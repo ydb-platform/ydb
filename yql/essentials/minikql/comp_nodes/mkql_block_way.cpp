@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/dense_union.h>
 #include <yql/essentials/public/udf/arrow/dense_union_scalar.h>
 
 #include <arrow/util/bitmap_ops.h>
@@ -33,17 +34,9 @@ public:
         }
         MKQL_ENSURE(variantDatum.is_array(), "Expected array datum");
         const arrow::ArrayData& inputArray = *variantDatum.array();
-        const i8* typeCodes = GetUnionArray(inputArray).GetValues<i8>(1);
+        const arrow::ArrayData* unionArray = NYql::NUdf::SplitUnionIntoMaskAndData<IsOptional>(inputArray).UnionArray;
+        const i8* typeCodes = unionArray->GetValues<i8>(1);
         return ExecArray(ctx, inputArray, typeCodes, res);
-    }
-
-protected:
-    static const arrow::ArrayData& GetUnionArray(const arrow::ArrayData& inputArray) {
-        if constexpr (IsOptional) {
-            return *inputArray.child_data[0];
-        } else {
-            return inputArray;
-        }
     }
 
 private:
@@ -53,17 +46,11 @@ private:
                                     const i8* typeCodes, arrow::Datum* res) const = 0;
 
     NUdf::TBlockItem ComputeScalarKey(const arrow::Scalar& scalar) const {
-        if constexpr (IsOptional) {
-            if (!scalar.is_valid) {
-                return NUdf::TBlockItem{};
-            }
-            const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-            const auto& unionScalar = arrow::internal::checked_cast<const NYql::NUdf::TDenseUnionScalar&>(*structScalar.value.front());
-            return MakeKey(unionScalar.Index);
-        } else {
-            const auto& unionScalar = arrow::internal::checked_cast<const NYql::NUdf::TDenseUnionScalar&>(scalar);
-            return MakeKey(unionScalar.Index);
+        const auto* unionScalar = NYql::NUdf::SplitUnionIntoMaskAndDataScalar<IsOptional>(scalar);
+        if (!unionScalar) {
+            return NUdf::TBlockItem{};
         }
+        return MakeKey(unionScalar->Index);
     }
 
     TType* const ResultItemType_;
@@ -93,8 +80,8 @@ private:
         }
 
         std::shared_ptr<arrow::Buffer> mask;
-        if (IsOptional && inputArray.buffers[0]) {
-            mask = MakeDenseBitmapCopyIfOffsetDiffers(inputArray.buffers[0], length, inputArray.offset, 0, pool);
+        if (auto outerMask = NYql::NUdf::SplitUnionIntoMaskAndData<IsOptional>(inputArray).Mask) {
+            mask = MakeDenseBitmapCopyIfOffsetDiffers(std::move(outerMask), length, inputArray.offset, 0, pool);
         }
         *res = arrow::ArrayData::Make(arrow::uint32(), length, {std::move(mask), std::move(values)});
         return arrow::Status::OK();
@@ -122,7 +109,8 @@ private:
         auto* pool = ctx->memory_pool();
         arrow::Datum built = BuildNameArray(pool, inputArray, typeCodes);
 
-        const ui8* maskBits = (IsOptional && inputArray.buffers[0]) ? inputArray.buffers[0]->data() : nullptr;
+        auto outerMask = NYql::NUdf::SplitUnionIntoMaskAndData<IsOptional>(inputArray).Mask;
+        const ui8* maskBits = outerMask ? outerMask->data() : nullptr;
         *res = maskBits ? ReattachNullMask(pool, built, inputArray, maskBits) : std::move(built);
         return arrow::Status::OK();
     }

@@ -12,6 +12,8 @@
 
 namespace NYql::NDq {
 
+namespace {
+
 template<bool fast>
 class TPackedSerializer : public TOutputSerializer {
 public:
@@ -24,9 +26,9 @@ public:
 };
 
 template<bool fast>
-class TBuferredSerializer : public TPackedSerializer<fast> {
+class TBufferedSerializer : public TPackedSerializer<fast> {
 public:
-    TBuferredSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
+    TBufferedSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
         : TPackedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, bufferPageAllocSize)
         , MaxChunkBytes(maxChunkBytes) {
 
@@ -37,19 +39,19 @@ public:
 };
 
 template<bool fast>
-class TNarrowSerializer : public TBuferredSerializer<fast> {
+class TNarrowSerializer : public TBufferedSerializer<fast> {
 public:
     using TOutputSerializer::Buffer;
     using TOutputSerializer::RowType;
     using TOutputSerializer::TransportVersion;
     using TOutputSerializer::PackerVersion;
     using TOutputSerializer::BufferPageAllocSize;
-    using TBuferredSerializer<fast>::Packer;
-    using TBuferredSerializer<fast>::MaxChunkBytes;
-    using TBuferredSerializer<fast>::Rows;
+    using TBufferedSerializer<fast>::Packer;
+    using TBufferedSerializer<fast>::MaxChunkBytes;
+    using TBufferedSerializer<fast>::Rows;
 
     TNarrowSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
-        : TBuferredSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
+        : TBufferedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
     }
 
     void Flush(bool finished) override {
@@ -86,7 +88,7 @@ public:
 };
 
 template<bool fast>
-class TWideSerializer : public TBuferredSerializer<fast> {
+class TWideSerializer : public TBufferedSerializer<fast> {
 public:
     using TOutputSerializer::Buffer;
     using TOutputSerializer::RowType;
@@ -94,11 +96,11 @@ public:
     using TOutputSerializer::PackerVersion;
     using TOutputSerializer::BufferPageAllocSize;
     using TPackedSerializer<fast>::Packer;
-    using TBuferredSerializer<fast>::MaxChunkBytes;
-    using TBuferredSerializer<fast>::Rows;
+    using TBufferedSerializer<fast>::MaxChunkBytes;
+    using TBufferedSerializer<fast>::Rows;
 
     TWideSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
-        : TBuferredSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
+        : TBufferedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
     }
 
     void Flush(bool finished) override {
@@ -253,6 +255,8 @@ std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& se
         return std::make_unique<TNarrowSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
     }
 }
+
+} // anonymous namespace
 
 std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer, bool local) {
     if (settings.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0

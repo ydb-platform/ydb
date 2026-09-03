@@ -55,6 +55,7 @@ namespace NKikimr::NYmq::V1 {
     static const TString CONTENT_BASED_DEDUPLICATION = "ContentBasedDeduplication";
     static const TString CREATED_TIMESTAMP = "CreatedTimestamp";
     static const TString DELAY_SECONDS = "DelaySeconds";
+    static const TString FIFO_QUEUE = "FifoQueue";
     static const TString LAST_MODIFIED_TIMESTAMP = "LastModifiedTimestamp";
     static const TString MAXIMUM_MESSAGE_SIZE = "MaximumMessageSize";
     static const TString MESSAGE_RETENTION_PERIOD = "MessageRetentionPeriod";
@@ -489,6 +490,9 @@ namespace NKikimr::NYmq::V1 {
             }
             if (attrs.HasDelaySeconds()) {
                 AddAttribute(result, DELAY_SECONDS, attrs.GetDelaySeconds());
+            }
+            if (attrs.HasFifoQueue()) {
+                AddAttribute(result, FIFO_QUEUE, attrs.GetFifoQueue());
             }
             if (attrs.HasLastModifiedTimestamp()) {
                 AddAttribute(result, LAST_MODIFIED_TIMESTAMP, attrs.GetLastModifiedTimestamp());

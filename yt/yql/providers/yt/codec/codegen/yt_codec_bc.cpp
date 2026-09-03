@@ -372,3 +372,15 @@ extern "C" ui64 GetWrittenBytes(void* vbuf) {
 extern "C" void FillZero(void* vpod) {
     new (vpod) NUdf::TUnboxedValuePod(NUdf::TUnboxedValuePod::Zero());
 }
+
+extern "C" void FillOptionalZero(void* vpod) {
+    new (vpod) NUdf::TUnboxedValuePod(NUdf::TUnboxedValuePod::Zero().MakeOptional());
+}
+
+extern "C" void FillNull(void* vpod) {
+    new (vpod) NUdf::TUnboxedValuePod(NUdf::TUnboxedValuePod());
+}
+
+extern "C" void FillOptionalNull(void* vpod) {
+    new (vpod) NUdf::TUnboxedValuePod(NUdf::TUnboxedValuePod().MakeOptional());
+}

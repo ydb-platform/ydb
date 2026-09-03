@@ -5,13 +5,14 @@
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TEnumerateWrapper: public TMutableCodegeneratorNode<TEnumerateWrapper> {
-    typedef TMutableCodegeneratorNode<TEnumerateWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TEnumerateWrapper>;
 
 public:
     using TSelf = TEnumerateWrapper;
@@ -26,22 +27,22 @@ public:
                 ui64 start, ui64 step,
                 TComputationContext& ctx, const TSelf* self)
                 : TComputationValue(memInfo)
-                , Inner(std::move(inner))
-                , Step(step)
-                , Counter(start - step)
-                , Ctx(ctx)
-                , Self(self)
+                , Inner_(std::move(inner))
+                , Step_(step)
+                , Counter_(start - step)
+                , Ctx_(ctx)
+                , Self_(self)
             {
             }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
                 NUdf::TUnboxedValue item;
-                if (Inner.Next(item)) {
-                    Counter += Step;
+                if (Inner_.Next(item)) {
+                    Counter_ += Step_;
                     NUdf::TUnboxedValue* items = nullptr;
-                    value = Self->ResPair.NewArray(Ctx, 2, items);
-                    items[0] = NUdf::TUnboxedValuePod(Counter);
+                    value = Self_->ResPair_.NewArray(Ctx_, 2, items);
+                    items[0] = NUdf::TUnboxedValuePod(Counter_);
                     items[1] = std::move(item);
                     return true;
                 }
@@ -50,40 +51,40 @@ public:
             }
 
             bool Skip() override {
-                if (Inner.Skip()) {
-                    Counter += Step;
+                if (Inner_.Skip()) {
+                    Counter_ += Step_;
                     return true;
                 }
 
                 return false;
             }
 
-            const NUdf::TUnboxedValue Inner;
-            const ui64 Step;
-            ui64 Counter;
-            TComputationContext& Ctx;
-            const TSelf* const Self;
+            const NUdf::TUnboxedValue Inner_;
+            const ui64 Step_;
+            ui64 Counter_;
+            TComputationContext& Ctx_;
+            const TSelf* const Self_;
         };
 
         TValue(
             TMemoryUsageInfo* memInfo,
-            const NUdf::TUnboxedValue& list,
+            NUdf::TUnboxedValue list,
             ui64 start, ui64 step,
             TComputationContext& ctx,
             const TSelf* self)
             : TCustomListValue(memInfo)
-            , List(list)
-            , Start(start)
-            , Step(step)
-            , Ctx(ctx)
-            , Self(self)
+            , List_(std::move(list))
+            , Start_(start)
+            , Step_(step)
+            , Ctx_(ctx)
+            , Self_(self)
         {
         }
 
     private:
         ui64 GetListLength() const override {
             if (!Length_) {
-                Length_ = List.GetListLength();
+                Length_ = List_.GetListLength();
             }
 
             return *Length_;
@@ -91,42 +92,42 @@ public:
 
         bool HasListItems() const override {
             if (!HasItems_) {
-                HasItems_ = List.HasListItems();
+                HasItems_ = List_.HasListItems();
             }
 
             return *HasItems_;
         }
 
         NUdf::TUnboxedValue GetListIterator() const override {
-            return Ctx.HolderFactory.Create<TIterator>(List.GetListIterator(), Start, Step, Ctx, Self);
+            return Ctx_.HolderFactory.Create<TIterator>(List_.GetListIterator(), Start_, Step_, Ctx_, Self_);
         }
 
-        const NUdf::TUnboxedValue List;
-        const ui64 Start;
-        const ui64 Step;
-        TComputationContext& Ctx;
-        const TSelf* const Self;
+        const NUdf::TUnboxedValue List_;
+        const ui64 Start_;
+        const ui64 Step_;
+        TComputationContext& Ctx_;
+        const TSelf* const Self_;
     };
 
     TEnumerateWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* start, IComputationNode* step)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , List(list)
-        , Start(start)
-        , Step(step)
-        , ResPair(mutables)
+        , List_(list)
+        , Start_(start)
+        , Step_(step)
+        , ResPair_(mutables)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return WrapList(ctx, List->GetValue(ctx).Release(), Start->GetValue(ctx).Get<ui64>(), Step->GetValue(ctx).Get<ui64>());
+        return WrapList(ctx, List_->GetValue(ctx).Release(), Start_->GetValue(ctx).Get<ui64>(), Step_->GetValue(ctx).Get<ui64>());
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto list = GetNodeValue(List, ctx, block);
-        const auto startv = GetNodeValue(Start, ctx, block);
-        const auto stepv = GetNodeValue(Step, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
+        const auto startv = GetNodeValue(Start_, ctx, block);
+        const auto stepv = GetNodeValue(Step_, ctx, block);
 
         const auto start = GetterFor<ui64>(startv, context, block);
         const auto step = GetterFor<ui64>(stepv, context, block);
@@ -143,16 +144,16 @@ private:
     }
 
     void RegisterDependencies() const final {
-        DependsOn(List);
-        DependsOn(Start);
-        DependsOn(Step);
+        DependsOn(List_);
+        DependsOn(Start_);
+        DependsOn(Step_);
     }
 
-    IComputationNode* const List;
-    IComputationNode* const Start;
-    IComputationNode* const Step;
+    IComputationNode* const List_;
+    IComputationNode* const Start_;
+    IComputationNode* const Step_;
 
-    const TContainerCacheOnContext ResPair;
+    const TContainerCacheOnContext ResPair_;
 };
 
 } // namespace
@@ -167,5 +168,4 @@ IComputationNode* WrapEnumerate(TCallable& callable, const TComputationNodeFacto
                                  LocateNode(ctx.NodeLocator, callable, 1), LocateNode(ctx.NodeLocator, callable, 2));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

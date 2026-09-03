@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class IAggColumnBuilder {
 public:
@@ -151,5 +150,4 @@ struct TFinalizeKeysTag {
     using TBase = TBlockAggregatorBase<TAggregator>;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -505,11 +505,18 @@ class YdbCliHelper:
                 res.add_stat('test', 'tpcc_warehouses', summary.get('warehouses', 0))
                 res.add_stat('test', 'tpcc_efficiency', summary.get('efficiency', 0))
                 res.add_stat('test', 'tpcc_time_seconds', summary.get('time_seconds', 0))
+                res.add_stat('test', 'tpcc_max_sessions', summary.get('max_sessions', 0))
+                res.add_stat('test', 'tpcc_threads', summary.get('threads', 0))
+                res.add_stat('test', 'tpcc_warmup_seconds', summary.get('warmup_seconds', 0))
                 for tr, stats in ans.get('transactions', {}).items():
                     res.add_stat('test', f'tpcc_{tr}_ok_count', stats.get('ok_count', 0))
                     res.add_stat('test', f'tpcc_{tr}_failed_count', stats.get('failed_count', 0))
                     for p, t in stats.get('percentiles', {}).items():
                         res.add_stat('test', f'tpcc_{tr}_perc_{p.replace(".", "_")}', t)
+                    for p, t in stats.get('percentiles_ms', {}).items():
+                        res.add_stat('test', f'tpcc_{tr}_ms_perc_{p.replace(".", "_")}', t)
+                    for p, t in stats.get('percentiles_pure', {}).items():
+                        res.add_stat('test', f'tpcc_{tr}_pure_perc_{p.replace(".", "_")}', t)
             except BaseException as e:
                 res.add_error(str(e))
                 res.traceback = e.__traceback__

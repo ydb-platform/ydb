@@ -3677,6 +3677,7 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
     TExprNode::TPtr isMultiget;
     TExprNode::TPtr isMultiMatches;
     TExprNode::TPtr fullscanLimit;
+    TExprNode::TPtr shuffleMode;
     if (const auto maybeOptions = join.JoinAlgoOptions()) {
         for (auto&& option: maybeOptions.Cast()) {
             auto&& name = option.Name().Value();
@@ -3690,6 +3691,8 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
                 isMultiget = option.Value().Cast().Ptr();
             } else if (name == "FullscanLimit"sv) {
                 fullscanLimit = option.Value().Cast().Ptr();
+            } else if (name == "ShuffleMode"sv) {
+                shuffleMode = option.Value().Cast().Ptr();
             }
         }
     }
@@ -3736,24 +3739,28 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         .MaxCachedRows(maxCachedRows)
         .MaxDelayedRows(maxDelayedRows);
 
-    if (fullscanLimit && !isMultiMatches) { // gaps are not allowed in optional
+    // gaps are not allowed in optional (fill in reverse order)
+    if (shuffleMode && !fullscanLimit) {
+        fullscanLimit = ctx.NewCallable(pos, "Void", {});
+    }
+    if (fullscanLimit && !isMultiMatches) {
         isMultiMatches = ctx.NewAtom(pos, false);
     }
-
-    if (isMultiMatches && !isMultiget) { // ditto
+    if (isMultiMatches && !isMultiget) {
         isMultiget = ctx.NewAtom(pos, false);
     }
 
     if (isMultiget) {
         cn.IsMultiget(isMultiget);
     }
-
     if (isMultiMatches) {
         cn.IsMultiMatches(isMultiMatches);
     }
-
     if (fullscanLimit) {
         cn.FullscanLimit(fullscanLimit);
+    }
+    if (shuffleMode) {
+        cn.ShuffleMode(shuffleMode);
     }
 
     auto lambda = Build<TCoLambda>(ctx, pos)
@@ -3780,7 +3787,8 @@ TExprBase DqPushWatermarkGeneratorToStage(
     TExprBase node,
     TExprContext& ctx,
     IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage
 ) {
     const auto maybeWatermarkGenerator = node.Maybe<TDqPhyWatermarkGenerator>();
     if (!maybeWatermarkGenerator) {
@@ -3794,7 +3802,7 @@ TExprBase DqPushWatermarkGeneratorToStage(
     }
     const auto connection = maybeConnection.Cast();
 
-    if (!IsSingleConsumerConnection(connection, parentsMap)) {
+    if (!IsSingleConsumerConnection(connection, parentsMap, allowStageMultiUsage)) {
         return node;
     }
 

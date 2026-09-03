@@ -352,7 +352,7 @@ TTranslationSpec WrapTranslationSpecs(
 }
 
 // Overload for dynamically-sized list of translation specs (as seen in tuple, struct, etc).
-template <CInvocable<TYsonCursorConverter(std::vector<TYsonCursorConverter>)> TConvertersWrapper>
+template <NMpl::CInvocable<TYsonCursorConverter(std::vector<TYsonCursorConverter>)> TConvertersWrapper>
 TTranslationSpec WrapTranslationSpecs(
     TConvertersWrapper&& convertersWrapper,
     std::vector<TTranslationSpec>&& translationSpecs)
@@ -542,11 +542,11 @@ TTranslationSpec BuildTranslationSpec(
     auto sourceMetatype = sourceType->GetMetatype();
     auto targetMetatype = targetType->GetMetatype();
 
-    if (sourceMetatype == ELogicalMetatype::Tagged) {
-        return BuildTranslationSpec(sourceDescriptor.TaggedElement(), targetDescriptor);
+    if (sourceMetatype == ELogicalMetatype::Tagged || sourceMetatype == ELogicalMetatype::AggregateState) {
+        return BuildTranslationSpec(sourceDescriptor.Detag(), targetDescriptor);
     }
-    if (targetMetatype == ELogicalMetatype::Tagged) {
-        return BuildTranslationSpec(sourceDescriptor, targetDescriptor.TaggedElement());
+    if (targetMetatype == ELogicalMetatype::Tagged || targetMetatype == ELogicalMetatype::AggregateState) {
+        return BuildTranslationSpec(sourceDescriptor, targetDescriptor.Detag());
     }
 
     if (sourceMetatype == ELogicalMetatype::Optional &&
@@ -579,7 +579,8 @@ TTranslationSpec BuildTranslationSpec(
 
     switch (sourceMetatype) {
         case ELogicalMetatype::Optional:
-        case ELogicalMetatype::Tagged: {
+        case ELogicalMetatype::Tagged:
+        case ELogicalMetatype::AggregateState: {
             // NB: Already handled above.
             YT_ABORT();
         }

@@ -1,0 +1,36 @@
+$e = TypeOf(AsErased(null));
+$nodeType = Struct<value:String,left:Optional<$e>,right:Optional<$e>>;
+
+$makeNode = ($v,$l,$r)->{
+   return cast(<|
+      value:$v,
+      left:if($l is not null, AsErased($l)),
+      right:if($r is not null, AsErased($r))|> as $nodeType);
+};
+
+$leftLink = ($node)->{
+   return Unwrap(PeekErased(Unwrap($node.left), $nodeType));
+};
+
+$rightLink = ($node)->{
+   return Unwrap(PeekErased(Unwrap($node.right), $nodeType));
+};
+
+$node1 = $makeNode("A",null,null);
+$node2 = $makeNode("B",$node1,null);
+$node3 = $makeNode("C",null,null);
+$node4 = $makeNode("D",$node2,$node3);
+
+$callableType = Callable<($e, $nodeType)->String>;
+$printImpl = ($impl_erased,$node)->{
+   $impl=Unwrap(PeekErased($impl_erased, $callableType));
+   return "{" || 
+   $node.value || 
+   if($node.left is not null, ",left:" || $impl($impl_erased, $leftLink($node)), "") ||
+   if($node.right is not null, ",right:" || $impl($impl_erased, $rightLink($node)), "") ||
+   "}";
+};
+$print = ($node)->($printImpl(AsErased(Callable($callableType, $printImpl)), $node));
+
+select $print($node4);
+

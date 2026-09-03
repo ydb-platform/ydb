@@ -82,7 +82,12 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is not a valid ISO 8601 duration: '" << *timeAgo << "'");
         }
 
-        *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(duration.Get<ui64>()));
+        const i64 signedDuration = duration.Get<i64>();
+        if (signedDuration < 0) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is negative: '" << *timeAgo << "'");
+        }
+
+        *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(signedDuration));
     }
 
     if (!streamingDispositionExtractor.IsFinished()) {
@@ -124,6 +129,7 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
         TStreamingQueryConfig::TProperties::Run,
         TStreamingQueryConfig::TProperties::ResourcePool,
         TStreamingQueryConfig::TProperties::Force,
+        TStreamingQueryConfig::TProperties::CheckpointInterval,
     }) {
         if (const auto& value = featuresExtractor.Extract(property)) {
             if (!properties.emplace(property, *value).second) {
@@ -267,7 +273,7 @@ TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOper
 
 TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
     if (settings.GetExistingOk() && settings.GetReplaceIfExists()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' can not be used together for STREAMING_QUERY objects");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' cannot be used together for STREAMING_QUERY objects");
     }
 
     const auto& externalContext = context.GetExternalData();

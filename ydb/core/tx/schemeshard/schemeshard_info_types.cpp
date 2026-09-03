@@ -1,5 +1,6 @@
 #include "schemeshard_info_types.h"
 
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
 #include "schemeshard_import_helpers.h"  // for ValidateImportDstPath
@@ -14,7 +15,9 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/util/pb.h>
@@ -511,6 +514,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
+            if (col.HasDefaultFromExpression()) {
+                errStr = Sprintf("Cannot add a generated (GENERATED ALWAYS AS) expression to the existing column '%s'", colName.data());
+                return nullptr;
+            }
+
             bool isChangeNotNullConstraint = col.HasNotNull();
             bool isChangeSetNotNullInProgress = col.HasSetNotNullInProgress();
 
@@ -554,6 +562,40 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
                     return nullptr;
+                }
+            }
+
+            if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression && columnFamily && columnFamily->GetId() != 0) {
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                if (generatedDesc.ParseFromString(sourceColumn.DefaultValue) && !generatedDesc.GetStored()) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+            }
+
+            if (isChangeNotNullConstraint || isChangeSetNotNullInProgress) {
+                if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+                    errStr = Sprintf("Can't change nullability of generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+
+                for (const auto& [_, srcCol] : source->Columns) {
+                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                        continue;
+                    }
+
+                    NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                    if (!generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                        continue;
+                    }
+
+                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't change nullability of column '%s': it is used by generated column '%s'", colName.c_str(),
+                                srcCol.Name.data());
+                            return nullptr;
+                        }
+                    }
                 }
             }
 
@@ -689,6 +731,24 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
+            if (col.HasDefaultFromExpression()) {
+                const bool stored = col.GetDefaultFromExpression().GetStored();
+                if (stored && !featureFlags.EnableGeneratedStored) {
+                    errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                }
+
+                if (!stored && !featureFlags.EnableGeneratedVirtual) {
+                    errStr = Sprintf("VIRTUAL GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                }
+
+                if (!stored && columnFamily && columnFamily->GetId() != 0) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+            }
+
             alterData->NextColumnId = Max(colId + 1, alterData->NextColumnId);
 
             colName2Id[colName] = colId;
@@ -705,6 +765,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             } else if (col.HasDefaultFromLiteral()) {
                 column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
                 column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
+            } else if (col.HasDefaultFromExpression()) {
+                column.DefaultKind = ETableColumnDefaultKind::FromExpression;
+                column.DefaultValue = col.GetDefaultFromExpression().SerializeAsString();
             }
         }
     }
@@ -743,6 +806,27 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == colName) {
                 errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data());
                 return nullptr;
+            }
+            for (const auto& [srcColId, srcCol] : source->Columns) {
+                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                    continue;
+                }
+
+                if (auto it = alterData->Columns.find(srcColId);
+                    it != alterData->Columns.end() && it->second.DeleteVersion == alterData->AlterVersion)
+                {
+                    continue;
+                }
+
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                if (generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't drop column '%s': it is used by generated column '%s'", colName.data(), srcCol.Name.data());
+                            return nullptr;
+                        }
+                    }
+                }
             }
 
             alterData->Columns[colId] = colIt->second;
@@ -829,6 +913,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 desc->AddColumnNames(colName);
                 desc->AddColumnIds(it->second);
             }
+            bool hasEqHeightHistogram = false;
             for (const auto rawType : add.GetTypes()) {
                 const auto type = static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(rawType);
                 switch (type) {
@@ -837,11 +922,37 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                         return nullptr;
                     case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                         break;
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                        hasEqHeightHistogram = true;
+                        break;
                     default:
                         errStr = TStringBuilder() << "Unknown statistic type: " << rawType;
                         return nullptr;
                 }
                 desc->AddTypes(type);
+            }
+            if (hasEqHeightHistogram) {
+                for (const auto& colName : add.GetColumnNames()) {
+                    const ui32 colId = colName2Id.at(colName);
+                    const TColumn* column = nullptr;
+                    if (auto it = alterData->Columns.find(colId); it != alterData->Columns.end()) {
+                        column = &it->second;
+                    } else if (source) {
+                        if (auto it = source->Columns.find(colId); it != source->Columns.end()) {
+                            column = &it->second;
+                        }
+                    }
+                    if (!column || column->IsDropped()) {
+                        errStr = TStringBuilder() << "Undefined column: " << colName;
+                        return nullptr;
+                    }
+                    if (!NScheme::NTypeIds::IsPresortEncodable(column->PType.GetTypeId())) {
+                        errStr = TStringBuilder()
+                            << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << colName
+                            << "' of type " << NScheme::TypeName(column->PType, column->PTypeMod);
+                        return nullptr;
+                    }
+                }
             }
         }
     }
@@ -964,6 +1075,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             errStr = Sprintf("Key column '%s' must belong to the default family", keyName.data());
             return nullptr;
         }
+        if (column.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+            errStr = Sprintf("Generated column '%s' cannot be part of the primary key", keyName.data());
+            return nullptr;
+        }
         column.KeyOrder = keyOrder;
         keyColIds.push_back(colId);
         ++keyOrder;
@@ -1034,6 +1149,11 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
         for (auto& c : Columns) {
             const TColumn& column = c.second;
             if (column.IsDropped()) {
+                continue;
+            }
+            // A VIRTUAL generated column is computed at read time by KQP: the datashards
+            // must never learn about it
+            if (IsVirtualGeneratedColumn(column)) {
                 continue;
             }
             auto colDescr = TableDescription.AddColumns();
@@ -3392,7 +3512,9 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         result.AddError("no items to import");
     }
 
-    Items.swap(items);
+    if (result.Success) {
+        Items.swap(items);
+    }
 
     return result;
 }

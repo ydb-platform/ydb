@@ -20,7 +20,7 @@ struct TWorkerFactoryOptions {
     TStringBuf Query;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FuncRegistry;
     IModuleResolver::TPtr ModuleResolver;
-    const TUserDataTable& UserData;
+    TUserDataTable UserData;
     const THashMap<TString, TString>& Modules;
     TString LLVMSettings;
     EBlockEngineMode BlockEngineMode;
@@ -44,7 +44,7 @@ struct TWorkerFactoryOptions {
         TStringBuf Query,
         TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FuncRegistry,
         IModuleResolver::TPtr ModuleResolver,
-        const TUserDataTable& UserData,
+        TUserDataTable UserData,
         const THashMap<TString, TString>& Modules,
         TString LLVMSettings,
         EBlockEngineMode BlockEngineMode,
@@ -66,7 +66,7 @@ struct TWorkerFactoryOptions {
         , Query(Query)
         , FuncRegistry(std::move(FuncRegistry))
         , ModuleResolver(std::move(ModuleResolver))
-        , UserData(UserData)
+        , UserData(std::move(UserData))
         , Modules(Modules)
         , LLVMSettings(std::move(LLVMSettings))
         , BlockEngineMode(BlockEngineMode)
@@ -93,7 +93,7 @@ private:
 
 protected:
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FuncRegistry_;
-    const TUserDataTable& UserData_;
+    TUserDataTable UserData_;
     TExprContext ExprContext_;
     TExprNode::TPtr ExprRoot_;
     TString SerializedProgram_;
@@ -121,7 +121,6 @@ protected:
 public:
     TWorkerFactory(TWorkerFactoryOptions, EProcessorMode);
 
-public:
     NYT::TNode MakeInputSchema(ui32) const override;
     NYT::TNode MakeInputSchema() const override;
     NYT::TNode MakeOutputSchema() const override;
@@ -158,7 +157,6 @@ public:
     {
     }
 
-public:
     TWorkerHolder<IPullStreamWorker> MakeWorker() override;
 };
 
@@ -169,7 +167,6 @@ public:
     {
     }
 
-public:
     TWorkerHolder<IPullListWorker> MakeWorker() override;
 };
 
@@ -180,7 +177,6 @@ public:
     {
     }
 
-public:
     TWorkerHolder<IPushStreamWorker> MakeWorker() override;
 };
 } // namespace NYql::NPureCalc

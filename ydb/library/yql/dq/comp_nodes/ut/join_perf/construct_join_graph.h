@@ -19,9 +19,13 @@ struct TJoinDescription {
     TDqSetup<false, true>* Setup;
     std::optional<TDqUserRenames> CustomRenames;
     int BlockSize = 128;
+    bool InputsAreBlocks = false;
     bool SliceBlocks = false;
     TVector<int> ScalarizeLeftColumns;
     TVector<int> ScalarizeRightColumns;
+    TDqProgramBuilder::TJoinFilterLambda LeftFilter;
+    TDqProgramBuilder::TJoinFilterLambda RightFilter;
+    TDqProgramBuilder::TJoinCommonFilterLambda CommonFilter;
 };
 
 bool IsBlockJoin(ETestedJoinAlgo algo);
@@ -30,5 +34,5 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
                                                      bool withSpiller = true,
                                                      TBlockHashJoinSettings joinSettings = {});
 
-i32 ResultColumnCount(ETestedJoinAlgo algo, TJoinDescription descr);
+i32 ResultColumnCount(ETestedJoinAlgo algo, EJoinKind joinKind, TJoinDescription descr);
 } // namespace NKikimr::NMiniKQL

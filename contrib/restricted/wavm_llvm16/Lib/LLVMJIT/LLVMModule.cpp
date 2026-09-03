@@ -846,6 +846,7 @@ bool LLVMJIT::getInstructionSourceByAddress(Uptr address, InstructionSource& out
 			llvm::DINameKind::None));
 
 	outSource.instructionIndex = Uptr(lineInfo.Line);
+	outSource.fileName = lineInfo.FileName;
 	return true;
 #else
 	// Find the highest entry in the offsetToOpIndexMap whose offset is <= the symbol-relative IP.
@@ -861,6 +862,7 @@ bool LLVMJIT::getInstructionSourceByAddress(Uptr address, InstructionSource& out
 	}
 
 	outSource.instructionIndex = opIndex > 0 ? Uptr(opIndex) : 0;
+	outSource.fileName.clear();
 	return true;
 #endif
 }

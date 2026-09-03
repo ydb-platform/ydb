@@ -139,11 +139,11 @@ public:
     {
     }
 
-    virtual ~TKqpLookupRows() {
-        auto guard = TypeEnv.BindAllocator();
-        auto alloc = &guard.GetMutex()->Ref();
-        while(!ReadResults.empty()) {
-            ReadResults.front().Untrack(alloc);
+    virtual ~TKqpLookupRows() = default;
+
+    void ClearResults(NMiniKQL::TAllocState& allocState) final {
+        while (!ReadResults.empty()) {
+            ReadResults.front().Untrack(&allocState);
             ReadResults.pop_front();
         }
     }

@@ -19,7 +19,6 @@ from OpenSSL.version import (
 
 __all__ = [
     "SSL",
-    "crypto",
     "__author__",
     "__copyright__",
     "__email__",
@@ -28,4 +27,5 @@ __all__ = [
     "__title__",
     "__uri__",
     "__version__",
+    "crypto",
 ]

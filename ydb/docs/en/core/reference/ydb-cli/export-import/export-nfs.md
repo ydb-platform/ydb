@@ -1,6 +1,6 @@
 # Export to NFS
 
-The `export nfs` command starts a server-side process of exporting data and schema object information to the network file system ( [Network File System](https://en.wikipedia.org/wiki/Network_File_System), NFS) of the {{ ydb-short-name }} cluster hosts, in the format described in the [File structure](./file-structure.md) article:
+The `export nfs` command starts a server-side export process to the network file system ( [Network File System](https://en.wikipedia.org/wiki/Network_File_System), NFS) of the {{ ydb-short-name }} cluster hosts, exporting data and schema object information in the format described in the [File structure](./file-structure.md) article:
 
 
 ```bash
@@ -16,7 +16,7 @@ The `export nfs` command starts a server-side process of exporting data and sche
 
 {% endnote %}
 
-## Command-line parameters {#pars}
+## Command line parameters {#pars}
 
 `[options]` — command parameters:
 
@@ -39,7 +39,7 @@ An alternative way to specify the list of objects is supported:
 - `source`, `src`, or `s` — path to the exported directory or table; `.` points to the root directory of the database. When specifying a directory, all non-system objects in it are exported, as well as all non-system subdirectories recursively.
 - `destination`, `dst`, or `d` — path in NFS (relative to `--fs-path`).
 
-`--exclude STRING`: Pattern ( [PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from the export. This parameter can be specified multiple times for different patterns.
+`--exclude STRING`: Pattern ( [PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. This parameter can be specified multiple times for different patterns.
 
 {% include [export-alternative-syntax-warning.md](_includes/export-alternative-syntax-warning.md) %}
 
@@ -47,7 +47,14 @@ An alternative way to specify the list of objects is supported:
 
 ### Additional parameters {#aux}
 
-{% include [export-additional-params.md](_includes/export-additional-params.md) %}
+| Parameter | Description |
+| --- | --- |
+| `--description STRING` | Text description of the operation, saved in the operation history. |
+| `--retries NUM` | Number of retry attempts for export that the server will make.<br/>Default value: `10`. |
+| `--compression STRING` | Compress exported data.<br/>With the default compression level for the [Zstandard](https://en.wikipedia.org/wiki/Zstd) algorithm, data can be compressed by 5-10 times. Data compression uses CPU resources and may affect the speed of other database operations.<br/>Allowed values:<br/><ul><li>`zstd` — compression using the Zstandard algorithm with the default compression level (`3`);</li><li>`zstd-N` — compression using the Zstandard algorithm, `N` — compression level (`1` — `22`).</li></ul> |
+| `--encryption-algorithm ALGORITHM` | Encrypt exported data using the specified algorithm. Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`. |
+| `--encryption-key-file PATH` | Path to the file containing the encryption key (only for encrypted exports). This file is binary and must contain the exact number of bytes corresponding to the key length in the selected encryption algorithm (16 bytes for `AES-128-GCM`, 32 bytes for `AES-256-GCM` and `ChaCha20-Poly1305`). The key can also be passed via the `YDB_ENCRYPTION_KEY` environment variable, in hexadecimal string representation. |
+| `--format STRING` | Output format.<br/>Allowed values:<br/><ul><li>`pretty` — human-readable format (default);</li><li>`proto-json-base64` — [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings encoded in [Base64](https://en.wikipedia.org/wiki/Base64).</li></ul> |
 
 ## Running the export {#exec}
 
@@ -55,7 +62,7 @@ An alternative way to specify the list of objects is supported:
 
 ### Launch result {#result}
 
-On successful execution, the `export nfs` command outputs summary information about the queued NFS export operation, in the format specified by the `--format` option. The actual export is performed asynchronously by the server. The summary information includes the operation ID, which can be used later to check the status and perform actions on the operation:
+Upon successful execution, the `export nfs` command outputs summary information about the queued NFS export operation, in the format specified by the `--format` option. The actual export is performed asynchronously by the server. The summary information includes the operation ID, which can be used later to check the status and perform actions on the operation:
 
 {% include [export-operation-result-pretty-intro.md](_includes/export-operation-result-pretty-intro.md) %}
 
@@ -156,8 +163,8 @@ Or using an alternative method:
 Export the entire database with encryption:
 
 - Using the `AES-128-GCM` encryption algorithm
-- Generating a random key with the `openssl` utility to the `~/my_secret_key` file
-- Reading the generated key from the `~/my_secret_key` file
+- With generation of a random key by the `openssl` utility into the `~/my_secret_key` file
+- With reading the generated key from the `~/my_secret_key` file
 - To the `/mnt/nfs/backups/export1` directory on the file system
 
 
@@ -169,11 +176,11 @@ openssl rand -out ~/my_secret_key 16
 ```
 
 
-Export the `dir1` directory of the database with encryption:
+Exporting the `dir1` directory of the database with encryption:
 
 - Using the `AES-256-GCM` encryption algorithm
-- Generating a random key with the `openssl` utility to the `YDB_ENCRYPTION_KEY` environment variable
-- Reading the generated key from the `YDB_ENCRYPTION_KEY` environment variable
+- By generating a random key with the `openssl` utility into the `YDB_ENCRYPTION_KEY` environment variable
+- By reading the generated key from the `YDB_ENCRYPTION_KEY` environment variable
 - To the `/mnt/nfs/backups/export1` directory on the file system
 
 
@@ -206,7 +213,7 @@ ydb://export/6?id=281474976788779&kind=fs
 ```
 
 
-These IDs can be used, for example, to run a loop to complete all current operations:
+Using these IDs, you can, for example, run a loop to terminate all current operations:
 
 
 ```bash

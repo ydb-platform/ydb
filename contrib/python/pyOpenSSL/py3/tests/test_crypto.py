@@ -4,17 +4,26 @@
 """
 Unit tests for :py:mod:`OpenSSL.crypto`.
 """
+
+from __future__ import annotations
+
 import base64
+import pathlib
 import sys
-import warnings
+import typing
 from datetime import datetime, timedelta, timezone
 from subprocess import PIPE, Popen
 
-import flaky
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, rsa
+from cryptography.hazmat.primitives.asymmetric import (
+    dsa,
+    ec,
+    ed448,
+    ed25519,
+    rsa,
+)
 
 from OpenSSL._util import ffi as _ffi
 from OpenSSL._util import lib as _lib
@@ -27,12 +36,16 @@ from OpenSSL.crypto import (
     X509,
     Error,
     PKey,
+    X509Extension,
     X509Name,
     X509Req,
     X509Store,
     X509StoreContext,
     X509StoreContextError,
     X509StoreFlags,
+    _EllipticCurve,
+    _Key,
+    _PrivateKey,
     dump_certificate,
     dump_certificate_request,
     dump_privatekey,
@@ -43,34 +56,18 @@ from OpenSSL.crypto import (
     load_certificate_request,
     load_privatekey,
     load_publickey,
-    sign,
-    verify,
 )
-
-with pytest.warns(DeprecationWarning):
-    from OpenSSL.crypto import (
-        CRL,
-        PKCS12,
-        NetscapeSPKI,
-        Revoked,
-        X509Extension,
-        dump_crl,
-        load_crl,
-    )
 
 from .util import (
     NON_ASCII,
-    WARNING_TYPE_EXPECTED,
-    EqualityTestsMixin,
-    is_consistent_type,
 )
 
 
-def normalize_privatekey_pem(pem):
+def normalize_privatekey_pem(pem: bytes) -> bytes:
     return dump_privatekey(FILETYPE_PEM, load_privatekey(FILETYPE_PEM, pem))
 
 
-def utcnow():
+def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
@@ -716,6 +713,11 @@ cka6W6btJiocdrdolfcukSoTEk+hRANCAAQkvPNu7Pa1GcsWU4v7ptNfqCJVq8Cx
 zo0MUVPQgwJ3aJtNM1QMOQUayCrRwfklg+D/rFSUwEUqtZh7fJDiFqz3
 -----END PRIVATE KEY-----
 """
+ec_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJLzzbuz2tRnLFlOL+6bTX6giVavA
+sc6NDFFT0IMCd2ibTTNUDDkFGsgq0cH5JYPg/6xUlMBFKrWYe3yQ4has9w==
+-----END PUBLIC KEY-----
+"""
 
 ec_root_key_pem = b"""-----BEGIN EC PRIVATE KEY-----
 MIGlAgEBBDEAz/HOBFPYLB0jLWeTpJn4Yc4m/C4mdWymVHBjOmnwiPHKT326iYN/
@@ -746,14 +748,100 @@ MBsCAQACAS0CAQcCAQACAQ8CAQMCAQACAQACAQA=
 -----END RSA PRIVATE KEY-----
 """
 
+dsa_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
+MIICZAIBADCCAjkGByqGSM44BAEwggIsAoIBAQD7UzdlshSCIIuntch43VmfCX1+
+WQDTvGw83sRZcN+B7nwFn4dm2PU8cby17oCjX7buBvalVqofnUokrSIDA6Rozm/f
+2wpGR9oVpd0xh9cI50pw1G3RZ4lcNWTP8C8O20eIzJoCH1KElcWLCHLAa3XoGOMv
+p4XnbVgMdc9/ydt4qttzIVPV4cZoVObzixoKCgwHyVPDxe0JaCe2cIwxyQY0IwAI
+PfaUWEAo+bf7pOosdnatJYm9MkKe8bEgKGQcUl9S8FXLhRejMo+oobcRjuBHTAmY
+fuV1iGlLrkFNrc2O6M1CRZhOoddoy53IeHcSjfzKET1biE3tCOUdHjUnABqfAiEA
+1llvauVKMLvFCDatVKRY+zNGJaa5dwff4qDtodz6sa8CggEAd+btod0di21mqFaf
+vc1ddmLK74PddMseT8DmoN/YduJaGLAOOVJ61rdG+KPXIar+8X5yqXfzP0MiYGkE
+A+xpNIImC3rzHElYNa8imA7ud8f+oC5jQijp0GhzVIS4UW83rZwakX7LITNE9Oj9
+FkETH1ZskHpp5BNlNoaSIW2+T7n/a+lq+tN60gP3f6FPBv5obB0pjqh+OAzEil/4
+Ys0dtCB0022cCUCqThMhWewlE2W2JioDLV5QkD91NMQNQwljDONNcs94AaWeVONK
+RaBQXlFsJPHzS8uKpsFeusFTrHIeEJW/8GQp/tfXP1ajEdg5EGxOhXFkem4ZMIus
+YFTbWwQiAiBFtgi8aNV0Jz2o8T+cxjVqVEgGdYNQqmpzqqBsM5AEOw==
+-----END PRIVATE KEY-----
+"""
+dsa_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MIIDRjCCAjkGByqGSM44BAEwggIsAoIBAQD7UzdlshSCIIuntch43VmfCX1+WQDT
+vGw83sRZcN+B7nwFn4dm2PU8cby17oCjX7buBvalVqofnUokrSIDA6Rozm/f2wpG
+R9oVpd0xh9cI50pw1G3RZ4lcNWTP8C8O20eIzJoCH1KElcWLCHLAa3XoGOMvp4Xn
+bVgMdc9/ydt4qttzIVPV4cZoVObzixoKCgwHyVPDxe0JaCe2cIwxyQY0IwAIPfaU
+WEAo+bf7pOosdnatJYm9MkKe8bEgKGQcUl9S8FXLhRejMo+oobcRjuBHTAmYfuV1
+iGlLrkFNrc2O6M1CRZhOoddoy53IeHcSjfzKET1biE3tCOUdHjUnABqfAiEA1llv
+auVKMLvFCDatVKRY+zNGJaa5dwff4qDtodz6sa8CggEAd+btod0di21mqFafvc1d
+dmLK74PddMseT8DmoN/YduJaGLAOOVJ61rdG+KPXIar+8X5yqXfzP0MiYGkEA+xp
+NIImC3rzHElYNa8imA7ud8f+oC5jQijp0GhzVIS4UW83rZwakX7LITNE9Oj9FkET
+H1ZskHpp5BNlNoaSIW2+T7n/a+lq+tN60gP3f6FPBv5obB0pjqh+OAzEil/4Ys0d
+tCB0022cCUCqThMhWewlE2W2JioDLV5QkD91NMQNQwljDONNcs94AaWeVONKRaBQ
+XlFsJPHzS8uKpsFeusFTrHIeEJW/8GQp/tfXP1ajEdg5EGxOhXFkem4ZMIusYFTb
+WwOCAQUAAoIBAEe6z5ud1k4EDD9mLP7UYALWrgc1NXUlDynoYkjr+T/NVf1eaMdq
+0vFbGcEmz05UPUNXOhDH0szUDxQam3IE9C27ZO4SOquc0/rIhPY6i75SJW13P+cg
+gdXhDMTW5JOlyV6CPUoCWKOtn1ds3pTDuuWlZ89UzOWQUbC1si6vvz43zDyhfu6U
+owgIusPxowErm2sH66+MPa8fYxVX7ZJL0mEfubejrloAbo5unYI/bUYIhx4mtpP/
+h/isFRifEAwG3yX6F9X/ZOYL53Z93EFPLJGRGMmQbkmXRA6lyvHdsC+OC/OCvPjW
+WfTXW9NHtUqpEks+OXBkyV971Hk5NvdLLr8=
+-----END PUBLIC KEY-----
+"""
+
 ed25519_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
 MC4CAQAwBQYDK2VwBCIEIKlxBbhVsSURoLTmsu9uTqYH6oF7zpxmp1ZQCAPhDmI2
 -----END PRIVATE KEY-----
+"""
+ed25519_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAq+FrpdwI1oTPytx8kGzuLVc+78zJE7hjYG4E9hwXoKI=
+-----END PUBLIC KEY-----
 """
 
 ed448_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
 MEcCAQAwBQYDK2VxBDsEOcqZ7a3k6JwrJbYO8CNTPT/d7dlWCo5vCf0EYDj79ZvA\nhD8u9EPHlYJw5Y8ZQdH4WmVEfpKA23xkdQ==
 -----END PRIVATE KEY-----
+"""
+ed448_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MEMwBQYDK2VxAzoAKFfWGCuqIaxgR9GmEXLRciYDyEjTnF56kr0sOVfwHEj+bHSU\neMJTZJR8qFSg8hNsHY1iZh9PIXcA
+-----END PUBLIC KEY-----
+"""
+
+rsa_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
+MIIEuwIBADANBgkqhkiG9w0BAQEFAASCBKUwggShAgEAAoIBAQDZ5FaSaXKn/RTF
+xyNr+GRvYnMvLz5XxSDD4JzVRKXxKGFzKKXMJAeXJkvPlho7Ta/HgMNXhMPAe8TT
+wcIRnHJqAfmSOnka1ks3Kl6EGQBTevKzyJy8MaUhzZsL4FUUgWUETFQQT8Dwcghf
+JobV0k+bWT4mrKHzIquw5y+NTsaZl4jSB1labhImsU16Vj66fHp7w9+c501tOxQO
+M4CQNWioGm8tgPT/43QUs9e+L2HFBI+cDQbEC68l+7VM8YY8NZ/fGypoML2QMVnU
+Y6zneoOLJTMUulOubrL+J6DkuuhxBsIOcyxMnqwgKm4pUGlPxfPSS7+Mo3JC969k
+wgUHerXZAgMBAAECgf9qAzz/VMCQwnV1UxkhxH/8zgYgYL+fERFuPC/ZWv7wOicv
+xAjm9KC8zVb44fLE586CCc7IN+zNK9y0gB9eAGr/04RhEvWgbmoqF6wdtdNyynuE
+Ut4oQKn7AUc1uPAeCfM4slw0Pie98YSS/9ZhwH/eh3C10iwWA1aiLWeDrnryPuJN
+mNB0d/ZsaL+arhR/nU2sJixx5LDI6AG0GJrw3DBHEKb4vZPIUM3wZNs7qnuG5W17
+JbZDQYnkApByZu2UMWI2YUkpJC246mFPWSWMa6sAl7sTWTkUIR21lJiqyTGG3ljY
+C2QjHoHrrzs+pwtlLBa1a4FgbaJmnL+VzWD/FQECgYEA8r3Y2oGcY5cQPb00TE0t
+ekXAXiHz9sX76nzE6BMZ8cwP/cVoWtIABpdaimKUoFML8CdjOi9Ti9OoNVGWm4Pk
+fT/GOUdysXWIw2Z/VOLM47nDwJb3fWwxsxph+x3gWJG/Vct/1NxmCCEendM63dy7
+/uR8RgX+0nxvn6Y6auQfpnkCgYEA5csHboa14Favx8aHTlITWOm46ugzdbARdfWz
+13Ewb7m4mm/3gKtA/m+yGdQFwmtBVkmwtdCeDj0aKH3Sfvg9WCQK1x/dUkPMr//r
+oGUGeJU9r3ZKVJTeSJ0lKX4h3u3+1TdpnAgtuWGI4AK9fEdulfHKArxyIdbsdwRr
+ljaBMmECgYATpEcCz1APQu7+f+vWbLxMU46QT2EFS9npjHUGbl1AEooMt8eM6cc0
+wVSDNBzgqDekFBvUXnX9L4BB6DsulEqN0/Y/NkfSkjch0I5nGP8JQkPTtqOKE5Il
+8vGQt0crA4ge8huC5t6es8ddb/UodK8FnglsRRnsgEMsAPBjK9hfyQKBgDHD23Mr
+R14zR9Q7AXiLu9bonvx4lxRosg9ay7zfrX60uO7xSqeZ7vRrWiXPzgOB2N+IC/YE
+HQa2YuDcBucqeZaKD7LxGqxDNKP1B6Fv34vjvj0uoABbURxms/Kdd1ZhMmwYmQ2K
+k+Ru5AancUPl8GQWvgoDp6/+bK2Fzor0eNxhAoGBANcJ6mGvgw3px/H2MPBjRBsf
+tUbZ39UH3c4siLa2Rry/Pm0Fgly8CUmu1IcFQDITKbyhaGPuHGtXglBOZqXid0VL
+01ReWISyKwWyuRjUuscdq2m684hXHYZCq2eJroqon1nMq4C0aqr696ra0cgCfbK3
+5yscAByxKd+64JZziDkZ
+-----END PRIVATE KEY-----
+"""
+rsa_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2eRWkmlyp/0Uxccja/hk
+b2JzLy8+V8Ugw+Cc1USl8ShhcyilzCQHlyZLz5YaO02vx4DDV4TDwHvE08HCEZxy
+agH5kjp5GtZLNypehBkAU3rys8icvDGlIc2bC+BVFIFlBExUEE/A8HIIXyaG1dJP
+m1k+Jqyh8yKrsOcvjU7GmZeI0gdZWm4SJrFNelY+unx6e8PfnOdNbTsUDjOAkDVo
+qBpvLYD0/+N0FLPXvi9hxQSPnA0GxAuvJfu1TPGGPDWf3xsqaDC9kDFZ1GOs53qD
+iyUzFLpTrm6y/ieg5LrocQbCDnMsTJ6sICpuKVBpT8Xz0ku/jKNyQvevZMIFB3q1
+2QIDAQAB
+-----END PUBLIC KEY-----
 """
 
 x25519_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
@@ -763,14 +851,14 @@ MC4CAQAwBQYDK2VuBCIEIPAjVfPNTm25VxtBRg+JjjFx9tA3M8aaBdVhjb92iBts
 
 
 @pytest.fixture
-def x509_data():
+def x509_data() -> tuple[PKey, X509]:
     """
     Create a new private key and start a certificate request (for a test
     to finish in one way or another).
     """
     # Basic setup stuff to generate a certificate
     pkey = PKey()
-    pkey.generate_key(TYPE_RSA, 512)
+    pkey.generate_key(TYPE_RSA, 2048)
     req = X509Req()
     req.set_pubkey(pkey)
     # Authority good you have.
@@ -784,7 +872,7 @@ def x509_data():
     expire = datetime.now() + timedelta(days=100)
     x509.set_notBefore(now.strftime("%Y%m%d%H%M%SZ").encode())
     x509.set_notAfter(expire.strftime("%Y%m%d%H%M%SZ").encode())
-    yield pkey, x509
+    return pkey, x509
 
 
 class TestX509Ext:
@@ -792,7 +880,7 @@ class TestX509Ext:
     Tests for `OpenSSL.crypto.X509Extension`.
     """
 
-    def test_str(self):
+    def test_str(self) -> None:
         """
         The string representation of `X509Extension` instances as
         returned by `str` includes stuff.
@@ -804,19 +892,7 @@ class TestX509Ext:
             == "CA:FALSE"
         )
 
-    def test_type(self):
-        """
-        `X509Extension` can be used to create instances of that type.
-        """
-        assert is_consistent_type(
-            X509Extension,
-            "X509Extension",
-            b"basicConstraints",
-            True,
-            b"CA:true",
-        )
-
-    def test_construction(self):
+    def test_construction(self) -> None:
         """
         `X509Extension` accepts an extension type name, a critical flag,
         and an extension value and returns an `X509Extension` instance.
@@ -844,7 +920,9 @@ class TestX509Ext:
             ),
         ],
     )
-    def test_invalid_extension(self, type_name, critical, value):
+    def test_invalid_extension(
+        self, type_name: bytes, critical: bool, value: bytes
+    ) -> None:
         """
         `X509Extension` raises something if it is passed a bad
         extension name or value.
@@ -853,7 +931,7 @@ class TestX509Ext:
             X509Extension(type_name, critical, value)
 
     @pytest.mark.parametrize("critical_flag", [True, False])
-    def test_get_critical(self, critical_flag):
+    def test_get_critical(self, critical_flag: bool) -> None:
         """
         `X509ExtensionType.get_critical` returns the value of the
         extension's critical flag.
@@ -865,7 +943,7 @@ class TestX509Ext:
         "short_name, value",
         [(b"basicConstraints", b"CA:true"), (b"nsComment", b"foo bar")],
     )
-    def test_get_short_name(self, short_name, value):
+    def test_get_short_name(self, short_name: bytes, value: bytes) -> None:
         """
         `X509ExtensionType.get_short_name` returns a string giving the
         short type name of the extension.
@@ -873,7 +951,7 @@ class TestX509Ext:
         ext = X509Extension(short_name, True, value)
         assert ext.get_short_name() == short_name
 
-    def test_get_data(self):
+    def test_get_data(self) -> None:
         """
         `X509Extension.get_data` returns a string giving the data of
         the extension.
@@ -882,7 +960,7 @@ class TestX509Ext:
         # Expect to get back the DER encoded form of CA:true.
         assert ext.get_data() == b"0\x03\x01\x01\xff"
 
-    def test_unused_subject(self, x509_data):
+    def test_unused_subject(self, x509_data: tuple[PKey, X509]) -> None:
         """
         The `subject` parameter to `X509Extension` may be provided for an
         extension which does not use it and is ignored in this case.
@@ -898,7 +976,7 @@ class TestX509Ext:
         assert b"X509v3 Basic Constraints:" in text
         assert b"CA:TRUE" in text
 
-    def test_subject(self, x509_data):
+    def test_subject(self, x509_data: tuple[PKey, X509]) -> None:
         """
         If an extension requires a subject, the `subject` parameter to
         `X509Extension` provides its value.
@@ -912,7 +990,7 @@ class TestX509Ext:
         text = dump_certificate(FILETYPE_TEXT, x509)
         assert b"X509v3 Subject Key Identifier:" in text
 
-    def test_missing_subject(self):
+    def test_missing_subject(self) -> None:
         """
         If an extension requires a subject and the `subject` parameter
         is given no value, something happens.
@@ -921,17 +999,20 @@ class TestX509Ext:
             X509Extension(b"subjectKeyIdentifier", False, b"hash")
 
     @pytest.mark.parametrize("bad_obj", [True, object(), "hello", []])
-    def test_invalid_subject(self, bad_obj):
+    def test_invalid_subject(self, bad_obj: object) -> None:
         """
         If the `subject` parameter is given a value which is not an
         `X509` instance, `TypeError` is raised.
         """
         with pytest.raises(TypeError):
             X509Extension(
-                "basicConstraints", False, "CA:TRUE", subject=bad_obj
+                b"basicConstraints",
+                False,
+                b"CA:TRUE",
+                subject=bad_obj,  # type: ignore[arg-type]
             )
 
-    def test_unused_issuer(self, x509_data):
+    def test_unused_issuer(self, x509_data: tuple[PKey, X509]) -> None:
         """
         The `issuer` parameter to `X509Extension` may be provided for an
         extension which does not use it and is ignored in this case.
@@ -946,7 +1027,7 @@ class TestX509Ext:
         assert b"X509v3 Basic Constraints:" in text
         assert b"CA:TRUE" in text
 
-    def test_issuer(self, x509_data):
+    def test_issuer(self, x509_data: tuple[PKey, X509]) -> None:
         """
         If an extension requires an issuer, the `issuer` parameter to
         `X509Extension` provides its value.
@@ -961,7 +1042,7 @@ class TestX509Ext:
         assert b"X509v3 Authority Key Identifier:" in text
         assert b"DirName:/CN=Yoda root CA" in text
 
-    def test_missing_issuer(self):
+    def test_missing_issuer(self) -> None:
         """
         If an extension requires an issue and the `issuer` parameter is
         given no value, something happens.
@@ -972,17 +1053,17 @@ class TestX509Ext:
             )
 
     @pytest.mark.parametrize("bad_obj", [True, object(), "hello", []])
-    def test_invalid_issuer(self, bad_obj):
+    def test_invalid_issuer(self, bad_obj: object) -> None:
         """
         If the `issuer` parameter is given a value which is not an
         `X509` instance, `TypeError` is raised.
         """
         with pytest.raises(TypeError):
             X509Extension(
-                "basicConstraints",
+                b"basicConstraints",
                 False,
-                "keyid:always,issuer:always",
-                issuer=bad_obj,
+                b"keyid:always,issuer:always",
+                issuer=bad_obj,  # type: ignore[arg-type]
             )
 
 
@@ -994,25 +1075,47 @@ class TestPKey:
     @pytest.mark.parametrize(
         ("key_string", "key_type"),
         [
-            (intermediate_key_pem, rsa.RSAPrivateKey),
+            (dsa_private_key_pem, dsa.DSAPrivateKey),
             (ec_private_key_pem, ec.EllipticCurvePrivateKey),
             (ed25519_private_key_pem, ed25519.Ed25519PrivateKey),
             (ed448_private_key_pem, ed448.Ed448PrivateKey),
+            (rsa_private_key_pem, rsa.RSAPrivateKey),
         ],
     )
     def test_convert_roundtrip_cryptography_private_key(
-        self, key_string, key_type
-    ):
+        self, key_string: bytes, key_type: type[_Key]
+    ) -> None:
         """
         PKey.from_cryptography_key creates a proper private PKey.
         PKey.to_cryptography_key creates a proper cryptography private key.
         """
         key = serialization.load_pem_private_key(key_string, None)
+        assert isinstance(key, key_type)
+        assert isinstance(
+            key,
+            (
+                dsa.DSAPrivateKey,
+                ec.EllipticCurvePrivateKey,
+                ed25519.Ed25519PrivateKey,
+                ed448.Ed448PrivateKey,
+                rsa.RSAPrivateKey,
+            ),
+        )
         pkey = PKey.from_cryptography_key(key)
 
         assert isinstance(pkey, PKey)
         parsed_key = pkey.to_cryptography_key()
         assert isinstance(parsed_key, key_type)
+        assert isinstance(
+            parsed_key,
+            (
+                dsa.DSAPrivateKey,
+                ec.EllipticCurvePrivateKey,
+                ed25519.Ed25519PrivateKey,
+                ed448.Ed448PrivateKey,
+                rsa.RSAPrivateKey,
+            ),
+        )
         assert parsed_key.public_key().public_bytes(
             serialization.Encoding.PEM,
             serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -1023,11 +1126,66 @@ class TestPKey:
         assert pkey._only_public is False
         assert pkey._initialized is True
 
-    def test_convert_from_cryptography_public_key(self):
+    @pytest.mark.parametrize(
+        ("key_string", "key_type"),
+        [
+            (dsa_public_key_pem, dsa.DSAPublicKey),
+            (ec_public_key_pem, ec.EllipticCurvePublicKey),
+            (ed25519_public_key_pem, ed25519.Ed25519PublicKey),
+            (ed448_public_key_pem, ed448.Ed448PublicKey),
+            (rsa_public_key_pem, rsa.RSAPublicKey),
+        ],
+    )
+    def test_convert_roundtrip_cryptography_public_key(
+        self, key_string: bytes, key_type: type[_Key]
+    ) -> None:
+        """
+        PKey.from_cryptography_key creates a proper public PKey.
+        PKey.to_cryptography_key creates a proper cryptography public key.
+        """
+        key = serialization.load_pem_public_key(key_string, None)
+        assert isinstance(key, key_type)
+        assert isinstance(
+            key,
+            (
+                dsa.DSAPublicKey,
+                ec.EllipticCurvePublicKey,
+                ed25519.Ed25519PublicKey,
+                ed448.Ed448PublicKey,
+                rsa.RSAPublicKey,
+            ),
+        )
+        pkey = PKey.from_cryptography_key(key)
+
+        assert isinstance(pkey, PKey)
+        parsed_key = pkey.to_cryptography_key()
+        assert isinstance(parsed_key, key_type)
+        assert isinstance(
+            parsed_key,
+            (
+                dsa.DSAPublicKey,
+                ec.EllipticCurvePublicKey,
+                ed25519.Ed25519PublicKey,
+                ed448.Ed448PublicKey,
+                rsa.RSAPublicKey,
+            ),
+        )
+        assert parsed_key.public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        ) == key.public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        assert pkey._only_public is True
+        assert pkey._initialized is True
+
+    def test_convert_from_cryptography_public_key(self) -> None:
         """
         PKey.from_cryptography_key creates a proper public PKey.
         """
         key = serialization.load_pem_public_key(cleartextPublicKeyPEM)
+        assert isinstance(key, rsa.RSAPublicKey)
         pkey = PKey.from_cryptography_key(key)
 
         assert isinstance(pkey, PKey)
@@ -1035,15 +1193,15 @@ class TestPKey:
         assert pkey._only_public is True
         assert pkey._initialized is True
 
-    def test_convert_from_cryptography_unsupported_type(self):
+    def test_convert_from_cryptography_unsupported_type(self) -> None:
         """
         PKey.from_cryptography_key raises TypeError with an unsupported type.
         """
         key = serialization.load_pem_private_key(x25519_private_key_pem, None)
         with pytest.raises(TypeError):
-            PKey.from_cryptography_key(key)
+            PKey.from_cryptography_key(key)  # type: ignore[arg-type]
 
-    def test_convert_public_pkey_to_cryptography_key(self):
+    def test_convert_public_pkey_to_cryptography_key(self) -> None:
         """
         PKey.to_cryptography_key creates a proper cryptography public key.
         """
@@ -1053,20 +1211,14 @@ class TestPKey:
         assert isinstance(key, rsa.RSAPublicKey)
         assert pkey.bits() == key.key_size
 
-    def test_type(self):
-        """
-        `PKey` can be used to create instances of that type.
-        """
-        assert is_consistent_type(PKey, "PKey")
-
-    def test_construction(self):
+    def test_construction(self) -> None:
         """
         `PKey` takes no arguments and returns a new `PKey` instance.
         """
         key = PKey()
         assert isinstance(key, PKey)
 
-    def test_pregeneration(self):
+    def test_pregeneration(self) -> None:
         """
         `PKey.bits` and `PKey.type` return `0` before the key is generated.
         `PKey.check` raises `TypeError` before the key is generated.
@@ -1077,7 +1229,7 @@ class TestPKey:
         with pytest.raises(TypeError):
             key.check()
 
-    def test_failed_generation(self):
+    def test_failed_generation(self) -> None:
         """
         `PKey.generate_key` takes two arguments, the first giving the key type
         as one of `TYPE_RSA` or `TYPE_DSA` and the second giving the number of
@@ -1087,7 +1239,7 @@ class TestPKey:
         """
         key = PKey()
         with pytest.raises(TypeError):
-            key.generate_key("foo", "bar")
+            key.generate_key("foo", "bar")  # type: ignore[arg-type]
         with pytest.raises(Error):
             key.generate_key(-1, 0)
 
@@ -1097,40 +1249,21 @@ class TestPKey:
             key.generate_key(TYPE_RSA, 0)
 
         with pytest.raises(TypeError):
-            key.generate_key(TYPE_RSA, object())
+            key.generate_key(TYPE_RSA, object())  # type: ignore[arg-type]
 
-        # XXX RSA generation for small values of bits is fairly buggy in a wide
-        # range of OpenSSL versions.  I need to figure out what the safe lower
-        # bound for a reasonable number of OpenSSL versions is and explicitly
-        # check for that in the wrapper.  The failure behavior is typically an
-        # infinite loop inside OpenSSL.
-
-        # with pytest.raises(Error):
-        #     key.generate_key(TYPE_RSA, 2)
-
-        # XXX DSA generation seems happy with any number of bits.  The DSS
-        # says bits must be between 512 and 1024 inclusive.  OpenSSL's DSA
-        # generator doesn't seem to care about the upper limit at all.  For
-        # the lower limit, it uses 512 if anything smaller is specified.
-        # So, it doesn't seem possible to make generate_key fail for
-        # TYPE_DSA with a bits argument which is at least an int.
-
-        # with pytest.raises(Error):
-        #     key.generate_key(TYPE_DSA, -7)
-
-    def test_rsa_generation(self):
+    def test_rsa_generation(self) -> None:
         """
         `PKey.generate_key` generates an RSA key when passed `TYPE_RSA` as a
         type and a reasonable number of bits.
         """
-        bits = 512
+        bits = 2048
         key = PKey()
         key.generate_key(TYPE_RSA, bits)
         assert key.type() == TYPE_RSA
         assert key.bits() == bits
         assert key.check()
 
-    def test_dsa_generation(self):
+    def test_dsa_generation(self) -> None:
         """
         `PKey.generate_key` generates a DSA key when passed `TYPE_DSA` as a
         type and a reasonable number of bits.
@@ -1146,18 +1279,18 @@ class TestPKey:
         with pytest.raises(TypeError):
             key.check()
 
-    def test_regeneration(self):
+    def test_regeneration(self) -> None:
         """
         `PKey.generate_key` can be called multiple times on the same key to
         generate new keys.
         """
         key = PKey()
-        for type, bits in [(TYPE_RSA, 512), (TYPE_DSA, 576)]:
+        for type, bits in [(TYPE_RSA, 2048), (TYPE_DSA, 576)]:
             key.generate_key(type, bits)
             assert key.type() == type
             assert key.bits() == bits
 
-    def test_inconsistent_key(self):
+    def test_inconsistent_key(self) -> None:
         """
         Either `load_privatekey` or `PKey.check` returns `Error` if the key is
         not consistent.
@@ -1166,21 +1299,21 @@ class TestPKey:
             key = load_privatekey(FILETYPE_PEM, inconsistentPrivateKeyPEM)
             key.check()
 
-    def test_check_public_key(self):
+    def test_check_public_key(self) -> None:
         """
         `PKey.check` raises `TypeError` if only the public part of the key
         is available.
         """
         # A trick to get a public-only key
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         cert = X509()
         cert.set_pubkey(key)
         pub = cert.get_pubkey()
         with pytest.raises(TypeError):
             pub.check()
 
-    def test_check_pr_897(self):
+    def test_check_pr_897(self) -> None:
         """
         Either `load_privatekey` or `PKey.check` raises `OpenSSL.crypto.Error`
         if provided with broken key
@@ -1190,20 +1323,18 @@ class TestPKey:
             pkey.check()
 
 
-def x509_name(**attrs):
+def x509_name(**attrs: str) -> X509Name:
     """
     Return a new X509Name with the given attributes.
     """
     # XXX There's no other way to get a new X509Name yet.
     name = X509().get_subject()
-    attrs = list(attrs.items())
 
     # Make the order stable - order matters!
-    def key(attr):
+    def key(attr: tuple[str, str]) -> str:
         return attr[1]
 
-    attrs.sort(key=key)
-    for k, v in attrs:
+    for k, v in sorted(attrs.items(), key=key):
         setattr(name, k, v)
     return name
 
@@ -1213,14 +1344,14 @@ class TestX509Name:
     Unit tests for `OpenSSL.crypto.X509Name`.
     """
 
-    def test_type(self):
+    def test_type(self) -> None:
         """
         The type of X509Name objects is `X509Name`.
         """
         name = x509_name()
         assert isinstance(name, X509Name)
 
-    def test_only_string_attributes(self):
+    def test_only_string_attributes(self) -> None:
         """
         Attempting to set a non-`str` attribute name on an `X509Name` instance
         causes `TypeError` to be raised.
@@ -1237,11 +1368,11 @@ class TestX509Name:
         # passed to setattr, so we can't test it on PyPy.  Apparently CPython
         # does this sometimes as well.
         with pytest.raises(TypeError):
-            setattr(name, None, "hello")
+            setattr(name, None, "hello")  # type: ignore[arg-type]
         with pytest.raises(TypeError):
-            setattr(name, 30, "hello")
+            setattr(name, 30, "hello")  # type: ignore[arg-type]
 
-    def test_set_invalid_attribute(self):
+    def test_set_invalid_attribute(self) -> None:
         """
         Attempting to set any attribute name on an `X509Name` instance for
         which no corresponding NID is defined causes `AttributeError` to be
@@ -1251,7 +1382,7 @@ class TestX509Name:
         with pytest.raises(AttributeError):
             setattr(name, "no such thing", None)
 
-    def test_attributes(self):
+    def test_attributes(self) -> None:
         """
         `X509Name` instances have attributes for each standard (?)
         X509Name field.
@@ -1278,7 +1409,7 @@ class TestX509Name:
         with pytest.raises(AttributeError):
             name.foobar
 
-    def test_copy(self):
+    def test_copy(self) -> None:
         """
         `X509Name` creates a new `X509Name` instance with all the same
         attributes as an existing `X509Name` instance when called with one.
@@ -1297,7 +1428,7 @@ class TestX509Name:
         name.emailAddress = "quux@example.com"
         assert copy.emailAddress == "bar@example.com"
 
-    def test_repr(self):
+    def test_repr(self) -> None:
         """
         `repr` passed an `X509Name` instance should return a string containing
         a description of the type and the NIDs which have been set on it.
@@ -1305,24 +1436,29 @@ class TestX509Name:
         name = x509_name(commonName="foo", emailAddress="bar")
         assert repr(name) == "<X509Name object '/emailAddress=bar/CN=foo'>"
 
-    def test_comparison(self):
+    def test_comparison(self) -> None:
         """
         `X509Name` instances should compare based on their NIDs.
         """
 
-        def _equality(a, b, assert_true, assert_false):
+        def _equality(
+            a: X509Name,
+            b: object,
+            assert_true: typing.Callable[[bool], None],
+            assert_false: typing.Callable[[bool], None],
+        ) -> None:
             assert_true(a == b)
             assert_false(a != b)
             assert_true(b == a)
             assert_false(b != a)
 
-        def assert_true(x):
+        def assert_true(x: bool) -> None:
             assert x
 
-        def assert_false(x):
+        def assert_false(x: bool) -> None:
             assert not x
 
-        def assert_equal(a, b):
+        def assert_equal(a: X509Name, b: object) -> None:
             _equality(a, b, assert_true, assert_false)
 
         # Instances compare equal to themselves.
@@ -1346,7 +1482,7 @@ class TestX509Name:
             x509_name(commonName="foo", OU="bar"),
         )
 
-        def assert_not_equal(a, b):
+        def assert_not_equal(a: X509Name, b: object) -> None:
             _equality(a, b, assert_false, assert_true)
 
         # Instances with different values for the same NID should not compare
@@ -1358,7 +1494,12 @@ class TestX509Name:
 
         assert_not_equal(x509_name(), object())
 
-        def _inequality(a, b, assert_true, assert_false):
+        def _inequality(
+            a: X509Name,
+            b: X509Name,
+            assert_true: typing.Callable[[bool], None],
+            assert_false: typing.Callable[[bool], None],
+        ) -> None:
             assert_true(a < b)
             assert_true(a <= b)
             assert_true(b > a)
@@ -1368,7 +1509,7 @@ class TestX509Name:
             assert_false(b < a)
             assert_false(b <= a)
 
-        def assert_less_than(a, b):
+        def assert_less_than(a: X509Name, b: X509Name) -> None:
             _inequality(a, b, assert_true, assert_false)
 
         # An X509Name with a NID with a value which sorts less than the value
@@ -1376,7 +1517,7 @@ class TestX509Name:
         # X509Name.
         assert_less_than(x509_name(CN="abc"), x509_name(CN="def"))
 
-        def assert_greater_than(a, b):
+        def assert_greater_than(a: X509Name, b: X509Name) -> None:
             _inequality(a, b, assert_false, assert_true)
 
         # An X509Name with a NID with a value which sorts greater than the
@@ -1384,7 +1525,7 @@ class TestX509Name:
         # other X509Name.
         assert_greater_than(x509_name(CN="def"), x509_name(CN="abc"))
 
-        def assert_raises(a, b):
+        def assert_raises(a: X509Name, b: object) -> None:
             with pytest.raises(TypeError):
                 a < b
             with pytest.raises(TypeError):
@@ -1397,7 +1538,7 @@ class TestX509Name:
         # Only X509Name objects can be compared with lesser than / greater than
         assert_raises(x509_name(), object())
 
-    def test_hash(self):
+    def test_hash(self) -> None:
         """
         `X509Name.hash` returns an integer hash based on the value of the name.
         """
@@ -1407,7 +1548,7 @@ class TestX509Name:
         a.CN = "bar"
         assert a.hash() != b.hash()
 
-    def test_der(self):
+    def test_der(self) -> None:
         """
         `X509Name.der` returns the DER encoded form of the name.
         """
@@ -1417,7 +1558,7 @@ class TestX509Name:
             b"1\x0c0\n\x06\x03U\x04\x03\x0c\x03foo"
         )
 
-    def test_get_components(self):
+    def test_get_components(self) -> None:
         """
         `X509Name.get_components` returns a `list` of two-tuples of `str`
         giving the NIDs and associated values which make up the name.
@@ -1429,7 +1570,7 @@ class TestX509Name:
         a.organizationalUnitName = "bar"
         assert a.get_components() == [(b"CN", b"foo"), (b"OU", b"bar")]
 
-    def test_load_nul_byte_attribute(self):
+    def test_load_nul_byte_attribute(self) -> None:
         """
         An `X509Name` from an `X509` instance loaded from a file can have a
         NUL byte in the value of one of its attributes.
@@ -1438,7 +1579,7 @@ class TestX509Name:
         subject = cert.get_subject()
         assert "null.python.org\x00example.org" == subject.commonName
 
-    def test_load_nul_byte_components(self):
+    def test_load_nul_byte_components(self) -> None:
         """
         An `X509Name` from an `X509` instance loaded from a file can have a
         NUL byte in the value of its components
@@ -1449,7 +1590,7 @@ class TestX509Name:
         ccn = [value for name, value in components if name == b"CN"]
         assert ccn[0] == b"null.python.org\x00example.org"
 
-    def test_set_attribute_failure(self):
+    def test_set_attribute_failure(self) -> None:
         """
         If the value of an attribute cannot be set for some reason then
         `Error` is raised.
@@ -1460,59 +1601,53 @@ class TestX509Name:
             setattr(name, "O", b"x" * 512)
 
 
-class _PKeyInteractionTestsMixin:
+class TestX509Req:
     """
-    Tests which involve another thing and a PKey.
+    Tests for `OpenSSL.crypto.X509Req`.
     """
 
-    def signable(self):
-        """
-        Return something with `set_pubkey` and `sign` methods.
-        """
-        raise NotImplementedError()
-
-    def test_sign_with_ungenerated(self):
+    def test_sign_with_ungenerated(self) -> None:
         """
         `X509Req.sign` raises `ValueError` when passed a `PKey` with no parts.
         """
-        request = self.signable()
+        request = X509Req()
         key = PKey()
         with pytest.raises(ValueError):
             request.sign(key, GOOD_DIGEST)
 
-    def test_sign_with_public_key(self):
+    def test_sign_with_public_key(self) -> None:
         """
         `X509Req.sign` raises `ValueError` when passed a `PKey` with no private
         part as the signing key.
         """
-        request = self.signable()
+        request = X509Req()
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         request.set_pubkey(key)
         pub = request.get_pubkey()
         with pytest.raises(ValueError):
             request.sign(pub, GOOD_DIGEST)
 
-    def test_sign_with_unknown_digest(self):
+    def test_sign_with_unknown_digest(self) -> None:
         """
         `X509Req.sign` raises `ValueError` when passed a digest name which is
         not known.
         """
-        request = self.signable()
+        request = X509Req()
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(ValueError):
             request.sign(key, BAD_DIGEST)
 
-    def test_sign(self):
+    def test_sign(self) -> None:
         """
         `X509Req.sign` succeeds when passed a private key object and a
         valid digest function. `X509Req.verify` can be used to check
         the signature.
         """
-        request = self.signable()
+        request = X509Req()
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         request.set_pubkey(key)
         request.sign(key, GOOD_DIGEST)
         # If the type has a verify method, cover that too.
@@ -1521,36 +1656,18 @@ class _PKeyInteractionTestsMixin:
             assert request.verify(pub)
             # Make another key that won't verify.
             key = PKey()
-            key.generate_key(TYPE_RSA, 512)
+            key.generate_key(TYPE_RSA, 2048)
             with pytest.raises(Error):
                 request.verify(key)
 
-
-class TestX509Req(_PKeyInteractionTestsMixin):
-    """
-    Tests for `OpenSSL.crypto.X509Req`.
-    """
-
-    def signable(self):
-        """
-        Create and return a new `X509Req`.
-        """
-        return X509Req()
-
-    def test_type(self):
-        """
-        `X509Req` can be used to create instances of that type.
-        """
-        assert is_consistent_type(X509Req, "X509Req")
-
-    def test_construction(self):
+    def test_construction(self) -> None:
         """
         `X509Req` takes no arguments and returns an `X509Req` instance.
         """
         request = X509Req()
         assert isinstance(request, X509Req)
 
-    def test_version(self):
+    def test_version(self) -> None:
         """
         `X509Req.set_version` sets the X.509 version of the certificate
         request. `X509Req.get_version` returns the X.509 version of the
@@ -1561,18 +1678,18 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         request.set_version(0)
         assert request.get_version() == 0
 
-    def test_version_wrong_args(self):
+    def test_version_wrong_args(self) -> None:
         """
         `X509Req.set_version` raises `TypeError` if called with a non-`int`
         argument.
         """
         request = X509Req()
         with pytest.raises(TypeError):
-            request.set_version("foo")
+            request.set_version("foo")  # type: ignore[arg-type]
         with pytest.raises(ValueError):
             request.set_version(2)
 
-    def test_get_subject(self):
+    def test_get_subject(self) -> None:
         """
         `X509Req.get_subject` returns an `X509Name` for the subject of the
         request and which is valid even after the request object is
@@ -1587,7 +1704,7 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         subject.commonName = "bar"
         assert subject.commonName == "bar"
 
-    def test_add_extensions(self):
+    def test_add_extensions(self) -> None:
         """
         `X509Req.add_extensions` accepts a `list` of `X509Extension` instances
         and adds them to the X509 request.
@@ -1602,7 +1719,7 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         assert exts[0].get_critical() == 1
         assert exts[0].get_data() == b"0\x00"
 
-    def test_get_extensions(self):
+    def test_get_extensions(self) -> None:
         """
         `X509Req.get_extensions` returns a `list` of extensions added to this
         X509 request.
@@ -1628,7 +1745,7 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         exts = request.get_extensions()
         assert len(exts) == 2
 
-    def test_undef_oid(self):
+    def test_undef_oid(self) -> None:
         assert (
             X509Extension(
                 b"1.2.3.4.5.6.7", False, b"DER:05:00"
@@ -1636,7 +1753,7 @@ class TestX509Req(_PKeyInteractionTestsMixin):
             == b"UNDEF"
         )
 
-    def test_add_extensions_wrong_args(self):
+    def test_add_extensions_wrong_args(self) -> None:
         """
         `X509Req.add_extensions` raises `TypeError` if called with a
         non-`list`.  Or it raises `ValueError` if called with a `list`
@@ -1644,20 +1761,20 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         """
         request = X509Req()
         with pytest.raises(TypeError):
-            request.add_extensions(object())
+            request.add_extensions(object())  # type: ignore[arg-type]
         with pytest.raises(ValueError):
-            request.add_extensions([object()])
+            request.add_extensions([object()])  # type: ignore[list-item]
 
-    def test_verify_wrong_args(self):
+    def test_verify_wrong_args(self) -> None:
         """
         `X509Req.verify` raises `TypeError` if passed anything other than a
         `PKey` instance as its single argument.
         """
         request = X509Req()
         with pytest.raises(TypeError):
-            request.verify(object())
+            request.verify(object())  # type: ignore[arg-type]
 
-    def test_verify_uninitialized_key(self):
+    def test_verify_uninitialized_key(self) -> None:
         """
         `X509Req.verify` raises `OpenSSL.crypto.Error` if called with a
         `OpenSSL.crypto.PKey` which contains no key data.
@@ -1667,7 +1784,7 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         with pytest.raises(Error):
             request.verify(pkey)
 
-    def test_verify_wrong_key(self):
+    def test_verify_wrong_key(self) -> None:
         """
         `X509Req.verify` raises `OpenSSL.crypto.Error` if called with a
         `OpenSSL.crypto.PKey` which does not represent the public part of the
@@ -1681,7 +1798,7 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         with pytest.raises(Error):
             request.verify(another_pkey)
 
-    def test_verify_success(self):
+    def test_verify_success(self) -> None:
         """
         `X509Req.verify` returns `True` if called with a `OpenSSL.crypto.PKey`
         which represents the public part of the key which signed the request.
@@ -1692,16 +1809,16 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         request.sign(pkey, GOOD_DIGEST)
         assert request.verify(pkey)
 
-    def test_convert_from_cryptography(self):
+    def test_convert_from_cryptography(self) -> None:
         crypto_req = x509.load_pem_x509_csr(cleartextCertificateRequestPEM)
         req = X509Req.from_cryptography(crypto_req)
         assert isinstance(req, X509Req)
 
-    def test_convert_from_cryptography_unsupported_type(self):
+    def test_convert_from_cryptography_unsupported_type(self) -> None:
         with pytest.raises(TypeError):
-            X509Req.from_cryptography(object())
+            X509Req.from_cryptography(object())  # type: ignore[arg-type]
 
-    def test_convert_to_cryptography_key(self):
+    def test_convert_to_cryptography_key(self) -> None:
         req = load_certificate_request(
             FILETYPE_PEM, cleartextCertificateRequestPEM
         )
@@ -1709,49 +1826,77 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         assert isinstance(crypto_req, x509.CertificateSigningRequest)
 
 
-class TestX509(_PKeyInteractionTestsMixin):
+class TestX509:
     """
     Tests for `OpenSSL.crypto.X509`.
     """
 
     pemData = root_cert_pem + root_key_pem
 
-    def signable(self):
+    def test_sign_with_ungenerated(self) -> None:
         """
-        Create and return a new `X509`.
+        `X509.sign` raises `ValueError` when passed a `PKey` with no parts.
         """
-        certificate = X509()
-        # Fill in placeholder validity values. signable only expects to call
-        # set_pubkey and sign.
-        certificate.gmtime_adj_notBefore(-24 * 60 * 60)
-        certificate.gmtime_adj_notAfter(24 * 60 * 60)
-        return certificate
+        cert = X509()
+        key = PKey()
+        with pytest.raises(ValueError):
+            cert.sign(key, GOOD_DIGEST)
 
-    def test_type(self):
+    def test_sign_with_public_key(self) -> None:
         """
-        `X509` can be used to create instances of that type.
+        `X509.sign` raises `ValueError` when passed a `PKey` with no private
+        part as the signing key.
         """
-        assert is_consistent_type(X509, "X509")
+        cert = X509()
+        key = PKey()
+        key.generate_key(TYPE_RSA, 2048)
+        cert.set_pubkey(key)
+        pub = cert.get_pubkey()
+        with pytest.raises(ValueError):
+            cert.sign(pub, GOOD_DIGEST)
 
-    def test_construction(self):
+    def test_sign_with_unknown_digest(self) -> None:
+        """
+        `X509.sign` raises `ValueError` when passed a digest name which is
+        not known.
+        """
+        cert = X509()
+        key = PKey()
+        key.generate_key(TYPE_RSA, 2048)
+        with pytest.raises(ValueError):
+            cert.sign(key, BAD_DIGEST)
+
+    def test_sign(self) -> None:
+        """
+        `X509.sign` succeeds when passed a private key object and a
+        valid digest function. `X509Req.verify` can be used to check
+        the signature.
+        """
+        cert = X509()
+        key = PKey()
+        key.generate_key(TYPE_RSA, 2048)
+        cert.set_pubkey(key)
+        cert.sign(key, GOOD_DIGEST)
+
+    def test_construction(self) -> None:
         """
         `X509` takes no arguments and returns an instance of `X509`.
         """
         certificate = X509()
         assert isinstance(certificate, X509)
         assert type(certificate).__name__ == "X509"
-        assert type(certificate) == X509
+        assert type(certificate) is X509
 
-    def test_set_version_wrong_args(self):
+    def test_set_version_wrong_args(self) -> None:
         """
         `X509.set_version` raises `TypeError` if invoked with an argument
         not of type `int`.
         """
         cert = X509()
         with pytest.raises(TypeError):
-            cert.set_version(None)
+            cert.set_version(None)  # type: ignore[arg-type]
 
-    def test_version(self):
+    def test_version(self) -> None:
         """
         `X509.set_version` sets the certificate version number.
         `X509.get_version` retrieves it.
@@ -1760,7 +1905,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert.set_version(2)
         assert cert.get_version() == 2
 
-    def test_serial_number(self):
+    def test_serial_number(self) -> None:
         """
         The serial number of an `X509` can be retrieved and
         modified with `X509.get_serial_number` and
@@ -1768,7 +1913,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         """
         certificate = X509()
         with pytest.raises(TypeError):
-            certificate.set_serial_number("1")
+            certificate.set_serial_number("1")  # type: ignore[arg-type]
         assert certificate.get_serial_number() == 0
         certificate.set_serial_number(1)
         assert certificate.get_serial_number() == 1
@@ -1779,65 +1924,66 @@ class TestX509(_PKeyInteractionTestsMixin):
         certificate.set_serial_number(2**128 + 1)
         assert certificate.get_serial_number() == 2**128 + 1
 
-    def _setBoundTest(self, which):
+    def _setBoundTest(
+        self,
+        get: typing.Callable[[X509], bytes | None],
+        set: typing.Callable[[X509, bytes], None],
+    ) -> None:
         """
         `X509.set_notBefore` takes a string in the format of an
         ASN1 GENERALIZEDTIME and sets the beginning of the certificate's
         validity period to it.
         """
         certificate = X509()
-        set = getattr(certificate, "set_not" + which)
-        get = getattr(certificate, "get_not" + which)
 
         # Starts with no value.
-        assert get() is None
+        assert get(certificate) is None
 
         # GMT (Or is it UTC?) -exarkun
         when = b"20040203040506Z"
-        set(when)
-        assert get() == when
+        set(certificate, when)
+        assert get(certificate) == when
 
         # A plus two hours and thirty minutes offset
         when = b"20040203040506+0530"
-        set(when)
-        assert get() == when
+        set(certificate, when)
+        assert get(certificate) == when
 
         # A minus one hour fifteen minutes offset
         when = b"20040203040506-0115"
-        set(when)
-        assert get() == when
+        set(certificate, when)
+        assert (
+            get(
+                certificate,
+            )
+            == when
+        )
 
         # An invalid string results in a ValueError
         with pytest.raises(ValueError):
-            set(b"foo bar")
+            set(certificate, b"foo bar")
 
-        # The wrong number of arguments results in a TypeError.
-        with pytest.raises(TypeError):
-            set()
-        with pytest.raises(TypeError):
-            set(b"20040203040506Z", b"20040203040506Z")
-        with pytest.raises(TypeError):
-            get(b"foo bar")
-
-    # XXX ASN1_TIME (not GENERALIZEDTIME)
-
-    def test_set_notBefore(self):
+    def test_set_notBefore(self) -> None:
         """
         `X509.set_notBefore` takes a string in the format of an
         ASN1 GENERALIZEDTIME and sets the beginning of the certificate's
         validity period to it.
         """
-        self._setBoundTest("Before")
+        self._setBoundTest(
+            lambda c: c.get_notBefore(), lambda c, v: c.set_notBefore(v)
+        )
 
-    def test_set_notAfter(self):
+    def test_set_notAfter(self) -> None:
         """
         `X509.set_notAfter` takes a string in the format of an ASN1
         GENERALIZEDTIME and sets the end of the certificate's validity period
         to it.
         """
-        self._setBoundTest("After")
+        self._setBoundTest(
+            lambda c: c.get_notAfter(), lambda c, v: c.set_notAfter(v)
+        )
 
-    def test_get_notBefore(self):
+    def test_get_notBefore(self) -> None:
         """
         `X509.get_notBefore` returns a string in the format of an
         ASN1 GENERALIZEDTIME even for certificates which store it as UTCTIME
@@ -1846,7 +1992,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert = load_certificate(FILETYPE_PEM, old_root_cert_pem)
         assert cert.get_notBefore() == b"20090325123658Z"
 
-    def test_get_notAfter(self):
+    def test_get_notAfter(self) -> None:
         """
         `X509.get_notAfter` returns a string in the format of an
         ASN1 GENERALIZEDTIME even for certificates which store it as UTCTIME
@@ -1855,17 +2001,17 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert = load_certificate(FILETYPE_PEM, old_root_cert_pem)
         assert cert.get_notAfter() == b"20170611123658Z"
 
-    def test_gmtime_adj_notBefore_wrong_args(self):
+    def test_gmtime_adj_notBefore_wrong_args(self) -> None:
         """
         `X509.gmtime_adj_notBefore` raises `TypeError` if called with a
         non-`int` argument.
         """
         cert = X509()
         with pytest.raises(TypeError):
-            cert.gmtime_adj_notBefore(None)
+            cert.gmtime_adj_notBefore(None)  # type: ignore[arg-type]
 
-    @flaky.flaky
-    def test_gmtime_adj_notBefore(self):
+    @pytest.mark.flaky(reruns=2)
+    def test_gmtime_adj_notBefore(self) -> None:
         """
         `X509.gmtime_adj_notBefore` changes the not-before timestamp to be the
         current time plus the number of seconds passed in.
@@ -1875,23 +2021,25 @@ class TestX509(_PKeyInteractionTestsMixin):
             seconds=100
         )
         cert.gmtime_adj_notBefore(100)
+        not_before_str = cert.get_notBefore()
+        assert not_before_str is not None
         not_before = datetime.strptime(
-            cert.get_notBefore().decode(), "%Y%m%d%H%M%SZ"
+            not_before_str.decode(), "%Y%m%d%H%M%SZ"
         )
         not_before_max = utcnow() + timedelta(seconds=100)
         assert not_before_min <= not_before <= not_before_max
 
-    def test_gmtime_adj_notAfter_wrong_args(self):
+    def test_gmtime_adj_notAfter_wrong_args(self) -> None:
         """
         `X509.gmtime_adj_notAfter` raises `TypeError` if called with a
         non-`int` argument.
         """
         cert = X509()
         with pytest.raises(TypeError):
-            cert.gmtime_adj_notAfter(None)
+            cert.gmtime_adj_notAfter(None)  # type: ignore[arg-type]
 
-    @flaky.flaky
-    def test_gmtime_adj_notAfter(self):
+    @pytest.mark.flaky(reruns=2)
+    def test_gmtime_adj_notAfter(self) -> None:
         """
         `X509.gmtime_adj_notAfter` changes the not-after timestamp
         to be the current time plus the number of seconds passed in.
@@ -1901,13 +2049,13 @@ class TestX509(_PKeyInteractionTestsMixin):
             seconds=100
         )
         cert.gmtime_adj_notAfter(100)
-        not_after = datetime.strptime(
-            cert.get_notAfter().decode(), "%Y%m%d%H%M%SZ"
-        )
+        not_after_str = cert.get_notAfter()
+        assert not_after_str is not None
+        not_after = datetime.strptime(not_after_str.decode(), "%Y%m%d%H%M%SZ")
         not_after_max = utcnow() + timedelta(seconds=100)
         assert not_after_min <= not_after <= not_after_max
 
-    def test_has_expired(self):
+    def test_has_expired(self) -> None:
         """
         `X509.has_expired` returns `True` if the certificate's not-after time
         is in the past.
@@ -1916,7 +2064,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert.gmtime_adj_notAfter(-1)
         assert cert.has_expired()
 
-    def test_has_not_expired(self):
+    def test_has_not_expired(self) -> None:
         """
         `X509.has_expired` returns `False` if the certificate's not-after time
         is in the future.
@@ -1925,7 +2073,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert.gmtime_adj_notAfter(2)
         assert not cert.has_expired()
 
-    def test_has_expired_exception(self):
+    def test_has_expired_exception(self) -> None:
         """
         `X509.has_expired` throws ValueError if not-after time is not set
         """
@@ -1933,7 +2081,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         with pytest.raises(ValueError):
             cert.has_expired()
 
-    def test_root_has_not_expired(self):
+    def test_root_has_not_expired(self) -> None:
         """
         `X509.has_expired` returns `False` if the certificate's not-after time
         is in the future.
@@ -1941,7 +2089,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert = load_certificate(FILETYPE_PEM, root_cert_pem)
         assert not cert.has_expired()
 
-    def test_digest(self):
+    def test_digest(self) -> None:
         """
         `X509.digest` returns a string giving ":"-separated hex-encoded
         words of the digest of the certificate.
@@ -1957,35 +2105,49 @@ class TestX509(_PKeyInteractionTestsMixin):
             )
         )
 
-    def _extcert(self, pkey, extensions):
-        cert = X509()
-        # Certificates with extensions must be X.509v3, which is encoded with a
-        # version of two.
-        cert.set_version(2)
-        cert.set_pubkey(pkey)
-        cert.get_subject().commonName = "Unit Tests"
-        cert.get_issuer().commonName = "Unit Tests"
-        when = datetime.now().strftime("%Y%m%d%H%M%SZ").encode("ascii")
-        cert.set_notBefore(when)
-        cert.set_notAfter(when)
-
-        cert.add_extensions(extensions)
-        cert.sign(pkey, "sha256")
-        return load_certificate(
-            FILETYPE_PEM, dump_certificate(FILETYPE_PEM, cert)
+    def _extcert(
+        self, key: _PrivateKey, extensions: list[x509.ExtensionType]
+    ) -> X509:
+        subject = x509.Name(
+            [x509.NameAttribute(x509.NameOID.COMMON_NAME, "Unit Tests")]
         )
+        when = datetime.now()
+        builder = (
+            x509.CertificateBuilder()
+            .public_key(key.public_key())
+            .subject_name(subject)
+            .issuer_name(subject)
+            .not_valid_before(when)
+            .not_valid_after(when)
+            .serial_number(1)
+        )
+        for i, ext in enumerate(extensions):
+            builder = builder.add_extension(ext, critical=i % 2 == 0)
 
-    def test_extension_count(self):
+        return X509.from_cryptography(builder.sign(key, hashes.SHA256()))
+
+    def test_extension_count(self) -> None:
         """
         `X509.get_extension_count` returns the number of extensions
         that are present in the certificate.
         """
-        pkey = load_privatekey(FILETYPE_PEM, client_key_pem)
-        ca = X509Extension(b"basicConstraints", True, b"CA:FALSE")
-        key = X509Extension(b"keyUsage", True, b"digitalSignature")
-        subjectAltName = X509Extension(
-            b"subjectAltName", True, b"DNS:example.com"
+        pkey = load_privatekey(
+            FILETYPE_PEM, client_key_pem
+        ).to_cryptography_key()
+        assert isinstance(pkey, rsa.RSAPrivateKey)
+        ca = x509.BasicConstraints(ca=False, path_length=None)
+        key = x509.KeyUsage(
+            digital_signature=True,
+            content_commitment=False,
+            key_encipherment=False,
+            data_encipherment=False,
+            key_agreement=False,
+            key_cert_sign=False,
+            crl_sign=False,
+            encipher_only=False,
+            decipher_only=False,
         )
+        san = x509.SubjectAlternativeName([x509.DNSName("example.com")])
 
         # Try a certificate with no extensions at all.
         c = self._extcert(pkey, [])
@@ -1996,22 +2158,33 @@ class TestX509(_PKeyInteractionTestsMixin):
         assert c.get_extension_count() == 1
 
         # And a certificate with several
-        c = self._extcert(pkey, [ca, key, subjectAltName])
+        c = self._extcert(pkey, [ca, key, san])
         assert c.get_extension_count() == 3
 
-    def test_get_extension(self):
+    def test_get_extension(self) -> None:
         """
         `X509.get_extension` takes an integer and returns an
         `X509Extension` corresponding to the extension at that index.
         """
-        pkey = load_privatekey(FILETYPE_PEM, client_key_pem)
-        ca = X509Extension(b"basicConstraints", True, b"CA:FALSE")
-        key = X509Extension(b"keyUsage", True, b"digitalSignature")
-        subjectAltName = X509Extension(
-            b"subjectAltName", False, b"DNS:example.com"
+        pkey = load_privatekey(
+            FILETYPE_PEM, client_key_pem
+        ).to_cryptography_key()
+        assert isinstance(pkey, rsa.RSAPrivateKey)
+        ca = x509.BasicConstraints(ca=False, path_length=None)
+        key = x509.KeyUsage(
+            digital_signature=True,
+            content_commitment=False,
+            key_encipherment=False,
+            data_encipherment=False,
+            key_agreement=False,
+            key_cert_sign=False,
+            crl_sign=False,
+            encipher_only=False,
+            decipher_only=False,
         )
+        san = x509.SubjectAlternativeName([x509.DNSName("example.com")])
 
-        cert = self._extcert(pkey, [ca, key, subjectAltName])
+        cert = self._extcert(pkey, [ca, key, san])
 
         ext = cert.get_extension(0)
         assert isinstance(ext, X509Extension)
@@ -2020,12 +2193,12 @@ class TestX509(_PKeyInteractionTestsMixin):
 
         ext = cert.get_extension(1)
         assert isinstance(ext, X509Extension)
-        assert ext.get_critical()
+        assert not ext.get_critical()
         assert ext.get_short_name() == b"keyUsage"
 
         ext = cert.get_extension(2)
         assert isinstance(ext, X509Extension)
-        assert not ext.get_critical()
+        assert ext.get_critical()
         assert ext.get_short_name() == b"subjectAltName"
 
         with pytest.raises(IndexError):
@@ -2033,9 +2206,9 @@ class TestX509(_PKeyInteractionTestsMixin):
         with pytest.raises(IndexError):
             cert.get_extension(4)
         with pytest.raises(TypeError):
-            cert.get_extension("hello")
+            cert.get_extension("hello")  # type: ignore[arg-type]
 
-    def test_nullbyte_subjectAltName(self):
+    def test_nullbyte_subjectAltName(self) -> None:
         """
         The fields of a `subjectAltName` extension on an X509 may contain NUL
         bytes and this value is reflected in the string representation of the
@@ -2053,7 +2226,7 @@ class TestX509(_PKeyInteractionTestsMixin):
             == str(ext).encode("ascii").strip()
         )
 
-    def test_invalid_digest_algorithm(self):
+    def test_invalid_digest_algorithm(self) -> None:
         """
         `X509.digest` raises `ValueError` if called with an unrecognized hash
         algorithm.
@@ -2062,7 +2235,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         with pytest.raises(ValueError):
             cert.digest(BAD_DIGEST)
 
-    def test_get_subject(self):
+    def test_get_subject(self) -> None:
         """
         `X509.get_subject` returns an `X509Name` instance.
         """
@@ -2077,16 +2250,16 @@ class TestX509(_PKeyInteractionTestsMixin):
             (b"CN", b"Testing Root CA"),
         ]
 
-    def test_set_subject_wrong_args(self):
+    def test_set_subject_wrong_args(self) -> None:
         """
         `X509.set_subject` raises a `TypeError` if called with an argument not
         of type `X509Name`.
         """
         cert = X509()
         with pytest.raises(TypeError):
-            cert.set_subject(None)
+            cert.set_subject(None)  # type: ignore[arg-type]
 
-    def test_set_subject(self):
+    def test_set_subject(self) -> None:
         """
         `X509.set_subject` changes the subject of the certificate to the one
         passed in.
@@ -2101,7 +2274,7 @@ class TestX509(_PKeyInteractionTestsMixin):
             (b"OU", b"Unit Tests"),
         ]
 
-    def test_get_issuer(self):
+    def test_get_issuer(self) -> None:
         """
         `X509.get_issuer` returns an `X509Name` instance.
         """
@@ -2117,16 +2290,16 @@ class TestX509(_PKeyInteractionTestsMixin):
             (b"CN", b"Testing Root CA"),
         ]
 
-    def test_set_issuer_wrong_args(self):
+    def test_set_issuer_wrong_args(self) -> None:
         """
         `X509.set_issuer` raises a `TypeError` if called with an argument not
         of type `X509Name`.
         """
         cert = X509()
         with pytest.raises(TypeError):
-            cert.set_issuer(None)
+            cert.set_issuer(None)  # type: ignore[arg-type]
 
-    def test_set_issuer(self):
+    def test_set_issuer(self) -> None:
         """
         `X509.set_issuer` changes the issuer of the certificate to the
         one passed in.
@@ -2141,7 +2314,7 @@ class TestX509(_PKeyInteractionTestsMixin):
             (b"OU", b"Unit Tests"),
         ]
 
-    def test_get_pubkey_uninitialized(self):
+    def test_get_pubkey_uninitialized(self) -> None:
         """
         When called on a certificate with no public key, `X509.get_pubkey`
         raises `OpenSSL.crypto.Error`.
@@ -2150,16 +2323,16 @@ class TestX509(_PKeyInteractionTestsMixin):
         with pytest.raises(Error):
             cert.get_pubkey()
 
-    def test_set_pubkey_wrong_type(self):
+    def test_set_pubkey_wrong_type(self) -> None:
         """
         `X509.set_pubkey` raises `TypeError` when given an object of the
         wrong type.
         """
         cert = X509()
         with pytest.raises(TypeError):
-            cert.set_pubkey(object())
+            cert.set_pubkey(object())  # type: ignore[arg-type]
 
-    def test_subject_name_hash(self):
+    def test_subject_name_hash(self) -> None:
         """
         `X509.subject_name_hash` returns the hash of the certificate's
         subject name.
@@ -2168,7 +2341,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         # SHA1
         assert cert.subject_name_hash() == 3278919224
 
-    def test_get_signature_algorithm(self):
+    def test_get_signature_algorithm(self) -> None:
         """
         `X509.get_signature_algorithm` returns a string which means
         the algorithm used to sign the certificate.
@@ -2176,7 +2349,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert = load_certificate(FILETYPE_PEM, self.pemData)
         assert b"sha256WithRSAEncryption" == cert.get_signature_algorithm()
 
-    def test_get_undefined_signature_algorithm(self):
+    def test_get_undefined_signature_algorithm(self) -> None:
         """
         `X509.get_signature_algorithm` raises `ValueError` if the signature
         algorithm is undefined or unknown.
@@ -2208,26 +2381,26 @@ tgI5
         with pytest.raises(ValueError):
             cert.get_signature_algorithm()
 
-    def test_sign_bad_pubkey_type(self):
+    def test_sign_bad_pubkey_type(self) -> None:
         """
         `X509.sign` raises `TypeError` when called with the wrong type.
         """
         cert = X509()
         with pytest.raises(TypeError):
-            cert.sign(object(), b"sha256")
+            cert.sign(object(), b"sha256")  # type: ignore[arg-type]
 
-    def test_convert_from_cryptography(self):
+    def test_convert_from_cryptography(self) -> None:
         crypto_cert = x509.load_pem_x509_certificate(intermediate_cert_pem)
         cert = X509.from_cryptography(crypto_cert)
 
         assert isinstance(cert, X509)
         assert cert.get_version() == crypto_cert.version.value
 
-    def test_convert_from_cryptography_unsupported_type(self):
+    def test_convert_from_cryptography_unsupported_type(self) -> None:
         with pytest.raises(TypeError):
-            X509.from_cryptography(object())
+            X509.from_cryptography(object())  # type: ignore[arg-type]
 
-    def test_convert_to_cryptography_key(self):
+    def test_convert_to_cryptography_key(self) -> None:
         cert = load_certificate(FILETYPE_PEM, intermediate_cert_pem)
         crypto_cert = cert.to_cryptography()
 
@@ -2240,13 +2413,7 @@ class TestX509Store:
     Test for `OpenSSL.crypto.X509Store`.
     """
 
-    def test_type(self):
-        """
-        `X509Store` is a type object.
-        """
-        assert is_consistent_type(X509Store, "X509Store")
-
-    def test_add_cert(self):
+    def test_add_cert(self) -> None:
         """
         `X509Store.add_cert` adds a `X509` instance to the certificate store.
         """
@@ -2255,16 +2422,16 @@ class TestX509Store:
         store.add_cert(cert)
 
     @pytest.mark.parametrize("cert", [None, 1.0, "cert", object()])
-    def test_add_cert_wrong_args(self, cert):
+    def test_add_cert_wrong_args(self, cert: object) -> None:
         """
         `X509Store.add_cert` raises `TypeError` if passed a non-X509 object
         as its first argument.
         """
         store = X509Store()
         with pytest.raises(TypeError):
-            store.add_cert(cert)
+            store.add_cert(cert)  # type: ignore[arg-type]
 
-    def test_add_cert_accepts_duplicate(self):
+    def test_add_cert_accepts_duplicate(self) -> None:
         """
         `X509Store.add_cert` doesn't raise `OpenSSL.crypto.Error` if an attempt
         is made to add the same certificate to the store more than once.
@@ -2304,10 +2471,17 @@ class TestX509Store:
         ],
     )
     def test_load_locations_parameters(
-        self, cafile, capath, call_cafile, call_capath, monkeypatch
-    ):
+        self,
+        cafile: str | bytes | None,
+        capath: str | bytes | None,
+        call_cafile: object,
+        call_capath: object,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         class LibMock:
-            def load_locations(self, store, cafile, capath):
+            def load_locations(
+                self, store: object, cafile: object, capath: object
+            ) -> int:
                 self.cafile = cafile
                 self.capath = capath
                 return 1
@@ -2323,293 +2497,30 @@ class TestX509Store:
         assert call_cafile == lib_mock.cafile
         assert call_capath == lib_mock.capath
 
-    def test_load_locations_fails_when_all_args_are_none(self):
+    def test_load_locations_fails_when_all_args_are_none(self) -> None:
         store = X509Store()
         with pytest.raises(Error):
             store.load_locations(None, None)
 
-    def test_load_locations_raises_error_on_failure(self, tmpdir):
-        invalid_ca_file = tmpdir.join("invalid.pem")
-        invalid_ca_file.write("This is not a certificate")
+    def test_load_locations_raises_error_on_failure(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        invalid_ca_file = tmp_path / "invalid.pem"
+        invalid_ca_file.write_text("This is not a certificate")
 
         store = X509Store()
         with pytest.raises(Error):
             store.load_locations(cafile=str(invalid_ca_file))
 
 
-class TestPKCS12:
-    """
-    Test for `OpenSSL.crypto.PKCS12`.
-    """
-
-    def test_type(self):
-        """
-        `PKCS12` is a type object.
-        """
-        assert is_consistent_type(PKCS12, "PKCS12")
-
-    def test_empty_construction(self):
-        """
-        `PKCS12` returns a new instance of `PKCS12` with no certificate,
-        private key, CA certificates, or friendly name.
-        """
-        p12 = PKCS12()
-        assert None is p12.get_certificate()
-        assert None is p12.get_privatekey()
-        assert None is p12.get_ca_certificates()
-        assert None is p12.get_friendlyname()
-
-    def test_type_errors(self):
-        """
-        The `PKCS12` setter functions (`set_certificate`, `set_privatekey`,
-        `set_ca_certificates`, and `set_friendlyname`) raise `TypeError`
-        when passed objects of types other than those expected.
-        """
-        p12 = PKCS12()
-        for bad_arg in [3, PKey(), X509]:
-            with pytest.raises(TypeError):
-                p12.set_certificate(bad_arg)
-        for bad_arg in [3, "legbone", X509()]:
-            with pytest.raises(TypeError):
-                p12.set_privatekey(bad_arg)
-        for bad_arg in [3, X509(), (3, 4), (PKey(),)]:
-            with pytest.raises(TypeError):
-                p12.set_ca_certificates(bad_arg)
-        for bad_arg in [6, ("foo", "bar")]:
-            with pytest.raises(TypeError):
-                p12.set_friendlyname(bad_arg)
-
-    def test_key_only(self):
-        """
-        A `PKCS12` with only a private key can be exported using
-        `PKCS12.export`.
-        """
-        passwd = b"blah"
-        p12 = PKCS12()
-        pkey = load_privatekey(FILETYPE_PEM, root_key_pem)
-        p12.set_privatekey(pkey)
-        assert None is p12.get_certificate()
-        assert pkey == p12.get_privatekey()
-        p12.export(passphrase=passwd, iter=2, maciter=3)
-
-    def test_cert_only(self):
-        """
-        A `PKCS12` with only a certificate can be exported using
-        `PKCS12.export`.
-        """
-        passwd = b"blah"
-        p12 = PKCS12()
-        cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        p12.set_certificate(cert)
-        assert cert == p12.get_certificate()
-        assert None is p12.get_privatekey()
-        p12.export(passphrase=passwd, iter=2, maciter=3)
-
-    def gen_pkcs12(self, cert_pem=None, key_pem=None, ca_pem=None):
-        """
-        Generate a PKCS12 object with components from PEM.  Verify that the set
-        functions return None.
-        """
-        p12 = PKCS12()
-
-        ret = p12.set_certificate(load_certificate(FILETYPE_PEM, cert_pem))
-        assert ret is None
-
-        ret = p12.set_privatekey(load_privatekey(FILETYPE_PEM, key_pem))
-        assert ret is None
-
-        if ca_pem:
-            ret = p12.set_ca_certificates(
-                (load_certificate(FILETYPE_PEM, ca_pem),)
-            )
-            assert ret is None
-        return p12
-
-    def check_recovery(
-        self, p12_str, key=None, cert=None, ca=None, passwd=b"", extra=()
-    ):
-        """
-        Use openssl program to confirm three components are recoverable from a
-        PKCS12 string.
-        """
-        recovered_key = _runopenssl(
-            p12_str,
-            b"pkcs12",
-            b"-nocerts",
-            b"-nodes",
-            b"-passin",
-            b"pass:" + passwd,
-            *extra,
-        ).replace(b"\r\n", b"\n")
-        assert recovered_key[-len(key) :] == key
-
-        recovered_cert = _runopenssl(
-            p12_str,
-            b"pkcs12",
-            b"-clcerts",
-            b"-nodes",
-            b"-passin",
-            b"pass:" + passwd,
-            b"-nokeys",
-            *extra,
-        ).replace(b"\r\n", b"\n")
-        assert recovered_cert[-len(cert) :] == cert
-
-        if ca:
-            recovered_cert = _runopenssl(
-                p12_str,
-                b"pkcs12",
-                b"-cacerts",
-                b"-nodes",
-                b"-passin",
-                b"pass:" + passwd,
-                b"-nokeys",
-                *extra,
-            ).replace(b"\r\n", b"\n")
-            assert recovered_cert[-len(ca) :] == ca
-
-    def test_replace(self):
-        """
-        `PKCS12.set_certificate` replaces the certificate in a PKCS12
-        cluster. `PKCS12.set_privatekey` replaces the private key.
-        `PKCS12.set_ca_certificates` replaces the CA certificates.
-        """
-        p12 = self.gen_pkcs12(client_cert_pem, client_key_pem, root_cert_pem)
-        p12.set_certificate(load_certificate(FILETYPE_PEM, server_cert_pem))
-        p12.set_privatekey(load_privatekey(FILETYPE_PEM, server_key_pem))
-        root_cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        client_cert = load_certificate(FILETYPE_PEM, client_cert_pem)
-        p12.set_ca_certificates([root_cert])  # not a tuple
-        assert 1 == len(p12.get_ca_certificates())
-        assert root_cert == p12.get_ca_certificates()[0]
-        p12.set_ca_certificates([client_cert, root_cert])
-        assert 2 == len(p12.get_ca_certificates())
-        assert client_cert == p12.get_ca_certificates()[0]
-        assert root_cert == p12.get_ca_certificates()[1]
-
-    def test_friendly_name(self):
-        """
-        The *friendlyName* of a PKCS12 can be set and retrieved via
-        `PKCS12.get_friendlyname` and `PKCS12_set_friendlyname`, and a
-        `PKCS12` with a friendly name set can be dumped with `PKCS12.export`.
-        """
-        passwd = b'Dogmeat[]{}!@#$%^&*()~`?/.,<>-_+=";:'
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        for friendly_name in [b"Serverlicious", None, b"###"]:
-            p12.set_friendlyname(friendly_name)
-            assert p12.get_friendlyname() == friendly_name
-            p12.export(passphrase=passwd, iter=2, maciter=3)
-
-    def test_various_empty_passphrases(self):
-        """
-        Test that missing, None, and '' passphrases are identical for PKCS12
-        export.
-        """
-        p12 = self.gen_pkcs12(client_cert_pem, client_key_pem, root_cert_pem)
-        passwd = b""
-        dumped_p12_empty = p12.export(iter=2, maciter=0, passphrase=passwd)
-        dumped_p12_none = p12.export(iter=3, maciter=2, passphrase=None)
-        dumped_p12_nopw = p12.export(iter=9, maciter=4)
-        for dumped_p12 in [dumped_p12_empty, dumped_p12_none, dumped_p12_nopw]:
-            self.check_recovery(
-                dumped_p12,
-                key=client_key_pem,
-                cert=client_cert_pem,
-                ca=root_cert_pem,
-                passwd=passwd,
-            )
-
-    def test_removing_ca_cert(self):
-        """
-        Passing `None` to `PKCS12.set_ca_certificates` removes all CA
-        certificates.
-        """
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        p12.set_ca_certificates(None)
-        assert None is p12.get_ca_certificates()
-
-    def test_export_without_mac(self):
-        """
-        Exporting a PKCS12 with a `maciter` of `-1` excludes the MAC entirely.
-        """
-        passwd = b"Lake Michigan"
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        dumped_p12 = p12.export(maciter=-1, passphrase=passwd, iter=2)
-        self.check_recovery(
-            dumped_p12,
-            key=server_key_pem,
-            cert=server_cert_pem,
-            passwd=passwd,
-            extra=(b"-nomacver",),
-        )
-
-    def test_load_without_mac(self):
-        """
-        Loading a PKCS12 without a MAC does something other than crash.
-        """
-        passwd = b"Lake Michigan"
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        p12.export(maciter=-1, passphrase=passwd, iter=2)
-
-    def test_zero_len_list_for_ca(self):
-        """
-        A PKCS12 with an empty CA certificates list can be exported.
-        """
-        passwd = b"Hobie 18"
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem)
-        p12.set_ca_certificates([])
-        assert () == p12.get_ca_certificates()
-        dumped_p12 = p12.export(passphrase=passwd, iter=3)
-        self.check_recovery(
-            dumped_p12, key=server_key_pem, cert=server_cert_pem, passwd=passwd
-        )
-
-    def test_export_without_args(self):
-        """
-        All the arguments to `PKCS12.export` are optional.
-        """
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        dumped_p12 = p12.export()  # no args
-        self.check_recovery(
-            dumped_p12, key=server_key_pem, cert=server_cert_pem, passwd=b""
-        )
-
-    def test_export_without_bytes(self):
-        """
-        Test `PKCS12.export` with text not bytes as passphrase
-        """
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-
-        with pytest.warns(DeprecationWarning) as w:
-            warnings.simplefilter("always")
-            dumped_p12 = p12.export(passphrase=b"randomtext".decode("ascii"))
-            msg = "{} for passphrase is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
-            )
-            assert msg == str(w[-1].message)
-        self.check_recovery(
-            dumped_p12,
-            key=server_key_pem,
-            cert=server_cert_pem,
-            passwd=b"randomtext",
-        )
-
-    def test_key_cert_mismatch(self):
-        """
-        `PKCS12.export` raises an exception when a key and certificate
-        mismatch.
-        """
-        p12 = self.gen_pkcs12(server_cert_pem, client_key_pem, root_cert_pem)
-        with pytest.raises(Error):
-            p12.export()
-
-
-def _runopenssl(pem, *args):
+def _runopenssl(pem: bytes, *args: bytes) -> bytes:
     """
     Run the command line openssl tool with the given arguments and write
     the given PEM to its stdin.  Not safe for quotes.
     """
     proc = Popen([b"openssl", *list(args)], stdin=PIPE, stdout=PIPE)
+    assert proc.stdin is not None
+    assert proc.stdout is not None
     proc.stdin.write(pem)
     proc.stdin.close()
     output = proc.stdout.read()
@@ -2623,7 +2534,7 @@ class TestLoadPublicKey:
     Tests for :func:`load_publickey`.
     """
 
-    def test_loading_works(self):
+    def test_loading_works(self) -> None:
         """
         load_publickey loads public keys and sets correct attributes.
         """
@@ -2633,21 +2544,21 @@ class TestLoadPublicKey:
         assert 2048 == key.bits()
         assert TYPE_RSA == key.type()
 
-    def test_invalid_type(self):
+    def test_invalid_type(self) -> None:
         """
         load_publickey doesn't support FILETYPE_TEXT.
         """
         with pytest.raises(ValueError):
             load_publickey(FILETYPE_TEXT, cleartextPublicKeyPEM)
 
-    def test_invalid_key_format(self):
+    def test_invalid_key_format(self) -> None:
         """
         load_publickey explodes on incorrect keys.
         """
         with pytest.raises(Error):
             load_publickey(FILETYPE_ASN1, cleartextPublicKeyPEM)
 
-    def test_tolerates_unicode_strings(self):
+    def test_tolerates_unicode_strings(self) -> None:
         """
         load_publickey works with text strings, not just bytes.
         """
@@ -2663,24 +2574,26 @@ class TestFunction:
     Tests for free-functions in the `OpenSSL.crypto` module.
     """
 
-    def test_load_privatekey_invalid_format(self):
+    def test_load_privatekey_invalid_format(self) -> None:
         """
         `load_privatekey` raises `ValueError` if passed an unknown filetype.
         """
         with pytest.raises(ValueError):
             load_privatekey(100, root_key_pem)
 
-    def test_load_privatekey_invalid_passphrase_type(self):
+    def test_load_privatekey_invalid_passphrase_type(self) -> None:
         """
         `load_privatekey` raises `TypeError` if passed a passphrase that is
         neither a `str` nor a callable.
         """
         with pytest.raises(TypeError):
             load_privatekey(
-                FILETYPE_PEM, encryptedPrivateKeyPEMPassphrase, object()
+                FILETYPE_PEM,
+                encryptedPrivateKeyPEMPassphrase,
+                object(),  # type: ignore[arg-type]
             )
 
-    def test_load_privatekey_wrongPassphrase(self):
+    def test_load_privatekey_wrongPassphrase(self) -> None:
         """
         `load_privatekey` raises `OpenSSL.crypto.Error` when it is passed an
         encrypted PEM and an incorrect passphrase.
@@ -2689,18 +2602,18 @@ class TestFunction:
             load_privatekey(FILETYPE_PEM, encryptedPrivateKeyPEM, b"quack")
         assert err.value.args[0] != []
 
-    def test_load_privatekey_passphraseWrongType(self):
+    def test_load_privatekey_passphraseWrongType(self) -> None:
         """
-        `load_privatekey` raises `ValueError` when it is passeda passphrase
+        `load_privatekey` raises `ValueError` when it is passed a passphrase
         with a private key encoded in a format, that doesn't support
         encryption.
         """
         key = load_privatekey(FILETYPE_PEM, root_key_pem)
         blob = dump_privatekey(FILETYPE_ASN1, key)
         with pytest.raises(ValueError):
-            load_privatekey(FILETYPE_ASN1, blob, "secret")
+            load_privatekey(FILETYPE_ASN1, blob, b"secret")
 
-    def test_load_privatekey_passphrase(self):
+    def test_load_privatekey_passphrase(self) -> None:
         """
         `load_privatekey` can create a `PKey` object from an encrypted PEM
         string if given the passphrase.
@@ -2712,28 +2625,29 @@ class TestFunction:
         )
         assert isinstance(key, PKey)
 
-    def test_load_privatekey_passphrase_exception(self):
+    def test_load_privatekey_passphrase_exception(self) -> None:
         """
         If the passphrase callback raises an exception, that exception is
         raised by `load_privatekey`.
         """
 
-        def cb(ignored):
+        def cb(ignored: object) -> bytes:
             raise ArithmeticError
 
         with pytest.raises(ArithmeticError):
             load_privatekey(FILETYPE_PEM, encryptedPrivateKeyPEM, cb)
 
-    def test_load_privatekey_wrongPassphraseCallback(self):
+    def test_load_privatekey_wrongPassphraseCallback(self) -> None:
         """
         `load_privatekey` raises `OpenSSL.crypto.Error` when it
         is passed an encrypted PEM and a passphrase callback which returns an
         incorrect passphrase.
         """
-        called = []
+        called = False
 
-        def cb(*a):
-            called.append(None)
+        def cb(*a: object) -> bytes:
+            nonlocal called
+            called = True
             return b"quack"
 
         with pytest.raises(Error) as err:
@@ -2741,7 +2655,7 @@ class TestFunction:
         assert called
         assert err.value.args[0] != []
 
-    def test_load_privatekey_passphraseCallback(self):
+    def test_load_privatekey_passphraseCallback(self) -> None:
         """
         `load_privatekey` can create a `PKey` object from an encrypted PEM
         string if given a passphrase callback which returns the correct
@@ -2749,7 +2663,7 @@ class TestFunction:
         """
         called = []
 
-        def cb(writing):
+        def cb(writing: bool) -> bytes:
             called.append(writing)
             return encryptedPrivateKeyPEMPassphrase
 
@@ -2757,27 +2671,29 @@ class TestFunction:
         assert isinstance(key, PKey)
         assert called == [False]
 
-    def test_load_privatekey_passphrase_wrong_return_type(self):
+    def test_load_privatekey_passphrase_wrong_return_type(self) -> None:
         """
         `load_privatekey` raises `ValueError` if the passphrase callback
         returns something other than a byte string.
         """
         with pytest.raises(ValueError):
             load_privatekey(
-                FILETYPE_PEM, encryptedPrivateKeyPEM, lambda *args: 3
+                FILETYPE_PEM,
+                encryptedPrivateKeyPEM,
+                lambda *args: 3,  # type: ignore[arg-type]
             )
 
-    def test_dump_privatekey_wrong_args(self):
+    def test_dump_privatekey_wrong_args(self) -> None:
         """
         `dump_privatekey` raises `TypeError` if called with a `cipher`
         argument but no `passphrase` argument.
         """
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(TypeError):
             dump_privatekey(FILETYPE_PEM, key, cipher=GOOD_CIPHER)
 
-    def test_dump_privatekey_not_rsa_key(self):
+    def test_dump_privatekey_not_rsa_key(self) -> None:
         """
         `dump_privatekey` raises `TypeError` if called with a key that is
         not RSA.
@@ -2787,53 +2703,53 @@ class TestFunction:
         with pytest.raises(TypeError):
             dump_privatekey(FILETYPE_TEXT, key)
 
-    def test_dump_privatekey_invalid_pkey(self):
+    def test_dump_privatekey_invalid_pkey(self) -> None:
         with pytest.raises(TypeError):
-            dump_privatekey(FILETYPE_TEXT, object())
+            dump_privatekey(FILETYPE_TEXT, object())  # type: ignore[arg-type]
 
-    def test_dump_privatekey_unknown_cipher(self):
+    def test_dump_privatekey_unknown_cipher(self) -> None:
         """
         `dump_privatekey` raises `ValueError` if called with an unrecognized
         cipher name.
         """
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(ValueError):
-            dump_privatekey(FILETYPE_PEM, key, BAD_CIPHER, "passphrase")
+            dump_privatekey(FILETYPE_PEM, key, BAD_CIPHER, b"passphrase")
 
-    def test_dump_privatekey_invalid_passphrase_type(self):
+    def test_dump_privatekey_invalid_passphrase_type(self) -> None:
         """
         `dump_privatekey` raises `TypeError` if called with a passphrase which
         is neither a `str` nor a callable.
         """
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(TypeError):
-            dump_privatekey(FILETYPE_PEM, key, GOOD_CIPHER, object())
+            dump_privatekey(FILETYPE_PEM, key, GOOD_CIPHER, object())  # type: ignore[arg-type]
 
-    def test_dump_privatekey_invalid_filetype(self):
+    def test_dump_privatekey_invalid_filetype(self) -> None:
         """
         `dump_privatekey` raises `ValueError` if called with an unrecognized
         filetype.
         """
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(ValueError):
             dump_privatekey(100, key)
 
-    def test_load_privatekey_passphrase_callback_length(self):
+    def test_load_privatekey_passphrase_callback_length(self) -> None:
         """
         `crypto.load_privatekey` should raise an error when the passphrase
         provided by the callback is too long, not silently truncate it.
         """
 
-        def cb(ignored):
-            return "a" * 1025
+        def cb(ignored: object) -> bytes:
+            return b"a" * 1025
 
         with pytest.raises(ValueError):
             load_privatekey(FILETYPE_PEM, encryptedPrivateKeyPEM, cb)
 
-    def test_dump_privatekey_passphrase(self):
+    def test_dump_privatekey_passphrase(self) -> None:
         """
         `dump_privatekey` writes an encrypted PEM when given a passphrase.
         """
@@ -2846,7 +2762,7 @@ class TestFunction:
         assert loadedKey.type() == key.type()
         assert loadedKey.bits() == key.bits()
 
-    def test_dump_privatekey_passphrase_wrong_type(self):
+    def test_dump_privatekey_passphrase_wrong_type(self) -> None:
         """
         `dump_privatekey` raises `ValueError` when it is passed a passphrase
         with a private key encoded in a format, that doesn't support
@@ -2854,9 +2770,9 @@ class TestFunction:
         """
         key = load_privatekey(FILETYPE_PEM, root_key_pem)
         with pytest.raises(ValueError):
-            dump_privatekey(FILETYPE_ASN1, key, GOOD_CIPHER, "secret")
+            dump_privatekey(FILETYPE_ASN1, key, GOOD_CIPHER, b"secret")
 
-    def test_dump_certificate(self):
+    def test_dump_certificate(self) -> None:
         """
         `dump_certificate` writes PEM, DER, and text.
         """
@@ -2873,16 +2789,16 @@ class TestFunction:
         dumped_text = dump_certificate(FILETYPE_TEXT, cert)
         assert len(dumped_text) > 500
 
-    def test_dump_certificate_bad_type(self):
+    def test_dump_certificate_bad_type(self) -> None:
         """
         `dump_certificate` raises a `ValueError` if it's called with
         a bad type.
         """
         cert = load_certificate(FILETYPE_PEM, root_cert_pem)
         with pytest.raises(ValueError):
-            dump_certificate(object(), cert)
+            dump_certificate(object(), cert)  # type: ignore[arg-type]
 
-    def test_dump_privatekey_pem(self):
+    def test_dump_privatekey_pem(self) -> None:
         """
         `dump_privatekey` writes a PEM
         """
@@ -2891,7 +2807,7 @@ class TestFunction:
         dumped_pem = dump_privatekey(FILETYPE_PEM, key)
         assert dumped_pem == normalized_root_key_pem
 
-    def test_dump_privatekey_asn1(self):
+    def test_dump_privatekey_asn1(self) -> None:
         """
         `dump_privatekey` writes a DER
         """
@@ -2900,7 +2816,7 @@ class TestFunction:
         dumped_der = dump_privatekey(FILETYPE_ASN1, key)
         assert dumped_der == root_key_der
 
-    def test_load_privatekey_asn1(self):
+    def test_load_privatekey_asn1(self) -> None:
         """
         `dump_privatekey` writes a DER
         """
@@ -2908,7 +2824,7 @@ class TestFunction:
         assert key.bits() == 3072
         assert key.type() == TYPE_RSA
 
-    def test_dump_privatekey_text(self):
+    def test_dump_privatekey_text(self) -> None:
         """
         `dump_privatekey` writes a text
         """
@@ -2916,7 +2832,7 @@ class TestFunction:
         dumped_text = dump_privatekey(FILETYPE_TEXT, key)
         assert len(dumped_text) > 500
 
-    def test_dump_publickey_pem(self):
+    def test_dump_publickey_pem(self) -> None:
         """
         dump_publickey writes a PEM.
         """
@@ -2924,7 +2840,7 @@ class TestFunction:
         dumped_pem = dump_publickey(FILETYPE_PEM, key)
         assert dumped_pem == cleartextPublicKeyPEM
 
-    def test_dump_publickey_asn1(self):
+    def test_dump_publickey_asn1(self) -> None:
         """
         dump_publickey writes a DER.
         """
@@ -2934,7 +2850,7 @@ class TestFunction:
         dumped_pem2 = dump_publickey(FILETYPE_PEM, key2)
         assert dumped_pem2 == cleartextPublicKeyPEM
 
-    def test_dump_publickey_invalid_type(self):
+    def test_dump_publickey_invalid_type(self) -> None:
         """
         dump_publickey doesn't support FILETYPE_TEXT.
         """
@@ -2943,7 +2859,7 @@ class TestFunction:
         with pytest.raises(ValueError):
             dump_publickey(FILETYPE_TEXT, key)
 
-    def test_dump_certificate_request(self):
+    def test_dump_certificate_request(self) -> None:
         """
         `dump_certificate_request` writes a PEM, DER, and text.
         """
@@ -2963,7 +2879,7 @@ class TestFunction:
         with pytest.raises(ValueError):
             dump_certificate_request(100, req)
 
-    def test_dump_privatekey_passphrase_callback(self):
+    def test_dump_privatekey_passphrase_callback(self) -> None:
         """
         `dump_privatekey` writes an encrypted PEM when given a callback
         which returns the correct passphrase.
@@ -2971,7 +2887,7 @@ class TestFunction:
         passphrase = b"foo"
         called = []
 
-        def cb(writing):
+        def cb(writing: bool) -> bytes:
             called.append(writing)
             return passphrase
 
@@ -2984,33 +2900,33 @@ class TestFunction:
         assert loadedKey.type() == key.type()
         assert loadedKey.bits() == key.bits()
 
-    def test_dump_privatekey_passphrase_exception(self):
+    def test_dump_privatekey_passphrase_exception(self) -> None:
         """
         `dump_privatekey` should not overwrite the exception raised
         by the passphrase callback.
         """
 
-        def cb(ignored):
+        def cb(ignored: object) -> bytes:
             raise ArithmeticError
 
         key = load_privatekey(FILETYPE_PEM, root_key_pem)
         with pytest.raises(ArithmeticError):
             dump_privatekey(FILETYPE_PEM, key, GOOD_CIPHER, cb)
 
-    def test_dump_privatekey_passphraseCallbackLength(self):
+    def test_dump_privatekey_passphraseCallbackLength(self) -> None:
         """
         `crypto.dump_privatekey` should raise an error when the passphrase
         provided by the callback is too long, not silently truncate it.
         """
 
-        def cb(ignored):
-            return "a" * 1025
+        def cb(ignored: object) -> bytes:
+            return b"a" * 1025
 
         key = load_privatekey(FILETYPE_PEM, root_key_pem)
         with pytest.raises(ValueError):
             dump_privatekey(FILETYPE_PEM, key, GOOD_CIPHER, cb)
 
-    def test_dump_privatekey_truncated(self):
+    def test_dump_privatekey_truncated(self) -> None:
         """
         `crypto.dump_privatekey` should not truncate a passphrase that contains
         a null byte.
@@ -3030,7 +2946,7 @@ class TestFunction:
                 FILETYPE_PEM, encrypted_key_pem, truncated_passphrase
             )
 
-    def test_load_privatekey_truncated(self):
+    def test_load_privatekey_truncated(self) -> None:
         """
         `crypto.load_privatekey` should not truncate a passphrase that contains
         a null byte.
@@ -3054,178 +2970,23 @@ class TestLoadCertificate:
     Tests for `load_certificate_request`.
     """
 
-    def test_bad_file_type(self):
+    def test_bad_file_type(self) -> None:
         """
         If the file type passed to `load_certificate_request` is neither
         `FILETYPE_PEM` nor `FILETYPE_ASN1` then `ValueError` is raised.
         """
         with pytest.raises(ValueError):
-            load_certificate_request(object(), b"")
+            load_certificate_request(object(), b"")  # type: ignore[arg-type]
         with pytest.raises(ValueError):
-            load_certificate(object(), b"")
+            load_certificate(object(), b"")  # type: ignore[arg-type]
 
-    def test_bad_certificate(self):
+    def test_bad_certificate(self) -> None:
         """
         If the bytes passed to `load_certificate` are not a valid certificate,
         an exception is raised.
         """
         with pytest.raises(Error):
             load_certificate(FILETYPE_ASN1, b"lol")
-
-
-class TestNetscapeSPKI(_PKeyInteractionTestsMixin):
-    """
-    Tests for `OpenSSL.crypto.NetscapeSPKI`.
-    """
-
-    def signable(self):
-        """
-        Return a new `NetscapeSPKI` for use with signing tests.
-        """
-        return NetscapeSPKI()
-
-    def test_type(self):
-        """
-        `NetscapeSPKI` can be used to create instances of that type.
-        """
-        assert is_consistent_type(NetscapeSPKI, "NetscapeSPKI")
-
-    def test_construction(self):
-        """
-        `NetscapeSPKI` returns an instance of `NetscapeSPKI`.
-        """
-        nspki = NetscapeSPKI()
-        assert isinstance(nspki, NetscapeSPKI)
-
-    def test_invalid_attribute(self):
-        """
-        Accessing a non-existent attribute of a `NetscapeSPKI` instance
-        causes an `AttributeError` to be raised.
-        """
-        nspki = NetscapeSPKI()
-        with pytest.raises(AttributeError):
-            nspki.foo
-
-    def test_b64_encode(self):
-        """
-        `NetscapeSPKI.b64_encode` encodes the certificate to a base64 blob.
-        """
-        nspki = NetscapeSPKI()
-        pkey = load_privatekey(FILETYPE_PEM, root_key_pem)
-        nspki.set_pubkey(pkey)
-        nspki.sign(pkey, GOOD_DIGEST)
-        blob = nspki.b64_encode()
-        assert isinstance(blob, bytes)
-
-
-class TestRevoked:
-    """
-    Tests for `OpenSSL.crypto.Revoked`.
-    """
-
-    def test_ignores_unsupported_revoked_cert_extension_get_reason(self):
-        """
-        The get_reason method on the Revoked class checks to see if the
-        extension is NID_crl_reason and should skip it otherwise. This test
-        loads a CRL with extensions it should ignore.
-        """
-        crl = load_crl(FILETYPE_PEM, crlDataUnsupportedExtension)
-        revoked = crl.get_revoked()
-        reason = revoked[1].get_reason()
-        assert reason == b"Unspecified"
-
-    def test_ignores_unsupported_revoked_cert_extension_set_new_reason(self):
-        crl = load_crl(FILETYPE_PEM, crlDataUnsupportedExtension)
-        revoked = crl.get_revoked()
-        revoked[1].set_reason(None)
-        reason = revoked[1].get_reason()
-        assert reason is None
-
-    def test_construction(self):
-        """
-        Confirm we can create `OpenSSL.crypto.Revoked`.  Check that it is
-        empty.
-        """
-        revoked = Revoked()
-        assert isinstance(revoked, Revoked)
-        assert type(revoked) == Revoked
-        assert revoked.get_serial() == b"00"
-        assert revoked.get_rev_date() is None
-        assert revoked.get_reason() is None
-
-    def test_serial(self):
-        """
-        Confirm we can set and get serial numbers from
-        `OpenSSL.crypto.Revoked`.  Confirm errors are handled with grace.
-        """
-        revoked = Revoked()
-        ret = revoked.set_serial(b"10b")
-        assert ret is None
-        ser = revoked.get_serial()
-        assert ser == b"010B"
-
-        revoked.set_serial(b"31ppp")  # a type error would be nice
-        ser = revoked.get_serial()
-        assert ser == b"31"
-
-        with pytest.raises(ValueError):
-            revoked.set_serial(b"pqrst")
-        with pytest.raises(TypeError):
-            revoked.set_serial(100)
-
-    def test_date(self):
-        """
-        Confirm we can set and get revocation dates from
-        `OpenSSL.crypto.Revoked`.  Confirm errors are handled with grace.
-        """
-        revoked = Revoked()
-        date = revoked.get_rev_date()
-        assert date is None
-
-        now = datetime.now().strftime("%Y%m%d%H%M%SZ").encode("ascii")
-        ret = revoked.set_rev_date(now)
-        assert ret is None
-        date = revoked.get_rev_date()
-        assert date == now
-
-    def test_reason(self):
-        """
-        Confirm we can set and get revocation reasons from
-        `OpenSSL.crypto.Revoked`.  The "get" need to work as "set".
-        Likewise, each reason of all_reasons() must work.
-        """
-        revoked = Revoked()
-        for r in revoked.all_reasons():
-            for x in range(2):
-                ret = revoked.set_reason(r)
-                assert ret is None
-                reason = revoked.get_reason()
-                assert reason.lower().replace(b" ", b"") == r.lower().replace(
-                    b" ", b""
-                )
-                r = reason  # again with the resp of get
-
-        revoked.set_reason(None)
-        assert revoked.get_reason() is None
-
-    @pytest.mark.parametrize("reason", [object(), 1.0, "foo"])
-    def test_set_reason_wrong_args(self, reason):
-        """
-        `Revoked.set_reason` raises `TypeError` if called with an argument
-        which is neither `None` nor a byte string.
-        """
-        revoked = Revoked()
-        with pytest.raises(TypeError):
-            revoked.set_reason(reason)
-
-    def test_set_reason_invalid_reason(self):
-        """
-        Calling `OpenSSL.crypto.Revoked.set_reason` with an argument which
-        isn't a valid reason results in `ValueError` being raised.
-        """
-        revoked = Revoked()
-        with pytest.raises(ValueError):
-            revoked.set_reason(b"blue")
 
 
 class TestCRL:
@@ -3247,293 +3008,10 @@ class TestCRL:
         FILETYPE_PEM, intermediate_server_key_pem
     )
 
-    def test_construction(self):
-        """
-        Confirm we can create `OpenSSL.crypto.CRL`.  Check
-        that it is empty
-        """
-        crl = CRL()
-        assert isinstance(crl, CRL)
-        assert crl.get_revoked() is None
-
-    def _get_crl(self):
-        """
-        Get a new ``CRL`` with a revocation.
-        """
-        crl = CRL()
-        revoked = Revoked()
-        now = datetime.now().strftime("%Y%m%d%H%M%SZ").encode("ascii")
-        revoked.set_rev_date(now)
-        revoked.set_serial(b"3ab")
-        revoked.set_reason(b"sUpErSeDEd")
-        crl.add_revoked(revoked)
-        return crl
-
-    def test_export_pem(self):
-        """
-        If not passed a format, ``CRL.export`` returns a "PEM" format string
-        representing a serial number, a revoked reason, and certificate issuer
-        information.
-        """
-        # PEM format
-        dumped_crl = self._get_crl().export(
-            self.cert, self.pkey, days=20, digest=b"sha256"
-        )
-        crl = x509.load_pem_x509_crl(dumped_crl)
-        revoked = crl.get_revoked_certificate_by_serial_number(0x03AB)
-        assert revoked is not None
-        assert crl.issuer == x509.Name(
-            [
-                x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
-                x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, "IL"),
-                x509.NameAttribute(x509.NameOID.LOCALITY_NAME, "Chicago"),
-                x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, "Testing"),
-                x509.NameAttribute(
-                    x509.NameOID.COMMON_NAME, "Testing Root CA"
-                ),
-            ]
-        )
-
-    def test_export_der(self):
-        """
-        If passed ``FILETYPE_ASN1`` for the format, ``CRL.export`` returns a
-        "DER" format string representing a serial number, a revoked reason, and
-        certificate issuer information.
-        """
-        crl = self._get_crl()
-
-        # DER format
-        dumped_crl = self._get_crl().export(
-            self.cert, self.pkey, FILETYPE_ASN1, digest=b"sha256"
-        )
-        crl = x509.load_der_x509_crl(dumped_crl)
-        revoked = crl.get_revoked_certificate_by_serial_number(0x03AB)
-        assert revoked is not None
-        assert crl.issuer == x509.Name(
-            [
-                x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
-                x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, "IL"),
-                x509.NameAttribute(x509.NameOID.LOCALITY_NAME, "Chicago"),
-                x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, "Testing"),
-                x509.NameAttribute(
-                    x509.NameOID.COMMON_NAME, "Testing Root CA"
-                ),
-            ]
-        )
-
-    def test_export_text(self):
-        """
-        If passed ``FILETYPE_TEXT`` for the format, ``CRL.export`` returns a
-        text format string like the one produced by the openssl command line
-        tool.
-        """
-        crl = self._get_crl()
-
-        # text format
-        dumped_text = crl.export(
-            self.cert, self.pkey, type=FILETYPE_TEXT, digest=b"sha256"
-        )
-        assert len(dumped_text) > 500
-
-    def test_export_custom_digest(self):
-        """
-        If passed the name of a digest function, ``CRL.export`` uses a
-        signature algorithm based on that digest function.
-        """
-        crl = self._get_crl()
-        dumped_crl = crl.export(self.cert, self.pkey, digest=b"sha384")
-        text = _runopenssl(dumped_crl, b"crl", b"-noout", b"-text")
-        text.index(b"Signature Algorithm: sha384")
-
-    def test_export_md5_digest(self):
-        """
-        If passed md5 as the digest function, ``CRL.export`` uses md5 and does
-        not emit a deprecation warning.
-        """
-        crl = self._get_crl()
-        with warnings.catch_warnings(record=True) as catcher:
-            warnings.simplefilter("always")
-        assert 0 == len(catcher)
-        dumped_crl = crl.export(self.cert, self.pkey, digest=b"md5")
-        text = _runopenssl(dumped_crl, b"crl", b"-noout", b"-text")
-        text.index(b"Signature Algorithm: md5")
-
-    def test_export_default_digest(self):
-        """
-        If not passed the name of a digest function, ``CRL.export`` raises a
-        ``TypeError``.
-        """
-        crl = self._get_crl()
-        with pytest.raises(TypeError):
-            crl.export(self.cert, self.pkey)
-
-    def test_export_invalid(self):
-        """
-        If `CRL.export` is used with an uninitialized `X509` instance,
-        `OpenSSL.crypto.Error` is raised.
-        """
-        crl = CRL()
-        with pytest.raises(Error):
-            crl.export(X509(), PKey(), digest=b"sha256")
-
-    def test_add_revoked_keyword(self):
-        """
-        `OpenSSL.CRL.add_revoked` accepts its single argument as the
-        ``revoked`` keyword argument.
-        """
-        crl = CRL()
-        revoked = Revoked()
-        revoked.set_serial(b"01")
-        revoked.set_rev_date(b"20160310020145Z")
-        crl.add_revoked(revoked=revoked)
-        assert isinstance(crl.get_revoked()[0], Revoked)
-
-    def test_export_wrong_args(self):
-        """
-        Calling `OpenSSL.CRL.export` with arguments other than the certificate,
-        private key, integer file type, and integer number of days it
-        expects, results in a `TypeError` being raised.
-        """
-        crl = CRL()
-        with pytest.raises(TypeError):
-            crl.export(None, self.pkey, FILETYPE_PEM, 10)
-        with pytest.raises(TypeError):
-            crl.export(self.cert, None, FILETYPE_PEM, 10)
-        with pytest.raises(TypeError):
-            crl.export(self.cert, self.pkey, None, 10)
-        with pytest.raises(TypeError):
-            crl.export(self.cert, FILETYPE_PEM, None)
-
-    def test_export_unknown_filetype(self):
-        """
-        Calling `OpenSSL.CRL.export` with a file type other than
-        `FILETYPE_PEM`, `FILETYPE_ASN1`, or
-        `FILETYPE_TEXT` results in a `ValueError` being raised.
-        """
-        crl = CRL()
-        with pytest.raises(ValueError):
-            crl.export(self.cert, self.pkey, 100, 10, digest=b"sha256")
-
-    def test_export_unknown_digest(self):
-        """
-        Calling `OpenSSL.CRL.export` with an unsupported digest results
-        in a `ValueError` being raised.
-        """
-        crl = CRL()
-        with pytest.raises(ValueError):
-            crl.export(
-                self.cert, self.pkey, FILETYPE_PEM, 10, b"strange-digest"
-            )
-
-    def test_get_revoked(self):
-        """
-        Use python to create a simple CRL with two revocations. Get back the
-        `Revoked` using `OpenSSL.CRL.get_revoked` and verify them.
-        """
-        crl = CRL()
-
-        revoked = Revoked()
-        now = datetime.now().strftime("%Y%m%d%H%M%SZ").encode("ascii")
-        revoked.set_rev_date(now)
-        revoked.set_serial(b"3ab")
-        crl.add_revoked(revoked)
-        revoked.set_serial(b"100")
-        revoked.set_reason(b"sUpErSeDEd")
-        crl.add_revoked(revoked)
-
-        revs = crl.get_revoked()
-        assert len(revs) == 2
-        assert type(revs[0]) == Revoked
-        assert type(revs[1]) == Revoked
-        assert revs[0].get_serial() == b"03AB"
-        assert revs[1].get_serial() == b"0100"
-        assert revs[0].get_rev_date() == now
-        assert revs[1].get_rev_date() == now
-
-    def test_load_crl(self):
-        """
-        Load a known CRL and inspect its revocations.  Both EM and DER formats
-        are loaded.
-        """
-        crl = load_crl(FILETYPE_PEM, crlData)
-        revs = crl.get_revoked()
-        assert len(revs) == 2
-        assert revs[0].get_serial() == b"03AB"
-        assert revs[0].get_reason() is None
-        assert revs[1].get_serial() == b"0100"
-        assert revs[1].get_reason() == b"Superseded"
-
-        der = _runopenssl(crlData, b"crl", b"-outform", b"DER")
-        crl = load_crl(FILETYPE_ASN1, der)
-        revs = crl.get_revoked()
-        assert len(revs) == 2
-        assert revs[0].get_serial() == b"03AB"
-        assert revs[0].get_reason() is None
-        assert revs[1].get_serial() == b"0100"
-        assert revs[1].get_reason() == b"Superseded"
-
-    def test_load_crl_bad_filetype(self):
-        """
-        Calling `OpenSSL.crypto.load_crl` with an unknown file type raises a
-        `ValueError`.
-        """
-        with pytest.raises(ValueError):
-            load_crl(100, crlData)
-
-    def test_load_crl_bad_data(self):
-        """
-        Calling `OpenSSL.crypto.load_crl` with file data which can't be loaded
-        raises a `OpenSSL.crypto.Error`.
-        """
-        with pytest.raises(Error):
-            load_crl(FILETYPE_PEM, b"hello, world")
-
-    def test_get_issuer(self):
-        """
-        Load a known CRL and assert its issuer's common name is what we expect
-        from the encoded crlData string.
-        """
-        crl = load_crl(FILETYPE_PEM, crlData)
-        assert isinstance(crl.get_issuer(), X509Name)
-        assert crl.get_issuer().CN == "Testing Root CA"
-
-    def test_dump_crl(self):
-        """
-        The dumped CRL matches the original input.
-        """
-        crl = load_crl(FILETYPE_PEM, crlData)
-        buf = dump_crl(FILETYPE_PEM, crl)
-        assert buf == crlData
-
     @staticmethod
-    def _make_test_crl(issuer_cert, issuer_key, certs=()):
-        """
-        Create a CRL.
-
-        :param list[X509] certs: A list of certificates to revoke.
-        :rtype: CRL
-        """
-        crl = CRL()
-        for cert in certs:
-            revoked = Revoked()
-            # FIXME: This string splicing is an unfortunate implementation
-            # detail that has been reported in
-            # https://github.com/pyca/pyopenssl/issues/258
-            serial = hex(cert.get_serial_number())[2:].encode("utf-8")
-            revoked.set_serial(serial)
-            revoked.set_reason(b"unspecified")
-            revoked.set_rev_date(b"20140601000000Z")
-            crl.add_revoked(revoked)
-        crl.set_version(1)
-        crl.set_lastUpdate(b"20140601000000Z")
-        # The year 5000 is far into the future so that this CRL isn't
-        # considered to have expired.
-        crl.set_nextUpdate(b"50000601000000Z")
-        crl.sign(issuer_cert, issuer_key, digest=b"sha512")
-        return crl
-
-    @staticmethod
-    def _make_test_crl_cryptography(issuer_cert, issuer_key, certs=()):
+    def _make_test_crl_cryptography(
+        issuer_cert: X509, issuer_key: PKey, certs: list[X509] = []
+    ) -> x509.CertificateRevocationList:
         """
         Create a CRL using cryptography's API.
 
@@ -3543,9 +3021,7 @@ class TestCRL:
         from cryptography.x509.extensions import CRLReason, ReasonFlags
 
         builder = x509.CertificateRevocationListBuilder()
-        builder = builder.issuer_name(
-            X509.to_cryptography(issuer_cert).subject
-        )
+        builder = builder.issuer_name(issuer_cert.to_cryptography().subject)
         for cert in certs:
             revoked = (
                 x509.RevokedCertificateBuilder()
@@ -3561,26 +3037,15 @@ class TestCRL:
         # considered to have expired.
         builder = builder.next_update(datetime(5000, 6, 1, 0, 0, 0))
 
+        key = issuer_key.to_cryptography_key()
+        assert isinstance(key, rsa.RSAPrivateKey)
         crl = builder.sign(
-            private_key=PKey.to_cryptography_key(issuer_key),
+            key,
             algorithm=hashes.SHA512(),
         )
         return crl
 
-    @pytest.mark.parametrize(
-        "create_crl",
-        [
-            pytest.param(
-                _make_test_crl.__func__,
-                id="pyOpenSSL CRL",
-            ),
-            pytest.param(
-                _make_test_crl_cryptography.__func__,
-                id="cryptography CRL",
-            ),
-        ],
-    )
-    def test_verify_with_revoked(self, create_crl):
+    def test_verify_with_revoked(self) -> None:
         """
         `verify_certificate` raises error when an intermediate certificate is
         revoked.
@@ -3588,10 +3053,10 @@ class TestCRL:
         store = X509Store()
         store.add_cert(self.root_cert)
         store.add_cert(self.intermediate_cert)
-        root_crl = create_crl(
+        root_crl = self._make_test_crl_cryptography(
             self.root_cert, self.root_key, certs=[self.intermediate_cert]
         )
-        intermediate_crl = create_crl(
+        intermediate_crl = self._make_test_crl_cryptography(
             self.intermediate_cert, self.intermediate_key, certs=[]
         )
         store.add_crl(root_crl)
@@ -3604,20 +3069,7 @@ class TestCRL:
             store_ctx.verify_certificate()
         assert str(err.value) == "certificate revoked"
 
-    @pytest.mark.parametrize(
-        "create_crl",
-        [
-            pytest.param(
-                _make_test_crl.__func__,
-                id="pyOpenSSL CRL",
-            ),
-            pytest.param(
-                _make_test_crl_cryptography.__func__,
-                id="cryptography CRL",
-            ),
-        ],
-    )
-    def test_verify_with_missing_crl(self, create_crl):
+    def test_verify_with_missing_crl(self) -> None:
         """
         `verify_certificate` raises error when an intermediate certificate's
         CRL is missing.
@@ -3625,7 +3077,7 @@ class TestCRL:
         store = X509Store()
         store.add_cert(self.root_cert)
         store.add_cert(self.intermediate_cert)
-        root_crl = create_crl(
+        root_crl = self._make_test_crl_cryptography(
             self.root_cert, self.root_key, certs=[self.intermediate_cert]
         )
         store.add_crl(root_crl)
@@ -3637,20 +3089,6 @@ class TestCRL:
             store_ctx.verify_certificate()
         assert str(err.value) == "unable to get certificate CRL"
         assert err.value.certificate.get_subject().CN == "intermediate-service"
-
-    def test_convert_from_cryptography(self):
-        crypto_crl = x509.load_pem_x509_crl(crlData)
-        crl = CRL.from_cryptography(crypto_crl)
-        assert isinstance(crl, CRL)
-
-    def test_convert_from_cryptography_unsupported_type(self):
-        with pytest.raises(TypeError):
-            CRL.from_cryptography(object())
-
-    def test_convert_to_cryptography_key(self):
-        crl = load_crl(FILETYPE_PEM, crlData)
-        crypto_crl = crl.to_cryptography()
-        assert isinstance(crypto_crl, x509.CertificateRevocationList)
 
 
 class TestX509StoreContext:
@@ -3664,7 +3102,7 @@ class TestX509StoreContext:
         FILETYPE_PEM, intermediate_server_cert_pem
     )
 
-    def test_valid(self):
+    def test_valid(self) -> None:
         """
         `verify_certificate` returns ``None`` when called with a certificate
         and valid chain.
@@ -3673,9 +3111,9 @@ class TestX509StoreContext:
         store.add_cert(self.root_cert)
         store.add_cert(self.intermediate_cert)
         store_ctx = X509StoreContext(store, self.intermediate_server_cert)
-        assert store_ctx.verify_certificate() is None
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
 
-    def test_reuse(self):
+    def test_reuse(self) -> None:
         """
         `verify_certificate` can be called multiple times with the same
         ``X509StoreContext`` instance to produce the same result.
@@ -3684,8 +3122,8 @@ class TestX509StoreContext:
         store.add_cert(self.root_cert)
         store.add_cert(self.intermediate_cert)
         store_ctx = X509StoreContext(store, self.intermediate_server_cert)
-        assert store_ctx.verify_certificate() is None
-        assert store_ctx.verify_certificate() is None
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
 
     @pytest.mark.parametrize(
         "root_cert, chain, verified_cert",
@@ -3710,13 +3148,15 @@ class TestX509StoreContext:
             ),
         ],
     )
-    def test_verify_success_with_chain(self, root_cert, chain, verified_cert):
+    def test_verify_success_with_chain(
+        self, root_cert: X509, chain: list[X509], verified_cert: X509
+    ) -> None:
         store = X509Store()
         store.add_cert(root_cert)
         store_ctx = X509StoreContext(store, verified_cert, chain=chain)
-        assert store_ctx.verify_certificate() is None
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
 
-    def test_valid_untrusted_chain_reuse(self):
+    def test_valid_untrusted_chain_reuse(self) -> None:
         """
         `verify_certificate` using an untrusted chain can be called multiple
         times with the same ``X509StoreContext`` instance to produce the same
@@ -3729,10 +3169,10 @@ class TestX509StoreContext:
         store_ctx = X509StoreContext(
             store, self.intermediate_server_cert, chain=chain
         )
-        assert store_ctx.verify_certificate() is None
-        assert store_ctx.verify_certificate() is None
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
 
-    def test_chain_reference(self):
+    def test_chain_reference(self) -> None:
         """
         ``X509StoreContext`` properly keeps references to the untrusted chain
         certificates.
@@ -3746,7 +3186,7 @@ class TestX509StoreContext:
         )
 
         del chain
-        assert store_ctx.verify_certificate() is None
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
 
     @pytest.mark.parametrize(
         "root_cert, chain, verified_cert",
@@ -3777,7 +3217,9 @@ class TestX509StoreContext:
             ),
         ],
     )
-    def test_verify_fail_with_chain(self, root_cert, chain, verified_cert):
+    def test_verify_fail_with_chain(
+        self, root_cert: X509, chain: list[X509], verified_cert: X509
+    ) -> None:
         store = X509Store()
         if root_cert:
             store.add_cert(root_cert)
@@ -3802,7 +3244,9 @@ class TestX509StoreContext:
             ),
         ],
     )
-    def test_untrusted_chain_wrong_args(self, chain, expected_error):
+    def test_untrusted_chain_wrong_args(
+        self, chain: list[X509], expected_error: type[Exception]
+    ) -> None:
         """
         Creating ``X509StoreContext`` with wrong chain raises an exception.
         """
@@ -3812,7 +3256,9 @@ class TestX509StoreContext:
         with pytest.raises(expected_error):
             X509StoreContext(store, self.intermediate_server_cert, chain=chain)
 
-    def test_failure_building_untrusted_chain_raises(self, monkeypatch):
+    def test_failure_building_untrusted_chain_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """
         Creating ``X509StoreContext`` raises ``OpenSSL.crypto.Error`` when
         the underlying lib fails to add the certificate to the stack.
@@ -3826,7 +3272,7 @@ class TestX509StoreContext:
         with pytest.raises(Error):
             X509StoreContext(store, self.intermediate_server_cert, chain=chain)
 
-    def test_trusted_self_signed(self):
+    def test_trusted_self_signed(self) -> None:
         """
         `verify_certificate` returns ``None`` when called with a self-signed
         certificate and itself in the chain.
@@ -3834,9 +3280,9 @@ class TestX509StoreContext:
         store = X509Store()
         store.add_cert(self.root_cert)
         store_ctx = X509StoreContext(store, self.root_cert)
-        assert store_ctx.verify_certificate() is None
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
 
-    def test_untrusted_self_signed(self):
+    def test_untrusted_self_signed(self) -> None:
         """
         `verify_certificate` raises error when a self-signed certificate is
         verified without itself in the chain.
@@ -3853,7 +3299,7 @@ class TestX509StoreContext:
         ]
         assert exc.value.certificate.get_subject().CN == "Testing Root CA"
 
-    def test_invalid_chain_no_root(self):
+    def test_invalid_chain_no_root(self) -> None:
         """
         `verify_certificate` raises error when a root certificate is missing
         from the chain.
@@ -3868,7 +3314,7 @@ class TestX509StoreContext:
         assert str(exc.value) == "unable to get issuer certificate"
         assert exc.value.certificate.get_subject().CN == "intermediate"
 
-    def test_invalid_chain_no_intermediate(self):
+    def test_invalid_chain_no_intermediate(self) -> None:
         """
         `verify_certificate` raises error when an intermediate certificate is
         missing from the chain.
@@ -3883,7 +3329,7 @@ class TestX509StoreContext:
         assert str(exc.value) == "unable to get local issuer certificate"
         assert exc.value.certificate.get_subject().CN == "intermediate-service"
 
-    def test_modification_pre_verify(self):
+    def test_modification_pre_verify(self) -> None:
         """
         `verify_certificate` can use a store context modified after
         instantiation.
@@ -3902,9 +3348,9 @@ class TestX509StoreContext:
         assert exc.value.certificate.get_subject().CN == "intermediate"
 
         store_ctx.set_store(store_good)
-        assert store_ctx.verify_certificate() is None
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
 
-    def test_verify_with_time(self):
+    def test_verify_with_time(self) -> None:
         """
         `verify_certificate` raises error when the verification time is
         set at notAfter.
@@ -3914,6 +3360,7 @@ class TestX509StoreContext:
         store.add_cert(self.intermediate_cert)
 
         expire_time = self.intermediate_server_cert.get_notAfter()
+        assert expire_time is not None
         expire_datetime = datetime.strptime(
             expire_time.decode("utf-8"), "%Y%m%d%H%M%SZ"
         )
@@ -3925,7 +3372,7 @@ class TestX509StoreContext:
 
         assert str(exc.value) == "certificate has expired"
 
-    def test_get_verified_chain(self):
+    def test_get_verified_chain(self) -> None:
         """
         `get_verified_chain` returns the verified chain.
         """
@@ -3946,7 +3393,7 @@ class TestX509StoreContext:
         assert chain[1].get_subject() == self.intermediate_cert.get_subject()
         assert chain[2].get_subject() == self.root_cert.get_subject()
 
-    def test_get_verified_chain_invalid_chain_no_root(self):
+    def test_get_verified_chain_invalid_chain_no_root(self) -> None:
         """
         `get_verified_chain` raises error when cert verification fails.
         """
@@ -3961,52 +3408,61 @@ class TestX509StoreContext:
         assert exc.value.certificate.get_subject().CN == "intermediate"
 
     @pytest.fixture
-    def root_ca_file(self, tmpdir):
-        return self._create_ca_file(tmpdir, "root_ca_hash_dir", self.root_cert)
+    def root_ca_file(self, tmp_path: pathlib.Path) -> pathlib.Path:
+        return self._create_ca_file(
+            tmp_path, "root_ca_hash_dir", self.root_cert
+        )
 
     @pytest.fixture
-    def intermediate_ca_file(self, tmpdir):
+    def intermediate_ca_file(self, tmp_path: pathlib.Path) -> pathlib.Path:
         return self._create_ca_file(
-            tmpdir, "intermediate_ca_hash_dir", self.intermediate_cert
+            tmp_path, "intermediate_ca_hash_dir", self.intermediate_cert
         )
 
     @staticmethod
-    def _create_ca_file(base_path, hash_directory, cacert):
+    def _create_ca_file(
+        base_path: pathlib.Path, hash_directory: str, cacert: X509
+    ) -> pathlib.Path:
         ca_hash = f"{cacert.subject_name_hash():08x}.0"
-        cafile = base_path.join(hash_directory, ca_hash)
-        cafile.write_binary(
-            dump_certificate(FILETYPE_PEM, cacert), ensure=True
-        )
+        cafile = base_path / hash_directory / ca_hash
+        cafile.parent.mkdir(parents=True, exist_ok=True)
+        cafile.write_bytes(dump_certificate(FILETYPE_PEM, cacert))
         return cafile
 
-    def test_verify_with_ca_file_location(self, root_ca_file):
+    def test_verify_with_ca_file_location(
+        self, root_ca_file: pathlib.Path
+    ) -> None:
         store = X509Store()
         store.load_locations(str(root_ca_file))
 
         store_ctx = X509StoreContext(store, self.intermediate_cert)
         store_ctx.verify_certificate()
 
-    def test_verify_with_ca_path_location(self, root_ca_file):
+    def test_verify_with_ca_path_location(
+        self, root_ca_file: pathlib.Path
+    ) -> None:
         store = X509Store()
-        store.load_locations(None, str(root_ca_file.dirname))
+        store.load_locations(None, str(root_ca_file.parent))
 
         store_ctx = X509StoreContext(store, self.intermediate_cert)
         store_ctx.verify_certificate()
 
     def test_verify_with_cafile_and_capath(
-        self, root_ca_file, intermediate_ca_file
-    ):
+        self,
+        root_ca_file: pathlib.Path,
+        intermediate_ca_file: pathlib.Path,
+    ) -> None:
         store = X509Store()
         store.load_locations(
-            cafile=str(root_ca_file), capath=str(intermediate_ca_file.dirname)
+            cafile=str(root_ca_file), capath=str(intermediate_ca_file.parent)
         )
 
         store_ctx = X509StoreContext(store, self.intermediate_server_cert)
         store_ctx.verify_certificate()
 
     def test_verify_with_multiple_ca_files(
-        self, root_ca_file, intermediate_ca_file
-    ):
+        self, root_ca_file: pathlib.Path, intermediate_ca_file: pathlib.Path
+    ) -> None:
         store = X509Store()
         store.load_locations(str(root_ca_file))
         store.load_locations(str(intermediate_ca_file))
@@ -4014,9 +3470,11 @@ class TestX509StoreContext:
         store_ctx = X509StoreContext(store, self.intermediate_server_cert)
         store_ctx.verify_certificate()
 
-    def test_verify_failure_with_empty_ca_directory(self, tmpdir):
+    def test_verify_failure_with_empty_ca_directory(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         store = X509Store()
-        store.load_locations(None, str(tmpdir))
+        store.load_locations(None, str(tmp_path))
 
         store_ctx = X509StoreContext(store, self.intermediate_cert)
         with pytest.raises(X509StoreContextError) as exc:
@@ -4024,7 +3482,7 @@ class TestX509StoreContext:
 
         assert str(exc.value) == "unable to get local issuer certificate"
 
-    def test_verify_with_partial_chain(self):
+    def test_verify_with_partial_chain(self) -> None:
         store = X509Store()
         store.add_cert(self.intermediate_cert)
 
@@ -4035,129 +3493,7 @@ class TestX509StoreContext:
         # Now set the partial verification flag for verification.
         store.set_flags(X509StoreFlags.PARTIAL_CHAIN)
         store_ctx = X509StoreContext(store, self.intermediate_server_cert)
-        assert store_ctx.verify_certificate() is None
-
-
-class TestSignVerify:
-    """
-    Tests for `OpenSSL.crypto.sign` and `OpenSSL.crypto.verify`.
-    """
-
-    def test_sign_verify(self):
-        """
-        `sign` generates a cryptographic signature which `verify` can check.
-        """
-        content = (
-            b"It was a bright cold day in April, and the clocks were striking "
-            b"thirteen. Winston Smith, his chin nuzzled into his breast in an "
-            b"effort to escape the vile wind, slipped quickly through the "
-            b"glass doors of Victory Mansions, though not quickly enough to "
-            b"prevent a swirl of gritty dust from entering along with him."
-        )
-
-        # sign the content with this private key
-        priv_key = load_privatekey(FILETYPE_PEM, root_key_pem)
-        # verify the content with this cert
-        good_cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        # certificate unrelated to priv_key, used to trigger an error
-        bad_cert = load_certificate(FILETYPE_PEM, server_cert_pem)
-
-        for digest in ["md5", "sha1", "sha256"]:
-            sig = sign(priv_key, content, digest)
-
-            # Verify the signature of content, will throw an exception if
-            # error.
-            verify(good_cert, sig, content, digest)
-
-            # This should fail because the certificate doesn't match the
-            # private key that was used to sign the content.
-            with pytest.raises(Error):
-                verify(bad_cert, sig, content, digest)
-
-            # This should fail because we've "tainted" the content after
-            # signing it.
-            with pytest.raises(Error):
-                verify(good_cert, sig, content + b"tainted", digest)
-
-        # test that unknown digest types fail
-        with pytest.raises(ValueError):
-            sign(priv_key, content, "strange-digest")
-        with pytest.raises(ValueError):
-            verify(good_cert, sig, content, "strange-digest")
-
-    def test_sign_verify_with_text(self):
-        """
-        `sign` generates a cryptographic signature which
-        `verify` can check. Deprecation warnings raised because using
-        text instead of bytes as content
-        """
-        content = (
-            b"It was a bright cold day in April, and the clocks were striking "
-            b"thirteen. Winston Smith, his chin nuzzled into his breast in an "
-            b"effort to escape the vile wind, slipped quickly through the "
-            b"glass doors of Victory Mansions, though not quickly enough to "
-            b"prevent a swirl of gritty dust from entering along with him."
-        ).decode("ascii")
-
-        priv_key = load_privatekey(FILETYPE_PEM, root_key_pem)
-        cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        for digest in ["md5", "sha1", "sha256"]:
-            with pytest.warns(DeprecationWarning) as w:
-                warnings.simplefilter("always")
-                sig = sign(priv_key, content, digest)
-            assert "{} for data is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
-            ) == str(w[-1].message)
-
-            with pytest.warns(DeprecationWarning) as w:
-                warnings.simplefilter("always")
-                verify(cert, sig, content, digest)
-            assert "{} for data is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
-            ) == str(w[-1].message)
-
-    def test_sign_verify_ecdsa(self):
-        """
-        `sign` generates a cryptographic signature which `verify` can check.
-        ECDSA Signatures in the X9.62 format may have variable length,
-        different from the length of the private key.
-        """
-        content = (
-            b"It was a bright cold day in April, and the clocks were striking "
-            b"thirteen. Winston Smith, his chin nuzzled into his breast in an "
-            b"effort to escape the vile wind, slipped quickly through the "
-            b"glass doors of Victory Mansions, though not quickly enough to "
-            b"prevent a swirl of gritty dust from entering along with him."
-        )
-        priv_key = load_privatekey(FILETYPE_PEM, ec_root_key_pem)
-        cert = load_certificate(FILETYPE_PEM, ec_root_cert_pem)
-        sig = sign(priv_key, content, "sha256")
-        verify(cert, sig, content, "sha256")
-
-    def test_sign_nulls(self):
-        """
-        `sign` produces a signature for a string with embedded nulls.
-        """
-        content = b"Watch out!  \0  Did you see it?"
-        priv_key = load_privatekey(FILETYPE_PEM, root_key_pem)
-        good_cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        sig = sign(priv_key, content, "sha256")
-        verify(good_cert, sig, content, "sha256")
-
-    def test_sign_with_large_key(self):
-        """
-        `sign` produces a signature for a string when using a long key.
-        """
-        content = (
-            b"It was a bright cold day in April, and the clocks were striking "
-            b"thirteen. Winston Smith, his chin nuzzled into his breast in an "
-            b"effort to escape the vile wind, slipped quickly through the "
-            b"glass doors of Victory Mansions, though not quickly enough to "
-            b"prevent a swirl of gritty dust from entering along with him."
-        )
-
-        priv_key = load_privatekey(FILETYPE_PEM, large_key_pem)
-        sign(priv_key, content, "sha256")
+        assert store_ctx.verify_certificate() is None  # type: ignore[func-returns-value]
 
 
 class TestEllipticCurve:
@@ -4166,13 +3502,13 @@ class TestEllipticCurve:
     `get_elliptic_curves`.
     """
 
-    def test_set(self):
+    def test_set(self) -> None:
         """
         `get_elliptic_curves` returns a `set`.
         """
         assert isinstance(get_elliptic_curves(), set)
 
-    def test_a_curve(self):
+    def test_a_curve(self) -> None:
         """
         `get_elliptic_curve` can be used to retrieve a particular supported
         curve.
@@ -4181,7 +3517,7 @@ class TestEllipticCurve:
         curve = next(iter(curves))
         assert curve.name == get_elliptic_curve(curve.name).name
 
-    def test_not_a_curve(self):
+    def test_not_a_curve(self) -> None:
         """
         `get_elliptic_curve` raises `ValueError` if called with a name which
         does not identify a supported curve.
@@ -4189,7 +3525,7 @@ class TestEllipticCurve:
         with pytest.raises(ValueError):
             get_elliptic_curve("this curve was just invented")
 
-    def test_repr(self):
+    def test_repr(self) -> None:
         """
         The string representation of a curve object includes simply states the
         object is a curve and what its name is.
@@ -4198,7 +3534,7 @@ class TestEllipticCurve:
         curve = next(iter(curves))
         assert f"<Curve {curve.name!r}>" == repr(curve)
 
-    def test_to_EC_KEY(self):
+    def test_to_EC_KEY(self) -> None:
         """
         The curve object can export a version of itself as an EC_KEY* via the
         private `_EllipticCurve._to_EC_KEY`.
@@ -4211,39 +3547,127 @@ class TestEllipticCurve:
         curve._to_EC_KEY()
 
 
-class EllipticCurveFactory:
-    """
-    A helper to get the names of two curves.
-    """
-
-    def __init__(self):
-        curves = iter(get_elliptic_curves())
-        self.curve_name = next(curves).name
-        self.another_curve_name = next(curves).name
-
-
-class TestEllipticCurveEquality(EqualityTestsMixin):
+class TestEllipticCurveEquality:
     """
     Tests `_EllipticCurve`'s implementation of ``==`` and ``!=``.
     """
 
-    curve_factory = EllipticCurveFactory()
-
-    if curve_factory.curve_name is None:
-        skip = "There are no curves available there can be no curve objects."
-
-    def anInstance(self):
+    def anInstance(self) -> _EllipticCurve:
         """
         Get the curve object for an arbitrary curve supported by the system.
         """
-        return get_elliptic_curve(self.curve_factory.curve_name)
+        return next(iter(get_elliptic_curves()))
 
-    def anotherInstance(self):
+    def anotherInstance(self) -> _EllipticCurve:
         """
         Get the curve object for an arbitrary curve supported by the system -
         but not the one returned by C{anInstance}.
         """
-        return get_elliptic_curve(self.curve_factory.another_curve_name)
+        return list(get_elliptic_curves())[1]
+
+    def test_identicalEq(self) -> None:
+        """
+        An object compares equal to itself using the C{==} operator.
+        """
+        o = self.anInstance()
+        assert o == o
+
+    def test_identicalNe(self) -> None:
+        """
+        An object doesn't compare not equal to itself using the C{!=} operator.
+        """
+        o = self.anInstance()
+        assert not (o != o)
+
+    def test_sameEq(self) -> None:
+        """
+        Two objects that are equal to each other compare equal to each other
+        using the C{==} operator.
+        """
+        a = self.anInstance()
+        b = self.anInstance()
+        assert a == b
+
+    def test_sameNe(self) -> None:
+        """
+        Two objects that are equal to each other do not compare not equal to
+        each other using the C{!=} operator.
+        """
+        a = self.anInstance()
+        b = self.anInstance()
+        assert not (a != b)
+
+    def test_differentEq(self) -> None:
+        """
+        Two objects that are not equal to each other do not compare equal to
+        each other using the C{==} operator.
+        """
+        a = self.anInstance()
+        b = self.anotherInstance()
+        assert not (a == b)
+
+    def test_differentNe(self) -> None:
+        """
+        Two objects that are not equal to each other compare not equal to each
+        other using the C{!=} operator.
+        """
+        a = self.anInstance()
+        b = self.anotherInstance()
+        assert a != b
+
+    def test_anotherTypeEq(self) -> None:
+        """
+        The object does not compare equal to an object of an unrelated type
+        (which does not implement the comparison) using the C{==} operator.
+        """
+        a = self.anInstance()
+        b = object()
+        assert not (a == b)
+
+    def test_anotherTypeNe(self) -> None:
+        """
+        The object compares not equal to an object of an unrelated type (which
+        does not implement the comparison) using the C{!=} operator.
+        """
+        a = self.anInstance()
+        b = object()
+        assert a != b
+
+    def test_delegatedEq(self) -> None:
+        """
+        The result of comparison using C{==} is delegated to the right-hand
+        operand if it is of an unrelated type.
+        """
+        called = False
+
+        class Delegate:
+            def __eq__(self, other: object) -> bool:
+                nonlocal called
+                called = True
+                return False
+
+        a = self.anInstance()
+        b = Delegate()
+        assert not (a == b)
+        assert called
+
+    def test_delegateNe(self) -> None:
+        """
+        The result of comparison using C{!=} is delegated to the right-hand
+        operand if it is of an unrelated type.
+        """
+        called = False
+
+        class Delegate:
+            def __ne__(self, other: object) -> bool:
+                nonlocal called
+                called = True
+                return False
+
+        a = self.anInstance()
+        b = Delegate()
+        assert not (a != b)  # type: ignore[comparison-overlap]
+        assert called
 
 
 class TestEllipticCurveHash:
@@ -4252,27 +3676,22 @@ class TestEllipticCurveHash:
     an item in a `dict` or `set`).
     """
 
-    curve_factory = EllipticCurveFactory()
-
-    if curve_factory.curve_name is None:
-        skip = "There are no curves available there can be no curve objects."
-
-    def test_contains(self):
+    def test_contains(self) -> None:
         """
         The ``in`` operator reports that a `set` containing a curve does
         contain that curve.
         """
-        curve = get_elliptic_curve(self.curve_factory.curve_name)
+        curve = next(iter(get_elliptic_curves()))
         curves = set([curve])
         assert curve in curves
 
-    def test_does_not_contain(self):
+    def test_does_not_contain(self) -> None:
         """
         The ``in`` operator reports that a `set` not containing a curve
         does not contain that curve.
         """
-        curve = get_elliptic_curve(self.curve_factory.curve_name)
-        curves = set(
-            [get_elliptic_curve(self.curve_factory.another_curve_name)]
-        )
+        all_curves = list(get_elliptic_curves())
+
+        curve = all_curves[0]
+        curves = set([all_curves[1]])
         assert curve not in curves

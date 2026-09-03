@@ -66,6 +66,6 @@ EValidationResult ValidateConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
 
-TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig);
+TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig);
 
 } // namespace NKikimr::NConfig

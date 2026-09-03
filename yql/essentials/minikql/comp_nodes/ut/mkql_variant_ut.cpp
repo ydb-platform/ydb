@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -569,7 +568,7 @@ Y_UNIT_TEST(TestDynamicVariantTuple) {
     const auto var2 = pb.DynamicVariant(data2, pb.NewDataLiteral<ui32>(1), varType);
     const auto var3 = pb.DynamicVariant(data3, pb.NewDataLiteral<ui32>(2), varType);
     const auto list = pb.AsList({var1, var2, var3});
-    const auto pgmReturn = list;
+    const auto& pgmReturn = list;
 
     using TItem = TMaybe<std::variant<TString, TString>>;
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -592,7 +591,7 @@ Y_UNIT_TEST(TestDynamicVariantStruct) {
     const auto var1 = pb.DynamicVariant(data1, pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("x"), varType);
     const auto var2 = pb.DynamicVariant(data2, pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("z"), varType);
     const auto list = pb.AsList({var1, var2});
-    const auto pgmReturn = list;
+    const auto& pgmReturn = list;
 
     using TItem = TMaybe<std::variant<ui32, ui32>>;
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -612,7 +611,7 @@ Y_UNIT_TEST(TestDynamicVariantStructWithNullIndex) {
     const auto varType = pb.NewVariantType(structType);
     const auto var1 = pb.DynamicVariant(data1, pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<NUdf::TUtf8>::Id), varType);
     const auto list = pb.AsList({var1});
-    const auto pgmReturn = list;
+    const auto& pgmReturn = list;
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(),
@@ -620,5 +619,4 @@ Y_UNIT_TEST(TestDynamicVariantStructWithNullIndex) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLVariantTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

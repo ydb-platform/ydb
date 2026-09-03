@@ -33,6 +33,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
+#include <library/cpp/string_utils/parse_size/parse_size.h>
+
 #include <util/generic/serialized_enum.h>
 #include <util/generic/singleton.h>
 #include <util/generic/strbuf.h>
@@ -2069,7 +2071,7 @@ namespace NTypeAnnImpl {
                 flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({keyType, payloadType}));
                 allFieldOptional = false;
             } else if (mode == "optional" || (mode == "auto" && fieldOptional)) {
-                if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::FlattenOptionalByNonOptional.MinLangVer, ctx.Types.BackportMode) && !fieldOptional) {
+                if (!IsAvailable(NFeature::FlattenOptionalByNonOptional, ctx.Types) && !fieldOptional) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                         "Expected optional type in field of struct: '" << fieldName <<
                         "', but got: " << *field->GetItemType()));
@@ -2886,9 +2888,55 @@ namespace NTypeAnnImpl {
             }
             return IGraphTransformer::TStatus::Repeat;
         }
-    }
 
-    IGraphTransformer::TStatus AddWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        IGraphTransformer::TStatus ConvertDifferentDecimalsToCommonType(
+            TExprNode::TPtr& left,
+            const TDataExprType& leftType,
+            TExprNode::TPtr& right,
+            const TDataExprType& rightType,
+            TExprContext& ctx,
+            const TTypeAnnotationContext& typeCtx)
+        {
+            if (typeCtx.GetDecimalConversionMode() != EDecimalConversionMode::WithCommonTypeFixup) {
+                ctx.AddError(TIssue(ctx.GetPosition(left->Pos()),
+                                    TStringBuilder() << "Decimal common type fix must be enabled for arithmetic operations on different Decimal types"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto* commonType = CommonType<false>(left->Pos(), &leftType, &rightType, ctx, typeCtx);
+            if (!commonType) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto status = TryConvertTo(left, leftType, *commonType, ctx, typeCtx)
+                                    .Combine(TryConvertTo(right, rightType, *commonType, ctx, typeCtx));
+            return status.Level == IGraphTransformer::TStatus::Error ? status : IGraphTransformer::TStatus::Repeat;
+        }
+
+        IGraphTransformer::TStatus TryConvertDifferentDecimalsToCommonType(
+            const TExprNode::TPtr& input,
+            const TDataExprType& leftType,
+            const TDataExprType& rightType,
+            TStringBuf operation,
+            TExprContext& ctx,
+            const TTypeAnnotationContext& typeCtx)
+        {
+            if (!IsAvailable(NFeature::DecimalArithmeticWithCommonType, typeCtx) ||
+                !IsDataTypeDecimal(leftType.GetSlot()) || !IsDataTypeDecimal(rightType.GetSlot()) ||
+                IsSameAnnotation(leftType, rightType)) {
+                return IGraphTransformer::TStatus::Ok;
+            }
+
+            TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder()
+                                                                                << "Cannot infer common Decimal type for '" << operation << "' operation.");
+            });
+            return ConvertDifferentDecimalsToCommonType(
+                input->ChildRef(0), leftType, input->ChildRef(1), rightType, ctx, typeCtx);
+        }
+        } // namespace
+
+    IGraphTransformer::TStatus AddWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("+", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -2924,6 +2972,12 @@ namespace NTypeAnnImpl {
             }
         }
 
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "+", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         auto isAddAllowed = IsAddAllowedYqlTypes(input->ChildPtr(0)->GetTypeAnn(), input->ChildPtr(1)->GetTypeAnn(), ctx.Expr);
         if (!isAddAllowed.has_value()) {
             ctx.Expr.AddError(TIssue(
@@ -2953,7 +3007,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SubWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus SubWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("-", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -2992,6 +3046,12 @@ namespace NTypeAnnImpl {
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
+        }
+
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "-", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         const bool isLeftNumeric = IsDataTypeNumeric(dataType[0]->GetSlot());
@@ -3057,7 +3117,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus MulWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus MulWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("*", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -3096,6 +3156,12 @@ namespace NTypeAnnImpl {
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
+        }
+
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "*", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
@@ -3141,7 +3207,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus DivWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus DivWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("/", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -3182,6 +3248,12 @@ namespace NTypeAnnImpl {
             }
         }
 
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "/", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
@@ -3220,7 +3292,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ModWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ModWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("%", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -3259,6 +3331,12 @@ namespace NTypeAnnImpl {
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
+        }
+
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "%", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
@@ -3873,8 +3951,7 @@ namespace NTypeAnnImpl {
     template<bool IsScore>
     IGraphTransformer::TStatus FullTextBuiltinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         YQL_ENSURE(output);
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::FullTextFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << input->Content() << " function is not available before version 2025.05"));
+        if (!EnsureAvailable(input->Pos(), NFeature::FullTextFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3944,8 +4021,7 @@ namespace NTypeAnnImpl {
 
     IGraphTransformer::TStatus HybridRankBuiltinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         YQL_ENSURE(output);
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::HybridRankFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "HybridRank function is not available before version 2026.02"));
+        if (!EnsureAvailable(input->Pos(), NFeature::HybridRankFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4037,8 +4113,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus SqlConcatWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::ConcatFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Concat function is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::ConcatFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4086,8 +4161,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus NullIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::NullIfFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "NullIf function is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::NullIfFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4281,10 +4355,11 @@ namespace NTypeAnnImpl {
             }
             hasOptionals = hasOptionals || isOptional;
         }
-        if (hasOptionals && !ignoreNulls)
+        if (hasOptionals && !ignoreNulls) {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
-        else
+        } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
+        }
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -4693,6 +4768,66 @@ namespace NTypeAnnImpl {
             input->SetTypeAnn(taggedType->GetBaseType());
         }
 
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus AsErasedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::TypeErasure.MinLangVer, ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "AsErased function is not available before version 2026.02"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TResourceExprType>(NKikimr::NMiniKQL::ErasedResourceTag));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus PeekErasedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::TypeErasure.MinLangVer, ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "PeekErased function is not available before version 2026.02"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!EnsureResourceType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto* resType = input->Head().GetTypeAnn()->Cast<TResourceExprType>();
+        if (resType->GetTag() != NKikimr::NMiniKQL::ErasedResourceTag) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
+                << "Expected Resource<" << NKikimr::NMiniKQL::ErasedResourceTag << ">, but got: " << *input->Head().GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        const auto expectedType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(expectedType));
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -7617,12 +7752,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr, ctx.Types)) {
             if (const auto status = TryConvertTo(input->ChildRef(1), *commonType, ctx.Expr, ctx.Types)
                 .Combine(TryConvertTo(input->TailRef(), *commonType, ctx.Expr, ctx.Types));
-                status != IGraphTransformer::TStatus::Ok)
+                status != IGraphTransformer::TStatus::Ok) {
                 return status;
+                }
 
             input->SetTypeAnn(commonType);
-        } else
+        } else {
             return IGraphTransformer::TStatus::Error;
+        }
 
         return IGraphTransformer::TStatus::Ok;
     }
@@ -9596,6 +9733,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         // (7) settings
         bool isStrict = false;
+        bool settingsWasChanged = false;
         TExprNode::TPtr settings;
         if (input->ChildrenSize() > 7) {
             settings = input->ChildPtr(7);
@@ -9636,6 +9774,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                     if (!EnsureAtom(child->Tail(), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
+                    }
+
+                    ui64 extraMemValue = 0;
+                    if (settingName == "cpu") {
+                        double cpuValue = 0.0;
+                        if (!TryFromString(child->Tail().Content(), cpuValue) || cpuValue <= 0.0) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Tail().Pos()), TStringBuilder()
+                                << "Bad cpu setting value: " << child->Tail().Content()
+                                << ". Expected a positive number (e.g., '2')"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else if (settingName == "extraMem" && !TryFromString(child->Tail().Content(), extraMemValue)) {
+                        try {
+                            extraMemValue = NSize::ParseSize(child->Tail().Content());
+                        } catch (const std::exception& e) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Tail().Pos()), TStringBuilder()
+                                << "Bad extraMem setting value: " << child->Tail().Content()
+                                << ". Expected a number (bytes) or a human-readable size like '2048M', '1G', '512K'"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        auto normalizedValue = ctx.Expr.NewAtom(child->Tail().Pos(), ToString(extraMemValue));
+                        auto normalizedSetting = ctx.Expr.NewList(child->Pos(), {ctx.Expr.NewAtom(child->Head().Pos(), "extraMem"), normalizedValue});
+                        settings = ReplaceSetting(*settings, normalizedSetting, ctx.Expr);
+                        settingsWasChanged = true;
                     }
 
                     if (ctx.Types.LangVer != UnknownLangVersion) {
@@ -9699,6 +9861,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (settingsWasChanged) {
+            output = ctx.Expr.ChangeChild(*input, 7, std::move(settings));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         if (input->ChildrenSize() != 8 || !cachedType) {
@@ -9907,7 +10074,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (cachedType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -10143,7 +10310,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (callableType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -10588,9 +10755,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus BuildSimplePgCall(TPositionHandle pos, TStringBuf name,
-        const TExprNodeList& args, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::SimplePgFunction.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "SimplePg functions are not available before version 2025.04"));
+        const TExprNodeList& args, TExprNode::TPtr& output, TExtContext& ctx)
+    {
+        if (!EnsureAvailable(pos, NFeature::SimplePgFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -11034,7 +11201,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (callableType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -12510,7 +12677,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto underlyingType = input->Head().GetTypeAnn()->Cast<TVariantExprType>()->GetUnderlyingType();
             if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
                 auto tupleTypeItems = underlyingType->Cast<TTupleExprType>()->GetItems();
-                if (std::adjacent_find(tupleTypeItems.cbegin(), tupleTypeItems.cend(), std::not_equal_to<const TTypeAnnotationNode*>()) == tupleTypeItems.cend()) {
+                if (std::adjacent_find(tupleTypeItems.cbegin(), tupleTypeItems.cend(), std::not_equal_to<>()) == tupleTypeItems.cend()) {
                     // All types are the same
                     output = ctx.Expr.Builder(input->Pos())
                         .Apply(input->ChildPtr(1))
@@ -13703,8 +13870,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     IGraphTransformer::TStatus WithSideEffectsModeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::SideEffects.MinLangVer, ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "SideEffects is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::SideEffects, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -15743,8 +15909,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus LinearDestroyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsAvailableLangVersion(NFeature::LinearDestroy.MinLangVer, ctx.Types.LangVer)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "LinearDestroy is not available before version 2025.05"));
+        if (!EnsureAvailable(input->Pos(), NFeature::LinearDestroy, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -15898,32 +16063,32 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Plus"] = &PlusMinusWrapper;
         Functions["Minus"] = &PlusMinusWrapper;
         Functions["CheckedMinus"] = &PlusMinusWrapper;
-        Functions["+"] = &AddWrapper;
-        Functions["Add"] = &AddWrapper;
-        Functions["CheckedAdd"] = &AddWrapper;
-        Functions["+MayWarn"] = &AddWrapper;
-        Functions["AddMayWarn"] = &AddWrapper;
+        ExtFunctions["+"] = &AddWrapper;
+        ExtFunctions["Add"] = &AddWrapper;
+        ExtFunctions["CheckedAdd"] = &AddWrapper;
+        ExtFunctions["+MayWarn"] = &AddWrapper;
+        ExtFunctions["AddMayWarn"] = &AddWrapper;
         Functions["AggrAdd"] = &AggrAddWrapper;
-        Functions["-"] = &SubWrapper;
-        Functions["Sub"] = &SubWrapper;
-        Functions["CheckedSub"] = &SubWrapper;
-        Functions["-MayWarn"] = &SubWrapper;
-        Functions["SubMayWarn"] = &SubWrapper;
-        Functions["*"] = &MulWrapper;
-        Functions["Mul"] = &MulWrapper;
-        Functions["CheckedMul"] = &MulWrapper;
-        Functions["*MayWarn"] = &MulWrapper;
-        Functions["MulMayWarn"] = &MulWrapper;
-        Functions["/"] = &DivWrapper;
-        Functions["Div"] = &DivWrapper;
-        Functions["CheckedDiv"] = &DivWrapper;
-        Functions["/MayWarn"] = &DivWrapper;
-        Functions["DivMayWarn"] = &DivWrapper;
-        Functions["%"] = &ModWrapper;
-        Functions["Mod"] = &ModWrapper;
-        Functions["CheckedMod"] = &ModWrapper;
-        Functions["%MayWarn"] = &ModWrapper;
-        Functions["ModMayWarn"] = &ModWrapper;
+        ExtFunctions["-"] = &SubWrapper;
+        ExtFunctions["Sub"] = &SubWrapper;
+        ExtFunctions["CheckedSub"] = &SubWrapper;
+        ExtFunctions["-MayWarn"] = &SubWrapper;
+        ExtFunctions["SubMayWarn"] = &SubWrapper;
+        ExtFunctions["*"] = &MulWrapper;
+        ExtFunctions["Mul"] = &MulWrapper;
+        ExtFunctions["CheckedMul"] = &MulWrapper;
+        ExtFunctions["*MayWarn"] = &MulWrapper;
+        ExtFunctions["MulMayWarn"] = &MulWrapper;
+        ExtFunctions["/"] = &DivWrapper;
+        ExtFunctions["Div"] = &DivWrapper;
+        ExtFunctions["CheckedDiv"] = &DivWrapper;
+        ExtFunctions["/MayWarn"] = &DivWrapper;
+        ExtFunctions["DivMayWarn"] = &DivWrapper;
+        ExtFunctions["%"] = &ModWrapper;
+        ExtFunctions["Mod"] = &ModWrapper;
+        ExtFunctions["CheckedMod"] = &ModWrapper;
+        ExtFunctions["%MayWarn"] = &ModWrapper;
+        ExtFunctions["ModMayWarn"] = &ModWrapper;
         Functions["BitAnd"] = &BitOpsWrapper<2>;
         Functions["BitOr"] = &BitOpsWrapper<2>;
         Functions["BitXor"] = &BitOpsWrapper<2>;
@@ -15976,6 +16141,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Last"] = &ToOptionalWrapper;
         Functions["AsTagged"] = &AsTaggedWrapper;
         Functions["Untag"] = &UntagWrapper;
+        ExtFunctions["AsErased"] = &AsErasedWrapper;
+        ExtFunctions["PeekErased"] = &PeekErasedWrapper;
         Functions["And"] = &LogicalWrapper<false>;
         Functions["Or"] = &LogicalWrapper<false>;
         Functions["Xor"] = &LogicalWrapper<true>;
@@ -16523,6 +16690,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockWay"] = &BlockWayWrapper;
         Functions["BlockVariant"] = &BlockVariantWrapper;
         Functions["BlockVariantItem"] = &BlockVariantItemWrapper;
+        Functions["BlockDynamicVariant"] = &BlockDynamicVariantWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsStruct"] = &BlockAsStructWrapper;
@@ -16806,7 +16974,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return dataProvider.GetIntentDeterminationTransformer().Transform(input, output, ctx);
         }
 
-    private:
         const TTypeAnnotationContext& Types_;
     };
 

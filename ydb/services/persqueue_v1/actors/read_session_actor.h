@@ -22,6 +22,7 @@
 #include <google/protobuf/util/time_util.h>
 
 #include <type_traits>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -89,7 +90,8 @@ struct TPartitionActorInfo {
         , NodeId(0)
         , ReadingFinished(false)
     {
-        Y_ABORT_UNLESS(partition.DiscoveryConverter != nullptr);
+        AFL_ENSURE(partition.DiscoveryConverter != nullptr)
+            ("partition", partition.Partition)("assign_id", partition.AssignId);
     }
 
     bool IsLastOffsetCommitted() const {

@@ -73,7 +73,7 @@ void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream
 
     try {
         double cpuUsage = 0.0;
-        auto fullStat = StatProcessor->GetQueryStat(convertedPlan, cpuUsage, nullptr);
+        auto fullStat = StatProcessor->GetQueryStat(convertedPlan, cpuUsage, nullptr, nullptr);
         auto flatStat = StatProcessor->GetFlatStat(convertedPlan);
         auto publicStat = StatProcessor->GetPublicStat(fullStat);
 
@@ -86,7 +86,7 @@ void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream
 }
 
 void TStatsPrinter::PrintTimeline(const TString& plan, IOutputStream& output) {
-    TPlanVisualizer planVisualizer;
+    NPlan2Svg::TPlanVisualizer planVisualizer;
     planVisualizer.LoadPlans(plan);
     output.Write(planVisualizer.PrintSvg());
 }

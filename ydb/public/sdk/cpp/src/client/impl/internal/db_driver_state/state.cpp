@@ -331,7 +331,12 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
         }
     }
     if (results.empty()) {
-        return NThreading::MakeFuture();
+        // MakeFuture<void>() uses a process-wide singleton that may already be
+        // destroyed when driver shutdown is triggered by another singleton.
+        auto promise = NThreading::NewPromise<void>();
+        auto future = promise.GetFuture();
+        promise.SetValue();
+        return future;
     }
     return NThreading::WaitExceptionOrAll(results);
 }

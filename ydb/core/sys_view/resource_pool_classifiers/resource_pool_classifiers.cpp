@@ -18,6 +18,8 @@
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -51,12 +53,12 @@ public:
                 cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
                 cFunc(TEvents::TEvPoison::EventType, PassAway);
                 default:
-                    LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                        "NSysView::TResourcePoolClassifiersScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TResourcePoolClassifiersScan: unexpected event",
+                        {"eventType", ev->GetTypeRewrite()});
             }
         } catch (...) {
-            LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                "NSysView::TResourcePoolClassifiersScan: with exception %s", CurrentExceptionMessage().c_str());
+            YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TResourcePoolClassifiersScan: with exception",
+                {"exceptionMessage", CurrentExceptionMessage()});
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage());
         }
     }
@@ -92,31 +94,61 @@ private:
                     return TCell::Make<i64>(config.GetRank());
                 }});
                 insert({TSchema::MemberName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& memberName = config.GetConfigJson()["member_name"].GetString();
-                    return TCell(memberName.data(), memberName.size());
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.MemberName.has_value()) {
+                        const auto& memberName = settings.MemberName.value();
+                        return TCell(memberName.data(), memberName.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::ResourcePool::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& resourcePool = config.GetConfigJson()["resource_pool"].GetString();
-                    return TCell(resourcePool.data(), resourcePool.size());
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.ResourcePool.has_value()) {
+                        const auto& resourcePool = settings.ResourcePool.value();
+                        return TCell(resourcePool.data(), resourcePool.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::HasAppName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& hasAppName = config.GetConfigJson()["has_app_name"].GetString();
-                    return TCell(hasAppName.data(), hasAppName.size());
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.HasAppName.has_value()) {
+                        const auto& hasAppName = settings.HasAppName.value();
+                        return TCell(hasAppName.data(), hasAppName.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::Action::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& action = config.GetConfigJson()["action"].GetString();
-                    return TCell(action.data(), action.size());
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.Action.has_value()
+                        && *settings.Action == NResourcePool::EClassifierAction::Reject)
+                    {
+                        return TCell(ToString(NResourcePool::EClassifierAction::Reject));
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::HasFullScan::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& hasFullScan = config.GetConfigJson()["has_full_scan"].GetString();
-                    return TCell(hasFullScan.data(), hasFullScan.size());
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.HasFullScan.has_value()) {
+                        const auto& hasFullScan = settings.HasFullScan->Pattern;
+                        return TCell(hasFullScan.data(), hasFullScan.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::HasPath::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& hasPath = config.GetConfigJson()["has_path"].GetString();
-                    return TCell(hasPath.data(), hasPath.size());
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.HasPath.has_value()) {
+                        const auto& hasPath = settings.HasPath->Pattern;
+                        return TCell(hasPath.data(), hasPath.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::HasStream::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    return TCell::Make<bool>(config.GetConfigJson()["has_stream"].GetBoolean());
+                    const auto& settings = config.GetClassifierSettings();
+                    if (settings.HasStream.has_value()) {
+                        return TCell::Make<bool>(settings.HasStream.value());
+                    } else {
+                        return TCell();
+                    }
                 }});
             }
         };

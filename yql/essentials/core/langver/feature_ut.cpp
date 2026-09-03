@@ -10,6 +10,7 @@ TFeature MakeFeature(TLangVersion min, TLangVersion max = UnknownLangVersion) {
         .Description = "Feature",
         .MinLangVer = min,
         .MaxLangVer = max,
+        .IsBackportAllowed = true,
     };
 }
 

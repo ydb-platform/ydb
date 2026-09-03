@@ -7,6 +7,7 @@ SRCS(
     events.cpp
     executor.cpp
     filters.cpp
+    hang_tracker.cpp
     manager.cpp
     merge.cpp
     private_events.cpp

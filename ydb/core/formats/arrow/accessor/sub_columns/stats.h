@@ -194,7 +194,7 @@ public:
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
         AFL_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
-        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetCodecForValueType(GetValueType(index))->GetArrowType());
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
     }
 
     TRTStats GetRTStats(const ui32 index) const {
@@ -210,7 +210,11 @@ public:
         return Original->num_rows();
     }
 
-    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex) const;
+    // The serialization constructor for `columnIndex`. encodingParams selects the offset/index
+    // re-encoding for binary-backed Array/Dictionary columns; a disabled params yields the plain
+    // accessor constructor. Since the encoding lives in the accessor settings (not the stats blob),
+    // it is supplied per call rather than stored here.
+    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex, const TEncodingParams& encodingParams) const;
     IChunkedArray::EType GetAccessorType(const ui32 columnIndex) const;
     EValueType GetValueType(const ui32 columnIndex) const;
 

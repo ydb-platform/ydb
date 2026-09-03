@@ -32,6 +32,8 @@ PEERDIR(
     ydb/tests/library/flavours
     ydb/tests/library/clients
     ydb/tests/oss/ydb_sdk_import
+    ydb/tests/stress/remove_storage_groups/workload
+    ydb/tests/stress/tpcc/workload
     ydb/public/sdk/python
 )
 

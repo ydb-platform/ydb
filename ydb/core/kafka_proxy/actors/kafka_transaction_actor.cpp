@@ -1,5 +1,6 @@
 #include "kafka_transaction_actor.h"
 #include "kafka_transaction_actor_sql.h"
+#include "kafka_metadata_service.h"
 #include "txn_actor_response_builder.h"
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
@@ -7,6 +8,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <util/generic/cast.h>
 #include <regex>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -23,9 +25,17 @@ if (!ProducerInRequestIsValid(ev->Get()->Request)) { \
 
 namespace NKafka {
 
-    void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext&){
+    void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
         YDB_LOG_DEBUG("Received ADD_PARTITIONS_TO_TXN request",
             {LogPrefix()});
+        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",
+            {LogPrefix()});
+            SendFailResponse<TAddPartitionsToTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
+                "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
         VALIDATE_PRODUCER_IN_REQUEST(TAddPartitionsToTxnResponseData);
 
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
@@ -39,16 +49,30 @@ namespace NKafka {
     // Method does nothing. In Kafka it will add __consumer_offsets topic to transaction, but
     // in YDB Topics we store offsets in table and do not need this extra action.
     // Thus we can just ignore this request.
-    void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext&) {
+    void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Received ADD_OFFSETS_TO_TXN request",
             {LogPrefix()});
+        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
+            SendFailResponse<TAddOffsetsToTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
+                "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
         VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
         SendOkResponse<TAddOffsetsToTxnResponseData>(ev);
     }
 
-    void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext&) {
+    void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Received TXN_OFFSET_COMMIT request",
             {LogPrefix()});
+        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
+            SendFailResponse<TTxnOffsetCommitResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
+                "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
         VALIDATE_PRODUCER_IN_REQUEST(TTxnOffsetCommitResponseData);
 
         // save offsets for future use
@@ -86,6 +110,13 @@ namespace NKafka {
     void TTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Received END_TXN request",
             {LogPrefix()});
+        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
+            SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
+                "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
         VALIDATE_PRODUCER_IN_REQUEST(TEndTxnResponseData);
 
         bool txnAborted = !ev->Get()->Request->Committed;
@@ -126,6 +157,17 @@ namespace NKafka {
         YDB_LOG_DEBUG("Received query response from KQP for request",
             {LogPrefix()},
             {"lastSentToKqpRequest", GetAsStr(LastSentToKqpRequest)});
+        const TString metadataDatabasePath = GetMetadataDatabasePath();
+        const auto ydbStatus = ev->Get()->Record.GetYdbStatus();
+        bool producerCreated = TryRequestProducerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
+        bool consumerCreated = TryRequestConsumerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
+        if (producerCreated || consumerCreated) {
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::INVALID_TXN_STATE,
+                "Kafka metadata tables are not initialized yet. Please retry.");
+            Die(ctx);
+            return;
+        }
+
         if (auto error = GetErrorFromYdbResponse(ev)) {
             YDB_LOG_WARN(error,
                 {LogPrefix()},
@@ -146,12 +188,12 @@ namespace NKafka {
                 HandleCommitResponse(ctx);
                 break;
             default:
-                Y_FAIL("Unexpected KQP request");
+                AFL_ENSURE(false)("reason", "Unexpected KQP request")("request", GetAsStr(LastSentToKqpRequest))("database", DatabasePath);
         }
     }
 
     void TTransactionActor::StartKqpSession(const TActorContext& ctx) {
-        Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+        Kqp = std::make_unique<TKqpTxHelper>(GetMetadataDatabasePath());
         YDB_LOG_DEBUG("Sending create session request to KQP for database",
             {LogPrefix()},
             {"databasePath", DatabasePath});
@@ -237,20 +279,26 @@ namespace NKafka {
         return NPersQueue::GetFullTopicPath(DatabasePath, topicName);
     }
 
+    TString TTransactionActor::GetMetadataDatabasePath() const {
+        return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? DatabasePath : ResourceDatabasePath;
+    }
+
     TString TTransactionActor::GetYqlWithTablesNames() {
+        const TString metadataDatabasePath = GetMetadataDatabasePath();
+
         const TString& templateStr = OffsetsToCommit.empty() ?  NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITHOUT_CONSUMERS : NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITH_CONSUMERS;
 
         TString templateWithProducerStateTable = std::regex_replace(
             templateStr.c_str(),
             std::regex("<producer_state_table_name>"),
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(ResourceDatabasePath).c_str()
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(metadataDatabasePath).c_str()
         );
 
         if (!OffsetsToCommit.empty()) {
             return std::regex_replace(
                 templateWithProducerStateTable.c_str(),
                 std::regex("<consumer_state_table_name>"),
-                NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(ResourceDatabasePath).c_str()
+                NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(metadataDatabasePath).c_str()
             );
         }
 

@@ -1,5 +1,11 @@
 ### FAMILY <family_name> (column setting)
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
 Specifies that this column belongs to the specified column group. For more information, see [{#T}](../create_table/family.md).
 
 ### DEFAULT <default_value>
@@ -8,40 +14,23 @@ Specifies that this column belongs to the specified column group. For more infor
 
 The `DEFAULT` option is supported:
 
-* Only for [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables.
-* Only with literal values.  
+* Only for [row](../../../../concepts/datamodel/table.md#row-oriented-tables) tables.
+* Only with literal values.
 
 {% endnote %}
 
-Allows you to set a default value for a column. If no value is specified for this column when inserting a row, the specified default value will be used. The default value must match the column's data type.
+Sets a default value for the column. If no value is specified for this column when inserting a row, the specified default value is used. The default value must match the column's data type.
 
 ### NOT NULL
 
-{% note warning %}
+There are two operations:
 
-Currently only `DROP NOT NULL` is supported. 
+* `SET NOT NULL` — sets the `NOT NULL` constraint for the column.
+* `DROP NOT NULL` — removes the `NOT NULL` constraint from the column, again allowing `NULL` values.
 
-{% endnote %}
+For more information about how these operations work, see [here](../alter_table/not_null.md).
 
-Removes the `NOT NULL` constraint from the column, allowing `NULL` values again.
-
-### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
-
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
-
-{% endif %}
-
-You can set the following compression parameters for columns:
-
-* `algorithm` — compression algorithm. Allowed values: `off` (disable compression), `lz4`, `zstd`.
-
-* `level` — compression level; supported only for `zstd` (allowed values are 0 through 22).
-
-If `COMPRESSION()` is specified without parameters, the column uses the default compression. Currently that is `lz4`; future versions will let you configure default compression at the cluster or table level.
-
-### ENCODING([OFF|DICT])
+### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]]) {#compression}
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -49,12 +38,26 @@ If `COMPRESSION()` is specified without parameters, the column uses the default 
 
 {% endif %}
 
-Sets the encoding for a column's data.
+The following compression parameters can be set for columns:
+
+* `algorithm` — data compression algorithm. Valid values: `off` (disable compression), `lz4`, `zstd`.
+* `level` — compression level, supported only for the `zstd` algorithm (valid values from 0 to 22).
+
+If `COMPRESSION()` is specified without parameters, the default compression is used for the column. Currently this is `lz4`; future versions will allow configuring default compression at the cluster or table level.
+
+### ENCODING([OFF|DICT]) {#encoding}
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
+
+{% endif %}
+
+Sets the encoding method for the column data.
 
 Available options:
 
-* `ENCODING(DICT)` — enables dictionary encoding. Repeated values are replaced by small integer identifiers stored in a dictionary. Effective for low-cardinality columns (few unique values). Supported only for comparable types such as `String`, `Timestamp`, `UInt64`. Using `ENCODING(DICT)` on non-comparable types (`Json`, `JsonDocument`, `Yson`) returns an error.
+* `ENCODING(DICT)`: enables dictionary encoding. Duplicate values are replaced with small integer identifiers, and the values themselves are stored in a dictionary. Dictionary encoding is effective for columns with low cardinality (a small number of unique values). It reduces the amount of stored data and speeds up some operations. Supported only for comparable data types, such as `String`, `Timestamp`, `UInt64`, and others. For non-comparable types, such as `Json`, `JsonDocument`, or `Yson`, using `ENCODING(DICT)` will result in an error.
+* `ENCODING(OFF)`: disables special encoding. Data will be stored in standard format without additional encoding.
 
-* `ENCODING(OFF)` — disables special encoding. Data is stored in the standard format without additional encoding.
-
-If `ENCODING()` is specified without parameters, the column uses the default encoding. Currently that is `OFF`; future versions will let you configure the default encoding at the database or table level.
+If `ENCODING()` is specified without parameters, the default encoding will be used for the column. Currently it is `OFF`; future versions will allow configuring the default encoding at the database or table level.

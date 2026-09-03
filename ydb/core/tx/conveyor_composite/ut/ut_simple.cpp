@@ -1,8 +1,12 @@
 #include <library/cpp/retry/retry.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
+#include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
@@ -151,7 +155,7 @@ public:
         AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
 
         NConfig::TConfig config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
-        const auto actorId = actorSystem.Register(TServiceOperator::CreateService(config, counters));
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
 
         std::vector<std::shared_ptr<IRequestProcessor>> requests = GetRequests();
         for (auto&& i : requests) {
@@ -220,6 +224,70 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
+    Y_UNIT_TEST(ProcessGuardMovePreservesProcessState) {
+        NActors::TTestActorRuntime runtime;
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+        const auto serviceId = TServiceOperator::MakeServiceId(runtime.GetNodeId(0));
+        const auto serviceEdge = runtime.AllocateEdgeActor();
+        runtime.RegisterService(serviceId, serviceEdge);
+
+        THashSet<ui64> registrations;
+        THashSet<ui64> tasks;
+        THashSet<ui64> unregistrations;
+        auto registrationObserver = runtime.AddObserver<TEvExecution::TEvRegisterProcess>([&](auto& ev) {
+            if (ev->Recipient == serviceId) {
+                registrations.emplace(ev->Get()->GetInternalProcessId());
+            }
+        });
+        auto taskObserver = runtime.AddObserver<TEvExecution::TEvNewTask>([&](auto& ev) {
+            if (ev->Recipient == serviceId) {
+                tasks.emplace(ev->Get()->GetInternalProcessId());
+            }
+        });
+        auto unregistrationObserver = runtime.AddObserver<TEvExecution::TEvUnregisterProcess>([&](auto& ev) {
+            if (ev->Recipient == serviceId) {
+                unregistrations.emplace(ev->Get()->GetInternalProcessId());
+            }
+        });
+
+        TAtomicCounter taskCounter;
+        ui64 activeProcessId = 0;
+        ui64 finishedProcessId = 0;
+        UNIT_ASSERT(runtime.RunCall([&] {
+            {
+                TProcessGuard guard(ESpecialTaskCategory::Scan, "active", 1, TCPULimitsConfig(), serviceId);
+                activeProcessId = guard.GetInternalProcessId();
+
+                TProcessGuard movedGuard(std::move(guard));
+                UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetInternalProcessId(), activeProcessId);
+                movedGuard.SendTaskToExecute(std::make_shared<TSleepTask>(TDuration::Zero(), taskCounter));
+                movedGuard.Finish();
+            }
+            {
+                TProcessGuard guard(ESpecialTaskCategory::Scan, "finished", 2, TCPULimitsConfig(), serviceId);
+                finishedProcessId = guard.GetInternalProcessId();
+                guard.Finish();
+
+                TProcessGuard movedGuard(std::move(guard));
+                UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetInternalProcessId(), finishedProcessId);
+            }
+            NActors::TActorContext::AsActorContext().Send(serviceEdge, new NActors::TEvents::TEvWakeup());
+            return true;
+        }));
+
+        runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(serviceEdge);
+
+        UNIT_ASSERT_VALUES_EQUAL(registrations.size(), 2);
+        UNIT_ASSERT(registrations.contains(activeProcessId));
+        UNIT_ASSERT(registrations.contains(finishedProcessId));
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT(tasks.contains(activeProcessId));
+        UNIT_ASSERT_VALUES_EQUAL(unregistrations.size(), 2);
+        UNIT_ASSERT(unregistrations.contains(activeProcessId));
+        UNIT_ASSERT(unregistrations.contains(finishedProcessId));
+    }
+
     class TTestingExecutor10xDistribution: public TTestingExecutor {
     private:
         virtual TString GetConveyorConfig() override {

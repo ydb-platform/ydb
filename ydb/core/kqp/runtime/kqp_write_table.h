@@ -96,6 +96,7 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
 
 IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+    ui32 dataColumnCount,
     bool withFreq,
     bool added,
     const Ydb::Table::FulltextIndexSettings& settings,

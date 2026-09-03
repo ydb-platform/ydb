@@ -13,6 +13,7 @@
 
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
@@ -34,9 +35,9 @@ public:
                   // Do not enforce monitoring AllowedSIDs or reject on auth-RPC failure here.
     };
 
-    using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::THttpIncomingRequest* request)>;
+    using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event)>;
 
-    static IEventHandle* DefaultAuthorizer(const TActorId& owner, NHttp::THttpIncomingRequest* request);
+    static IEventHandle* DefaultAuthorizer(const TActorId& owner, NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event);
 
     struct TConfig {
         ui16 Port = 0;

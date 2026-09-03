@@ -1,0 +1,14 @@
+[
+  {
+    "jsonrpc": "",
+    "method": ""
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": null,
+    "error": {
+      "code": -32600,
+      "message": "\"jsonrpc\" expected to be 2.0"
+    }
+  }
+]

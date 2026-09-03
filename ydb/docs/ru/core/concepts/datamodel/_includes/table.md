@@ -250,7 +250,8 @@ CREATE TABLE article (
   + Доступно и в первичном ключе и в остальных колонках: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
   + Доступно только в колонках, не входящих в первичный ключ: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
 
-* Поддерживается возможность задавать сжатие и кодирование данных индивидуально для каждой колонки. Подробнее в разделе [Параметры запроса CREATE TABLE](../../../yql/reference/syntax/create_table/index.md#parametry-zaprosa).
+* Поддерживается возможность задавать сжатие индивидуально для каждой колонки при [создании](../../../yql/reference/syntax/create_table/index.md#compression) колоночной таблицы или [изменить](../../../yql/reference/syntax/alter_table/columns.md#compression) её позднее.
+* Поддерживается возможность задавать кодирование данных индивидуально для каждой колонки при [создании](../../../yql/reference/syntax/create_table/index.md#encoding) колоночной таблицы или [изменить](../../../yql/reference/syntax/alter_table/columns.md#encoding) её позднее.
 
 Повторим создание таблицы `article`, на этот раз в колоночной форме, с помощью следующей YQL-команды:
 
@@ -267,6 +268,10 @@ WITH (STORE = COLUMN);
 ### Локальные блум-индексы {#local-bloom-indexes}
 
 В колоночных и строковых таблицах можно задавать [локальные Блум-индексы](../../glossary.md#local-bloom-skip-index) по колонкам: `LOCAL USING bloom_filter` или `LOCAL USING bloom_ngram_filter`. Индексы создаются при [создании таблицы](../../../yql/reference/syntax/create_table/bloom_skip_index.md) или добавляются через [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom). Подробнее: [локальные индексы](../../query_execution/local_indexes.md), [Блум-индексы](../../../dev/bloom-skip-indexes.md).
+
+### Локальный min_max-индекс {#local-min-max-index}
+
+В колоночных таблицах можно задавать [локальный min_max-индекс](../../glossary.md#local-min-max-index) по колонкам с помощью `LOCAL USING min_max`. Индекс задается при [создании таблицы](../../../yql/reference/syntax/create_table/min_max_index.md) или добавляется через [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-min-max). Подробнее: [локальные индексы](../../query_execution/local_indexes.md), [min_max-индекс](../../../dev/min_max-skip-index.md).
 
 ### Партицирование колоночной таблицы {#olap-tables-partitioning}
 

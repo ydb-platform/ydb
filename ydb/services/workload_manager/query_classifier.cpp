@@ -1,39 +1,53 @@
 #include "has_full_scan_matcher.h"
 #include "has_path_matcher.h"
+#include "has_shared_reading_matcher.h"
 #include "has_stream_matcher.h"
 #include "query_classifier.h"
 
-namespace NKikimr::NWorkloadManager {
+#include <ydb/core/base/appdata.h>
 
-inline constexpr char RESOLVER_IS_USER[] = "User request";
-inline constexpr char DEFAULT_RESOLVER[] = "Default";
+namespace NKikimr::NWorkloadManager {
 
 class TQueryClassifier : public IQueryClassifier {
 public:
     TQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
                      TClassifierConfigsView classifierView,
                      TString databaseId,
-                     TClassifyContext context)
+                     TClassifyContext context,
+                     std::optional<TString> resourcePoolForSharedReading)
         : ResourcePoolMap(std::move(resourcePoolMap))
         , ClassifierView(std::move(classifierView))
         , DatabaseId(std::move(databaseId))
         , Context(std::move(context))
+        , ResourcePoolForSharedReading(std::move(resourcePoolForSharedReading))
     {}
 
     TQueryClassifier(const TQueryClassifier&) = delete;
     TQueryClassifier& operator=(const TQueryClassifier&) = delete;
 
     [[nodiscard]]
-    TPreCompileClassifyResult PreCompileClassify() override {
+    TPreCompileClassifyResult PreCompileClassify(const NKqp::TUserRequestContext& userRequestContext) override {
+        if (userRequestContext.IsStreamingQuery && ResourcePoolForSharedReading.has_value()) {
+            PreClassifyResult = TPendingCompilation{.ResumeRank = 0};
+            return *PreClassifyResult;
+        }
+
         // User requested an explicit pool
         if (Context.PoolId) {
-            TryResolve(Context.PoolId, PreClassifyResult, RESOLVER_IS_USER);
+            TryResolve(Context.PoolId, PreClassifyResult, TResolver::Direct());
             return *PreClassifyResult;
         }
 
         // If no classification, use default pool
         if (!ClassifierView) {
-            TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, DEFAULT_RESOLVER);
+            TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, TResolver::Default());
+            return *PreClassifyResult;
+        }
+
+        // Streaming queries always go through post-compile so dynamic predicates
+        // (HAS_STREAM / HAS_PATH / HAS_FULL_SCAN) are evaluated from ResumeRank 0.
+        if (userRequestContext.IsStreamingQuery) {
+            PreClassifyResult = TPendingCompilation{.ResumeRank = 0};
             return *PreClassifyResult;
         }
 
@@ -54,21 +68,57 @@ public:
                 return *PreClassifyResult;
             }
 
-            if (TryResolve(settings, PreClassifyResult)) {
+            if (TryResolve(value, PreClassifyResult)) {
                 return *PreClassifyResult;
             }
         }
 
         // No suitable classification, use default pool
-        TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, DEFAULT_RESOLVER);
+        TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, TResolver::Default());
         return *PreClassifyResult;
     }
 
     [[nodiscard]]
     TPostCompileClassifyResult PostCompileClassify(const NKqp::TPreparedQueryHolder& preparedQuery, const NKqp::TUserRequestContext& userRequestContext) override {
-        Y_VALIDATE(ClassifierView, "Post compile classify without configuration");
         Y_VALIDATE(PreClassifyResult.has_value() && std::holds_alternative<TPendingCompilation>(*PreClassifyResult),
                "Post compile classify requires TPendingCompilation from pre-classification");
+
+        if (userRequestContext.IsStreamingQuery && ResourcePoolForSharedReading.has_value()) {
+            if (UsesSharedReading(preparedQuery.GetPhysicalQuery())) {
+                const auto resolver = TResolver::SharedReading();
+                if (Context.PoolId && Context.PoolId != *ResourcePoolForSharedReading) {
+                    PostClassifyResult = TReject{
+                        .Code = Ydb::StatusIds::PRECONDITION_FAILED,
+                        .Message = TStringBuilder()
+                            << "Explicit resource pool '" << Context.PoolId
+                            << "' conflicts with required pool for shared reading '"
+                            << *ResourcePoolForSharedReading << "'"
+                            << ", resolved by: " << resolver.ToLogString(),
+                        .Resolver = resolver.ToLogString(),
+                    };
+                    return *PostClassifyResult;
+                }
+                // Shared reading must run in its configured pool or be rejected.
+                // `mandatoryPool` makes TryResolve hard-reject a missing pool
+                // (instead of soft-resolving) and retain the pool id for an
+                // unconstrained pool (instead of TBypass).
+                TryResolve(*ResourcePoolForSharedReading, PostClassifyResult, resolver, /*mandatoryPool=*/true);
+                return *PostClassifyResult;
+            }
+
+            // No shared reading — apply the original user pool, if any.
+            if (Context.PoolId) {
+                TryResolve(Context.PoolId, PostClassifyResult, TResolver::Direct());
+                return *PostClassifyResult;
+            }
+
+            if (!ClassifierView) {
+                TryResolve(NResourcePool::DEFAULT_POOL_ID, PostClassifyResult, TResolver::Default());
+                return *PostClassifyResult;
+            }
+        }
+
+        Y_VALIDATE(ClassifierView, "Post compile classify without configuration");
 
         const auto& pending = std::get<TPendingCompilation>(*PreClassifyResult);
 
@@ -88,13 +138,13 @@ public:
                 return *PostClassifyResult;
             }
 
-            if (TryResolve(settings, PostClassifyResult)) {
+            if (TryResolve(it->second, PostClassifyResult)) {
                 return *PostClassifyResult;
             }
         }
 
         // No suitable classification, use default pool
-        TryResolve(NResourcePool::DEFAULT_POOL_ID, PostClassifyResult, DEFAULT_RESOLVER);
+        TryResolve(NResourcePool::DEFAULT_POOL_ID, PostClassifyResult, TResolver::Default());
         return *PostClassifyResult;
     }
 
@@ -212,8 +262,11 @@ private:
     }
 
     template<typename TStore>
-    bool TryResolve(const NResourcePool::TClassifierSettings& classifier, TStore& store) {
-        return TryResolve(classifier.ResourcePool, store, TStringBuilder() << "Classifier with rank: " << classifier.Rank);
+    bool TryResolve(const TResourcePoolClassifierConfig& config, TStore& store) {
+        const auto& classifier = config.GetClassifierSettings();
+        Y_ABORT_UNLESS(classifier.ResourcePool.has_value(),
+            "ResourcePool must be set for non-Reject classifiers");
+        return TryResolve(*classifier.ResourcePool, store, TResolver::Classifier(config.GetName()));
     }
 
     static TReject MakeRejectFromClassifier(const TResourcePoolClassifierConfig& config) {
@@ -222,7 +275,7 @@ private:
         return TReject{
             .Code = Ydb::StatusIds::PRECONDITION_FAILED,
             .Message = TStringBuilder() << "Request is rejected by classifier '" << name << "' (rank=" << rank << ")",
-            .Resolver = TStringBuilder() << "Classifier with rank: " << rank,
+            .Resolver = TResolver::Classifier(name).ToLogString(),
         };
     }
 
@@ -231,12 +284,30 @@ private:
     /// Returns true if the resolved result is final (stop searching).
     /// Returns false if the caller should try the next rule.
     ///
+    /// `mandatoryPool` marks the pool as required (used for shared-reading
+    /// queries, which must run in their configured pool or be rejected):
+    ///   - a missing pool becomes a NOT_FOUND TReject instead of a soft-resolved
+    ///     TResolvedPoolId{PoolId} (which would let the query run elsewhere);
+    ///   - an unconstrained pool (no workload service enforcement) is resolved to
+    ///     TResolvedPoolId with SkipAdmission instead of TBypass, so the pool id is
+    ///     preserved for accounting/observability.
+    ///
     template<typename TStore>
-    bool TryResolve(const TString& poolId, TStore& store, const TString& resolver) {
-        auto poolInfo = FindPool(poolId);
+    bool TryResolve(const TString& poolId, TStore& store, TResolver resolver, bool mandatoryPool = false) {
+        const auto* poolInfo = FindPool(poolId);
 
         if (!poolInfo) {
-            store = TResolvedPoolId{.PoolId = poolId, .Resolver = resolver};
+            if (mandatoryPool) {
+                store = TReject{
+                    .Code = Ydb::StatusIds::NOT_FOUND,
+                    .Message = TStringBuilder()
+                        << "Resource pool: " << poolId << " not found"
+                        << ", resolved by: " << resolver.ToLogString(),
+                    .Resolver = resolver.ToLogString(),
+                };
+                return true;
+            }
+            store = TResolvedPoolId{.PoolId = poolId, .Resolver = std::move(resolver)};
             return false;
         }
 
@@ -245,8 +316,8 @@ private:
                 .Code = Ydb::StatusIds::NOT_FOUND,
                 .Message = TStringBuilder()
                     << "Resource pool: " << poolId << " not found or you don't have describe permissions"
-                    << ", resolved by: " << resolver,
-                .Resolver = resolver
+                    << ", resolved by: " << resolver.ToLogString(),
+                .Resolver = resolver.ToLogString()
             };
             return false;
         }
@@ -256,23 +327,23 @@ private:
                 .Code = Ydb::StatusIds::UNAUTHORIZED,
                 .Message = TStringBuilder()
                     << "No access permissions for resource pool: " << poolId
-                    << ", resolved by: " << resolver,
-                .Resolver = resolver
+                    << ", resolved by: " << resolver.ToLogString(),
+                .Resolver = resolver.ToLogString()
             };
             return false;
         }
 
-        if (!poolInfo->Config.IsWorkloadServiceRequired()) {
-            store = TBypass{.Resolver = resolver};
+        if (!poolInfo->Config.IsWorkloadServiceRequired() && !mandatoryPool) {
+            store = TBypass{.Resolver = resolver.ToLogString()};
         } else if (!poolInfo->Config.IsAdmissionRequired()) {
             store = TResolvedPoolId{
                 .PoolId = poolId,
-                .Resolver = resolver,
+                .Resolver = std::move(resolver),
                 .SkipAdmission = true,
                 .PoolConfig = poolInfo->Config,
             };
         } else {
-            store = TResolvedPoolId{.PoolId = poolId, .Resolver = resolver};
+            store = TResolvedPoolId{.PoolId = poolId, .Resolver = std::move(resolver)};
         }
 
         return true;
@@ -283,6 +354,7 @@ private:
     const TClassifierConfigsView ClassifierView;
     const TString DatabaseId;
     const TClassifyContext Context;
+    const std::optional<TString> ResourcePoolForSharedReading;
     std::optional<TPreCompileClassifyResult> PreClassifyResult;
     std::optional<TPostCompileClassifyResult> PostClassifyResult;
     mutable std::unordered_map<TString, bool> MemberNameCache;
@@ -291,8 +363,24 @@ private:
 std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
                                                         TClassifierConfigsView classifierView,
                                                         const TString& databaseId,
-                                                        TClassifyContext context) {
-    return std::make_shared<TQueryClassifier>(std::move(resourcePoolMap), std::move(classifierView), databaseId, std::move(context));
+                                                        TClassifyContext context,
+                                                        std::optional<TString> resourcePoolForSharedReading) {
+    return std::make_shared<TQueryClassifier>(std::move(resourcePoolMap), std::move(classifierView), databaseId, std::move(context), std::move(resourcePoolForSharedReading));
+}
+
+std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
+                                                        TClassifierConfigsView classifierView,
+                                                        const TString& databaseId,
+                                                        TClassifyContext context,
+                                                        const TAppData& appData) {
+    std::optional<TString> resourcePoolForSharedReading;
+    if (appData.QueryServiceConfig.GetStreamingQueries().HasResourcePoolForSharedReading()) {
+        const auto& pool = appData.QueryServiceConfig.GetStreamingQueries().GetResourcePoolForSharedReading();
+        if (!pool.empty()) {
+            resourcePoolForSharedReading = pool;
+        }
+    }
+    return std::make_shared<TQueryClassifier>(std::move(resourcePoolMap), std::move(classifierView), databaseId, std::move(context), std::move(resourcePoolForSharedReading));
 }
 
 } // namespace NKikimr::NWorkloadManager

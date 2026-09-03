@@ -20,6 +20,11 @@ class FieldInfo:
     def __init__(self, field: dict):
         self.id = field.get('id')
         self.value = field.get('default-value')
+        # Immediate controls (TImmediateControlsConfig) also carry the allowed
+        # range taken from the (ControlOptions) field option. Absent for
+        # everything else.
+        self.min_value = field.get('min-value')
+        self.max_value = field.get('max-value')
 
 
 class FieldIdent:
@@ -36,6 +41,24 @@ def _get_value_string(value: FieldInfo) -> str:
     if isinstance(value.value, list):
         return '[]'
     return str(value.value)
+
+
+def _describe_range_narrowing(old: FieldInfo, new: FieldInfo) -> str:
+    """Describes narrowing of the allowed [min, max] range, if any.
+
+    A bound that is missing in the older version is not compared: the range was
+    not specified back then, so there is nothing to narrow. The same holds for a
+    bound that has disappeared in the newer version - dropping a bound widens
+    the range rather than narrows it.
+    """
+    narrowed = []
+    if old.min_value is not None and new.min_value is not None and new.min_value > old.min_value:
+        narrowed.append(f'min {old.min_value} -> {new.min_value}')
+    if old.max_value is not None and new.max_value is not None and new.max_value < old.max_value:
+        narrowed.append(f'max {old.max_value} -> {new.max_value}')
+    if not narrowed:
+        return ''
+    return 'range narrowed ' + ', '.join(narrowed)
 
 
 class FieldResolution:
@@ -120,8 +143,15 @@ class Differ:
                     return Resolution.INFO, 'FF switched on'
                 else:
                     return Resolution.ERROR, 'FF switched off'
-            return Resolution.WARNING, f'value changed {old.value} -> {new.value}'
-        return Resolution.OK, value_str
+            resolution, message = Resolution.WARNING, f'value changed {old.value} -> {new.value}'
+        else:
+            resolution, message = Resolution.OK, value_str
+        narrowing = _describe_range_narrowing(old, new)
+        if narrowing:
+            if resolution.value < Resolution.WARNING.value:
+                resolution = Resolution.WARNING
+            message = f'{message}, {narrowing}' if message else narrowing
+        return resolution, message
 
     def compare(self):
         for ident, values in self.fields:
@@ -252,7 +282,7 @@ function showBranches(event) {
 <li><span style="background-color: #dddddd;font-weight:bold">Серый</span> - значение задано и не изменялось, в том числе пустое.</li>
 <li><span style="background-color: #aaffaa;font-weight:bold">Зеленый</span> - безопасное изменение, такое как добавление нового поля или включение Feature flag.</li>
 <li><span style="background-color: #ffffaa;font-weight:bold">Желтый</span> - изменение, которое может вызвать изменение поведения,
-но не должно быть критичным, например изменение значения по умолчанию.</li>
+но не должно быть критичным, например изменение значения по умолчанию или сужение допустимого диапазона immediate control.</li>
 <li><span style="background-color: #ffaaaa;font-weight:bold">Красный</span> - опасное изменение,
 которое может все сломать: удаление полей, изменение их типа или id (в протобуфе), выключение Feature flag итд.</li>
 </ul>
@@ -268,7 +298,8 @@ The color indicates the criticality of the changes in the neighboring branches:
 <li><span style="font-weight:bold">White</span> means that the field is completely absent in this version of the configuration.</li>
 <li><span style="background-color: #dddddd;font-weight:bold">Grey</span> - the value is set and has not changed, including the empty one.</li>
 <li><span style="background-color: #aaffaa;font-weight:bold">Green</span> - a safe change, such as adding a new field or enabling the Feature flag.</li>
-<li><span style="background-color: #ffffaa;font-weight:bold">Yellow</span> - a change that may cause a change in behavior, but should not be critical, such as changing the default value.</li>
+<li><span style="background-color: #ffffaa;font-weight:bold">Yellow</span> - a change that may cause a change in behavior, but should not be critical,
+such as changing the default value or narrowing the allowed range of an immediate control.</li>
 <li><span style="background-color: #ffaaaa;font-weight:bold">Red</span> - A dangerous change that can break everything:
 removing fields, changing their type or id (in protobuf), disabling the Feature flag etc.</li>
 </ul>

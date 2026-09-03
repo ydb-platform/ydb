@@ -5,7 +5,6 @@
 #include "opentelemetry/exporters/otlp/otlp_environment.h"
 #include "opentelemetry/exporters/otlp/otlp_http.h"
 #include "opentelemetry/exporters/otlp/otlp_preferred_temporality.h"
-#include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE

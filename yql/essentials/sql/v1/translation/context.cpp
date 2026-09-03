@@ -55,6 +55,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"RotateJoinTree", &TContext::RotateJoinTree},
     {"DqEngineEnable", &TContext::DqEngineEnable},
     {"DqEngineForce", &TContext::DqEngineForce},
+    {"EvaluateExprCache", &TContext::EvaluateExprCache},
     {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
     {"OrderedColumns", &TContext::OrderedColumns},
     {"DeriveColumnOrder", &TContext::DeriveColumnOrder},
@@ -119,15 +120,15 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
-    if (settings.LangVer >= NYql::NFeature::GroupByExprAfterWhere.MinLangVer) {
+    if (IsAvailable(NYql::NFeature::GroupByExprAfterWhere)) {
         GroupByExprAfterWhere = true;
     }
 
-    if (settings.LangVer >= NYql::NFeature::PersistableFlattenAndAggrExprs.MinLangVer) {
+    if (IsAvailable(NYql::NFeature::PersistableFlattenAndAggrExprs)) {
         FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Auto;
     }
 
-    if (settings.LangVer > NYql::NFeature::LegacyNotNull.MaxLangVer) {
+    if (!IsAvailable(NYql::NFeature::LegacyNotNull)) {
         DisableLegacyNotNull = true;
     }
 

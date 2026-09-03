@@ -8,6 +8,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 
 #include <ydb/library/query_actor/query_actor.h>
 
@@ -321,23 +322,21 @@ private:
             FailAndPassAway("Resource pool classifiers are disabled for serverless domains. Please contact your system administrator to enable it");
             return;
         }
-
-        if (!featureFlags.GetEnableHasPredicatesInResourcePoolClassifiers()) {
-            for (const auto& object : PatchedObjects) {
-                const auto& configMap = object.GetConfigJson().GetMap();
-                if (configMap.count("has_full_scan") || configMap.count("has_path") ||
-                        configMap.count("has_stream") || configMap.count("has_app_name")) {
+        for (const auto& object : PatchedObjects) {
+            const auto& settings = object.GetClassifierSettings();
+            if (!featureFlags.GetEnableHasPredicatesInResourcePoolClassifiers()) {
+                if (settings.HasFullScan.has_value() ||
+                    settings.HasPath.has_value() ||
+                    settings.HasAppName.has_value() ||
+                    settings.HasStream.has_value())
+                {
                     FailAndPassAway("Advanced resource pool classifier properties are disabled. "
-                        "Please contact your system administrator to enable it");
+                            "Please contact your system administrator to enable it");
                     return;
                 }
             }
-        }
-
-        if (!featureFlags.GetEnableRejectActionInResourcePoolClassifiers()) {
-            for (const auto& object : PatchedObjects) {
-                const auto& configMap = object.GetConfigJson().GetMap();
-                if (configMap.count("action")) {
+            if (!featureFlags.GetEnableRejectActionInResourcePoolClassifiers()) {
+                if (settings.Action.has_value()) {
                     FailAndPassAway("Resource pool classifier action property is disabled. "
                         "Please contact your system administrator to enable it");
                     return;
@@ -361,11 +360,16 @@ private:
     }
 
     void ValidatePools() {
-        // Collect unique pool IDs referenced by classifiers being created/altered
         std::unordered_set<TString> poolIds;
         for (auto& object : PatchedObjects) {
-            object.EnsureSettings();
-            const TString& poolId = object.GetClassifierSettings().ResourcePool;
+            if (auto error = object.GetClassifierSettings().Validate()) {
+                FailAndPassAway(TStringBuilder() << "Invalid resource pool classifier settings: " << *error);
+                return;
+            }
+            if (!object.GetClassifierSettings().ResourcePool.has_value()) {
+                continue;
+            }
+            const TString& poolId = *object.GetClassifierSettings().ResourcePool;
             // The default pool is always created on first use — skip it
             if (poolId == NResourcePool::DEFAULT_POOL_ID) {
                 continue;

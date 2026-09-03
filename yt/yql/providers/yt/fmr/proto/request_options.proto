@@ -33,6 +33,7 @@ enum EOperationType {
     OPERATION_TYPE_PULL = 9;
     OPERATION_TYPE_FILL = 10;
     OPERATION_TYPE_MAP_REDUCE = 11;
+    OPERATION_TYPE_TOUCH = 12;
 }
 
 enum ETaskType {
@@ -277,6 +278,10 @@ message TFillOperationParams {
     bytes SerializedFillJobState = 2;
 }
 
+message TTouchOperationParams {
+    repeated TFmrTableRef Output = 1;
+}
+
 message TFillTaskParams {
     repeated TFmrTableOutputRef Output = 1;
     bytes SerializedFillJobState = 2;
@@ -356,6 +361,7 @@ message TOperationParams {
         TPullOperationParams PullOperationParams = 9;
         TFillOperationParams FillOperationParams = 10;
         TMapReduceOperationParams MapReduceOperationParams = 11;
+        TTouchOperationParams TouchOperationParams = 12;
     }
 }
 

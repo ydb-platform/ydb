@@ -89,6 +89,9 @@ message Entry {
 
     // Virtual timestamp when the object was created
     VirtualTimestamp created_at = 9;
+
+    // When true, permissions are not inherited from parent objects
+    bool interrupt_permission_inheritance = 10;
 }
 
 message ListDirectoryResult {

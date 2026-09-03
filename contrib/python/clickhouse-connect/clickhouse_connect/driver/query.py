@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfoNotFoundError
 
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.binding import bind_query
-from clickhouse_connect.driver.common import StreamContext, dict_copy, empty_gen, get_rename_method
+from clickhouse_connect.driver.common import ShowClickHouseErrors, StreamContext, dict_copy, empty_gen, get_rename_method
 from clickhouse_connect.driver.context import BaseQueryContext
 from clickhouse_connect.driver.exceptions import ProgrammingError, StreamClosedError
 from clickhouse_connect.driver.external import ExternalData
@@ -34,14 +34,7 @@ limit_re = re.compile(r"\s+LIMIT($|\s)", re.IGNORECASE)
 select_re = re.compile(r"(^|\s)SELECT\s", re.IGNORECASE)
 insert_re = re.compile(r"(^|\s)INSERT\s*INTO", re.IGNORECASE)
 command_re = re.compile(r"(^\s*)(" + commands + r")\s", re.IGNORECASE)
-row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\b", re.IGNORECASE)
 bare_row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\s*$", re.IGNORECASE)
-
-
-def returns_empty_string_on_empty_body(cmd: str | bytes) -> bool:
-    if not isinstance(cmd, str):
-        return False
-    return row_policy_show_re.search(remove_sql_comments(cmd)) is not None
 
 
 class QueryContext(BaseQueryContext):
@@ -148,6 +141,7 @@ class QueryContext(BaseQueryContext):
         self.block_info = False
         self.as_pandas = as_pandas
         self.streaming = streaming
+        self.show_clickhouse_errors: ShowClickHouseErrors = True
         self._rename_response_column: str | None = rename_response_column
         self.column_renamer = get_rename_method(rename_response_column)
         self._update_query()
@@ -419,15 +413,20 @@ def remove_sql_comments(sql: str) -> str:
     Remove SQL comments.  This is useful to determine the type of SQL query, such as SELECT or INSERT, but we
     don't fully trust it to correctly ignore weird quoted strings, and other edge cases, so we always pass the
     original SQL to ClickHouse (which uses a full-fledged AST/ token parser)
+
+    A block comment is replaced with a single space because the server lexer treats it as a token separator,
+    so "SELECT/*c*/1" is two tokens for the server and has to stay two tokens here.  A line comment ends at
+    its newline, which is kept, so it separates the tokens around it on its own.
     :param sql:  SQL query
     :return: SQL Query without SQL comments
     """
 
     def replacer(match):
         # if the 2nd group (capturing comments) is not None, it means we have captured a
-        # non-quoted, actual comment string, so return nothing to remove the comment
+        # non-quoted, actual comment string, so replace it with its separator
         if match.group(2):
-            return ""
+            # the 3rd group is only set for a line comment, whose terminating newline is not consumed
+            return "" if match.group(3) else " "
         # Otherwise we've actually captured a quoted string, so return it
         return match.group(1)
 

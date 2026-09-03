@@ -58,7 +58,7 @@ void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::N
     Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(p->GetRequest()));
 
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Describe topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TDescribeTopicActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDescribeTopicActor(p));
 }
 
 void DoDescribeConsumerRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -145,17 +145,10 @@ void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacili
     f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateRemoveConsumerActor(p));
 }
 
-#ifdef DECLARE_RPC
-#error DECLARE_RPC macro already defined
-#endif
-
-#define DECLARE_RPC(name) template<> IActor* TEv##name##Request::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) { \
-    return new NKikimr::NGRpcProxy::V1::T##name##Actor(msg);\
-    }
-
-DECLARE_RPC(DescribeTopic);
-
-#undef DECLARE_RPC
+template<>
+IActor* TEvDescribeTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return NGRpcProxy::V1::NTopic::CreateDescribeTopicActor(msg);
+}
 
 template<>
 IActor* TEvDescribeConsumerRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

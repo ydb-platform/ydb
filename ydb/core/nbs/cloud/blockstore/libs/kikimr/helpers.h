@@ -28,36 +28,36 @@ inline bool IsUnrecoverable(const NKikimrProto::EReplyStatus status)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_IMPLEMENT_REQUEST(name, ns)                     \
-    void Handle##name(                                             \
-        const ns::TEv##name##Request::TPtr& ev,                    \
-        const NActors::TActorContext& ctx);                        \
-                                                                   \
-    void Reject##name(                                             \
-        const ns::TEv##name##Request::TPtr& ev,                    \
-        const NActors::TActorContext& ctx)                         \
-    {                                                              \
-        auto response = std::make_unique<ns::TEv##name##Response>( \
-            MakeError(E_REJECTED, #name " request rejected"));     \
-                                                                   \
-        NYdb::NBS::Reply(ctx, *ev, std::move(response));           \
-    }                                                              \
+#define BLOCKSTORE_IMPLEMENT_REQUEST(name, ns)                                 \
+    void Handle##name(                                                         \
+        const ns::TEv##name##Request::TPtr& ev,                                \
+        const NActors::TActorContext& ctx);                                    \
+                                                                               \
+    void Reject##name(                                                         \
+        const ns::TEv##name##Request::TPtr& ev,                                \
+        const NActors::TActorContext& ctx)                                     \
+    {                                                                          \
+        auto response = std::make_unique<ns::TEv##name##Response>(             \
+            MakeError(E_REJECTED, #name " request rejected"));                 \
+                                                                               \
+        NYdb::NBS::Reply(ctx, *ev, std::move(response));                       \
+    }                                                                          \
     // BLOCKSTORE_IMPLEMENT_REQUEST
 
-#define BLOCKSTORE_HANDLE_REQUEST(name, ns)      \
-    HFunc(ns::TEv##name##Request, Handle##name); \
+#define BLOCKSTORE_HANDLE_REQUEST(name, ns)                                    \
+    HFunc(ns::TEv##name##Request, Handle##name);                               \
     // BLOCKSTORE_HANDLE_REQUEST
 
-#define BLOCKSTORE_REJECT_REQUEST(name, ns)      \
-    HFunc(ns::TEv##name##Request, Reject##name); \
+#define BLOCKSTORE_REJECT_REQUEST(name, ns)                                    \
+    HFunc(ns::TEv##name##Request, Reject##name);                               \
     // BLOCKSTORE_REJECT_REQUEST
 
-#define BLOCKSTORE_HANDLE_RESPONSE(name, ns)                \
-    HFunc(ns::TEv##name##Response, Handle##name##Response); \
+#define BLOCKSTORE_HANDLE_RESPONSE(name, ns)                                   \
+    HFunc(ns::TEv##name##Response, Handle##name##Response);                    \
     // BLOCKSTORE_HANDLE_RESPONSE
 
-#define BLOCKSTORE_IGNORE_RESPONSE(name, ns) \
-    IgnoreFunc(ns::TEv##name##Response);     \
+#define BLOCKSTORE_IGNORE_RESPONSE(name, ns)                                   \
+    IgnoreFunc(ns::TEv##name##Response);                                       \
     // BLOCKSTORE_IGNORE_RESPONSE
 
 }   // namespace NYdb::NBS

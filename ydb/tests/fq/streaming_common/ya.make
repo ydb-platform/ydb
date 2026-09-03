@@ -13,3 +13,7 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    iam_grpc_emulator
+    vm_metadata_emulator
+)

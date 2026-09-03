@@ -3,8 +3,8 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
 #include <ydb/core/persqueue/events/internal.h>
@@ -19,7 +19,8 @@ namespace NKafka {
 
 TActorId MakeKafkaDiscoveryCacheID();
 
-class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
+class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor>
+                         , public TKafkaExceptionHandler<TKafkaMetadataActor> {
 public:
     TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message,
                         const TActorId& discoveryCacheActor)
@@ -32,6 +33,10 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx);
+
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
 
 private:
     using TEvLocationResponse = NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse;

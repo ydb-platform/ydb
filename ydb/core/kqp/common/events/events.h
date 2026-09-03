@@ -137,6 +137,7 @@ struct TEvKqp {
         bool SaveQueryPhysicalGraph = false;
         std::optional<NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
         std::optional<TString> ExecutionId;
+        TString StreamingQueryOperationId;
         bool DisableDefaultTimeout = false;
         i64 Generation = 1;
         TString CheckpointId;
@@ -144,6 +145,7 @@ struct TEvKqp {
         TString CustomerSuppliedId;
         TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
+        std::optional<TDuration> CheckpointInterval;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

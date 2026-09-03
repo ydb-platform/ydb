@@ -82,6 +82,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EDecommitStatus, stream, value) {
     stream << NKikimrBlobStorage::EDecommitStatus_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TMaintenanceStatus::E, stream, value) {
+    stream << NKikimrBlobStorage::TMaintenanceStatus::E_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TGroupStatus::E, stream, value) {
     stream << NKikimrBlobStorage::TGroupStatus::E_Name(value);
 }
@@ -232,10 +236,6 @@ Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvAnalyzeResponse_EStatus, stream, value) {
 
 Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvAnalyzeStatusResponse_EStatus, stream, value) {
     stream << NKikimrStat::TEvAnalyzeStatusResponse_EStatus_Name(value);
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvStatisticsResponse::EStatus, stream, value) {
-    stream << NKikimrStat::TEvStatisticsResponse::EStatus_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrIndexBuilder::EBuildStatus, stream, value) {

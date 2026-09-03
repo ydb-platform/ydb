@@ -42,6 +42,10 @@ void TPurgerActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             TopicInfo = topic;
             return DoPurge();
         }
+        case NDescriber::EStatus::BAD_REQUEST: {
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
+                NDescriber::Description(Settings.TopicName, topic.Status));
+        }
         default: {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                 NDescriber::Description(Settings.TopicName, topic.Status));

@@ -10,6 +10,9 @@
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_actor.h>
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
+
+#include <optional>
 
 
 namespace NKikimr::NKqp {
@@ -30,7 +33,7 @@ public:
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-        NScheduler::TSchedulableActorOptions schedulableOptions,
+        NScheduler::TSchedulableOptions schedulableOptions,
         NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         const TString& database
@@ -77,6 +80,7 @@ private:
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString Database;
+    std::optional<NUdfStore::NWasm::TQueryCompartmentScope> WasmQueryCompartment_;
 };
 
 } // namespace NKikimr::NKqp

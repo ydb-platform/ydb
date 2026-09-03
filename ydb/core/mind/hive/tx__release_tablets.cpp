@@ -86,12 +86,12 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"requestRecord", Request->Get()->Record},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost
             ctx.Send(unlockedFromActor.second, new TEvHive::TEvLockTabletExecutionLost(unlockedFromActor.first, NKikimrHive::LOCK_LOST_REASON_TABLET_RELEASED));
         }
-        ctx.Send(Request->Sender, Response.Release());
+        ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         if (NeedToProcessPendingOperations) {
             YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete retrying pending operations",
                 {"logPrefix", GetLogPrefix()});

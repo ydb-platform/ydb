@@ -9,6 +9,7 @@ from .intranges import intranges_contain
 
 _virama_combining_class = 9
 _alabel_prefix = b"xn--"
+_max_input_length = 1024
 _unicode_dots_re = re.compile("[\u002e\u3002\uff0e\uff61]")
 
 
@@ -20,32 +21,31 @@ _bidi_rtl_valid_ending = frozenset({"R", "AL", "EN", "AN"})
 _bidi_rtl_numeric = frozenset({"AN", "EN"})
 _bidi_ltr_allowed = frozenset({"L", "EN", "ES", "CS", "ET", "ON", "BN", "NSM"})
 _bidi_ltr_valid_ending = frozenset({"L", "EN"})
-_bidi_joiner_l_or_d = frozenset({ord("L"), ord("D")})
-_bidi_joiner_r_or_d = frozenset({ord("R"), ord("D")})
+_bidi_joiner_l_or_d = frozenset({"L", "D"})
+_bidi_joiner_r_or_d = frozenset({"R", "D"})
+
+
+def _joining_type(cp: int) -> Optional[str]:
+    for jt, ranges in idnadata.joining_types.items():
+        if intranges_contain(cp, ranges):
+            return jt
+    return None
 
 
 class IDNAError(UnicodeError):
     """Base exception for all IDNA-encoding related problems"""
 
-    pass
-
 
 class IDNABidiError(IDNAError):
     """Exception when bidirectional requirements are not satisfied"""
-
-    pass
 
 
 class InvalidCodepoint(IDNAError):
     """Exception when a disallowed or unallocated codepoint is used"""
 
-    pass
-
 
 class InvalidCodepointContext(IDNAError):
     """Exception when the codepoint is not valid in the context it is used"""
-
-    pass
 
 
 def _combining_class(cp: int) -> int:
@@ -112,13 +112,15 @@ def check_bidi(label: str, check_ltr: bool = False) -> bool:
     :raises IDNABidiError: If any of Bidi Rule conditions 1-6 are violated,
         or if the directional category of a codepoint cannot be determined.
     """
+    if len(label) > _max_input_length:
+        raise IDNAError("Label too long")
     # Bidi rules should only be applied if string contains RTL characters
     bidi_label = False
     for idx, cp in enumerate(label, 1):
         direction = unicodedata.bidirectional(cp)
         if direction == "":
             # String likely comes from a newer version of Unicode
-            raise IDNABidiError(f"Unknown directionality in label {repr(label)} at position {idx}")
+            raise IDNABidiError(f"Unknown directionality in label {label!r} at position {idx}")
         if direction in _bidi_rtl_categories:
             bidi_label = True
     if not bidi_label and not check_ltr:
@@ -131,7 +133,7 @@ def check_bidi(label: str, check_ltr: bool = False) -> bool:
     elif direction == "L":
         rtl = False
     else:
-        raise IDNABidiError(f"First codepoint in label {repr(label)} must be directionality L, R or AL")
+        raise IDNABidiError(f"First codepoint in label {label!r} must be directionality L, R or AL")
 
     valid_ending = False
     number_type: Optional[str] = None
@@ -151,9 +153,8 @@ def check_bidi(label: str, check_ltr: bool = False) -> bool:
             if direction in _bidi_rtl_numeric:
                 if not number_type:
                     number_type = direction
-                else:
-                    if number_type != direction:
-                        raise IDNABidiError("Can not mix numeral types in a right-to-left label")
+                elif number_type != direction:
+                    raise IDNABidiError("Can not mix numeral types in a right-to-left label")
         else:
             # Bidi rule 5
             if direction not in _bidi_ltr_allowed:
@@ -209,6 +210,8 @@ def check_nfc(label: str) -> None:
     :param label: The label to check.
     :raises IDNAError: If ``label`` differs from its NFC normalisation.
     """
+    if len(label) > _max_input_length:
+        raise IDNAError("Label too long")
     if unicodedata.normalize("NFC", label) != label:
         raise IDNAError("Label must be in Normalization Form C")
 
@@ -227,7 +230,10 @@ def valid_contextj(label: str, pos: int) -> bool:
         ``pos`` is not a recognised joiner).
     :raises ValueError: If an adjacent codepoint has no Unicode name when
         determining its combining class.
+    :raises IDNAError: If ``label`` exceeds the defensive input length limit.
     """
+    if len(label) > _max_input_length:
+        raise IDNAError("Label too long")
     cp_value = ord(label[pos])
 
     if cp_value == 0x200C:
@@ -236,35 +242,32 @@ def valid_contextj(label: str, pos: int) -> bool:
 
         ok = False
         for i in range(pos - 1, -1, -1):
-            joining_type = idnadata.joining_types().get(ord(label[i]))
-            if joining_type == ord("T"):
+            joining_type = _joining_type(ord(label[i]))
+            if joining_type == "T":
                 continue
-            elif joining_type in _bidi_joiner_l_or_d:
+            if joining_type in _bidi_joiner_l_or_d:
                 ok = True
                 break
-            else:
-                break
+            break
 
         if not ok:
             return False
 
         ok = False
         for i in range(pos + 1, len(label)):
-            joining_type = idnadata.joining_types().get(ord(label[i]))
-            if joining_type == ord("T"):
+            joining_type = _joining_type(ord(label[i]))
+            if joining_type == "T":
                 continue
-            elif joining_type in _bidi_joiner_r_or_d:
+            if joining_type in _bidi_joiner_r_or_d:
                 ok = True
                 break
-            else:
-                break
+            break
         return ok
 
     if cp_value == 0x200D:
         return pos > 0 and _combining_class(ord(label[pos - 1])) == _virama_combining_class
 
-    else:
-        return False
+    return False
 
 
 def valid_contexto(label: str, pos: int, exception: bool = False) -> bool:
@@ -280,23 +283,26 @@ def valid_contexto(label: str, pos: int, exception: bool = False) -> bool:
     :returns: ``True`` if the codepoint at ``pos`` satisfies its CONTEXTO
         rule, ``False`` otherwise (including when the codepoint is not a
         recognised CONTEXTO codepoint).
+    :raises IDNAError: If ``label`` exceeds the defensive input length limit.
     """
+    if len(label) > _max_input_length:
+        raise IDNAError("Label too long")
     cp_value = ord(label[pos])
 
     if cp_value == 0x00B7:
         return 0 < pos < len(label) - 1 and ord(label[pos - 1]) == 0x006C and ord(label[pos + 1]) == 0x006C
 
-    elif cp_value == 0x0375:
+    if cp_value == 0x0375:
         if pos < len(label) - 1 and len(label) > 1:
             return _is_script(label[pos + 1], "Greek")
         return False
 
-    elif cp_value == 0x05F3 or cp_value == 0x05F4:
+    if cp_value in {0x05F3, 0x05F4}:
         if pos > 0:
             return _is_script(label[pos - 1], "Hebrew")
         return False
 
-    elif cp_value == 0x30FB:
+    if cp_value == 0x30FB:
         for cp in label:
             if cp == "\u30fb":
                 continue
@@ -304,10 +310,10 @@ def valid_contexto(label: str, pos: int, exception: bool = False) -> bool:
                 return True
         return False
 
-    elif 0x660 <= cp_value <= 0x669:
+    if 0x660 <= cp_value <= 0x669:
         return not any(0x6F0 <= ord(cp) <= 0x06F9 for cp in label)
 
-    elif 0x6F0 <= cp_value <= 0x6F9:
+    if 0x6F0 <= cp_value <= 0x6F9:
         return not any(0x660 <= ord(cp) <= 0x0669 for cp in label)
 
     return False
@@ -331,6 +337,8 @@ def check_label(label: Union[str, bytes, bytearray]) -> None:
         is not valid in its context.
     :raises IDNABidiError: If the Bidi Rule is violated.
     """
+    if len(label) > _max_input_length:
+        raise IDNAError("Label too long")
     if isinstance(label, (bytes, bytearray)):
         label = label.decode("utf-8")
     if len(label) == 0:
@@ -349,23 +357,19 @@ def check_label(label: Union[str, bytes, bytearray]) -> None:
         cp_value = ord(cp)
         if intranges_contain(cp_value, idnadata.codepoint_classes["PVALID"]):
             continue
-        elif intranges_contain(cp_value, idnadata.codepoint_classes["CONTEXTJ"]):
+        if intranges_contain(cp_value, idnadata.codepoint_classes["CONTEXTJ"]):
             try:
                 if not valid_contextj(label, pos):
-                    raise InvalidCodepointContext(
-                        f"Joiner {_unot(cp_value)} not allowed at position {pos + 1} in {repr(label)}"
-                    )
+                    raise InvalidCodepointContext(f"Joiner {_unot(cp_value)} not allowed at position {pos + 1} in {label!r}")
             except ValueError as err:
                 raise IDNAError(
-                    f"Unknown codepoint adjacent to joiner {_unot(cp_value)} at position {pos + 1} in {repr(label)}"
+                    f"Unknown codepoint adjacent to joiner {_unot(cp_value)} at position {pos + 1} in {label!r}"
                 ) from err
         elif intranges_contain(cp_value, idnadata.codepoint_classes["CONTEXTO"]):
             if not valid_contexto(label, pos):
-                raise InvalidCodepointContext(
-                    f"Codepoint {_unot(cp_value)} not allowed at position {pos + 1} in {repr(label)}"
-                )
+                raise InvalidCodepointContext(f"Codepoint {_unot(cp_value)} not allowed at position {pos + 1} in {label!r}")
         else:
-            raise InvalidCodepoint(f"Codepoint {_unot(cp_value)} at position {pos + 1} of {repr(label)} not allowed")
+            raise InvalidCodepoint(f"Codepoint {_unot(cp_value)} at position {pos + 1} of {label!r} not allowed")
 
     check_bidi(label)
 
@@ -383,14 +387,17 @@ def alabel(label: str) -> bytes:
     :raises IDNAError: If the label is invalid or the resulting A-label
         exceeds 63 octets.
     """
+    if len(label) > _max_input_length:
+        raise IDNAError("Label too long")
     try:
         label_bytes = label.encode("ascii")
+    except UnicodeEncodeError:
+        pass
+    else:
         ulabel(label_bytes)
         if not valid_label_length(label_bytes):
             raise IDNAError("Label too long")
         return label_bytes
-    except UnicodeEncodeError:
-        pass
 
     check_label(label)
     label_bytes = _alabel_prefix + _punycode(label)
@@ -414,6 +421,8 @@ def ulabel(label: Union[str, bytes, bytearray]) -> str:
     :returns: The U-label as a Unicode string.
     :raises IDNAError: If the label is malformed or fails validation.
     """
+    if len(label) > _max_input_length:
+        raise IDNAError("Label too long")
     if not isinstance(label, (bytes, bytearray)):
         try:
             label_bytes = label.encode("ascii")
@@ -460,18 +469,19 @@ def uts46_remap(domain: str, std3_rules: bool = True, transitional: bool = False
     :returns: The remapped domain, in Normalisation Form C.
     :raises InvalidCodepoint: If the domain contains a disallowed
         codepoint under the chosen rules.
+    :raises IDNAError: If ``domain`` exceeds the defensive input length limit.
     """
-    from .uts46data import uts46data
+    if len(domain) > _max_input_length:
+        raise IDNAError("Domain too long")
+    from .uts46data import uts46_replacements, uts46_starts, uts46_statuses
 
     output = ""
 
     for pos, char in enumerate(domain):
         code_point = ord(char)
-        uts46row = uts46data[code_point if code_point < 256 else bisect.bisect_left(uts46data, (code_point, "Z")) - 1]
-        status = uts46row[1]
-        replacement: Optional[str] = None
-        if len(uts46row) == 3:
-            replacement = uts46row[2]  # ty: ignore[index-out-of-bounds]
+        i = code_point if code_point < 256 else bisect.bisect_right(uts46_starts, code_point) - 1
+        status = chr(uts46_statuses[i])
+        replacement: Optional[str] = uts46_replacements[i]
 
         # UTS #46 §4: V is always valid, D is deviation (kept unless transitional),
         # 3 is disallowed-STD3 (kept unmapped if std3_rules is off and no mapping).
@@ -492,7 +502,7 @@ def uts46_remap(domain: str, std3_rules: bool = True, transitional: bool = False
         elif status == "I":
             continue
         else:
-            raise InvalidCodepoint(f"Codepoint {_unot(code_point)} not allowed at position {pos + 1} in {repr(domain)}")
+            raise InvalidCodepoint(f"Codepoint {_unot(code_point)} not allowed at position {pos + 1} in {domain!r}")
 
     return unicodedata.normalize("NFC", output)
 
@@ -537,6 +547,8 @@ def encode(
             s = str(s, "ascii")
         except (UnicodeDecodeError, TypeError) as err:
             raise IDNAError("should pass a unicode string to the function rather than a byte string.") from err
+    if len(s) > _max_input_length:
+        raise IDNAError("Domain too long")
     if uts46:
         s = uts46_remap(s, std3_rules, transitional)
 
@@ -572,6 +584,7 @@ def decode(
     strict: bool = False,
     uts46: bool = False,
     std3_rules: bool = False,
+    display: bool = False,
 ) -> str:
     """Decode an A-label-encoded domain name back to Unicode.
 
@@ -586,6 +599,13 @@ def decode(
     :param uts46: If ``True``, apply UTS #46 mapping before decoding.
     :param std3_rules: Forwarded to :func:`uts46_remap` when ``uts46`` is
         ``True``.
+    :param display: If ``True``, any ``xn--`` label that fails IDNA
+        validation is passed through unchanged (lowercased) rather than
+        aborting the whole call. Intended for "decode for display"
+        consumers (e.g. URL libraries, HTTP clients) that want to show
+        the user the label as it appears on the wire when it cannot be
+        rendered as Unicode. Matches the per-label recovery prescribed
+        by UTS #46 §4 and the WHATWG URL "domain to Unicode" algorithm.
     :returns: The decoded domain as a Unicode string.
     :raises IDNAError: If the input is not valid ASCII, contains an
         invalid label, or is empty.
@@ -595,6 +615,8 @@ def decode(
             s = str(s, "ascii")
         except (UnicodeDecodeError, TypeError) as err:
             raise IDNAError("Invalid ASCII in A-label") from err
+    if len(s) > _max_input_length:
+        raise IDNAError("Domain too long")
     if uts46:
         s = uts46_remap(s, std3_rules, False)
     # Reject inputs that exceed the maximum DNS domain length up-front
@@ -610,9 +632,15 @@ def decode(
         del labels[-1]
         trailing_dot = True
     for label in labels:
-        s = ulabel(label)
-        if s:
-            result.append(s)
+        try:
+            u = ulabel(label)
+        except IDNAError:
+            if display and label[:4].lower() == "xn--":
+                u = label.lower()
+            else:
+                raise
+        if u:
+            result.append(u)
         else:
             raise IDNAError("Empty label")
     if trailing_dot:

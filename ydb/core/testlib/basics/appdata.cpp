@@ -46,7 +46,6 @@ namespace NKikimr {
         app->StreamingConfig.SetEnableOutputStreams(true);
         app->PQConfig.MergeFrom(PQConfig);
         app->PQConfig.SetACLRetryTimeoutSec(1);
-        app->PQConfig.SetBalancerMetadataRetryTimeoutSec(1);
         app->PQConfig.SetClustersUpdateTimeoutSec(1);
         app->PQConfig.SetCheckACL(true);
         if (NetDataSourceUrl) {

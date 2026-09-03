@@ -56,8 +56,10 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , ExplicitHashKey(std::move(explicitHashKey))
         , LogicalMessageCount(logicalMessageCount)
         , IsBatch(isBatch) {
-    Y_ENSURE(PartitionKey.size() <= 256);
-    Y_ENSURE(LogicalMessageCount >= 1 && LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT);
+    AFL_ENSURE(PartitionKey.size() <= 256)("partition_key_size", PartitionKey.size());
+    AFL_ENSURE(LogicalMessageCount >= 1 && LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT)
+        ("logical_message_count", LogicalMessageCount)
+        ("max_logical_message_count", MAX_LOGICAL_MESSAGE_COUNT);
 }
 
 

@@ -2,9 +2,12 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen_common.h>
 
+#include <util/generic/yexception.h>
+
+#include <array>
+
 #ifdef MKQL_DISABLE_CODEGEN
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using NYql::GetMethodPtr;
 using NYql::GetMethodPtrIndex;
@@ -65,7 +68,6 @@ using TFlowSourceCodegeneratorNode = TFlowSourceComputationNode<TDerived>;
 template <typename TDerived>
 using TWideFlowSourceCodegeneratorNode = TWideFlowSourceComputationNode<TDerived>;
 }
-}
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/BasicBlock.h>
@@ -82,8 +84,7 @@ using TWideFlowSourceCodegeneratorNode = TWideFlowSourceComputationNode<TDerived
 #include <source_location>
 #endif
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using NYql::GetMethodPtr;
 using NYql::GetMethodPtrIndex;
@@ -117,30 +118,30 @@ struct TCodegenContext {
     Value* GetBuilder() const;
 
 private:
-    Value * Factory = nullptr;
-    Value * Stat = nullptr;
-    Value * Mutables = nullptr;
-    Value * Builder = nullptr;
+    Value* Factory_ = nullptr;
+    Value* Stat_ = nullptr;
+    Value* Mutables_ = nullptr;
+    Value* Builder_ = nullptr;
 };
 
 using TGeneratorPtr = Value* (*)(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block);
 
 class ICodegeneratorRootNode {
 public:
-    virtual ~ICodegeneratorRootNode() {}
+    virtual ~ICodegeneratorRootNode() = default;
     virtual void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) = 0;
     virtual void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) = 0;
 };
 
 class ICodegeneratorInlineNode {
 public:
-    virtual ~ICodegeneratorInlineNode() {}
+    virtual ~ICodegeneratorInlineNode() = default;
     virtual Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
 };
 
 class ICodegeneratorInlineWideNode {
 public:
-    virtual ~ICodegeneratorInlineWideNode() {}
+    virtual ~ICodegeneratorInlineWideNode() = default;
 
     using TGettersList = std::vector<std::function<Value*(const TCodegenContext& ctx, BasicBlock*&)>>;
     using TGenerateResult = std::pair<Value*, TGettersList>;
@@ -174,7 +175,7 @@ public:
 
 class ICodegeneratorRunNode {
 public:
-    virtual ~ICodegeneratorRunNode() {}
+    virtual ~ICodegeneratorRunNode() = default;
     virtual void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const = 0;
 };
 
@@ -246,29 +247,36 @@ Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodege
     return CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), returnType, value, codegen, block, arg1, arg2);
 }
 
-template <size_t Argc>
-class CallArgs {
-    std::array<Value*, Argc> args;
-
-public:
-    template <typename... Args>
-        requires (sizeof...(Args) == Argc)
-    constexpr CallArgs(Args... args) : args{args...} {}
-
-    template <typename... Args>
-        requires (sizeof...(Args) != Argc)
-    CallArgs(Args...) = delete;
-
-    auto begin() const { return std::begin(args); }
-    auto end()   const { return std::end(args); }
-};
-
 Value* EmitFunctionCallImpl(uintptr_t methodPtr, Type* result, std::vector<Value*>&& args, const TCodegenContext& ctx, BasicBlock* block);
 
-template<auto Method>
-Value* EmitFunctionCall(Type* result, CallArgs<arity_v<decltype(Method)>> args, const TCodegenContext& ctx, BasicBlock* block) {
-    std::vector<Value*> argVec(std::begin(args), std::end(args));
-    return EmitFunctionCallImpl(GetMethodPtr<Method>(), result, std::move(argVec), ctx, block);
+template <size_t ArgumentCount>
+class TCallArgs {
+public:
+    template <typename... TArguments>
+        requires (sizeof...(TArguments) == ArgumentCount)
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    constexpr TCallArgs(TArguments... arguments)
+        : Arguments_{arguments...}
+    {
+    }
+
+    template <typename... TArguments>
+        requires (sizeof...(TArguments) != ArgumentCount)
+    TCallArgs(TArguments...) = delete;
+
+    const std::array<Value*, ArgumentCount>& GetArguments() const {
+        return Arguments_;
+    }
+
+private:
+    std::array<Value*, ArgumentCount> Arguments_;
+};
+
+template <auto Method>
+Value* EmitFunctionCall(Type* result, TCallArgs<arity_v<decltype(Method)>> arguments, const TCodegenContext& ctx, BasicBlock* block) {
+    const auto& argumentArray = arguments.GetArguments();
+    std::vector<Value*> argumentVector(argumentArray.begin(), argumentArray.end());
+    return EmitFunctionCallImpl(GetMethodPtr<Method>(), result, std::move(argumentVector), ctx, block);
 }
 
 void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
@@ -289,7 +297,7 @@ Value* MakeVariant(Value* item, Value* variant, const TCodegenContext& ctx, Basi
 Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block);
 void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block);
 
-struct TNoCodegen {};
+struct TNoCodegen : yexception {};
 ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlowNode* node, const TCodegenContext& ctx, BasicBlock*& block);
 
 Function* GenerateCompareFunction(
@@ -325,7 +333,7 @@ protected:
         : TBase(node, kind)
     {}
 
-    TDecoratorCodegeneratorNode(IComputationNode* node)
+    explicit TDecoratorCodegeneratorNode(IComputationNode* node)
         : TBase(node)
     {}
 
@@ -374,7 +382,7 @@ class TStatelessWideFlowCodegeneratorNode: public TStatelessWideFlowComputationN
 {
 using TBase = TStatelessWideFlowCodegeneratorNode<TDerived>;
 protected:
-    TStatelessWideFlowCodegeneratorNode(const IComputationNode* source)
+    explicit TStatelessWideFlowCodegeneratorNode(const IComputationNode* source)
         : TStatelessWideFlowComputationNode<TDerived>(source)
     {}
 
@@ -633,7 +641,7 @@ protected:
 
 
 public:
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         static_assert(std::is_same<std::invoke_result_t<decltype(&TDerived::DoCalculate), TDerived, TComputationContext&>, NUdf::TUnboxedValuePod>(), "DoCalculate must return pod!");
         return DoGenerateGetValueImpl(GetMethodPtr<&TDerived::DoCalculate>(), uintptr_t(this), ctx, block);
     }
@@ -652,14 +660,15 @@ class TCodegeneratorRootNode: public TDerived, public ICodegeneratorRootNode,
 using TBase = TDerived;
 public:
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
-        if (compCtx.ExecuteLLVM && GetFunction)
-            return GetFunction(&compCtx);
+        if (compCtx.ExecuteLLVM && GetFunction_) {
+            return GetFunction_(&compCtx);
+        }
 
         return TBase::GetValue(compCtx);
     }
 
 protected:
-    TCodegeneratorRootNode(EValueRepresentation kind)
+    explicit TCodegeneratorRootNode(EValueRepresentation kind)
         : TBase(kind)
     {}
 
@@ -682,8 +691,9 @@ private:
         auto& module = codegen.GetModule();
 
         if constexpr (PreventReGeneration) {
-            if (const auto& name = TDerived::MakeName(); module.getFunction(name.c_str()))
+            if (const auto& name = TDerived::MakeName(); module.getFunction(name.c_str())) {
                 return nullptr;
+            }
         }
 
         const auto& name = MakeName();
@@ -691,19 +701,21 @@ private:
     }
 protected:
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) override {
-        if (GetFunc)
-            GetFunction = reinterpret_cast<TGetPtr>(codegen.GetPointerToFunction(GetFunc));
+        if (GetFunc_) {
+            GetFunction_ = reinterpret_cast<TGetPtr>(codegen.GetPointerToFunction(GetFunc_));
+        }
     }
 
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) override {
-        if (GetFunc = GenerateGetValue(codegen))
-            codegen.ExportSymbol(GetFunc);
+        if (GetFunc_ = GenerateGetValue(codegen)) {
+            codegen.ExportSymbol(GetFunc_);
+        }
     }
 private:
     using TGetPtr = NUdf::TUnboxedValuePod (*)(TComputationContext* ctx);
 
-    Function* GetFunc = nullptr;
-    TGetPtr GetFunction = nullptr;
+    Function* GetFunc_ = nullptr;
+    TGetPtr GetFunction_ = nullptr;
 };
 
 template <typename TDerived>
@@ -734,8 +746,8 @@ protected:
     void SetValueBuilder(TValueBuilder valueBuilder) final;
     void SetValueGetterBuilder(TValueGetterBuilder valueGetterBuilder) final;
 private:
-    TValueBuilder ValueBuilder;
-    TValueGetterBuilder ValueGetterBuilder;
+    TValueBuilder ValueBuilder_;
+    TValueGetterBuilder ValueGetterBuilder_;
 };
 
 class TExternalCodegeneratorRootNode: public TExternalCodegeneratorNode, public ICodegeneratorRootNode
@@ -758,13 +770,13 @@ private:
 
     using TGetPtr = NUdf::TUnboxedValuePod (*)(TComputationContext* ctx);
 
-    Function* GetValueFunc = nullptr;
-    TGetPtr GetFunction = nullptr;
+    Function* GetValueFunc_ = nullptr;
+    TGetPtr GetFunction_ = nullptr;
 
     using TSetPtr = void (*)(TComputationContext* ctx, NUdf::TUnboxedValuePod);
 
-    Function* SetValueFunc = nullptr;
-    TSetPtr SetFunction = nullptr;
+    Function* SetValueFunc_ = nullptr;
+    TSetPtr SetFunction_ = nullptr;
 };
 
 
@@ -779,7 +791,7 @@ private:
 
     TGenerateResult GenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const final;
 
-    TGenerator Generator;
+    TGenerator Generator_;
 };
 
 class TCodegenIterator : public TComputationValue<TCodegenIterator> {
@@ -788,19 +800,19 @@ public:
 
     TCodegenIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator)
         : TComputationValue<TCodegenIterator>(memInfo)
-        , Ctx(ctx)
-        , NextFunc(next)
-        , Iterator(std::move(iterator))
+        , Ctx_(ctx)
+        , NextFunc_(next)
+        , Iterator_(std::move(iterator))
     {}
 
 protected:
     bool Next(NUdf::TUnboxedValue& value) override {
-        return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
+        return NextFunc_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Iterator_), value);
     }
 
-    TComputationContext* const Ctx;
-    const TNextPtr NextFunc;
-    const NUdf::TUnboxedValue Iterator;
+    TComputationContext* const Ctx_;
+    const TNextPtr NextFunc_;
+    const NUdf::TUnboxedValue Iterator_;
 };
 
 template <typename TState = NUdf::TUnboxedValue>
@@ -809,23 +821,23 @@ public:
     using TStateType = TState;
     using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, TStateType&, NUdf::TUnboxedValuePod&);
 
-    TCodegenStatefulIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator, const TStateType& init = TStateType())
+    TCodegenStatefulIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator, TStateType init = TStateType())
         : TComputationValue<TCodegenStatefulIterator>(memInfo)
-        , Ctx(ctx)
-        , NextFunc(next)
-        , Iterator(std::move(iterator))
-        , State(init)
+        , Ctx_(ctx)
+        , NextFunc_(next)
+        , Iterator_(std::move(iterator))
+        , State_(std::move(init))
     {}
 
 protected:
     bool Next(NUdf::TUnboxedValue& value) override {
-        return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
+        return NextFunc_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Iterator_), State_, value);
     }
 
-    TComputationContext* const Ctx;
-    const TNextPtr NextFunc;
-    const NUdf::TUnboxedValue Iterator;
-    TStateType State;
+    TComputationContext* const Ctx_;
+    const TNextPtr NextFunc_;
+    const NUdf::TUnboxedValue Iterator_;
+    TStateType State_;
 };
 
 template <typename TState = NUdf::TUnboxedValue>
@@ -834,24 +846,24 @@ public:
     using TStateType = TState;
     using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, TStateType&, TStateType&, NUdf::TUnboxedValuePod&);
 
-    TCodegenStableStatefulIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator, const TStateType& init = TStateType())
+    TCodegenStableStatefulIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator, TStateType init = TStateType())
         : TComputationValue<TCodegenStableStatefulIterator>(memInfo)
-        , Ctx(ctx)
-        , NextFunc(next)
-        , Iterator(std::move(iterator))
-        , Init(init)
+        , Ctx_(ctx)
+        , NextFunc_(next)
+        , Iterator_(std::move(iterator))
+        , Init_(std::move(init))
     {}
 
 protected:
     bool Next(NUdf::TUnboxedValue& value) override {
-        return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), Init, State, value);
+        return NextFunc_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Iterator_), Init_, State_, value);
     }
 
-    TComputationContext* const Ctx;
-    const TNextPtr NextFunc;
-    const NUdf::TUnboxedValue Iterator;
-    TStateType Init;
-    TStateType State;
+    TComputationContext* const Ctx_;
+    const TNextPtr NextFunc_;
+    const NUdf::TUnboxedValue Iterator_;
+    TStateType Init_;
+    TStateType State_;
 };
 
 class TCustomListCodegenValue : public TCustomListValue {
@@ -861,19 +873,19 @@ public:
 
     TCustomListCodegenValue(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& list)
         : TCustomListValue(memInfo)
-        , Ctx(ctx)
-        , NextFunc(next)
-        , List(std::move(list))
+        , Ctx_(ctx)
+        , NextFunc_(next)
+        , List_(std::move(list))
     {}
 
 private:
     NUdf::TUnboxedValue GetListIterator() const final {
-        return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), NextFunc, Ctx, List.GetListIterator()));
+        return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), NextFunc_, Ctx_, List_.GetListIterator()));
     }
 
-    TComputationContext* const Ctx;
-    const TNextPtr NextFunc;
-    const NUdf::TUnboxedValue List;
+    TComputationContext* const Ctx_;
+    const TNextPtr NextFunc_;
+    const NUdf::TUnboxedValue List_;
 };
 
 template <class TIterator = TCodegenStatefulIterator<>>
@@ -884,21 +896,21 @@ public:
 
     TCustomListCodegenStatefulValueT(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& list, TStateType&& init = TStateType())
         : TCustomListValue(memInfo)
-        , Ctx(ctx)
-        , NextFunc(next)
-        , List(std::move(list))
-        , Init(std::move(init))
+        , Ctx_(ctx)
+        , NextFunc_(next)
+        , List_(std::move(list))
+        , Init_(std::move(init))
     {}
 
 private:
     NUdf::TUnboxedValue GetListIterator() const final {
-        return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), NextFunc, Ctx, List.GetListIterator(), Init));
+        return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), NextFunc_, Ctx_, List_.GetListIterator(), Init_));
     }
 
-    TComputationContext* const Ctx;
-    const TNextPtr NextFunc;
-    const NUdf::TUnboxedValue List;
-    const TStateType Init;
+    TComputationContext* const Ctx_;
+    const TNextPtr NextFunc_;
+    const NUdf::TUnboxedValue List_;
+    const TStateType Init_;
 };
 
 using TCustomListCodegenStatefulValue = TCustomListCodegenStatefulValueT<>;
@@ -909,31 +921,31 @@ public:
 
     TListCodegenValue(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& list)
         : TComputationValue<TListCodegenValue>(memInfo)
-        , Ctx(ctx)
-        , NextFunc(next)
-        , List(std::move(list))
+        , Ctx_(ctx)
+        , NextFunc_(next)
+        , List_(std::move(list))
     {}
 
 private:
     NUdf::TUnboxedValue GetListIterator() const final {
-        return NUdf::TUnboxedValuePod(new TCodegenIterator(GetMemInfo(), NextFunc, Ctx, List.GetListIterator()));
+        return NUdf::TUnboxedValuePod(new TCodegenIterator(GetMemInfo(), NextFunc_, Ctx_, List_.GetListIterator()));
     }
 
     ui64 GetListLength() const final {
-        return List.GetListLength();
+        return List_.GetListLength();
     }
 
     bool HasListItems() const final {
-        return List.HasListItems();
+        return List_.HasListItems();
     }
 
     bool HasFastListLength() const final {
-        return List.HasFastListLength();
+        return List_.HasFastListLength();
     }
 
-    TComputationContext* const Ctx;
-    const TNextPtr NextFunc;
-    const NUdf::TUnboxedValue List;
+    TComputationContext* const Ctx_;
+    const TNextPtr NextFunc_;
+    const NUdf::TUnboxedValue List_;
 };
 
 class TCodegenIteratorOne : public TComputationValue<TCodegenIteratorOne> {
@@ -942,28 +954,28 @@ public:
 
     TCodegenIteratorOne(TMemoryUsageInfo* memInfo, TNextPtr nextOne, TNextPtr nextTwo, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator)
         : TComputationValue<TCodegenIteratorOne>(memInfo)
-        , NextFuncOne(nextOne)
-        , NextFuncTwo(nextTwo)
-        , Ctx(ctx)
-        , Iterator(std::move(iterator))
+        , NextFuncOne_(nextOne)
+        , NextFuncTwo_(nextTwo)
+        , Ctx_(ctx)
+        , Iterator_(std::move(iterator))
     {}
 
 private:
     bool Next(NUdf::TUnboxedValue& value) override {
-        if (FirstCall) {
-            FirstCall = false;
-            return NextFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
+        if (FirstCall_) {
+            FirstCall_ = false;
+            return NextFuncOne_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Iterator_), State_, value);
         } else {
-            return NextFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
+            return NextFuncTwo_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Iterator_), State_, value);
         }
     }
 
-    const TNextPtr NextFuncOne;
-    const TNextPtr NextFuncTwo;
-    TComputationContext* const Ctx;
-    const NUdf::TUnboxedValue Iterator;
-    bool FirstCall = true;
-    NUdf::TUnboxedValue State;
+    const TNextPtr NextFuncOne_;
+    const TNextPtr NextFuncTwo_;
+    TComputationContext* const Ctx_;
+    const NUdf::TUnboxedValue Iterator_;
+    bool FirstCall_ = true;
+    NUdf::TUnboxedValue State_;
 };
 
 class TListCodegenValueOne : public TComputationValue<TListCodegenValueOne> {
@@ -972,33 +984,33 @@ public:
 
     TListCodegenValueOne(TMemoryUsageInfo* memInfo, TNextPtr nextOne, TNextPtr nextTwo, TComputationContext* ctx, NUdf::TUnboxedValue&& list)
         : TComputationValue<TListCodegenValueOne>(memInfo)
-        , NextFuncOne(nextOne)
-        , NextFuncTwo(nextTwo)
-        , Ctx(ctx)
-        , List(std::move(list))
+        , NextFuncOne_(nextOne)
+        , NextFuncTwo_(nextTwo)
+        , Ctx_(ctx)
+        , List_(std::move(list))
     {}
 
 private:
     NUdf::TUnboxedValue GetListIterator() const final {
-        return NUdf::TUnboxedValuePod(new TCodegenIteratorOne(GetMemInfo(), NextFuncOne, NextFuncTwo, Ctx, List.GetListIterator()));
+        return NUdf::TUnboxedValuePod(new TCodegenIteratorOne(GetMemInfo(), NextFuncOne_, NextFuncTwo_, Ctx_, List_.GetListIterator()));
     }
 
     ui64 GetListLength() const final {
-        return List.GetListLength();
+        return List_.GetListLength();
     }
 
     bool HasListItems() const final {
-        return List.HasListItems();
+        return List_.HasListItems();
     }
 
     bool HasFastListLength() const final {
-        return List.HasFastListLength();
+        return List_.HasFastListLength();
     }
 
-    const TNextPtr NextFuncOne;
-    const TNextPtr NextFuncTwo;
-    TComputationContext* const Ctx;
-    const NUdf::TUnboxedValue List;
+    const TNextPtr NextFuncOne_;
+    const TNextPtr NextFuncTwo_;
+    TComputationContext* const Ctx_;
+    const NUdf::TUnboxedValue List_;
 };
 
 class TStreamCodegenValueStateless : public TComputationValue<TStreamCodegenValueStateless> {
@@ -1009,9 +1021,9 @@ public:
 
     TStreamCodegenValueStateless(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream)
         : TBase(memInfo)
-        , FetchFunc(fetch)
-        , Ctx(ctx)
-        , Stream(std::move(stream))
+        , FetchFunc_(fetch)
+        , Ctx_(ctx)
+        , Stream_(std::move(stream))
     {}
 
 protected:
@@ -1020,7 +1032,7 @@ protected:
     }
 
     NUdf::TUnboxedValue GetTraverseItem(ui32) const final {
-        return Stream;
+        return Stream_;
     }
 
     NUdf::TUnboxedValue Save() const override {
@@ -1033,12 +1045,12 @@ protected:
     }
 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override MKQL_NO_SANITIZE_LLVM_CALL {
-        return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
+        return FetchFunc_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Stream_), result);
     }
 
-    const TFetchPtr FetchFunc;
-    TComputationContext* const Ctx;
-    const NUdf::TUnboxedValue Stream;
+    const TFetchPtr FetchFunc_;
+    TComputationContext* const Ctx_;
+    const NUdf::TUnboxedValue Stream_;
 };
 
 class TStreamCodegenValueOne : public TComputationValue<TStreamCodegenValueOne> {
@@ -1049,30 +1061,30 @@ public:
 
     TStreamCodegenValueOne(TMemoryUsageInfo* memInfo, TFetchPtr fetchOne, TFetchPtr fetchTwo, TComputationContext* ctx, NUdf::TUnboxedValue&& stream)
         : TBase(memInfo)
-        , FetchFuncOne(fetchOne)
-        , FetchFuncTwo(fetchTwo)
-        , Ctx(ctx)
-        , Stream(std::move(stream))
+        , FetchFuncOne_(fetchOne)
+        , FetchFuncTwo_(fetchTwo)
+        , Ctx_(ctx)
+        , Stream_(std::move(stream))
     {}
 
 private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final MKQL_NO_SANITIZE_LLVM_CALL {
-        if (FirstCall) {
-            const auto status = FetchFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
+        if (FirstCall_) {
+            const auto status = FetchFuncOne_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Stream_), result);
             if (status == NUdf::EFetchStatus::Ok) {
-                FirstCall = false;
+                FirstCall_ = false;
             }
             return status;
         } else {
-            return FetchFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
+            return FetchFuncTwo_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Stream_), result);
         }
     }
 
-    const TFetchPtr FetchFuncOne;
-    const TFetchPtr FetchFuncTwo;
-    TComputationContext* const Ctx;
-    const NUdf::TUnboxedValue Stream;
-    bool FirstCall = true;
+    const TFetchPtr FetchFuncOne_;
+    const TFetchPtr FetchFuncTwo_;
+    TComputationContext* const Ctx_;
+    const NUdf::TUnboxedValue Stream_;
+    bool FirstCall_ = true;
 };
 
 template <typename TState = NUdf::TUnboxedValue>
@@ -1084,21 +1096,21 @@ public:
 
     TStreamCodegenStatefulValueT(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream, TState&& init = TState())
         : TBase(memInfo)
-        , FetchFunc(fetch)
-        , Ctx(ctx)
-        , Stream(std::move(stream))
-        , State(std::move(init))
+        , FetchFunc_(fetch)
+        , Ctx_(ctx)
+        , Stream_(std::move(stream))
+        , State_(std::move(init))
     {}
 
 protected:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override MKQL_NO_SANITIZE_LLVM_CALL {
-        return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), State, result);
+        return FetchFunc_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Stream_), State_, result);
     }
 
-    const TFetchPtr FetchFunc;
-    TComputationContext* const Ctx;
-    const NUdf::TUnboxedValue Stream;
-    TState State;
+    const TFetchPtr FetchFunc_;
+    TComputationContext* const Ctx_;
+    const NUdf::TUnboxedValue Stream_;
+    TState State_;
 };
 
 using TStreamCodegenStatefulValue = TStreamCodegenStatefulValueT<>;
@@ -1112,19 +1124,19 @@ public:
     template <typename...TArgs>
     TStreamCodegenSelfStateValue(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream, TArgs&&...args)
         : TState(memInfo, std::forward<TArgs>(args)...)
-        , FetchFunc(fetch)
-        , Ctx(ctx)
-        , Stream(std::move(stream))
+        , FetchFunc_(fetch)
+        , Ctx_(ctx)
+        , Stream_(std::move(stream))
     {}
 
 private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override MKQL_NO_SANITIZE_LLVM_CALL {
-        return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), this, result);
+        return FetchFunc_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Stream_), this, result);
     }
 
-    const TFetchPtr FetchFunc;
-    TComputationContext* const Ctx;
-    const NUdf::TUnboxedValue Stream;
+    const TFetchPtr FetchFunc_;
+    TComputationContext* const Ctx_;
+    const NUdf::TUnboxedValue Stream_;
 };
 
 template <class StateType>
@@ -1136,20 +1148,20 @@ public:
     template <typename...TArgs>
     TStreamCodegenSelfStatePlusValue(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream, TArgs&&...args)
         : TState(memInfo, std::forward<TArgs>(args)...)
-        , FetchFunc(fetch)
-        , Ctx(ctx)
-        , Stream(std::move(stream))
+        , FetchFunc_(fetch)
+        , Ctx_(ctx)
+        , Stream_(std::move(stream))
     {}
 
 private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override MKQL_NO_SANITIZE_LLVM_CALL {
-        return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), this, State, result);
+        return FetchFunc_(Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Stream_), this, State_, result);
     }
 
-    const TFetchPtr FetchFunc;
-    TComputationContext* const Ctx;
-    const NUdf::TUnboxedValue Stream;
-    NUdf::TUnboxedValue State;
+    const TFetchPtr FetchFunc_;
+    TComputationContext* const Ctx_;
+    const NUdf::TUnboxedValue Stream_;
+    NUdf::TUnboxedValue State_;
 };
 
 template <typename TDerived>
@@ -1158,7 +1170,7 @@ class TCustomValueCodegeneratorNode: public TMutableCodegeneratorFallbackNode<TD
 using TBase = TMutableCodegeneratorFallbackNode<TDerived>;
 
 protected:
-    TCustomValueCodegeneratorNode(TComputationMutables& mutables)
+    explicit TCustomValueCodegeneratorNode(TComputationMutables& mutables)
         : TBase(mutables, EValueRepresentation::Boxed)
     {}
 
@@ -1175,7 +1187,7 @@ class TBothWaysCodegeneratorNode: public TMutableCodegeneratorRootNode<TDerived>
 using TBase = TMutableCodegeneratorRootNode<TDerived>;
 
 protected:
-    TBothWaysCodegeneratorNode(TComputationMutables& mutables)
+    explicit TBothWaysCodegeneratorNode(TComputationMutables& mutables)
         : TBase(mutables, EValueRepresentation::Boxed)
     {}
 
@@ -1190,20 +1202,22 @@ template<typename T> Type* GetTypeFor(LLVMContext &context);
 
 template<typename T> inline Value* GetterFor(Value* value, LLVMContext &context, BasicBlock* block) {
     const auto trunc = CastInst::Create(Instruction::Trunc, value, std::is_same<T, bool>() ? Type::getInt1Ty(context) : IntegerType::get(context, sizeof(T) << 3U), "trunc", block);
-    if  (std::is_integral<T>::value)
+    if  (std::is_integral<T>::value) {
         return trunc;
+    }
     return CastInst::Create(Instruction::BitCast, trunc, GetTypeFor<T>(context), "bitcast", block);
 }
 
 template<typename T> inline
 Value* SetterFor(Value* value, LLVMContext &context, BasicBlock* block) {
-    if  (value->getType()->isFloatingPointTy())
+    if  (value->getType()->isFloatingPointTy()) {
         value = CastInst::Create(Instruction::BitCast, value, IntegerType::get(context, sizeof(T) << 3U), "bitcast", block);
+    }
 
     const auto type = Type::getInt128Ty(context);
     const auto zext = CastInst::Create(Instruction::ZExt, value, type, "zext", block);
-    const uint64_t init[] = {0ULL, 0x100000000000000ULL}; // Embedded
-    const auto meta = ConstantInt::get(context, APInt(128, 2, init));
+    const std::array<uint64_t, 2> init = {0ULL, 0x100000000000000ULL}; // Embedded
+    const auto meta = ConstantInt::get(context, APInt(128, init));
     const auto full = BinaryOperator::CreateOr(zext, meta, "or", block);
     return full;
 }
@@ -1215,8 +1229,9 @@ Value* GetterForTimezone(LLVMContext& context, Value* value, BasicBlock* block);
 
 template<typename TSrc, typename TDst> inline
 Value* StaticCast(Value* value, LLVMContext &context, BasicBlock* block) {
-    if (std::is_same<TSrc, TDst>())
+    if (std::is_same<TSrc, TDst>()) {
         return value;
+    }
 
     if (std::is_integral<TSrc>() == std::is_integral<TDst>()) {
         if (std::is_integral<TSrc>()) {
@@ -1313,10 +1328,10 @@ private:
 
     friend DIScopeAnnotator;
 
-    TCodegenContext& Ctx;
-    std::unique_ptr<DIBuilder> DebugBuilder;
-    DISubprogram* Subprogram;
-    Function* Func;
+    TCodegenContext& Ctx_;
+    std::unique_ptr<DIBuilder> DebugBuilder_;
+    DISubprogram* Subprogram_;
+    Function* Func_;
 };
 
 class DIScopeAnnotator final {
@@ -1326,10 +1341,9 @@ public:
     Instruction* operator()(Instruction* inst, const TSrcLocation& location = TSrcLocation::current()) const;
 
 private:
-    DISubprogramAnnotator* SubprogramAnnotator;
-    DIScope* Scope;
+    DISubprogramAnnotator* SubprogramAnnotator_;
+    DIScope* Scope_;
 };
 
-}
 }
 #endif

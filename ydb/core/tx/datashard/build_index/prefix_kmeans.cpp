@@ -815,3 +815,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

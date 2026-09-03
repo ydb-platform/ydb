@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.15)
+VERSION(3.18)
 
 LICENSE(BSD-3-Clause)
 
@@ -11,6 +11,8 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     idna/__init__.py
+    idna/__main__.py
+    idna/cli.py
     idna/codec.py
     idna/compat.py
     idna/core.py
@@ -23,6 +25,7 @@ PY_SRCS(
 RESOURCE_FILES(
     PREFIX contrib/python/idna/py3/
     .dist-info/METADATA
+    .dist-info/entry_points.txt
     .dist-info/top_level.txt
     idna/py.typed
 )

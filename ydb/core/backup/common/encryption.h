@@ -4,11 +4,16 @@
 
 #include <util/generic/buffer.h>
 #include <util/generic/maybe.h>
+#include <util/generic/size_literals.h>
 #include <util/generic/string.h>
 
 #include <vector>
 
 namespace NKikimr::NBackup {
+
+// Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
+// Default export batch size is 32 MB (data_shard_config.backup_bytes_batch_size / ScanSettings.BytesBatchSize).
+static constexpr size_t MAX_BLOCK_SIZE = 50_MB;
 
 TString NormalizeEncryptionAlgorithmName(const TString& name);
 

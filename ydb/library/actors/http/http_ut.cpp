@@ -11,6 +11,9 @@
 #include <library/cpp/resource/resource.h>
 #include <util/system/tempfile.h>
 #include <util/system/condvar.h>
+#include <util/network/address.h>
+#include <util/network/sock.h>
+#include <netinet/in.h>
 #include <thread>
 #include <atomic>
 
@@ -38,6 +41,22 @@ void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) {
         memcpy(request->Pos(), &c, 1);
         request->Advance(1);
     }
+}
+
+std::pair<TString, ui16> BoundHostAndPort(const TIntrusivePtr<NHttp::TSocketDescriptor>& socket) {
+    sockaddr_storage ss{};
+    socklen_t slen = sizeof(ss);
+    Y_ABORT_UNLESS(getsockname(socket->GetDescriptor(), reinterpret_cast<sockaddr*>(&ss), &slen) == 0);
+    if (ss.ss_family == AF_INET6) {
+        return {"::1", ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port)};
+    }
+    return {"127.0.0.1", ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port)};
+}
+
+void AssertCanConnect(const TString& host, ui16 port) {
+    TNetworkAddress addr(host, port);
+    TSocket sock(addr);
+    UNIT_ASSERT(static_cast<SOCKET>(sock) != INVALID_SOCKET);
 }
 
 }
@@ -1696,7 +1715,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
     }
 
     Y_UNIT_TEST(UntrustedClientCertificate) {
-        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("connection closed - error in Accept"));
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("Connection closed - error in Accept"));
         auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
         bool expectedMessageLogged = false;
 
@@ -1737,7 +1756,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
     }
 
     Y_UNIT_TEST(RequiredNoClientCertificate) {
-        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("connection closed - error in Accept"));
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("Connection closed - error in Accept"));
         auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
         bool expectedMessageLogged = false;
 
@@ -1789,6 +1808,51 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         setup.ActorSystem.Send(new NActors::IEventHandle(handle->Sender, setup.ServerId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
         UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+    }
+
+    Y_UNIT_TEST(SyncBindListensImmediately) {
+        auto socket = NHttp::TryBindListeningSocket(TString(), 0);
+        UNIT_ASSERT(socket);
+        const auto [host, port] = BoundHostAndPort(socket);
+        UNIT_ASSERT(port != 0);
+        AssertCanConnect(host, port);
+    }
+
+    Y_UNIT_TEST(PreboundSocketServesHttp) {
+        auto socket = NHttp::TryBindListeningSocket(TString(), 0);
+        UNIT_ASSERT(socket);
+        const auto [host, port] = BoundHostAndPort(socket);
+
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+
+        NActors::TActorId proxyId = actorSystem.Register(NHttp::CreateHttpProxy());
+        auto* addPort = new NHttp::TEvHttpProxy::TEvAddListeningPort(port);
+        addPort->PreboundSocket = socket;
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), addPort), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+        UNIT_ASSERT(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        const TString url = host == "::1"
+            ? "http://[::1]:" + ToString(port) + "/test"
+            : "http://127.0.0.1:" + ToString(port) + "/test";
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
     }
 
 }

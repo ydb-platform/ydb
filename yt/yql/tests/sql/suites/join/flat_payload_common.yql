@@ -1,0 +1,12 @@
+USE plato;
+
+-- Common join with the flat payload on; results must match the default Variant plan.
+pragma yt.JoinCommonUseFlatPayload="true";
+
+SELECT a.key AS k, a.value AS av, b.value AS bv
+FROM Input1 AS a INNER JOIN Input2 AS b ON a.key == b.key
+ORDER BY k, av, bv;
+
+SELECT a.subkey AS sk, a.value AS av, b.value AS bv
+FROM Input1 AS a RIGHT JOIN Input2 AS b ON a.subkey == b.subkey
+ORDER BY sk, av, bv;

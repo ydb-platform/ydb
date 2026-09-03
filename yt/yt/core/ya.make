@@ -371,6 +371,7 @@ PEERDIR(
     library/cpp/yt/logging
     library/cpp/yt/logging/plain_text_formatter
     library/cpp/yt/misc
+    library/cpp/yt/mpl
     library/cpp/yt/memory
     library/cpp/yt/string
     library/cpp/yt/yson
@@ -456,6 +457,7 @@ ENDIF()
 RECURSE_FOR_TESTS(
     actions/unittests
     concurrency/unittests
+    dns/unittests
     http/unittests
     misc/unittests
     net/unittests

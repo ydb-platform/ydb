@@ -30,12 +30,6 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
             return true;
         }
 
-        if (Self->ScheduleTraversals.empty()) {
-            YDB_LOG_TRACE("TTxScheduleTraversal. No info from schemeshard",
-                {"tabletId", Self->TabletID()});
-            return true;
-        }
-
         YDB_LOG_TRACE("TTxScheduleTraversal::Execute",
             {"tabletId", Self->TabletID()});
 
@@ -46,8 +40,10 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
 
         // Next, if there is no analyze operation, try to schedule background traversal.
         if (!Self->TraversalPathId
+                && Self->StatisticsTablePathId
+                && !Self->ScheduleTraversals.empty()
                 && Self->StatisticsConfig.GetEnableBackgroundColumnStatsCollection()) {
-            Self->ScheduleNextBackgroundTraversal(db);
+            Self->ScheduleNextBackgroundTraversal(db, ctx);
         }
         return true;
     }
@@ -56,6 +52,7 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
         YDB_LOG_TRACE("TTxScheduleTraversal::Complete",
             {"tabletId", Self->TabletID()});
 
+        Self->ResolveStatisticsTablePathId();
         Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
     }
 };

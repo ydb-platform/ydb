@@ -260,8 +260,12 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.File = "generated.sql";
         settings.Flags = GetSqlFlags(BlockEngineMode_);
         settings.AllowTablesFunction = true;
-        for (const auto& [key, block] : UserData_) {
+        const TString libraryPrefix = NYql::GetDefaultFilePrefix() + "yql_libs/";
+        for (auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
+            if (alias.StartsWith(libraryPrefix)) {
+                block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
+            }
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {
                 alias.SkipPrefix("/home/");
                 settings.Libraries.emplace(alias);

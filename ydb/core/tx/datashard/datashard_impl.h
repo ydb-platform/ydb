@@ -326,6 +326,7 @@ class TDataShard
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
+    class TTxPersistSubDomainTablesMetricsLevel;
 
     class TTxRequestChangeRecords;
     class TTxRemoveChangeRecords;
@@ -595,8 +596,6 @@ class TDataShard
         struct TEvReadonlyLeaseConfirmation: public TEventLocal<TEvReadonlyLeaseConfirmation, EvReadonlyLeaseConfirmation> {};
 
         struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
-
-        struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
 
         struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
 
@@ -1147,6 +1146,17 @@ class TDataShard
             using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, ResponseType, FinalProgressRecord>;
         };
 
+        // Per-writer uncommitted write seq num.
+        struct LockWriteSeqNums : Table<40> {
+            struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct WriterIndex : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct WriteSeqNum : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct WriteResult : Column<4, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<LockId, WriterIndex>;
+            using TColumns = TableColumns<LockId, WriterIndex, WriteSeqNum, WriteResult>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -1155,7 +1165,8 @@ class TDataShard
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
-            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans>;
+            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans,
+            LockWriteSeqNums>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1227,6 +1238,8 @@ class TDataShard
 
             Sys_VacuumCompletedGeneration = 47,
 
+            Sys_SubDomainTablesMetricsLevel = 48,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1240,6 +1253,7 @@ class TDataShard
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeStep == 39, "SysMvcc_ImmediateWriteEdgeStep changed its value");
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeTxId == 40, "SysMvcc_ImmediateWriteEdgeTxId changed its value");
         static_assert(ESysTableKeys::Sys_LastLoanTableTid == 41, "Sys_LastLoanTableTid changed its value");
+        static_assert(ESysTableKeys::Sys_SubDomainTablesMetricsLevel == 48, "Sys_SubDomainTablesMetricsLevel changed its value");
 
         static constexpr ui64 MinLocalTid = TSysTables::SysTableMAX + 1; // 1000
 
@@ -1422,9 +1436,6 @@ class TDataShard
     void Handle(TEvDataShard::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx);
-    void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
@@ -1490,6 +1501,10 @@ class TDataShard
 
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
+
+    // Reports the identity of this shard's primary user table to the node's tablet counters
+    // aggregator, so detailed metrics can attribute the executor's counter deltas to a table.
+    void SendTableInfoToCountersAggregator(const TActorContext &ctx);
 
     TDuration GetTxCompleteLag()
     {
@@ -1769,13 +1784,19 @@ public:
         TableInfos.erase(tableId.LocalPathId);
     }
 
-    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb* locksDb = nullptr) {
-        if (locksDb) {
-            SysLocks.RemoveSchema(tableId, locksDb);
-        }
+    void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
+    }
+
+    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
+        SetUserTable(tableId, tableInfo);
+    }
+
+    void ReplaceUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb& locksDb) {
+        SysLocks.RemoveSchema(tableId, &locksDb);
+        SetUserTable(tableId, tableInfo);
     }
 
     bool IsUserTable(const TTableId& tableId) const {
@@ -2004,6 +2025,19 @@ public:
     bool IsSubDomainOutOfSpace() const
     {
         return SubDomainOutOfSpace;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetSubDomainTablesMetricsLevel() const
+    {
+        return SubDomainTablesMetricsLevel;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetEffectiveMetricsLevel(const TUserTable& table) const
+    {
+        const auto tableLevel = table.GetDetailedMetricsLevel();
+        return tableLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+            ? tableLevel
+            : SubDomainTablesMetricsLevel;
     }
 
     ui64 GetExecutorStep() const
@@ -2461,10 +2495,11 @@ private:
                 return size;
             };
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                            "Sending snapshot for split opId " << ev->Record.GetOperationCookie()
-                            << " from datashard " << ev->Record.GetSrcTabletId()
-                            << " to datashard " << dstTabletId << " size " << fnCalcTotalSize(*ev));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Sending snapshot for split op from srcTablet to dstTablet",
+                {"operationId", ev->Record.GetOperationCookie()},
+                {"srcTabletId", ev->Record.GetSrcTabletId()},
+                {"dstTabletId", dstTabletId},
+                {"totalSize", fnCalcTotalSize(*ev)});
 
             NTabletPipe::SendData(ctx, PipesToDstShards[dstTabletId], ev.Release());
         }
@@ -2535,9 +2570,9 @@ private:
             auto ev = MakeHolder<TEvChangeExchange::TEvActivateSender>();
             ev->Record.SetOrigin(Origin);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Activate change sender"
-                << ": origin# " << ev->Record.GetOrigin()
-                << ", dst# " << dstTabletId);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Activate change sender",
+                {"origin", ev->Record.GetOrigin()},
+                {"dst", dstTabletId});
 
             NTabletPipe::SendData(ctx, PipesToDstShards[dstTabletId], ev.Release());
         }
@@ -2836,6 +2871,8 @@ private:
     std::optional<TPathId> SubDomainPathId;
     std::optional<TPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel SubDomainTablesMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     THashSet<TActorId> Actors;
     TLoanReturnTracker LoanReturnTracker;
@@ -3226,9 +3263,6 @@ private:
 
     std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
 
-    ui32 StatisticsScanTableId = 0;
-    ui64 StatisticsScanId = 0;
-
     ui64 CurrentVacuumGeneration = 0;
 
     // Cache for tracking recent writes for TLI breaker linkage in deferred lock creation scenarios
@@ -3333,8 +3367,9 @@ protected:
     using TTabletExecutedFlat::Enqueue;
 
     void Enqueue(STFUNC_SIG) override {
-        ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << ev->ToString());
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
     }
 
     // In this state we are not handling external pipes to datashard tablet (it's just another init phase)
@@ -3352,8 +3387,9 @@ protected:
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << ev->ToString());
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
             }
             break;
         }
@@ -3497,13 +3533,13 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
-            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
-            HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+                    YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event",
+                        {"type", ev->GetTypeRewrite()},
+                        {"event", ev->ToString()});
                 }
                 break;
         }
@@ -3534,8 +3570,9 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << ev->ToString());
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
             }
             break;
         }
@@ -3560,8 +3597,10 @@ protected:
     }
 
     void ReportState(const TActorContext &ctx, ui32 state) {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " Reporting state " << DatashardStateName(State)
-                    << " to schemeshard " << CurrentSchemeShardId);
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Reporting state to schemeshard",
+            {"tabletId", TabletID()},
+            {"state", DatashardStateName(State)},
+            {"currentSchemeShardId", CurrentSchemeShardId});
         Y_ENSURE(state != TShardState::Offline || !HasSharedBlobs(),
                  "Datashard " << TabletID() << " tried to go offline while having shared blobs");
         if (!StateReportPipe) {
@@ -3594,15 +3633,17 @@ protected:
 
             // Don't report stats until they are build for the first time
             if (!ti.Stats.StatsUpdateTime && !IsFollower()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard " << TabletID()
-                            << ", for tableId " << tableId << ", but no stats yet"
-                );
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard for tableId but no stats yet",
+                    {"tabletId", TabletID()},
+                    {"tableId", tableId});
                 continue;
             }
 
             if (!DbStatsReportPipe) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard " << TabletID()
-                    << " FollowerId " << FollowerId() << ", TableInfos size = " << TableInfos.size());
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard",
+                    {"tabletId", TabletID()},
+                    {"followerId", FollowerId()},
+                    {"tableInfosCount", TableInfos.size()});
 
                 NTabletPipe::TClientConfig clientConfig;
                 DbStatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
@@ -3695,7 +3736,10 @@ protected:
             if (DstSplitDescription)
                 ev->Record.SetIsDstSplit(true);
 
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TEvPeriodicTableStats from datashard " << TabletID() << ", FollowerId " << FollowerId() << ", tableId " << tableId);
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TEvPeriodicTableStats from datashard",
+                {"tabletId", TabletID()},
+                {"followerId", FollowerId()},
+                {"tableId", tableId});
             NTabletPipe::SendData(ctx, DbStatsReportPipe, ev.Release());
         }
 

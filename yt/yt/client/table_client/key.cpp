@@ -13,7 +13,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Used only for YT_LOG_FATAL below in debug mode.
+//! Used only for YT_TLOG_FATAL below in debug mode.
 [[maybe_unused]] constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -49,7 +49,8 @@ TKey TKey::FromRowUnchecked(TUnversionedRow row, std::optional<int> length)
     try {
         ValidateValueTypes(row.FirstNElements(keyLength));
     } catch (const std::exception& ex) {
-        YT_LOG_FATAL(ex, "Unexpected exception while building key from row");
+        YT_TLOG_FATAL("Unexpected exception while building key from row")
+            .With(ex);
     }
 #endif
 

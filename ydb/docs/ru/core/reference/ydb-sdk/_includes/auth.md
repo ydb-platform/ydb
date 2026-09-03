@@ -21,25 +21,25 @@
 
   Режим | Метод
   ----- | -----
-  Anonymous | [NYdb::CreateInsecureCredentialsProviderFactory()](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/credentials.h) |
-  Access Token | [NYdb::TDriverConfig::SetAuthToken(token)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/driver/driver.h) или [NYdb::CreateOAuthCredentialsProviderFactory(token)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/credentials.h) |
-  Metadata | [NYdb::CreateIamCredentialsProviderFactory(NYdb::TIamHost{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/iam/iam.h) |
-  Service Account Key | [NYdb::CreateIamJwtFileCredentialsProviderFactory(NYdb::TIamJwtFilename{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/iam/iam.h) или [NYdb::CreateIamJwtParamsCredentialsProviderFactory(NYdb::TIamJwtContent{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/iam/iam.h), вспомогательно [NYdb::CreateFromSaKeyFile(saKeyFile, connectionString)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/helpers/helpers.h) |
-  Static Credentials | [NYdb::CreateLoginCredentialsProviderFactory(NYdb::TLoginCredentialsParams{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/credentials.h) |
-  OAuth 2.0 token exchange | [NYdb::CreateOauth2TokenExchangeCredentialsProviderFactory(NYdb::TOauth2TokenExchangeParams{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h), [NYdb::CreateOauth2TokenExchangeFileCredentialsProviderFactory(configFilePath, tokenEndpoint)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h) |
-  Определяется по переменным окружения | [NYdb::CreateFromEnvironment(connectionString)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/helpers/helpers.h) |
+  Anonymous | [NYdb::CreateInsecureCredentialsProviderFactory()](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/credentials.h)
+  Access Token | [NYdb::TDriverConfig::SetAuthToken(token)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/driver/driver.h) или [NYdb::CreateOAuthCredentialsProviderFactory(token)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/credentials.h)
+  Metadata | [NYdb::CreateIamCredentialsProviderFactory(NYdb::TIamHost{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/iam/iam.h)
+  Service Account Key | [NYdb::CreateIamJwtFileCredentialsProviderFactory(NYdb::TIamJwtFilename{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/iam/iam.h) или [NYdb::CreateIamJwtParamsCredentialsProviderFactory(NYdb::TIamJwtContent{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/iam/iam.h), вспомогательно [NYdb::CreateFromSaKeyFile(saKeyFile, connectionString)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/helpers/helpers.h)
+  Static Credentials | [NYdb::CreateLoginCredentialsProviderFactory(NYdb::TLoginCredentialsParams{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/credentials.h)
+  OAuth 2.0 token exchange | [NYdb::CreateOauth2TokenExchangeCredentialsProviderFactory(NYdb::TOauth2TokenExchangeParams{...})](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h), [NYdb::CreateOauth2TokenExchangeFileCredentialsProviderFactory(configFilePath, tokenEndpoint)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h)
+  Определяется по переменным окружения | [NYdb::CreateFromEnvironment(connectionString)](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/helpers/helpers.h)
 
 - Python
 
   Режим | Метод
   ----- | -----
-  Anonymous | [ydb.AnonymousCredentials()](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/anonymous-credentials) |
-  Access Token | [ydb.AccessTokenCredentials(token)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials) |
+  Anonymous | [ydb.AnonymousCredentials()](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/anonymous-credentials)
+  Access Token | [ydb.AccessTokenCredentials(token)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials)
   Metadata | [ydb.iam.MetadataUrlCredentials()](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/metadata-credentials)
-  Service Account Key | [ydb.iam.ServiceAccountCredentials.from_file(<br/>key_file, iam_endpoint=None, iam_channel_credentials=None)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/service-account-credentials) |
-  Static Credentials | [ydb.StaticCredentials.from_user_password(user, password)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/static-credentials/example.py) |
-  OAuth 2.0 token exchange | [ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials()](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py),<br/>[ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials.from_file(cfg_file, iam_endpoint=None)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py) |
-  Определяется по переменным окружения | `ydb.credentials_from_env_variables()` |
+  Service Account Key | [ydb.iam.ServiceAccountCredentials.from_file(<br/>key_file, iam_endpoint=None, iam_channel_credentials=None)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/service-account-credentials)
+  Static Credentials | [ydb.StaticCredentials.from_user_password(user, password)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/static-credentials/example.py)
+  OAuth 2.0 token exchange | [ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials()](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py),<br/>[ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials.from_file(cfg_file, iam_endpoint=None)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py)
+  Определяется по переменным окружения | `ydb.credentials_from_env_variables()`
 
 - Go
 
@@ -57,23 +57,23 @@
 
   Режим | Метод
   ----- | -----
-  Anonymous | [tech.ydb.core.auth.NopAuthProvider.INSTANCE](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/anonymous_credentials) |
-  Access Token | [new tech.ydb.core.auth.TokenAuthProvider(accessToken);](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/access_token_credentials) |
-  Metadata | [tech.ydb.auth.iam.CloudAuthHelper.getMetadataAuthProvider();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/metadata_credentials) |
-  Service Account Key | [tech.ydb.auth.iam.CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyFile);](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/service_account_credentials) |
-  OAuth 2.0 token exchange | [tech.ydb.auth.OAuth2TokenExchangeProvider.fromFile(cfgFile);](https://github.com/ydb-platform/ydb-java-sdk/blob/master/auth-providers/oauth2-provider/src/main/java/tech/ydb/auth/OAuth2TokenExchangeProvider.java) |
-  Определяется по переменным окружения | [tech.ydb.auth.iam.CloudAuthHelper.getAuthProviderFromEnviron();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/environ) |
+  Anonymous | [tech.ydb.core.auth.NopAuthProvider.INSTANCE](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/anonymous_credentials)
+  Access Token | [new tech.ydb.core.auth.TokenAuthProvider(accessToken);](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/access_token_credentials)
+  Metadata | [tech.ydb.auth.iam.CloudAuthHelper.getMetadataAuthProvider();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/metadata_credentials)
+  Service Account Key | [tech.ydb.auth.iam.CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyFile);](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/service_account_credentials)
+  OAuth 2.0 token exchange | [tech.ydb.auth.OAuth2TokenExchangeProvider.fromFile(cfgFile);](https://github.com/ydb-platform/ydb-java-sdk/blob/master/auth-providers/oauth2-provider/src/main/java/tech/ydb/auth/OAuth2TokenExchangeProvider.java)
+  Определяется по переменным окружения | [tech.ydb.auth.iam.CloudAuthHelper.getAuthProviderFromEnviron();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/environ)
 
 - C#
 
-  Режим | Метод                                                                                                                                                           
-  ----- |-----------------------------------------------------------------------------------------------------------------------------------------------------------------
-  Anonymous | Ничего передавать для этого режима не нужно                                                                                                                      |
-  Access Token | [new TokenProvider(accessToken)](https://github.com/ydb-platform/ydb-dotnet-sdk/blob/main/src/Ydb.Sdk/src/Auth/TokenProvider.cs)                                 |
-  Metadata | [new Ydb.Sdk.Auth.MetadataProvider()](https://github.com/ydb-platform/ydb-dotnet-yc/blob/main/src/Ydb.Sdk.Yc.Auth/src/MetadataProvider.cs)                      |
-  Service Account Key | [new Ydb.Sdk.Auth.ServiceAccountProvider(saKeyFile);](https://github.com/ydb-platform/ydb-dotnet-yc/blob/main/src/Ydb.Sdk.Yc.Auth/src/ServiceAccountProvider.cs) |
-  OAuth 2.0 token exchange | Не поддерживается                                                                                                                                  |
-  Определяется по переменным окружения | Не поддерживается                                                                                                              |
+  Режим | Метод
+  ----- | -----
+  Anonymous | Ничего передавать для этого режима не нужно
+  Access Token | [new TokenProvider(accessToken)](https://github.com/ydb-platform/ydb-dotnet-sdk/blob/main/src/Ydb.Sdk/src/Auth/TokenProvider.cs)
+  Metadata | [new Ydb.Sdk.Auth.MetadataProvider()](https://github.com/ydb-platform/ydb-dotnet-yc/blob/main/src/Ydb.Sdk.Yc.Auth/src/MetadataProvider.cs)
+  Service Account Key | [new Ydb.Sdk.Auth.ServiceAccountProvider(saKeyFile);](https://github.com/ydb-platform/ydb-dotnet-yc/blob/main/src/Ydb.Sdk.Yc.Auth/src/ServiceAccountProvider.cs)
+  OAuth 2.0 token exchange | Не поддерживается
+  Определяется по переменным окружения | Не поддерживается
 
 
 - JavaScript
@@ -134,30 +134,30 @@
 
 Поля, не описанные в этой таблице, игнорируются.
 
-| Поле | Тип | Описание | Значение по умолчанию/опциональность |
-|:----:|:---:|:--------:|:------------------------------------:|
-|`grant-type`|string|Grant type|`urn:ietf:params:oauth:grant-type:token-exchange`|
-|`res`|string \| list of strings|Resource|опциональное|
-|`aud`|string \| list of strings|Опция audience для [запроса обмена токена](https://www.rfc-editor.org/rfc/rfc8693)|опциональное|
-|`scope`|string \| list of strings|Scope|опциональное|
-|`requested-token-type`|string|Тип получаемого токена|`urn:ietf:params:oauth:token-type:access_token`|
-|`subject-credentials`|creds_json|Subject credentials|опциональное|
-|`actor-credentials`|creds_json|Actor credentials|опциональное|
-|`token-endpoint`|string|Token endpoint. В случае с {{ ydb-short-name }} CLI перезаписывается опцией `--iam-endpoint`.|опциональное|
-|**Описание полей `creds_json` (JWT)**|||||
-|`type`|string|Тип источника токена. Нужно задать константу `JWT`||
-|`alg`|string|Алгоритм подписи JWT. Поддерживаются следующие алгоритмы: ES256, ES384, ES512, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512||
-|`private-key`|string|(Приватный) ключ в формате PEM (для алгоритмов `ES*`, `PS*`, `RS*`) или Base64 (для алгоритмов `HS*`) для подписи||
-|`kid`|string|Стандартное поле JWT `kid` (key id)|опциональное|
-|`iss`|string|Стандартное поле JWT `iss` (issuer)|опциональное|
-|`sub`|string|Стандартное поле JWT `sub` (subject)|опциональное|
-|`aud`|string|Стандартное поле JWT `aud` (audience)|опциональное|
-|`jti`|string|Стандартное поле JWT `jti` (JWT id)|опциональное|
-|`ttl`|string|Время жизни JWT токена|`1h`|
-|**Описание полей `creds_json` (FIXED)**|||||
-|`type`|string|Тип источника токена. Нужно задать константу `FIXED`||
-|`token`|string|Значение токена||
-|`token-type`|string|Значение типа токена. Это значение попадёт в параметр `subject_token_type/actor_token_type` в [запросе обмена токена](https://www.rfc-editor.org/rfc/rfc8693)||
+Поле | Тип | Описание | Значение по умолчанию/опциональность
+:----:|:---:|:--------:|:------------------------------------:
+`grant-type`|string|Grant type|`urn:ietf:params:oauth:grant-type:token-exchange`
+`res`|string \| list of strings|Resource|опциональное
+`aud`|string \| list of strings|Опция audience для [запроса обмена токена](https://www.rfc-editor.org/rfc/rfc8693)|опциональное
+`scope`|string \| list of strings|Scope|опциональное
+`requested-token-type`|string|Тип получаемого токена|`urn:ietf:params:oauth:token-type:access_token`
+`subject-credentials`|creds_json|Subject credentials|опциональное
+`actor-credentials`|creds_json|Actor credentials|опциональное
+`token-endpoint`|string|Token endpoint. В случае с {{ ydb-short-name }} CLI перезаписывается опцией `--iam-endpoint`.|опциональное
+**Описание полей `creds_json` (JWT)** | — | — | —
+`type`|string|Тип источника токена. Нужно задать константу `JWT`|—
+`alg`|string|Алгоритм подписи JWT. Поддерживаются следующие алгоритмы: ES256, ES384, ES512, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512|—
+`private-key`|string|(Приватный) ключ в формате PEM (для алгоритмов `ES*`, `PS*`, `RS*`) или Base64 (для алгоритмов `HS*`) для подписи|—
+`kid`|string|Стандартное поле JWT `kid` (key id)|опциональное
+`iss`|string|Стандартное поле JWT `iss` (issuer)|опциональное
+`sub`|string|Стандартное поле JWT `sub` (subject)|опциональное
+`aud`|string|Стандартное поле JWT `aud` (audience)|опциональное
+`jti`|string|Стандартное поле JWT `jti` (JWT id)|опциональное
+`ttl`|string|Время жизни JWT токена|`1h`
+**Описание полей `creds_json` (FIXED)** | — | — | —
+`type`|string|Тип источника токена. Нужно задать константу `FIXED`|—
+`token`|string|Значение токена|—
+`token-type`|string|Значение типа токена. Это значение попадёт в параметр `subject_token_type/actor_token_type` в [запросе обмена токена](https://www.rfc-editor.org/rfc/rfc8693)|—
 
 ### Пример
 

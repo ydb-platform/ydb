@@ -170,7 +170,6 @@ int TAsyncSemaphore::GetWaiterCount() const
     return std::ssize(Waiters_);
 }
 
-
 TFuture<void> TAsyncSemaphore::GetReadyEvent()
 {
     auto guard = WriterGuard(SpinLock_);

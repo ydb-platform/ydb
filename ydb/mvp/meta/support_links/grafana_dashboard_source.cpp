@@ -46,6 +46,9 @@ void ValidateGrafanaDashboardSourceConfig(const TSupportLinkEntryConfig& config,
     if (config.GetUrl().empty()) {
         ythrow yexception() << "url is required for source=" << config.GetSource();
     }
+    if (config.GetUrl().Contains('{') || config.GetUrl().Contains('}')) {
+        ythrow yexception() << "url template placeholders are not supported for source=" << config.GetSource();
+    }
     if (!IsAbsoluteUrl(config.GetUrl()) && metaSettings.SupportLinks.GrafanaEndpoint.empty()) {
         ythrow yexception() << "grafana.endpoint is required for relative url";
     }

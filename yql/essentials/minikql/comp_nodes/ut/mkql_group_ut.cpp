@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -20,7 +19,7 @@ TRuntimeNode MakeStream(TSetup<UseLLVM>& setup, ui64 count = 9U) {
 
     callableBuilder.Add(NTest::ConvertValueToLiteralNode(pgmBuilder, count));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 template <bool UseLLVM>
@@ -244,5 +243,4 @@ Y_UNIT_TEST_LLVM(TestGroupingWithHandler) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -3,39 +3,38 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsOptional>
 class TFromYsonSimpleTypeWrapper: public TMutableComputationNode<TFromYsonSimpleTypeWrapper<IsOptional>> {
-    typedef TMutableComputationNode<TFromYsonSimpleTypeWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TFromYsonSimpleTypeWrapper<IsOptional>>;
 
 public:
     TFromYsonSimpleTypeWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType)
         : TBaseComputation(mutables)
-        , Data(data)
-        , SchemeType(NUdf::GetDataSlot(schemeType))
+        , Data_(data)
+        , SchemeType_(NUdf::GetDataSlot(schemeType))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& data = Data->GetValue(ctx);
+        const auto& data = Data_->GetValue(ctx);
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
         }
 
-        return SimpleValueFromYson(SchemeType, data.AsStringRef());
+        return SimpleValueFromYson(SchemeType_, data.AsStringRef());
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Data);
+        this->DependsOn(Data_);
     }
 
-    IComputationNode* const Data;
-    const NUdf::EDataSlot SchemeType;
+    IComputationNode* const Data_;
+    const NUdf::EDataSlot SchemeType_;
 };
 
 } // namespace
@@ -60,5 +59,4 @@ IComputationNode* WrapFromYsonSimpleType(TCallable& callable, const TComputation
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

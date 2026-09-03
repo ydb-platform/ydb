@@ -121,8 +121,16 @@ TExprNode::TPtr BuildEmptyTablesRead(TPositionHandle pos, const TExprNode& userS
 TExprNode::TPtr GetFlowSettings(TPositionHandle pos, const TYtState& state, TExprContext& ctx, TExprNode::TPtr settings = {});
 TVector<TStringBuf> GetKeyFilterColumns(const NNodes::TYtSection& section, EYtSettingTypes kind);
 bool HasNonEmptyKeyFilter(const NNodes::TYtSection& section);
+NNodes::TYtPath RemoveYtQLFilters(NNodes::TYtPath path, TExprContext& ctx);
+NNodes::TYtSection RemoveYtQLFilters(NNodes::TYtSection section, TExprContext& ctx);
+NNodes::TYtSectionList RemoveYtQLFilters(NNodes::TYtSectionList sections, TExprContext& ctx);
 
 NNodes::TYtOutputOpBase GetOutputOp(NNodes::TYtOutput output, bool takeFirstInHybrid = false);
+
+// Column names with the SystemMemberPrefix are reserved for YQL internals (auxiliary sort columns,
+// system columns), so user data must neither expose nor accept them. Returns the first such column of
+// rowType, or Nothing() if there are none or the ban is not yet active for the current language version.
+TMaybe<TStringBuf> FindReservedColumnName(const TTypeAnnotationNode& rowType, const TYtState& state);
 
 inline bool IsUnorderedOutput(NNodes::TYtOutput out) {
     return out.Mode() && FromString<EYtSettingType>(out.Mode().Cast().Value()) == EYtSettingType::Unordered;
@@ -163,5 +171,9 @@ TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TS
 bool CanReplaceParentOutputHash(const TExprNode& node);
 
 ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config);
+
+// Reports strict (non optional) Yson columns, which cannot be written with native YT types.
+// rowType is expected to have at least one such column
+void ReportNonWritableBareYsonError(const TPosition& pos, const TStructExprType& rowType, TExprContext& ctx);
 
 };

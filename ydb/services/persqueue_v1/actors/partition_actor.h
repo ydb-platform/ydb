@@ -85,6 +85,8 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
     void Die(const NActors::TActorContext& ctx) override;
     bool OnUnhandledException(const std::exception& exc) override;
+    void CloseSessionAndDie(const TString& reason, PersQueue::ErrorCode::ErrorCode code,
+                            const NActors::TActorContext& ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_PARTITION; }
 private:

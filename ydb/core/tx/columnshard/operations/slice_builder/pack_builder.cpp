@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/core/tx/columnshard/tracing/write_orbit.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
@@ -45,14 +46,19 @@ private:
     std::vector<TInsertPortion> Portions;
     std::vector<NColumnShard::TWriteResult> WriteResults;
     TActorId DstActor;
+    ui64 BlobBytes = 0;
+    TMonotonic BsWriteStart;
 
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         std::vector<NColumnShard::TInsertedPortion> portions;
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion());
         }
-        if (putResult->GetPutStatus() != NKikimrProto::OK) {
-            for (auto&& i : WriteResults) {
+        const bool success = putResult->GetPutStatus() == NKikimrProto::OK;
+        const TDuration bsDuration = TMonotonic::Now() - BsWriteStart;
+        for (auto&& i : WriteResults) {
+            NColumnShard::TrackWriteToBlobStorage(i.GetWriteMeta(), bsDuration, BlobBytes, success);
+            if (!success) {
                 i.SetErrorMessage("cannot put blobs: " + ::ToString(putResult->GetPutStatus()), true);
             }
         }
@@ -63,6 +69,10 @@ private:
     }
 
     virtual void DoOnStartSending() override {
+        BsWriteStart = TMonotonic::Now();
+        for (auto&& i : WriteResults) {
+            NColumnShard::TrackWriteToBlobStorageStart(i.GetWriteMeta(), BlobBytes);
+        }
     }
 
 public:
@@ -75,6 +85,7 @@ public:
     {
         for (auto&& p : Portions) {
             for (auto&& b : p.MutablePortion().MutableBlobs()) {
+                BlobBytes += b.GetResultBlob().size();
                 auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
                 b.RegisterBlobId(p.MutablePortion(), task.GetBlobId());
             }
@@ -86,6 +97,7 @@ class TSliceToMerge {
 private:
     YDB_READONLY_DEF(std::vector<NArrow::TContainerWithIndexes<arrow::RecordBatch>>, Batches);
     std::vector<ui64> SequentialWriteId;
+    std::vector<std::shared_ptr<NEvWrite::TWriteMeta>> WriteMetas;
     const TInternalPathId PathId;
     const NEvWrite::EModificationType ModificationType;
 
@@ -102,6 +114,7 @@ public:
         }
         Batches.emplace_back(rb);
         SequentialWriteId.emplace_back(data->GetWriteMeta().GetWriteId());
+        WriteMetas.emplace_back(data->GetWriteMetaPtr());
     }
 
     [[nodiscard]] TConclusionStatus Finalize(
@@ -110,8 +123,13 @@ public:
             return TConclusionStatus::Success();
         }
         if (Batches.size() == 1) {
+            ISnapshotSchema::TWriteBlobPrepareStats prepareStats;
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId,
-                Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
+                Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters(), &prepareStats);
+            for (auto&& meta : WriteMetas) {
+                NColumnShard::TrackWritePrepareBlobs(
+                    *meta, prepareStats.DataDuration, prepareStats.DataBytes, prepareStats.IndexDuration, prepareStats.IndexBytes);
+            }
             if (portionConclusion.IsFail()) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                     {"event", "cannot prepare for write"},
@@ -179,8 +197,13 @@ public:
             }
             NArrow::NMerger::TRecordBatchBuilder rbBuilder(dataSchema->fields(), recordsCountSum);
             stream.DrainAll(rbBuilder);
+            ISnapshotSchema::TWriteBlobPrepareStats prepareStats;
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, rbBuilder.Finalize(),
-                ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
+                ModificationType, context.GetStoragesManager(), context.GetSplitterCounters(), &prepareStats);
+            for (auto&& meta : WriteMetas) {
+                NColumnShard::TrackWritePrepareBlobs(
+                    *meta, prepareStats.DataDuration, prepareStats.DataBytes, prepareStats.IndexDuration, prepareStats.IndexBytes);
+            }
             if (portionConclusion.IsFail()) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                     {"event", "cannot prepare for write"},
@@ -209,6 +232,7 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
         const auto& originalBatch = unit.GetBatch();
         if (originalBatch->num_rows() == 0) {
             unit.GetData()->GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::PackSlicesReady);
+            NColumnShard::TrackWritePrepareBlobs(unit.GetData()->GetWriteMeta(), TDuration::Zero(), 0, TDuration::Zero(), 0);
             writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), nullptr, true, 0);
             continue;
         }

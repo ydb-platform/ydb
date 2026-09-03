@@ -10,7 +10,7 @@ from ydb.tests.library.compatibility.fixtures import inter_stable_binary_path, i
 from ydb.tests.library.compatibility.fixtures import current_binary_path, current_name
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import retry_assertions
-from ydb.core.protos import blobstorage_config_pb2
+from ydb.core.protos import blobstorage_base3_pb2
 from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
@@ -105,7 +105,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
             for pdisk in self.pdisk_list():
                 assert pdisk.Path == CONST_PDISK_PATH
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
-                assert pdisk.DriveStatus == blobstorage_config_pb2.EDriveStatus.ACTIVE
+                assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
                 if self.versions[0] < (25, 3):
                     assert not pdisk.PDiskMetrics.HasField('SlotCount')
@@ -141,7 +141,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
         def check_pdisks():
             for pdisk in self.pdisk_list():
                 assert pdisk.Path == CONST_PDISK_PATH
-                assert pdisk.DriveStatus == blobstorage_config_pb2.EDriveStatus.ACTIVE
+                assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.ExpectedSlotCount == CONST_CUSTOM_SLOT_COUNT
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_CUSTOM_SLOT_COUNT
                 assert pdisk.PDiskConfig.SlotSizeInUnits == 2
@@ -166,7 +166,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
         def check_pdisks():
             for pdisk in self.pdisk_list():
                 assert pdisk.Path == CONST_PDISK_PATH
-                assert pdisk.DriveStatus == blobstorage_config_pb2.EDriveStatus.ACTIVE
+                assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.ExpectedSlotCount == CONST_CUSTOM_SLOT_COUNT
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_CUSTOM_SLOT_COUNT
                 assert pdisk.PDiskConfig.SlotSizeInUnits == 2
@@ -195,7 +195,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
         def check_pdisks():
             for pdisk in self.pdisk_list():
                 assert pdisk.Path == CONST_PDISK_PATH
-                assert pdisk.DriveStatus == blobstorage_config_pb2.EDriveStatus.ACTIVE
+                assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
@@ -237,7 +237,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
         def check_pdisks():
             for pdisk in self.pdisk_list():
                 assert pdisk.Path == CONST_PDISK_PATH
-                assert pdisk.DriveStatus == blobstorage_config_pb2.EDriveStatus.ACTIVE
+                assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
@@ -261,7 +261,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
         def check_pdisks():
             for pdisk in self.pdisk_list():
                 assert pdisk.Path == CONST_PDISK_PATH
-                assert pdisk.DriveStatus == blobstorage_config_pb2.EDriveStatus.ACTIVE
+                assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB

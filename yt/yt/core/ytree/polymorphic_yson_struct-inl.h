@@ -17,7 +17,7 @@ namespace NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TEnum, std::same_as<TEnum>... TArgs>
-consteval bool AllDifferentValues(TArgs... args)
+consteval bool AreAllValuesDifferent(TArgs... args)
 {
     TEnumIndexedArray<TEnum, bool> array;
     ((array[args] = true), ...);
@@ -236,7 +236,7 @@ void TPolymorphicYsonStruct<TMapping>::MergeWith(const TPolymorphicYsonStruct& o
 
     THROW_ERROR_EXCEPTION_UNLESS(
         GetType() == other.GetType(),
-        "Can't merge polymorphic yson structs with different types stored (ThisType: %v, OtherType: %v)",
+        "Cannot merge polymorphic YSON structs with different stored types: %Qlv vs %Qlv",
         GetType(),
         other.GetType());
 
@@ -264,7 +264,8 @@ template <class T>
     requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
 void TraverseYsonStruct(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path)
 {
-    static constexpr auto enumValues = TEnumTraits<typename T::TKey>::GetDomainValues();
+    static constexpr auto enumValues =
+        TEnumTraits<typename T::TKey>::template GetDomainValues</*AllowAmbiguousValues*/ true>();
     [&]<auto... Is> (std::index_sequence<Is...>) {
         (TraverseYsonStruct<typename T::template TEnumToDerived<enumValues[Is]>>(visitor, path + "/" + FormatEnum(enumValues[Is])), ...);
     } (std::make_index_sequence<std::size(enumValues)>());

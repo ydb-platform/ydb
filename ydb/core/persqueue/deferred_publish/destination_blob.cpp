@@ -1,4 +1,5 @@
 #include "destination_blob.h"
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NDeferredPublish {
 
@@ -9,7 +10,7 @@ TString SerializeDestinationBlob(const NKikimrPQ::TDeferredPublishDestinationBlo
 }
 
 bool ParseDestinationBlob(TStringBuf bytes, NKikimrPQ::TDeferredPublishDestinationBlob* blob) {
-    Y_ABORT_UNLESS(blob != nullptr);
+    AFL_ENSURE(blob != nullptr)("reason", "destination blob is null");
     return blob->ParseFromArray(bytes.data(), bytes.size());
 }
 
@@ -37,7 +38,7 @@ void AddOrUpdateTopicPartition(
     ui32 partitionId,
     ui64 tabletId)
 {
-    Y_ABORT_UNLESS(blob != nullptr);
+    AFL_ENSURE(blob != nullptr)("reason", "destination blob is null");
 
     for (auto& partition : *blob->MutablePartitions()) {
         if (partition.GetPartitionId() == partitionId) {

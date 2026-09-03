@@ -59,6 +59,8 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
 
     VhostServer = NVhost::CreateServer(
         Logging,
+        Timer,
+        Scheduler,
         VHostStats,
         NVhost::CreateVhostQueueFactory(),
         CreateDefaultDeviceHandlerFactory(),

@@ -30,6 +30,36 @@ Y_UNIT_TEST_SUITE(THostMaskTest)
         UNIT_ASSERT_VALUES_EQUAL(2u, mask.Count());
     }
 
+    Y_UNIT_TEST(ShouldUpdate)
+    {
+        THostMask mask;
+
+        // Update with true sets the bit.
+        mask.Update(2, true);
+        UNIT_ASSERT(mask.Get(2));
+        UNIT_ASSERT_VALUES_EQUAL(1u, mask.Count());
+
+        // Update with true again is idempotent.
+        mask.Update(2, true);
+        UNIT_ASSERT(mask.Get(2));
+        UNIT_ASSERT_VALUES_EQUAL(1u, mask.Count());
+
+        // Update with false resets the bit.
+        mask.Update(2, false);
+        UNIT_ASSERT(!mask.Get(2));
+        UNIT_ASSERT(mask.Empty());
+
+        // Update with false on an already unset bit is a no-op.
+        mask.Update(5, false);
+        UNIT_ASSERT(!mask.Get(5));
+        UNIT_ASSERT(mask.Empty());
+
+        // Update the highest valid host index.
+        mask.Update(31, true);
+        UNIT_ASSERT(mask.Get(31));
+        UNIT_ASSERT_VALUES_EQUAL(1u, mask.Count());
+    }
+
     Y_UNIT_TEST(ShouldMakeAll)
     {
         UNIT_ASSERT(THostMask::MakeAll(0).Empty());

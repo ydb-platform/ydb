@@ -111,7 +111,7 @@ IPollerPtr TDispatcher::TImpl::GetOrCreatePoller(
 
 void TDispatcher::TImpl::DisableNetworking()
 {
-    YT_LOG_INFO("Networking disabled");
+    YT_TLOG_INFO("Networking disabled");
 
     NetworkingDisabled_.store(true);
 }
@@ -363,8 +363,8 @@ void TDispatcher::TImpl::RegisterLocalMessageHandler(int port, const ILocalMessa
         }
     }
 
-    YT_LOG_INFO("Local message handler registered (Port: %v)",
-        port);
+    YT_TLOG_INFO("Local message handler registered")
+        .With("Port", port);
 }
 
 void TDispatcher::TImpl::UnregisterLocalMessageHandler(int port)
@@ -374,8 +374,8 @@ void TDispatcher::TImpl::UnregisterLocalMessageHandler(int port)
         LocalMessageHandlers_.erase(port);
     }
 
-    YT_LOG_INFO("Local message handler unregistered (Port: %v)",
-        port);
+    YT_TLOG_INFO("Local message handler unregistered")
+        .With("Port", port);
 }
 
 ILocalMessageHandlerPtr TDispatcher::TImpl::FindLocalBypassMessageHandler(const TNetworkAddress& address)

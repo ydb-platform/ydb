@@ -25,11 +25,13 @@ END()
 RECURSE(
     cluster_tracker
     codecs
+    dataplane
     counters
     describer
     fetcher
     list_topics
     mlp
+    nameresolver
     partition_index_generator
     partition_key_range
     schema

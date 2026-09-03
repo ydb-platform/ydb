@@ -20,7 +20,7 @@ int GetThreadCount()
                 threads = std::stoi(threadsStr.data());
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION(EErrorCode::FailedToParseProcFS, "Failed to parse 'Threads' field in /proc/self/status")
-                    << ex;
+                    .With(ex);
             }
         }
     }

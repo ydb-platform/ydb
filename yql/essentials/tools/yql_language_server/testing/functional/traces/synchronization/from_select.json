@@ -1,0 +1,194 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": ""
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 5
+      },
+      "contentChanges": [
+        {
+          "text": "FROM"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 6
+      },
+      "contentChanges": [
+        {
+          "text": "FROM "
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 7
+      },
+      "contentChanges": [
+        {
+          "text": "FROM \n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 8
+      },
+      "contentChanges": [
+        {
+          "text": "FROM I\n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 9
+      },
+      "contentChanges": [
+        {
+          "text": "FROM In\n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 12
+      },
+      "contentChanges": [
+        {
+          "text": "FROM Input\n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 20
+      },
+      "contentChanges": [
+        {
+          "text": "FROM Input SELECT \n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 22
+      },
+      "contentChanges": [
+        {
+          "text": "FROM Input SELECT id\n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 23
+      },
+      "contentChanges": [
+        {
+          "text": "FROM Input SELECT id;\n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 24
+      },
+      "contentChanges": [
+        {
+          "text": "FROM Input \n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 28
+      },
+      "contentChanges": [
+        {
+          "text": "FROM In\n"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didChange",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "version": 29
+      },
+      "contentChanges": [
+        {
+          "text": "\n"
+        }
+      ]
+    }
+  }
+]

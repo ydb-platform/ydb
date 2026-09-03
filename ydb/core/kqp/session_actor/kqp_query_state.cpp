@@ -21,7 +21,8 @@ TKqpQueryState::TQueryTxId& TKqpQueryState::TQueryTxId::operator=(const TQueryTx
 }
 
 void TKqpQueryState::TQueryTxId::SetValue(const TTxId& id) {
-    YQL_ENSURE(!Id);
+    YQL_ENSURE(!Id, "user tx id is already set to '" << Id->HumanStr
+        << "', attempt to overwrite it with '" << id.HumanStr << "'");
     Id = id.Id;
 }
 
@@ -30,7 +31,7 @@ TTxId TKqpQueryState::TQueryTxId::GetValue() {
 }
 
 void TKqpQueryState::TQueryTxId::Reset() {
-    Id = TTxId();
+    Id.Clear();
 }
 
 bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response) {
@@ -435,6 +436,11 @@ bool TKqpQueryState::ProcessingLastStatementPart() {
 }
 
 bool TKqpQueryState::PrepareNextStatementPart() {
+    // Despite its name, this is also called once after a non-split query finishes,
+    // before PreparedQuery and CompileResult are cleared and the response is logged.
+    if (QueryTextForLogging.empty() && PreparedQuery && (!RequestEv || RequestEv->GetQuery().empty())) {
+        QueryTextForLogging = PreparedQuery->GetText();
+    }
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};

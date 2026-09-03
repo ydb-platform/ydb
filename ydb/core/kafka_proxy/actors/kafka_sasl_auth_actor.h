@@ -17,7 +17,8 @@ namespace NKafka {
 
 using namespace NKikimr;
 
-class TKafkaSaslAuthActor: public NActors::TActorBootstrapped<TKafkaSaslAuthActor> {
+class TKafkaSaslAuthActor: public NActors::TActorBootstrapped<TKafkaSaslAuthActor>
+                         , public TKafkaExceptionHandler<TKafkaSaslAuthActor> {
 
 struct TAuthData {
     TString UserName;
@@ -31,6 +32,10 @@ public:
     }
 
     void Bootstrap();
+
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
 
 private:
     STATEFN(StateWork) {

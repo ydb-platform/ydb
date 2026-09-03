@@ -281,17 +281,12 @@ namespace NYql::NDq {
         }
 
         void Handle(TEvError::TPtr ev) {
-            const auto error = ev->Get()->Error;
-            auto issues = NConnector::ErrorToIssues(error);
-            auto fatalCode = NDqProto::StatusIds::INTERNAL_ERROR;
-
-            try {
-                fatalCode = NConnector::ErrorToDqStatus(error);
-            } catch (const std::exception& e) {
-                issues.AddIssue(TStringBuilder() << "Failed to convert YDB status code: " << e.what());
-            }
-
-            Send(ParentId, new IDqComputeActorAsyncInput::TEvAsyncInputError(-1, std::move(issues), fatalCode));
+            const auto& error = ev->Get()->Error;
+            Send(ParentId,
+                 new IDqComputeActorAsyncInput::TEvAsyncInputError(
+                     /*inputId=*/-1, /* will be filled by LookupTransform actor */
+                     NConnector::ErrorToIssues(error),
+                     NConnector::ErrorToDqStatus(error)));
         }
 
         void Handle(TEvLookupRetry::TPtr ev) {

@@ -307,8 +307,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 16);
     }
 
-    Y_UNIT_TEST(VectorIndexLookup) {
-        TKikimrRunner kikimr(GetAppConfig(true, false));
+    Y_UNIT_TEST_TWIN(VectorIndexLookup, EnableVectorSearchActor) {
+        auto appConfig = GetAppConfig(true, false);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -525,8 +527,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
-    Y_UNIT_TEST(VectorIndexAutoSearchTopSize) {
-        TKikimrRunner kikimr(GetAppConfig(true, false));
+    Y_UNIT_TEST_TWIN(VectorIndexAutoSearchTopSize, EnableVectorSearchActor) {
+        auto appConfig = GetAppConfig(true, false);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1669,14 +1673,17 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
 
+            // Other INSERT may ack before the failure.
+            const size_t writes = FromProto(stats).Writes;
+            UNIT_ASSERT_C(writes <= 1, writes);
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1698,14 +1705,16 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
 
+            const size_t writes = FromProto(stats).Writes;
+            UNIT_ASSERT_C(writes <= 1, writes);
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1969,19 +1978,18 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
 
+            // Other INSERT may ack before the failure.
+            const size_t writes = FromProto(stats).Writes;
+            UNIT_ASSERT_C(writes <= 1, writes);
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -2003,21 +2011,17 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-
+            const size_t writes = FromProto(stats).Writes;
+            UNIT_ASSERT_C(writes <= 1, writes);
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });

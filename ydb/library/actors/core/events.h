@@ -111,7 +111,7 @@ namespace NActors {
                 CoroTimeout,
                 InvokeQuery,
                 Wilson,
-                Preemption,
+                MailboxProcessingFinished,
                 ResumeRunnable,
                 CheckActorLiveness,
                 ActorAlive,
@@ -139,12 +139,25 @@ namespace NActors {
             const ui64 Tag = 0;
         };
 
-        struct TEvPreemption: public TEventLocal<TEvPreemption, TSystem::Preemption> {
-            bool ByEventCount = false;
-            bool ByCycles = false;
-            bool ByTailSend = false;
-            ui32 EventCount = 0;
-            ui64 Cycles = 0;
+        struct TEvMailboxProcessingFinished
+            : public TEventLocal<TEvMailboxProcessingFinished, TSystem::MailboxProcessingFinished> {
+            enum class EReason : ui8 {
+                QueueEmpty,
+                EventCountLimitReached,
+                TimeLimitReached,
+                SoftDeadlineReached,
+                TailSend,
+            };
+
+            const EReason Reason;
+            const ui32 ExecutedEvents;
+            const ui64 ElapsedCycles;
+
+            TEvMailboxProcessingFinished(EReason reason, ui32 executedEvents, ui64 elapsedCycles)
+                : Reason(reason)
+                , ExecutedEvents(executedEvents)
+                , ElapsedCycles(elapsedCycles)
+            {}
         };
 
         struct TEvSubscribe: public TEventLocal<TEvSubscribe, TSystem::Subscribe> {

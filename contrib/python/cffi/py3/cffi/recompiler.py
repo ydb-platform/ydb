@@ -7,9 +7,11 @@ VERSION_BASE = 0x2601
 VERSION_EMBEDDED = 0x2701
 VERSION_CHAR16CHAR32 = 0x2801
 
+FREE_THREADED_BUILD = sysconfig.get_config_var("Py_GIL_DISABLED")
 USE_LIMITED_API = ((sys.platform != 'win32' or sys.version_info < (3, 0) or
                    sys.version_info >= (3, 5)) and
-                   not sysconfig.get_config_var("Py_GIL_DISABLED"))  # free-threaded doesn't yet support limited API
+                   # free-threaded build doesn't support the stable ABI until Python 3.15
+                   (not FREE_THREADED_BUILD or sys.version_info >= (3, 15)))
 
 class GlobalExpr:
     def __init__(self, name, address, type_op, size=0, check_value=0):
@@ -93,9 +95,18 @@ class EnumExpr:
         self.allenums = allenums
 
     def as_c_expr(self):
-        return ('  { "%s", %d, _cffi_prim_int(%s, %s),\n'
-                '    "%s" },' % (self.name, self.type_index,
-                                 self.size, self.signed, self.allenums))
+        lines = ['  { "%s", %d, _cffi_prim_int(%s, %s),' % (self.name, self.type_index,
+                                                            self.size, self.signed,)]
+        pending = 0
+        while len(self.allenums) > pending + 110:
+            j = self.allenums.find(',', pending + 100)
+            if j < 0:
+                break
+            j += 1
+            lines.append('    "%s"' % (self.allenums[pending:j],))
+            pending = j
+        lines.append('    "%s" },' % (self.allenums[pending:],))
+        return '\n'.join(lines)
 
     def as_python_expr(self):
         prim_index = {
@@ -315,11 +326,8 @@ class Recompiler:
             prnt('#ifdef PYPY_VERSION')
             prnt('# define _CFFI_PYTHON_STARTUP_FUNC  _cffi_pypyinit_%s' % (
                 base_module_name,))
-            prnt('#elif PY_MAJOR_VERSION >= 3')
-            prnt('# define _CFFI_PYTHON_STARTUP_FUNC  PyInit_%s' % (
-                base_module_name,))
             prnt('#else')
-            prnt('# define _CFFI_PYTHON_STARTUP_FUNC  init%s' % (
+            prnt('# define _CFFI_PYTHON_STARTUP_FUNC  PyInit_%s' % (
                 base_module_name,))
             prnt('#endif')
             lines = self._rel_readlines('_embedding.h')
@@ -427,33 +435,20 @@ class Recompiler:
             prnt('    }')
         prnt('    p[0] = (const void *)0x%x;' % self._version)
         prnt('    p[1] = &_cffi_type_context;')
-        prnt('#if PY_MAJOR_VERSION >= 3')
         prnt('    return NULL;')
-        prnt('#endif')
         prnt('}')
         # on Windows, distutils insists on putting init_cffi_xyz in
         # 'export_symbols', so instead of fighting it, just give up and
         # give it one
         prnt('#  ifdef _MSC_VER')
         prnt('     PyMODINIT_FUNC')
-        prnt('#  if PY_MAJOR_VERSION >= 3')
         prnt('     PyInit_%s(void) { return NULL; }' % (base_module_name,))
-        prnt('#  else')
-        prnt('     init%s(void) { }' % (base_module_name,))
         prnt('#  endif')
-        prnt('#  endif')
-        prnt('#elif PY_MAJOR_VERSION >= 3')
+        prnt('#else')
         prnt('PyMODINIT_FUNC')
         prnt('PyInit_%s(void)' % (base_module_name,))
         prnt('{')
         prnt('  return _cffi_init("%s", 0x%x, &_cffi_type_context);' % (
-            self.module_name, self._version))
-        prnt('}')
-        prnt('#else')
-        prnt('PyMODINIT_FUNC')
-        prnt('init%s(void)' % (base_module_name,))
-        prnt('{')
-        prnt('  _cffi_init("%s", 0x%x, &_cffi_type_context);' % (
             self.module_name, self._version))
         prnt('}')
         prnt('#endif')
@@ -552,8 +547,7 @@ class Recompiler:
                                                     tovar, errcode)
             return
         #
-        elif (isinstance(tp, model.StructOrUnionOrEnum) or
-              isinstance(tp, model.BasePrimitiveType)):
+        elif (isinstance(tp, (model.StructOrUnionOrEnum, model.BasePrimitiveType))):
             # a struct (not a struct pointer) as a function argument;
             # or, a complex (the same code works)
             self._prnt('  if (_cffi_to_c((char *)&%s, _cffi_type(%d), %s) < 0)'
@@ -1313,10 +1307,6 @@ class Recompiler:
             s = s.encode('utf-8')       # -> bytes
         else:
             s.decode('utf-8')           # got bytes, check for valid utf-8
-        try:
-            s.decode('ascii')
-        except UnicodeDecodeError:
-            s = b'# -*- encoding: utf8 -*-\n' + s
         for line in s.splitlines(True):
             comment = line
             if type('//') is bytes:     # python2
@@ -1415,7 +1405,7 @@ else:
         def write(self, s):
             if isinstance(s, unicode):
                 s = s.encode('ascii')
-            super(NativeIO, self).write(s)
+            super().write(s)
 
 def _is_file_like(maybefile):
     # compare to xml.etree.ElementTree._get_writer
@@ -1437,11 +1427,11 @@ def _make_c_or_py_source(ffi, module_name, preamble, target_file, verbose):
     try:
         with open(target_file, 'r') as f1:
             if f1.read(len(output) + 1) != output:
-                raise IOError
+                raise OSError
         if verbose:
             print("(already up-to-date)")
         return False     # already up-to-date
-    except IOError:
+    except OSError:
         tmp_file = '%s.~%d' % (target_file, os.getpid())
         with open(tmp_file, 'w') as f1:
             f1.write(output)

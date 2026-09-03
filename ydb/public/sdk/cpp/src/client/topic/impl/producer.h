@@ -6,12 +6,18 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h>
 
 #include <library/cpp/threading/future/future.h>
+#include <library/cpp/yt/threading/event_count.h>
+#include <util/thread/lfqueue.h>
+#include <util/thread/factory.h>
 
 #include <atomic>
 #include <functional>
+#include <limits>
 #include <memory>
 
 namespace NYdb::inline Dev::NTopic {
+
+struct TProducerMessageInfoTestHelper;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer
@@ -19,6 +25,8 @@ namespace NYdb::inline Dev::NTopic {
 class TProducer : public IProducer,
                   public TContinuationTokenIssuer,
                   public std::enable_shared_from_this<TProducer> {
+    friend struct TProducerMessageInfoTestHelper;
+
 private:
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
     static constexpr TDuration DEFAULT_START_BLOCK_TIMEOUT = TDuration::MilliSeconds(1);
@@ -42,6 +50,10 @@ private:
     };
 
     struct TMessageInfo {
+        static constexpr std::uint32_t UNKNOWN_PARTITION_ID = std::numeric_limits<std::uint32_t>::max();
+
+        TMessageInfo() = default;
+        TMessageInfo(TWriteMessage&& message);
         TMessageInfo(const std::string& key, const std::string& choosePartitionKey, TWriteMessage&& message, std::uint32_t partition);
 
         std::string Key;
@@ -52,11 +64,29 @@ private:
         std::optional<TInstant> CreateTimestamp;
         TMessageMeta MessageMeta;
         std::optional<std::reference_wrapper<TTransactionBase>> Tx;
-        std::uint32_t Partition;
+        std::optional<TDeferredPublication> DeferredPublication;
+        bool HasKey = false;
+        std::uint32_t Partition = UNKNOWN_PARTITION_ID;
         bool Sent = false;
-        NThreading::TPromise<TFlushResult> FlushPromise;
+        std::vector<NThreading::TPromise<TFlushResult>> FlushPromises;
 
+        void AssignPartition(const std::string& key, const std::string& choosePartitionKey, std::uint32_t partition);
         TWriteMessage BuildMessage() const;
+    };
+
+    struct TClientRequest {
+        enum class EKind {
+            Message,
+            Flush,
+        };
+
+        TClientRequest() = default;
+        TClientRequest(TMessageInfo&& message);
+        TClientRequest(NThreading::TPromise<TFlushResult>&& flushPromise);
+
+        EKind Kind = EKind::Message;
+        TMessageInfo Message;
+        NThreading::TPromise<TFlushResult> FlushPromise;
     };
 
     struct TIdleSession;
@@ -156,11 +186,12 @@ private:
         void DoWork();
 
         void AddMessage(const std::string& key, const std::string& choosePartitionKey, TWriteMessage&& message, std::uint32_t partition);
+        void AddMessage(TMessageInfo&& message);
         void ScheduleResendMessages(std::uint32_t partition, std::uint64_t afterSeqNo);
         void RebuildPendingMessagesIndex(std::uint32_t partition);
         void HandleAck();
         void HandleContinuationToken(std::uint32_t partition, TContinuationToken&& continuationToken);
-        bool IsMemoryUsageOK() const;
+        void DropContinuationTokens(std::uint32_t partition);
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
@@ -192,8 +223,7 @@ private:
         std::unordered_map<std::uint32_t, std::list<MessageIter>> PendingMessagesIndex;
         std::unordered_map<std::uint32_t, std::list<MessageIter>> MessagesToResendIndex;
         std::unordered_map<std::uint32_t, std::deque<TContinuationToken>> ContinuationTokens;
-        
-        std::uint64_t MemoryUsage = 0;
+
         std::uint64_t CurrentSeqNo = 0;
         EState State = EState::Init;
 
@@ -265,13 +295,11 @@ private:
         NThreading::TPromise<void> WakeAndRotate();
         void UnsubscribeFromPartition(std::uint32_t partition);
         void SubscribeToPartition(std::uint32_t partition);
-        std::optional<NThreading::TPromise<void>> HandleNewMessage();
         void HandleAcksEvent(std::uint64_t partition, TWriteSessionEvent::TAcksEvent&& event);
         std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block, const std::vector<EEventType>& eventTypes = {});
         std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt, const std::vector<EEventType>& eventTypes = {});
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueBegin(std::uint32_t partition);
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(std::uint32_t partition);
-        std::optional<TContinuationToken> GetContinuationToken();
         std::optional<TSessionClosedEvent> GetSessionClosedEvent();
         bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
 
@@ -279,7 +307,6 @@ private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, std::uint32_t partition);
         void HandleReadyToAcceptEvent(std::uint32_t partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
         bool TransferEventsToOutputQueue();
-        void AddContinuationToken();
         bool AddSessionClosedIfNeeded();
         std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block, const std::vector<EEventType>& eventTypes = {});
         EEventType GetEventType(const TWriteSessionEvent::TEvent& event);
@@ -289,7 +316,6 @@ private:
         std::unordered_set<std::uint32_t> ReadyFutures;
         std::unordered_map<std::uint32_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
         std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
-        std::list<TContinuationToken> TokensQueue;
 
         using EventsIter = std::list<TWriteSessionEvent::TEvent>::iterator;
 
@@ -347,7 +373,6 @@ private:
         TMetricGauge MainWorkerTimeMs;
         TMetricGauge CycleTimeMs;
         TMetricGauge WriteLagMs;
-        TMetricGauge ContinuationTokensSent;
         TMetricGauge BufferFull;
         TMetricGauge IncomingMessages;
         TMetricGauge OutgoingMessages;
@@ -357,7 +382,6 @@ private:
         void AddMainWorkerTime(std::uint64_t ms);
         void AddCycleTime(std::uint64_t ms);
         void AddWriteLag(std::uint64_t lagMs);
-        void IncContinuationTokensSent();
         void IncBufferFull();
         void IncIncomingMessages();
         void IncOutgoingMessages();
@@ -366,7 +390,12 @@ private:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    void RequestMainWorkerRun(std::int64_t owner);
     void RunMainWorker(std::int64_t owner);
+    bool TryAcquireMainWorker();
+    void WakeMainWorkerThread();
+    void RunMainWorkerLoop();
+    void RunMainWorkerAcquired(std::int64_t owner);
 
     void NonBlockingClose();
 
@@ -388,7 +417,21 @@ private:
 
     void NextEpoch();
 
-    TWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message);
+    bool TryReserveMemory(std::uint64_t size);
+    void ReserveMemory(std::uint64_t size);
+    void ReleaseReservedMemory(std::uint64_t size);
+    std::optional<TWriteResult> ReserveMemoryForWrite(std::uint64_t size, bool checkMemory);
+    void ValidateSeqNoStrategy(bool hasSeqNo);
+    void DrainClientRequests();
+    void HandleClientMessage(TMessageInfo&& message);
+    void HandleClientFlush(NThreading::TPromise<TFlushResult> promise);
+
+    TWriteResult WriteInternal(TWriteMessage& message, bool checkMemory);
+    TWriteResult WriteToExplicitPartition(
+        TWriteMessage& message,
+        std::uint32_t partition,
+        std::uint64_t memoryUsage,
+        bool checkMemory);
 
     bool IsFederation(const std::string& endpoint);
 
@@ -442,7 +485,11 @@ private:
     std::map<std::string, std::uint32_t> PartitionsIndex;
 
     TProducerSettings Settings;
-    ESeqNoStrategy SeqNoStrategy = ESeqNoStrategy::NotInitialized;
+    std::atomic<ESeqNoStrategy> SeqNoStrategy = ESeqNoStrategy::NotInitialized;
+    std::atomic<std::uint64_t> ReservedMemory = 0;
+    TLockFreeQueue<TClientRequest> ClientRequests;
+    THolder<IThreadFactory::IThread> MainWorkerThread;
+    NYT::NThreading::TEventCount MainWorkerEvent;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
@@ -475,11 +522,11 @@ private:
     };
     std::atomic<std::uint8_t> MainWorkerState = Idle;
     // MainWorker has an owner, which can be:
-    // - user's thread, in this case the value of MainWorkerOwner is -1
-    // - subsession's thread, in this case the value of MainWorkerOwner is the subsession's partition ID
+    // - client-side wakeup, in this case the value of MainWorkerOwner is -1
+    // - subsession callback, in this case the value of MainWorkerOwner is the subsession's partition ID
     std::int64_t MainWorkerOwner = -1;
 
-    std::uint64_t LastWrittenSeqNo = 0;
+    std::atomic<std::uint64_t> LastWrittenSeqNo = 0;
     std::uint64_t MessagesWritten = 0;
 
     std::atomic<size_t> Epoch = 0;

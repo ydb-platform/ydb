@@ -18,8 +18,7 @@
 #include <ctime>
 #include <algorithm>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -31,13 +30,13 @@ TRuntimeNode MakeStream(TSetup<LLVM>& setup) {
                                      pgmBuilder.NewStreamType(
                                          NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"a", ui64>, NTest::TStructMember<"b", TStringBuf>>>(pgmBuilder)));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode StreamToString(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     return pgmBuilder.Condense(stream,
                                NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("|")),
-                               [&](TRuntimeNode, TRuntimeNode) { return NTest::ConvertValueToLiteralNode(pgmBuilder, false); },
+                               [&](TRuntimeNode, TRuntimeNode) { return NTest::ConvertValueToLiteralNode(pgmBuilder, /*simpleNode=*/false); },
                                [&](TRuntimeNode item, TRuntimeNode state) {
                 auto str = pgmBuilder.Concat(
                     pgmBuilder.Concat(
@@ -50,6 +49,8 @@ TRuntimeNode StreamToString(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
                 return pgmBuilder.Concat(pgmBuilder.Concat(state, str),
                     NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("|"))); });
 }
+
+thread_local size_t echoCounter;
 
 } // namespace
 
@@ -98,7 +99,7 @@ Y_UNIT_TEST_LLVM(TestFlowSortByLambdaComparator) {
         pgmBuilder.FromFlow(pgmBuilder.FlatMap(
             pgmBuilder.Condense1(pgmBuilder.ToFlow(stream, {}),
                                  [&](TRuntimeNode item) { return pgmBuilder.AsList(item); },
-                                 [&](TRuntimeNode, TRuntimeNode) { return NTest::ConvertValueToLiteralNode(pgmBuilder, false); },
+                                 [&](TRuntimeNode, TRuntimeNode) { return NTest::ConvertValueToLiteralNode(pgmBuilder, /*simpleNode=*/false); },
                                  [&](TRuntimeNode item, TRuntimeNode state) { return pgmBuilder.Append(state, item); }),
             [&](TRuntimeNode list) { return pgmBuilder.StableSort(list,
                                                                   [&](TRuntimeNode left, TRuntimeNode right) {
@@ -135,7 +136,7 @@ Y_UNIT_TEST_LLVM(TestListSort) {
 
     const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<double>(xxx.begin(), xxx.end()));
 
-    const auto pgmReturn = pgmBuilder.Sort(list, NTest::ConvertValueToLiteralNode(pgmBuilder, false),
+    const auto pgmReturn = pgmBuilder.Sort(list, NTest::ConvertValueToLiteralNode(pgmBuilder, /*simpleNode=*/false),
                                            std::bind(&TProgramBuilder::Abs, std::ref(pgmBuilder), std::placeholders::_1));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -486,8 +487,6 @@ Y_UNIT_TEST_LLVM(TestFlowTopSortWithoutKey) {
 } // Y_UNIT_TEST_SUITE(TMiniKQLSortTest)
 
 Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
-static thread_local size_t echoCounter;
-
 SIMPLE_UDF(TEchoU64, ui64(ui64)) {
     Y_UNUSED(valueBuilder);
     echoCounter++;
@@ -534,7 +533,7 @@ Y_UNIT_TEST(TestStreamTopSort) {
     const auto graph = setup.BuildGraph(pgmRoot);
     const auto& value = graph->GetValue();
 
-    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<>());
     test.resize(n);
 
     std::vector<ui64> res;
@@ -586,12 +585,12 @@ Y_UNIT_TEST(TestStreamTop) {
     // XXX: The order of the result being yielded by Top
     // computation node is not defined by design, hence
     // manually sort the result to match the canonical one.
-    const auto pgmSorted = pgmBuilder.Sort(pgmRoot, NTest::ConvertValueToLiteralNode(pgmBuilder, false),
+    const auto pgmSorted = pgmBuilder.Sort(pgmRoot, NTest::ConvertValueToLiteralNode(pgmBuilder, /*simpleNode=*/false),
                                            [&](TRuntimeNode item) { return item; });
     const auto graph = setup.BuildGraph(pgmSorted);
     const auto& value = graph->GetValue();
 
-    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<>());
     test.resize(n);
 
     std::vector<ui64> res;
@@ -643,7 +642,7 @@ Y_UNIT_TEST(TestFlowTopSort) {
     const auto graph = setup.BuildGraph(pgmRoot);
     const auto& value = graph->GetValue();
 
-    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<>());
     test.resize(n);
 
     std::vector<ui64> res;
@@ -695,12 +694,12 @@ Y_UNIT_TEST(TestFlowTop) {
     // XXX: The order of the result being yielded by Top
     // computation node is not defined by design, hence
     // manually sort the result to match the canonical one.
-    const auto pgmSorted = pgmBuilder.Sort(pgmRoot, NTest::ConvertValueToLiteralNode(pgmBuilder, false),
+    const auto pgmSorted = pgmBuilder.Sort(pgmRoot, NTest::ConvertValueToLiteralNode(pgmBuilder, /*simpleNode=*/false),
                                            [&](TRuntimeNode item) { return item; });
     const auto graph = setup.BuildGraph(pgmSorted);
     const auto& value = graph->GetValue();
 
-    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<>());
     test.resize(n);
 
     std::vector<ui64> res;
@@ -714,5 +713,4 @@ Y_UNIT_TEST(TestFlowTop) {
     UNIT_ASSERT_VALUES_EQUAL(echoCounter, total);
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest)
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -20,6 +20,7 @@ from botocore.exceptions import EventStreamError
 # byte length of the prelude (total_length + header_length + prelude_crc)
 _PRELUDE_LENGTH = 12
 _MAX_HEADERS_LENGTH = 128 * 1024  # 128 Kb
+_MAX_PAYLOAD_LENGTH = 24 * 1024 * 1024  # 24 Mb
 
 
 class ParserError(Exception):
@@ -45,14 +46,10 @@ class InvalidHeadersLength(ParserError):
 
 
 class InvalidPayloadLength(ParserError):
-    """Payload length is longer than the maximum.
-
-    DEPRECATED: This case is no longer validated client side. Payloads
-    of varying lengths are now supported by AWS services.
-    """
+    """Payload length is longer than the maximum."""
 
     def __init__(self, length):
-        message = f'Payload length of {length} exceeded the maximum of 24MB.'
+        message = f'Payload length of {length} exceeded the maximum of {_MAX_PAYLOAD_LENGTH}'
         super().__init__(message)
 
 
@@ -461,6 +458,9 @@ class EventStreamBuffer:
     def _validate_prelude(self, prelude):
         if prelude.headers_length > _MAX_HEADERS_LENGTH:
             raise InvalidHeadersLength(prelude.headers_length)
+
+        if prelude.payload_length > _MAX_PAYLOAD_LENGTH:
+            raise InvalidPayloadLength(prelude.payload_length)
 
     def _parse_prelude(self):
         prelude_bytes = self._data[:_PRELUDE_LENGTH]

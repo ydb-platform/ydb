@@ -66,9 +66,6 @@ bool TPushFilterIntoJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) 
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
 TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
-
     if (input->Kind != EOperator::Filter) {
         return input;
     }
@@ -92,6 +89,19 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
+    const bool usingBlockCrossJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin() && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+    if (join->JoinKind == "Cross" && usingBlockCrossJoin) {
+        auto conjuncts = filter->GetFilterExpression().SplitConjunct();
+        // If all not equal - we cannot rewrite cross to inner, just adding them as join filters.
+        const bool containsEquiJoinCondition = AnyOf(conjuncts, [](const TExpression& conjunct) {
+            return conjunct.MaybeEquiJoinCondition();
+        });
+        if (!containsEquiJoinCondition) {
+            join->JoinFilters.insert(join->JoinFilters.end(), conjuncts.begin(), conjuncts.end());
+            return join;
+        }
+    }
+
     auto output = input;
     auto leftIUs = join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = join->GetRightInput()->GetOutputIUs();
@@ -99,7 +109,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     // Break the filter into join conditions and other conjuncts
     // Join conditions can be pushed into the join operator and conjucts can either be pushed
     // or left on top of the join
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     // Check if we need a top level filter
     TVector<TExpression> topLevelPreds;

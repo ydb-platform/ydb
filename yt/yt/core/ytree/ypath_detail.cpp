@@ -1114,7 +1114,7 @@ bool TSupportsAttributes::GuardedGetBuiltinAttribute(TInternedAttributeKey key, 
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error getting builtin attribute %Qv",
             ToYPathLiteral(key.Unintern()))
-            << ex;
+            .With(ex);
     }
 }
 
@@ -1127,7 +1127,7 @@ bool TSupportsAttributes::GuardedSetBuiltinAttribute(TInternedAttributeKey key, 
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error setting builtin attribute %Qv",
             ToYPathLiteral(key.Unintern()))
-            << ex;
+            .With(ex);
     }
 }
 
@@ -1140,7 +1140,7 @@ bool TSupportsAttributes::GuardedRemoveBuiltinAttribute(TInternedAttributeKey ke
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error removing builtin attribute %Qv",
             ToYPathLiteral(key.Unintern()))
-            << ex;
+            .With(ex);
     }
 }
 

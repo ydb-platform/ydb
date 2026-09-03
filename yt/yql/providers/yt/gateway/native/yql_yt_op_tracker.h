@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yql/providers/yt/gateway/lib/op_tracker.h>
+
 #include <yql/essentials/core/yql_execution.h>
 
 #include <yt/cpp/mapreduce/interface/fwd.h>
@@ -20,18 +22,16 @@ namespace NYql {
 
 namespace NNative {
 
-class TOperationTracker: public TThrRefBase {
+class TOperationTracker: public IOperationTracker {
 public:
-    using TPtr = ::TIntrusivePtr<TOperationTracker>;
-
     TOperationTracker();
     ~TOperationTracker();
 
-    void Stop();
+    void Stop() override;
 
     NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
-        const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& writer, const TStatWriter& statWriter);
-
+        const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter,
+        const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted, bool isExternalProgress) override;
 private:
     static void* Tracker(void* param);
 

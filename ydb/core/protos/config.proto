@@ -81,6 +81,9 @@ message TActorSystemConfig {
         optional uint32 Threads = 2;
         optional uint64 SpinThreshold = 3;
         optional TAffinity Affinity = 4;
+        // Index into runtime CPU topology placement groups. Supported for BASIC executors and mutually exclusive with Affinity.
+        // Placement only resolves this executor's affinity; multiple executors may use the same placement group.
+        optional uint32 Placement = 28;
         optional uint32 InjectMadSquirrels = 5; // Obsolete, no more mad squirrels anymore
         optional string Name = 6;
         optional uint32 TimePerMailboxMicroSecs = 7;
@@ -93,6 +96,7 @@ message TActorSystemConfig {
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
         optional uint32 HarmonizerNeedyCpuWindowSeconds = 26 [default = 1]; // Supported for BASIC executors, range is [1, 32]
+        optional bool EnableWaker = 27 [default = false]; // Experimental, non-shared BASIC executors only
 
         optional bool HasSharedThread = 18;
         optional bool AllThreadsAreShared = 24;
@@ -119,6 +123,7 @@ message TActorSystemConfig {
     optional uint32 UserExecutor = 4;
     optional uint32 IoExecutor = 5;
     optional uint32 BatchExecutor = 6;
+    repeated uint32 InterconnectSessionExecutor = 23; // Ordered indices into Executor.
 
     message TServiceExecutor {
         required string ServiceName = 1;
@@ -203,39 +208,39 @@ message TDynamicNameserviceConfig {
     optional uint32 MinDynamicNodeId = 4 [default = 50000];
 }
 
-message TDomainsConfig {
-    message TStateStorage {
-        enum EPileState {
-            DISCONNECTED = 0; // this pile is disconnected from primary one
-            NOT_SYNCHRONIZED = 1; // this pile is connected to primary pile, but not yet fully synchronized
-            SYNCHRONIZED = 2; // this pile is connected to primary pile and in sync
-            PRIMARY = 3; // this is the primary pile
-            PROMOTED = 4; // this is the synchronized pile which is being promoted to become primary
-            DEMOTED = 5; // this is currently primary pile which is being demoted
-        }
-
-        message TRing {
-            optional uint32 NToSelect = 1;
-            repeated TRing Ring = 2;
-            repeated uint32 Node = 3;
-            optional bool UseSingleNodeActorId = 4;
-            optional bool UseRingSpecificNodeSelection = 5;
-            optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
-            optional bool WriteOnly = 7 [default = false]; // used for ring groups
-            optional uint32 RingGroupActorIdOffset = 8 [default = 0]; // used for ActorId difference for multiple replicas on one node
-            optional uint32 BridgePileId = 9; // bridge pile id for this ring group when bridge mode is enabled
-            optional EPileState PileState = 10; // state for this ring group's pile
-        }
-
-        optional uint32 SSId = 1 [default = 1];
-        optional TRing Ring = 2; // for compatibility, use RingGroups
-        optional uint32 StateStorageVersion = 3 [default = 0];
-        repeated uint32 CompatibleVersions = 4;
-        repeated TRing RingGroups = 5;
-        optional uint64 ClusterStateGeneration = 6; // generation from current ClusterState
-        optional fixed64 ClusterStateGuid = 7;
+message TStateStorageConfig {
+    enum EPileState {
+        DISCONNECTED = 0; // this pile is disconnected from primary one
+        NOT_SYNCHRONIZED = 1; // this pile is connected to primary pile, but not yet fully synchronized
+        SYNCHRONIZED = 2; // this pile is connected to primary pile and in sync
+        PRIMARY = 3; // this is the primary pile
+        PROMOTED = 4; // this is the synchronized pile which is being promoted to become primary
+        DEMOTED = 5; // this is currently primary pile which is being demoted
     }
 
+    message TRing {
+        optional uint32 NToSelect = 1;
+        repeated TRing Ring = 2;
+        repeated uint32 Node = 3;
+        optional bool UseSingleNodeActorId = 4;
+        optional bool UseRingSpecificNodeSelection = 5;
+        optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
+        optional bool WriteOnly = 7 [default = false]; // used for ring groups
+        optional uint32 RingGroupActorIdOffset = 8 [default = 0]; // used for ActorId difference for multiple replicas on one node
+        optional uint32 BridgePileId = 9; // bridge pile id for this ring group when bridge mode is enabled
+        optional EPileState PileState = 10; // state for this ring group's pile
+    }
+
+    optional uint32 SSId = 1 [default = 1];
+    optional TRing Ring = 2; // for compatibility, use RingGroups
+    optional uint32 StateStorageVersion = 3 [default = 0];
+    repeated uint32 CompatibleVersions = 4;
+    repeated TRing RingGroups = 5;
+    optional uint64 ClusterStateGeneration = 6; // generation from current ClusterState
+    optional fixed64 ClusterStateGuid = 7;
+}
+
+message TDomainsConfig {
     message TStoragePoolType {
         optional string Kind = 1;
         optional NKikimrBlobStorage.TDefineStoragePool PoolConfig = 2;
@@ -312,7 +317,7 @@ message TDomainsConfig {
     }
 
     repeated TDomain Domain = 1;
-    repeated TStateStorage StateStorage = 2;
+    repeated TStateStorageConfig StateStorage = 2;
     repeated TExecLevel ExecLevel = 3;
     repeated THiveConfig HiveConfig = 4;
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
@@ -320,9 +325,9 @@ message TDomainsConfig {
     optional bool ForbidImplicitStoragePools = 7 [default = true];
 
     // then these configs are set, they override the default StateStorage config for each kind of entity
-    optional TStateStorage ExplicitStateStorageConfig = 8;
-    optional TStateStorage ExplicitStateStorageBoardConfig = 9;
-    optional TStateStorage ExplicitSchemeBoardConfig = 10;
+    optional TStateStorageConfig ExplicitStateStorageConfig = 8;
+    optional TStateStorageConfig ExplicitStateStorageBoardConfig = 9;
+    optional TStateStorageConfig ExplicitSchemeBoardConfig = 10;
 }
 
 message TBlobStorageConfig {
@@ -470,6 +475,7 @@ message TLogConfig {
     optional uint64 TimeThresholdMs = 14 [default = 1000];
     optional bool IgnoreUnknownComponents = 15 [default = true];
     optional string TenantName = 16;
+    optional bool EnableStructuredLogInJson = 17 [default = false];
 }
 
 message TInterconnectConfig {
@@ -547,14 +553,64 @@ message TInterconnectConfig {
     optional bool CollectSubscriptionStackTrace = 59 [default = false];
     optional uint32 RdmaPayloadCopySizeThreshold = 60 [default = 65536]; // 0 disables copying RDMA payload to regular memory
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
-    optional bool UseUring = 62 [default = false];
-    optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
-    optional bool EnableInterconnectSessionV2 = 64 [default = false];
-    optional bool ChecksumInterconnectSessionV2 = 65 [default = false];
-    optional bool EnableSQPOLLv2 = 66 [default = true];
-    optional bool EnablePreserializeInV2 = 67 [default = false];
-    optional uint32 UringEngineThreadsV2 = 68 [default = 4];
+    reserved 62, 63; // were UseUring / EnableUringSQPOLL of the reverted io_uring v1 transport
     optional bool EnableRdmaSendReceive = 69 [default = false];
+
+    message TV2Config {
+        optional bool Enable = 1 [default = false];
+        optional bool ChecksumEvents = 2 [default = false];
+
+        // Use io_uring SQPOLL for v2 data-plane rings. If the kernel poller is saturated while shard workers
+        // still have CPU headroom, set this to false so submissions run on the worker threads instead.
+        optional bool EnableSQPOLL = 3 [default = true];
+
+        // If set, this enables event preserialization in IC actor system pool.
+        optional bool EnablePreserializeEvents = 4 [default = false];
+
+        // Number of worker threads of ICv2 thread pool (not counting uring internal ones).
+        optional uint32 Threads = 5 [default = 4];
+
+        // io_uring rings per v2 shard worker (each ring may own a SQPOLL thread). Default 1 preserves legacy
+        // 1:1 ring/worker topology. Raise this when poller-bound; raise Threads when serializer-bound.
+        optional uint32 RingsPerShard = 6 [default = 1];
+
+        // SQPOLL kernel-thread idle timeout (ms) for v2 rings before the poller sleeps. Only effective when
+        // EnableSQPOLLv2 is set. Lower values save idle CPU; higher values keep the poller warm for latency.
+        optional uint32 SqThreadIdleMs = 7 [default = 2000];
+
+        // If enabled, rings of different threads share same kernel thread pools and SQ pollers (effectively creating
+        // RingsPerShard threads instead of RingsPerShard * Threads).
+        optional bool ShareRingsAmongThreads = 8 [default = false];
+
+        // Register session sockets into each ring's fixed-file table (IOSQE_FIXED_FILE) to avoid
+        // per-op process file-table refcount traffic. Falls back to plain fds if the kernel rejects
+        // the table or a ring runs out of slots. Requires sparse/update support (kernel >= 5.5; target 5.13+).
+        optional bool EnableFixedFiles = 9 [default = true];
+
+        // Size of the fixed-file table reserved per ring when EnableFixedFiles is on.
+        optional uint32 FixedFilesPerRing = 10 [default = 4096];
+
+        // Shared provided-buffer pool (buf_ring or provide_buffers) for sessions whose receive
+        // target is still at the minimum size. Falls back to per-session plain buffers.
+        optional bool EnableProvidedBuffers = 11 [default = true];
+
+        // Number of shared-pool buffers reserved per ring.
+        optional uint32 PoolBufCount = 12 [default = 128];
+
+        // Minimum and maximum write buffer size.
+        optional uint32 MinWriteBufferSizeKB = 13 [default = 4];
+        optional uint32 MaxWriteBufferSizeKB = 14 [default = 256];
+
+        // Minimum and maximum read buffer size.
+        optional uint32 MinReadBufferSizeKB = 15 [default = 4];
+        optional uint32 MaxReadBufferSizeKB = 16 [default = 256];
+
+        // Minimum and maximum serialization window size.
+        optional uint32 MinSerializeWindowSizeKB = 17 [default = 4];
+        optional uint32 MaxSerializeWindowSizeKB = 18 [default = 256];
+    }
+
+    optional TV2Config V2Config = 70;
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -1283,6 +1339,7 @@ message TStreamingQueriesConfig {
     optional TExternalStorageConfig ExternalStorage = 3;
     optional TExternalTopicsSettings TopicSdkSettings = 4;
     optional bool ForbidYqlSysColumnsAndSystemMetadata = 5 [default = true];
+    optional string ResourcePoolForSharedReading = 6;
 }
 
 message TQueryServiceConfig {
@@ -1773,6 +1830,21 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 100000,
             DefaultValue: 2000 }];
+        optional uint64 HullCompEmergencyMaxSsts = 53 [(ControlOptions) = {
+            Description: "Maximum number of SSTables in one Emergency compaction job. Zero disables the Emergency compaction strategy.",
+            MinValue: 0,
+            MaxValue: 64,
+            DefaultValue: 8 }];
+        optional uint64 HullCompEmergencyChunkReserve = 54 [(ControlOptions) = {
+            Description: "Index chunks reserved for fresh/huge/synclog and subtracted from the Emergency free-chunk budget.",
+            MinValue: 0,
+            MaxValue: 64,
+            DefaultValue: 1 }];
+        optional uint64 HullCompEmergencyEnableAtColor = 55 [(ControlOptions) = {
+            Description: "Enable Emergency compaction mode when local PDisk space color is at least this value (0=GREEN, 10=CYAN, 15=LIGHT_YELLOW, 20=YELLOW, 30=LIGHT_ORANGE, 35=PRE_ORANGE, 40=ORANGE, 50=RED, 60=BLACK).",
+            MinValue: 0,
+            MaxValue: 60,
+            DefaultValue: 15 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -1952,6 +2024,20 @@ message TImmediateControlsConfig {
             MaxValue: 10000000,     // 10 MB
             DefaultValue: 1000000,  // 1 MB
         }];
+
+        optional uint64 EnableChecksumReadValidationOnVDisk = 51 [(ControlOptions) = {
+            Description: "Enable checksum calculation and validation on VDisk read path",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 EnableChecksumWriteValidationOnVDisk = 52 [(ControlOptions) = {
+            Description: "Enable checksum calculation and validation on VDisk write path",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -2066,6 +2152,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 60000,
             DefaultValue: 1000 }];
+
+        optional uint64 EnableChecksumCalcAndValidationOnDsProxy = 17 [(ControlOptions) = {
+            Description: "Enable checksum calculation and validation on DSProxy read and write paths",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TBlobDepotControls {
@@ -2112,6 +2204,19 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
+        optional uint64 StaticGroupChunkReservePerMille = 8 [(ControlOptions) = {
+            Description: "Upper bound for the chunk reserve of the static group VDisks, in permille of the user chunk pool of the PDisk. 0 disables the reserve",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 25 }];
+        optional uint64 UseDeviceOverestimationRatioMerged = 9 [(ControlOptions) = {
+            Description: "If enabled (default), PDisk's DeviceOverestimationRatio/DeviceNonperformanceMs "
+                          "sensors report the merged (cross-source, e.g. shared with DDisk/PersistentBuffer) "
+                          "overestimation metric instead of the legacy PDisk-only computation. "
+                          "Disable to revert to the old (legacy) metric computation without a cluster restart.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TBlobStorageControllerControls {
@@ -2522,51 +2627,59 @@ message THiveTabletPreference {
 }
 
 message THiveConfig {
+    extend google.protobuf.FieldOptions {
+        optional string ParamDescription = 61002;
+    }
+
+    extend google.protobuf.EnumValueOptions {
+        optional string EnumDescription = 61003;
+    }
+
     enum EHiveStorageBalanceStrategy {
-        HIVE_STORAGE_BALANCE_STRATEGY_AUTO = 0;
-        HIVE_STORAGE_BALANCE_STRATEGY_IOPS = 1;
-        HIVE_STORAGE_BALANCE_STRATEGY_THROUGHPUT = 2;
-        HIVE_STORAGE_BALANCE_STRATEGY_SIZE = 3;
+        HIVE_STORAGE_BALANCE_STRATEGY_AUTO = 0 [(EnumDescription) = "use the parameter with maximum consumption"];
+        HIVE_STORAGE_BALANCE_STRATEGY_IOPS = 1 [(EnumDescription) = "consider only IOPS"];
+        HIVE_STORAGE_BALANCE_STRATEGY_THROUGHPUT = 2 [(EnumDescription) = "consider only throughput consumption"];
+        HIVE_STORAGE_BALANCE_STRATEGY_SIZE = 3 [(EnumDescription) = "consider only occupied space volume"];
     }
 
     enum EHiveStorageSelectStrategy {
-        HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
-        HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN = 1;
-        HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P = 2;
-        HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN = 3;
-        HIVE_STORAGE_SELECT_STRATEGY_RANDOM = 4;
+        HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0 [(EnumDescription) = "weighted random selection based on consumption"];
+        HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN = 1 [(EnumDescription) = "select group with minimum consumption"];
+        HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P = 2 [(EnumDescription) = "select random group among 7% of groups with lowest consumption"];
+        HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN = 3 [(EnumDescription) = "select group within storage pool using round-robin"];
+        HIVE_STORAGE_SELECT_STRATEGY_RANDOM = 4 [(EnumDescription) = "select random group"];
     }
 
     enum EHiveNodeBalanceStrategy {
         HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM = 0;
-        HIVE_NODE_BALANCE_STRATEGY_HEAVIEST = 1;
-        HIVE_NODE_BALANCE_STRATEGY_RANDOM = 2;
-        HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+        HIVE_NODE_BALANCE_STRATEGY_HEAVIEST = 1 [(EnumDescription) = "select node with maximum consumption"];
+        HIVE_NODE_BALANCE_STRATEGY_RANDOM = 2 [(EnumDescription) = "select random node"];
+        HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3 [(EnumDescription) = "weighted random selection based on consumption"];
     }
 
     enum EHiveTabletBalanceStrategy {
         HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM = 0;
-        HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST = 1;
-        HIVE_TABLET_BALANCE_STRATEGY_RANDOM = 2;
-        HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+        HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST = 1 [(EnumDescription) = "select tablet with maximum consumption"];
+        HIVE_TABLET_BALANCE_STRATEGY_RANDOM = 2 [(EnumDescription) = "select random tablet"];
+        HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3 [(EnumDescription) = "weighted random selection based on consumption"];
     }
 
     enum EHiveChannelBalanceStrategy {
-        HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST = 0;
-        HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM = 1;
-        HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM = 2;
+        HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST = 0 [(EnumDescription) = "select channel with maximum consumption"];
+        HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM = 1 [(EnumDescription) = "select random channel"];
+        HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM = 2 [(EnumDescription) = "weighted random selection based on consumption"];
     }
 
     enum EHiveNodeSelectStrategy {
-        HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
-        HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1;
-        HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P = 2;
-        HIVE_NODE_SELECT_STRATEGY_RANDOM = 3;
+        HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0 [(EnumDescription) = "weighted random selection based on consumption"];
+        HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1 [(EnumDescription) = "select node with minimum consumption"];
+        HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P = 2 [(EnumDescription) = "select random node among 7% of nodes with lowest consumption"];
+        HIVE_NODE_SELECT_STRATEGY_RANDOM = 3 [(EnumDescription) = "select random node"];
     }
 
     enum EHiveBootStrategy {
-        HIVE_BOOT_STRATEGY_BALANCED = 0;
-        HIVE_BOOT_STRATEGY_FAST = 1;
+        HIVE_BOOT_STRATEGY_BALANCED = 0 [(EnumDescription) = "when the per-node startup limit is reached on one node, stop starting new tablets on all nodes"];
+        HIVE_BOOT_STRATEGY_FAST = 1 [(EnumDescription) = "when the per-node startup limit is reached on one node, continue starting tablets on other nodes"];
     }
 
     message TBootPriority {
@@ -2587,89 +2700,89 @@ message THiveConfig {
         optional EAllowedMetricValue Network = 4;
     }
 
-    optional uint64 MaxTabletsScheduled = 2 [default = 100];
-    optional uint64 MaxResourceCounter = 3 [default = 100000000];
-    optional uint64 MaxResourceCPU = 4 [default = 10000000];
-    optional uint64 MaxResourceMemory = 5 [default = 512000000000];
-    optional uint64 MaxResourceNetwork = 6 [default = 1000000000];
-    optional double MinScatterToBalance = 7 [default = 0.5]; // Does not affect Counter. For other resources can be overriden with resource-specific settings bellow
-    optional bool SpreadNeighbours = 8 [default = true];
-    optional uint64 MaxBootBatchSize = 9 [default = 1000];
-    optional uint64 DrainInflight = 10 [default = 10];
-    optional double DefaultUnitIOPS = 11 [default = 1]; // operations/sec
-    optional uint64 DefaultUnitThroughput = 12 [default = 1000]; // bytes/sec
-    optional uint64 DefaultUnitSize = 13 [default = 100000000]; // bytes
-    optional double StorageOvercommit = 14 [default = 1.00];
-    optional EHiveStorageBalanceStrategy StorageBalanceStrategy = 15 [default = HIVE_STORAGE_BALANCE_STRATEGY_SIZE];
-    optional bool StorageSafeMode = 16 [default = true];
-    optional EHiveStorageSelectStrategy StorageSelectStrategy = 17 [default = HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM];
-    optional uint64 RequestSequenceSize = 18 [default = 1000];
-    optional uint64 MinRequestSequenceSize = 19 [default = 1000];
-    optional uint64 MaxRequestSequenceSize = 20 [default = 1000000];
-    optional uint64 MetricsWindowSize = 21 [default = 60000]; // milliseconds
-    optional double MaxNodeUsageToKick = 22 [default = 0.9];
-    optional uint64 ResourceChangeReactionPeriod = 23 [default = 10]; // seconds
-    optional uint64 TabletKickCooldownPeriod = 24 [default = 600]; // seconds
-    optional double ResourceOvercommitment = 25 [default = 3.00];
-    optional uint64 BalancerInflight = 26 [default = 1]; // tablets
-    optional EHiveNodeBalanceStrategy NodeBalanceStrategy = 27 [default = HIVE_NODE_BALANCE_STRATEGY_HEAVIEST];
-    optional EHiveTabletBalanceStrategy TabletBalanceStrategy = 28 [default = HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional double MinPeriodBetweenBalance = 29 [default = 0.2]; // seconds
-    optional uint64 MaxMovementsOnAutoBalancer = 30 [default = 1]; // tablets
-    optional bool ContinueAutoBalancer = 31 [default = true];
-    optional double MinNodeUsageToBalance = 32 [default = 0.3];
-    optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
-    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds, period used for statistics, not to be confused with TabletRestartsPeriod
-    optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
-    optional uint64 NodeDeletePeriod = 36 [default = 3600]; // seconds
-    repeated THiveTabletLimit DefaultTabletLimit = 37;
-    repeated THiveTabletPreference DefaultTabletPreference = 38;
-    optional uint64 SystemTabletCategoryId = 39 [default = 1];
+    optional uint64 MaxTabletsScheduled = 2 [default = 100, (ParamDescription) = "Maximum number of tablets simultaneously in the startup process on a single node."];
+    optional uint64 MaxResourceCounter = 3 [default = 100000000, (ParamDescription) = "Maximum consumption of virtual Counter resource per node."];
+    optional uint64 MaxResourceCPU = 4 [default = 10000000, (ParamDescription) = "Maximum CPU consumption per node per second. Default value, used only if the node does not provide a value when registering with Hive."];
+    optional uint64 MaxResourceMemory = 5 [default = 512000000000, (ParamDescription) = "Maximum memory consumption per node. Default value, used only if the node does not provide a value when registering with Hive."];
+    optional uint64 MaxResourceNetwork = 6 [default = 1000000000, (ParamDescription) = "Maximum bandwidth consumption per node. Default value, used only if the node does not provide a value when registering with Hive."];
+    optional double MinScatterToBalance = 7 [default = 0.5, (ParamDescription) = "Threshold for Scatter metric for CPU, Memory, Network resources. Has lower priority than resource-specific thresholds."]; // Does not affect Counter. For other resources can be overridden with resource-specific settings below
+    optional bool SpreadNeighbours = 8 [default = true, (ParamDescription) = "Start tablets of the same schema object on different nodes when possible."];
+    optional uint64 MaxBootBatchSize = 9 [default = 1000, (ParamDescription) = "Maximum number of tablets from the Hive boot queue processed at once."];
+    optional uint64 DrainInflight = 10 [default = 10, (ParamDescription) = "Number of tablets simultaneously restarting during graceful movement of all tablets from one node."];
+    optional double DefaultUnitIOPS = 11 [default = 1, (ParamDescription) = "Default value for IOPS of one channel."]; // operations/sec
+    optional uint64 DefaultUnitThroughput = 12 [default = 1000, (ParamDescription) = "Default value for throughput consumption by one channel."]; // bytes/sec
+    optional uint64 DefaultUnitSize = 13 [default = 100000000, (ParamDescription) = "Default value for disk space consumption by one channel."]; // bytes
+    optional double StorageOvercommit = 14 [default = 1.00, (ParamDescription) = "Overcommitment factor for storage group resources."];
+    optional EHiveStorageBalanceStrategy StorageBalanceStrategy = 15 [default = HIVE_STORAGE_BALANCE_STRATEGY_SIZE, (ParamDescription) = "Selection of parameter used for distributing tablet channels across storage groups."];
+    optional bool StorageSafeMode = 16 [default = true, (ParamDescription) = "Check for exceeding maximum resource consumption of storage groups."];
+    optional EHiveStorageSelectStrategy StorageSelectStrategy = 17 [default = HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM, (ParamDescription) = "Strategy for selecting storage group for tablet channel."];
+    optional uint64 RequestSequenceSize = 18 [default = 1000, (ParamDescription) = "Number of tablet identifiers that database Hive requests from root Hive at once."];
+    optional uint64 MinRequestSequenceSize = 19 [default = 1000, (ParamDescription) = "Minimum number of tablet identifiers that root Hive allocates for database Hive at once."];
+    optional uint64 MaxRequestSequenceSize = 20 [default = 1000000, (ParamDescription) = "Maximum number of tablet identifiers allocated for database Hive at once."];
+    optional uint64 MetricsWindowSize = 21 [default = 60000, (ParamDescription) = "Size of the window over which tablet resource consumption metrics are aggregated."]; // milliseconds
+    optional double MaxNodeUsageToKick = 22 [default = 0.9, (ParamDescription) = "Resource consumption threshold on a node for triggering emergency auto-balancing."];
+    optional uint64 ResourceChangeReactionPeriod = 23 [default = 10, (ParamDescription) = "Frequency of updating aggregated resource consumption statistics."]; // seconds
+    optional uint64 TabletKickCooldownPeriod = 24 [default = 600, (ParamDescription) = "Minimum time period between movements of a single tablet."]; // seconds
+    optional double ResourceOvercommitment = 25 [default = 3.00, (ParamDescription) = "Overcommitment factor for node resources."];
+    optional uint64 BalancerInflight = 26 [default = 1, (ParamDescription) = "Number of tablets simultaneously restarting during auto-balancing process. Does not apply to emergency balancing."]; // tablets
+    optional EHiveNodeBalanceStrategy NodeBalanceStrategy = 27 [default = HIVE_NODE_BALANCE_STRATEGY_HEAVIEST, (ParamDescription) = "Strategy for selecting the node from which tablets are moved during auto-balancing."];
+    optional EHiveTabletBalanceStrategy TabletBalanceStrategy = 28 [default = HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM, (ParamDescription) = "Strategy for selecting a tablet to move during auto-balancing."];
+    optional double MinPeriodBetweenBalance = 29 [default = 0.2, (ParamDescription) = "Minimum time period between two auto-balancing iterations. Does not apply to emergency balancing."];
+    optional uint64 MaxMovementsOnAutoBalancer = 30 [default = 1, (ParamDescription) = "Number of tablet movements per auto-balancing iteration. Does not apply to emergency balancing."]; // tablets
+    optional bool ContinueAutoBalancer = 31 [default = true, (ParamDescription) = "When enabled, the next balancing iteration starts without waiting for the end of resource change reaction period."];
+    optional double MinNodeUsageToBalance = 32 [default = 0.3, (ParamDescription) = "Resource consumption on a node below this value is equated to this value. Used to avoid balancing tablets between lightly loaded nodes."];
+    optional double MinPeriodBetweenReassign = 33 [default = 300.0, (ParamDescription) = "Minimum time period between storage group reassignments for channels of one tablet."]; // seconds
+    optional double TabletRestartWatchPeriod = 34 [default = 3600.0, (ParamDescription) = "Size of window over which statistics on tablet restart count are collected. This period is used only for statistics passed to HealthCheck."]; // seconds, period used for statistics, not to be confused with TabletRestartsPeriod
+    optional double NodeRestartWatchPeriod = 35 [default = 3600.0, (ParamDescription) = "Size of window over which statistics on node restart count are collected."]; // seconds
+    optional uint64 NodeDeletePeriod = 36 [default = 3600, (ParamDescription) = "Inactivity period after which a node is deleted from the Hive database."]; // seconds
+    repeated THiveTabletLimit DefaultTabletLimit = 37 [(ParamDescription) = "Limits on starting tablets of various types on a single node."];
+    repeated THiveTabletPreference DefaultTabletPreference = 38 [(ParamDescription) = "Priorities for selecting data centers for starting tablets of various types."];
+    optional uint64 SystemTabletCategoryId = 39 [default = 1, (ParamDescription) = "When set to a non-zero value, all coordinators and mediators are launched in the same data center whenever possible."];
     optional bool EnableFastTabletMove = 40 [default = true];
-    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds, period checked for penalties - not to be confused with TabletRestartWatchPeriod
+    optional uint64 TabletRestartsPeriod = 42 [default = 1000, (ParamDescription) = "Size of window over which tablet restart count is calculated for penalizing problematic tablet startup."]; // milliseconds, period checked for penalties - not to be confused with TabletRestartWatchPeriod
     optional uint64 TabletRestarsMaxCount = 43 [default = 2]; // deprecated, use TabletRestartsMaxCount instead
-    optional uint64 PostponeStartPeriod = 44 [default = 1000]; // milliseconds
-    optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
-    optional bool CheckMoveExpediency = 46 [default = true];
-    optional uint64 StoragePoolFreshPeriod = 47 [default = 60000]; // milliseconds
-    optional string PoolsToMonitorForUsage = 48 [default = "System,User,IC"];
-    repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
-    optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1]; // number > 1
-    optional double SpaceUsagePenalty = 54 [default = 0.2]; // number <= 1
-    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 30000]; // milliseconds, time to wait for known nodes on cluster restart
+    optional uint64 PostponeStartPeriod = 44 [default = 1000, (ParamDescription) = "Frequency of startup attempts for problematic tablets."]; // milliseconds
+    optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P, (ParamDescription) = "Node selection strategy for tablet startup."];
+    optional bool CheckMoveExpediency = 46 [default = true, (ParamDescription) = "Check the expediency of tablet movements. If auto-balancing leads to increased Hive CPU resource consumption, you can disable this option."];
+    optional uint64 StoragePoolFreshPeriod = 47 [default = 60000, (ParamDescription) = "Frequency of updating storage pool information."]; // milliseconds
+    optional string PoolsToMonitorForUsage = 48 [default = "System,User,IC", (ParamDescription) = "Actor system pools whose consumption is taken into account when calculating node resource consumption."];
+    repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49 [(ParamDescription) = "Tablet types that are not subject to auto-balancing."];
+    optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1, (ParamDescription) = "Minimum ratio of free space in target group to free space in source group at which the target group is penalized."]; // number > 1
+    optional double SpaceUsagePenalty = 54 [default = 0.2, (ParamDescription) = "Penalty factor applied when the storage group free-space ratio threshold is reached."]; // number <= 1
+    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 30000, (ParamDescription) = "Waiting time for all known nodes to start during database startup."]; // milliseconds, time to wait for known nodes on cluster restart
     optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
-    optional double MaxWarmUpPeriod = 52 [default = 600.0]; // seconds
-    optional bool WarmUpEnabled = 55 [default = true];
-    optional uint64 EmergencyBalancerInflight = 56 [default = 1]; // tablets
-    optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2];
-    optional bool ContinueEmergencyBalancer = 58 [default = true];
-    optional double MinPeriodBetweenEmergencyBalance = 59 [default = 0.1]; // seconds
-    optional EHiveBootStrategy BootStrategy = 60 [default = HIVE_BOOT_STRATEGY_BALANCED];
-    optional uint64 TabletRestartsMaxCount = 61 [default = 2];
-    optional double MinCPUScatterToBalance = 62 [default = 0.5];
-    optional double MinMemoryScatterToBalance = 63 [default = 0.5];
-    optional double MinNetworkScatterToBalance = 64 [default = 0.5];
-    optional double MinCounterScatterToBalance = 65 [default = 0.02];
+    optional double MaxWarmUpPeriod = 52 [default = 600.0, (ParamDescription) = "Maximum waiting time for node startup during database startup."]; // seconds
+    optional bool WarmUpEnabled = 55 [default = true, (ParamDescription) = "When enabled, database Hive waits for all nodes to connect before starting tablets during startup. When disabled, all tablets can be started on the first connected node."];
+    optional uint64 EmergencyBalancerInflight = 56 [default = 1, (ParamDescription) = "Number of tablets simultaneously restarting during emergency balancing."]; // tablets
+    optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2, (ParamDescription) = "Number of tablet movements per emergency balancing iteration."];
+    optional bool ContinueEmergencyBalancer = 58 [default = true, (ParamDescription) = "When enabled, the next emergency balancing iteration starts without waiting for the end of resource change reaction period."];
+    optional double MinPeriodBetweenEmergencyBalance = 59 [default = 0.1, (ParamDescription) = "Minimum time period between two emergency balancing iterations."]; // seconds
+    optional EHiveBootStrategy BootStrategy = 60 [default = HIVE_BOOT_STRATEGY_BALANCED, (ParamDescription) = "Controls behavior when starting large numbers of tablets."];
+    optional uint64 TabletRestartsMaxCount = 61 [default = 2, (ParamDescription) = "Number of restarts in the tablet restarts period window, exceeding which triggers penalization."];
+    optional double MinCPUScatterToBalance = 62 [default = 0.5, (ParamDescription) = "Threshold for Scatter metric for CPU resource."];
+    optional double MinMemoryScatterToBalance = 63 [default = 0.5, (ParamDescription) = "Threshold for Scatter metric for Memory resource."];
+    optional double MinNetworkScatterToBalance = 64 [default = 0.5, (ParamDescription) = "Threshold for Scatter metric for Network resource."];
+    optional double MinCounterScatterToBalance = 65 [default = 0.02, (ParamDescription) = "Threshold for Scatter metric for virtual Counter resource."];
     reserved 66;
-    optional double ObjectImbalanceToBalance = 67 [default = 0.02];
-    optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional uint64 MaxChannelHistorySize = 69 [default = 10];
-    optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000]; // send a query to BSC every x milliseconds
-    optional double MinStorageScatterToBalance = 71 [default = 0.5];
-    optional double MinGroupUsageToBalance = 72 [default = 0.1];
-    optional uint64 StorageBalancerInflight = 73 [default = 1];
-    optional bool EnableDestroyOperations = 74 [default = false];
-    optional double NodeUsageRangeToKick = 75 [default = 0.2];
-    optional bool LessSystemTabletsMoves = 77 [default = true];
-    optional uint64 MaxPingsInFlight = 78 [default = 1000];
-    optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
-    optional string CutHistoryAllowList = 79 [default = "DataShard"];
-    optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
-    optional uint64 ScaleOutWindowSize = 81 [default = 10]; // buckets
-    optional uint64 ScaleInWindowSize = 82 [default = 60]; // buckets
-    optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
-    optional double DryRunTargetTrackingCPU = 84; // percent
-    optional uint64 NodeRestartsForPenalty = 85 [default = 3];
+    optional double ObjectImbalanceToBalance = 67 [default = 0.02, (ParamDescription) = "Threshold for single object tablet imbalance metric."];
+    optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM, (ParamDescription) = "Strategy for selecting channel for reassignment during channel balancing."];
+    optional uint64 MaxChannelHistorySize = 69 [default = 10, (ParamDescription) = "Maximum size of channel history."];
+    optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000, (ParamDescription) = "Frequency of updating storage pool information."]; // send a query to BSC every x milliseconds
+    optional double MinStorageScatterToBalance = 71 [default = 0.5, (ParamDescription) = "Threshold for Scatter metric for storage groups."];
+    optional double MinGroupUsageToBalance = 72 [default = 0.1, (ParamDescription) = "Storage group resource consumption threshold below which balancing is not started."];
+    optional uint64 StorageBalancerInflight = 73 [default = 1, (ParamDescription) = "Number of tablets simultaneously restarting during channel balancing."];
+    optional bool EnableDestroyOperations = 74 [default = false, (ParamDescription) = "Whether destructive manual operations are allowed."];
+    optional double NodeUsageRangeToKick = 75 [default = 0.2, (ParamDescription) = "Minimum difference in resource consumption level between nodes, below which auto-balancing is considered inappropriate."];
+    optional bool LessSystemTabletsMoves = 77 [default = true, (ParamDescription) = "Minimize movement of system tablets during auto-balancing."];
+    optional uint64 MaxPingsInFlight = 78 [default = 1000, (ParamDescription) = "Maximum number of connections being established with nodes in parallel."];
+    optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot", (ParamDescription) = "List of tablet types for which history cleanup operation is ignored."];
+    optional string CutHistoryAllowList = 79 [default = "DataShard", (ParamDescription) = "List of tablet types for which history cleanup operation is allowed."];
+    optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000, (ParamDescription) = "How often the recommendation for the number of compute nodes is updated."]; // calculate scale recommendation every x milliseconds
+    optional uint64 ScaleOutWindowSize = 81 [default = 10, (ParamDescription) = "Number of buckets based on which the decision to recommend increasing the number of compute nodes is made."]; // buckets
+    optional uint64 ScaleInWindowSize = 82 [default = 60, (ParamDescription) = "Number of buckets based on which the decision to recommend decreasing the number of compute nodes is made."]; // buckets
+    optional double TargetTrackingCPUMargin = 83 [default = 0.1, (ParamDescription) = "Allowable deviation from target CPU utilization value during autoscaling."]; // percent
+    optional double DryRunTargetTrackingCPU = 84 [(ParamDescription) = "Target CPU utilization value for testing how autoscaling would work."]; // percent
+    optional uint64 NodeRestartsForPenalty = 85 [default = 3, (ParamDescription) = "Number of restarts in the node restart watch period window after which nodes receive priority reduction."];
     optional bool UseTabletUsageEstimate = 86 [default = true];
     repeated TBootPriority TabletTypeToBootPriority = 87;
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
@@ -2677,6 +2790,8 @@ message THiveConfig {
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
     optional uint64 DataCenterChangeReactionPeriod = 91 [default = 300]; // seconds
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
+    optional double TabletImpactToPin = 93 [default = 0.3, (ParamDescription) = "Usage impact at which a tablet is treated as high-impact and is potentially isolated on a node"];
+    optional double TabletImpactShareToPin = 94 [default = 0.5, (ParamDescription) = "Same as above, but relative to node's total usage"];
 }
 
 message THealthCheckConfig {
@@ -2812,6 +2927,35 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = true];
+    optional uint64 NodePortionsCountLimit = 73;
+
+    message TFlowControlConfig {
+        optional uint64 MaxWaitQueueSize = 1 [default = 500];
+        optional uint64 MaxDelayedRejectQueueSize = 2 [default = 5000];
+        optional uint32 WaitTimeoutPercent = 3 [default = 50];
+        optional uint32 DelayedRejectTimeoutPercent = 4 [default = 20];
+        optional uint32 DrainJitterMinMs = 5 [default = 50];
+        optional uint32 DrainJitterMaxMs = 6 [default = 250];
+        optional double DrainAimdBeta = 7 [default = 0.8];
+        optional double DrainCubicRecoveryTargetSec = 8 [default = 10];
+        optional double DrainCubicProbePercent = 9 [default = 8];
+        // Drain rate bounds, in admits/sec (DrainRate*) and bytes/sec (DrainRate*Bytes). The rate
+        // between them is learned from write outcomes, never nailed to a number here.
+        optional double DrainRateMin = 10 [default = 5];
+        // 0 means no ceiling: the rate is capped by the throughput actually being served, which is
+        // what the controller is for. Set a non-zero value only to impose an external limit.
+        optional double DrainRateMax = 11 [default = 0];
+        // Must not be below DrainRateMin: the FCM seeds the rate (and Wmax, tokens) from it at
+        // construction, before the bounds get a chance to clamp it up.
+        optional double DrainRateStart = 12 [default = 50];
+        optional double DrainRateMinBytes = 13 [default = 50000000];
+        // 0 means no ceiling, as for DrainRateMax.
+        optional double DrainRateMaxBytes = 14 [default = 0];
+        // Must not be below DrainRateMinBytes, as for DrainRateStart.
+        optional double DrainRateStartBytes = 15 [default = 50000000];
+    }
+
+    optional TFlowControlConfig FlowControl = 74;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
@@ -3154,6 +3298,9 @@ message TKafkaProxyConfig {
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
     optional string PublicHost = 16;
+    // How often an authenticated Kafka connection re-validates the SASL ticket via TicketParser.
+    // Zero disables periodic rechecks.
+    optional uint32 TokenRecheckIntervalMs = 21 [default = 300000];
 }
 
 message TAwsCompatibilityConfig {
@@ -3238,6 +3385,30 @@ message TStatisticsConfig {
 
     optional uint32 AnalyzeMaxTotalScanActorsInFlight = 6 [default = 100];
     optional uint32 AnalyzeMaxPerNodeScanActorsInFlight = 7 [default = 1];
+
+    // Threshold percentage of changed rows that triggers background ANALYZE.
+    // When (RowUpdates + RowDeletes since last ANALYZE) / RowCount * 100 >= this value,
+    // column statistics are considered stale and will be recalculated.
+    optional uint32 BackgroundAnalyzeChangeRatioThresholdPercent = 8 [default = 20];
+
+    // Column tables smaller than or equal to this size are scanned as a whole table
+    // rather than per shard. 0 disables the optimization (always per-shard).
+    optional uint64 AnalyzeWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
+
+    // Auto-collect PK equi-height histogram on ANALYZE. Declared stats ignore this.
+    optional bool AnalyzeCollectPrimaryKeyHistogram = 10 [default = false];
+
+    // Extra samples per histogram bucket. Clamped to [1, 256].
+    optional uint32 AnalyzeHistogramOversampleFactor = 11 [default = 8];
+
+    // Intermediate-state byte budget. Clamped to MaxStatisticSize (8 MB).
+    optional uint64 AnalyzeHistogramMaxStateBytes = 12 [default = 4194304];
+
+    // Initial delay (in seconds) before SchemeShard sends the first base stats
+    // batch to the StatisticsAggregator after initialization. This gives table
+    // shards time to report their statistics. Not required for correctness,
+    // but avoids sending incomplete stats on the very first cycle.
+    optional uint32 BaseStatsSendInitialDelaySeconds = 13 [default = 30];
 };
 
 message TSystemTabletBackupConfig {
@@ -3289,6 +3460,8 @@ message TUdfStoreConfig {
     optional string KvStorageMedia = 2 [default = "ssd"];
     optional bool EnableUnsafeNativeUdf = 3 [default = false];
     optional string UnsafeNativeUdfDir = 4;
+    optional bool EnableWasmUdf = 5 [default = false];
+    optional string WasmCpuSpecOverride = 6;
 }
 
 message TAppConfig {
@@ -3345,6 +3518,7 @@ message TAppConfig {
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
     optional TTracingConfig TracingConfig = 55;
+    optional TTracingConfig UserFacingTracingConfig = 123;
     optional TFailureInjectionConfig FailureInjectionConfig = 56;
     optional THttpProxyConfig PublicHttpConfig = 57;
     optional TMetadataProviderConfig MetadataProviderConfig = 59;

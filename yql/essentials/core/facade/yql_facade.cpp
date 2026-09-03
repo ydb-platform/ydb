@@ -31,8 +31,8 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
+#include <yql/essentials/providers/common/config/yql_activation_groups.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
-#include <yql/essentials/providers/common/activation/yql_activation.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
 #include <yql/essentials/core/qplayer/url_lister/qplayer_url_lister_manager.h>
 
@@ -154,6 +154,37 @@ TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
     }
 
     return flags;
+}
+
+void WriteEvaluationStatistics(NYson::TYsonWriter& writer, const TEvaluationStats& stats) {
+    writer.OnKeyedItem("Evaluation");
+    writer.OnBeginMap();
+
+    writer.OnKeyedItem("Count");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.Count);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CacheHits");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CacheHits);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderCalls");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CalcProviderCalls);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderDurationUs");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("sum");
+    writer.OnInt64Scalar(stats.CalcProviderDurationSum.MicroSeconds());
+    writer.OnEndMap();
+
+    writer.OnEndMap();
 }
 
 } // namespace
@@ -321,7 +352,8 @@ TProgramPtr TProgramFactory::Create(
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
-                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
+                        GatewaysConfig_ ? MakeHolder<TGatewaysConfig>(*GatewaysConfig_) : nullptr,
+                        filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
                         qContext, RemoteLayersProviders_);
 }
 
@@ -347,7 +379,7 @@ TProgram::TProgram(
     TUdfIndexPackageSet::TPtr udfIndexPackageSet,
     const TFileStoragePtr& fileStorage,
     const IUrlPreprocessing::TPtr& urlPreprocessing,
-    const TGatewaysConfig* gatewaysConfig,
+    THolder<TGatewaysConfig> gatewaysConfig,
     TString filename,
     TString sourceCode,
     TString sessionId,
@@ -377,7 +409,7 @@ TProgram::TProgram(
     , FileStorage_(fileStorage)
     , UrlPreprocessing_(urlPreprocessing)
     , SavedUserDataTable_(std::move(userDataTable))
-    , GatewaysConfig_(gatewaysConfig)
+    , GatewaysConfig_(std::move(gatewaysConfig))
     , Filename_(std::move(filename))
     , SourceCode_(std::move(sourceCode))
     , SourceSyntax_(ESourceSyntax::Unknown)
@@ -516,6 +548,21 @@ void TProgram::SetUseTableMetaFromGraph(bool use) {
     UseTableMetaFromGraph_ = use;
 }
 
+void TProgram::SetBridgeBinaryPath(const TString& path) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    BridgeBinaryPath_ = path;
+}
+
+void TProgram::SetOperationTitle(const TString& title) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    if (title.Contains("YQL")) {
+        OperationOptions_.Title = title;
+        return;
+    }
+
+    OperationOptions_.Title = (title.empty() ? "" : title + " ") + "[Powered by YQL]";
+}
+
 TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const {
     Y_ENSURE(TypeCtx_, "TypeCtx_ is not created");
     return TypeCtx_;
@@ -528,6 +575,7 @@ TTypeAnnotationContextPtr TProgram::ProvideAnnotationContext(const TString& user
         TypeCtx_->ValidateMode = ValidateMode_;
         TypeCtx_->DisableNativeUdfSupport = DisableNativeUdfSupport_;
         TypeCtx_->UseTableMetaFromGraph = UseTableMetaFromGraph_;
+        TypeCtx_->BridgeBinaryPath = BridgeBinaryPath_;
     }
 
     return TypeCtx_;
@@ -1851,6 +1899,10 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->EvaluationStats.Count > 0) {
+        WriteEvaluationStatistics(writer, TypeCtx_->EvaluationStats);
+    }
+
     if (TypeCtx_->Modules) {
         writer.OnKeyedItem("moduleResolver");
             writer.OnBeginMap();
@@ -2092,6 +2144,10 @@ TString TProgram::ResultsAsString() const {
 TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& username) {
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
+    const auto activatedGroups = GatewaysConfig_
+                                     ? NCommon::ApplyActivationGroupsInplace(*GatewaysConfig_, username, Credentials_, QContext_)
+                                     : TVector<TString>{};
+
     typeAnnotationContext->LangVer = LangVer_;
     typeAnnotationContext->UseTypeDiffForConvertToError = true;
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
@@ -2130,7 +2186,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         auto dp = dpi(
             username,
             SessionId_,
-            GatewaysConfig_,
+            GatewaysConfig_.Get(),
             FunctionRegistry_,
             RandomProvider_,
             typeAnnotationContext,
@@ -2211,7 +2267,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     {
-        auto configProvider = CreateConfigProvider(*typeAnnotationContext, GatewaysConfig_, username);
+        auto configProvider = CreateConfigProvider(
+            *typeAnnotationContext,
+            GatewaysConfig_.Get(),
+            username,
+            {},
+            /*forPartialTypeCheck=*/false,
+            activatedGroups);
         typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider);
     }
 

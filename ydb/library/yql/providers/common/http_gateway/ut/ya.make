@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SRCS(
     yql_aws_signature_ut.cpp
     yql_dns_gateway_ut.cpp
+    yql_http_default_retry_policy_ut.cpp
 )
 
 PEERDIR(

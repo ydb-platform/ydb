@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimrBlobStorage {
     class TStorageConfig;
@@ -541,6 +542,26 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult : TEventPB<TEvControllerAllocateDDiskBlockGroupResult,
             NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult, EvControllerAllocateDDiskBlockGroupResult>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoListTablets : TEventPB<TEvControllerDDiskInfoListTablets,
+            NKikimrBlobStorage::TEvControllerDDiskInfoListTablets, EvControllerDDiskInfoListTablets>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult : TEventPB<TEvControllerDDiskInfoListTabletsResult,
+            NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult, EvControllerDDiskInfoListTabletsResult>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoGetTablet : TEventPB<TEvControllerDDiskInfoGetTablet,
+            NKikimrBlobStorage::TEvControllerDDiskInfoGetTablet, EvControllerDDiskInfoGetTablet>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult : TEventPB<TEvControllerDDiskInfoGetTabletResult,
+            NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult, EvControllerDDiskInfoGetTabletResult>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged : TEventPB<TEvControllerDDiskInfoTabletRevisionChanged,
+            NKikimrBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged, EvControllerDDiskInfoTabletRevisionChanged>
     {};
 
     struct TEvBlobStorage::TEvPutVDiskToReadOnly : TEventLocal<TEvPutVDiskToReadOnly, EvPutVDiskToReadOnly> {

@@ -3,6 +3,7 @@
 #include <yt/yt/client/object_client/public.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/strong_typedef.h>
 
 #include <library/cpp/yt/memory/ref_counted.h>
 
@@ -33,6 +34,16 @@ DEFINE_ENUM(ECommitOrdering,
 
 DEFINE_ENUM(ETimestampProviderFeature,
     ((AlienClocks)     (0))
+);
+
+//! Only applies to master transactions; setting it on a tablet transaction raises an error.
+DEFINE_ENUM(EMasterTransactionExpirationMode,
+    // Expire the local transaction only when the server reports it gone.
+    ((Optimistic)      (0))
+    // Additionally expire the local transaction once its ping lease elapses, even
+    // while the server-side transaction may still be alive, i.e. self-fence on a
+    // network partition.
+    ((Pessimistic)     (1))
 );
 
 YT_DEFINE_ERROR_ENUM(
@@ -69,37 +80,37 @@ using NObjectClient::NullTransactionId;
  *  bits 30-61:  Unix time in seconds (from 1 Jan 1970)
  *  bits 62-63:  reserved
  */
-using TTimestamp = ui64;
+YT_DEFINE_STRONG_TYPEDEF(TTimestamp, ui64);
 
 //! Number of bits in the counter part.
 constexpr int TimestampCounterWidth = 30;
 
 // Timestamp values range:
 //! Minimum valid (non-sentinel) timestamp.
-constexpr TTimestamp MinTimestamp                 = 0x0000000000000001ULL;
+constexpr auto MinTimestamp                 = TTimestamp(0x0000000000000001ULL);
 //! Maximum valid (non-sentinel) timestamp.
-constexpr TTimestamp MaxTimestamp                 = 0x3fffffffffffff00ULL;
+constexpr auto MaxTimestamp                 = TTimestamp(0x3fffffffffffff00ULL);
 
 // User sentinels:
 //! Uninitialized/invalid timestamp.
-constexpr TTimestamp NullTimestamp                = 0x0000000000000000ULL;
+constexpr auto NullTimestamp                = TTimestamp(0x0000000000000000ULL);
 //! Truly (serializable) latest committed version.
 //! May cause row blocking if concurrent writes are in progress.
-constexpr TTimestamp SyncLastCommittedTimestamp   = 0x3fffffffffffff01ULL;
+constexpr auto SyncLastCommittedTimestamp   = TTimestamp(0x3fffffffffffff01ULL);
 //! Relaxed (non-serializable) latest committed version.
 //! Never leads to row blocking but may miss some concurrent writes.
-constexpr TTimestamp AsyncLastCommittedTimestamp  = 0x3fffffffffffff04ULL;
+constexpr auto AsyncLastCommittedTimestamp  = TTimestamp(0x3fffffffffffff04ULL);
 //! Used to fetch all committed values during e.g. flushes or compactions.
 //! Returns all versions that were committed at the moment the reader was created.
 //! Never leads to row blocking but may miss some concurrent writes.
-constexpr TTimestamp AllCommittedTimestamp        = 0x3fffffffffffff03ULL;
+constexpr auto AllCommittedTimestamp        = TTimestamp(0x3fffffffffffff03ULL);
 
 // System sentinels:
 //! Used by TSortedDynamicStore to mark values being written by transactions.
-constexpr TTimestamp UncommittedTimestamp         = 0x3fffffffffffff02ULL;
+constexpr auto UncommittedTimestamp         = TTimestamp(0x3fffffffffffff02ULL);
 //! Used by TSortedDynamicStore in TLockDescriptor::PrepareTimestamp.
 //! Must be larger than SyncLastCommittedTimestamp.
-constexpr TTimestamp NotPreparedTimestamp         = 0x3fffffffffffffffULL;
+constexpr auto NotPreparedTimestamp         = TTimestamp(0x3fffffffffffffffULL);
 
 ////////////////////////////////////////////////////////////////////////////////
 

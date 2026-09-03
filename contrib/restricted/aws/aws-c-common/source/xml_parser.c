@@ -40,6 +40,11 @@ static int s_load_node_decl(
     AWS_PRECONDITION(decl_body);
     AWS_PRECONDITION(node);
 
+    if (decl_body->len == 0) {
+        AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
+        return aws_raise_error(AWS_ERROR_INVALID_XML);
+    }
+
     node->is_empty = decl_body->ptr[decl_body->len - 1] == '/';
 
     struct aws_array_list splits;
@@ -159,6 +164,77 @@ clean_up:
     return parser.error;
 }
 
+/* Returns true if the byte can follow a tag name in a start or empty-element tag. */
+static bool s_is_tag_name_boundary(uint8_t c) {
+    return c == ' ' || c == '>' || c == '/' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static struct aws_byte_cursor s_comment_prefix = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("<!--");
+static struct aws_byte_cursor s_comment_end = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("-->");
+static struct aws_byte_cursor s_cdata_prefix = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("<![CDATA[");
+static struct aws_byte_cursor s_cdata_end = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("]]>");
+static struct aws_byte_cursor s_pi_prefix = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("<?");
+static struct aws_byte_cursor s_pi_end = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("?>");
+static struct aws_byte_cursor s_self_close_suffix = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("/>");
+static struct aws_byte_cursor s_decl_prefix = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("<!");
+static struct aws_byte_cursor s_close_bracket = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(">");
+static struct aws_byte_cursor s_closing_prefix = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("</");
+
+/*
+ * If `*input` points at a non-element construct (comment, CDATA, or PI), advances
+ * `*input` past the construct's closing delimiter, sets `*out_skipped = true`, and
+ * returns AWS_OP_SUCCESS.
+ *
+ * If `*input` does not start with a non-element construct, sets `*out_skipped = false`
+ * and returns AWS_OP_SUCCESS (caller should proceed with normal element handling).
+ *
+ * If the construct is unterminated (no closing delimiter found), returns AWS_OP_ERR
+ * and raises AWS_ERROR_INVALID_XML.
+ *
+ * WARNING: This function assumes `*input` starts with '<'. It will not produce correct
+ * results if called at an arbitrary position within a document.
+ */
+static int s_try_skip_non_element(struct aws_byte_cursor *input, bool *out_skipped) {
+    *out_skipped = false;
+
+    if (input->len == 0 || input->ptr[0] != '<') {
+        return AWS_OP_SUCCESS;
+    }
+
+    if (aws_byte_cursor_starts_with(input, &s_comment_prefix)) {
+        aws_byte_cursor_advance(input, s_comment_prefix.len);
+        struct aws_byte_cursor found;
+        if (aws_byte_cursor_find_exact(input, &s_comment_end, &found)) {
+            return aws_raise_error(AWS_ERROR_INVALID_XML);
+        }
+        aws_byte_cursor_advance(input, (found.ptr + s_comment_end.len) - input->ptr);
+        *out_skipped = true;
+        return AWS_OP_SUCCESS;
+    }
+    if (aws_byte_cursor_starts_with(input, &s_cdata_prefix)) {
+        aws_byte_cursor_advance(input, s_cdata_prefix.len);
+        struct aws_byte_cursor found;
+        if (aws_byte_cursor_find_exact(input, &s_cdata_end, &found)) {
+            return aws_raise_error(AWS_ERROR_INVALID_XML);
+        }
+        aws_byte_cursor_advance(input, (found.ptr + s_cdata_end.len) - input->ptr);
+        *out_skipped = true;
+        return AWS_OP_SUCCESS;
+    }
+    if (aws_byte_cursor_starts_with(input, &s_pi_prefix)) {
+        aws_byte_cursor_advance(input, s_pi_prefix.len);
+        struct aws_byte_cursor found;
+        if (aws_byte_cursor_find_exact(input, &s_pi_end, &found)) {
+            return aws_raise_error(AWS_ERROR_INVALID_XML);
+        }
+        aws_byte_cursor_advance(input, (found.ptr + s_pi_end.len) - input->ptr);
+        *out_skipped = true;
+        return AWS_OP_SUCCESS;
+    }
+
+    return AWS_OP_SUCCESS;
+}
+
 int s_advance_to_closing_tag(
     struct aws_xml_parser *parser,
     struct aws_xml_node *node,
@@ -208,45 +284,68 @@ int s_advance_to_closing_tag(
     aws_byte_buf_append(&closing_cmp_buf, &node->name);
     aws_byte_buf_append(&closing_cmp_buf, &close_bracket);
 
-    size_t depth_count = 1;
     struct aws_byte_cursor to_find_open = aws_byte_cursor_from_buf(&open_cmp_buf);
     struct aws_byte_cursor to_find_close = aws_byte_cursor_from_buf(&closing_cmp_buf);
-    struct aws_byte_cursor close_find_result;
-    AWS_ZERO_STRUCT(close_find_result);
-    do {
-        if (aws_byte_cursor_find_exact(&parser->doc, &to_find_close, &close_find_result)) {
-            AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
-            return aws_raise_error(AWS_ERROR_INVALID_XML);
-        }
 
-        /* if we find an opening node with the same name, before the closing tag keep going. */
-        struct aws_byte_cursor open_find_result;
-        AWS_ZERO_STRUCT(open_find_result);
-
-        while (parser->doc.len) {
-            if (!aws_byte_cursor_find_exact(&parser->doc, &to_find_open, &open_find_result)) {
-                if (open_find_result.ptr < close_find_result.ptr) {
-                    size_t skip_len = open_find_result.ptr - parser->doc.ptr;
-                    aws_byte_cursor_advance(&parser->doc, skip_len + 1);
-                    depth_count++;
-                    continue;
-                }
-            }
-            size_t skip_len = close_find_result.ptr - parser->doc.ptr;
-
-            aws_byte_cursor_advance(&parser->doc, skip_len + closing_cmp_buf.len);
-            depth_count--;
+    /* Single forward scan: jump between '<' characters, tracking nesting depth. */
+    size_t depth = 1;
+    while (parser->doc.len > 0) {
+        const uint8_t *open = memchr(parser->doc.ptr, '<', parser->doc.len);
+        if (!open) {
             break;
         }
-    } while (depth_count > 0);
+        aws_byte_cursor_advance(&parser->doc, open - parser->doc.ptr);
 
-    size_t len = close_find_result.ptr - node->doc_at_body.ptr;
+        /* Skip non-element constructs (comments, CDATA, PI). */
+        bool skipped = false;
+        if (s_try_skip_non_element(&parser->doc, &skipped)) {
+            AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
+            return AWS_OP_ERR;
+        }
+        if (skipped) {
+            continue;
+        }
 
-    if (out_body) {
-        *out_body = aws_byte_cursor_from_array(node->doc_at_body.ptr, len);
+        /* Check for closing tag. */
+        if (aws_byte_cursor_starts_with(&parser->doc, &to_find_close)) {
+            depth--;
+            if (depth == 0) {
+                size_t len = parser->doc.ptr - node->doc_at_body.ptr;
+                if (out_body) {
+                    *out_body = aws_byte_cursor_from_array(node->doc_at_body.ptr, len);
+                }
+                aws_byte_cursor_advance(&parser->doc, to_find_close.len);
+                return parser->error;
+            }
+            aws_byte_cursor_advance(&parser->doc, to_find_close.len);
+            continue;
+        }
+
+        /* Check for opening tag with same name. */
+        if (aws_byte_cursor_starts_with(&parser->doc, &to_find_open)) {
+
+            struct aws_byte_cursor after_open = parser->doc;
+            aws_byte_cursor_advance(&after_open, to_find_open.len);
+
+            if (after_open.len > 0 && s_is_tag_name_boundary(*after_open.ptr)) {
+                /* Check for self-closing tag (e.g. <a/>) — does not increment depth. */
+                if (!aws_byte_cursor_starts_with(&after_open, &s_self_close_suffix)) {
+                    depth++;
+                }
+            }
+            /* Advance past the '<' regardless — the name boundary / self-close checks
+             * only determine whether depth increments; we always move forward. */
+            aws_byte_cursor_advance(&parser->doc, 1);
+            continue;
+        }
+
+        /* Some other '<' — skip past it. */
+        aws_byte_cursor_advance(&parser->doc, 1);
     }
 
-    return parser->error;
+    AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
+    parser->error = aws_raise_error(AWS_ERROR_INVALID_XML);
+    return AWS_OP_ERR;
 }
 
 int aws_xml_node_as_body(struct aws_xml_node *node, struct aws_byte_cursor *out_body) {
@@ -275,7 +374,7 @@ int aws_xml_node_traverse(
 
     size_t doc_depth = aws_array_list_length(&parser->callback_stack);
     if (doc_depth >= parser->max_depth) {
-        AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document exceeds max depth.");
+        AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document exceeds max depth of %zu.", parser->max_depth);
         aws_raise_error(AWS_ERROR_INVALID_XML);
         goto error;
     }
@@ -285,36 +384,63 @@ int aws_xml_node_traverse(
     /* look for the next node at the current level. do this until we encounter the parent node's
      * closing tag. */
     while (!parser->error) {
-        const uint8_t *next_location = memchr(parser->doc.ptr, '<', parser->doc.len);
+        const uint8_t *open = memchr(parser->doc.ptr, '<', parser->doc.len);
 
-        if (!next_location) {
+        if (!open) {
             AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
             aws_raise_error(AWS_ERROR_INVALID_XML);
             goto error;
         }
 
-        const uint8_t *end_location = memchr(parser->doc.ptr, '>', parser->doc.len);
+        /* Advance to the '<'. Everything leading up to the `<` is disregarded. */
+        aws_byte_cursor_advance(&parser->doc, open - parser->doc.ptr);
 
-        if (!end_location || next_location >= end_location) {
+        /* Skip CDATA, comments, and processing instructions — they are not elements. */
+        bool skipped = false;
+        if (s_try_skip_non_element(&parser->doc, &skipped)) {
+            AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
+            goto error;
+        }
+        if (skipped) {
+            continue;
+        }
+
+        /* Handle other <! declarations (e.g. <!DOCTYPE) not covered by the helper — skip to closing >. */
+        if (aws_byte_cursor_starts_with(&parser->doc, &s_decl_prefix)) {
+            struct aws_byte_cursor found;
+            if (aws_byte_cursor_find_exact(&parser->doc, &s_close_bracket, &found)) {
+                AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
+                aws_raise_error(AWS_ERROR_INVALID_XML);
+                goto error;
+            }
+            aws_byte_cursor_advance(&parser->doc, (found.ptr + 1) - parser->doc.ptr);
+            continue;
+        }
+
+        /* parser->doc.ptr is now at '<'. Find the closing '>'. */
+        if (parser->doc.len < 2) {
+            AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
+            aws_raise_error(AWS_ERROR_INVALID_XML);
+            goto error;
+        }
+        const uint8_t *end_location = memchr(parser->doc.ptr + 1, '>', parser->doc.len - 1);
+
+        if (!end_location) {
             AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
             aws_raise_error(AWS_ERROR_INVALID_XML);
             goto error;
         }
 
-        bool parent_closed = false;
+        bool parent_closed = aws_byte_cursor_starts_with(&parser->doc, &s_closing_prefix);
 
-        if (*(next_location + 1) == '/') {
-            parent_closed = true;
-        }
+        size_t node_name_len = end_location - parser->doc.ptr;
+        struct aws_byte_cursor decl_body = aws_byte_cursor_from_array(parser->doc.ptr + 1, node_name_len - 1);
 
-        size_t node_name_len = end_location - next_location;
         aws_byte_cursor_advance(&parser->doc, end_location - parser->doc.ptr + 1);
 
         if (parent_closed) {
             break;
         }
-
-        struct aws_byte_cursor decl_body = aws_byte_cursor_from_array(next_location + 1, node_name_len - 1);
 
         struct aws_xml_node next_node = {
             .parser = parser,

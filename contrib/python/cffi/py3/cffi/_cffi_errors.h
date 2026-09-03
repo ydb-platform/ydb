@@ -36,11 +36,7 @@ static PyObject *_cffi_start_error_capture(void)
     if (result == NULL)
         goto error;
 
-#if PY_MAJOR_VERSION >= 3
     bi = PyImport_ImportModule("builtins");
-#else
-    bi = PyImport_ImportModule("__builtin__");
-#endif
     if (bi == NULL)
         goto error;
     PyDict_SetItemString(result, "__builtins__", bi);
@@ -81,15 +77,9 @@ static PyObject *_cffi_start_error_capture(void)
 static DWORD WINAPI _cffi_bootstrap_dialog(LPVOID ignored)
 {
     Sleep(666);    /* may be interrupted if the whole process is closing */
-#if PY_MAJOR_VERSION >= 3
     MessageBoxW(NULL, (wchar_t *)_cffi_bootstrap_text,
                 L"Python-CFFI error",
                 MB_OK | MB_ICONERROR);
-#else
-    MessageBoxA(NULL, (char *)_cffi_bootstrap_text,
-                "Python-CFFI error",
-                MB_OK | MB_ICONERROR);
-#endif
     _cffi_bootstrap_text = NULL;
     return 0;
 }
@@ -111,11 +101,7 @@ static void _cffi_stop_error_capture(PyObject *ecap)
 
     /* Show a dialog box, but in a background thread, and
        never show multiple dialog boxes at once. */
-#if PY_MAJOR_VERSION >= 3
     text = PyUnicode_AsWideCharString(s, NULL);
-#else
-    text = PyString_AsString(s);
-#endif
 
     _cffi_bootstrap_text = text;
 

@@ -31,19 +31,31 @@ public:
 
     TYqlSelect(const TYqlSelect& that) = default;
 
-    TNodeResult Build(const TRule_select_stmt& rule) {
+    TSourceResult Build(const TRule_into_values_source& rule) {
+        switch (rule.GetAltCase()) {
+            case TRule_into_values_source::kAltIntoValuesSource1:
+                return Build(rule.GetAlt_into_values_source1());
+            case TRule_into_values_source::kAltIntoValuesSource2:
+                AltNotImplemented("into_values_source", rule);
+                return std::unexpected(ESQLError::Basic);
+            case TRule_into_values_source::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
+    }
+
+    TSourceResult Build(const TRule_select_stmt& rule) {
         return WithForkedNamespace([&](TYqlSelect& that) {
             return that.BuildForked(rule);
         });
     }
 
-    TNodeResult Build(const TRule_select_unparenthesized_stmt& rule) {
+    TSourceResult Build(const TRule_select_unparenthesized_stmt& rule) {
         return WithForkedNamespace([&](TYqlSelect& that) {
             return that.BuildForked(rule);
         });
     }
 
-    TNodeResult Build(const TRule_values_stmt& rule) {
+    TSourceResult Build(const TRule_values_stmt& rule) {
         TYqlValuesArgs values;
 
         Token(rule.GetToken1());
@@ -184,7 +196,7 @@ private:
             }
         }
 
-        TNodeResult result = [&] {
+        TSourceResult result = [&] {
             TYqlSelect that(*this);
             that.CurrentCTE_ = name;
             return that.Build(*binding.ParseTree);
@@ -205,7 +217,7 @@ private:
         return std::monostate();
     }
 
-    TNodeResult Build(const TRule_cte_value& rule) {
+    TSourceResult Build(const TRule_cte_value& rule) {
         switch (rule.GetAltCase()) {
             case TRule_cte_value::kAltCteValue1:
                 return Build(rule.GetAlt_cte_value1().GetRule_select_stmt1());
@@ -216,7 +228,7 @@ private:
         }
     }
 
-    TNodeResult BuildForked(const TRule_select_stmt& rule) {
+    TSourceResult BuildForked(const TRule_select_stmt& rule) {
         if (auto status = BuildCTE(rule); !status) {
             return std::unexpected(status.error());
         }
@@ -225,7 +237,7 @@ private:
         return Finalize(BuildUnion(core, TYqlSelectArgs()));
     }
 
-    TNodeResult BuildForked(const TRule_select_unparenthesized_stmt& rule) {
+    TSourceResult BuildForked(const TRule_select_unparenthesized_stmt& rule) {
         if (auto status = BuildCTE(rule); !status) {
             return std::unexpected(status.error());
         }
@@ -258,7 +270,7 @@ private:
         }
 
         if (!IsOnlySubExpr(rule)) {
-            return Finalize(BuildUnion(core, TYqlSelectArgs()));
+            return ToNode(Finalize(BuildUnion(core, TYqlSelectArgs())));
         }
 
         const auto& intersect = core.GetRule_select_subexpr_intersect1();
@@ -473,7 +485,7 @@ private:
         }
     }
 
-    TNodeResult Build(const TRule_exists_expr::TBlock3& block) {
+    TSourceResult Build(const TRule_exists_expr::TBlock3& block) {
         switch (block.GetAltCase()) {
             case TRule_exists_expr_TBlock3::kAlt1:
                 return Build(block.GetAlt1().GetRule_select_stmt1());
@@ -492,7 +504,7 @@ private:
         switch (rule.GetAltCase()) {
             case TRule_select_or_expr::kAltSelectOrExpr1: {
                 const auto& alt = rule.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
-                return TYqlSelect(*this).Build(alt);
+                return ToNode(TYqlSelect(*this).Build(alt));
             }
             case TRule_select_or_expr::kAltSelectOrExpr2: {
                 const auto& alt = rule.GetAlt_select_or_expr2().GetRule_tuple_or_expr1();
@@ -503,7 +515,7 @@ private:
         }
     }
 
-    TNodeResult Build(const TRule_select_kind_partial& rule) {
+    TSourceResult Build(const TRule_select_kind_partial& rule) {
         TYqlSelectArgs select;
 
         if (rule.HasBlock2()) {
@@ -531,7 +543,7 @@ private:
         return Build(rule.GetRule_select_kind1(), std::move(select));
     }
 
-    TNodeResult Build(const TRule_select_kind& rule, TYqlSelectArgs&& select) {
+    TSourceResult Build(const TRule_select_kind& rule, TYqlSelectArgs&& select) {
         if (rule.HasBlock1()) {
             return Unsupported("DISCARD");
         }
@@ -554,7 +566,7 @@ private:
         }
     }
 
-    TNodeResult Build(const TRule_select_core& rule, TYqlSelectArgs&& select) {
+    TSourceResult Build(const TRule_select_core& rule, TYqlSelectArgs&& select) {
         TYqlSetItemArgs setItem;
 
         if (rule.HasBlock1()) {
@@ -571,7 +583,7 @@ private:
         setItem.Position = Ctx_.Pos();
 
         if (Mode_ != NSQLTranslation::ESqlMode::QUERY) {
-            return Unsupported("ESqlMode != QUERY");
+            return Unsupported(TString::Join("ESqlMode ", ToString(Mode_)));
         }
 
         if (!Ctx_.SimpleColumns) {
@@ -583,7 +595,7 @@ private:
             return Unsupported("STREAM");
         }
 
-        if (auto q = rule.GetRule_opt_set_quantifier4(); q.HasBlock1()) {
+        if (const auto& q = rule.GetRule_opt_set_quantifier4(); q.HasBlock1()) {
             const auto& token = q.GetBlock1().GetToken1();
 
             if (IS_TOKEN(token.GetId(), ALL)) {
@@ -961,10 +973,53 @@ private:
         }
     }
 
+    TSourceResult Build(const TRule_into_values_source::TAlt1& alt) {
+        TVector<TYqlColumnRef> columns;
+        if (alt.HasBlock1()) {
+            columns = TableColumns(alt.GetBlock1().GetRule_pure_column_list1());
+        }
+
+        auto source = Build(alt.GetRule_values_source2());
+        if (!source) {
+            return std::unexpected(source.error());
+        }
+
+        TYqlSourceAlias alias = {
+            .Position = (*source)->GetPos(),
+            .Name = Ctx_.MakeName("yql_into_values_source"),
+            .Columns = std::move(columns),
+            .Kind = TYqlSourceAlias::EKind::IntoValues,
+        };
+
+        return Wrap(ToTableExpression(TYqlSource{
+            .Node = std::move(*source),
+            .Alias = std::move(alias),
+        }));
+    }
+
+    TSourceResult Build(const TRule_values_source& rule) {
+        switch (rule.GetAltCase()) {
+            case TRule_values_source::kAltValuesSource1:
+                return Build(rule.GetAlt_values_source1().GetRule_values_stmt1());
+            case TRule_values_source::kAltValuesSource2:
+                return Build(rule.GetAlt_values_source2().GetRule_select_stmt1());
+            case TRule_values_source::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
+    }
+
     TSQLResult<TYqlSource> Build(const TRule_flatten_source& rule) {
         if (rule.HasBlock2()) {
-            Token(rule.GetBlock2().GetToken1());
-            return Unsupported("FLATTEN ((OPTIONAL|LIST|DICT)? BY flatten_by_arg | COLUMNS)");
+            const auto& block = rule.GetBlock2();
+            Token(block.GetToken1());
+            switch (block.GetBlock2().GetAltCase()) {
+                case TRule_flatten_source_TBlock2_TBlock2::kAlt1:
+                    return Unsupported("FLATTEN (OPTIONAL|LIST|DICT)? BY flatten_by_arg");
+                case TRule_flatten_source_TBlock2_TBlock2::kAlt2:
+                    return Unsupported("FLATTEN COLUMNS");
+                case TRule_flatten_source_TBlock2_TBlock2::ALT_NOT_SET:
+                    YQL_ENSURE(false, "Unreachable");
+            }
         }
 
         return Build(rule.GetRule_named_single_source1());
@@ -1053,6 +1108,7 @@ private:
         const bool isAnonymous = rule.HasBlock2();
 
         return Build(
+            rule,
             rule.GetBlock3(),
             std::move(service),
             std::move(cluster),
@@ -1103,6 +1159,7 @@ private:
 
     TSQLResult<TYqlSource>
     Build(
+        const TRule_table_ref& rule,
         const TRule_table_ref::TBlock3& block,
         TString service,
         TDeferredAtom cluster,
@@ -1117,7 +1174,8 @@ private:
                     std::move(cluster),
                     isAnonymous);
             case TRule_table_ref_TBlock3::kAlt2:
-                return Unsupported("an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
+                return Build(rule, block.GetAlt2())
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case TRule_table_ref_TBlock3::kAlt3:
                 return Build(
                            block.GetAlt3(),
@@ -1172,6 +1230,38 @@ private:
     }
 
     TNodeResult Build(
+        const TRule_table_ref& rule,
+        const TRule_table_ref::TBlock3::TAlt2& alt)
+    {
+        Y_UNUSED(alt);
+
+        if (auto maybe = AsTableImpl(rule)) {
+            return Wrap(static_cast<INode*>(maybe->Get()));
+        }
+
+        TTableRef result;
+        TTableHints tableHints;
+        TMaybe<TString> keyFunc;
+        if (!TableRefImpl(rule, result, /*unorderedSubquery=*/false, tableHints, keyFunc)) {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        TSourcePtr source = result.Source;
+        if (!source) {
+            source = BuildTableSource(Ctx_.Pos(), result);
+        }
+
+        if (const auto contextHints = GetContextHints(Ctx_);
+            (tableHints || contextHints) &&
+            !source->SetTableHints(Ctx_, Ctx_.Pos(), tableHints, contextHints))
+        {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        return ToNode(Wrap(std::move(source)));
+    }
+
+    TNodeResult Build(
         const TRule_table_ref::TBlock3::TAlt3& alt,
         TString service,
         TDeferredAtom cluster,
@@ -1204,6 +1294,10 @@ private:
             }
 
             return TNonNull(node);
+        }
+
+        if (node->GetSource()) {
+            return Unsupported("bind parameter referencing a legacy source");
         }
 
         TYqlTableRefArgs args = {
@@ -1605,7 +1699,7 @@ private:
         return op;
     }
 
-    TNodeResult Finalize(TSQLResult<TYqlSelectArgs> select) {
+    TSourceResult Finalize(TSQLResult<TYqlSelectArgs> select) {
         if (!select) {
             return std::unexpected(select.error());
         }
@@ -1682,11 +1776,11 @@ private:
         return UnsupportedYqlSelect(Ctx_, message);
     }
 
-    TNodeResult WithForkedNamespace(std::invocable<TYqlSelect&> auto&& f) {
+    auto WithForkedNamespace(std::invocable<TYqlSelect&> auto&& f) -> decltype(f(std::declval<TYqlSelect&>())) {
         TYqlSelect that(*this);
         that.ForkNamespace();
 
-        TNodeResult result = f(that);
+        auto result = f(that);
         if (result && !that.WarnUnusedCTEs()) {
             return std::unexpected(ESQLError::Basic);
         }
@@ -1713,8 +1807,7 @@ TNodeResult BuildYqlSelectStatement(
     TSqlTranslation& that,
     const NSQLv1Generated::TRule_select_stmt& rule)
 {
-    return TYqlSelect(that)
-        .Build(rule)
+    return BuildYqlSelect(that, rule)
         .transform([](auto x) {
             return TNonNull(BuildYqlStatement(std::move(x)));
         });
@@ -1724,11 +1817,31 @@ TNodeResult BuildYqlSelectStatement(
     TSqlTranslation& that,
     const NSQLv1Generated::TRule_values_stmt& rule)
 {
-    return TYqlSelect(that)
-        .Build(rule)
+    return BuildYqlSelect(that, rule)
         .transform([](auto x) {
             return TNonNull(BuildYqlStatement(std::move(x)));
         });
+}
+
+TSourceResult BuildYqlSelect(
+    TSqlTranslation& that,
+    const NSQLv1Generated::TRule_select_stmt& rule)
+{
+    return TYqlSelect(that).Build(rule);
+}
+
+TSourceResult BuildYqlSelect(
+    TSqlTranslation& that,
+    const NSQLv1Generated::TRule_values_stmt& rule)
+{
+    return TYqlSelect(that).Build(rule);
+}
+
+TSourceResult BuildYqlSelect(
+    TSqlTranslation& that,
+    const NSQLv1Generated::TRule_into_values_source& rule)
+{
+    return TYqlSelect(that).Build(rule);
 }
 
 TNodeResult BuildYqlSelectSubExpr(

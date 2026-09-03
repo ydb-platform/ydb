@@ -41,7 +41,8 @@ message TPartitionTxMeta {
 
 message TPQConfig {
     optional uint32 ACLRetryTimeoutSec = 1 [default = 300];
-    optional uint32 BalancerMetadataRetryTimeoutSec = 2 [default = 240];
+    reserved 2;
+    reserved "BalancerMetadataRetryTimeoutSec";
     optional uint32 MaxBlobsPerLevel = 3 [default = 64]; // will produce 8mb blobs at last level
                                                          //32 => 1mb blobs at last level
     optional uint32 MaxBlobSize = 4 [default = 8388608]; //8mb
@@ -49,15 +50,15 @@ message TPQConfig {
 
     optional bool Enabled = 6 [default = true]; // Enable PQ proxies
 
-    optional uint32 MetaCacheTimeoutSec = 7 [default = 30, deprecated = true];
+    reserved 7;
+    reserved "MetaCacheTimeoutSec";
 
     optional uint32 MaxReadCookies = 8 [default = 100000];
 
     optional bool CheckACL = 9 [default = true];
 
-    optional uint32 SourceIdCleanupPeriodSec = 10 [default = 60]; // 24 hours // TODO: What is '24 hours'? Default is 60 seconds.
-    optional uint32 SourceIdMaxLifetimeSec = 11 [default = 1382400]; // 16 days
-    optional uint32 SourceIdTotalShardsCount = 12 [default = 131072];
+    reserved 10, 11, 12;
+    reserved "SourceIdCleanupPeriodSec", "SourceIdMaxLifetimeSec", "SourceIdTotalShardsCount";
 
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 
@@ -179,11 +180,12 @@ message TPQConfig {
     optional TClientServiceType DefaultClientServiceType = 40;
     optional bool DisallowDefaultClientServiceType = 43 [default = false];
 
-    optional uint32 MetaCacheRefreshIntervalMilliSeconds = 41 [default = 10000, deprecated = true]; // DEPRECATED
-    optional bool MetaCacheSkipVersionCheck = 42 [default = false, deprecated = true]; // DEPRECATED
+    reserved 41, 42;
+    reserved "MetaCacheRefreshIntervalMilliSeconds", "MetaCacheSkipVersionCheck";
 
     repeated string NonChargeableUser = 44;
-    optional string LbCommunalDatabase = 45 [default = ""];
+    reserved 45;
+    reserved "LbCommunalDatabase";
 
     message TPQDiscoveryConfig {
         optional uint32 CacheRefreshIntervalMilliSeconds = 1 [default = 10000];
@@ -198,12 +200,8 @@ message TPQConfig {
 
     optional uint32 MaxStorageNodePort = 50 [default = 19001];
     optional uint32 MaxStorageNodeId = 53 [default = 999];
-
-    message TMoveTopicActorConfig {
-        repeated string AllowedUserSIDs = 1;
-    }
-
-    optional TMoveTopicActorConfig MoveTopicActorConfig = 51;
+    reserved 51;
+    reserved "MoveTopicActorConfig";
 
     optional uint64 BalancerWakeupIntervalSec = 54 [default = 30];
     optional uint64 BalancerStatsWakeupIntervalSec = 55 [default = 5];
@@ -268,7 +266,7 @@ message TMirrorPartitionConfig {
     optional TCredentials Credentials = 7;
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
-    optional bool SyncWriteTime = 10 [default = false];
+    reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
 }
 
 message TPartitionConfig {
@@ -281,17 +279,20 @@ message TPartitionConfig {
     repeated string ImportantClientId_Deprecated = 4; //can be empty . Deprecated. Use Consumer.Important
     optional uint32 LowWatermark = 5 [default = 6291456]; //6Mb, compact blobs if they at least this big.
     optional uint32 SourceIdLifetimeSeconds = 6 [ default = 1382400]; //16 days
-    optional uint32 SourceIdMaxCounts = 31 [default = 6000000]; // Maximum number of stored sourceId records in partition
-                                                                // default - generate 5 new source id each second during 14 days
+    optional uint32 SourceIdMaxCounts = 31 [default = 100000]; // Maximum number of stored sourceId records in partition
 
     optional uint64 WriteSpeedInBytesPerSecond = 7 [default = 50000000];
     optional uint64 BurstSize = 8 [default = 50000000];
     optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 100000];
 
     message TReadQuota {
+        // Consumer name the quota is applied to. The special value CLIENTID_WITHOUT_CONSUMER
+        // ("$without_consumer") stores the quota for reading a partition without a consumer.
         optional string ClientId = 1;
         optional uint64 SpeedInBytesPerSecond = 2;
         optional uint64 BurstSize = 3;
+        optional uint64 SpeedInMessagesPerSecond = 4;
+        optional uint64 BurstSizeInMessages = 5;
     }
 
     repeated TReadQuota ReadQuota = 11;
@@ -308,6 +309,15 @@ message TPartitionConfig {
 
     optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 1048576]; // 1024 * 1024
     optional uint64 BurstSizeInMessages = 19 [default = 1048576];           // 1024 * 1024
+
+    // Total read speed for a single partition (across all consumers), in bytes per second.
+    optional uint64 ReadSpeedInBytesPerSecond = 20;
+    // Total burst size for read from a single partition (across all consumers), in bytes.
+    optional uint64 ReadBurstBytes = 21;
+    // Total read speed for a single partition (across all consumers), in messages per second.
+    optional uint64 ReadSpeedInMessagesPerSecond = 22;
+    // Total burst size for read from a single partition (across all consumers), in messages.
+    optional uint64 ReadBurstMessages = 23;
 };
 
 message TPartitionKeyRange {
@@ -357,6 +367,17 @@ message TOffloadConfig {
 }
 
 message TPQTabletConfig {
+    message TTopicId {
+        // Id is the schemeshard PathId for FirstClass topics, or CM-provided OwnerId for federation topics.
+        optional uint64 Id = 1;
+        // OwnerId is the schemeshard TabletId for FirstClass topics, or CM-provided OwnerId for federation topics.
+        optional uint64 OwnerId = 2;
+        // Wall-clock ms timestamp (coordinator plan step) at which Id was stamped.
+        // 0 = Id filled at create (no legacy name-keyed fallback); non-zero = Id back-filled by an alter.
+        optional uint64 TxStep = 3;
+    }
+    optional TTopicId Id = 49;
+
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
     repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31)
@@ -522,6 +543,12 @@ message THeartbeat {
     optional bytes Data = 3;
 }
 
+message TSchemaChangeInfo {
+    optional uint64 Step = 1;
+    optional uint64 TxId = 2;
+    optional bytes Data = 3;
+}
+
 message TMessageGroupInfo {
     enum EState {
         STATE_UNKNOWN = 0;
@@ -540,6 +567,7 @@ message TMessageGroupInfo {
     optional TPartitionKeyRange KeyRange = 6;
     optional EState State = 7;
     optional THeartbeat LastHeartbeat = 8;
+    optional TSchemaChangeInfo LastSchemaChange = 11;
 
 }
 
@@ -815,6 +843,13 @@ message TUserInfo {
     optional uint64 OffsetRewindSum = 5;
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
+    // Whether the consumer has ever committed past the partition StartOffset.
+    // Equivalent to (Offset > StartOffset): true means a real committed position in the
+    // live data range; false means the consumer is still at/before the retention boundary
+    // (never committed into live data, or was clamped back to StartOffset).
+    // Persisted with user info; recalculated on partition init from final StartOffset.
+    // Exposed to clients/proxies as ClientHasAnyCommits (TCmdGetClientOffsetResult) and
+    // used for first-commit distributed commits when the partition has parents after a split.
     optional bool AnyCommits = 8;
     optional string CommittedMetadata = 9;
 }

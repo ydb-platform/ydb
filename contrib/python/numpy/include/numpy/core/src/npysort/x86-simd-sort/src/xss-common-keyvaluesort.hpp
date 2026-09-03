@@ -1,0 +1,5 @@
+#ifdef USE_PYTHON3
+#include <contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-keyvaluesort.hpp>
+#else
+#error #include <contrib/python/numpy/py2/numpy/core/src/npysort/x86-simd-sort/src/xss-common-keyvaluesort.hpp>
+#endif

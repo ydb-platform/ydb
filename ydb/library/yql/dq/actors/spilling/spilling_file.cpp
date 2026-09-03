@@ -169,6 +169,7 @@ private:
             EvWriteFileResponse,
             EvReadFileResponse,
             EvRemoveOldTmp,
+            EvRetryStart,
 
             LastEvent
         };
@@ -203,10 +204,22 @@ private:
         struct TEvRemoveOldTmp : public TEventLocal<TEvRemoveOldTmp, EvRemoveOldTmp> {
             TFsPath TmpRoot;
             ui32 NodeId;
+            TString Username;
             TString SpillingSessionId;
 
-            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString spillingSessionId)
-                : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), SpillingSessionId(std::move(spillingSessionId)) {}
+            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString username, TString spillingSessionId)
+                : TmpRoot(std::move(tmpRoot))
+                , NodeId(nodeId)
+                , Username(std::move(username))
+                , SpillingSessionId(std::move(spillingSessionId))
+            {}
+        };
+
+        struct TEvRetryStart : public TEventLocal<TEvRetryStart, EvRetryStart> {
+            ui32 RetriesLeft;
+
+            explicit TEvRetryStart(ui32 retriesLeft)
+                : RetriesLeft(retriesLeft) {}
         };
     };
 
@@ -224,29 +237,11 @@ public:
     }
 
     void Bootstrap() {
-        Root_ = Config_.Root;
-        const auto rootToRemoveOldTmp = Root_;
-        const auto sessionId = Config_.SpillingSessionId;
-        const auto nodeId = SelfId().NodeId();
+        SpillingRoot_ = Config_.Root ? TFsPath(Config_.Root) : GetDefaultSpillingRoot();
+        SessionRoot_ = SpillingRoot_ / MakeSpillingNodeDirName(SelfId().NodeId(), Username_, Config_.SpillingSessionId);
+        LOG_I("Init DQ local file spilling service at " << SessionRoot_ << ", actor: " << SelfId());
 
-        Root_ /= (TStringBuilder() << NodePrefix_ << "_" << nodeId << "_" << sessionId);
-        LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
-
-        try {
-            if (Root_.IsSymlink()) {
-                throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
-            }
-            Root_.ForceDelete();
-            Root_.MkDirs(DIR_MODE);
-        } catch (...) {
-            LOG_E(CurrentExceptionMessage());
-            Become(&TDqLocalFileSpillingService::BrokenState);
-            return;
-        }
-
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(rootToRemoveOldTmp, nodeId, sessionId));
-
-        Become(&TDqLocalFileSpillingService::WorkState);
+        CreateSessionRoot(MaxStartupRetries);
     }
 
     static constexpr char ActorName[] = "DQ_LOCAL_FILE_SPILLING_SERVICE";
@@ -256,37 +251,58 @@ protected:
         IoThreadPool_->Stop();
         IActor::PassAway();
         if (Config_.CleanupOnShutdown) {
-            Root_.ForceDelete();
+            SessionRoot_.ForceDelete();
         }
     }
 
 private:
-    STATEFN(BrokenState) {
-        switch (ev->GetTypeRewrite()) {
-            case TEvDqSpillingLocalFile::TEvOpenFile::EventType:
-            case TEvDqSpillingLocalFile::TEvCloseFile::EventType:
-            case TEvDqSpilling::TEvWrite::EventType:
-            case TEvDqSpilling::TEvRead::EventType: {
-                HandleBroken(ev->Sender);
-                break;
+    void ReplyError(const TActorId& to, const TString& message, TSpillingCounters::TTypeCounters& tc) {
+        Send(to, new TEvDqSpilling::TEvError(message));
+        tc.Errors->Inc();
+    }
+
+    void CreateSessionRoot(ui32 retriesLeft) {
+        try {
+            if (SessionRoot_.IsSymlink()) {
+                throw TIoException() << SessionRoot_ << " is a symlink, can not start Spilling Service";
             }
-            hFunc(NMon::TEvHttpInfo, HandleBroken);
+            SessionRoot_.ForceDelete();
+            // SpillingRoot_ must already exist, create only the directory of this session inside it
+            SessionRoot_.MkDir(DIR_MODE);
+        } catch (const yexception& e) {
+            const TString root = SessionRoot_.GetPath();
+            Counters_->StartupErrors->Inc();
+            if (retriesLeft > 0) {
+                LOG_E("Cannot start DQ local file spilling service at " << root << ": " << e.what() << ". Retry "
+                    << (MaxStartupRetries - retriesLeft + 1) << "/" << MaxStartupRetries
+                    << " in " << StartupRetryDelay.Seconds() << "s");
+                Schedule(StartupRetryDelay, new TEvPrivate::TEvRetryStart(retriesLeft - 1));
+                Become(&TDqLocalFileSpillingService::BrokenState);
+                return;
+            }
+            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), e.what());
+        }
+
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(
+            SpillingRoot_, SelfId().NodeId(), Username_, Config_.SpillingSessionId));
+
+        Become(&TDqLocalFileSpillingService::WorkState);
+    }
+
+    STFUNC(BrokenState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NMon::TEvHttpInfo, HandleWork);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
+            case TEvPrivate::TEvRetryStart::EventType:
+                CreateSessionRoot(ev->Get<TEvPrivate::TEvRetryStart>()->RetriesLeft);
+                break;
             default:
-                Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
+                LOG_E("DQ local file spilling service is not started, send error to client " << ev->Sender);
+                Send(ev->Sender, new TEvDqSpilling::TEvError("Spilling service is not started"));
+                Counters_->ServiceNotStarted->Inc();
         }
     }
 
-    void HandleBroken(const TActorId& from) {
-        LOG_E("Service is broken, send error to client " << from);
-        Send(from, new TEvDqSpilling::TEvError("Service not started"));
-    }
-
-    void HandleBroken(NMon::TEvHttpInfo::TPtr& ev) {
-        Send(ev->Sender, new NMon::TEvHttpInfoRes("<html><h2>Service is not started due to IO error</h2></html>"));
-    }
-
-private:
     STRICT_STFUNC(WorkState,
         hFunc(TEvDqSpillingLocalFile::TEvOpenFile, HandleWork)
         hFunc(TEvDqSpillingLocalFile::TEvCloseFile, HandleWork)
@@ -309,7 +325,8 @@ private:
         if (it != Files_.end()) {
             LOG_E("[OpenFile] Can not open file: already exists. TxId: " << msg.TxId << ", desc: " << msg.Description);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File already exists"));
+            auto& tc = Counters_->GetTypeCounters(it->second.SpillingType);
+            ReplyError(ev->Sender, "File already exists", tc);
             return;
         }
 
@@ -403,16 +420,15 @@ private:
         }
 
         auto& fd = it->second;
+        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
 
         if (fd.CloseAt) {
             LOG_E("[Write] File already closed. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"));
+            ReplyError(ev->Sender, "File already closed", tc);
             return;
         }
-
-        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
 
         if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.Size() > Config_.MaxFileSize) {
             LOG_E("[Write] File size limit exceeded. "
@@ -421,8 +437,7 @@ private:
             const auto usedMb = (fd.TotalSize + msg.Blob.Size()) / 1024 / 1024;
             const auto limitMb = Config_.MaxFileSize / 1024 / 1024;
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("File size limit exceeded: {}/{}Mb", usedMb, limitMb)));
-
+            ReplyError(ev->Sender, std::format("File size limit exceeded: {}/{}Mb", usedMb, limitMb), tc);
             tc.TooBigFileErrors->Inc();
             return;
         }
@@ -433,8 +448,7 @@ private:
 
             const auto usedMb = (TotalSize_ + msg.Blob.Size()) / 1024 / 1024;
             const auto limitMb = Config_.MaxTotalSize / 1024 / 1024;
-            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("Total size limit exceeded: {}/{}Mb", usedMb, limitMb)));
-
+            ReplyError(ev->Sender, std::format("Total size limit exceeded: {}/{}Mb", usedMb, limitMb), tc);
             tc.NoSpaceErrors->Inc();
             return;
         }
@@ -455,7 +469,7 @@ private:
             fd.Parts.emplace(msg.BlobId, fp);
 
             auto fname = TStringBuilder() << fd.TxId << "_" << fd.Description << "_" << fd.NextPartListIndex++;
-            fp->FileName = (Root_ / fname).GetPath();
+            fp->FileName = (SessionRoot_ / fname).GetPath();
 
             LOG_D("[Write] create new FilePart " << fp->FileName);
             newFile = true;
@@ -482,7 +496,8 @@ private:
             TString error = "[Write] Can not run operation";
             LOG_E(error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            ReplyError(ev->Sender, error, tc);
+            tc.QueueOverflowErrors->Inc();
         }
     }
 
@@ -495,11 +510,15 @@ private:
             LOG_E("[WriteFileResponse] Can not write file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
+            Send(msg.Client, new TEvDqSpilling::TEvError("Internal error"));
             return;
         }
 
         auto& fd = it->second;
+
+        if (msg.Error) {
+            Counters_->GetTypeCounters(fd.SpillingType).IoErrors->Inc();
+        }
 
         fd.Error = std::move(msg.Error);
         fd.TotalWaitTime += msg.WaitTime;
@@ -528,12 +547,10 @@ private:
             if (!fd.Error) {
                 fd.Error = "File part not found";
             }
-
-            tc.IoErrors->Inc();
         }
 
         if (fd.Error) {
-            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
+            ReplyError(msg.Client, *fd.Error, tc);
 
             fd.Ops.clear();
             fd.HasActiveOp = false;
@@ -549,7 +566,8 @@ private:
             TString error = "[WriteFileResponse] Can not run operation";
             LOG_E(error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            ReplyError(msg.Client, error, tc);
+            tc.QueueOverflowErrors->Inc();
             return;
         }
     }
@@ -567,11 +585,12 @@ private:
         }
 
         auto& fd = it->second;
+        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
 
         if (fd.CloseAt) {
             LOG_E("[Read] Can not read file: closed. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Closed"));
+            ReplyError(ev->Sender, "Closed", tc);
             return;
         }
 
@@ -579,7 +598,7 @@ private:
         if (partIt == fd.Parts.end()) {
             LOG_E("[Read] Can not read file: part not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File part not found"));
+            ReplyError(ev->Sender, "File part not found", tc);
 
             fd.Ops.clear();
             TMaybe<TString> err = "Part not found";
@@ -593,7 +612,7 @@ private:
         if (blobIt == fp->Blobs.end()) {
             LOG_E("[Read] Can not read file: blob not found in the part. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Blob not found in the file part"));
+            ReplyError(ev->Sender, "Blob not found in the file part", tc);
 
             fd.Ops.clear();
             TMaybe<TString> err = "Blob not found in the file part";
@@ -630,7 +649,8 @@ private:
             TString error = "[Read] Can not run operation";
             LOG_E(error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            ReplyError(ev->Sender, error, tc);
+            tc.QueueOverflowErrors->Inc();
         }
     }
 
@@ -644,11 +664,15 @@ private:
             LOG_E("[ReadFileResponse] Can not read file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
+            Send(msg.Client, new TEvDqSpilling::TEvError("Internal error"));
             return;
         }
 
         auto& fd = it->second;
+
+        if (msg.Error) {
+            Counters_->GetTypeCounters(fd.SpillingType).IoErrors->Inc();
+        }
 
         fd.Error = std::move(msg.Error);
         fd.TotalWaitTime += msg.WaitTime;
@@ -682,7 +706,7 @@ private:
         }
 
         if (fd.Error) {
-            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
+            ReplyError(msg.Client, *fd.Error, tc);
 
             fd.Ops.clear();
             fd.HasActiveOp = false;
@@ -698,7 +722,8 @@ private:
             TString error = "[ReadFileResponse] Can not run operation";
             LOG_E(error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            ReplyError(msg.Client, error, tc);
+            tc.QueueOverflowErrors->Inc();
             return;
         }
     }
@@ -788,44 +813,81 @@ private:
     void HandleWork(TEvPrivate::TEvRemoveOldTmp::TPtr& ev) {
         const auto& msg = *ev->Get();
         const auto& root = msg.TmpRoot;
-        const auto nodeIdString = ToString(msg.NodeId);
-        const auto& sessionId = msg.SpillingSessionId;
-        const auto& nodePrefix = this->NodePrefix_;
 
         LOG_I("[RemoveOldTmp] removing at root: " << root);
 
-        const auto isDirOldTmp = [&nodePrefix, &nodeIdString, &sessionId](const TString& dirName) -> bool {
-            // dirName: node_<nodeId>_<sessionId>
-            TVector<TString> parts;
-            StringSplitter(dirName).Split('_').Limit(3).Collect(&parts);
-
-            if (parts.size() < 3) {
-                return false;
-            }
-            return parts[0] == nodePrefix && parts[1] == nodeIdString && parts[2] != sessionId;
-        };
-
         try {
-            TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
+            // Current format: <root>/spilling-tmp-<nodeId>-<sessionId>-<username>.
+            RemoveOwnDirs(root, msg);
 
-            TVector<TString> oldTmps;
-            for (const auto& dirEntry : iter) {
-                if (dirEntry.fts_info == FTS_DP) {
-                    continue;
-                }
+            // Old format with a configured Root: <root>/node_<nodeId>_<sessionId>.
+            RemoveOwnOldFormatDirs(root, msg.NodeId);
 
-                const auto dirName = dirEntry.fts_name;
-                if (isDirOldTmp(dirName)) {
-                    LOG_D("[RemoveOldTmp] found old temporary at " << (root / dirName));
-                    oldTmps.emplace_back(std::move(dirName));
-                }
-            }
-
-            for (const auto& dirName : oldTmps) {
-                (root / dirName).ForceDelete();
-            }
+            // Old format with an empty Root: $TMP/spilling-tmp-<username>/node_<nodeId>_<sessionId>.
+            RemoveOwnOldFormatDirs(
+                GetDefaultSpillingRoot() / (TStringBuilder() << SpillingDirPrefix << msg.Username), msg.NodeId);
         } catch (const yexception& e) {
             LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
+        }
+    }
+
+    void RemoveOwnDirs(const TFsPath& root, const TEvPrivate::TEvRemoveOldTmp& msg) {
+        const TString prefix = TStringBuilder() << SpillingDirPrefix << msg.NodeId << "-";
+        const TString suffix = TStringBuilder() << "-" << msg.Username;
+        const TString currentDirName = MakeSpillingNodeDirName(msg.NodeId, msg.Username, msg.SpillingSessionId);
+
+        RemoveMatchingChildren(root, [&](TStringBuf dirName) {
+            TStringBuf sessionId = dirName;
+            if (!sessionId.SkipPrefix(prefix) || !sessionId.ChopSuffix(suffix)) {
+                return false;
+            }
+
+            TGUID guid;
+            return GetGuid(sessionId, guid) && dirName != currentDirName;
+        });
+    }
+
+    void RemoveOwnOldFormatDirs(const TFsPath& dir, ui32 nodeId) {
+        const TString prefix = TStringBuilder() << "node_" << nodeId << "_";
+
+        RemoveMatchingChildren(dir, [&](TStringBuf dirName) {
+            TStringBuf sessionId = dirName;
+            if (!sessionId.SkipPrefix(prefix)) {
+                return false;
+            }
+
+            TGUID guid;
+            return GetGuid(sessionId, guid);
+        });
+    }
+
+    template <typename TPredicate>
+    void RemoveMatchingChildren(const TFsPath& dir, const TPredicate& shouldRemove) {
+        if (!dir.IsDirectory()) {
+            return;
+        }
+
+        TDirIterator iter(dir, TDirIterator::TOptions().SetMaxLevel(1));
+
+        TVector<TString> toRemove;
+        for (const auto& dirEntry : iter) {
+            if (dirEntry.fts_info == FTS_DP) {
+                continue;
+            }
+
+            const TStringBuf dirName = dirEntry.fts_name;
+            if (shouldRemove(dirName)) {
+                LOG_D("[RemoveOldTmp] found old temporary at " << (dir / dirName));
+                toRemove.emplace_back(dirName);
+            }
+        }
+
+        for (const auto& dirName : toRemove) {
+            try {
+                (dir / dirName).ForceDelete();
+            } catch (const yexception& e) {
+                LOG_E("[RemoveOldTmp] failed to remove " << (dir / dirName) << ": " << e.what());
+            }
         }
     }
 
@@ -837,10 +899,14 @@ private:
             return true;
         }
 
-        fd.HasActiveOp = true;
+        if (!IoThreadPool_->AddAndOwn(std::move(op))) {
+            Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size());
+            return false;
+        }
 
-        Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size() + 1);
-        return IoThreadPool_->AddAndOwn(std::move(op));
+        fd.HasActiveOp = true;
+        Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size());
+        return true;
     }
 
     bool RunNextOp(TFileDesc& fd) {
@@ -956,7 +1022,7 @@ private:
 
             auto resp = MakeHolder<TEvPrivate::TEvReadFileResponse>();
             resp->Client = Client;
-            resp->WaitTime = TInstant::Now() - now;
+            resp->WaitTime = now - Ts;
             resp->BlobId = BlobId;
 
             try {
@@ -1061,9 +1127,15 @@ private:
     };
 
 private:
+    static constexpr ui32 MaxStartupRetries = 2;
+    static constexpr TDuration StartupRetryDelay = TDuration::Seconds(1);
+
     const TFileSpillingServiceConfig Config_;
-    const TString NodePrefix_ = "node";
-    TFsPath Root_;
+    const TString Username_ = GetUsername();
+    // Root of all spilling directories, either configured or the default one.
+    TFsPath SpillingRoot_;
+    // Directory of this Spilling Service session inside SpillingRoot_, where the spilling files go.
+    TFsPath SessionRoot_;
     TIntrusivePtr<TSpillingCounters> Counters_;
 
     THolder<IThreadPool> IoThreadPool_;
@@ -1074,10 +1146,8 @@ private:
 
 } // anonymous namespace
 
-TFsPath GetTmpSpillingRootForCurrentUser() {
-    auto root = TFsPath{GetSystemTempDir()};
-    root /= "spilling-tmp-" + GetUsername();
-    return root;
+TFsPath GetDefaultSpillingRoot() {
+    return TFsPath{GetSystemTempDir()};
 }
 
 IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const TActorId& client,

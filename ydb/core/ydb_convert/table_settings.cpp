@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 
 #include <ydb/library/conclusion/status.h>
 
@@ -30,6 +31,27 @@ namespace {
             return proto.partition_at_keys().split_points().size() + 1;
         default:
             return defaultMinPartitions;
+        }
+    }
+
+    void FillDetailedMetricsSettings(NKikimrSchemeOp::TTableDetailedMetricsSettings& out,
+        Ydb::Table::MetricsSettings::MetricsLevel level)
+    {
+        switch (level) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED:
+            out.MutableConfigured()->SetMetricsLevel(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled);
+            break;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+            out.MutableConfigured()->SetMetricsLevel(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
+            break;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+            out.MutableConfigured()->SetMetricsLevel(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
+            break;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED:
+        default:
+            out.MutableNotConfigured();
+            break;
         }
     }
 }
@@ -238,6 +260,10 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     }
 
+    if (proto.has_metrics_settings()) {
+        FillDetailedMetricsSettings(*tableDesc.MutableDetailedMetricsSettings(), proto.metrics_settings().metrics_level());
+    }
+
     tableDesc.SetTemporary(proto.Gettemporary());
 
     return true;
@@ -289,7 +315,13 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& table
         error = "Storage settings are not supported";
         return false;
     }
-    
+
+    if (proto.has_metrics_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Metrics settings are not supported";
+        return false;
+    }
+
     tableDesc.SetTemporary(proto.temporary());
 
     return true;
@@ -440,6 +472,14 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     } else if (proto.has_drop_ttl_settings()) {
         tableDesc.MutableTTLSettings()->MutableDisabled();
+    }
+
+    if (proto.has_set_metrics_settings()) {
+        FillDetailedMetricsSettings(*tableDesc.MutableDetailedMetricsSettings(), proto.set_metrics_settings().metrics_level());
+        changed = true;
+    } else if (proto.has_drop_metrics_settings()) {
+        tableDesc.MutableDetailedMetricsSettings()->MutableNotConfigured();
+        changed = true;
     }
 
     if (!changed && !hadPartitionConfig) {

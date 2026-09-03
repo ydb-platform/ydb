@@ -178,7 +178,7 @@ bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
         || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
-        || StoreExternalBlobs || ExternalDataChannelsCount;
+        || StoreExternalBlobs || ExternalDataChannelsCount || MetricsLevel;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
@@ -340,6 +340,64 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
             outTier->mutable_delete_();
         }
     }
+}
+
+bool ParseMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error) {
+    // one can set metrics level both by literal and by numeric value
+    // PUBLIC numerics drift from any other enum, so remap them here
+    static constexpr Ydb::Table::MetricsSettings::MetricsLevel numericLevels[] = {
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION,
+    };
+
+    const TString value = to_lower(TString(raw));
+    ui64 numericVal = 0;
+    // to use numericLevels array own offsets, rather than map
+    if (TryFromString<ui64>(value, numericVal)
+        && numericVal > 0
+        && numericVal <= std::size(numericLevels))
+    {
+        out = numericLevels[numericVal - 1];
+    } else if (value == "database") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE;
+    } else if (value == "table") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE;
+    } else if (value == "partition") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION;
+    } else {
+        error = TStringBuilder() << "METRICS_LEVEL is invalid: " << raw;
+        return false;
+    }
+
+    return true;
+}
+
+// Ydb::Topic's metrics_level is a plain uint32 that flows verbatim to PQTabletConfig::MetricsLevel,
+// so unlike ParseMetricsLevel above, no remap is needed here: the numbers below are exactly
+// METRICS_LEVEL_{DISABLED,DATABASE,OBJECT,DETAILED} from ydb/core/persqueue/public/constants.h.
+// TODO: the RFC says level 0 (DISABLED) is supported by neither YDB nor LogBroker, but the topic
+// proto and today's metrics_level = 0 both allow it; rejecting DISABLED needs agreement with the
+// topic/LogBroker owners first, so it is accepted for now.
+bool ParseTopicMetricsLevel(TStringBuf raw, ui32& out, TString& error) {
+    const TString value = to_lower(TString(raw));
+    ui64 numericVal = 0;
+    if (TryFromString<ui64>(value, numericVal) && numericVal <= 3) {
+        out = static_cast<ui32>(numericVal);
+    } else if (value == "disabled") {
+        out = 0;
+    } else if (value == "database") {
+        out = 1;
+    } else if (value == "topic") {
+        out = 2;
+    } else if (value == "partition") {
+        out = 3;
+    } else {
+        error = TStringBuilder() << "METRICS_LEVEL is invalid: " << raw;
+        return false;
+    }
+
+    return true;
 }
 
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {

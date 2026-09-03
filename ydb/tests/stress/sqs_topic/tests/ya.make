@@ -22,6 +22,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/fixtures
     ydb/tests/library/stress
     ydb/tests/stress/sqs_topic/workload
     contrib/python/boto3

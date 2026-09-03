@@ -2,6 +2,7 @@ import logging
 import threading
 import time
 import uuid
+from typing import NamedTuple
 
 import boto3
 import ydb
@@ -22,23 +23,51 @@ BOTO_CONFIG = Config(
 )
 
 
-def make_sqs_topic_queue_name(topic_name, consumer=DEFAULT_CONSUMER):
-    if consumer == DEFAULT_CONSUMER:
-        return topic_name
-    return f"{topic_name}@{consumer}"
+class PartitionState(NamedTuple):
+    partition_id: int
+    active: bool
+    partition_end: int
+    committed_offset: int
 
 
-def get_written_messages_count(driver, topic_name):
-    describe = driver.topic_client.describe_topic(topic_name, include_stats=True)
-    return sum(p.partition_stats.partition_end for p in describe.partitions)
-
-
-def get_committed_messages_count(driver, topic_name, consumer=DEFAULT_CONSUMER):
+def get_consumer_partition_states(driver, topic_name, consumer=DEFAULT_CONSUMER):
     describe = driver.topic_client.describe_consumer(topic_name, consumer, include_stats=True)
-    return sum(
-        p.partition_consumer_stats.committed_offset
-        for p in describe.partitions
-        if p.partition_consumer_stats is not None
+    states = {}
+    for partition in describe.partitions:
+        partition_end = 0
+        if partition.partition_stats is not None:
+            partition_end = partition.partition_stats.partition_end
+        committed_offset = 0
+        if partition.partition_consumer_stats is not None:
+            committed_offset = partition.partition_consumer_stats.committed_offset
+        states[partition.partition_id] = PartitionState(
+            partition_id=partition.partition_id,
+            active=partition.active,
+            partition_end=partition_end,
+            committed_offset=committed_offset,
+        )
+    return states
+
+
+def partition_needs_committed_progress(state: PartitionState) -> bool:
+    if state.partition_end <= state.committed_offset:
+        return False
+    if not state.active and state.committed_offset >= state.partition_end:
+        return False
+    return True
+
+
+def assert_partitions_committed_caught_up(states, sent):
+    stalled_partitions = []
+    for partition_id, state in sorted(states.items()):
+        if state.committed_offset < state.partition_end:
+            stalled_partitions.append(
+                f"partition={partition_id} active={state.active} "
+                f"end={state.partition_end} committed={state.committed_offset}"
+            )
+    assert not stalled_partitions, (
+        f"some partitions did not commit all written messages (sent={sent}): "
+        f"{'; '.join(stalled_partitions)}"
     )
 
 
@@ -58,8 +87,8 @@ class BotoStressWorkload:
         self.sqs_endpoint = sqs_endpoint
         self.workers = workers
         self.consumer = consumer
-        self.topic_name = f"boto_stress_{uuid.uuid4().hex}"
-        self.queue_name = make_sqs_topic_queue_name(self.topic_name, consumer)
+        self.queue_name = f"boto_stress_{uuid.uuid4().hex}"
+        self.topic_name = self.queue_name
         self._queue_url = None
         self._driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self._driver.wait(timeout=60)
@@ -76,49 +105,31 @@ class BotoStressWorkload:
             config=BOTO_CONFIG,
         )
 
-    def create_topic(self):
-        with ydb.QuerySessionPool(self._driver) as session_pool:
-            session_pool.execute_with_retries(f"""
-                CREATE TOPIC `{self.topic_name}`
-                  (CONSUMER `{self.consumer}`
-                    WITH (
-                      type = 'shared',
-                      keep_messages_order = false,
-                      default_processing_timeout = Interval('PT30S')
-                    )
-                  );
-            """)
-
-    def drop_topic(self):
-        with ydb.QuerySessionPool(self._driver) as session_pool:
-            try:
-                session_pool.execute_with_retries(f"DROP TOPIC `{self.topic_name}`;")
-            except Exception as error:
-                logging.error("Failed to drop topic %s: %r", self.topic_name, error)
-
-    def resolve_queue_url(self):
+    def create_queue(self):
         client = self._make_boto_client()
         last_error = None
         for attempt in range(10):
             try:
-                self._queue_url = client.get_queue_url(QueueName=self.queue_name)["QueueUrl"]
+                self._queue_url = client.create_queue(QueueName=self.queue_name)["QueueUrl"]
                 return self._queue_url
             except Exception as error:
                 last_error = error
-                logging.warning("get_queue_url attempt %s failed: %r", attempt + 1, error)
+                logging.warning("create_queue attempt %s failed: %r", attempt + 1, error)
                 time.sleep(1)
                 client = self._make_boto_client()
-        raise AssertionError(f"get_queue_url failed for {self.queue_name}: {last_error!r}")
+        raise AssertionError(f"create_queue failed for {self.queue_name}: {last_error!r}")
 
-    @property
-    def queue_url(self):
+    def delete_queue(self):
         if self._queue_url is None:
-            return self.resolve_queue_url()
-        return self._queue_url
+            return
+        client = self._make_boto_client()
+        try:
+            client.delete_queue(QueueUrl=self._queue_url)
+        except Exception as error:
+            logging.error("Failed to delete queue %s: %r", self._queue_url, error)
 
     def run(self):
-        self.create_topic()
-        queue_url = self.resolve_queue_url()
+        queue_url = self.create_queue()
         stop_event = threading.Event()
         drain_event = threading.Event()
         lock = threading.Lock()
@@ -204,34 +215,58 @@ class BotoStressWorkload:
         def monitor_loop():
             monitor_driver = ydb.Driver(ydb.DriverConfig(self.endpoint, self.database))
             monitor_driver.wait(timeout=60)
-            last_committed = -1
-            last_progress_at = time.time()
+            last_committed_by_partition = {}
+            last_progress_at_by_partition = {}
+            monitor_started_at = time.time()
             try:
                 while not drain_event.is_set():
-                    written = get_written_messages_count(monitor_driver, self.topic_name)
-                    committed = get_committed_messages_count(
+                    partition_states = get_consumer_partition_states(
                         monitor_driver,
                         self.topic_name,
                         self.consumer,
                     )
                     with lock:
                         stats["describe_checks"] += 1
-                        committed_history.append((time.time(), written, committed, stats["sent"], stats["deleted"]))
+                        committed_history.append((
+                            time.time(),
+                            {
+                                partition_id: state._asdict()
+                                for partition_id, state in partition_states.items()
+                            },
+                            stats["sent"],
+                            stats["deleted"],
+                        ))
 
-                    if committed < last_committed:
-                        raise AssertionError(
-                            f"committed offset moved backwards: {last_committed} -> {committed}"
+                    now = time.time()
+                    for partition_id, state in partition_states.items():
+                        committed = state.committed_offset
+                        last_committed = last_committed_by_partition.get(partition_id, -1)
+
+                        if committed < last_committed:
+                            raise AssertionError(
+                                f"partition {partition_id} committed offset moved backwards: "
+                                f"{last_committed} -> {committed}"
+                            )
+                        if committed > last_committed:
+                            last_committed_by_partition[partition_id] = committed
+                            last_progress_at_by_partition[partition_id] = now
+
+                        if not partition_needs_committed_progress(state):
+                            continue
+
+                        last_progress_at = last_progress_at_by_partition.get(
+                            partition_id,
+                            monitor_started_at,
                         )
-                    if committed > last_committed:
-                        last_committed = committed
-                        last_progress_at = time.time()
-                    elif written > committed and time.time() - last_progress_at > COMMITTED_STALL_TIMEOUT_SECONDS:
-                        with lock:
-                            snapshot = dict(stats)
-                        raise AssertionError(
-                            "committed offset stalled while messages are still in the topic: "
-                            f"written={written} committed={committed} stats={snapshot}"
-                        )
+                        if now - last_progress_at > COMMITTED_STALL_TIMEOUT_SECONDS:
+                            with lock:
+                                snapshot = dict(stats)
+                            raise AssertionError(
+                                "partition committed offset stalled while messages are still in the topic: "
+                                f"partition={partition_id} active={state.active} "
+                                f"end={state.partition_end} committed={committed} stats={snapshot}"
+                            )
+
                     time.sleep(DESCRIBE_INTERVAL_SECONDS)
             finally:
                 monitor_driver.stop()
@@ -247,9 +282,9 @@ class BotoStressWorkload:
         monitor_thread = threading.Thread(target=monitor_loop, name="sqs-monitor", daemon=True)
 
         logging.info(
-            "Starting boto SQS stress for %s seconds: topic=%s workers=%s endpoint=%s",
+            "Starting boto SQS stress for %s seconds: queue=%s workers=%s endpoint=%s",
             self.duration,
-            self.topic_name,
+            self.queue_name,
             self.workers,
             self.sqs_endpoint,
         )
@@ -277,16 +312,24 @@ class BotoStressWorkload:
         monitor_thread.join(timeout=10)
 
         committed_deadline = time.time() + 30
-        committed = 0
+        partition_states = {}
         while time.time() < committed_deadline:
-            committed = get_committed_messages_count(self._driver, self.topic_name, self.consumer)
+            partition_states = get_consumer_partition_states(
+                self._driver,
+                self.topic_name,
+                self.consumer,
+            )
             with lock:
                 sent = stats["sent"]
-            if committed >= sent:
+            if sent > 0 and not any(
+                partition_needs_committed_progress(state)
+                for state in partition_states.values()
+            ):
                 break
             time.sleep(1)
 
-        written = get_written_messages_count(self._driver, self.topic_name)
+        written = sum(state.partition_end for state in partition_states.values())
+        committed = sum(state.committed_offset for state in partition_states.values())
 
         with lock:
             final_stats = dict(stats)
@@ -294,9 +337,11 @@ class BotoStressWorkload:
             history_tail = committed_history[-5:]
 
         logging.info(
-            "Boto SQS stress finished: written=%s committed=%s stats=%s history_tail=%s",
+            "Boto SQS stress finished: written=%s committed=%s partition_states=%s "
+            "stats=%s history_tail=%s",
             written,
             committed,
+            {pid: state._asdict() for pid, state in partition_states.items()},
             final_stats,
             history_tail,
         )
@@ -320,16 +365,14 @@ class BotoStressWorkload:
         assert final_stats["deleted"] == final_stats["sent"], (
             f"not all sent messages were read and committed: {final_stats}"
         )
-        assert committed >= final_stats["sent"], (
-            f"committed offset lagged behind sent messages: committed={committed} sent={final_stats['sent']}"
-        )
+        assert_partitions_committed_caught_up(partition_states, final_stats["sent"])
         assert written >= final_stats["sent"], (
             f"topic end offset lagged behind sent messages: written={written} sent={final_stats['sent']}"
         )
         assert not final_errors, f"worker errors: {final_errors[:10]}"
 
     def close(self):
-        self.drop_topic()
+        self.delete_queue()
         self._driver.stop()
 
     def __enter__(self):

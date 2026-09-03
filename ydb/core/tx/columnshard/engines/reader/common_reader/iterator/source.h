@@ -167,6 +167,9 @@ private:
     std::optional<ui32> RecordsCountImpl;
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
+    // A conflicting source is scanned only so TConflictDetector can break the lock: it yields no
+    // rows and takes no part in the ordered stream.
+    bool ConflictingFlag = false;
     std::optional<ui64> MemoryGroupId;
     TExecutionContext ExecutionContext;
     virtual bool DoAddTxConflict() = 0;
@@ -397,6 +400,14 @@ public:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards();
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
+
+    bool IsConflicting() const {
+        return ConflictingFlag;
+    }
+
+    void SetIsConflicting() {
+        ConflictingFlag = true;
+    }
 
     bool IsSourceInMemory() const;
 

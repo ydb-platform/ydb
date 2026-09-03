@@ -123,12 +123,6 @@ public:
         ESourcesSorting SourcesSorting;
 
         bool Less(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
-            if (l.Conflicting != r.Conflicting) {
-                return !l.Conflicting;   // conflicting portions are scanned last
-            }
-            if (l.Conflicting) {
-                return false;   // both conflicting: equivalent, relative order is unspecified
-            }
             switch (SourcesSorting) {
                 case ESourcesSorting::SourceIdAsc:
                     return TSimpleLess()(l, r);
@@ -324,6 +318,12 @@ template <std::derived_from<TDataSourceConstructor> TConstructor>
 class TSourcesConstructorWithAccessors: public TSourcesConstructorWithAccessorsImpl {
 private:
     TOrderedObjects<TConstructor> Constructors;
+    // Conflicting portions are not sorted, they produce no rows and no cursor can name them.
+    // They are scanned only so TConflictDetector can break the lock.
+    // So we need to process them first before a limit can stop the scan.
+    // Their index only has to be unique, since ISyncPoint::AddSource leaves them out of the ordered stream.
+    std::deque<TConstructor> ConflictingConstructors;
+    ui32 NextConflictingIdx = Max<ui32>();
 
     virtual TString DoDebugString() const override {
         return "{CC:" + ::ToString(Constructors.GetSize()) + "}";
@@ -334,17 +334,19 @@ private:
     }
 
     virtual void DoClear() override {
+        ConflictingConstructors.clear();
         Constructors.Clear();
         Accessors.Stop();
     }
 
     virtual void DoAbort() override {
+        ConflictingConstructors.clear();
         Constructors.Clear();
         Accessors.Stop();
     }
 
     virtual bool DoIsFinished() const override {
-        return Constructors.IsEmpty();
+        return ConflictingConstructors.empty() && Constructors.IsEmpty();
     }
 
     virtual std::shared_ptr<IDataSource> DoExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
@@ -361,14 +363,24 @@ private:
                 {"inFlight", inFlightCurrentLimit});
             return nullptr;
         }
-        if (!Accessors.HasRequest() && (Accessors.GetSize() < Constructors.GetSize() && Accessors.GetSize() < inFlightCurrentLimit)) {
-            Constructors.PrepareOrdered(inFlightCurrentLimit * 2);
+        const ui32 constructorsCount = ConflictingConstructors.size() + Constructors.GetSize();
+        const ui32 twiceInFlightCurrentLimit = 2 * inFlightCurrentLimit;
+        if (!Accessors.HasRequest() && (Accessors.GetSize() < constructorsCount && Accessors.GetSize() < inFlightCurrentLimit)) {
             std::shared_ptr<TDataAccessorsRequest> request =
                 std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
-            for (ui32 idx = Accessors.GetSize(); idx < Constructors.GetAlreadySorted().size(); ++idx) {
-                request->AddPortion(Constructors.GetAlreadySorted()[idx].GetPortion());
-                if (request->GetSize() == 2 * inFlightCurrentLimit) {
-                    break;
+            // Accessors are fetched in hand-out order and popped from the front, so the ones already held are
+            // the first Accessors.GetSize() sources still to hand out. Conflicting sources are handed out
+            // first, so the ordered queue starts at whatever is left of that count.
+            const ui32 alreadyFetched = Accessors.GetSize();
+            for (ui32 idx = alreadyFetched; idx < ConflictingConstructors.size() && request->GetSize() < twiceInFlightCurrentLimit; ++idx) {
+                request->AddPortion(ConflictingConstructors[idx].GetPortion());
+            }
+            if (request->GetSize() < twiceInFlightCurrentLimit) {
+                Constructors.PrepareOrdered(twiceInFlightCurrentLimit);
+                const auto& ordered = Constructors.GetAlreadySorted();
+                for (ui32 idx = alreadyFetched - Min<ui32>(alreadyFetched, ConflictingConstructors.size());
+                     idx < ordered.size() && request->GetSize() < twiceInFlightCurrentLimit; ++idx) {
+                    request->AddPortion(ordered[idx].GetPortion());
                 }
             }
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
@@ -430,7 +442,14 @@ public:
     };
 
     TObjectWithAccessor PopObjectWithAccessor() {
-        auto object = Constructors.PopFront();
+        auto object = [&]() {
+            if (ConflictingConstructors.empty()) {
+                return Constructors.PopFront();
+            }
+            auto conflicting = std::move(ConflictingConstructors.front());
+            ConflictingConstructors.pop_front();
+            return conflicting;
+        }();
         auto acc = Accessors.ExtractAccessorVerified(object.GetPortion()->GetPortionId());
         TObjectWithAccessor result(std::move(object), std::move(acc));
         return result;
@@ -442,7 +461,20 @@ public:
     }
 
     void InitializeConstructors(std::deque<TConstructor>&& objects) {
-        Constructors.Initialize(std::move(objects));
+        std::deque<TConstructor> ordered;
+        for (auto&& object : objects) {
+            if (object.IsConflicting()) {
+                object.SetIndex(NextConflictingIdx--);
+                ConflictingConstructors.emplace_back(std::move(object));
+            } else {
+                ordered.emplace_back(std::move(object));
+            }
+        }
+        Constructors.Initialize(std::move(ordered));
+    }
+
+    const std::deque<TConstructor>& GetConflictingConstructors() const {
+        return ConflictingConstructors;
     }
 };
 }   // namespace NKikimr::NOlap::NReader::NCommon

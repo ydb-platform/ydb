@@ -28,10 +28,8 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
 
 std::vector<TPortionInfo::TConstPtr> TPortionsSources::GetConflictingPortions() const {
     std::vector<TPortionInfo::TConstPtr> result;
-    for (auto&& i : TBase::GetConstructors()) {
-        if (i.IsConflicting()) {
-            result.emplace_back(i.GetPortion());
-        }
+    for (auto&& i : TBase::GetConflictingConstructors()) {
+        result.emplace_back(i.GetPortion());
     }
     return result;
 }
@@ -40,6 +38,9 @@ std::shared_ptr<TPortionDataSource> TSourceConstructor::Construct(
     const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const {
     auto result = std::make_shared<TPortionDataSource>(GetSourceIdx(), Portion, context);
     result->SetPortionAccessor(std::move(accessor));
+    if (IsConflicting()) {
+        result->SetIsConflicting();
+    }
     if (IsStartedByCursorFlag) {
         result->SetIsStartedByCursor();
     }

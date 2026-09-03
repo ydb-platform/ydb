@@ -69,6 +69,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     const bool partialUsageByPredicateExt, const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion,
     const bool preventDuplicates, const bool isFinalSyncPoint) const {
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
+    // conflicting portions produce no rows, so no aggregation for them
+    const bool aggregateSources = !needConflictDetector && !!GetSourcesAggregationScript();
 
     NCommon::TFetchingScriptBuilder acc(*this);
     acc.AddStep(std::make_shared<TInitializeSourceStep>());
@@ -96,22 +98,24 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddStep(std::make_shared<TPredicateFilter>());
         }
         if (needConflictDetector) {
+            // A conflicting portion is invisible at the request snapshot: registering the conflict is the only
+            // product of scanning it. So no need to do anything after TConflictDetector.
             acc.AddStep(std::make_shared<TConflictDetector>());
-        }
-        if (preventDuplicates) {
-            acc.AddStep(std::make_shared<TDuplicateFilter>());
-        }
-        if (const auto& chainProgram = GetReadMetadata()->GetProgram().GetGraphOptional()) {
-            acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
         } else {
-            acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
-            acc.AddAssembleStep(*GetFFColumns(), "LAST", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, false);
-        }
-        if (GetSourcesAggregationScript()) {
-            acc.AddStep(std::make_shared<TUpdateAggregatedMemoryStep>());
+            if (preventDuplicates) {
+                acc.AddStep(std::make_shared<TDuplicateFilter>());
+            }
+            if (const auto& chainProgram = GetReadMetadata()->GetProgram().GetGraphOptional()) {
+                acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+            } else {
+                acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
+                acc.AddAssembleStep(*GetFFColumns(), "LAST", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, false);
+            }
         }
     }
-    if (!GetSourcesAggregationScript()) {
+    if (aggregateSources) {
+        acc.AddStep(std::make_shared<TUpdateAggregatedMemoryStep>());
+    } else {
         acc.AddStep(std::make_shared<NCommon::TBuildStageResultStep>());
         acc.AddStep(std::make_shared<TPrepareResultStep>(isFinalSyncPoint));
     }

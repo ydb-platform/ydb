@@ -247,9 +247,7 @@ namespace {
                 COUNTER(DirectIO, FallbackUringCount, false)
                 COUNTER(DirectIO, FallbackPDiskCount, false)
 
-                COUNTER(DirectIO, QueueSize, false)
                 COUNTER(DirectIO, RunningCount, false)
-                HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
             },
 #if defined(__linux__)
             .UringCounters = {
@@ -287,6 +285,16 @@ namespace {
     }
 
     TDDiskActor::~TDDiskActor() {
+#if defined(__linux__)
+        // Actor-system hard shutdown may destroy the actor without calling PassAway().
+        // Join the router while every field reachable from completion/sample callbacks
+        // is still alive; the router destructor would otherwise run too late in member
+        // destruction order.
+        if (UringRouter) {
+            UringRouter->Stop();
+            UringRouter.reset();
+        }
+#endif
         [[maybe_unused]] constexpr size_t CompleteTypeGuard = sizeof(TDirectIoOpBase);
     }
 
@@ -356,12 +364,8 @@ namespace {
         }
     }
 
-    void TDDiskActor::FailDirectIoOp(std::unique_ptr<TDirectIoOpBase> op, bool wasRunning) {
-        if (wasRunning) {
-            Counters.DirectIO.RunningCount->Dec();
-        } else {
-            Counters.DirectIO.QueueSize->Dec();
-        }
+    void TDDiskActor::FailDirectIoOp(std::unique_ptr<TDirectIoOpBase> op) {
+        Counters.DirectIO.RunningCount->Dec();
         switch (op->GetOperationType()) {
             case NPDisk::TUringOperationBase::EREAD:
                 Counters.DirectIO.Read.Done(op->GetTotalSize());
@@ -390,25 +394,20 @@ namespace {
             {"DDiskId", DDiskId},
             {"errorReason", GetBrokenReason()});
 
-        // Complete actor-owned queued/fallback operations immediately. Submitted io_uring
-        // operations post their result events later; the actor normalizes those to ERROR because
-        // Broken is already set.
-        while (!DirectIoQueue.empty()) {
-            auto op = std::move(DirectIoQueue.front());
-            DirectIoQueue.pop();
-            FailDirectIoOp(std::move(op), false);
-        }
+        // Complete actor-owned fallback operations immediately. Submitted io_uring operations
+        // post their result events later; the actor normalizes those to ERROR because Broken is
+        // already set.
         while (!WriteCallbacks.empty()) {
             auto it = WriteCallbacks.begin();
             auto op = std::move(it->second.Op);
             WriteCallbacks.erase(it);
-            FailDirectIoOp(std::move(op), true);
+            FailDirectIoOp(std::move(op));
         }
         while (!ReadCallbacks.empty()) {
             auto it = ReadCallbacks.begin();
             auto op = std::move(it->second.Op);
             ReadCallbacks.erase(it);
-            FailDirectIoOp(std::move(op), true);
+            FailDirectIoOp(std::move(op));
         }
 
         for (auto& [tabletId, chunks] : ChunkRefs) {
@@ -698,6 +697,17 @@ namespace {
         }
 #if defined(__linux__)
         if (UringRouter) {
+            // FIXME: This synchronous teardown runs in a System/User actor handler and violates
+            // the actor contract by sleeping and then blocking in Stop()/Join(). GetInflight()
+            // covers router work only: OnComplete() may enqueue TEvShortIO or another DDisk result
+            // and then let the router decrement its count while this mailbox is blocked. A queued
+            // TEvShortIO is not counted at all, so zero inflight does not mean actor-level work is
+            // drained; detaching the mailbox can drop client-visible completion and accounting.
+            // A stuck device can also make Stop() wait indefinitely for its IO_DRAIN barrier despite
+            // the one-second pre-loop bound. Both the DDisk and PersistentBuffer actor paths need a
+            // separate asynchronous, multi-phase shutdown that closes admission, keeps the actor
+            // alive to drain/fail completion events, waits for the router thread off the mailbox,
+            // and detaches only after actor-level work is drained.
             for (int i = 0; i < 1000 && UringRouter->GetInflight() > 0; ++i) {
                 usleep(1000);
             }

@@ -5,6 +5,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_race unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
+ydb/core/kafka_proxy/ut RequestUtilityActors.DescribeConfigs
 ydb/core/kafka_proxy/ut TTopicLocationActor.MissingTopicIsSchemeError
 ydb/core/kafka_proxy/ut TTopicLocationActor.RetriesOnDeliveryProblem
 ydb/core/kafka_proxy/ut TTopicLocationActor.SuccessReturnsLivePartitions
@@ -16,7 +17,6 @@ ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingTopicIsSchemeError
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.ParsesConsumerOffsetsAndSkipsErrors
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.RetriesOnDeliveryProblem
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.RetriesOnEmptyStatusResponse
-ydb/core/kafka_proxy/ut unittest.sole chunk
 ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NoMultipleColumnsWithoutFeatureFlag
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk

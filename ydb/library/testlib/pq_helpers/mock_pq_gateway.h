@@ -125,7 +125,7 @@ public:
     virtual IMockPqReadSession::TPtr ExtractReadSession(const TString& topic) = 0;
 
     // Get read session for a specific partition (multi-partition topics). Returns nullptr if not created.
-    // Topics with multiple partition must be registered in TMockPqGatewaySettings.
+    // Topics with multiple partitions must be registered in TMockPqGatewaySettings.
     virtual IMockPqReadSession::TPtr GetReadSession(const TString& topic, ui64 partitionId) = 0;
 
     // Wait for read session creation

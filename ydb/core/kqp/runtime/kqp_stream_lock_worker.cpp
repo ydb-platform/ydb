@@ -270,6 +270,21 @@ void TKqpStreamLockWorker::RebuildLockRequest(
     PendingLockRequests.emplace_back(shardId, std::move(lockRequest));
 }
 
+void TKqpStreamLockWorker::ResetLockRowsProcessing(ui64 requestId) {
+    auto batchIt = BatchesByRequestId.find(requestId);
+    if (batchIt == BatchesByRequestId.end()) {
+        return;
+    }
+
+    auto& batchInfo = batchIt->second;
+    InputRows.reserve(InputRows.size() + batchInfo.Rows.size());
+    for (auto& row : batchInfo.Rows) {
+        InputRows.emplace_back(std::move(row));
+    }
+
+    BatchesByRequestId.erase(batchIt);
+}
+
 std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>> TKqpStreamLockWorker::PopNextLockRequest() {
     if (PendingLockRequests.empty()) {
         return {0, nullptr};

@@ -7,11 +7,13 @@ ENV(YDB_TEST_PATH="ydb/tests/stress/sqs_topic/sqs_topic")
 
 TEST_SRCS(
     test_workload.py
+    test_boto_stress.py
 )
 
 REQUIREMENTS(ram:32 cpu:4)
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 
 DEPENDS(
     ydb/apps/ydb
@@ -22,6 +24,8 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress
     ydb/tests/stress/sqs_topic/workload
+    contrib/python/boto3
+    contrib/python/botocore
 )
 
 END()

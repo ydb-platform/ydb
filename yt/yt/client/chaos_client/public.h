@@ -24,6 +24,7 @@ constexpr TReplicationEra InitialReplicationEra = 0;
 constexpr int MaxReplicasPerReplicationCard = 128;
 
 DECLARE_REFCOUNTED_STRUCT(TReplicationCard)
+DECLARE_REFCOUNTED_STRUCT(TChaosLease)
 
 DECLARE_REFCOUNTED_STRUCT(IReplicationCardCache)
 DECLARE_REFCOUNTED_STRUCT(TChaosCacheChannelConfig)

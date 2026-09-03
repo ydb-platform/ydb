@@ -552,6 +552,7 @@ struct TSchemaValidationOptions
     bool AllowUnversionedUpdateColumns = false;
     bool AllowTimestampColumns = false;
     bool AllowOperationColumns = false;
+    bool AllowShuffleColumns = false;
 };
 
 void ValidateColumnSchema(

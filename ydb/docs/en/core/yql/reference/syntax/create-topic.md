@@ -24,7 +24,7 @@ Consumer parameters:
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — list of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the consumer.
+* `supported_codecs` — list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the consumer.
 
 {% endif %}
 
@@ -44,7 +44,7 @@ Allowed values: `disabled`, `paused`, `scale_up`, default value — `disabled`.
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — list of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type — `String`.
+* `supported_codecs` — list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. Value type — `String`.
 
 {% endif %}
 
@@ -59,12 +59,6 @@ The following command creates a topic without consumers with default settings:
 ```yql
 CREATE TOPIC `my_topic`;
 ```
-
-{% if feature_topic_codecs %}
-
-* `supported_codecs` - list of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type - `String`.
-
-{% endif %}
 
 To create a topic with an important consumer and a data retention period of 1 day, run the following command:
 

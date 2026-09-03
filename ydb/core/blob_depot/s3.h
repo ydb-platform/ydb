@@ -65,7 +65,9 @@ namespace NKikimr::NBlobDepot {
         std::deque<TEvBlobDepot::TEvPrepareWriteS3::TPtr> PendingPrepareWrites;
 
         ui32 MaxWritesInFlight() const;
-        ui32 EffectiveMaxWritesInFlight() const { return Min(CurrentMaxWritesInFlight, MaxWritesInFlight()); }
+        ui32 EffectiveMaxWritesInFlight() const {
+            return EffectiveS3InFlightLimit(CurrentMaxWritesInFlight, MaxWritesInFlight());
+        }
 
         void HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
         void NotifyPutSlowDown();
@@ -110,7 +112,9 @@ namespace NKikimr::NBlobDepot {
         ui32 ConsecutiveSuccessfulDeleteBatches = 0;
 
         ui32 MaxDeletesInFlight() const;
-        ui32 EffectiveMaxDeletesInFlight() const { return Min(CurrentMaxDeletesInFlight, MaxDeletesInFlight()); }
+        ui32 EffectiveMaxDeletesInFlight() const {
+            return EffectiveS3InFlightLimit(CurrentMaxDeletesInFlight, MaxDeletesInFlight());
+        }
         size_t MaxObjectsToDeleteAtOnce() const;
 
         void RunDeletersIfNeeded();

@@ -648,7 +648,9 @@ namespace NKikimr::NBlobDepot {
 
         TControlWrapper S3MaxGetsInFlight = 32;
         ui32 MaxS3GetsInFlight() const { return Max<ui32>(1, S3MaxGetsInFlight); }
-        ui32 EffectiveMaxS3GetsInFlight() const { return Min(CurrentMaxS3GetsInFlight, MaxS3GetsInFlight()); }
+        ui32 EffectiveMaxS3GetsInFlight() const {
+            return EffectiveS3InFlightLimit(CurrentMaxS3GetsInFlight, MaxS3GetsInFlight());
+        }
 
         struct TPendingS3Read {
             TString Key;

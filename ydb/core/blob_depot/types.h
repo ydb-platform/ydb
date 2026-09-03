@@ -4,6 +4,12 @@
 
 namespace NKikimr::NBlobDepot {
 
+    // Adaptive S3 limiter: CurrentMax shrinks to 1 on SlowDown and grows back,
+    // configuredCeiling is the ICB cap. Used by write/delete/get inflight gates.
+    inline ui32 EffectiveS3InFlightLimit(ui32 currentMax, i64 configuredCeiling) {
+        return Min(currentMax, Max<ui32>(1, configuredCeiling));
+    }
+
     static constexpr ui32 BaseDataChannel = 2;
 
     struct TChannelKind {

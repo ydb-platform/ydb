@@ -681,6 +681,27 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 
 ///////////////////////////////////////////////////////////////////////////////
 
+void TPartitionActor::ReplyUpdateVolumeConfig(
+    const NActors::TActorContext& ctx,
+    const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+    NKikimrBlockStore::EStatus status)
+{
+    auto response = std::make_unique<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
+    response->Record.SetTxId(ev->Get()->Record.GetTxId());
+    response->Record.SetOrigin(TabletID());
+    response->Record.SetStatus(status);
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Sending UpdateVolumeConfig response %s",
+        LogTitle.GetWithTime().c_str(),
+        NKikimrBlockStore::EStatus_Name(status).c_str());
+
+    ctx.Send(ev->Sender, response.release());
+}
+
 void TPartitionActor::HandleUpdateVolumeConfig(
     const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -701,10 +722,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             "%s Already has ddisk connections",
             LogTitle.GetWithTime().c_str());
 
-        auto response = std::make_unique<
-            NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-        response->Record.SetStatus(NKikimrBlockStore::ERROR);
-        ctx.Send(ev->Sender, response.release());
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
         return;
     }
 
@@ -719,10 +737,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             LogTitle.GetWithTime().c_str(),
             volumeConfig.GetBlockSize());
 
-        auto response = std::make_unique<
-            NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-        response->Record.SetStatus(NKikimrBlockStore::ERROR);
-        ctx.Send(ev->Sender, response.release());
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
         return;
     }
 
@@ -735,20 +750,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 
     ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
-    // Send response back to volume
-    auto response = std::make_unique<
-        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-    response->Record.SetTxId(msg->Record.GetTxId());
-    response->Record.SetOrigin(TabletID());
-    response->Record.SetStatus(NKikimrBlockStore::OK);
-
-    LOG_INFO(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s Sending UpdateVolumeConfig response OK",
-        LogTitle.GetWithTime().c_str());
-
-    ctx.Send(ev->Sender, response.release());
+    ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
 void TPartitionActor::HandleUpdateVChunkConfig(

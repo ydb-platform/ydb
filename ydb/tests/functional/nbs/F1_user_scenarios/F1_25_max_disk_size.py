@@ -23,7 +23,7 @@ def _block_size_params():
 
 
 class TestF1_25MaxDiskSize(NbsCase):
-    """F1.25 — eager vchunk metadata at 2^31 blocks for large disks."""
+    """F1.25 — max-size disk size for different block sizes"""
 
     @pytest.mark.timeout(300, func_only=True)
     @pytest.mark.parametrize('block_size', _block_size_params())

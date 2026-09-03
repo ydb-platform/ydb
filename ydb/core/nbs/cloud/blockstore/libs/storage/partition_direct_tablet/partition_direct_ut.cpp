@@ -1451,6 +1451,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
         UNIT_ASSERT(
             response->Get()->Record.GetStatus() == NKikimrBlockStore::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetTxId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            response->Get()->Record.GetOrigin(),
+            PartitionTabletId);
     }
 
     // Test implementation for IndirectWrite write mode

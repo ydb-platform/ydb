@@ -238,10 +238,7 @@ void TPartitionActor::HandleUpdateVolumeConfigDuringDelete(
         "%s Reject UpdateVolumeConfig: partition is being deleted",
         LogTitle.GetWithTime().c_str());
 
-    auto response = std::make_unique<
-        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-    response->Record.SetStatus(NKikimrBlockStore::ERROR);
-    ctx.Send(ev->Sender, response.release());
+    ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
 }
 
 // Ignore update vchunk config during delete

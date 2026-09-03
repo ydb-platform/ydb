@@ -353,9 +353,11 @@ namespace NKikimr::NStorage {
         static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize,
             ui64 unitSizeInBytes, ui32 maxSlots);
         void UpdateBlobStorageExecutorPoolMapping();
-        ui32 GetBlobStorageExecutorPoolId(ui32 pdiskId);
+        // Engaged when the PDisk placement feature is enabled; disengaged means "no
+        // assignment" and callers register actors on the System pool without pinning.
+        std::optional<ui32> GetBlobStorageExecutorPoolId(ui32 pdiskId);
         void ApplyBlobStorageExecutorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig,
-            ui32 blobStorageExecutorPoolId);
+            std::optional<ui32> blobStorageExecutorPoolId);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);

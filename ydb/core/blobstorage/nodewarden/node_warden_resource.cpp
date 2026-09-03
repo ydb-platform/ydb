@@ -373,7 +373,7 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
 
     // register new actor
     TActorId actorId = Register(CreateIncrHugeKeeper(settings), TMailboxType::HTSwap,
-        GetBlobStorageExecutorPoolId(pdiskId));
+        GetBlobStorageExecutorPoolId(pdiskId).value_or(AppData()->SystemPoolId));
 
     // bind it to service
     TActivationContext::ActorSystem()->RegisterLocalService(keeperId, actorId);

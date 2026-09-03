@@ -421,7 +421,8 @@ namespace NKikimr::NStorage {
             actor.reset(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters));
         }
 
-        const ui32 blobStorageExecutorPoolId = GetBlobStorageExecutorPoolId(vslotId.PDiskId);
+        const ui32 blobStorageExecutorPoolId =
+            GetBlobStorageExecutorPoolId(vslotId.PDiskId).value_or(AppData()->SystemPoolId);
         const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, blobStorageExecutorPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);

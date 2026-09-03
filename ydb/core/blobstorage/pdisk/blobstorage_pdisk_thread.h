@@ -92,7 +92,7 @@ public:
 
 private:
     void* DoThreadProc() override {
-        ::SetCurrentThreadName("PDisk");
+        ::TThread::SetCurrentThreadName("PDisk");
         Exec();
         return nullptr;
     }

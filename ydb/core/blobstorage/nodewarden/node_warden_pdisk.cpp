@@ -53,57 +53,39 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::UpdateBlobStorageExecutorPoolMapping() {
-        THashSet<ui32> pdiskIds;
+        if (Cfg->BlobStorageExecutorPoolIds.empty()) {
+            return;
+        }
 
-        auto addPDisk = [&](const TServiceSetPDisk& pdisk) {
-            Y_DEBUG_ABORT_UNLESS(pdisk.HasNodeID() && pdisk.HasPDiskID() && pdisk.GetNodeID() == LocalNodeId);
-            pdiskIds.insert(pdisk.GetPDiskID());
-        };
+        // Runs right after the service-set merge, before any PDisk is started: a PDisk
+        // that left the configuration must free its pool slot immediately, because its
+        // replacement starts before it is destroyed (destruction may even wait for
+        // later service-set updates while its VDisks drain).
+        THashSet<ui32> pdiskIds;
         for (const auto& pdisk : StaticServices.GetPDisks()) {
-            addPDisk(pdisk);
+            pdiskIds.insert(pdisk.GetPDiskID());
         }
         for (const auto& pdisk : DynamicServices.GetPDisks()) {
-            addPDisk(pdisk);
+            pdiskIds.insert(pdisk.GetPDiskID());
         }
-        for (const auto& item : LocalVDisks) {
-            const TVSlotId& vslotId = item.first;
-            Y_DEBUG_ABORT_UNLESS(vslotId.NodeId == LocalNodeId);
-            if (LocalPDisks.contains({vslotId.NodeId, vslotId.PDiskId})) {
-                pdiskIds.insert(vslotId.PDiskId);
-            }
-        }
-
-        PDiskToBlobStorageExecutorPool.Update(Cfg->BlobStorageExecutorPoolIds, pdiskIds);
+        PDiskToBlobStorageExecutorPool.RetainConfiguredPDisks(pdiskIds);
     }
 
-    ui32 TNodeWarden::GetBlobStorageExecutorPoolId(ui32 pdiskId) {
+    std::optional<ui32> TNodeWarden::GetBlobStorageExecutorPoolId(ui32 pdiskId) {
         if (Cfg->BlobStorageExecutorPoolIds.empty()) {
-            return AppData()->SystemPoolId;
+            return std::nullopt;
         }
-        if (const std::optional<ui32> executorPoolId = PDiskToBlobStorageExecutorPool.FindPoolId(pdiskId)) {
-            return *executorPoolId;
-        }
-        STLOG(PRI_ERROR, BS_NODE, NW119,
-            "No BlobStorage executor pool allocated for PDisk, falling back to System pool",
-            (PDiskId, pdiskId));
-        return AppData()->SystemPoolId;
+        return PDiskToBlobStorageExecutorPool.AcquirePoolId(Cfg->BlobStorageExecutorPoolIds, pdiskId);
     }
 
     void TNodeWarden::ApplyBlobStorageExecutorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig,
-            ui32 blobStorageExecutorPoolId) {
-        bool isBlobStorageExecutorPool = false;
-        for (const ui32 poolId : Cfg->BlobStorageExecutorPoolIds) {
-            if (poolId == blobStorageExecutorPoolId) {
-                isBlobStorageExecutorPool = true;
-                break;
-            }
-        }
-        if (!isBlobStorageExecutorPool) {
+            std::optional<ui32> blobStorageExecutorPoolId) {
+        if (!blobStorageExecutorPoolId) {
             return;
         }
 
         std::optional<TCpuMask> affinity =
-            ActorContext().ActorSystem()->GetExecutorPoolAffinity(blobStorageExecutorPoolId);
+            ActorContext().ActorSystem()->GetExecutorPoolAffinity(*blobStorageExecutorPoolId);
         if (affinity) {
             pdiskConfig->BlobStorageExecutorPoolAffinity = std::move(*affinity);
         }
@@ -473,14 +455,15 @@ namespace NKikimr::NStorage {
         }
 
         const ui32 pdiskID = pdisk.GetPDiskID();
-        const ui32 blobStorageExecutorPoolId =
-            temporary ? AppData()->SystemPoolId : GetBlobStorageExecutorPoolId(pdiskID);
+        const std::optional<ui32> assignedExecutorPoolId =
+            temporary ? std::optional<ui32>() : GetBlobStorageExecutorPoolId(pdiskID);
+        const ui32 blobStorageExecutorPoolId = assignedExecutorPoolId.value_or(AppData()->SystemPoolId);
 
         auto pdiskConfig = CreatePDiskConfig(pdisk, &record.PDiskConfigWarning);
         if (temporary) {
             pdiskConfig->MetadataOnly = true;
         } else {
-            ApplyBlobStorageExecutorPoolAffinity(pdiskConfig, blobStorageExecutorPoolId);
+            ApplyBlobStorageExecutorPoolAffinity(pdiskConfig, assignedExecutorPoolId);
         }
         record.ExpectedSlotCount = pdiskConfig->ExpectedSlotCount;
         record.SlotSizeInUnits = pdiskConfig->SlotSizeInUnits;
@@ -531,6 +514,7 @@ namespace NKikimr::NStorage {
             }
             LocalPDisks.erase(it);
             PDiskRestartInFlight.erase(pdiskId);
+            PDiskToBlobStorageExecutorPool.ReleasePoolId(pdiskId);
 
             // mark vdisks still living over this PDisk as destroyed ones
             for (auto it = LocalVDisks.lower_bound({LocalNodeId, pdiskId, 0}); it != LocalVDisks.end() &&

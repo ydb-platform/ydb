@@ -60,7 +60,7 @@ class TRealBlockDevice : public IBlockDevice {
         {}
 
         void *DoThreadProc() override {
-            ::SetCurrentThreadName(Name.data());
+            ::TThread::SetCurrentThreadName(Name.data());
             auto prevCycleEnd = HPNow();
             bool isWorking = true;
             bool stateError = false;
@@ -295,7 +295,7 @@ class TRealBlockDevice : public IBlockDevice {
 
     private:
         void* DoThreadProc() override {
-            ::SetCurrentThreadName("PdSbmEv");
+            ::TThread::SetCurrentThreadName("PdSbmEv");
             Exec();
             return nullptr;
         }
@@ -404,7 +404,7 @@ class TRealBlockDevice : public IBlockDevice {
 
     private:
         void* DoThreadProc() override {
-            ::SetCurrentThreadName("PdGetEv");
+            ::TThread::SetCurrentThreadName("PdGetEv");
             Exec();
             return nullptr;
         }
@@ -667,7 +667,10 @@ class TRealBlockDevice : public IBlockDevice {
 
         static int ThreadProcSpdk(void* _this) {
             auto *thread = static_cast<TSubmitGetThread*>(_this);
-            TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
+            TAffinityGuard affinityGuard;
+            if (thread->Device.ThreadAffinity) {
+                affinityGuard.SetCpuMask(*thread->Device.ThreadAffinity);
+            }
             thread->Run();
             return 0;
         }
@@ -679,7 +682,7 @@ class TRealBlockDevice : public IBlockDevice {
         }
 
         void Run() {
-            ::SetCurrentThreadName("PdSbmGet");
+            ::TThread::SetCurrentThreadName("PdSbmGet");
             Exec();
         }
 
@@ -833,7 +836,7 @@ class TRealBlockDevice : public IBlockDevice {
 
     private:
         void* DoThreadProc() override {
-            ::SetCurrentThreadName("PdTrim");
+            ::TThread::SetCurrentThreadName("PdTrim");
             Exec();
             return nullptr;
         }

@@ -244,6 +244,7 @@ namespace NActors {
             return std::nullopt;
         }
 
+        // The same mask the pool's own worker threads pin themselves to.
         const TAffinity* affinity = Executors[poolId]->Affinity();
         if (!affinity || affinity->Empty()) {
             return std::nullopt;

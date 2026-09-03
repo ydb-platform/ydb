@@ -1180,11 +1180,8 @@ TBSNodeWardenInitializer::TBSNodeWardenInitializer(const TKikimrRunConfig& runCo
 void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData) {
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
-    const auto& actorSystemConfig = Config.GetActorSystemConfig();
-    if (!actorSystemConfig.GetUseSharedThreads()) {
-        nodeWardenConfig->BlobStorageExecutorPoolIds =
-            NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(actorSystemConfig);
-    }
+    nodeWardenConfig->BlobStorageExecutorPoolIds =
+        NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(Config.GetActorSystemConfig());
     if (Config.HasBlobStorageConfig()) {
         const auto& bsc = Config.GetBlobStorageConfig();
         nodeWardenConfig->FeatureFlags = std::make_unique<NKikimrConfig::TFeatureFlags>(Config.GetFeatureFlags());

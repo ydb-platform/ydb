@@ -1,46 +1,50 @@
 #include "blobstorage_executor_pool_mapping.h"
 
-#include <utility>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NStorage {
 
-void TBlobStorageExecutorPoolMapping::Update(const TVector<ui32>& executorPoolIds, const THashSet<ui32>& pdiskIds) {
-    auto previousMapping = std::move(ExecutorPoolByPDiskId);
-    ExecutorPoolByPDiskId.clear();
+ui32 TBlobStorageExecutorPoolMapping::AcquirePoolId(const TVector<ui32>& executorPoolIds, ui32 pdiskId) {
+    Y_ABORT_UNLESS(!executorPoolIds.empty());
 
-    if (executorPoolIds.empty()) {
-        return;
+    // Running PDisk and VDisk actors cannot be moved between executor pools, so an
+    // existing assignment is retained even if the load has become uneven.
+    if (const auto it = ExecutorPoolByPDiskId.find(pdiskId); it != ExecutorPoolByPDiskId.end()) {
+        return it->second;
     }
 
     THashMap<ui32, size_t> loadByPool;
     for (const ui32 poolId : executorPoolIds) {
         loadByPool[poolId] = 0;
     }
-
-    // Preserve assignments for existing PDisks. Running PDisk and VDisk actors
-    // cannot be moved between executor pools, so only newly discovered PDisks
-    // are assigned. Retained assignments are not rebalanced.
-    TVector<ui32> unassigned;
-    for (const ui32 pdiskId : pdiskIds) {
-        if (const auto it = previousMapping.find(pdiskId);
-                it != previousMapping.end() && loadByPool.contains(it->second)) {
-            ExecutorPoolByPDiskId.emplace(pdiskId, it->second);
-            ++loadByPool[it->second];
-        } else {
-            unassigned.push_back(pdiskId);
+    for (const auto& [assignedPDiskId, poolId] : ExecutorPoolByPDiskId) {
+        if (const auto it = loadByPool.find(poolId); it != loadByPool.end()) {
+            ++it->second;
         }
     }
 
-    // Place new PDisks on the least-loaded pool; ties are broken by configured pool order.
-    for (const ui32 pdiskId : unassigned) {
-        ui32 bestPool = executorPoolIds.front();
-        for (const ui32 poolId : executorPoolIds) {
-            if (loadByPool[poolId] < loadByPool[bestPool]) {
-                bestPool = poolId;
-            }
+    // Place the new PDisk on the least-loaded pool; ties are broken by configured pool order.
+    ui32 bestPool = executorPoolIds.front();
+    for (const ui32 poolId : executorPoolIds) {
+        if (loadByPool[poolId] < loadByPool[bestPool]) {
+            bestPool = poolId;
         }
-        ExecutorPoolByPDiskId.emplace(pdiskId, bestPool);
-        ++loadByPool[bestPool];
+    }
+    ExecutorPoolByPDiskId.emplace(pdiskId, bestPool);
+    return bestPool;
+}
+
+void TBlobStorageExecutorPoolMapping::ReleasePoolId(ui32 pdiskId) {
+    ExecutorPoolByPDiskId.erase(pdiskId);
+}
+
+void TBlobStorageExecutorPoolMapping::RetainConfiguredPDisks(const THashSet<ui32>& pdiskIds) {
+    for (auto it = ExecutorPoolByPDiskId.begin(); it != ExecutorPoolByPDiskId.end(); ) {
+        if (pdiskIds.contains(it->first)) {
+            ++it;
+        } else {
+            ExecutorPoolByPDiskId.erase(it++);
+        }
     }
 }
 

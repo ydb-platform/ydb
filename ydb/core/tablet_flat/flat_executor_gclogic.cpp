@@ -521,7 +521,7 @@ ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
-                    vec = &affectedGroups[activeGroup].first;
+                    vec = activeGroup == Max<ui32>() ? nullptr : &affectedGroups[activeGroup].first;
                 }
 
                 if (vec) {
@@ -539,7 +539,7 @@ ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
-                    vec = &affectedGroups[activeGroup].second;
+                    vec = activeGroup == Max<ui32>() ? nullptr : &affectedGroups[activeGroup].second;
                 }
 
                 if (vec) {

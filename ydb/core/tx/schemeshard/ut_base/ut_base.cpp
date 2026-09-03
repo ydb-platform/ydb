@@ -4980,6 +4980,72 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics("s2")});
     }
 
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogram) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "a"   Type: "Uint64" }
+            Columns { Name: "b"   Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "h1" ColumnNames: "a" ColumnNames: "b" Types: EQ_HEIGHT_HISTOGRAM }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/EqHeightTable"),
+            {NLs::PathExist, NLs::Finished,
+             NLs::CheckMultiColumnStatistics("h1", {"a", "b"},
+                 {NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM})});
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/EqHeightTable"),
+            {NLs::PathExist, NLs::Finished,
+             NLs::CheckMultiColumnStatistics("h1", {"a", "b"},
+                 {NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM})});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightTable"
+            MultiColumnStatistics { Name: "h2" ColumnNames: "a" Types: EQ_HEIGHT_HISTOGRAM }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/EqHeightTable"),
+            {NLs::PathExist, NLs::Finished,
+             NLs::CheckMultiColumnStatistics("h1", {"a", "b"},
+                 {NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM}),
+             NLs::CheckMultiColumnStatistics("h2", {"a"},
+                 {NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM})});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogramRejectsJson) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "js"  Type: "Json" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "js"  Type: "Json" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonTable"
+            MultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusInvalidParameter});
+    }
+
     Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

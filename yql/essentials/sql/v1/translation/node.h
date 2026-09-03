@@ -244,13 +244,9 @@ public:
     TPtr AstNode(TPtr node) const;
     TPtr AstNode(const TString& str) const;
 
-    template <typename TVal, typename... TVals>
-    void Add(TVal val, TVals... vals) {
-        DoAdd(AstNode(val));
-        Add(vals...);
-    }
-
-    void Add() {
+    template <typename... TVals>
+    void Add(TVals... vals) {
+        (DoAdd(AstNode(vals)), ...);
     }
 
     // Y() Q() L()
@@ -903,7 +899,6 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     TNodePtr Hop;
     TNodePtr Interval;
     TNodePtr Delay;
-    bool DataWatermarks;
 
     TIntrusivePtr<TLegacyHoppingWindowSpec> Clone() const;
     ~TLegacyHoppingWindowSpec() = default;
@@ -1281,13 +1276,14 @@ struct TTableSettings {
     TNodePtr PartitionByHashFunction;
     TMaybe<TIdentifier> StoreExternalBlobs;
     TNodePtr ExternalDataChannelsCount;
+    NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
 
     TNodePtr DataSourcePath;
     NYql::TResetableSetting<TNodePtr, void> Location;
     TVector<NYql::TResetableSetting<std::pair<TIdentifier, TNodePtr>, TIdentifier>> ExternalSourceParameters;
 
     bool IsSet() const {
-        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount;
+        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount || MetricsLevel;
     }
 };
 

@@ -27,6 +27,11 @@ DEFAULT_MAX_DEVIATION_PERCENT = 5.0
 
 _OK_COLOR = '#90EE90'
 _FAILED_COLOR = '#FA8072'
+# Key measurements are colored by the same thresholds the check itself uses:
+# better than the baseline, worse but within the allowance, and a degradation.
+_KM_IMPROVED_COLOR = '#ccffcc'
+_KM_OK_COLOR = '#ffffcc'
+_KM_FAILED_COLOR = '#ffcccc'
 _STABLE_BRANCH_RE = re.compile(r'^(?:origin/)?stable-(\d+)-(\d+)(?:-(\d+))?$')
 
 
@@ -77,11 +82,13 @@ class Metric:
     column: str
     name: str
     higher_is_better: bool
+    # Key measurement holding the degradation of this metric, in percent.
+    signal: str
 
 
 METRICS = (
-    Metric('tpmC', 'tpmC', True),
-    Metric('newOrderLatency90', 'NewOrder p90', False),
+    Metric('tpmC', 'tpmC', True, 'tpcc_deviation_tpmc'),
+    Metric('newOrderLatency90', 'NewOrder p90', False, 'tpcc_deviation_neworder_p90'),
 )
 
 
@@ -128,6 +135,30 @@ class DeviationCheckResult:
     errors: list[str] = field(default_factory=list)
     # Short one-line status for the Allure table, empty when the check did not run.
     summary: str = ''
+    # Key measurements of the run: Metric.signal -> degradation in percent.
+    measurements: dict[str, float] = field(default_factory=dict)
+
+
+def key_measurement_intervals() -> list[tuple[str, float | None, float | None]]:
+    """Color bounds of the degradation key measurements, as (color, min, max) percents.
+
+    The suite turns these into LoadSuiteBase.KeyMeasurement.Interval; the bounds
+    live here so that they always follow the limit the check is run with.
+    """
+    limit = 100 * get_max_deviation()
+    return [
+        (_KM_IMPROVED_COLOR, None, 0.0),
+        (_KM_OK_COLOR, 0.0, limit),
+        (_KM_FAILED_COLOR, limit, None),
+    ]
+
+
+def key_measurement_description(metric: Metric) -> str:
+    better = 'less' if metric.higher_is_better else 'greater'
+    return (
+        f'Degradation of {metric.name} against the unixbench baseline of the previous runs, '
+        f'in percent: positive means the current run is {better} than the baseline'
+    )
 
 
 def get_max_deviation() -> float:
@@ -326,6 +357,10 @@ def _check(results: dict, run_type: str, run_ts: float, mode: CheckMode, report:
     return DeviationCheckResult(
         errors=[check.error_message for check in checks if check.failed],
         summary=', '.join(check.report_text for check in checks),
+        measurements={
+            check.metric.signal: 100 * check.deviation
+            for check in checks if check.deviation is not None
+        },
     )
 
 
@@ -354,6 +389,9 @@ def check_tpcc_deviation(results: dict, run_type: str, run_ts: float) -> Deviati
         if mode == CheckMode.REPORT and result.errors:
             LOGGER.warning(f'TPC-C deviation check is report only, the test is not failed by: {result.errors}')
             report.append('<div>Report only mode: this check does not fail the test.</div>')
-            result = DeviationCheckResult(summary=f'{result.summary} (report only)')
+            result = DeviationCheckResult(
+                summary=f'{result.summary} (report only)',
+                measurements=result.measurements,
+            )
         allure.attach('\n'.join(report), 'TPC-C deviation check', attachment_type=allure.attachment_type.HTML)
     return result

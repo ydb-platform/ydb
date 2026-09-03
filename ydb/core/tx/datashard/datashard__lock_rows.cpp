@@ -1039,3 +1039,7 @@ TConstArrayRef<TCell> GetUniqueIndexKey(TConstArrayRef<TCell> cells, ui32 count)
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

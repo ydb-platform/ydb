@@ -2,6 +2,8 @@
 #include "parsing.h"
 #include "stream.h"
 
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/services/services.pb.h>
@@ -14,6 +16,27 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 
 namespace NKikimr::NArrow::NSerialization {
+
+arrow::ipc::IpcOptions TNativeSerializer::BuildDefaultOptions() {
+    arrow::ipc::IpcWriteOptions options;
+    options.use_threads = false;
+    if (HasAppData()) {
+        if (AppData()->ColumnShardConfig.HasDefaultCompression()) {
+            arrow::Compression::type codec = CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
+            if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
+                options.codec = NArrow::TStatusValidator::GetValid(
+                    arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
+            } else {
+                options.codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
+            }
+        } else {
+            options.codec = GetDefaultCodec();
+        }
+    } else {
+        options.codec = GetDefaultCodec();
+    }
+    return options;
+}
 
 arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data) const {
     arrow::ipc::DictionaryMemo dictMemo;

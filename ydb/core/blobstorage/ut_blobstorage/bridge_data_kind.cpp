@@ -24,6 +24,35 @@ TNodeLocation GetLocation(ui32 nodeId) {
 
 Y_UNIT_TEST_SUITE(BridgeDataKind) {
 
+    Y_UNIT_TEST(StorageInfoVersion) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8 * 3,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        env.CreatePool();
+        const ui32 groupId = env.GetGroups().front();
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+
+        auto block = [&](ui32 generation, ui32 version) {
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvBlock(100500, generation,
+                    TInstant::Max(), 1, TWriteSource::Unknown, version));
+            });
+            return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(sender, false);
+        };
+
+        auto result = block(10, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(20, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+    }
+
     Y_UNIT_TEST(EncryptionWorksWithInterpileTrafficOptimization) {
         TFeatureFlags featureFlags;
         featureFlags.SetEnableInterpileTrafficOptimization(true);

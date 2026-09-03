@@ -2,8 +2,6 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/config.pb.h>
-
 #include <util/generic/string.h>
 #include <util/generic/map.h>
 

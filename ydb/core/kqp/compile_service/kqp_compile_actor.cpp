@@ -92,7 +92,6 @@ public:
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
-        , EnforcedSqlVersion(tableServiceConfig.GetEnforceSqlVersionV1())
         , EnableNewRBO(tableServiceConfig.GetEnableNewRBO())
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
@@ -111,18 +110,6 @@ public:
         }
 
         config->ApplyServiceConfig(tableServiceConfig);
-
-        if (tableServiceConfig.GetSqlVersion() != 0) {
-            EnforcedSqlVersion = false;
-        } else if (EnforcedSqlVersion) {
-            YDB_LOG_DEBUG("Enforced SQL version 1, current sql",
-                {"version", tableServiceConfig.GetSqlVersion()},
-                {"queryText", GetQueryTextForLog(QueryId.Text)});
-
-            config->SetSqlVersion(1);
-        } else {
-            EnforcedSqlVersion = false;
-        }
 
         // This is either the default setting or the explicit exclusion of a new RBO when compilation fails and recompilation is attempted.
         config->SetEnableNewRBO(EnableNewRBO);
@@ -376,7 +363,6 @@ private:
     }
 
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
-        // If CurrentSqlVersion differs from the frozen Config, create a new Config with updated SqlVersion
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
@@ -443,7 +429,8 @@ private:
         }
         replayMessage.InsertValue("query_parameter_types", std::move(queryParameterTypes));
         replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
-        replayMessage.InsertValue("query_syntax", ToString(Config->GetSqlVersion()));
+        // Keep the field for compatibility with existing query replay datasets.
+        replayMessage.InsertValue("query_syntax", "1");
         replayMessage.InsertValue("query_database", QueryId.Database);
         replayMessage.InsertValue("query_cluster", QueryId.Cluster);
         replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
@@ -625,10 +612,6 @@ private:
             Counters->ReportCompileNewRBOFailed(DbCounters);
         }
 
-        if (IsSuitableToReportSuccessOnEnforcedSqlVersion(status)) {
-            Counters->ReportCompileEnforceConfigSuccess(DbCounters);
-        }
-
         auto database = QueryId.Database;
         if (kqpResult.SqlVersion) {
             Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion);
@@ -727,10 +710,6 @@ private:
         return EnableNewRBO && status != Ydb::StatusIds::SUCCESS;
     }
 
-    bool IsSuitableToReportSuccessOnEnforcedSqlVersion(Ydb::StatusIds::StatusCode status) {
-        return !EnableNewRBO && EnforcedSqlVersion && status == Ydb::StatusIds::SUCCESS;
-    }
-
     TActorId Owner;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -771,7 +750,6 @@ private:
     bool PerStatementResult;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
-    bool EnforcedSqlVersion;
     bool EnableNewRBO;
     bool EnableFallbackToYqlOptimizer;
     bool UsePessimisticLocks;

@@ -2969,7 +2969,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 if (*lastStartOffset >= minStartOffset) {
                     return;
                 }
-                Sleep(TDuration::MilliSeconds(500));
+                Sleep(TDuration::MilliSeconds(100));
             }
             UNIT_ASSERT_C(
                 false,
@@ -2979,8 +2979,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                                  << (lastStartOffset ? ToString(*lastStartOffset) : "n/a"));
         };
 
-        WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 3);
-        WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 20);
+        // 7_MB exceeds LowWatermark (6MB), so each write becomes its own blob and retention/compaction
+        // can move startOffset. Two blobs plus a few small records are enough to form a gap.
+        WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 2);
+        WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 3);
         waitStartOffsetAtLeast(1, TDuration::Seconds(60), "retention");
 
         auto msg = client.AlterConfigs(
@@ -2993,10 +2995,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         rSSettings.AppendTopics({topicFullPath});
         auto readSession = pqClient.CreateReadSession(rSSettings);
         bool seenMessage = false;
-        for (ui32 triesCount = 30; triesCount != 0 && !seenMessage; --triesCount) {
+        for (ui32 triesCount = 40; triesCount != 0 && !seenMessage; --triesCount) {
             auto results = Read(readSession, false);
             if (results.empty()) {
-                Sleep(TDuration::MilliSeconds(500));
+                Sleep(TDuration::MilliSeconds(50));
                 continue;
             }
             for (auto& dataEvent : results) {
@@ -4526,17 +4528,28 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         // CHECK ONE READER DEAD (NO HEARTBEAT)
 
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(2));
 
         UNIT_ASSERT_VALUES_EQUAL(
             clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode,
             static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
         );
 
-        Sleep(TDuration::Seconds(25));
         {
-            auto errorCode = clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode;
-            UNIT_ASSERT(errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS) || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
+            const auto deadline = TInstant::Now() + TDuration::MilliSeconds(heartbeatTimeout * 2);
+            TKafkaInt16 errorCode = static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR);
+            while (TInstant::Now() < deadline) {
+                errorCode = clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode;
+                if (errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS)
+                    || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION))
+                {
+                    break;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(errorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                Sleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT(errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS)
+                || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
         }
 
 
@@ -5377,41 +5390,33 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString transactionalId = TStringBuilder() << "my-tx-producer-" << TGUID::Create().AsUuidString();
         TString consumerName = "my-consumer";
 
-        // create input and output topics
-        CreateTopic(pqClient, outputTopicName, 3, {consumerName});
+        CreateTopic(pqClient, outputTopicName, 1, {consumerName});
 
-        // init producer id
-        ui64 txnTimeoutMs = 1000;
+        const ui64 txnTimeoutMs = 200;
         auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, txnTimeoutMs);
         UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
         TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
 
-        // add partitions to txn
         std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
         topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
         auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
         UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        // TTransactionActor starts TxnTimeoutMs from CreatedAt, which is set on this first txn request.
+        const auto txnStartedAt = TInstant::Now();
 
-        // produce data
-        // to part 0
         auto out0ProduceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"0", "123"}}, 0, producerInstanceId, transactionalId);
         UNIT_ASSERT_VALUES_EQUAL(out0ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
 
-        // init consumer
-        std::vector<TString> topicsToSubscribe{outputTopicName};
-        TString protocolName = "range";
-        auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
-
         kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
 
-        // move time forward after transaction timeout
-        Sleep(TDuration::MilliSeconds(txnTimeoutMs));
+        const auto expireAt = txnStartedAt + TDuration::MilliSeconds(txnTimeoutMs) + TDuration::MilliSeconds(50);
+        if (TInstant::Now() < expireAt) {
+            Sleep(expireAt - TInstant::Now());
+        }
 
-        // end txn
         auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
         UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::PRODUCER_FENCED);
 
-        // validate data is still not assessible in target topic
         auto fetchResponse1 = kafkaClient.Fetch({{outputTopicName, {0}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT(!fetchResponse1->Responses[0].Partitions[0].Records.has_value());

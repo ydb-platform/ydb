@@ -1100,9 +1100,7 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            // Schema version is baked into TEvWrite at Open() time and is not
-            // refreshed by resolve, so retrying InconsistentTx writes loops forever.
-            // Surface the error so the session actor recompiles.
+            // Resolve does not refresh the baked-in schema version: fail to recompile instead of retrying forever.
             if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());

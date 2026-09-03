@@ -48,7 +48,7 @@ public:
             TYtMap::CallableName(),
             TYtReduce::CallableName(),
             TYtMapReduce::CallableName(),
-            TYtFill::CallableName()}), HNDL(RemoveTrivialWithWorldFromOperationLambdas));
+            TYtFill::CallableName()}), HNDL(RemoveRedundantWithWorldFromOperationLambdas));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         if (State_->Configuration->_ReplaceEmptyOpWithTouch.Get().GetOrElse(false)) {
             AddHandler(0, &TYtTransientOpBase::Match, HNDL(ReplaceEmptyOpWithTouch));
@@ -778,50 +778,72 @@ protected:
         return node;
     }
 
-    TMaybeNode<TExprBase> RemoveTrivialWithWorldFromOperationLambdas(TExprBase node, TExprContext& ctx) const {
+    TVector<std::pair<TCoLambda, size_t>> GetOperationLambdas(TExprBase node) const {
+        if (auto mapReduce = node.Maybe<TYtMapReduce>()) {
+            TVector<std::pair<TCoLambda, size_t>> lambdas;
+            if (auto mapper = mapReduce.Mapper().Maybe<TCoLambda>()) {
+                lambdas.emplace_back(mapper.Cast(), size_t(TYtMapReduce::idx_Mapper));
+            }
+            lambdas.emplace_back(mapReduce.Reducer().Cast(), size_t(TYtMapReduce::idx_Reducer));
+            return lambdas;
+        }
+        if (auto reduce = node.Maybe<TYtReduce>()) {
+            return {{reduce.Reducer().Cast(), size_t(TYtReduce::idx_Reducer)}};
+        }
+        if (auto fill = node.Maybe<TYtFill>()) {
+            return {{fill.Content().Cast(), size_t(TYtFill::idx_Content)}};
+        }
+        return {{node.Maybe<TYtMap>().Mapper().Cast(), size_t(TYtMap::idx_Mapper)}};
+    }
+
+    static bool IsRedundantWithWorld(TCoWithWorld withWorld, TExprBase operationWorld) {
+        const auto world = withWorld.World();
+        const auto maybeRead = world.Maybe<TCoLeft>().Input().Maybe<TYtReadTable>();
+        if (maybeRead && maybeRead.Cast().World().Ref().IsWorld()) {
+            return true;
+        }
+        const auto maybeOperation = world.Maybe<TCoLeft>().Input().Maybe<TYtOutputOpBase>();
+        return maybeOperation && IsDepended(operationWorld.Ref(), world.Ref());
+    }
+
+    TMaybeNode<TCoLambda> CleanupOperationLambda(TCoLambda lambda, TExprBase operationWorld, TExprContext& ctx) const {
+        TNodeOnNodeOwnedMap remaps;
+        VisitExpr(lambda.Ptr(), [&remaps, operationWorld](const TExprNode::TPtr& lambdaNode) {
+            if (TYtOutput::Match(lambdaNode.Get())) {
+                return false;
+            }
+            if (TCoWithWorld::Match(lambdaNode.Get())) {
+                if (IsRedundantWithWorld(TCoWithWorld(lambdaNode), operationWorld)) {
+                    remaps.emplace(lambdaNode.Get(), lambdaNode->HeadPtr());
+                }
+            }
+            return true;
+        });
+        if (remaps.empty()) {
+            return lambda;
+        }
+        TExprNode::TPtr cleanedLambda;
+        const TOptimizeExprSettings settings(State_->Types);
+        if (RemapExpr(lambda.Ptr(), cleanedLambda, remaps, ctx, settings).Level == IGraphTransformer::TStatus::Error) {
+            return {};
+        }
+        return TCoLambda(cleanedLambda);
+    }
+
+    TMaybeNode<TExprBase> RemoveRedundantWithWorldFromOperationLambdas(TExprBase node, TExprContext& ctx) const {
         if (!IsOptimizerEnabled<KeepWorldOptName>(*State_->Types) || IsOptimizerDisabled<KeepWorldOptName>(*State_->Types)) {
             return node;
         }
-        const TOptimizeExprSettings settings(State_->Types);
-        TVector<std::pair<TMaybeNode<TCoLambda>, size_t>> opLambdas;
-        if (auto mapReduce = node.Maybe<TYtMapReduce>()) {
-            opLambdas = {
-                {mapReduce.Mapper().Maybe<TCoLambda>(), size_t(TYtMapReduce::idx_Mapper)},
-                {mapReduce.Reducer(), size_t(TYtMapReduce::idx_Reducer)}};
-        } else if (auto reduce = node.Maybe<TYtReduce>()) {
-            opLambdas = {{reduce.Reducer(), size_t(TYtReduce::idx_Reducer)}};
-        } else if (auto fill = node.Maybe<TYtFill>()) {
-            opLambdas = {{fill.Content(), size_t(TYtFill::idx_Content)}};
-        } else {
-            opLambdas = {{node.Maybe<TYtMap>().Mapper(), size_t(TYtMap::idx_Mapper)}};
-        }
-
+        const auto operationWorld = node.Cast<TYtOutputOpBase>().World();
         auto result = node.Ptr();
-        for (const auto& [maybeLambda, index] : opLambdas) {
-            if (!maybeLambda) {
-                continue;
-            }
-            TNodeOnNodeOwnedMap remaps;
-            VisitExpr(maybeLambda.Cast().Ptr(), [&remaps](const TExprNode::TPtr& lambdaNode) {
-                if (TYtOutput::Match(lambdaNode.Get())) {
-                    return false;
-                }
-                if (TCoWithWorld::Match(lambdaNode.Get())) {
-                    const auto maybeRead = TCoWithWorld(lambdaNode).World().Maybe<TCoLeft>().Input().Maybe<TYtReadTable>();
-                    if (maybeRead && maybeRead.Cast().World().Ref().IsWorld()) {
-                        remaps.emplace(lambdaNode.Get(), lambdaNode->HeadPtr());
-                    }
-                }
-                return true;
-            });
-            if (remaps.empty()) {
-                continue;
-            }
-            TExprNode::TPtr cleanedLambda;
-            if (RemapExpr(maybeLambda.Cast().Ptr(), cleanedLambda, remaps, ctx, settings).Level == IGraphTransformer::TStatus::Error) {
+        for (const auto& [lambda, index] : GetOperationLambdas(node)) {
+            const auto cleanedLambda = CleanupOperationLambda(lambda, operationWorld, ctx);
+            if (!cleanedLambda) {
                 return {};
             }
-            result = ctx.ChangeChild(*result, index, std::move(cleanedLambda));
+            if (cleanedLambda.Cast().Raw() != lambda.Raw()) {
+                result = ctx.ChangeChild(*result, index, cleanedLambda.Cast().Ptr());
+            }
         }
         return TExprBase(result);
     }

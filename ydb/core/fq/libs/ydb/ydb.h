@@ -151,7 +151,7 @@ TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
 
     settings.CredentialsProviderFactory(credProviderFactory(GetYdbCredentialSettings(config)));
 
-    if (config.GetUseLocalMetadataService()) {
+    if (config.GetUseLocalMetadataService() || config.GetUseSsl()) {
         settings.SslCredentials(NYdb::TSslCredentials(true));
     }
 

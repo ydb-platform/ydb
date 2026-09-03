@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("_yql_portion_id"), result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetIssues().ToString().contains("_yql_portion_id"), result.GetIssues().ToString());
     }
 }
 

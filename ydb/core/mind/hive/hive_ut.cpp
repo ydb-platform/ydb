@@ -10982,6 +10982,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.WaitFor("TEvShrinkStoragePoolDone after registrar reconnect replayed CutTabletHistory", [&] { return done; });
     }
 
+<<<<<<< HEAD
     enum class ELocalTabletReport {
         OnlineTablets,
         InbootTablets,
@@ -11100,6 +11101,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TestLockedTabletMetricsAfterLateLocalReport(ELocalTabletReport::InbootTablets);
     }
 
+=======
+>>>>>>> 1c46e3d369b (Local: retain cut-history requests and replay them to Hive on reconnect (#51961))
     Y_UNIT_TEST(TestLockedTabletMetricsAfterHiveRestart) {
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);

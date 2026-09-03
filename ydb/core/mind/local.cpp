@@ -924,6 +924,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (onlineIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(onlineIt->first.first);
             }
+            if (onlineIt->first.second == 0) { // leader
+                RetainedCutHistory.erase(onlineIt->first.first);
+            }
             OnlineTablets.erase(onlineIt);
             UpdateEstimate();
             return;

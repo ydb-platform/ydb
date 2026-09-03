@@ -44,7 +44,7 @@ private:
         };
     };
 
-    using IRetryPolicy = IRetryPolicy<const NTiers::TEvSchemeObjectResolutionFailed::EReason>;
+    using IRetryPolicy = IRetryPolicy<const ERetryErrorClass>;
 
     std::shared_ptr<TTiersManager> Owner;
     IRetryPolicy::TPtr RetryPolicy;
@@ -57,17 +57,65 @@ private:
         return NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
     }
 
-    void RetryTierRequest(const NTiers::TExternalStorageId& tier, const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
-        YDB_LOG_DEBUG("",
-            {"component", "tiers_manager"},
-            {"event", "retry_watch_objects"});
+    static ERetryErrorClass GetRetryErrorClass(const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
+        switch (reason) {
+            case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
+                return ERetryErrorClass::LongRetry;
+            case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
+                return ERetryErrorClass::ShortRetry;
+        }
+    }
+
+    static ERetryErrorClass GetRetryErrorClass(const Ydb::StatusIds::StatusCode status) {
+        switch (status) {
+            case Ydb::StatusIds::UNAVAILABLE:
+            case Ydb::StatusIds::OVERLOADED:
+            case Ydb::StatusIds::TIMEOUT:
+            case Ydb::StatusIds::UNDETERMINED:
+            case Ydb::StatusIds::INTERNAL_ERROR:
+            case Ydb::StatusIds::SESSION_BUSY:
+                return ERetryErrorClass::ShortRetry;
+            default:
+                return ERetryErrorClass::LongRetry;
+        }
+    }
+
+    // Re-requests the description of the external data source (the scheme cache re-sends the current description to
+    // an already subscribed watcher), so the whole chain including the resolution of secrets is re-run.
+    void RetryTierRequest(const NTiers::TExternalStorageId& tier, const ERetryErrorClass errorClass) {
         auto findRetryState = RetryStateByObject.find(tier);
         if (!findRetryState) {
             findRetryState = RetryStateByObject.emplace(tier, RetryPolicy->CreateRetryState()).first;
         }
-        auto retryDelay = findRetryState->second->GetNextRetryDelay(reason);
-        AFL_VERIFY(retryDelay)("object", tier.GetConfigPath());
+        auto retryDelay = findRetryState->second->GetNextRetryDelay(errorClass);
+        if (!retryDelay) {
+            YDB_LOG_ERROR("",
+                {"component", "tiers_manager"},
+                {"event", "retry_watch_objects_exhausted"},
+                {"object", tier.GetConfigPath()});
+            return;
+        }
+        YDB_LOG_DEBUG("",
+            {"component", "tiers_manager"},
+            {"event", "retry_watch_objects"},
+            {"object", tier.GetConfigPath()},
+            {"delay", *retryDelay});
         ActorContext().Schedule(*retryDelay, std::make_unique<IEventHandle>(SelfId(), TiersFetcher, new NTiers::TEvWatchSchemeObject(std::vector<TString>({ tier.GetConfigPath() }))));
+    }
+
+    // Secrets of the tier cannot be resolved right now (scheme shard / scheme cache unavailable, secret not created yet).
+    // A tier awaited by the shard is marked as unavailable to let the shard start; a tier that already has a working
+    // config keeps it. In both cases the request is retried, otherwise the tier would stay inaccessible until the next
+    // tablet restart or an ALTER of the external data source.
+    void OnSchemaSecretsResolutionFailed(const NTiers::TExternalStorageId& tierId, const ERetryErrorClass errorClass) {
+        const auto* tier = Owner->GetTiers().FindPtr(tierId);
+        if (!tier) {
+            return;
+        }
+        if (tier->GetState() == TTiersManager::ETierState::REQUESTED) {
+            Owner->UpdateTierConfig(std::nullopt, tierId);
+        }
+        RetryTierRequest(tierId, errorClass);
     }
 
     void ResetRetryState(const NTiers::TExternalStorageId& tier) {
@@ -112,7 +160,6 @@ private:
             {"path", ev->Get()->GetObjectPath()});
         const NTiers::TExternalStorageId tierId(ev->Get()->GetObjectPath());
         const auto& description = ev->Get()->GetDescription();
-        ResetRetryState(tierId);
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
             NTiers::TTierConfig tier;
             if (HasAppData() && AppDataVerified().ColumnShardConfig.HasS3Client()) {
@@ -123,6 +170,7 @@ private:
                 YDB_LOG_WARN("",
                     {"event", "fetched_invalid_tier_settings"},
                     {"error", status.GetErrorMessage()});
+                ResetRetryState(tierId);
                 Owner->UpdateTierConfig(std::nullopt, tierId);
                 return;
             }
@@ -163,12 +211,14 @@ private:
                     {"identityCase", static_cast<int>(auth.identity_case())});
             }
 
+            ResetRetryState(tierId);
             Owner->UpdateTierConfig(tier, tierId);
         } else {
             YDB_LOG_WARN("",
                 {"error", "invalid_object_type"},
                 {"type", static_cast<ui64>(description.GetSelf().GetPathType())},
                 {"path", tierId.GetConfigPath()});
+            ResetRetryState(tierId);
             Owner->UpdateTierConfig(std::nullopt, tierId);
         }
     }
@@ -178,8 +228,9 @@ private:
             YDB_LOG_ERROR("",
                 {"event", "cannot_read_schema_secrets"},
                 {"tier", ev->Get()->TierId.GetConfigPath()},
+                {"status", Ydb::StatusIds::StatusCode_Name(ev->Get()->Description.Status)},
                 {"reason", ev->Get()->Description.Issues.ToOneLineString()});
-            Owner->UpdateTierConfig(std::nullopt, ev->Get()->TierId);
+            OnSchemaSecretsResolutionFailed(ev->Get()->TierId, GetRetryErrorClass(ev->Get()->Description.Status));
             return;
         }
 
@@ -188,10 +239,11 @@ private:
                 {"event", "cannot_read_schema_secrets"},
                 {"tier", ev->Get()->TierId.GetConfigPath()},
                 {"reason", TStringBuilder() << "expected 2 secrets, got " << ev->Get()->Description.SecretValues.size()});
-            Owner->UpdateTierConfig(std::nullopt, ev->Get()->TierId);
+            OnSchemaSecretsResolutionFailed(ev->Get()->TierId, ERetryErrorClass::LongRetry);
             return;
         }
 
+        ResetRetryState(ev->Get()->TierId);
         Owner->UpdateTierConfig(
             ev->Get()->TierConfig.BuildWithPatchedSecrets(
                 ev->Get()->Description.SecretValues[0],
@@ -204,6 +256,7 @@ private:
             {"component", "tiering_manager"},
             {"event", "object_deleted"},
             {"name", ev->Get()->GetObjectPath()});
+        ResetRetryState(ev->Get()->GetObjectPath());
         Owner->UpdateTierConfig(std::nullopt, ev->Get()->GetObjectPath());
     }
 
@@ -220,7 +273,7 @@ private:
             case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
                 break;
         }
-        RetryTierRequest(objectPath, ev->Get()->GetReason());
+        RetryTierRequest(objectPath, GetRetryErrorClass(ev->Get()->GetReason()));
     }
 
     void Handle(NTiers::TEvWatchSchemeObject::TPtr& ev) {
@@ -231,13 +284,8 @@ public:
     TActor(std::shared_ptr<TTiersManager> owner)
         : Owner(owner)
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
-              [](const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
-                  switch (reason) {
-                      case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
-                          return ERetryErrorClass::LongRetry;
-                      case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
-                          return ERetryErrorClass::ShortRetry;
-                  }
+              [](const ERetryErrorClass errorClass) {
+                  return errorClass;
               }, TDuration::MilliSeconds(10), TDuration::Seconds(29), TDuration::Seconds(30), 10000))
         , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
     {

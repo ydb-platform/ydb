@@ -16,10 +16,13 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/services/scheme_secret/service.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 
 #include <library/cpp/testing/hook/hook.h>
+
+#include <util/string/join.h>
 
 namespace NKikimr::NKqp {
 
@@ -47,6 +50,55 @@ private:
     std::atomic<ui64> AbortedWrites{ 0 };
 };
 
+// Wraps the real schema secrets service: while `Fail` is set, every resolution request is answered with UNAVAILABLE
+// (as if scheme shard / scheme cache were unreachable), otherwise the request is forwarded to the real service.
+class TFlakySchemaSecretsService: public TActorBootstrapped<TFlakySchemaSecretsService> {
+public:
+    struct TState {
+        std::atomic<bool> Fail = false;
+        std::atomic<ui32> FailedRequests = 0;
+    };
+
+private:
+    std::shared_ptr<TState> State;
+    TActorId Inner;
+
+public:
+    TFlakySchemaSecretsService(std::shared_ptr<TState> state)
+        : State(std::move(state)) {
+    }
+
+    void Bootstrap() {
+        Inner = Register(NSecret::TDescribeSchemaSecretsServiceFactory().CreateService());
+        Become(&TThis::StateWork);
+    }
+
+    STFUNC(StateWork) {
+        if (ev->GetTypeRewrite() == NSecret::TDescribeSchemaSecretsService::TEvResolveSecret::EventType && State->Fail.load()) {
+            auto* msg = ev->Get<NSecret::TDescribeSchemaSecretsService::TEvResolveSecret>();
+            msg->Promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::UNAVAILABLE, { NYql::TIssue("scheme shard is unavailable") }));
+            ++State->FailedRequests;
+            return;
+        }
+        Forward(ev, Inner);
+    }
+};
+
+class TFlakySchemaSecretsServiceFactory: public NSecret::IDescribeSchemaSecretsServiceFactory {
+private:
+    std::shared_ptr<TFlakySchemaSecretsService::TState> State = std::make_shared<TFlakySchemaSecretsService::TState>();
+
+public:
+    const std::shared_ptr<TFlakySchemaSecretsService::TState>& GetState() const {
+        return State;
+    }
+
+    NActors::IActor* CreateService() override {
+        return new TFlakySchemaSecretsService(State);
+    }
+};
+
 template <class TCtrl = NOlap::TWaitCompactionController>
 class TTieringTestHelper {
 private:
@@ -58,7 +110,7 @@ private:
     YDB_ACCESSOR(TString, TablePath, DEFAULT_TABLE_PATH);
 
 public:
-    TTieringTestHelper(bool enableLocalIndexAsSchemeObject = true) {
+    TTieringTestHelper(bool enableLocalIndexAsSchemeObject = true, std::function<void(TKikimrSettings&)> patchSettings = {}) {
         CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<TCtrl>());
         (*CsController)->SetSkipSpecialCheckForEvict(true);
 
@@ -68,7 +120,10 @@ public:
         runnerSettings.FeatureFlags.SetEnableColumnshardBool(true);
         runnerSettings.FeatureFlags.SetEnableColumnStore(true);
         runnerSettings.FeatureFlags.SetEnableLocalIndexAsSchemeObject(enableLocalIndexAsSchemeObject);
-        
+        if (patchSettings) {
+            patchSettings(runnerSettings);
+        }
+
         TestHelper.emplace(runnerSettings);
         // Shorten LongTx delays directly on AppData so MinSnapshotForNewReads advances quickly
         // for tier blob GC to run within the test's WaitCondition window.
@@ -370,6 +425,108 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetInt32(rows[0].at("level")), scanResult);
         }
+    }
+
+    Y_UNIT_TEST(ReadAfterRestartWithTransientSchemaSecretsFailure) {
+        auto secretsServiceFactory = std::make_shared<TFlakySchemaSecretsServiceFactory>();
+        TTieringTestHelper tieringHelper(true, [&](TKikimrSettings& settings) {
+            settings.SetDescribeSchemaSecretsServiceFactory(secretsServiceFactory);
+        });
+        auto& secretsService = *secretsServiceFactory->GetState();
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        olapHelper.CreateTestOlapTable();
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                CREATE SECRET `/Root/tier1-access-key` WITH (value = "secretAccessKey");
+                CREATE SECRET `/Root/tier1-secret-key` WITH (value = "fakeSecret");
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                CREATE EXTERNAL DATA SOURCE `)" + DEFAULT_TIER_PATH + R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="http://fake.fake/olap-)" + DEFAULT_TIER_NAME + R"(",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_PATH="/Root/tier1-access-key",
+                    AWS_SECRET_ACCESS_KEY_SECRET_PATH="/Root/tier1-secret-key",
+                    AWS_REGION="ru-central1"
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        const TString selectQuery = R"(SELECT MAX(level) AS level FROM `/Root/olapStore/olapTable`)";
+        i32 expectedLevel;
+        {
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            expectedLevel = GetInt32(rows[0].at("level"));
+        }
+
+        std::vector<ui64> tableShards;
+        {
+            auto* runtime = testHelper.GetKikimr().GetTestServer().GetRuntime();
+            const auto describeResult = DescribeTable(&testHelper.GetKikimr().GetTestServer(), runtime->AllocateEdgeActor(), DEFAULT_TABLE_PATH);
+            for (const auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
+                tableShards.push_back(shard);
+            }
+        }
+        UNIT_ASSERT(!tableShards.empty());
+        const auto allTableShardsActive = [&]() {
+            for (const auto shard : tableShards) {
+                if (!csController->IsActiveTablet(shard)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        UNIT_ASSERT(allTableShardsActive());
+
+        // Fail every secret resolution while the shards are restarting
+        secretsService.Fail = true;
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
+        const TInstant rebootDeadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < rebootDeadline && (secretsService.FailedRequests.load() < tableShards.size() || !allTableShardsActive())) {
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_GE(secretsService.FailedRequests.load(), tableShards.size());
+        UNIT_ASSERT(allTableShardsActive());
+
+        // Secrets are resolvable again: the shard must restore access to the tier on its own
+        secretsService.Fail = false;
+
+        bool restored = false;
+        TString lastError;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (TInstant::Now() < deadline) {
+            auto it = tableClient.StreamExecuteScanQuery(selectQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto part = it.ReadNext().GetValueSync();
+            if (part.IsSuccess()) {
+                UNIT_ASSERT(part.HasResultSet());
+                auto resultSet = part.ExtractResultSet();
+                NYdb::TResultSetParser parser(resultSet);
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(GetInt32(parser.GetValue("level")), expectedLevel);
+                restored = true;
+                break;
+            }
+            lastError = part.GetIssues().ToString();
+            Cerr << "read from tier failed: " << lastError << Endl;
+            Sleep(TDuration::Seconds(3));
+        }
+        UNIT_ASSERT_C(restored, "tier access was not restored after a transient secret resolution failure: " << lastError);
     }
 
     Y_UNIT_TEST(TtlBorders) {

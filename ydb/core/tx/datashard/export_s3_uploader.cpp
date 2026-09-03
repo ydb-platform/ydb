@@ -660,13 +660,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            NActors::NStructuredLog::TTextWriter writer;
-
-            TStringBuilder errorBuilder;
-            writer.Write(errorBuilder, LogPrefix());
-            errorBuilder << " key: " << CurrentObjectKey << " error: " << error;
-
-            Error = errorBuilder;
+            Error = FormatError(error, CurrentObjectKey);
             PassAway();
         }
     }
@@ -689,13 +683,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear();
             Retry();
         } else {
-            NActors::NStructuredLog::TTextWriter writer;
-
-            TStringBuilder errorBuilder;
-            writer.Write(errorBuilder, LogPrefix());
-            errorBuilder << " key: " << CurrentObjectKey << " error: " << error;
-
-            Error = errorBuilder;
+            Error = FormatError(error, CurrentObjectKey);
             PassAway();
         }
     }
@@ -757,16 +745,24 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         this->Schedule(Delay + random, new TEvents::TEvWakeup());
     }
 
+    TString FormatError(const Aws::S3::S3Error& error, const TStringBuf key = {}) const {
+        auto message = LogPrefix();
+        if (!key.empty()) {
+            YDB_LOG_UPDATE_MESSAGE(message, {"key", TString(key)});
+        }
+        YDB_LOG_UPDATE_MESSAGE(message, {"error", error});
+
+        NStructuredLog::TTextWriter writer;
+        TStringBuilder errorBuilder;
+        writer.Write(errorBuilder, message);
+        return errorBuilder;
+    }
+
     void RetryOrFinish(const Aws::S3::S3Error& error) {
         if (CanRetry(error)) {
             Retry();
         } else {
-            NStructuredLog::TTextWriter writer;
-            TStringBuilder errorBuilder;
-            writer.Write(errorBuilder, LogPrefix());
-            errorBuilder << " error: " << error;
-
-            Finish(false, errorBuilder);
+            Finish(false, FormatError(error));
         }
     }
 
@@ -774,12 +770,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            NStructuredLog::TTextWriter writer;
-            TStringBuilder errorBuilder;
-            writer.Write(errorBuilder, LogPrefix());
-            errorBuilder << " key: " << key << " error: " << error;
-
-            Finish(false, errorBuilder);
+            Finish(false, FormatError(error, key));
         }
     }
 
@@ -831,7 +822,7 @@ public:
         return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "S3Uploader"},
             {"selfId", this->SelfId()},

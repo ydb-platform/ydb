@@ -924,7 +924,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                     IndexImplTablePrefixes.reserve(item.Table->indexes_size());
 
                     for (const auto& index : item.Table->indexes()) {
-                        const auto indexType = NTableIndex::TryConvertIndexType(index.type_case());
+                        const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
                         if (!indexType) {
                             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unsupported index"
                                 << ": name# " << index.name()

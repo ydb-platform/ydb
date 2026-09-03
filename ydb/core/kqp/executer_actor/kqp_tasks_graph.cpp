@@ -732,10 +732,6 @@ void TKqpTasksGraph::FillStages() {
                             meta.IndexMetas.back().TablePath = indexSettings.GetDocsTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                             meta.IndexMetas.emplace_back();
-                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDictTable());
-                            meta.IndexMetas.back().TablePath = indexSettings.GetDictTable().GetPath();
-                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
-                            meta.IndexMetas.emplace_back();
                             meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetStatsTable());
                             meta.IndexMetas.back().TablePath = indexSettings.GetStatsTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
@@ -2091,6 +2087,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
         }
+
+        GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
     }
 }
 

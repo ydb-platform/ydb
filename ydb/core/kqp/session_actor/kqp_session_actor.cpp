@@ -347,13 +347,14 @@ public:
             "Cannot send to workload manager: PoolConfig is already resolved");
 
         Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
+            QueryState->QueryId,
             QueryState->UserRequestContext->DatabaseId,
             SessionId,
             QueryState->UserRequestContext->PoolId,
             QueryState->UserToken,
             QueryState->GetQuery(),
             QueryState->RequestEv->GetWmSessionUpdater()
-        ), IEventHandle::FlagTrackDelivery);
+        ), IEventHandle::FlagTrackDelivery, QueryState->QueryId);
 
         QueryState->PoolHandlerActor = NWorkloadManager::MakeServiceId(SelfId().NodeId());
         Become(&TKqpSessionActor::ExecuteState);
@@ -658,6 +659,9 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NWorkloadManager::TWorkloadManagerEvents::EvPlaceRequestIntoPool) {
+            if (!AcceptWmAdmissionReply(ev->Cookie, "TEvUndelivered")) {
+                return;
+            }
             YDB_LOG_WARN("Failed to deliver request to workload service, bypassing WLM",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
@@ -681,8 +685,27 @@ public:
         }
     }
 
+    // Replies are addressed to the session, not to the query, so a duplicated
+    // or late one would otherwise re-enter the pipeline of a query that is
+    // running now. The reply carries the QueryId of the query that issued
+    // the admission request; a reply is valid only if it matches the current
+    // query and has not already been accepted for it.
+    bool AcceptWmAdmissionReply(ui64 queryId, TStringBuf eventName) {
+        if (!QueryState || queryId != QueryState->QueryId || queryId <= LastAcceptedWmAdmissionQueryId) {
+            STLOG_W("Ignoring stale workload manager reply"
+                << " event=" << eventName
+                << " queryId=" << queryId,
+                (trace_id, TraceId()));
+            return false;
+        }
+        LastAcceptedWmAdmissionQueryId = queryId;
+        return true;
+    }
+
     void Handle(NWorkloadManager::TEvContinueRequest::TPtr& ev) {
-        YQL_ENSURE(QueryState);
+        if (!AcceptWmAdmissionReply(ev->Get()->QueryId, "TEvContinueRequest")) {
+            return;
+        }
         QueryState->ContinueTime = TInstant::Now();
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
@@ -1469,7 +1492,7 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (hasTxControl && QueryState->TxId.GetValue() == TTxId()) {
+                    if (hasTxControl && !QueryState->TxId.HasValue()) {
                         QueryState->TxId.SetValue(txId);
                     }
                     break;
@@ -4203,6 +4226,7 @@ private:
     std::shared_ptr<TKqpQueryState> QueryState;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
+    ui64 LastAcceptedWmAdmissionQueryId = 0;
     TIntrusiveConstPtr<TKikimrConfiguration> Config;
     IDataProvider::TFillSettings FillSettings;
     TTransactionsCache Transactions;

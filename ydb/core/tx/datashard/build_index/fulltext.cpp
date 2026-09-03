@@ -110,7 +110,6 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     THashMap<TString, TTokenState> TokenBuf;
     TSet<TTokenState*, TTokenStateLess> TokensBySize;
     ui64 BufferedBytes = 0;
-    ui64 EmptyTokenBytes = 0;
 
     ui64 MaxBatchBytes = 0;
     ui64 MaxSegmentDocuments = 0;
@@ -387,6 +386,11 @@ public:
         } else {
             tokens = Analyze(row.Get(0).AsBuf(), TextAnalyzers);
         }
+        const ui32 docTokens = tokens.size();
+        if (PrefixColumns.size()) {
+            // Add an empty token to count documents in prefix
+            tokens.emplace_back();
+        }
         if (Compact) {
             Y_ENSURE(key.size() == 1);
             ui64 docId;
@@ -404,18 +408,23 @@ public:
                     freq++;
                     continue;
                 }
+                if (tokens[i].empty()) {
+                    // Empty token's frequency is the document's total length + 1 (to support length == 0),
+                    // used to calculate per-prefix document statistics
+                    freq = docTokens + 1;
+                }
                 TString bucketKey = MakeCompactBucketKey(prefixCells, tokens[i]);
-                auto& state = TokenBuf[bucketKey];
-                if (state.BucketKey.empty()) {
+                auto tokenIt = TokenBuf.find(bucketKey);
+                if (tokenIt == TokenBuf.end()) {
+                    tokenIt = TokenBuf.emplace(bucketKey, TTokenState{}).first;
+                    auto& state = tokenIt->second;
                     state.Token = tokens[i];
                     state.BucketKey = bucketKey;
                     state.Prefix = TOwnedCellVec(prefixCells);
                     state.Segment.Reset(WithRelevance, Signed);
                     BufferedBytes += bucketKey.size(); // count bucket-key sizes
-                } else if (!state.Segment.GetCount()) {
-                    EmptyTokenBytes -= bucketKey.size();
-                    state.Segment.Reset(WithRelevance, Signed);
                 }
+                auto& state = tokenIt->second;
                 TokensBySize.erase(&state);
                 BufferedBytes -= state.Segment.GetBuf().size();
                 state.Segment.Add(docId, freq);
@@ -424,6 +433,7 @@ public:
                 freq = 1;
                 if (state.Segment.GetCount() >= MaxSegmentDocuments) {
                     FlushToken(state);
+                    TokenBuf.erase(tokenIt);
                 }
             }
             if (BufferedBytes >= MaxBatchBytes) {
@@ -434,14 +444,14 @@ public:
                     if (!(*mostFreqIt)->Segment.GetCount()) {
                         break;
                     }
-                    FlushToken(TokenBuf.at((*mostFreqIt)->BucketKey));
+                    auto tokenIt = TokenBuf.find((*mostFreqIt)->BucketKey);
+                    Y_ENSURE(tokenIt != TokenBuf.end());
+                    FlushToken(tokenIt->second);
+                    TokenBuf.erase(tokenIt);
                 }
             }
-            if (EmptyTokenBytes >= MaxBatchBytes/3) {
-                FlushAllTokens();
-            }
             if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
-                UploadDocRow(key, row, tokens.size());
+                UploadDocRow(key, row, docTokens);
             }
         } else if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             LastProcessedKey = TSerializedCellVec(key);
@@ -450,7 +460,7 @@ public:
             // safe across the asymmetrically-filling posting and docs buffers.
             Uploader.SetCurrentSourceKey(LastProcessedKey);
             UploadFulltextRelevance(prefixCells, docIdKey, tokens);
-            UploadDocRow(docIdKey, row, tokens.size());
+            UploadDocRow(docIdKey, row, docTokens);
         } else {
             LastProcessedKey = TSerializedCellVec(key);
             Uploader.SetCurrentSourceKey(LastProcessedKey);
@@ -568,9 +578,7 @@ public:
         UploadBuf->AddRow(uploadKey, uploadValue);
         TokensBySize.erase(&state);
         BufferedBytes -= state.Segment.GetBuf().size();
-        EmptyTokenBytes += state.BucketKey.size();
-        state.Segment = TDeltaWriter();
-        TokensBySize.insert(&state);
+        BufferedBytes -= state.BucketKey.size();
     }
 
     void FlushAllTokens()
@@ -582,7 +590,6 @@ public:
             FlushToken(state);
         }
         BufferedBytes = 0;
-        EmptyTokenBytes = 0;
         TokenBuf.clear();
         TokensBySize.clear();
     }

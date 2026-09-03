@@ -1110,7 +1110,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     if (scheme) {
         int idx = changefeeds.size() + 1;
         for (const auto& index : scheme->indexes()) {
-            const auto indexType = NTableIndex::TryConvertIndexType(index.type_case());
+            const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
             if (!indexType) {
                 continue;
             }

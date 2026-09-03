@@ -11,4 +11,5 @@ def test_dstool_evict_vdisk_legacy_api(ydb_cluster):
         ydb_cluster,
         TOKEN,
         allowed_failure='DisintegratedByExpectedStatus',
+        expect_fallback=True,
     )

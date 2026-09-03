@@ -1,13 +1,9 @@
 import sys
-import time
 
 import ydb.apps.dstool.lib.common as common
 import ydb.public.api.protos.draft.ydb_distributed_storage_pb2 as ydb_distributed_storage
 
 description = 'Relocate vdisks to other pdisks'
-
-GROUP_GENERATION_UPDATE_TIMEOUT_SECONDS = 30
-GROUP_GENERATION_UPDATE_POLL_INTERVAL_SECONDS = 1
 
 
 def add_options(p):
@@ -74,24 +70,6 @@ def select_vdisks(args):
     return selected
 
 
-def get_current_vdisk(vdisk, previous_generation):
-    position = get_vdisk_position(vdisk)
-    deadline = time.monotonic() + GROUP_GENERATION_UPDATE_TIMEOUT_SECONDS
-
-    while True:
-        storage = common.fetch_storage_state(vdisks=True)
-        for current in storage.vdisks:
-            same_position = get_vdisk_position(current) == position
-            has_new_generation = current.id.group_generation > previous_generation
-            if same_position and has_new_generation:
-                return current
-
-        if time.monotonic() >= deadline:
-            raise common.QueryError(
-                'VDisk %s did not advance to a new group generation after previous reassignment' % vdisk.id)
-        time.sleep(GROUP_GENERATION_UPDATE_POLL_INTERVAL_SECONDS)
-
-
 def perform_request(request):
     return common.invoke_distributed_storage_request('ReassignVDisk', request)
 
@@ -117,14 +95,20 @@ def _do_legacy(args):
 
 def _do_distributed_storage(args):
     vdisks = select_vdisks(args)
+    if args.dry_run and len(vdisks) > 1 and not getattr(args, 'quiet', False):
+        print(
+            'WARNING: dry-run for multiple VDisks is approximate: each VDisk is checked independently, '
+            'so the result may differ from actual sequential reassignment',
+            file=sys.stderr,
+        )
     reassigned_group_generations = {}
     successful_requests = 0
     try:
         for vdisk in vdisks:
             group_id = vdisk.id.group_id
-            if not args.dry_run and group_id in reassigned_group_generations:
-                vdisk = get_current_vdisk(vdisk, reassigned_group_generations[group_id])
             request = create_request(args, vdisk)
+            if not args.dry_run and group_id in reassigned_group_generations:
+                request.vdisk_id.group_generation = reassigned_group_generations[group_id]
             response = perform_request(request)
             if not is_successful_response(response):
                 error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
@@ -132,13 +116,10 @@ def _do_distributed_storage(args):
                     error_reason += _partial_success_message(successful_requests) + '\n'
                 common.print_status(args, False, error_reason)
                 sys.exit(1)
-            reassigned_group_generations[group_id] = vdisk.id.group_generation
+            if not args.dry_run:
+                reassigned_group_generations[group_id] = request.vdisk_id.group_generation + 1
             successful_requests += 1
-    except common.DistributedStorageUnavailable as error:
-        if successful_requests and not args.dry_run:
-            raise common.QueryError('%s; %s' % (error, _partial_success_message(successful_requests))) from error
-        raise
-    except (common.ConnectionError, common.QueryError) as error:
+    except (common.DistributedStorageUnavailable, common.ConnectionError, common.QueryError) as error:
         if successful_requests and not args.dry_run:
             raise common.QueryError('%s; %s' % (error, _partial_success_message(successful_requests))) from error
         raise

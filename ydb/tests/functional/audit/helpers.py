@@ -51,7 +51,14 @@ def get_dstool_binary_path():
     return yatest.common.binary_path(os.getenv('YDB_DSTOOL_BINARY'))
 
 
-def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True, allowed_failure=None):
+def execute_dstool_grpc(
+    cluster,
+    token,
+    cmd,
+    check_exit_code=True,
+    allowed_failure=None,
+    expected_stderr_substrings=(),
+):
     full_cmd = [get_dstool_binary_path(), '--endpoint', f'grpc://{cluster_endpoint(cluster)}']
     full_cmd += cmd
 
@@ -60,6 +67,8 @@ def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True, allowed_failu
     failure_allowed = allowed_failure is not None and allowed_failure in stderr
     if check_exit_code and proc_result.exit_code != 0 and not failure_allowed:
         assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{stderr}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
+    for substring in expected_stderr_substrings:
+        assert substring in stderr, f'Expected {substring!r} in stderr:\n\n{stderr}'
     return proc_result.std_out
 
 
@@ -198,7 +207,7 @@ class CanonicalCaptureAuditFileOutput:
         )
 
 
-def capture_dstool_evict_vdisk_audit(cluster, token, allowed_failure=None):
+def capture_dstool_evict_vdisk_audit(cluster, token, allowed_failure=None, expect_fallback=False):
     list_result = json.loads(execute_dstool_grpc(cluster, token, ['vdisk', 'list', '--format', 'json']))
     assert len(list_result) > 0
     vdisk_id = list_result[0]['VDiskId']
@@ -208,8 +217,21 @@ def capture_dstool_evict_vdisk_audit(cluster, token, allowed_failure=None):
         'vdisk', 'evict', '--vdisk-ids', vdisk_id, '--ignore-degraded-group-check',
         '--ignore-failure-model-group-check',
     ]
+    expected_stderr_substrings = ()
+    if expect_fallback:
+        evict_cmd.insert(0, '--verbose')
+        expected_stderr_substrings = (
+            'gRPC method StreamStorageState is unavailable at ',
+            'falling back to BlobStorageConfig',
+        )
 
     capture_audit = CanonicalCaptureAuditFileOutput(cluster.config.audit_file_path)
     with capture_audit:
-        execute_dstool_grpc(cluster, token, evict_cmd, allowed_failure=allowed_failure)
+        execute_dstool_grpc(
+            cluster,
+            token,
+            evict_cmd,
+            allowed_failure=allowed_failure,
+            expected_stderr_substrings=expected_stderr_substrings,
+        )
     return capture_audit.canonize()

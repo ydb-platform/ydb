@@ -10,7 +10,10 @@ description = 'List groups'
 
 
 def _enum_name(enum, value, prefix):
-    return enum.Name(value)[len(prefix):]
+    try:
+        return enum.Name(value)[len(prefix):]
+    except ValueError:
+        return 'UNKNOWN(%d)' % value
 
 
 def _group_status_name(value):

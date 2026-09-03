@@ -418,23 +418,20 @@ def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_r
         try:
             result = query(endpoint)
             break
-        except DistributedStorageUnavailable as e:
-            errors.append(e)
-            try_index += 1
-            print_if_verbose(connection_params.args,
-                             'INFO: distributed storage service is unavailable at %s: %s'
-                             % (endpoint.host_with_port, e), file=sys.stderr)
-            if try_index == max_retries:
-                _raise_retry_error(errors)
         except Exception as e:
             errors.append(e)
             try_index += 1
-            if isinstance(e, urllib.error.URLError):
-                bad_hosts.add(endpoint.host_with_port)
-            if not connection_params.quiet:
-                print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e} ({type(e).__module__}.{type(e).__name__})', file=sys.stderr)
-                if request_type == 'http' and try_index == max_retries:
-                    print('HINT: consider trying different protocol for endpoints when experiencing massive fetch failures from different hosts', file=sys.stderr)
+            if isinstance(e, DistributedStorageUnavailable):
+                print_if_verbose(connection_params.args,
+                                 'INFO: distributed storage service is unavailable at %s: %s'
+                                 % (endpoint.host_with_port, e), file=sys.stderr)
+            else:
+                if isinstance(e, urllib.error.URLError):
+                    bad_hosts.add(endpoint.host_with_port)
+                if not connection_params.quiet:
+                    print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e} ({type(e).__module__}.{type(e).__name__})', file=sys.stderr)
+                    if request_type == 'http' and try_index == max_retries:
+                        print('HINT: consider trying different protocol for endpoints when experiencing massive fetch failures from different hosts', file=sys.stderr)
             if try_index == max_retries:
                 _raise_retry_error(errors)
     return try_index, result

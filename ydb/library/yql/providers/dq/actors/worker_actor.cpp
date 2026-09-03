@@ -70,7 +70,7 @@ struct TSinkInfo {
 };
 
 class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
-    bool AllocateQuota(ui64) override {
+    bool AllocateQuota(ui64, bool) override {
         return true;
     }
 
@@ -88,8 +88,8 @@ class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
         return TString();
     }
 
-    bool IsReasonableToUseSpilling() const override {
-        return false;
+    i64 GetMemoryAvailability() const override {
+        return std::numeric_limits<i64>::max();
     }
 };
 

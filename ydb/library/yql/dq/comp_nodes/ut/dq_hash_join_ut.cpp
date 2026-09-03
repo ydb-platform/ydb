@@ -5,11 +5,14 @@
 #include <type_utils.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/join_perf/construct_join_graph.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_operator_memory_quota.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+
+#include <util/system/align.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -1959,6 +1962,84 @@ void AssertOutputBufferBounded(const TOutputBlockStats& stats, i64 expectedTotal
                          << " should be at most " << maxOutputRows);
 }
 
+void AssertNotSpilled(IComputationGraph& graph) {
+    auto factory = std::dynamic_pointer_cast<TMockSpillerFactory>(graph.GetContext().SpillerFactory);
+    UNIT_ASSERT_C(factory, "Expected the graph to use TMockSpillerFactory");
+    ui64 spilled = 0;
+    for (const auto& spiller : factory->GetCreatedSpillers()) {
+        auto mock = std::dynamic_pointer_cast<TMockSpiller>(spiller);
+        UNIT_ASSERT_C(mock, "Expected TMockSpiller");
+        spilled += mock->GetTotalSpilled();
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(spilled, 0, "Expected the join not to spill data");
+}
+
+// Scripted operator memory quota (RFC dq_memory_quota_20): availability and grants are set by the test,
+// grants raise the allocator limit like TDqMemoryQuota does.
+struct TFakeDqMemoryQuota : public NYql::NDq::IDqOperatorMemoryQuota {
+    bool RequestExtraMemory(ui64 bytes, bool isOptional) override {
+        const bool grant = isOptional ? GrantOptional : GrantMandatory;
+        if (isOptional) {
+            ++OptionalRequests;
+            OptionalGranted += grant;
+        } else {
+            ++MandatoryRequests;
+        }
+        if (grant && Alloc) {
+            Alloc->SetLimit(Alloc->GetLimit() + AlignUp<ui64>(bytes, 1_MB));
+        }
+        return grant;
+    }
+
+    i64 GetMemoryAvailability() const override {
+        if (TightenLimitOnRead && Alloc) {
+            // keep the allocator limit tight, like a real quota after a shrink: the join then has to ask
+            // for every table it builds (TJoinTestData otherwise leaves the headroom of freed transients)
+            Alloc->SetLimit(std::max<ui64>(Alloc->GetAllocated(), 1));
+        }
+        return Availability;
+    }
+
+    void TryShrinkMemory() override {
+        ++ShrinkCalls;
+    }
+
+    i64 Availability = 1_GB;
+    bool GrantOptional = true;
+    bool GrantMandatory = true;
+    bool TightenLimitOnRead = false;
+    TScopedAlloc* Alloc = nullptr;
+    int OptionalRequests = 0;
+    int OptionalGranted = 0;
+    int MandatoryRequests = 0;
+    int ShrinkCalls = 0;
+};
+
+// Like Test(), but the fetch loop runs with the fake quota bound to the thread; the allocator yellow zone is
+// forced as requested to prove that the bound path ignores it.
+// testData by reference: its allocator callback captures the TJoinTestData object, a move would leave it dangling
+void TestBound(TJoinTestData& testData, bool blockJoin, TFakeDqMemoryQuota& quota, bool expectSpilling, bool forceYellowZone = false) {
+    auto descr = MakeJoinDescription(testData);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(forceYellowZone);
+    THolder<IComputationGraph> got = ConstructJoinGraphStream(
+        testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, true,
+        testData.JoinSettings);
+    quota.Alloc = &descr.Setup->Alloc;
+    {
+        NYql::NDq::TDqOperatorMemoryQuotaScope scope(&quota);
+        if (blockJoin) {
+            CompareListAndBlockStreamIgnoringOrder(testData.Result, *got);
+        } else {
+            CompareListAndStreamIgnoringOrder(testData.Result, *got);
+        }
+    }
+    if (expectSpilling) {
+        AssertSpilled(*got);
+    } else {
+        AssertNotSpilled(*got);
+    }
+}
+
 void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     auto descr = MakeJoinDescription(testData);
     if (testData.JoinMemoryConstraint){
@@ -2051,6 +2132,62 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpilling, BlockJoin) {
         Test(LeftJoinSpillingTestData(), BlockJoin);
+    }
+
+    // ---- bound operator memory quota (RFC dq_memory_quota_20) ----
+
+    Y_UNIT_TEST_TWIN(TestBoundSpillsWhenAvailabilityNegative, BlockJoin) {
+        auto td = LeftJoinSpillingTestData();
+        td.JoinMemoryConstraint = std::nullopt;
+        TFakeDqMemoryQuota quota;
+        quota.Availability = -1; // the node is over target: the join gives memory back by spilling
+        TestBound(td, BlockJoin, quota, /* expectSpilling = */ true);
+        UNIT_ASSERT_GE(quota.ShrinkCalls, 1);
+    }
+
+    Y_UNIT_TEST_TWIN(TestBoundIgnoresYellowZoneWhenAvailabilityPositive, BlockJoin) {
+        auto td = LeftJoinSpillingTestData();
+        td.JoinMemoryConstraint = std::nullopt;
+        TFakeDqMemoryQuota quota;
+        quota.Availability = 1_GB;
+        quota.TightenLimitOnRead = true;
+        TestBound(td, BlockJoin, quota, /* expectSpilling = */ false, /* forceYellowZone = */ true);
+        // the allocator limit is kept tight, so every in-memory table asks the quota and is granted
+        UNIT_ASSERT_GE(quota.OptionalRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(quota.OptionalGranted, quota.OptionalRequests);
+    }
+
+    Y_UNIT_TEST_TWIN(TestBoundOptionalRefusalBeforeBuildSpills, BlockJoin) {
+        auto td = LeftJoinSpillingTestData();
+        td.JoinMemoryConstraint = std::nullopt;
+        TFakeDqMemoryQuota quota;
+        quota.Availability = 1_GB;
+        quota.TightenLimitOnRead = true;
+        quota.GrantOptional = false; // the manager keeps the memory for others: the buckets take the spilled path
+        TestBound(td, BlockJoin, quota, /* expectSpilling = */ true);
+        UNIT_ASSERT_GE(quota.OptionalRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(quota.OptionalGranted, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(TestBoundNoOptionalRequestAtZeroAvailability, BlockJoin) {
+        auto td = LeftJoinSpillingTestData();
+        td.JoinMemoryConstraint = std::nullopt;
+        TFakeDqMemoryQuota quota;
+        quota.Availability = 0; // RFC: do not ask for optional quota
+        quota.TightenLimitOnRead = true;
+        TestBound(td, BlockJoin, quota, /* expectSpilling = */ true);
+        UNIT_ASSERT_VALUES_EQUAL(quota.OptionalRequests, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(TestBoundPartitionRebuildMandatoryRefusedThrows, BlockJoin) {
+        auto td = LeftJoinSpillingTestData();
+        td.JoinMemoryConstraint = std::nullopt;
+        TFakeDqMemoryQuota quota;
+        quota.Availability = -1;      // everything is spilled ...
+        quota.TightenLimitOnRead = true;
+        quota.GrantMandatory = false; // ... and a spilled partition cannot be rebuilt: no fallback yet
+        UNIT_ASSERT_EXCEPTION(TestBound(td, BlockJoin, quota, /* expectSpilling = */ true), TMemoryLimitExceededException);
+        UNIT_ASSERT_GE(quota.MandatoryRequests, 1);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeys, BlockJoin) {

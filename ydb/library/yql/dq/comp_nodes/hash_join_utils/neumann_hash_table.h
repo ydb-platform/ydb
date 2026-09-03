@@ -185,7 +185,8 @@ class TNeumannHashTable {
 
 
     ui64 RequiredMemoryForBuild(int nItems) const {
-        return sizeof(TDirectory)*EstimateLogSize(nItems)+ static_cast<size_t>(BufferSlotSize_) * nItems;
+        // Build() allocates (1 << EstimateLogSize) + 1 directories plus one buffer slot per item
+        return sizeof(TDirectory) * ((1ull << EstimateLogSize(nItems)) + 1) + static_cast<ui64>(BufferSlotSize_) * nItems;
     }
 
     void Build(const ui8 *const tuples, const ui8 *const overflow, int nItems,

@@ -13,12 +13,22 @@ NYql::TChunkedBuffer Serialize(TPackResult&& result);
 
 TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout* layout);
 
-struct BlobIdAndBucketIndex {
+// A page being written: the future key and the accounting of the serialized copy handed to the spiller
+struct TSpillingPage {
     bool IsReady() const {
-        return BlobId.IsReady();
+        return Key.IsReady();
     }
 
-    NThreading::TFuture<ISpiller::TKey> BlobId;
+    NThreading::TFuture<ISpiller::TKey> Key;
+    TOffloadedMemoryGuard Copy;
+};
+
+struct BlobIdAndBucketIndex {
+    bool IsReady() const {
+        return Page.IsReady();
+    }
+
+    TSpillingPage Page;
     int BucketIndex;
 };
 
@@ -55,7 +65,12 @@ inline ESpillResult Wait() {
     return ESpillResult::Spilling;
 }
 
-NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page);
+inline ui64 SerializedPageBytes(const TPackResult& page) {
+    return sizeof(page.NTuples) + page.PackedTuples.size() + page.Overflow.size();
+}
+
+// accountOffload: charge the serialized copy to the MKQL allocator (bound operator memory quota)
+TSpillingPage SpillPage(ISpiller& spiller, TPackResult&& page, bool accountOffload);
 
 template <TSpillerSettings Settings> class TBucketsSpiller {
     std::optional<int> FindInMemoryBucketWithMostPages() const {
@@ -125,9 +140,9 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
                     }
                 }
                 for (auto& future : *SpillingPages_) {
-                    MKQL_ENSURE(future.BlobId.IsReady(), "no blocking wait");
+                    MKQL_ENSURE(future.Page.Key.IsReady(), "no blocking wait");
                     MKQL_ENSURE(Buckets_[future.BucketIndex].IsSpilled(), "spilled page from in memory bucket?");
-                    Buckets_[future.BucketIndex].SpilledPages->push_back(future.BlobId.ExtractValueSync());
+                    Buckets_[future.BucketIndex].SpilledPages->push_back({future.Page.Key.ExtractValueSync(), future.Page.Copy.Bytes()});
                 }
                 SpillingPages_ = std::nullopt;
             } else {
@@ -149,15 +164,19 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
                     while (bucket.IsSpilled() && !bucket.InMemoryPages().empty() && totalSpillingPages != 0) {
                         totalSpillingPages--;
                         SpillingPages_->push_back(
-                            {.BlobId = SpillPage(*Spiller_, *bucket.ReleaseAtMostOnePage()),
+                            {.Page = SpillPage(*Spiller_, *bucket.ReleaseAtMostOnePage(), AccountOffload_),
                              .BucketIndex = index});
                     }
                 }
                 MKQL_ENSURE(totalSpillingPages == 0, "not enough pages for spilling?");
             }
         }
-        MKQL_ENSURE(!condition(), "sanity check");
+        // no post-check of condition(): a bound memory quota can change between two evaluations
         return ESpillResult::FinishedSpilling;
+    }
+
+    void SetAccountOffload(bool enabled) {
+        AccountOffload_ = enabled;
     }
 
     TBuckets& GetBuckets() {
@@ -171,6 +190,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     const NPackedTuple::TTupleLayout* Layout_;
     EBucketAssign Assign_ = EBucketAssign::Hash;
     int RoundRobinCursor_ = 0;
+    bool AccountOffload_ = false;
 };
 
 template <TSpillerSettings Settings> class TProbeSpiller {
@@ -219,7 +239,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                     TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[future.BucketIndex]);
                     MKQL_ENSURE(thisBucket, "spilling page from in memory bucket?");
                     thisBucket->SelectSide(future.Side)
-                        .SpilledPages->push_back(future.Val.ExtractValueSync());
+                        .SpilledPages->push_back({future.Val.Key.ExtractValueSync(), future.Val.Copy.Bytes()});
                 }
                 SpillingPages_ = std::nullopt;
             } else {
@@ -229,8 +249,8 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                 SpillingPages_.emplace();
                 for (int index = 0; index < Settings.SpillingPagesAtTime; ++index) {
                     auto page = *GetBackOrNull(State_.InMemoryPages);
-                    SpillingPages_->push_back({.Val = SpillPage(*Spiller_, std::move(page.Val)), .Side = page.Side,
-                                               .BucketIndex = page.BucketIndex});
+                    SpillingPages_->push_back({.Val = SpillPage(*Spiller_, std::move(page.Val), AccountOffload_),
+                                               .Side = page.Side, .BucketIndex = page.BucketIndex});
                 }
             }
         }
@@ -268,12 +288,17 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         return State_;
     }
 
+    void SetAccountOffload(bool enabled) {
+        AccountOffload_ = enabled;
+    }
+
   private:
     State State_;
     const NPackedTuple::TTupleLayout* Layout_;
 
-    std::optional<TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>>> SpillingPages_;
+    std::optional<TMKQLVector<TValueAndLocation<TSpillingPage>>> SpillingPages_;
     ISpiller::TPtr Spiller_;
+    bool AccountOffload_ = false;
 
 };
 } // namespace NKikimr::NMiniKQL

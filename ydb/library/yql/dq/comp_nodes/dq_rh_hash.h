@@ -111,6 +111,11 @@ public:
         return Capacity_;
     }
 
+    // capacity of the table after the next Grow(); the grown table coexists with the old one while it is rebuilt
+    ui64 GetGrowCapacity() const {
+        return Capacity_ * CalculateRHHashTableGrowFactor(Capacity_);
+    }
+
     void Clear() {
         char* ptr = Data_;
         for (ui64 i = 0; i < Capacity_; ++i) {

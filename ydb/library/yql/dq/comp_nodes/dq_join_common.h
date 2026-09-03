@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <numeric>
 #include <vector>
+#include <ydb/library/yql/dq/comp_nodes/dq_operator_memory_quota.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/spilled_storage.h>
@@ -247,7 +248,7 @@ TPackResult GetPage(TFuturePage&& future);
 
 using ProbeSpillingPage = std::optional<TPackResult>;
 
-struct TSpilledBucket : public TSides<TMKQLVector<ISpiller::TKey>> {};
+struct TSpilledBucket : public TSides<TSpilledPages> {};
 
 using PairOfSpilledBuckets = TSides<TBucket>;
 
@@ -258,11 +259,18 @@ bool AllFuturesReady(const auto& futures) {
 struct TFutureTableData {
     TMKQLVector<TFuturePage> Futures;
     NThreading::TFuture<void> All;
+    TOffloadedMemoryGuard ReadBuffers; // the chunked buffers of the whole build side of a partition
+};
+
+// A probe page being read back: the future buffer and its accounting
+struct TGuardedFuturePage {
+    TFuturePage Page;
+    TOffloadedMemoryGuard ReadBuffer;
 };
 
 struct TTableAndSomeData {
     NJoinTable::TNeumannJoinTable Table;
-    TMKQLDeque<TFuturePage> Futures;
+    TMKQLDeque<TGuardedFuturePage> Futures;
     std::optional<TPackResult> CurrentProbePack;
     ui32 ProbeResumeIndex = 0;
     size_t BuildCursor = 0;
@@ -270,6 +278,75 @@ struct TTableAndSomeData {
 };
 
 namespace NJoinPackedTuples {
+
+// ---- operator memory quota (RFC dq_memory_quota_20) ----
+
+inline ui64 PagesBytes(const TMKQLVector<TPackResult>& pages) {
+    ui64 bytes = 0;
+    for (const auto& page : pages) {
+        bytes += page.PackedTuples.size() + page.Overflow.size();
+    }
+    return bytes;
+}
+
+inline i64 PagesTuples(const TMKQLVector<TPackResult>& pages) {
+    i64 tuples = 0;
+    for (const auto& page : pages) {
+        tuples += page.NTuples;
+    }
+    return tuples;
+}
+
+// Growth of building one in-memory table from `pages`: the flattened copy (the pages die when Flatten
+// returns) or the hash table on top of it, whichever is larger.
+inline ui64 TableBuildBytes(const NJoinTable::TNeumannJoinTable& table, const TMKQLVector<TPackResult>& pages) {
+    return std::max<ui64>(PagesBytes(pages), table.RequiredMemoryForBuild(static_cast<int>(PagesTuples(pages))));
+}
+
+// Reserve `bytes` beyond the current allocator headroom through the bound operator memory quota.
+// Unbound: true (today's behaviour). Optional requests are not made at a non-positive availability (RFC).
+inline bool TryReserveMemory(NYql::NDq::IDqOperatorMemoryQuota* quota, ui64 bytes, bool isOptional) {
+    if (!quota) {
+        return true;
+    }
+    const ui64 limit = TlsAllocState->GetLimit(); // 0 == unlimited
+    const ui64 allocated = TlsAllocState->GetAllocated();
+    if (limit == 0 || allocated + bytes <= limit) {
+        return true;
+    }
+    if (isOptional && quota->GetMemoryAvailability() <= 0) {
+        return false;
+    }
+    return quota->RequestExtraMemory(allocated + bytes - limit, isOptional);
+}
+
+inline void ReserveOrThrow(NYql::NDq::IDqOperatorMemoryQuota* quota, ui64 bytes) {
+    if (!TryReserveMemory(quota, bytes, /* isOptional = */ false)) {
+        throw TMemoryLimitExceededException();
+    }
+}
+
+// Spilling is how the join gives memory back. Bound: the numeric availability is negative (give back) or an
+// optional reservation was refused (soft pressure). Unbound: the allocator yellow zone, as before.
+inline bool NeedToSpill(NYql::NDq::IDqOperatorMemoryQuota* quota, bool hasSpiller, bool softPressure) {
+    if (!hasSpiller) {
+        return false;
+    }
+    if (!quota) {
+        return TlsAllocState->IsMemoryYellowZoneEnabled();
+    }
+    if (softPressure) {
+        return true;
+    }
+    i64 availability = quota->GetMemoryAvailability();
+    if (availability < 0) {
+        // return what the previous rounds freed first, the availability may recover
+        quota->TryShrinkMemory();
+        availability = quota->GetMemoryAvailability();
+    }
+    return availability < 0;
+}
+
 template <typename Source> class TInMemoryHashJoin {
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
@@ -464,24 +541,24 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         std::optional<int> GridProbeBucket;
     };
 
-    using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
+    using DumpedBuckets = TMKQLHashMap<int, TSpilledBucket>;
 
     struct DumpRestOfPages {
-        DumpRestOfPages(Self& self, std::unordered_map<int, TSpilledBucket>&& base,
-                        TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>>&& futures)
+        DumpRestOfPages(Self& self, DumpedBuckets&& base,
+                        TMKQLVector<TValueAndLocation<TSpillingPage>>&& futures)
             : AlreadyDumped(std::move(base))
             , Futures(std::move(futures))
         {
             NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wg;
             for (auto& future : Futures) {
-                wg.Add(future.Val);
+                wg.Add(future.Val.Key);
             }
             All = std::move(wg).Finish();
             self.Logger_.LogDebug(Sprintf("DumpRestOfPages stage started, page count: %i", Futures.size()));
         }
 
         DumpedBuckets AlreadyDumped;
-        TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>> Futures;
+        TMKQLVector<TValueAndLocation<TSpillingPage>> Futures;
         NThreading::TFuture<void> All;
     };
 
@@ -494,7 +571,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     };
 
     struct JoinPairsOfPartitions {
-        JoinPairsOfPartitions(Self& self, std::unordered_map<int, TSpilledBucket>&& pairs)
+        JoinPairsOfPartitions(Self& self, DumpedBuckets&& pairs)
             : Pairs(std::move(pairs))
         {
             if constexpr (IsGrid) {
@@ -509,9 +586,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                           static_cast<int>(Pairs.size())));
         }
 
-        std::unordered_map<int, TSpilledBucket> Pairs;
+        DumpedBuckets Pairs;
         std::optional<PairAndMetadata> SelectedPair;
-        TMKQLVector<ISpiller::TKey> GridProbeKeys;
+        TSpilledPages GridProbeKeys;
     };
 
     class Sources {
@@ -595,8 +672,26 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     template <bool HasFilter>
     EFetchResult MatchRowsImpl([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull,
                                [[maybe_unused]] TPackedTuplePairFilter* filter) {
-        auto notEnoughMemory = [hasSpiller = !!Spiller_] {
-            return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
+        // the operator memory quota is read per call and never stored: the owner binds it around graph execution
+        NYql::NDq::IDqOperatorMemoryQuota* const quota = NYql::NDq::GetDqOperatorMemoryQuota();
+        const bool hasSpiller = !!Spiller_;
+        const bool accountOffload = quota != nullptr;
+        auto notEnoughMemory = [this, quota, hasSpiller] {
+            return NeedToSpill(quota, hasSpiller, SoftPressure_);
+        };
+        // a round that ran out of pages served the soft pressure: the refused bucket is on disk now
+        auto spillWhileNeeded = [&](auto& spiller) {
+            spiller.SetAccountOffload(accountOffload);
+            const ESpillResult res = spiller.SpillWhile(notEnoughMemory);
+            if (res == ESpillResult::DontHavePages) {
+                SoftPressure_ = false;
+            }
+            return res;
+        };
+        auto giveBack = [quota] {
+            if (quota) {
+                quota->TryShrinkMemory();
+            }
         };
         auto lookupToTable = [&](TTable& table, TSingleTuple probeRow, size_t& buildCursor) {
             if constexpr (HasFilter) {
@@ -654,7 +749,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
                 }
             } else {
-                ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
+                ESpillResult res = spillWhileNeeded(state.Spiller);
                 switch (res) {
                 case Spilling:
                     return WaitWhileSpilling();
@@ -671,7 +766,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             }
         } else if (auto* s = std::get_if<BuildingInMemoryTable>(&State_)) {
             BuildingInMemoryTable& state = *s;
-            ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
+            ESpillResult res = spillWhileNeeded(state.Spiller);
             switch (res) {
                 case Spilling:
                     return WaitWhileSpilling();
@@ -710,8 +805,17 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 MKQL_ENSURE(table, "sanity check");
                 TBucket& buildBucket = state.Spiller.GetBuckets()[*smallestBucket];
 
-                table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
-                MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
+                // Ask for the table memory optionally when spilling is the alternative; a refusal sends this
+                // bucket to the spilled path (the routing above) and its pages to disk (soft pressure).
+                if (hasSpiller && !TryReserveMemory(quota, TableBuildBytes(*table, buildBucket.InMemoryPages()), /* isOptional = */ true)) {
+                    Logger_.LogDebug(Sprintf("optional memory quota refused, bucket %i (%i pages) goes to the spilled path",
+                                             *smallestBucket, static_cast<int>(buildBucket.InMemoryPages().size())));
+                    buildBucket.SpilledPages.emplace();
+                    SoftPressure_ = true;
+                } else {
+                    table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
+                    MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
+                }
             }
 
         } else if (auto* s = std::get_if<Probing>(&State_)) {
@@ -731,8 +835,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             return EFetchResult::One;
                         }
                     }
-                    std::unordered_map<int, TSpilledBucket> alreadyDumped;
-                    TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>> futures;
+                    DumpedBuckets alreadyDumped;
+                    TMKQLVector<TValueAndLocation<TSpillingPage>> futures;
                     for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
                         if (state.Spiller.IsBucketSpilled(index)) {
                             TSides<TBucket>& thisPair = *std::get_if<TSides<TBucket>>(&state.Spiller.GetState().Buckets[index]);
@@ -741,8 +845,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 thisBucket.DetatchBuildingPage();
                                 for( TPackResult& page: thisBucket.DetatchPages()){
 
-                                    futures.push_back(TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>{
-                                        .Val = SpillPage(*Spiller_, std::move(page)), .Side = side,
+                                    futures.push_back(TValueAndLocation<TSpillingPage>{
+                                        .Val = SpillPage(*Spiller_, std::move(page), accountOffload), .Side = side,
                                         .BucketIndex = index});
                                 }
                                 alreadyDumped[index].SelectSide(side) = std::move(*thisBucket.SpilledPages);
@@ -751,8 +855,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         }
                     }
                     for (auto& page : state.Spiller.GetState().InMemoryPages) {
-                        futures.push_back(TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>{
-                            .Val = SpillPage(*Spiller_, std::move(page.Val)), .Side = page.Side,
+                        futures.push_back(TValueAndLocation<TSpillingPage>{
+                            .Val = SpillPage(*Spiller_, std::move(page.Val), accountOffload), .Side = page.Side,
                             .BucketIndex = page.BucketIndex});
                     }
                     state.Spiller.GetState().InMemoryPages.clear();
@@ -768,9 +872,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         MKQL_ENSURE(!alreadyDumped.empty(), "0 dumped buckets but have some parts in memory?");
                         State_ = DumpRestOfPages{*this, std::move(alreadyDumped), std::move(futures)};
                     }
+                    giveBack(); // the in-memory tables are gone
                 }
             } else {
-                switch (state.Spiller.SpillWhile(notEnoughMemory)) {
+                switch (spillWhileNeeded(state.Spiller)) {
                 case Spilling:
                     return WaitWhileSpilling();
                 case FinishedSpilling:
@@ -819,9 +924,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 for (auto& future : state.Futures) {
                     auto it = state.AlreadyDumped.find(future.BucketIndex);
                     MKQL_ENSURE(it != state.AlreadyDumped.end(), "bucket with this index is processed already");
-                    it->second.SelectSide(future.Side).push_back(ExtractReadyFuture(std::move(future.Val)));
+                    it->second.SelectSide(future.Side).push_back({ExtractReadyFuture(std::move(future.Val.Key)), future.Val.Copy.Bytes()});
                 }
                 State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped)};
+                giveBack(); // the serialized copies of the dumped pages are released
 
             } else {
                 return WaitWhileSpilling();
@@ -839,24 +945,37 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         state.SelectedPair->Buckets.Probe = state.GridProbeKeys;
                     }
                     TFutureTableData data;
-                    for (ISpiller::TKey key : state.SelectedPair->Buckets.Build) {
-                        data.Futures.push_back(Spiller_->Extract(key));
+                    ui64 readBytes = 0;
+                    for (const TSpilledPageRef& page : state.SelectedPair->Buckets.Build) {
+                        readBytes += page.Bytes;
+                    }
+                    // the whole build side of the partition is read at once: account it before the blobs exist
+                    data.ReadBuffers = TOffloadedMemoryGuard{readBytes, accountOffload};
+                    for (const TSpilledPageRef& page : state.SelectedPair->Buckets.Build) {
+                        data.Futures.push_back(Spiller_->Extract(page.Key));
                     }
                     data.All = NThreading::WaitAll(data.Futures);
                     state.SelectedPair->Table = std::move(data);
                 } else {
                     State_ = Finish{};
+                    giveBack(); // all partitions are joined
                 }
             } else {
-                TMKQLVector<ISpiller::TKey>& currentProbe = state.SelectedPair->Buckets.Probe;
+                TSpilledPages& currentProbe = state.SelectedPair->Buckets.Probe;
                 if (auto* tdata = std::get_if<TFutureTableData>(&state.SelectedPair->Table)) {
                     if (tdata->All.IsReady()) {
                         TMKQLVector<TPackResult> vec;
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
+                        tdata->ReadBuffers.Release(); // the chunked buffers were parsed into MKQL pages
                         NJoinTable::TNeumannJoinTable table{Layouts_.Build, PreservedRowsInBuildTable()};
-                        table.BuildWith(Flatten(std::move(vec)));
+                        // No fallback until repartitioning exists (see the TODO above): the partition must fit, so
+                        // the reservations are mandatory - the flattened copy first, then the table on top of it.
+                        ReserveOrThrow(quota, PagesBytes(vec));
+                        TPackResult flattened = Flatten(std::move(vec));
+                        ReserveOrThrow(quota, table.RequiredMemoryForBuild(static_cast<int>(flattened.NTuples)));
+                        table.BuildWith(std::move(flattened));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
                         return WaitWhileSpilling();
@@ -867,8 +986,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     const bool keepProbeBlobs = IsGrid && !state.SelectedPair->IsLastPair;
                     constexpr int MinFuturesInBuffer = 10;
                     while (table->Futures.size() < MinFuturesInBuffer && !currentProbe.empty()) {
-                        const ISpiller::TKey key = *GetBackOrNull(currentProbe);
-                        table->Futures.push_back(keepProbeBlobs ? Spiller_->Get(key) : Spiller_->Extract(key));
+                        const TSpilledPageRef page = *GetBackOrNull(currentProbe);
+                        TOffloadedMemoryGuard readBuffer{page.Bytes, accountOffload};
+                        table->Futures.push_back({.Page = keepProbeBlobs ? Spiller_->Get(page.Key) : Spiller_->Extract(page.Key),
+                                                  .ReadBuffer = std::move(readBuffer)});
                     }
                     if (table->CurrentProbePack.has_value()) {
                         ui32 idx = 0;
@@ -895,10 +1016,13 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             }
                         }
                         state.SelectedPair = std::nullopt;
+                        giveBack(); // the partition table and its parsed pages are freed
                     } else {
-                        if (table->Futures.front().IsReady()) {
-                            table->CurrentProbePack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
+                        if (table->Futures.front().Page.IsReady()) {
+                            auto next = *GetFrontOrNull(table->Futures);
+                            table->CurrentProbePack = GetPage(std::move(next.Page), ESide::Probe);
                             table->ProbeResumeIndex = 0;
+                            // next.ReadBuffer is released here, the page lives in MKQL memory now
                         } else {
                             return WaitWhileSpilling();
                         }
@@ -943,6 +1067,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     const Logger Logger_;
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
+    bool SoftPressure_ = false; // an optional reservation was refused: spill until the pages are on disk
     Sources Sources_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};

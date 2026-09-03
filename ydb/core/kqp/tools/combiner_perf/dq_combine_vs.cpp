@@ -7,6 +7,7 @@
 #include "kqp_setup.h"
 
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/preallocated_spiller.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_operator_memory_quota.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_rh_hash.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -349,6 +350,39 @@ std::vector<TType*> FieldDescrToTypes(const std::vector<TFieldDescr>& fds, TProg
     return result;
 }
 
+// Scripted operator memory quota for the perf runs: grants everything, reports a scripted availability
+class TPerfMemoryQuota : public NYql::NDq::IDqOperatorMemoryQuota {
+public:
+    explicit TPerfMemoryQuota(TScopedAlloc& alloc)
+        : Alloc(alloc)
+    {
+    }
+
+    bool RequestExtraMemory(ui64 bytes, bool isOptional) override {
+        Requests += 1;
+        OptionalRequests += isOptional;
+        Alloc.SetLimit(Alloc.GetLimit() + bytes);
+        return true;
+    }
+
+    i64 GetMemoryAvailability() const override {
+        return Availability;
+    }
+
+    void TryShrinkMemory() override {
+        ++Shrinks;
+        Alloc.ReleaseFreePages();
+    }
+
+    i64 Availability = std::numeric_limits<i64>::max();
+    size_t Requests = 0;
+    size_t OptionalRequests = 0;
+    size_t Shrinks = 0;
+
+private:
+    TScopedAlloc& Alloc;
+};
+
 template<bool LLVM, bool Spilling = true>
 TRunResult RunTestOverGraph(
     const TRunParams& params,
@@ -361,6 +395,13 @@ TRunResult RunTestOverGraph(
     TKqpSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+
+    TPerfMemoryQuota perfQuota(setup.Alloc);
+    std::optional<NYql::NDq::TDqOperatorMemoryQuotaScope> quotaScope;
+    if (params.QuotaMode != EQuotaMode::None) {
+        Cerr << "Binding the operator memory quota (" << (params.QuotaMode == EQuotaMode::Pressure ? "pressure" : "steady") << ")" << Endl;
+        quotaScope.emplace(&perfQuota);
+    }
 
     NYql::NLog::InitLogger("cerr", false);
 
@@ -379,8 +420,13 @@ TRunResult RunTestOverGraph(
     auto makeStream = [&]() -> THolder<NUdf::TBoxedValue> {
         size_t yellowZoneTrigger = Spilling ? 1000000 : std::numeric_limits<size_t>::max();
         return MakeHolder<TPrebuiltStream>(inputData, keyFields.size() + valueFields.size(), params.NumRuns, yellowZoneTrigger, [&](){
-            Cerr << "Enabling yellow zone" << Endl;
-            setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            if (params.QuotaMode == EQuotaMode::Pressure) {
+                Cerr << "Memory availability turns negative" << Endl;
+                perfQuota.Availability = -1;
+            } else {
+                Cerr << "Enabling yellow zone" << Endl;
+                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            }
         });
     };
 
@@ -398,6 +444,10 @@ TRunResult RunTestOverGraph(
         }
 
         auto duration = GetThreadCPUTimeDelta(graphTimeStart);
+        if (quotaScope) {
+            Cerr << "Operator memory quota: " << perfQuota.Requests << " requests (" << perfQuota.OptionalRequests
+                 << " optional), " << perfQuota.Shrinks << " shrinks" << Endl;
+        }
         if (realSpillerFactory) {
             for (auto& spiller : realSpillerFactory->GetCreatedSpillers()) {
                 auto preallocSpiller = dynamic_cast<TPreallocatedSpiller*>(spiller.get());

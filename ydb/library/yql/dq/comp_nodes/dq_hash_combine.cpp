@@ -4,6 +4,8 @@
 #include "dq_rh_hash.h"
 #include "type_utils.h"
 #include "coro_tasks.h"
+#include "dq_accounting_spiller.h"
+#include "dq_operator_memory_quota.h"
 
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/util.h>
@@ -30,14 +32,6 @@ using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
 namespace {
-
-bool HasMemoryForProcessing() {
-    return !TlsAllocState->IsMemoryYellowZoneEnabled();
-}
-
-bool SpillingTime() {
-    return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
-}
 
 [[maybe_unused]] void DebugPrintUV(TUnboxedValuePod& uv) {
     Cerr << "----- UV at " << (size_t)(&uv) << Endl;
@@ -93,7 +87,6 @@ struct TSegmentedArena
     size_t UsedMem = 0;
     ui32 PageCapacity = 0;
     TPageList::iterator LastUsedPage;
-    bool NeedNewPages = true;
 
     struct TIterator {
         bool Valid = false;
@@ -148,11 +141,9 @@ struct TSegmentedArena
                 pagePtr->Tag = tag;
                 pagePtr->Used = 0;
             }
-            NeedNewPages = (LastUsedPage == Pages.end() && PageCapacity == 1);
             PagesByTag[tag] = pagePtr;
         } else {
             pagePtr = prevPtr;
-            NeedNewPages = (LastUsedPage == Pages.end() && (PageCapacity - 1) == pagePtr->Used);
         }
 
         UsedMem += AllocSize;
@@ -184,7 +175,6 @@ struct TSegmentedArena
         PagesByTag.clear();
         PagesByTag.resize(numTags, nullptr);
         LastUsedPage = Pages.begin();
-        NeedNewPages = Pages.empty();
         UsedMem = 0;
     }
 
@@ -659,6 +649,10 @@ protected:
     {
         if (!Spiller) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
+            if (NYql::NDq::GetDqOperatorMemoryQuota()) {
+                // account the malloc-backed packer buffers of the spiller adapters in the task allocator (RFC 3.1)
+                Spiller = std::make_shared<NYql::NDq::TAccountingSpiller>(std::move(Spiller));
+            }
         }
 
         MKQL_ENSURE(SpillingStack.empty(), "Spilling buckets should not have been initialized yet");
@@ -742,12 +736,18 @@ protected:
             UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "Spilled state bucket " << i << ": " << bucketEntries << " entries");
         }
 
-        Map->Clear();
+        // the state is on disk now: drop the hash table and the arena pages, then give the quota back
+        PeakMapSizeBeforeSpill = Map->GetSize();
+        Map.Reset();
+        Store->Clear();
         Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputUnpackedWidth);
+        GiveBackMemory(/* force = */ true);
     }
 
     [[nodiscard]] bool InitiateSpilling()
     {
+        ++SpillsStarted;
+        CallTestStateCallback();
         CurrentAsyncTask = InitiateSpillingAsync();
         return CurrentAsyncTask.CheckPending();
     }
@@ -794,7 +794,11 @@ protected:
             }
         }
 
+        if (IsOverMemoryTarget()) {
+            Store->Clear();
+        }
         Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputUnpackedWidth);
+        GiveBackMemory(/* force = */ false);
     }
 
     [[nodiscard]] bool FlushSpillingInput()
@@ -818,8 +822,11 @@ protected:
     {
         // Run aggregation on a single bucket
 
-        // TODO: maybe reallocate?
-        if (Map->GetSize() > 0) {
+        if (!Map) {
+            // the table was dropped when the state was spilled; a bucket holds ~1/NumBuckets of the keys,
+            // mandatory auto-growth in the re-aggregation loop covers skewed buckets
+            MaxRowCount = TryAllocMapForRowCount(std::max<size_t>(LowerFixedRowCount, PeakMapSizeBeforeSpill / NumBuckets * 2));
+        } else if (Map->GetSize() > 0) {
             Map->Clear();
         }
 
@@ -828,7 +835,11 @@ protected:
         const ui32 bucket = currentSpill.CurrentBucket;
         MKQL_ENSURE(bucket < NumBuckets, "Trying to read past the last spilling bucket");
 
+        if (IsOverMemoryTarget()) {
+            Store->Clear();
+        }
         Store->Format(1, KeyAndStatesByteSize);
+        GiveBackMemory(/* force = */ false);
 
         const bool isDehydratedState = GenericAggregation->StateIsDehydrated();
         const ui32 keysCount = KeyTypes.size();
@@ -961,7 +972,7 @@ protected:
                 }
 
                 if (isNew) {
-                    CheckAutoGrowMap(true);
+                    CheckAutoGrowMap(true, /* optionalReserve = */ false);
                     if (Map->GetSize() > MaxRowCount) {
                         throw TMemoryLimitExceededException();
                     }
@@ -979,16 +990,21 @@ protected:
         return CurrentAsyncTask.CheckPending();
     }
 
-    void CheckAutoGrowMap(const bool hasMemoryForProcessing)
+    void CheckAutoGrowMap(const bool hasMemoryForProcessing, const bool optionalReserve = true)
     {
         if (MapAutoGrowEnabled && !MapAutoGrowLimitReached && Map->GetSize() >= MaxRowCount) {
             if (hasMemoryForProcessing) {
-                try {
-                    Map->CheckGrow();
-                    MaxRowCount = Map->GetCapacity() / 2;
-                    return;
-                }
-                catch(const TMemoryLimitExceededException& e) {
+                // the grown table coexists with the old one while it is rebuilt: reserve it optionally first,
+                // a refusal is real pressure (the table would grow beyond its planned footprint)
+                const ui64 growBytes = Map->GetGrowCapacity() * TMap::GetCellSize();
+                if (!optionalReserve || TryReserveOptional(growBytes, /* armSoftPressure = */ true)) {
+                    try {
+                        Map->CheckGrow();
+                        MaxRowCount = Map->GetCapacity() / 2;
+                        return;
+                    }
+                    catch(const TMemoryLimitExceededException& e) {
+                    }
                 }
             }
 
@@ -1046,6 +1062,7 @@ protected:
     }
 
     EFillState ProcessFetchedRow(TUnboxedValue* const* input) {
+        MaybeRefreshPressure();
         TArrayRef<TUnboxedValuePod> keyBuf(TempKeyBuffer);
 
         LoadItemAndKey(input, keyBuf.data());
@@ -1160,9 +1177,10 @@ protected:
             }
         }
 
-        if (IsAggregation && EnableSpilling && SpillingTime()) {
+        if (IsAggregation && EnableSpilling && SpillingTime() && Map->GetSize() >= LowerFixedRowCount) {
             // The SpillingTime() limit is presumably lower than the yellow zone
-            // so it can trigger separately, earlier than !HasMemoryForProcessing()
+            // so it can trigger separately, earlier than !HasMemoryForProcessing().
+            // An almost empty table is never worth spilling on a soft signal.
             if (InitiateSpilling()) {
                 return EFillState::Yield;
             }
@@ -1305,7 +1323,85 @@ protected:
         }
         TestParams.StateCallback({
             .BypassActivated = BypassActivated,
+            .DrainsStarted = DrainsStarted,
+            .SpillsStarted = SpillsStarted,
+            .ShrinksRequested = ShrinksRequested,
         });
+    }
+
+    // ---- memory quota integration (RFC dq_memory_quota_20) ----
+    // When the compute actor bound its memory quota to this thread the numeric availability drives the
+    // drain / spill decisions (> 0 grow, 0 do not ask, < 0 give back); unbound = the allocator heuristics.
+
+    void RefreshPressure() {
+        if (auto* quota = NYql::NDq::GetDqOperatorMemoryQuota()) {
+            const i64 availability = quota->GetMemoryAvailability();
+            Pressure.HasMemory = availability > 0 && !SoftPressure;
+            Pressure.SpillingTime = availability < 0 || SoftPressure || TlsAllocState->GetMaximumLimitValueReached();
+            PressureRefreshCountdown = PressureRefreshInterval;
+        } else {
+            Pressure.HasMemory = !TlsAllocState->IsMemoryYellowZoneEnabled();
+            Pressure.SpillingTime = !Pressure.HasMemory || TlsAllocState->GetMaximumLimitValueReached();
+        }
+    }
+
+    Y_FORCE_INLINE void MaybeRefreshPressure() {
+        if (PressureRefreshCountdown == 0 || !NYql::NDq::GetDqOperatorMemoryQuota()) {
+            RefreshPressure();
+        } else {
+            --PressureRefreshCountdown;
+        }
+    }
+
+    Y_FORCE_INLINE bool HasMemoryForProcessing() const {
+        return Pressure.HasMemory;
+    }
+
+    Y_FORCE_INLINE bool SpillingTime() const {
+        return Pressure.SpillingTime;
+    }
+
+    bool IsOverMemoryTarget() const {
+        auto* quota = NYql::NDq::GetDqOperatorMemoryQuota();
+        return quota && quota->GetMemoryAvailability() < 0;
+    }
+
+    // True if `bytes` of fresh MKQL memory fit under the allocator limit without the implicit (mandatory)
+    // callback firing. Bound: asks the quota optionally for the missing headroom. Unbound: always true.
+    bool TryReserveOptional(ui64 bytes, bool armSoftPressure) {
+        auto* quota = NYql::NDq::GetDqOperatorMemoryQuota();
+        if (!quota) {
+            return true;
+        }
+        const ui64 limit = TlsAllocState->GetLimit(); // 0 == unlimited
+        const ui64 need = TlsAllocState->GetAllocated() + bytes + TAllocState::POOL_PAGE_SIZE;
+        if (limit == 0 || need <= limit) {
+            return true;
+        }
+        bool granted = false;
+        if (quota->GetMemoryAvailability() > 0) { // RFC: at 0 and below do not ask for optional quota
+            granted = quota->RequestExtraMemory(need - limit, /* isOptional = */ true);
+        }
+        if (!granted && armSoftPressure) {
+            SoftPressure = true;
+        }
+        RefreshPressure();
+        return granted;
+    }
+
+    // RFC 3.3: call after memory was released (Map.Reset / Store->Clear) to return the unused quota.
+    // `force` where the released memory is not needed again, otherwise only when the manager asks for it.
+    void GiveBackMemory(bool force) {
+        SoftPressure = false;
+        MapAutoGrowLimitReached = false;
+        if (auto* quota = NYql::NDq::GetDqOperatorMemoryQuota()) {
+            if (force || quota->GetMemoryAvailability() < 0) {
+                quota->TryShrinkMemory();
+                ++ShrinksRequested;
+                CallTestStateCallback();
+            }
+        }
+        RefreshPressure();
     }
 
     size_t TryAllocMapForRowCount(size_t rowCount)
@@ -1322,13 +1418,22 @@ protected:
             Map.Reset(nullptr);
         }
 
-        auto tryAlloc = [this](size_t rows) -> bool {
+        const bool quotaBound = NYql::NDq::GetDqOperatorMemoryQuota() != nullptr;
+        auto tryAlloc = [this, quotaBound](size_t rows) -> bool {
             size_t newCapacity = GetMapCapacity(rows);
+            // initial sizing: a refusal only means "not a table of this size now", it is not memory pressure
+            if (!TryReserveOptional(newCapacity * TMap::GetCellSize(), /* armSoftPressure = */ false)) {
+                return false;
+            }
             try {
                 Map.Reset(new TMap(Equals, newCapacity));
-                if (!HasMemoryForProcessing()) {
-                    Map.Reset(nullptr);
-                    return false;
+                if (!quotaBound) {
+                    // legacy heuristic: allocate, then check the allocator yellow zone
+                    RefreshPressure();
+                    if (!HasMemoryForProcessing()) {
+                        Map.Reset(nullptr);
+                        return false;
+                    }
                 }
                 return true;
             }
@@ -1402,9 +1507,10 @@ protected:
         if (CanBypass && Incompressible) {
             IsEstimating = false;
             BypassActivated = true;
-            CallTestStateCallback();
             Map.Reset();
             Store->Clear();
+            GiveBackMemory(/* force = */ true); // the hash structures are never needed again
+            CallTestStateCallback();
             return;
         }
 
@@ -1418,12 +1524,14 @@ protected:
         }
         Store->Clear();
         Store->Format(EnableSpilling ? NumBuckets : 1, KeyAndStatesByteSize);
-
+        GiveBackMemory(/* force = */ false); // pages are reused by the next batch unless the node is over target
     }
 
     [[nodiscard]] bool OpenDrain() {
         // This can start an async task which gets completed after another call to ProcessInput()
         // So we must yield if OpenDrain() returns true
+        ++DrainsStarted;
+        CallTestStateCallback();
         if (!SourceEmpty && IsEstimating && Map->GetSize() > 0) {
             UpdateRowLimitFromSample();
         }
@@ -1512,6 +1620,19 @@ protected:
     size_t InitialMapCapacity = 0;
     bool MapAutoGrowEnabled = false;
     bool MapAutoGrowLimitReached = false;
+
+    struct TMemoryPressure {
+        bool HasMemory = true;
+        bool SpillingTime = false;
+    };
+    TMemoryPressure Pressure;             // snapshot, see RefreshPressure
+    bool SoftPressure = false;            // an optional growth request was refused since the last release point
+    ui32 PressureRefreshCountdown = 0;    // bound path: rows until the next availability read
+    static constexpr ui32 PressureRefreshInterval = 64;
+    size_t PeakMapSizeBeforeSpill = 0;
+    size_t DrainsStarted = 0;
+    size_t SpillsStarted = 0;
+    size_t ShrinksRequested = 0;
 
     size_t InputUnpackedWidth;
     const NDqHashOperatorCommon::TCombinerNodes& Nodes;
@@ -1667,6 +1788,7 @@ public:
             } else {
                 Map.Reset();
                 Store->Clear();
+                GiveBackMemory(/* force = */ true); // the operator is done
             }
             Draining = false;
             return NUdf::EFetchStatus::Finish;
@@ -2078,6 +2200,7 @@ public:
         } else {
             Map.Reset();
             Store->Clear();
+            GiveBackMemory(/* force = */ true); // the operator is done
         }
 
         return NUdf::EFetchStatus::Finish;

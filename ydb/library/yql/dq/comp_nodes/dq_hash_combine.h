@@ -10,6 +10,9 @@ struct TComputationNodeFactoryContext;
 
 struct TDqHashCombineTestState {
     bool BypassActivated = false;
+    size_t DrainsStarted = 0;
+    size_t SpillsStarted = 0;
+    size_t ShrinksRequested = 0; // give-backs through the bound operator memory quota
 };
 
 using TTestStateCallback = std::function<void(const TDqHashCombineTestState&)>;

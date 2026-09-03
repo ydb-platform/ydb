@@ -166,7 +166,7 @@ public:
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
 
         ui64 rows = GetRowsCount(batch);
-        if (QuotaManager && !QuotaManager->AllocateQuota(space)) {
+        if (QuotaManager && !QuotaManager->AllocateQuota(space, /* isOptional = */ false)) {
             throw NKikimr::TMemoryLimitExceededException();
         }
         StoredBytes += space;

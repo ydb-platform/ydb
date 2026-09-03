@@ -4,9 +4,11 @@
 
 namespace NKikimr::NMiniKQL {
 
-NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page) {
+TSpillingPage SpillPage(ISpiller& spiller, TPackResult&& page, bool accountOffload) {
     MKQL_ENSURE(!page.Empty(), "sanity check");
-    return spiller.Put(Serialize(std::move(page)));
+    // account the serialized copy before it is made (may throw), the guard travels with the write future
+    TOffloadedMemoryGuard copy{SerializedPageBytes(page), accountOffload};
+    return {.Key = spiller.Put(Serialize(std::move(page))), .Copy = std::move(copy)};
 }
 
 NYql::TChunkedBuffer Serialize(TPackResult&& result) {

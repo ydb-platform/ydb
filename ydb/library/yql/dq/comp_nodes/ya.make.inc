@@ -23,6 +23,7 @@ SET(ORIG_SOURCES
     dq_hash_join_table.cpp
     dq_join_common.cpp
     dq_watermark_generator.cpp
+    dq_operator_memory_quota.cpp
     type_utils.cpp
 )
 

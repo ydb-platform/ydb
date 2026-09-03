@@ -380,7 +380,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             const auto srcInternalPathId = owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false);
             AFL_VERIFY(srcInternalPathId);
             // CopyTablePlanStep persists dst in TableInfoV1 before progress completes. After tablet restart
-            // dst is already in GenerationIndex.Live, so replay must be idempotent (same as CopyTableProgress).
+            // dst is already in LivePathIds, so replay must be idempotent (same as CopyTableProgress).
             if (const auto dstInternalPathId = owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
                 AFL_VERIFY(*dstInternalPathId == *srcInternalPathId)("src", *srcInternalPathId)("dst", *dstInternalPathId);
             }

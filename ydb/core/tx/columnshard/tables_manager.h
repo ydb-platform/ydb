@@ -344,7 +344,6 @@ public:
 class TTtlVersions {
 private:
     THashMap<TInternalPathId, std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>>> Ttl;
-    THashMap<TInternalPathId, std::map<NOlap::TSnapshot, NKikimrSchemeOp::TColumnDataLifeCycle>> TtlProtos;
 
     void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
         auto [it, inserted] = Ttl[pathId].emplace(snapshot, ttl);
@@ -361,25 +360,10 @@ public:
             ttlVersion.emplace(std::move(deserializedTtl));
         }
         AddVersion(pathId, snapshot, ttlVersion);
-        auto [it, inserted] = TtlProtos[pathId].emplace(snapshot, ttlSettings);
-        AFL_VERIFY(inserted || it->second.SerializeAsString() == ttlSettings.SerializeAsString())("snapshot", snapshot);
     }
 
     std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         auto findTable = Ttl.FindPtr(pathId);
-        if (!findTable) {
-            return std::nullopt;
-        }
-        const auto findTtl = findTable->upper_bound(snapshot);
-        if (findTtl == findTable->begin()) {
-            return std::nullopt;
-        }
-        return std::prev(findTtl)->second;
-    }
-
-    std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> GetTableTtlProto(
-        const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
-        auto findTable = TtlProtos.FindPtr(pathId);
         if (!findTable) {
             return std::nullopt;
         }
@@ -395,133 +379,88 @@ public:
         for (const auto& [_, ttlVersions] : Ttl) {
             memory += ttlVersions.size() * sizeof(NOlap::TTiering);
         }
-        for (const auto& [_, ttlProtoVersions] : TtlProtos) {
-            // Use serialized size for accurate accounting; sizeof only counts the fixed header.
-            for (const auto& [_, proto] : ttlProtoVersions) {
-                memory += proto.ByteSizeLong() + sizeof(NKikimrSchemeOp::TColumnDataLifeCycle);
-            }
-        }
         return memory;
     }
 
     void RemovePathId(const TInternalPathId pathId) {
         Ttl.erase(pathId);
-        TtlProtos.erase(pathId);
-    }
-};
-
-class TGenerationIndex {
-private:
-    THashMap<TSchemeShardLocalPathId, TInternalPathId> Live;
-    THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> All;
-
-public:
-    void SetLive(TSchemeShardLocalPathId ss, TInternalPathId id, bool isDropped) {
-        if (isDropped) {
-            // Only insert if there is no live mapping yet (recovery ordering guard).
-            Live.emplace(ss, id);
-        } else {
-            Live[ss] = id;
-        }
-        All[ss].insert(id);
-    }
-
-    bool ForgetLiveIfMatches(TSchemeShardLocalPathId ss, TInternalPathId id) {
-        auto it = Live.find(ss);
-        if (it != Live.end() && it->second == id) {
-            Live.erase(it);
-            return true;
-        }
-        return false;
-    }
-
-    void ForgetLive(TSchemeShardLocalPathId ss) {
-        Live.erase(ss);
-    }
-
-    void ForgetGeneration(TSchemeShardLocalPathId ss, TInternalPathId id) {
-        auto it = All.find(ss);
-        if (it != All.end()) {
-            it->second.erase(id);
-            if (it->second.empty()) {
-                All.erase(it);
-            }
-        }
-    }
-
-    void Rename(TSchemeShardLocalPathId fromSs, TSchemeShardLocalPathId toSs) {
-        auto itLive = Live.find(fromSs);
-        if (itLive != Live.end()) {
-            Live[toSs] = itLive->second;
-            Live.erase(itLive);
-        }
-        // Move full history.
-        auto itAll = All.find(fromSs);
-        if (itAll != All.end()) {
-            All[toSs] = std::move(itAll->second);
-            All.erase(itAll);
-        }
-    }
-
-    void AddToHistory(TSchemeShardLocalPathId ss, TInternalPathId id) {
-        All[ss].insert(id);
-    }
-
-    std::optional<TInternalPathId> ResolveLive(TSchemeShardLocalPathId ss) const {
-        const auto* it = Live.FindPtr(ss);
-        return it ? std::optional<TInternalPathId>(*it) : std::nullopt;
-    }
-
-    const THashSet<TInternalPathId>* Generations(TSchemeShardLocalPathId ss) const {
-        return All.FindPtr(ss);
-    }
-
-    template <class TMemberCheck, class TDropVersionGet>
-    std::optional<TInternalPathId> ResolveForSnapshot(
-        TSchemeShardLocalPathId ss, const NOlap::TSnapshot& readSnapshot, TMemberCheck isMember, TDropVersionGet getDropVersion) const {
-        const auto* generations = Generations(ss);
-        if (!generations) {
-            return std::nullopt;
-        }
-        std::optional<TInternalPathId> best;
-        std::optional<NOlap::TSnapshot> bestDrop;
-        std::optional<TInternalPathId> live;
-        for (const auto& internalPathId : *generations) {
-            if (!isMember(internalPathId, ss)) {
-                continue;
-            }
-            const auto dropVersion = getDropVersion(internalPathId, ss);
-            if (!dropVersion) {
-                live = internalPathId;
-                continue;
-            }
-            if (*dropVersion <= readSnapshot) {
-                continue;
-            }
-            if (!bestDrop || *dropVersion < *bestDrop) {
-                bestDrop = dropVersion;
-                best = internalPathId;
-            }
-        }
-        if (best) {
-            return best;
-        }
-        return live;
-    }
-
-    const THashMap<TSchemeShardLocalPathId, TInternalPathId>& GetLive() const {
-        return Live;
-    }
-
-    const THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>>& GetAll() const {
-        return All;
     }
 };
 
 class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
-    TGenerationIndex GenerationIndex;
+    // Generation index: maps scheme-shard local path ids to internal path ids.
+    // Live = current generation, All = all generations (for MVCC time-travel reads).
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> LivePathIds;
+    THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> AllPathIds;
+
+    void SetLivePathId(TSchemeShardLocalPathId ss, TInternalPathId id, bool isDropped) {
+        if (isDropped) {
+            // Only insert if there is no live mapping yet (recovery ordering guard).
+            LivePathIds.emplace(ss, id);
+        } else {
+            LivePathIds[ss] = id;
+        }
+        AllPathIds[ss].insert(id);
+    }
+
+    bool ForgetLivePathIdIfMatches(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        auto it = LivePathIds.find(ss);
+        if (it != LivePathIds.end() && it->second == id) {
+            LivePathIds.erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    void ForgetLivePathId(TSchemeShardLocalPathId ss) {
+        LivePathIds.erase(ss);
+    }
+
+    void ForgetGeneration(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        auto it = AllPathIds.find(ss);
+        if (it != AllPathIds.end()) {
+            it->second.erase(id);
+            if (it->second.empty()) {
+                AllPathIds.erase(it);
+            }
+        }
+    }
+
+    void RenamePathId(TSchemeShardLocalPathId fromSs, TSchemeShardLocalPathId toSs) {
+        auto itLive = LivePathIds.find(fromSs);
+        if (itLive != LivePathIds.end()) {
+            LivePathIds[toSs] = itLive->second;
+            LivePathIds.erase(itLive);
+        }
+        // Move full history.
+        auto itAll = AllPathIds.find(fromSs);
+        if (itAll != AllPathIds.end()) {
+            AllPathIds[toSs] = std::move(itAll->second);
+            AllPathIds.erase(itAll);
+        }
+    }
+
+    void AddToHistory(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        AllPathIds[ss].insert(id);
+    }
+
+    std::optional<TInternalPathId> ResolveLivePathId(TSchemeShardLocalPathId ss) const {
+        const auto* it = LivePathIds.FindPtr(ss);
+        return it ? std::optional<TInternalPathId>(*it) : std::nullopt;
+    }
+
+    const THashSet<TInternalPathId>* Generations(TSchemeShardLocalPathId ss) const {
+        return AllPathIds.FindPtr(ss);
+    }
+
+    // Resolves the correct InternalPathId for a given SchemeShard path at a specific read snapshot.
+    // Only used internally by BuildTableMetadataAccessor.
+    std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(
+        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId,
+        const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const;
+
     THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
     THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
     THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;   // Paths that are being truncated
@@ -558,9 +497,20 @@ public:   //IPathIdTranslator
     virtual std::vector<NOlap::TSnapshot> GetReadOnlyTablesSnapshots() const override;
 
 public:
-    std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId,
-        const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const;
-
+    /// Resolves the correct InternalPathId for a given SchemeShard path at a specific read snapshot.
+    ///
+    /// Unlike ResolveInternalPathId (which returns only the current live generation), this method
+    /// consults the generation history (AllPathIds) to find the generation that was active at the
+    /// time of the read snapshot. This is required for MVCC time-travel reads: after TRUNCATE, the
+    /// live generation changes, but readers with an older snapshot must still see the old generation.
+    ///
+    /// The parameter is named `readSnapshot` (not just `snapshot`) to emphasize that it represents
+    /// the reader's snapshot — i.e., the point-in-time at which the reader wants to observe the
+    /// table state. This contrasts with write/commit snapshots (e.g., drop version, copy version)
+    /// which are metadata timestamps stored per-path. The readSnapshot is the external query
+    /// parameter that determines which historical generation to resolve to.
+    ///
+    /// Algorithm:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
@@ -662,10 +612,6 @@ public:
         return Ttl.GetTableTtl(pathId, snapshot);
     }
 
-    std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> GetTableTtlProto(
-        const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
-        return Ttl.GetTableTtlProto(pathId, snapshot);
-    }
 
     const std::map<NOlap::TSnapshot, THashSet<TInternalPathId>>& GetPathsToDrop() const {
         return PathsToDrop;
@@ -707,6 +653,11 @@ public:
 
     void TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
     std::optional<TInternalPathId> GetTruncatingInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const;
+    /// Executes the plan phase of TRUNCATE. Resolves the old generation (fence → live), validates,
+    /// loads last version info, performs the generation swap, and registers the new table version.
+    /// Returns true if the truncate was executed, false if skipped (table dropped, read-only, etc.).
+    bool TruncateTableProgress(const TSchemeShardLocalPathId schemeShardLocalPathId,
+        const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
 
     NOlap::TSnapshot ResolveReadSnapshot(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& requestSnapshot) const;
 
@@ -798,8 +749,6 @@ public:
 
     void DropTable(const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId pathId, const NOlap::TSnapshot& version,
         NIceDb::TNiceDb& db);
-    TInternalPathId TruncateTable(const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId pathId,
-        const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
     void DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
 
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);

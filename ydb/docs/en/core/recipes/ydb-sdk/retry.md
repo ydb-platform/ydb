@@ -12,226 +12,291 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
 - C++
 
-  In the {{ ydb-short-name }} C++ SDK, retry attempts with proper error handling are implemented in several APIs:
+  {% list tabs %}
 
-  {% cut "Synchronous execution retry attempts" %}
+  - Native SDK
 
-  The `RetryQuerySync` method is used to execute queries with automatic retries.
-  The method takes a lambda function that receives a session object and returns the query result.
-  The {{ ydb-short-name }} C++ SDK automatically analyzes errors and performs retries according to their type.
+    In the {{ ydb-short-name }} C++ SDK, retry attempts with proper error handling are implemented in several APIs:
 
-  Code example using `RetryQuerySync`:
+    {% cut "Synchronous execution retry attempts" %}
 
+    The `RetryQuerySync` method is used to execute queries with automatic retries.
+    The method takes a lambda function that receives a session object and returns the query result.
+    The {{ ydb-short-name }} C++ SDK automatically analyzes errors and performs retries according to their type.
 
-  ```c++
-  #include <ydb-cpp-sdk/client/query/client.h>
-
-  void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              SELECT series_id, title
-              FROM series
-              WHERE series_id = 1;
-          )";
-
-          auto result = session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).GetValueSync();
-
-          if (!result.IsSuccess()) {
-              return result;
-          }
-
-          // Processing the query result
-          auto resultSet = result.GetResultSet(0);
-          NYdb::TResultSetParser parser(resultSet);
-          while (parser.TryNextRow()) {
-              std::cout << "Series"
-                  << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                  << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                  << std::endl;
-          }
-
-          return result;
-      });
-
-      if (!result.IsSuccess()) {
-          // Handling the error after all attempts
-          std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
-
-  {% endcut %}
-
-  {% cut "Asynchronous execution retry attempts" %}
-
-  The `RetryQuery` method is used for asynchronous execution of queries with automatic retries.
-  The method returns `NThreading::TFuture`, which enables asynchronous operation.
-
-  Code example using `RetryQuery`:
+    Code example using `RetryQuerySync`:
 
 
-  ```c++
-  #include <ydb-cpp-sdk/client/query/client.h>
+    ```c++
+    #include <ydb-cpp-sdk/client/query/client.h>
 
-  void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
-      auto future = client.RetryQuery([](NYdb::NQuery::TSession session) -> NYdb::TAsyncStatus {
-          auto query = R"(
-              SELECT series_id, title, release_date
-              FROM series
-              WHERE series_id = 1;
-          )";
+    void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+        auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+            auto query = R"(
+                SELECT series_id, title
+                FROM series
+                WHERE series_id = 1;
+            )";
 
-          return session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
-              auto result = asyncResult.GetValue();
-              if (!result.IsSuccess()) {
-                  return result;
-              }
+            auto result = session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            ).GetValueSync();
 
-              // Processing the query result
-              auto resultSet = result.GetResultSet(0);
-              NYdb::TResultSetParser parser(resultSet);
-              while (parser.TryNextRow()) {
-                  std::cout << "Series"
-                      << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                      << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                      << std::endl;
-              }
+            if (!result.IsSuccess()) {
+                return result;
+            }
 
-              return result;
-          });
-      });
+            // Processing query result
+            auto resultSet = result.GetResultSet(0);
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                std::cout << "Series"
+                    << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                    << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                    << std::endl;
+            }
 
-      // Waiting for completion
-      auto status = future.GetValueSync();
-      if (!status.IsSuccess()) {
-          std::cerr << "Query failed: " << status.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
+            return result;
+        });
 
-  {% endcut %}
+        if (!result.IsSuccess()) {
+            // Processing error after all attempts
+            std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
+        }
+    }
+    ```
 
-  {% cut "Execution retry attempts when working with streaming queries" %}
+    {% endcut %}
 
-  The `StreamExecuteQuery` method is used to execute streaming queries with automatic retries.
-  Streaming queries allow processing large amounts of data by receiving results in parts.
+    {% cut "Asynchronous execution retry attempts" %}
 
-  Code example using `RetryQuerySync` with `StreamExecuteQuery`:
+    The `RetryQuery` method is used for asynchronous execution of queries with automatic retries.
+    The method returns `NThreading::TFuture`, which enables asynchronous operation.
+
+    Code example using `RetryQuery`:
 
 
-  ```c++
-  #include <ydb-cpp-sdk/client/query/client.h>
+    ```c++
+    #include <ydb-cpp-sdk/client/query/client.h>
 
-  void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              SELECT series_id, title, release_date
-              FROM series
-              WHERE series_id > 0;
-          )";
+    void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
+        auto future = client.RetryQuery([](NYdb::NQuery::TSession session) -> NYdb::TAsyncStatus {
+            auto query = R"(
+                SELECT series_id, title, release_date
+                FROM series
+                WHERE series_id = 1;
+            )";
 
-          auto resultStreamQuery = session.StreamExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::NoTx()
-          ).GetValueSync();
+            return session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
+                auto result = asyncResult.GetValue();
+                if (!result.IsSuccess()) {
+                    return result;
+                }
 
-          if (!resultStreamQuery.IsSuccess()) {
-              return resultStreamQuery;
-          }
+                // Processing query result
+                auto resultSet = result.GetResultSet(0);
+                NYdb::TResultSetParser parser(resultSet);
+                while (parser.TryNextRow()) {
+                    std::cout << "Series"
+                        << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                        << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                        << std::endl;
+                }
 
-          // Processing results in parts
-          bool eos = false;
-          while (!eos) {
-              auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
+                return result;
+            });
+        });
 
-              if (!streamPart.IsSuccess()) {
-                  eos = true;
-                  if (!streamPart.EOS()) {
-                      return streamPart;
-                  }
-                  continue;
-              }
+        // Waiting for completion
+        auto status = future.GetValueSync();
+        if (!status.IsSuccess()) {
+            std::cerr << "Query failed: " << status.GetIssues().ToString() << std::endl;
+        }
+    }
+    ```
 
-              if (streamPart.HasResultSet()) {
-                  auto rs = streamPart.ExtractResultSet();
-                  NYdb::TResultSetParser parser(rs);
-                  while (parser.TryNextRow()) {
-                      std::cout << "Series"
-                          << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                          << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                          << std::endl;
-                  }
-              }
-          }
+    {% endcut %}
 
-          return resultStreamQuery;
-      });
+    {% cut "Execution retry attempts when working with streaming queries" %}
 
-      if (!result.IsSuccess()) {
-          std::cerr << "Stream query failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
+    The `StreamExecuteQuery` method is used to execute streaming queries with automatic retries.
+    Streaming queries allow processing large amounts of data by receiving results in parts.
 
-  {% endcut %}
-
-  {% cut "Configuration parameters retry attempts" %}
-
-  You can configure the retry mechanism behavior using the `TRetryOperationSettings` class:
-
-  * `MaxRetries(uint32_t)` – maximum number of retry attempts (default 10)
-  * `Idempotent(bool)` – idempotency flag for the operation. Idempotent operations are retried for a broader set of errors
-  * `RetryNotFound(bool)` – whether to retry operations that returned status `NOT_FOUND` (default true)
-  * `MaxTimeout(TDuration)` – maximum total time for all attempts
-  * `FastBackoffSettings(TBackoffSettings)` – fast retry settings
-  * `SlowBackoffSettings(TBackoffSettings)` – slow retry settings
-
-  Example of using retry settings:
+    Code example using `RetryQuerySync` with `StreamExecuteQuery`:
 
 
-  ```c++
-  #include <ydb-cpp-sdk/client/query/client.h>
-  #include <ydb-cpp-sdk/client/retry/retry.h>
+    ```c++
+    #include <ydb-cpp-sdk/client/query/client.h>
 
-  void ExecuteWithCustomRetry(NYdb::NQuery::TQueryClient client) {
-      auto retrySettings = NYdb::NRetry::TRetryOperationSettings()
-          .Idempotent(true)
-          .MaxRetries(20)
-          .MaxTimeout(TDuration::Seconds(30));
+    void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+        auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+            auto query = R"(
+                SELECT series_id, title, release_date
+                FROM series
+                WHERE series_id > 0;
+            )";
 
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              UPSERT INTO series (series_id, title)
-              VALUES (10, "New Series");
-          )";
+            auto resultStreamQuery = session.StreamExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
 
-          auto result = session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).GetValueSync();
+            if (!resultStreamQuery.IsSuccess()) {
+                return resultStreamQuery;
+            }
 
-          if (!result.IsSuccess()) {
-              return result;
-          }
+            // Processing results in parts
+            bool eos = false;
+            while (!eos) {
+                auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
 
-          // Processing the query result
-          std::cout << "Query executed successfully" << std::endl;
-          return result;
-      }, retrySettings);
+                if (!streamPart.IsSuccess()) {
+                    eos = true;
+                    if (!streamPart.EOS()) {
+                        return streamPart;
+                    }
+                    continue;
+                }
 
-      if (!result.IsSuccess()) {
-          std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
+                if (streamPart.HasResultSet()) {
+                    auto rs = streamPart.ExtractResultSet();
+                    NYdb::TResultSetParser parser(rs);
+                    while (parser.TryNextRow()) {
+                        std::cout << "Series"
+                            << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                            << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                            << std::endl;
+                    }
+                }
+            }
 
-  {% endcut %}
+            return resultStreamQuery;
+        });
+
+        if (!result.IsSuccess()) {
+            std::cerr << "Stream query failed: " << result.GetIssues().ToString() << std::endl;
+        }
+    }
+    ```
+
+    {% endcut %}
+
+    {% cut "Configuring retry parameters" %}
+
+    You can configure the retry mechanism behavior using the `TRetryOperationSettings` class:
+
+    * `MaxRetries(uint32_t)` – maximum number of retry attempts (default 10)
+    * `Idempotent(bool)` – idempotency flag for the operation. Idempotent operations are retried for a broader set of errors
+    * `RetryNotFound(bool)` – whether to retry operations that returned status `NOT_FOUND` (default true)
+    * `MaxTimeout(TDuration)` – maximum total time for all attempts
+    * `FastBackoffSettings(TBackoffSettings)` – fast retry settings
+    * `SlowBackoffSettings(TBackoffSettings)` – slow retry settings
+
+    Example of using retry settings:
+
+
+    ```c++
+    #include <ydb-cpp-sdk/client/query/client.h>
+    #include <ydb-cpp-sdk/client/retry/retry.h>
+
+    void ExecuteWithCustomRetry(NYdb::NQuery::TQueryClient client) {
+        auto retrySettings = NYdb::NRetry::TRetryOperationSettings()
+            .Idempotent(true)
+            .MaxRetries(20)
+            .MaxTimeout(TDuration::Seconds(30));
+
+        auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+            auto query = R"(
+                UPSERT INTO series (series_id, title)
+                VALUES (10, "New Series");
+            )";
+
+            auto result = session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            ).GetValueSync();
+
+            if (!result.IsSuccess()) {
+                return result;
+            }
+
+            // Processing query result
+            std::cout << "Query executed successfully" << std::endl;
+            return result;
+        }, retrySettings);
+
+        if (!result.IsSuccess()) {
+            std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
+        }
+    }
+    ```
+
+    {% endcut %}
+
+  - userver
+
+    In `ydb::TableClient`, retry attempts with proper error handling are implemented in all methods. userver automatically analyzes errors and performs retries according to their type.
+
+    You can configure the retry mechanism behavior using `ydb::OperationSettings` and `ydb::RetryTxSettings`:
+
+    * `retries` – maximum number of retry attempts
+    * `is_idempotent` – idempotency flag for the operation. Idempotent operations are retried for a broader set of errors
+    * `client_timeout_ms` or `timeout_ms` respectively – maximum total time for all attempts
+    * `get_session_timeout` (relevant only for `ydb::OperationSettings`) – timeout for acquiring a session
+    * `get_session_settings`, `commit_settings` and `rollback_settings` (relevant only for `ydb::RetryTxSettings`) – settings for session acquisition, commit, or transaction rollback requests
+
+    `ydb::RetryTxSettings` is used only for the `ydb::TableClient::RetryTx` method, which performs an interactive transaction with retry attempts on errors for the entire transaction.
+
+    The [`ydb.operation-settings`](https://github.com/userver-framework/userver/blob/develop/ydb/src/ydb/component.yaml) section in static config defines default values: if the field is not set in code when called (`std::nullopt` or zero where that means "not set"), the config value is used; otherwise, the code value is used.
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        operation-settings:
+            retries: 5
+            client-timeout: 2s
+            get-session-timeout: 10s
+    ```
+
+    {% endcut %}
+
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void RetryExamples(ydb::TableClient& client) {
+        client.ExecuteQuery(
+            ydb::OperationSettings{
+                .retries = 7,
+                .is_idempotent = true,
+            },
+            ydb::Query{R"(
+                UPSERT INTO series (series_id, title)
+                VALUES (10, "New Series");
+            )"}
+        );
+
+        client.RetryTx(
+            ydb::RetryTxSettings{
+                .retries = 3,
+                .is_idempotent = true,
+            },
+            [](ydb::TxActor& tx) {
+                tx.Execute(ydb::Query{R"(
+                    UPSERT INTO series (series_id, title)
+                    VALUES (11, "Other Series");
+                )"});
+            }
+        );
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -241,7 +306,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     In the {{ ydb-short-name }} Go SDK, proper error handling is built into several APIs:
 
-    {% cut "Function retry general purpose" %}
+    {% cut "General-purpose retry function" %}
 
     The core error‑handling logic is implemented by the helper function `retry.Retry`.
     Details of retry execution are largely hidden.
@@ -299,7 +364,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     {% endcut %}
 
-    {% cut "Execution retry attempts when errors on object session {{ ydb-short-name }}" %}
+    {% cut "Execution retry attempts when errors on the session {{ ydb-short-name }}" %}
 
     To handle errors at the session level of the table service, {{ ydb-short-name }} provides the `db.Table().Do(ctx, op)` function, which returns a prepared session for executing queries.
     The `db.Table().Do(ctx, op)` function uses the `retry` package and also monitors the session lifetime {{ ydb-short-name }}.
@@ -321,7 +386,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     {% endcut %}
 
-    {% cut "Execution retry attempts when errors on object interactive transaction {{ ydb-short-name }}" %}
+    {% cut "Execution retry attempts when errors on the interactive transaction {{ ydb-short-name }}" %}
 
     For retrying errors at the interactive transaction level of the {{ ydb-short-name }} table service, the function `db.Table().DoTx(ctx, txOp)` provides a prepared transaction {{ ydb-short-name }} on a session for executing queries.
     The function `db.Table().DoTx(ctx, txOp)` uses the package `retry` and also monitors the session lifetime {{ ydb-short-name }}.
@@ -364,7 +429,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     The {{ ydb-short-name }} Go SDK provides special functions for guaranteed execution of a user operation:
 
-    {% cut "Execution retry attempts when errors on object connection `*sql.Conn`:" %}
+    {% cut "Execution retry attempts when errors on the connection `*sql.Conn`:" %}
 
     For retrying error handling on the `*sql.Conn` connection object there is a helper function `retry.Do(ctx, db, op)` that provides a prepared connection `*sql.Conn` for executing queries.
     The `retry.Do` function requires a context, a database object, and the user operation to execute.
@@ -420,7 +485,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     {% endcut %}
 
-    {% cut "Execution retry attempts when errors on object interactive transaction `*sql.Tx`:" %}
+    {% cut "Execution retry attempts when errors on the interactive transaction `*sql.Tx`:" %}
 
     For retry handling of errors on the interactive transaction object `*sql.Tx`, there is a helper function `retry.DoTx(ctx, db, op)` that provides a prepared transaction `*sql.Tx` for executing queries.
     The function `retry.DoTx` requires a context, a database object, and a user operation to execute.
@@ -493,83 +558,124 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
   - Native SDK
 
-    In the {{ ydb-short-name }} Java SDK, the retry mechanism is implemented as a helper class `SessionRetryContext`. This class is constructed using the `SessionRetryContext.create` method, which requires passing an implementation of the `SessionSupplier` interface — typically an instance of the `TableClient` or `QueryClient` class.
+    In {{ ydb-short-name }} Java SDK, retries are implemented by the helper class `SessionRetryContext`. It is created via `SessionRetryContext.create`, which receives `SessionSupplier` — usually `TableClient` or `QueryClient`. Which errors are considered temporary and require a retry is described in the [Error handling](../../reference/ydb-sdk/error_handling.md#handling-retryable-errors) guide.
 
     Retry settings:
 
-    * `maxRetries(int maxRetries)` — the maximum number of operation retries, not including the first execution. The default value is `10`
-    * `retryNotFound(boolean retryNotFound)` — the option to retry operations that returned the `NOT_FOUND` status. Enabled by default.
-    * `idempotent(boolean idempotent)` — the idempotency flag for operations. Idempotent operations will be retried for a wider list of errors. Disabled by default.
+    * `maxRetries(int)` — the maximum number of retries (excluding the first attempt; default is `10`)
+    * `retryNotFound(boolean)` — whether to retry operations with status `NOT_FOUND` (default is `true`)
+    * `idempotent(boolean)` — operation idempotency; expands the list of retryable errors (default is `false`)
 
-    To run operations with retries, the `SessionRetryContext` class provides two methods:
+    Launch methods:
 
-    * `CompletableFuture<Status> supplyStatus` — executes an operation that returns a status. Takes a `Function<Session, CompletableFuture<Status>> fn` lambda as an argument.
-    * `CompletableFuture<Result<T>> supplyResult` — executes an operation that returns data. Takes a `Function<Session, CompletableFuture<Result<T>>> fn` lambda as an argument.
+    * `supplyStatus` — an operation that returns `Status` (DDL, `createTable`, etc.)
+    * `supplyResult` — an operation that returns data (`executeDataQuery`, `QueryReader.readFrom`, etc.)
 
-    When using the `SessionRetryContext` class, note that the operation will be re-executed in the following cases:
+    A retry is performed if the lambda returned a [retryable](../../reference/ydb-sdk/error_handling.md) status or threw `UnexpectedResultException` with that status.
 
-    * The lambda returned a [retryable](../../reference/ydb-sdk/error_handling.md) error code
-    * During lambda execution, `UnexpectedResultException` was called with a [retryable](../../reference/ydb-sdk/error_handling.md) error code
 
-      {% cut "Example code, using SessionRetryContext.supplyStatus:" %}
+    ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-      ```java
-      private void createTable(TableClient tableClient, String database, String tableName) {
-          SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-          TableDescription pets = TableDescription.newBuilder()
-                  .addNullableColumn("species", PrimitiveType.Text)
-                  .addNullableColumn("name", PrimitiveType.Text)
-                  .addNullableColumn("color", PrimitiveType.Text)
-                  .addNullableColumn("price", PrimitiveType.Float)
-                  .setPrimaryKeys("species", "name")
-                  .build();
+    public class RetryExample {
 
-          String tablePath = database + "/" + tableName;
-          retryCtx.supplyStatus(session -> session.createTable(tablePath, pets))
-                  .join().expectSuccess();
-      }
-      ```
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-      {% endcut %}
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      {% cut "Example code, using SessionRetryContext.supplyResult:" %}
+                // Configuring retry policy
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient)
+                        .maxRetries(5)
+                        .retryNotFound(true)
+                        .idempotent(true)
+                        .build();
 
-      ```java
-      private void selectData(TableClient tableClient, String tableName) {
-          SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-          String selectQuery
-                  = "DECLARE $species AS Text;"
-                  + "DECLARE $name AS Text;"
-                  + "SELECT * FROM " + tableName + " "
-                  + "WHERE species = $species AND name = $name;";
+                // supplyResult — query with automatic retries
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
 
-          Params params = Params.of(
-                  "$species", PrimitiveValue.newText("cat"),
-                  "$name", PrimitiveValue.newText("Tom")
-          );
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 => " + rs.getColumn("value").getInt32());
+                }
 
-          DataQueryResult data = retryCtx
-                  .supplyResult(session -> session.executeDataQuery(selectQuery, TxControl.onlineRo(), params))
-                  .join().getValue();
-
-          ResultSetReader rsReader = data.getResultSet(0);
-          logger.info("Result of select query:");
-          while (rsReader.next()) {
-              logger.info("  species: {}, name: {}, color: {}, price: {}",
-                      rsReader.getColumn("species").getText(),
-                      rsReader.getColumn("name").getText(),
-                      rsReader.getColumn("color").getText(),
-                      rsReader.getColumn("price").getFloat()
-              );
-          }
-      }
-      ```
-
-      {% endcut %}
+                // supplyStatus — operations without result (DDL, createTable etc.)
+                // retryCtx.supplyStatus(session -> session.executeSchemeQuery("CREATE TABLE ..."))
+                //         .join().expectSuccess("DDL failed");
+            }
+        }
+    }
+    ```
 
   - JDBC
 
-    Retries at the `SessionRetryContext` level apply to the native API (`TableClient` / `QueryClient`). When working through JDBC, use retries at the application level or connect the native transport and client, as described in the [Driver initialization](./init.md) section.
+    `SessionRetryContext` belongs to the native API (`TableClient` or `QueryClient`). When using JDBC, the driver performs limited built-in retries (for example, on `BAD_SESSION` outside a transaction); for other transient failures, implement a retry loop at the application level. The classes `YdbRetryableException` and `YdbConditionallyRetryableException` mark errors that make sense to retry — see [Error handling](../../reference/ydb-sdk/error_handling.md#handling-retryable-errors). Connection — in [Driver initialization](./init.md).
+
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.SQLTransientException;
+    import java.sql.Statement;
+
+    import tech.ydb.jdbc.exception.YdbConditionallyRetryableException;
+    import tech.ydb.jdbc.exception.YdbRetryableException;
+
+    public class JdbcRetryExample {
+
+        private static final int MAX_RETRIES = 3;
+
+        public static void main(String[] args) throws SQLException {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+                try (Connection connection = DriverManager.getConnection(connectionUrl);
+                     Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+                    rs.next();
+                    System.out.println("SELECT 1 => " + rs.getInt("value"));
+                    return;
+                } catch (SQLException e) {
+                    if (attempt >= MAX_RETRIES || !isRetryable(e)) {
+                        throw new RuntimeException("query failed after retries", e);
+                    }
+                    sleepBeforeRetry(attempt);
+                }
+            }
+        }
+
+        private static boolean isRetryable(SQLException e) {
+            if (e instanceof YdbRetryableException
+                    || e instanceof YdbConditionallyRetryableException
+                    || e instanceof SQLTransientException) {
+                return true;
+            }
+            return e.getCause() instanceof SQLException && isRetryable((SQLException) e.getCause());
+        }
+
+        private static void sleepBeforeRetry(int attempt) {
+            try {
+                Thread.sleep(50L * (attempt + 1));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(ie);
+            }
+        }
+    }
+    ```
 
   {% endlist %}
 
@@ -662,7 +768,54 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
   - SQLAlchemy
 
-    In {{ ydb-short-name }} C# SDK, retries are implemented at two levels.
+    When using {{ ydb-short-name }} via SQLAlchemy, retry attempts are performed under the hood and are not configurable externally.
+
+  {% endlist %}
+
+- C#
+
+  In {{ ydb-short-name }} C# SDK, retries are implemented at two levels.
+
+  {% list tabs %}
+
+  - OpenRetryableConnectionAsync
+
+    The `OpenRetryableConnectionAsync` method creates a connection with automatic retries on transient errors. A connection obtained this way does not support interactive transactions – use `ExecuteInTransactionAsync` for transaction work.
+
+
+    ```C#
+    using Ydb.Sdk.Ado;
+
+    await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+
+    await using var connection = await dataSource.OpenRetryableConnectionAsync();
+    var command = new YdbCommand("SELECT series_id, title FROM series WHERE series_id = $series_id", connection);
+    command.Parameters.Add(new YdbParameter("$series_id", YdbDbType.Uint64, 1U));
+
+    await using var reader = await command.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+    {
+        Console.WriteLine($"series_id: {reader.GetUint64(0)}, title: {reader.GetString(1)}");
+    }
+    ```
+
+  - ExecuteInTransactionAsync
+
+    The `ExecuteInTransactionAsync` method executes multiple operations within a single transaction with automatic retry on conflicts:
+
+
+    ```C#
+    using Ydb.Sdk.Ado;
+
+    await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+
+    await dataSource.ExecuteInTransactionAsync(async connection =>
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = "UPSERT INTO series (series_id, title) VALUES (1, \"IT Crowd\")";
+        await command.ExecuteNonQueryAsync();
+    });
+    ```
 
   {% endlist %}
 
@@ -670,7 +823,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
   Retries and reconnections are handled inside the SDK; the user does not need to configure anything separately.
 
-  Example with `@ydbjs/retry`:
+  The retryer itself is available in a separate package `@ydbjs/retry`.
 
 
   ```javascript
@@ -689,11 +842,11 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
 - Rust
 
-  Retries for Table API queries are handled by `TableClient::retry_transaction`: the callback receives a transaction, inside which `query` and, if necessary, `commit` are called.
+  Retries for queries via the Query Service are performed by `QueryClient`: helper methods for executing a single transactional SQL query (`query_row`, `exec`, etc.) are automatically retried; for multiple operations in a single transaction – [`retry_tx`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.retry_tx).
 
 
   ```rust
-  use ydb::{AccessTokenCredentials, ClientBuilder, Query, YdbResult};
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
 
   #[tokio::main]
   async fn main() -> YdbResult<()> {
@@ -705,26 +858,32 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
       client.wait().await?;
 
-      let row = client
-          .table_client()
-          .retry_transaction(|mut tx| async move {
-              let res = tx
-                  .query(Query::new(
-                      "SELECT series_id, title FROM series WHERE series_id = 1",
-                  ))
-                  .await?;
-              Ok(res.into_only_row()?.remove_field_by_name("title")?)
-          })
+      let mut qc = client.query_client();
+
+      // one SQL query on query client: internal retries
+      let mut row = qc
+          .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
+          .idempotent(true)
           .await?;
 
-      let _title: String = row.try_into()?;
+      // multiple operations in one transaction with retries
+      let title: String = qc
+          .retry_tx(async |tx| {
+              let mut row = tx
+                  .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
+                  .await?;
+              Ok(row.remove_field_by_name("title")?.try_into()?)
+          })
+          .idempotent(true)
+          .await?;
+
       Ok(())
   }
   ```
 
 - PHP
 
-  In the {{ ydb-short-name }} PHP SDK, retries for Table API queries are configured via `Table::retryTransaction()` (transaction + commit + retries on supported errors) or `Table::retrySession()` (a single session without the "whole transaction" wrapper). The second argument `retryTransaction` is the idempotency flag (`true` expands the set of errors for which a retry is performed).
+  In {{ ydb-short-name }} PHP SDK, retries for Table API requests are set via `Table::retryTransaction()` (transaction + commit + retries on supported errors) or `Table::retrySession()` (a single session without a “transaction‑wide” wrapper). The second argument `retryTransaction` is the idempotency flag (`true` expands the set of errors that trigger a retry).
 
   Example with `retryTransaction`:
 

@@ -55,15 +55,3 @@ items:
     href: service-discovery.md
   - name: Configuration publication
     href: config-publication.md
-- name: Диагностика проблем
-  items:
-  - name: Overview
-    href: debug.md
-  - name: Enable logging
-    href: debug-logs.md
-  - name: Connect metrics to Prometheus
-    href: debug-prometheus.md
-  - name: Connect tracing to Jaeger
-    href: debug-jaeger.md
-  - name: Connect tracing to OpenTelemetry
-    href: debug-otel.md

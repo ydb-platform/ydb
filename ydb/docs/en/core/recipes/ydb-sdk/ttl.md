@@ -8,11 +8,9 @@ In the example below, rows of table `mytable` will be deleted one hour after the
 
 {% list tabs group=tool %}
 
-
-
 {% if oss == true %}
 
-  - C++
+- C++
 
 
   ```c++
@@ -29,6 +27,7 @@ In the example below, rows of table `mytable` will be deleted one hour after the
 
 - Go
 
+
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithSetTimeToLiveSettings(
@@ -39,15 +38,19 @@ In the example below, rows of table `mytable` will be deleted one hour after the
 
 - Python
 
+
   ```python
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - Java
+
 
   ```java
   AlterTableSettings settings = new AlterTableSettings()
@@ -62,11 +65,9 @@ The following example demonstrates using column `modified_at` with a numeric typ
 
 {% list tabs group=tool %}
 
-
-
 {% if oss == true %}
 
-  - C++
+- C++
 
 
   ```c++
@@ -83,6 +84,7 @@ The following example demonstrates using column `modified_at` with a numeric typ
 
 - Go
 
+
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithSetTimeToLiveSettings(
@@ -93,15 +95,19 @@ The following example demonstrates using column `modified_at` with a numeric typ
 
 - Python
 
+
   ```python
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - Java
+
 
   ```java
   AlterTableSettings settings = new AlterTableSettings()
@@ -126,11 +132,9 @@ In the next example, rows of table `mytable` will be moved to the bucket describ
 
 {% list tabs group=tool %}
 
-
-
 {% if oss == true %}
 
-  - C++
+- C++
 
 
   ```c++
@@ -151,15 +155,15 @@ In the next example, rows of table `mytable` will be moved to the bucket describ
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - Go
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - Python
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+- C#
 
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Java
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -172,11 +176,9 @@ For a newly created table, you can pass TTL settings together with its descripti
 
 {% list tabs group=tool %}
 
-
-
 {% if oss == true %}
 
-  - C++
+- C++
 
 
   ```c++
@@ -195,6 +197,7 @@ For a newly created table, you can pass TTL settings together with its descripti
 
 - Go
 
+
   ```go
   err := session.CreateTable(ctx, "mytable",
     options.WithColumn("id", types.Optional(types.TypeUint64)),
@@ -207,6 +210,7 @@ For a newly created table, you can pass TTL settings together with its descripti
 
 - Python
 
+
   ```python
   session.create_table(
       'mytable',
@@ -218,21 +222,55 @@ For a newly created table, you can pass TTL settings together with its descripti
   )
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - Java
 
-  ```java
-  TableDescription description = TableDescription.newBuilder()
-          .addNullableColumn("id", PrimitiveType.Uint64)
-          .addNullableColumn("expire_at", PrimitiveType.Timestamp)
-          .setPrimaryKey("id")
-          .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
-          .build();
+  TTL for a table is set in `TableDescription` at creation. You can check the settings via `describeTable`.
 
-  session.createTable("mytable", description).join().expectSuccess();
+
+  ```java
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.table.TableClient;
+  import tech.ydb.table.description.TableDescription;
+  import tech.ydb.table.description.TableTtl;
+  import tech.ydb.table.session.SessionRetryContext;
+  import tech.ydb.table.values.PrimitiveType;
+
+  public class TtlCreateTableExample {
+
+      private static final String TABLE_NAME = "mytable";
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               TableClient tableClient = TableClient.newClient(transport).build()) {
+
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+
+              TableDescription description = TableDescription.newBuilder()
+                      .addNullableColumn("id", PrimitiveType.Uint64)
+                      .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+                      .setPrimaryKey("id")
+                      .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+                      .build();
+
+              retryCtx.supplyStatus(session -> session.createTable(tablePath, description))
+                      .join().expectSuccess("create table failed");
+
+              TableTtl ttl = retryCtx.supplyResult(session -> session.describeTable(tablePath))
+                      .join().getValue().getTableDescription().getTableTtl();
+              System.out.println("TTL column: " + ttl.getColumnName());
+          }
+      }
+  }
   ```
 
 {% endlist %}
@@ -241,11 +279,9 @@ For a newly created table, you can pass TTL settings together with its descripti
 
 {% list tabs group=tool %}
 
-
-
 {% if oss == true %}
 
-  - C++
+- C++
 
 
   ```c++
@@ -262,6 +298,7 @@ For a newly created table, you can pass TTL settings together with its descripti
 
 - Go
 
+
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithDropTimeToLive(),
@@ -270,15 +307,19 @@ For a newly created table, you can pass TTL settings together with its descripti
 
 - Python
 
+
   ```python
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - Java
+
 
   ```java
   AlterTableSettings settings = new AlterTableSettings()
@@ -295,11 +336,9 @@ Current TTL settings can be obtained from the table description:
 
 {% list tabs group=tool %}
 
-
-
 {% if oss == true %}
 
-  - C++
+- C++
 
 
   ```c++
@@ -311,6 +350,7 @@ Current TTL settings can be obtained from the table description:
 
 - Go
 
+
   ```go
   desc, err := session.DescribeTable(ctx, "mytable")
   if err != nil {
@@ -321,19 +361,47 @@ Current TTL settings can be obtained from the table description:
 
 - Python
 
+
   ```python
   desc = session.describe_table('mytable')
   ttl = desc.ttl_settings
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - Java
 
+
   ```java
-  TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.table.TableClient;
+  import tech.ydb.table.description.TableTtl;
+  import tech.ydb.table.session.SessionRetryContext;
+
+  public class TtlDescribeExample {
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               TableClient tableClient = TableClient.newClient(transport).build()) {
+
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              String tablePath = transport.getDatabase() + "/mytable";
+
+              TableTtl ttl = retryCtx.supplyResult(session -> session.describeTable(tablePath))
+                      .join().getValue().getTableDescription().getTableTtl();
+
+              System.out.println("TTL enabled: " + ttl.isEnabled());
+              System.out.println("TTL column: " + ttl.getColumnName());
+          }
+      }
+  }
   ```
 
 {% endlist %}

@@ -8,29 +8,43 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
+
 - Go
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-- with++
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-
 - Python
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -45,6 +59,8 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#491](https://github.com/ydb-platform/ydb-rs-sdk/issues/491)
 
 - PHP
 

@@ -174,7 +174,7 @@ def extract_breaker_id(line: str) -> Optional[str]:
 
 
 def check_query_id_in_line(line: str, query_id: str) -> bool:
-    """Check if query_id appears as querySpanId, victimQuerySpanId or otherVictimQuerySpanId."""
+    """Check if query_id appears in line."""
 
     query_id = query_id.strip()
 
@@ -186,10 +186,17 @@ def check_query_id_in_line(line: str, query_id: str) -> bool:
     if id and id.strip() == query_id:
         return True
 
-    id = extract_field(line, "otherVictimQuerySpanId")
+    id = extract_field(line, "victimTxSpanId")
     if id and id.strip() == query_id:
         return True
 
+    id = extract_field(line, "breakerQuerySpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    id = extract_field(line, "breakerTxSpanId")
+    if id and id.strip() == query_id:
+        return True
     return False
 
 
@@ -293,8 +300,10 @@ def main():
 
             line_query_id = extract_field(line, "querySpanId")
             line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
+
             if line_query_id and line_query_text:
-                if ("isVictimQuery" in line):
+                victim_tx_span_id = extract_field(line, "victimTxSpanId")
+                if victim_tx_span_id == line_query_id:
                     victim_query_text = line_query_text
                 victim_tx_items.append((line_query_id, line_query_text))
 

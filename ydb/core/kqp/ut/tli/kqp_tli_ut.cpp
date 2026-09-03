@@ -192,23 +192,13 @@ namespace {
     std::optional<ui64> ExtractBreakerQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
     {
-        Cerr << "DEBUG: ExtractBreakerQuerySpanId" <<
-            " component=" << component <<
-            " messagePattern=" << component <<
-            " expectedBreakerQueryText=" << expectedBreakerQueryText.value_or("<empty>") <<
-            Endl;
-
         for (const auto& record : ExtractTliRecords(logs)) {
-            Cerr << "DEBUG: " << record << Endl;
             if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
-                Cerr << "DEBUG: 1" << Endl;
                 continue;
             }
             if (expectedBreakerQueryText && component == "SessionActor") {
                 auto text = ExtractQueryTextFromRecord(record);
-                Cerr << "DEBUG: ExtractedText=" << text.value_or("<empty>") << Endl;
                 if (!text || *text != *expectedBreakerQueryText) {
-                    Cerr << "DEBUG: 2" << Endl;
                     continue;
                 }
             }
@@ -216,17 +206,20 @@ namespace {
             std::optional<ui64> result;
             if (component == "SessionActor") {
                 result = ExtractNumericField(record, "breakerTxSpanId");
+
+                if (expectedBreakerQueryText.has_value()) {
+                    auto querySpanId = ExtractNumericField(record, "querySpanId");
+                    if (result!=querySpanId) {
+                        continue;
+                    }
+                }
             } else {
                 result = ExtractNumericField(record, "breakerQuerySpanId");
             }
             if (result.has_value()) {
-                Cerr << "DEBUG: return " << result.value() << Endl;
                 return result.value();
-            } else {
-                Cerr << "DEBUG: 3" << Endl;
             }
         }
-        Cerr << "DEBUG: 4" << Endl;
         return std::nullopt;
     }
 

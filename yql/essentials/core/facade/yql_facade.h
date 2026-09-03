@@ -67,6 +67,7 @@ public:
     void EnableAutoUseYqlLibs();
     void SetArrowResolver(IArrowResolver::TPtr arrowResolver);
     void SetUdfResolverLogfile(const TString& path);
+    void SetUdfBridgeBinaryPath(const TString& path);
     void AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider);
 
     TProgramPtr Create(
@@ -108,6 +109,7 @@ private:
     bool AutoUseYqlLibs_ = false;
     IArrowResolver::TPtr ArrowResolver_;
     TMaybe<TString> UdfResolverLogfile_;
+    TString BridgeBinaryPath_;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
 };
 
@@ -288,7 +290,6 @@ public:
     void SetValidateOptions(NUdf::EValidateMode validateMode);
     void SetDisableNativeUdfSupport(bool disable);
     void SetUseTableMetaFromGraph(bool use);
-    void SetBridgeBinaryPath(const TString& path);
 
     void SetProgressWriter(TOperationProgressWriter writer) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
@@ -402,7 +403,8 @@ private:
         IArrowResolver::TPtr arrowResolver,
         EHiddenMode hiddenMode,
         const TQContext& qContext,
-        THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders);
+        THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
+        TString bridgeBinaryPath);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;

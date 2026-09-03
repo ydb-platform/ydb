@@ -377,4 +377,5 @@ message TFeatureFlags {
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
     optional bool EnableInsecureMirrorFactory = 322 [default = false];
+    optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
 }

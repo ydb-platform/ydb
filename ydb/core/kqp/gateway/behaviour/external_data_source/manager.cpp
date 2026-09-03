@@ -187,7 +187,8 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         "grpc_location", // solomon
         "project", // solomon
         "cluster", // solomon
-        "shared_reading" // ydb (topics)
+        "shared_reading", // ydb (topics)
+        "shared_reading_group", // ydb (topics)
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();

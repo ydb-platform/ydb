@@ -453,60 +453,6 @@ void TColumnShard::RunDropTable(
     TablesManager.DropTable(schemeShardLocalPathId, *internalPathId, version, db);
 }
 
-void TColumnShard::RunTruncateTable(
-    const NKikimrTxColumnShard::TTruncateTable& truncateProto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
-    NIceDb::TNiceDb db(txc.DB);
-
-    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
-    std::optional<TInternalPathId> oldInternalPathId = TablesManager.GetTruncatingInternalPathId(schemeShardLocalPathId);
-    if (!oldInternalPathId) {
-        oldInternalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
-    }
-
-    if (!oldInternalPathId) {
-        LOG_S_DEBUG("TruncateTable for unknown or deleted scheme shard pathId: " << schemeShardLocalPathId << " at tablet " << TabletID());
-        return;
-    }
-
-    const auto& pathId = TUnifiedPathId::BuildValid(*oldInternalPathId, schemeShardLocalPathId);
-    if (!TablesManager.HasTable(*oldInternalPathId)) {
-        LOG_S_DEBUG("TruncateTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
-        return;
-    }
-
-    if (TablesManager.GetTable(*oldInternalPathId).IsReadOnly(schemeShardLocalPathId)) {
-        LOG_S_WARN("TruncateTable skipped for read-only pathId: " << pathId << " at tablet " << TabletID());
-        return;
-    }
-
-    LOG_S_DEBUG("TruncateTable for pathId: " << pathId << " at tablet " << TabletID());
-
-    const auto lastVersionInfo = TablesManager.LoadLastTableVersionInfo(*oldInternalPathId, db);
-    const auto ttlSettings = TablesManager.GetTableTtlProto(*oldInternalPathId, version);
-
-    const auto newInternalPathId = TablesManager.TruncateTable(schemeShardLocalPathId, *oldInternalPathId, version, db);
-
-    NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
-    newInternalPathId.ToProto(tableVerProto);
-    if (lastVersionInfo) {
-        if (lastVersionInfo->HasSchemaPresetId()) {
-            tableVerProto.SetSchemaPresetId(lastVersionInfo->GetSchemaPresetId());
-        }
-        if (lastVersionInfo->HasSchemaPresetVersionAdj()) {
-            tableVerProto.SetSchemaPresetVersionAdj(lastVersionInfo->GetSchemaPresetVersionAdj());
-        }
-    }
-
-    if (ttlSettings) {
-        *tableVerProto.MutableTtlSettings() = *ttlSettings;
-    }
-
-    TablesManager.AddTableVersion(newInternalPathId, version, tableVerProto, std::nullopt, db);
-
-    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
-    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
-}
-
 void TColumnShard::RunMoveTable(
     const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
@@ -526,6 +472,14 @@ void TColumnShard::RunCopyTable(
     const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
     const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
     TablesManager.CopyTableProgress(db, version, srcPathId, dstPathId);
+}
+
+void TColumnShard::RunTruncateTable(
+    const NKikimrTxColumnShard::TTruncateTable& truncateProto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
+    TablesManager.TruncateTableProgress(schemeShardLocalPathId, version, db);
 }
 
 void TColumnShard::RunAlterStore(

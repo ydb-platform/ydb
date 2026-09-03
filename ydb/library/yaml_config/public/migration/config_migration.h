@@ -14,6 +14,7 @@ namespace NKikimr::NYamlConfig {
         Incorrect,
         Mirror3dc,
         Mirror3dc3Nodes,
+        Block42,
     };
 
     /** Merges V1 configs conservatively and emits Git-style markers for ambiguous sections and representations. */
@@ -36,7 +37,7 @@ namespace NKikimr::NYamlConfig {
     /** Returns whether the main config uses disk failure domains. */
     bool HasDiskFailDomainType(NFyaml::TDocument& config);
 
-    /** Validates that storage-pool geometry and static-group placement describe the same layout. */
+    /** Classifies a static-group layout supported by automatic self-management migration. */
     EStaticGroupLayoutCheckResult CheckStaticGroupLayout(NFyaml::TDocument& config);
 
     /** Removes legacy static-group topology and State Storage definitions after their management has switched to V2. */

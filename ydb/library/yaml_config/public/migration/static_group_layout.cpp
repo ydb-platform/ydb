@@ -1,4 +1,5 @@
 #include "config_migration.h"
+#include "yaml_helpers.h"
 
 #include <util/generic/map.h>
 #include <util/generic/set.h>
@@ -15,12 +16,46 @@
 namespace NKikimr::NYamlConfig {
 namespace {
 
+    using NMigrationDetail::AsMap;
+    using NMigrationDetail::AsSequence;
+    using NMigrationDetail::FindMap;
+    using NMigrationDetail::FindScalar;
+    using NMigrationDetail::FindSequence;
+
     constexpr ui32 DefaultInterconnectPort = 19001;
 
     enum class EDomainType {
         Rack,
         Disk,
     };
+
+    enum class EErasureSpecies {
+        Mirror3dc,
+        Block42,
+    };
+
+    struct TGroupShape {
+        ui32 NumFailRealms = 0;
+        ui32 NumFailDomainsPerFailRealm = 0;
+        ui32 NumVDisksPerFailDomain = 0;
+
+        bool operator==(const TGroupShape&) const = default;
+    };
+
+    // Defaults used by TGroupGeometryInfo when the shape is omitted.
+    constexpr TGroupShape DefaultMirror3dcShape{3, 3, 1};
+    constexpr TGroupShape DefaultBlock42Shape{1, 8, 1};
+
+    struct TStaticGroupGeometry {
+        EDomainType DomainType;
+        std::optional<TGroupShape> Shape;
+
+        bool operator==(const TStaticGroupGeometry&) const = default;
+    };
+
+    const TGroupShape& GetDefaultShape(EErasureSpecies erasureSpecies) {
+        return erasureSpecies == EErasureSpecies::Mirror3dc ? DefaultMirror3dcShape : DefaultBlock42Shape;
+    }
 
     struct TNodeLocation {
         TString BridgePile;
@@ -34,6 +69,30 @@ namespace {
         TMap<TString, std::optional<ui32>> Aliases;
     };
 
+    struct TPhysicalRealm {
+        TString BridgePile;
+        TString DataCenter;
+
+        bool operator==(const TPhysicalRealm&) const = default;
+
+        auto Fields() const {
+            return std::tie(BridgePile, DataCenter);
+        }
+
+        bool operator<(const TPhysicalRealm& other) const {
+            return Fields() < other.Fields();
+        }
+    };
+
+    template <typename T>
+    bool KeepSame(std::optional<T>& expected, const T& value) {
+        if (!expected) {
+            expected = value;
+            return true;
+        }
+        return *expected == value;
+    }
+
     struct TPhysicalDomain {
         TString BridgePile;
         TString DataCenter;
@@ -42,45 +101,16 @@ namespace {
         ui32 NodeId = 0;
         ui32 PDiskId = 0;
 
+        bool operator==(const TPhysicalDomain&) const = default;
+
         auto Fields() const {
             return std::tie(BridgePile, DataCenter, Module, Rack, NodeId, PDiskId);
-        }
-
-        bool operator==(const TPhysicalDomain& other) const {
-            return Fields() == other.Fields();
         }
 
         bool operator<(const TPhysicalDomain& other) const {
             return Fields() < other.Fields();
         }
     };
-
-    std::optional<NFyaml::TMapping> AsMap(const NFyaml::TNodeRef& node) {
-        return node.Type() == NFyaml::ENodeType::Mapping ? std::make_optional(node.Map()) : std::nullopt;
-    }
-
-    std::optional<NFyaml::TSequence> AsSequence(const NFyaml::TNodeRef& node) {
-        return node.Type() == NFyaml::ENodeType::Sequence ? std::make_optional(node.Sequence()) : std::nullopt;
-    }
-
-    std::optional<NFyaml::TMapping> FindMap(const NFyaml::TMapping& map, TStringBuf key) {
-        const TString name(key);
-        return map.Has(name) ? AsMap(map.at(name)) : std::nullopt;
-    }
-
-    std::optional<NFyaml::TSequence> FindSequence(const NFyaml::TMapping& map, TStringBuf key) {
-        const TString name(key);
-        return map.Has(name) ? AsSequence(map.at(name)) : std::nullopt;
-    }
-
-    std::optional<TString> FindScalar(const NFyaml::TMapping& map, TStringBuf key) {
-        const TString name(key);
-        if (!map.Has(name)) {
-            return std::nullopt;
-        }
-        const auto node = map.at(name);
-        return node.Type() == NFyaml::ENodeType::Scalar ? std::make_optional(node.Scalar()) : std::nullopt;
-    }
 
     std::optional<ui32> FindUi32(const NFyaml::TMapping& map, TStringBuf key) {
         const auto scalar = FindScalar(map, key);
@@ -96,34 +126,47 @@ namespace {
         return FindScalar(map, key).value_or(TString());
     }
 
-    std::optional<EDomainType> GetGeometryDomainType(const NFyaml::TMapping& geometry) {
+    std::optional<TStaticGroupGeometry> GetGeometry(const NFyaml::TMapping& geometry) {
         const ui32 realmBegin = FindUi32(geometry, "realm_level_begin").value_or(0);
         const ui32 realmEnd = FindUi32(geometry, "realm_level_end").value_or(0);
         const ui32 domainBegin = FindUi32(geometry, "domain_level_begin").value_or(0);
         const ui32 domainEnd = FindUi32(geometry, "domain_level_end").value_or(0);
+        std::optional<EDomainType> domainType;
         if (!realmBegin && !realmEnd && !domainBegin && !domainEnd) {
-            return EDomainType::Rack;
-        }
-        if (realmBegin != 10 || realmEnd != 20 || domainBegin != 10) {
+            domainType = EDomainType::Rack;
+        } else if (realmBegin != 10 || realmEnd != 20 || domainBegin != 10) {
+            return std::nullopt;
+        } else if (domainEnd == 40) {
+            domainType = EDomainType::Rack;
+        } else if (domainEnd == 256) {
+            domainType = EDomainType::Disk;
+        } else {
             return std::nullopt;
         }
-        if (domainEnd == 40) {
-            return EDomainType::Rack;
+
+        TGroupShape shape{
+            .NumFailRealms = FindUi32(geometry, "num_fail_realms").value_or(0),
+            .NumFailDomainsPerFailRealm = FindUi32(geometry, "num_fail_domains_per_fail_realm").value_or(0),
+            .NumVDisksPerFailDomain = FindUi32(geometry, "num_vdisks_per_fail_domain").value_or(0),
+        };
+        std::optional<TGroupShape> configuredShape;
+        if (shape.NumFailRealms || shape.NumFailDomainsPerFailRealm || shape.NumVDisksPerFailDomain) {
+            configuredShape = shape;
         }
-        if (domainEnd == 256) {
-            return EDomainType::Disk;
-        }
-        return std::nullopt;
+        return TStaticGroupGeometry{
+            .DomainType = *domainType,
+            .Shape = std::move(configuredShape),
+        };
     }
 
-    std::optional<EDomainType> GetStoragePoolDomainType(const NFyaml::TMapping& config) {
+    std::optional<TVector<TStaticGroupGeometry>> GetStoragePoolGeometries(const NFyaml::TMapping& config) {
         const auto domainsConfig = FindMap(config, "domains_config");
         const auto domains = domainsConfig ? FindSequence(*domainsConfig, "domain") : std::nullopt;
         if (!domains) {
             return std::nullopt;
         }
 
-        std::optional<EDomainType> result;
+        TVector<TStaticGroupGeometry> result;
         for (const auto& domainNode : *domains) {
             const auto domain = AsMap(domainNode);
             if (!domain) {
@@ -140,20 +183,55 @@ namespace {
                     return std::nullopt;
                 }
                 const auto geometry = FindMap(*poolConfig, "geometry");
-                if (!geometry) {
+                if (poolConfig->Has("geometry") && !geometry) {
                     return std::nullopt;
                 }
-                const auto domainType = GetGeometryDomainType(*geometry);
-                if (!domainType || (result && *result != *domainType)) {
+                const auto current = geometry
+                                     ? GetGeometry(*geometry)
+                                     : std::make_optional(TStaticGroupGeometry{.DomainType = EDomainType::Rack});
+                if (!current) {
                     return std::nullopt;
                 }
-                result = *domainType;
+                result.push_back(*current);
             }
+        }
+        if (result.empty()) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::move(result));
+    }
+
+    std::optional<TStaticGroupGeometry> GetStaticGroupGeometry(const TVector<TStaticGroupGeometry>& storagePoolGeometries,
+                                                               EErasureSpecies erasureSpecies) {
+        const auto& defaultShape = GetDefaultShape(erasureSpecies);
+        std::optional<TStaticGroupGeometry> result;
+        for (const auto& geometry : storagePoolGeometries) {
+            if (geometry.Shape && *geometry.Shape != defaultShape) {
+                return std::nullopt;
+            }
+            TStaticGroupGeometry current{
+                .DomainType = geometry.DomainType,
+                .Shape = defaultShape,
+            };
+            if (result && *result != current) {
+                return std::nullopt;
+            }
+            result = std::move(current);
         }
         return result;
     }
 
-    EStaticGroupLayoutCheckResult GetStaticGroupLayout(EDomainType domainType) {
+    std::optional<EErasureSpecies> ParseErasureSpecies(TStringBuf value) {
+        if (AsciiEqualsIgnoreCase(value, "mirror-3-dc")) {
+            return EErasureSpecies::Mirror3dc;
+        }
+        if (AsciiEqualsIgnoreCase(value, "block-4-2")) {
+            return EErasureSpecies::Block42;
+        }
+        return std::nullopt;
+    }
+
+    EStaticGroupLayoutCheckResult GetMirror3dcLayout(EDomainType domainType) {
         return domainType == EDomainType::Disk
                ? EStaticGroupLayoutCheckResult::Mirror3dc3Nodes
                : EStaticGroupLayoutCheckResult::Mirror3dc;
@@ -278,13 +356,11 @@ namespace {
         return used.insert(pdiskId).second ? std::make_optional(pdiskId) : std::nullopt;
     }
 
-    template <class T>
-    bool KeepSame(std::optional<T>& expected, const T& value) {
-        if (expected && *expected != value) {
-            return false;
-        }
-        expected = value;
-        return true;
+    TPhysicalRealm GetRealm(const TNodeLocation& location) {
+        return {
+            .BridgePile = location.BridgePile,
+            .DataCenter = location.DataCenter,
+        };
     }
 
     TPhysicalDomain GetDomain(const TNodeLocation& location, ui32 nodeId, ui32 pdiskId, EDomainType type) {
@@ -302,16 +378,19 @@ namespace {
         };
     }
 
-    bool IsGroupLayoutCorrect(const NFyaml::TMapping& group, const TNodes& nodes, EDomainType domainType) {
+    bool IsGroupLayoutCorrect(const NFyaml::TMapping& group, const TNodes& nodes,
+                              const TStaticGroupGeometry& geometry) {
+        Y_ABORT_UNLESS(geometry.Shape);
+        const auto& shape = *geometry.Shape;
         const auto rings = FindSequence(group, "rings");
-        if (!rings) {
+        if (!rings || rings->size() != shape.NumFailRealms) {
             return false;
         }
 
-        TSet<TString> usedRealms;
+        std::optional<TString> realmGroup;
+        TSet<TPhysicalRealm> usedRealms;
         TSet<TPhysicalDomain> usedDomains;
         TMap<ui32, TSet<ui32>> usedPDiskIds;
-        std::optional<TString> realmGroup;
 
         for (const auto& ringNode : *rings) {
             const auto ring = AsMap(ringNode);
@@ -319,15 +398,15 @@ namespace {
                 return false;
             }
             const auto failDomains = FindSequence(*ring, "fail_domains");
-            if (!failDomains) {
+            if (!failDomains || failDomains->size() != shape.NumFailDomainsPerFailRealm) {
                 return false;
             }
 
-            std::optional<TString> realm;
+            std::optional<TPhysicalRealm> realm;
             for (const auto& failDomainNode : *failDomains) {
                 const auto failDomain = AsMap(failDomainNode);
                 const auto vdisks = failDomain ? FindSequence(*failDomain, "vdisk_locations") : std::nullopt;
-                if (!vdisks) {
+                if (!vdisks || vdisks->size() != shape.NumVDisksPerFailDomain) {
                     return false;
                 }
 
@@ -351,8 +430,9 @@ namespace {
                     }
 
                     if (!KeepSame(realmGroup, location->second.BridgePile)
-                        || !KeepSame(realm, location->second.DataCenter)
-                        || !KeepSame(domain, GetDomain(location->second, nodeId, *pdiskId, domainType))) {
+                        || !KeepSame(realm, GetRealm(location->second))
+                        || !KeepSame(domain,
+                                    GetDomain(location->second, nodeId, *pdiskId, geometry.DomainType))) {
                         return false;
                     }
                 }
@@ -364,7 +444,7 @@ namespace {
                 return false;
             }
         }
-        return !usedRealms.empty();
+        return true;
     }
 
     EStaticGroupLayoutCheckResult CheckStaticGroupLayout(const NFyaml::TMapping& config) {
@@ -386,7 +466,8 @@ namespace {
         if (!defaultErasureSpecies) {
             defaultErasureSpecies = FindScalar(config, "erasure");
         }
-        TVector<NFyaml::TMapping> mirror3dcGroups;
+        TVector<NFyaml::TMapping> supportedGroups;
+        std::optional<EErasureSpecies> commonErasureSpecies;
         for (const auto& groupNode : *groups) {
             const auto group = AsMap(groupNode);
             if (!group) {
@@ -402,26 +483,42 @@ namespace {
             if (!erasureSpecies) {
                 return EStaticGroupLayoutCheckResult::Incorrect;
             }
-            if (AsciiEqualsIgnoreCase(*erasureSpecies, "mirror-3-dc")) {
-                mirror3dcGroups.push_back(*group);
+            const auto supportedErasure = ParseErasureSpecies(*erasureSpecies);
+            if (!supportedErasure) {
+                return EStaticGroupLayoutCheckResult::Incorrect;
             }
+            if (commonErasureSpecies && *commonErasureSpecies != *supportedErasure) {
+                return EStaticGroupLayoutCheckResult::Incorrect;
+            }
+            commonErasureSpecies = *supportedErasure;
+            supportedGroups.push_back(*group);
         }
-        if (mirror3dcGroups.empty()) {
+        if (supportedGroups.empty()) {
             return EStaticGroupLayoutCheckResult::NotApplicable;
         }
 
-        const auto storagePoolDomainType = GetStoragePoolDomainType(config);
-        if (!storagePoolDomainType) {
+        const auto storagePoolGeometries = GetStoragePoolGeometries(config);
+        if (!storagePoolGeometries) {
+            return EStaticGroupLayoutCheckResult::Incorrect;
+        }
+
+        Y_ABORT_UNLESS(commonErasureSpecies);
+        const auto geometry = GetStaticGroupGeometry(*storagePoolGeometries, *commonErasureSpecies);
+        if (!geometry
+            || (*commonErasureSpecies == EErasureSpecies::Block42
+                && geometry->DomainType != EDomainType::Rack)) {
             return EStaticGroupLayoutCheckResult::Incorrect;
         }
 
         const auto nodes = ReadNodes(config);
-        for (const auto& group : mirror3dcGroups) {
-            if (!IsGroupLayoutCorrect(group, nodes, *storagePoolDomainType)) {
+        for (const auto& group : supportedGroups) {
+            if (!IsGroupLayoutCorrect(group, nodes, *geometry)) {
                 return EStaticGroupLayoutCheckResult::Incorrect;
             }
         }
-        return GetStaticGroupLayout(*storagePoolDomainType);
+        return *commonErasureSpecies == EErasureSpecies::Mirror3dc
+               ? GetMirror3dcLayout(geometry->DomainType)
+               : EStaticGroupLayoutCheckResult::Block42;
     }
 
 } // anonymous namespace

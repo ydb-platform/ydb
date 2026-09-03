@@ -1,4 +1,5 @@
 #include "config_migration.h"
+#include "yaml_helpers.h"
 
 #include <util/generic/hash_set.h>
 #include <util/string/ascii.h>
@@ -10,6 +11,11 @@
 
 namespace NKikimr::NYamlConfig {
     namespace {
+
+        using NMigrationDetail::AsMap;
+        using NMigrationDetail::AsSequence;
+        using NMigrationDetail::FindMap;
+        using NMigrationDetail::FindScalar;
 
         constexpr std::array<TStringBuf, 3> StaticGroupTopologyKeys = {
             "pdisks",
@@ -38,29 +44,6 @@ namespace NKikimr::NYamlConfig {
 
         bool IsStaticOwnedKey(TStringBuf key) {
             return key == "hosts" || key == "host_configs" || key == "static_erasure";
-        }
-
-        std::optional<NFyaml::TMapping> AsMap(const NFyaml::TNodeRef& node) {
-            return node.Type() == NFyaml::ENodeType::Mapping ? std::make_optional(node.Map()) : std::nullopt;
-        }
-
-        std::optional<NFyaml::TSequence> AsSequence(const NFyaml::TNodeRef& node) {
-            return node.Type() == NFyaml::ENodeType::Sequence ? std::make_optional(node.Sequence()) : std::nullopt;
-        }
-
-        std::optional<NFyaml::TMapping> FindMap(const NFyaml::TMapping& map, TStringBuf key) {
-            const TString name(key);
-            return map.Has(name) ? AsMap(map.at(name)) : std::nullopt;
-        }
-
-        std::optional<TString> FindScalar(const NFyaml::TMapping& map, TStringBuf key) {
-            const TString name(key);
-            if (!map.Has(name)) {
-                return std::nullopt;
-            }
-
-            const auto node = map.at(name);
-            return node.Type() == NFyaml::ENodeType::Scalar ? std::make_optional(node.Scalar()) : std::nullopt;
         }
 
         std::optional<NFyaml::TNodeRef> FindNode(const NFyaml::TMapping& map, TStringBuf key) {

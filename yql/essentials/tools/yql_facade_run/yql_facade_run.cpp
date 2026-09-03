@@ -131,8 +131,7 @@ private:
 
 class TPeepHolePipelineConfigurator: public NYql::IPipelineConfigurator {
 public:
-    TPeepHolePipelineConfigurator() {
-    }
+    TPeepHolePipelineConfigurator() = default;
 
     void AfterCreate(NYql::TTransformationPipeline* pipeline) const final {
         Y_UNUSED(pipeline);
@@ -152,11 +151,9 @@ public:
 
 namespace NYql {
 
-TFacadeRunOptions::TFacadeRunOptions() {
-}
+TFacadeRunOptions::TFacadeRunOptions() = default;
 
-TFacadeRunOptions::~TFacadeRunOptions() {
-}
+TFacadeRunOptions::~TFacadeRunOptions() = default;
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
@@ -273,10 +270,11 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").RequiredArgument("DIR").Handler1T<TString>([this](const TString& dir) {
         NKikimr::NMiniKQL::FindUdfsInDir(dir, &UdfsPaths);
     });
-    opts.AddLongOption("udf-resolver", "Path to udf-resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
-    opts.AddLongOption("udf-resolver-log", "Path to udf resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
-    opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
-    opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf-resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
+    opts.AddLongOption("udf-resolver", "Path to udf_resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
+    opts.AddLongOption("udf-resolver-log", "Path to udf_resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
+    opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf_resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
+    opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf_resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
+    opts.AddLongOption("udf-bridge", "Path to udf_bridge").Optional().RequiredArgument("PATH").StoreResult(&UdfBridgePath);
 
     opts.AddLongOption("parse-only", "Parse program and exit").NoArgument().StoreValue(&Mode, ERunMode::Parse);
     opts.AddLongOption("compile-only", "Compile program and exit").NoArgument().StoreValue(&Mode, ERunMode::Compile);
@@ -553,8 +551,7 @@ TFacadeRunner::TFacadeRunner(TString name)
 {
 }
 
-TFacadeRunner::~TFacadeRunner() {
-}
+TFacadeRunner::~TFacadeRunner() = default;
 
 TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegistry() {
     return FuncRegistry_;
@@ -845,6 +842,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
     program->SetUseTableMetaFromGraph(RunOptions_.UseMetaFromGrpah);
     program->SetValidateOptions(RunOptions_.ValidateMode);
+    program->SetBridgeBinaryPath(RunOptions_.UdfBridgePath);
     if (RunOptions_.EnableLineage) {
         program->SetEnableLineage();
     }

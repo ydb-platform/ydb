@@ -39,6 +39,7 @@ struct TDiskHandle {
     ui32 PDiskId;
     ui32 SlotId;
     ui32 FirstChunkId;
+    bool EnableChecksums = true;
 };
 
 class TTestContext {
@@ -87,6 +88,7 @@ public:
     TDiskHandle RegisterDDisk(ui32 pdiskId, ui32 slotId,
             std::optional<NDDisk::TPersistentBufferFormat> customFormat = std::nullopt,
             NDDisk::TDDiskConfig ddiskConfig = {}) {
+        const bool enableChecksums = ddiskConfig.EnableChecksums;
         const TActorId pdiskEdge = Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         const TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
         Runtime.RegisterService(pdiskServiceId, pdiskEdge);
@@ -118,7 +120,14 @@ public:
         const TActorId pbServiceId = MakeBlobStoragePersistentBufferId(NodeId, pdiskId, slotId);
         Runtime.RegisterService(ddiskServiceId, ddiskActor);
 
-        return TDiskHandle{ddiskServiceId, pbServiceId, pdiskEdge, pdiskId, slotId, 100000 + pdiskId * 1000};
+        return TDiskHandle{
+            ddiskServiceId,
+            pbServiceId,
+            pdiskEdge,
+            pdiskId,
+            slotId,
+            100000 + pdiskId * 1000,
+            enableChecksums};
     }
 
     std::set<TActorId> ClientWaitEdges(std::initializer_list<TActorId> extra = {}) const {
@@ -380,6 +389,69 @@ public:
             *bootReclaimedChunks = reclaim->Get()->CommitRecord.DeleteChunks;
             ReplyLog(disk, *reclaim);
         }
+        std::set<std::pair<ui64, ui64>> restoredDataChunks;
+        std::set<std::pair<ui64, ui64>> restoredDataChunksWithExtents;
+        bool hasIntegrityChunks = false;
+        const auto inspectChunkMap = [&](const auto& chunkMap) {
+            using TChunkMapLogRecord =
+                NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+            switch (chunkMap.GetRecordCase()) {
+                case TChunkMapLogRecord::kSnapshot:
+                    for (const auto& tablet : chunkMap.GetSnapshot().GetTabletRecords()) {
+                        for (const auto& chunk : tablet.GetChunkRefs()) {
+                            if (!chunk.GetChunkIdx()) {
+                                continue;
+                            }
+                            const auto key = std::make_pair(
+                                tablet.GetTabletId(), chunk.GetVChunkIndex());
+                            restoredDataChunks.insert(key);
+                            if (chunk.HasExtentRef()) {
+                                restoredDataChunksWithExtents.insert(key);
+                            }
+                        }
+                    }
+                    hasIntegrityChunks |=
+                        chunkMap.GetSnapshot().IntegrityChunksSize() != 0;
+                    break;
+                case TChunkMapLogRecord::kIncrement: {
+                    const auto& increment = chunkMap.GetIncrement();
+                    const auto& dataChunk = increment.GetDataChunk();
+                    if (dataChunk.GetChunkIdx()) {
+                        const auto key = std::make_pair(
+                            dataChunk.GetTabletId(), dataChunk.GetVChunkIndex());
+                        restoredDataChunks.insert(key);
+                        if (dataChunk.HasExtentRef()) {
+                            restoredDataChunksWithExtents.insert(key);
+                        }
+                    }
+                    hasIntegrityChunks |= increment.HasIntegrityChunk();
+                    break;
+                }
+                default:
+                    break;
+            }
+        };
+        if (chunkMapSnapshot) {
+            inspectChunkMap(*chunkMapSnapshot);
+        }
+        for (const auto& [record, lsn] : replay) {
+            Y_UNUSED(lsn);
+            inspectChunkMap(record);
+        }
+        const bool hasDataChunks = !restoredDataChunks.empty();
+        const bool hasDataChunksWithoutExtents = std::any_of(
+            restoredDataChunks.begin(),
+            restoredDataChunks.end(),
+            [&](const auto& key) {
+                return !restoredDataChunksWithExtents.contains(key);
+            });
+        if ((!disk.EnableChecksums && hasIntegrityChunks)
+                || (disk.EnableChecksums
+                    && (hasDataChunksWithoutExtents
+                        || (hasDataChunks && !hasIntegrityChunks)))) {
+            // The actor has entered Broken and does not perform normal reserve/PB bootstrap.
+            return;
+        }
 
         // DDisk bootstrap starts persistent buffer initialization in background.
         // Burn these PDisk requests here, so later client-only phases don't see unsolicited PDisk traffic.
@@ -391,6 +463,98 @@ public:
             reserveReply->ChunkIds.push_back(disk.FirstChunkId + i);
         }
         SendPDiskResponse(disk, *reserve, reserveReply.release());
+
+        if (!disk.EnableChecksums) {
+            ui32 pbLogs = 0;
+            bool checkSpaceReplied = false;
+            std::map<TChunkIdx, ui32> formattedBytes;
+            std::set<TChunkIdx> formattedChunks;
+            while (pbLogs < PersistentBufferInitChunks
+                    || formattedChunks.size() < startupReserveChunks) {
+                auto raw = Runtime.WaitForEdgeActorEvent({disk.PDiskEdge});
+                switch (raw->GetTypeRewrite()) {
+                    case NPDisk::TEvChunkWriteRaw::EventType: {
+                        auto write =
+                            RecastEvent<NPDisk::TEvChunkWriteRaw>(std::move(raw));
+                        const auto& request = *write->Get();
+                        ui32& expectedOffset = formattedBytes[request.ChunkIdx];
+                        UNIT_ASSERT_VALUES_EQUAL(request.Offset, expectedOffset);
+                        for (auto it = request.Data.Begin(); it.Valid();
+                                it.AdvanceToNextContiguousBlock()) {
+                            const char* data = it.ContiguousData();
+                            UNIT_ASSERT_C(
+                                std::all_of(
+                                    data,
+                                    data + it.ContiguousSize(),
+                                    [](char value) { return value == 0; }),
+                                "chunk formatting must write only zeroes");
+                        }
+                        expectedOffset += request.Data.size();
+                        UNIT_ASSERT(expectedOffset <= chunkSize);
+                        if (expectedOffset == chunkSize) {
+                            UNIT_ASSERT(
+                                formattedChunks.insert(request.ChunkIdx).second);
+                        }
+                        SendPDiskResponse(
+                            disk,
+                            *write,
+                            new NPDisk::TEvChunkWriteRawResult(
+                                NKikimrProto::OK, ""));
+                        break;
+                    }
+                    case NPDisk::TEvLog::EventType: {
+                        auto log = RecastEvent<NPDisk::TEvLog>(std::move(raw));
+                        UNIT_ASSERT(pbLogs < PersistentBufferInitChunks);
+                        ReplyLog(disk, *log);
+                        ++pbLogs;
+                        break;
+                    }
+                    case NPDisk::TEvCheckSpace::EventType: {
+                        auto checkSpace =
+                            RecastEvent<NPDisk::TEvCheckSpace>(std::move(raw));
+                        SendPDiskResponse(
+                            disk,
+                            *checkSpace,
+                            new NPDisk::TEvCheckSpaceResult(
+                                NKikimrProto::OK,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                "",
+                                0));
+                        checkSpaceReplied = true;
+                        break;
+                    }
+                    default:
+                        UNIT_FAIL(
+                            "unexpected PDisk event during checksums-disabled boot: "
+                            << raw->GetTypeRewrite());
+                }
+            }
+            if (!checkSpaceReplied) {
+                auto checkSpace =
+                    WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
+                SendPDiskResponse(
+                    disk,
+                    *checkSpace,
+                    new NPDisk::TEvCheckSpaceResult(
+                        NKikimrProto::OK,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        "",
+                        0));
+            }
+            return;
+        }
 
         for (ui32 i = 0; i < PersistentBufferInitChunks; ++i) {
             std::unique_ptr<TEventHandle<NPDisk::TEvLog>> log;
@@ -2449,6 +2613,71 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             "checksum-mismatched source data must not persist target data or integrity metadata");
     }
 
+    Y_UNIT_TEST(ChecksumsDisabledSyncIgnoresSourceChecksums) {
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.EnableChecksums = false;
+        const TDiskHandle disk =
+            ctx.RegisterDDisk(10, 4, std::nullopt, config);
+        ctx.BootstrapDDisk(disk, 4u << 20);
+        NDDisk::TQueryCredentials creds =
+            Connect(ctx, disk.ServiceId, 53, 1);
+
+        const ui32 srcPDiskId = 95;
+        const ui32 srcSlotId = 1;
+        const TActorId fakeSourceEdge =
+            ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(
+            MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId),
+            fakeSourceEdge);
+
+        auto sync = std::make_unique<NDDisk::TEvSync>(creds);
+        sync->AddSegmentFromDDisk(
+            MakeSyncSourceId(srcPDiskId, srcSlotId),
+            42,
+            NDDisk::TBlockSelector(0, 0, BlockSize));
+        SendToDDisk(ctx, disk.ServiceId, sync.release());
+
+        auto readReq =
+            ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge});
+        const TString payload = MakeData('I', BlockSize);
+        const std::vector<ui64> badChecksums{
+            NDDisk::CalculateRawChecksum(payload.data(), payload.size()) + 1};
+        ctx.Runtime.Send(
+            new IEventHandle(
+                readReq->Sender,
+                fakeSourceEdge,
+                new NDDisk::TEvReadResult(
+                    TReplyStatus::OK,
+                    std::nullopt,
+                    TRope(payload),
+                    badChecksums),
+                0,
+                readReq->Cookie),
+            NodeId);
+
+        auto traffic =
+            ctx.CollectAllocationTraffic(disk, true, 1, true);
+        const auto increment =
+            TTestContext::ParseChunkMapLog(*traffic.Increment->Get());
+        UNIT_ASSERT(increment.GetChecksumsDisabled());
+        UNIT_ASSERT(!increment.GetIncrement().GetDataChunk().HasExtentRef());
+        UNIT_ASSERT(ctx.AutoServedIntegrityWriteChunks.empty());
+
+        ctx.SendPDiskResponse(
+            disk,
+            *traffic.DataWrites.front(),
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.ReplyLog(disk, *traffic.Increment);
+        auto result = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
+        AssertStatus(result, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.SegmentResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(
+                result->Get()->Record.GetSegmentResults(0).GetStatus()),
+            static_cast<int>(TReplyStatus::OK));
+    }
+
     Y_UNIT_TEST(SyncRejectsSourceChecksumCountMismatchBeforeWrite) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(10, 3);
@@ -3756,7 +3985,14 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TActorId pbServiceId = MakeBlobStoragePersistentBufferId(NodeId, pdiskId, slotId);
         ctx.Runtime.RegisterService(ddiskServiceId, ddiskActor);
 
-        TDiskHandle disk{ddiskServiceId, pbServiceId, pdiskEdge, pdiskId, slotId, 100000 + pdiskId * 1000};
+        TDiskHandle disk{
+            ddiskServiceId,
+            pbServiceId,
+            pdiskEdge,
+            pdiskId,
+            slotId,
+            100000 + pdiskId * 1000,
+            true};
 
         const NPDisk::TOwner Owner = 1;
         const NPDisk::TOwnerRound OwnerRound = 1;
@@ -6916,6 +7152,242 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             "no PDisk request (deallocation) should be issued when ownedChunks == InitChunks");
 
         UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks);
+    }
+
+    Y_UNIT_TEST(ChecksumsOnToOffTransitionBreaksDDisk) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+        constexpr ui64 TabletId = 501;
+        constexpr ui32 DataChunkIdx = 700;
+        constexpr ui32 IntegrityChunkIdx = 701;
+
+        TChunkMapLogRecord enabledSnapshot;
+        auto* snapshot = enabledSnapshot.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(TabletId);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(3);
+        chunk->SetChunkIdx(DataChunkIdx);
+        chunk->MutableExtentRef()->SetIntegrityChunkIdx(IntegrityChunkIdx);
+        chunk->MutableExtentRef()->SetExtentSlot(4);
+        chunk->MutableExtentRef()->SetVChunkGeneration(9);
+        auto* integrityChunk = snapshot->AddIntegrityChunks();
+        integrityChunk->SetChunkIdx(IntegrityChunkIdx);
+        integrityChunk->SetGeneration(8);
+        snapshot->SetGenerationCounter(9);
+
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.EnableChecksums = false;
+        const TDiskHandle disk =
+            ctx.RegisterDDisk(81, 1, std::nullopt, config);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &enabledSnapshot,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = TabletId;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {3, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "integrity chunks while EnableChecksums=false");
+    }
+
+    Y_UNIT_TEST(ChecksumsOffToOnTransitionBreaksDDisk) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord disabledSnapshot;
+        disabledSnapshot.SetChecksumsDisabled(true);
+        auto* snapshot = disabledSnapshot.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(502);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(4);
+        chunk->SetChunkIdx(702);
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(82, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &disabledSnapshot,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 502;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {4, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "data chunks without integrity chunks while EnableChecksums=true");
+    }
+
+    Y_UNIT_TEST(ChecksumsEnabledRejectsMissingIntegrityChunks) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord snapshotWithDanglingExtent;
+        auto* snapshot = snapshotWithDanglingExtent.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(506);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(6);
+        chunk->SetChunkIdx(706);
+        chunk->MutableExtentRef()->SetIntegrityChunkIdx(707);
+        chunk->MutableExtentRef()->SetExtentSlot(0);
+        chunk->MutableExtentRef()->SetVChunkGeneration(1);
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(86, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &snapshotWithDanglingExtent,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 506;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {6, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "data chunks without integrity chunks while EnableChecksums=true");
+    }
+
+    Y_UNIT_TEST(ChecksumsEnabledRejectsDataChunkWithoutExtent) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord transitionedSnapshot;
+        transitionedSnapshot.SetChecksumsDisabled(true);
+        auto* snapshot = transitionedSnapshot.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(505);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(5);
+        chunk->SetChunkIdx(704);
+        auto* integrityChunk = snapshot->AddIntegrityChunks();
+        integrityChunk->SetChunkIdx(705);
+        integrityChunk->SetGeneration(1);
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(85, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &transitionedSnapshot,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 505;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {5, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "data chunks without integrity extents while EnableChecksums=true");
+    }
+
+    Y_UNIT_TEST(EmptyDDiskAllowsChecksumsModeChange) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord disabledSnapshot;
+        disabledSnapshot.SetChecksumsDisabled(true);
+        disabledSnapshot.MutableSnapshot();
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(83, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &disabledSnapshot,
+            10);
+
+        const NDDisk::TQueryCredentials creds =
+            Connect(ctx, disk.ServiceId, 503, 1);
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {0, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(IntegrityChunksWithChecksumsDisabledBreaksDDisk) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord enabledSnapshot;
+        auto* integrityChunk =
+            enabledSnapshot.MutableSnapshot()->AddIntegrityChunks();
+        integrityChunk->SetChunkIdx(703);
+        integrityChunk->SetGeneration(1);
+
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.EnableChecksums = false;
+        const TDiskHandle disk =
+            ctx.RegisterDDisk(84, 1, std::nullopt, config);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &enabledSnapshot,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 504;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {0, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "integrity chunks while EnableChecksums=false");
     }
 
 } // Y_UNIT_TEST_SUITE

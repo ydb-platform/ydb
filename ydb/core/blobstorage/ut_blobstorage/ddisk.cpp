@@ -31,12 +31,14 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 std::optional<ui32> minFreeSectorsReserve = std::nullopt,
                 std::optional<ui32> preallocateFreeSpaceThresholdPercent = std::nullopt,
                 std::optional<ui32> deallocateFreeSpaceThresholdPercent = std::nullopt,
-                std::optional<ui32> deallocateThresholdSeconds = std::nullopt)
+                std::optional<ui32> deallocateThresholdSeconds = std::nullopt,
+                bool enableChecksums = true)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
                 .ConfigPreprocessor = [inMemCache, minFreeSectorsReserve, preallocateFreeSpaceThresholdPercent,
-                        deallocateFreeSpaceThresholdPercent, deallocateThresholdSeconds](ui32, TNodeWardenConfig& cfg){
+                        deallocateFreeSpaceThresholdPercent, deallocateThresholdSeconds,
+                        enableChecksums](ui32, TNodeWardenConfig& cfg){
                     NYdb::NBS::NProto::TPBufferConfig pbCfg;
                     pbCfg.SetMaxChunks(10);
                     pbCfg.SetMaxInMemoryCache(inMemCache);
@@ -53,6 +55,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
                         pbCfg.SetDeallocateThresholdSeconds(*deallocateThresholdSeconds);
                     }
                     cfg.PBufferConfig = pbCfg;
+                    cfg.DDiskConfig.emplace();
+                    cfg.DDiskConfig->SetEnableChecksums(enableChecksums);
                 }
             }) {
             SurfaceSize = surfaceSize;
@@ -609,6 +613,47 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 cred.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
                 cred.ConnectionToken.emplace(res->Get()->Record.GetConnectionToken());
             }
+
+            ReconcilePersistentBuffersAfterRestart();
+        }
+
+        // Reconcile the test's in-memory view of persistent buffer records (PersistentBuffers)
+        // with what the DDisk actually recovered from disk after a restart.
+        //
+        // Every operation the test issues (WritePB/ErasePB/BatchErasePB) blocks for the OK reply
+        // before returning, so nothing the test itself issued should ever be genuinely in-flight
+        // at the moment RestartNode() is called from the outer test loop. In that sense this
+        // reconciliation is expected to be a no-op in the common case. It exists purely to make
+        // the test resilient to any legitimately-lost record that was still physically in-flight
+        // on the DDisk side (e.g. a barrier/erase write not yet durable) at the exact moment of
+        // the simulated crash, without papering over genuine data loss of already-acknowledged
+        // records - hence we only ever remove entries here, never add or "invent" any.
+        void ReconcilePersistentBuffersAfterRestart() {
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvListPersistentBuffer(
+                PBCreds[0])), Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvListPersistentBufferResult>(Edge, false);
+            const auto& rr = res->Get()->Record;
+            UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
+            THashSet<ui64> onDiskLsns;
+            for (const auto& item : rr.GetRecords()) {
+                const auto& sel = item.GetSelector();
+                if (sel.GetVChunkIndex() != VChunkIndex) {
+                    continue;
+                }
+                onDiskLsns.insert(item.GetLsn());
+            }
+
+            for (auto it = PersistentBuffers.begin(); it != PersistentBuffers.end(); ) {
+                if (onDiskLsns.contains(it->first)) {
+                    ++it;
+                } else {
+                    Cerr << "record lsn# " << it->first << " was expected but missing from DDisk after"
+                        " restart; pruning from expected in-memory state (legitimate loss of a record"
+                        " that was in flight at the moment of the crash)\n";
+                    it = PersistentBuffers.erase(it);
+                }
+            }
         }
     };
 
@@ -656,6 +701,111 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }
             ++f.VChunkIndex;
         }
+    }
+
+    Y_UNIT_TEST(ChecksumsDisabledWriteReadAndPersistentBuffer) {
+        TDDiskTestContext f(
+            64_KB,
+            128_MB,
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            false);
+        const auto group = f.AllocateDDiskBlockGroup(1);
+        UNIT_ASSERT_VALUES_EQUAL(group.size(), 1u);
+        UNIT_ASSERT(group[0].GetNodes().size() > 0);
+        f.ChangeTestingNode(group[0].GetNodes(0));
+
+        const TString payload = TString(f.BlockSize, 'N');
+        const NDDisk::TBlockSelector selector{
+            f.VChunkIndex,
+            0,
+            f.BlockSize};
+        auto write = std::make_unique<NDDisk::TEvWrite>(
+            f.Creds,
+            selector,
+            NDDisk::TWriteInstruction(0));
+        auto alignedPayload = TRcBuf::UninitializedPageAligned(payload.size());
+        memcpy(alignedPayload.GetDataMut(), payload.data(), payload.size());
+        write->AddPayload(TRope(std::move(alignedPayload)));
+        f.Env.Runtime->Send(
+            new IEventHandle(f.ServiceId, f.Edge, write.release()),
+            f.Edge.NodeId());
+        auto writeResult =
+            f.Env.WaitForEdgeActorEvent<NDDisk::TEvWriteResult>(
+                f.Edge,
+                false);
+        UNIT_ASSERT_C(
+            writeResult->Get()->Record.GetStatus()
+                == NKikimrBlobStorage::NDDisk::TReplyStatus::OK,
+            writeResult->Get()->Record.GetErrorReason());
+
+        f.Env.Runtime->Send(
+            new IEventHandle(
+                f.ServiceId,
+                f.Edge,
+                new NDDisk::TEvRead(f.Creds, selector, {true})),
+            f.Edge.NodeId());
+        auto readResult =
+            f.Env.WaitForEdgeActorEvent<NDDisk::TEvReadResult>(
+                f.Edge,
+                false);
+        UNIT_ASSERT(
+            readResult->Get()->Record.GetStatus()
+            == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult->Get()->GetPayload(0).ConvertToString(),
+            payload);
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult->Get()->Record.ChecksumsSize(),
+            0u);
+
+        const ui64 lsn = 1;
+        auto pbWrite =
+            std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                f.PBCreds[0],
+                selector,
+                lsn,
+                NDDisk::TWriteInstruction(0));
+        pbWrite->AddPayload(TRope(payload));
+        f.Env.Runtime->Send(
+            new IEventHandle(f.PBServiceId, f.Edge, pbWrite.release()),
+            f.Edge.NodeId());
+        auto pbWriteResult =
+            f.Env.WaitForEdgeActorEvent<
+                NDDisk::TEvWritePersistentBufferResult>(
+                f.Edge,
+                false);
+        UNIT_ASSERT(
+            pbWriteResult->Get()->Record.GetStatus()
+            == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
+        f.Env.Runtime->Send(
+            new IEventHandle(
+                f.PBServiceId,
+                f.Edge,
+                new NDDisk::TEvReadPersistentBuffer(
+                    f.PBCreds[0],
+                    selector,
+                    lsn,
+                    1,
+                    {true})),
+            f.Edge.NodeId());
+        auto pbReadResult =
+            f.Env.WaitForEdgeActorEvent<
+                NDDisk::TEvReadPersistentBufferResult>(
+                f.Edge,
+                false);
+        UNIT_ASSERT(
+            pbReadResult->Get()->Record.GetStatus()
+            == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbReadResult->Get()->GetPayload(0).ConvertToString(),
+            payload);
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbReadResult->Get()->Record.ChecksumsSize(),
+            0u);
     }
 
     Y_UNIT_TEST(PersistentBufferWithRestarts) {

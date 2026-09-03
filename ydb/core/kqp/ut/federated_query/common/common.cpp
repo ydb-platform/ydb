@@ -258,8 +258,8 @@ std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCoun
     };
 
     return [txCount, stagesCount, stringCounter](const std::string& ast) {
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
+        UNIT_ASSERT_VALUES_EQUAL_C(stringCounter(ast, "KqpPhysicalTx"), txCount, "Ast:\n" << ast);
+        UNIT_ASSERT_VALUES_EQUAL_C(stringCounter(ast, "DqPhyStage"), stagesCount, "Ast:\n" << ast);
     };
 }
 

@@ -27,14 +27,14 @@ namespace NActors {
 
     void TCpuManager::SetupShared() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared");
-        bool hasSharedThread = false;
+        bool needsSharedPool = false;
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
-            if (cfg.HasSharedThread) {
-                hasSharedThread = true;
+            if (cfg.HasSharedThread || cfg.AllThreadsAreShared) {
+                needsSharedPool = true;
                 break;
             }
         }
-        if (!hasSharedThread) {
+        if (!needsSharedPool) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared: no shared threads, skipping");
             return;
         }

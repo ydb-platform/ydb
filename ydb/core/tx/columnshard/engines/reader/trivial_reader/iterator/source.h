@@ -412,11 +412,14 @@ public:
 
     void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
         auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-        if (!context->IsActive()) {
+        const auto duplicatesManager = context->GetDuplicatesManager();
+        if (!duplicatesManager) {
+            // Scan abort raced with this step: UnregisterActors already dropped the manager.
+            AFL_VERIFY(!context->IsActive());
             return;
         }
         NActors::TActivationContext::AsActorContext().Send(
-            context->GetDuplicatesManagerVerified(), new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
+            duplicatesManager, new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 
     std::optional<ui64> GetPortionIdOptional() const override {

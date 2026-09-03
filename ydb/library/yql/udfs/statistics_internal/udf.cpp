@@ -1,4 +1,5 @@
 #include <ydb/library/yql/udfs/statistics_internal/all_agg_funcs.h>
+#include <ydb/library/yql/udfs/statistics_internal/presort_key_udf.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <util/string/cast.h>
 
@@ -360,6 +361,7 @@ public:
 
     void GetAllFunctions(NYql::NUdf::IFunctionsSink& sink) const final {
         (GetAllFunctionsImpl<TAggFuncList>(sink), ...);
+        sink.Add(TPresortKeyFunc::Name())->SetTypeAwareness();
     }
 
     void BuildFunctionTypeInfo(
@@ -369,8 +371,12 @@ public:
         ui32 flags,
         NYql::NUdf::IFunctionTypeInfoBuilder& builder) const override {
         try {
+            const bool typesOnly = (flags & TFlags::TypesOnly);
             bool found = (BuildFunctionTypeInfoImpl<TAggFuncList>(
                 name, userType, typeConfig, flags, builder) || ...);
+            if (!found) {
+                found = TPresortKeyFunc::DeclareSignature(name, userType, builder, typesOnly);
+            }
             if (!found) {
                 TStringBuilder sb;
                 sb << "Unknown function: " << TStringBuf(name);

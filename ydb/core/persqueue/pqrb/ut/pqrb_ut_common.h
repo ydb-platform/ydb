@@ -5,6 +5,9 @@
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/vector.h>
@@ -21,10 +24,34 @@ inline void DispatchFor(TTestContext& tc, TDuration timeout = TDuration::MilliSe
 inline THolder<TEvPersQueue::TEvGetPartitionsLocationResponse> SendLocationRequest(
     TTestContext& tc,
     TEvPersQueue::TEvGetPartitionsLocation* request,
-    TDuration timeout = TDuration::Seconds(10)
+    TDuration timeout = TDuration::Seconds(10),
+    ui64 cookie = 0,
+    ui64* responseCookie = nullptr
 ) {
-    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request, 0, GetPipeConfigWithRetries());
-    return tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(timeout);
+    if (responseCookie) {
+        *responseCookie = Max<ui64>();
+        tc.Runtime->SetObserverFunc([responseCookie, edge = tc.Edge](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPersQueue::TEvGetPartitionsLocationResponse::EventType &&
+                ev->Recipient == edge)
+            {
+                *responseCookie = ev->Cookie;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+    }
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        request,
+        0,
+        GetPipeConfigWithRetries(),
+        TActorId(),
+        cookie);
+    auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(timeout);
+    if (responseCookie) {
+        tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+    }
+    return response;
 }
 
 inline void WaitBalancerReady(TTestContext& tc, ui32 retries = 20) {
@@ -144,6 +171,38 @@ inline void NotifyDatabasePath(TTestContext& tc, const TString& path = "/Root") 
     auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, path, TPathId{}, cres);
     ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, tc.Edge, event.Release());
     DispatchFor(tc, TDuration::MilliSeconds(200));
+}
+
+struct TProposeCapture {
+    std::vector<NKikimrTxUserProxy::TEvProposeTransaction> Records;
+};
+
+class TCapturingTxProxy : public NActors::TActor<TCapturingTxProxy> {
+public:
+    explicit TCapturingTxProxy(TProposeCapture* cap)
+        : TActor(&TThis::State)
+        , Cap(cap)
+    {}
+
+    STRICT_STFUNC(State,
+        hFunc(TEvTxUserProxy::TEvProposeTransaction, Handle);
+    )
+
+private:
+    void Handle(TEvTxUserProxy::TEvProposeTransaction::TPtr& ev) {
+        Cap->Records.push_back(ev->Get()->Record);
+    }
+
+    TProposeCapture* Cap;
+};
+
+inline void InstallProposeCapture(TTestContext& tc, TProposeCapture& cap) {
+    auto id = tc.Runtime->Register(new TCapturingTxProxy(&cap));
+    tc.Runtime->RegisterService(MakeTxProxyID(), id);
+}
+
+inline void WaitProposes(TTestContext& tc, TProposeCapture& cap, size_t n = 1) {
+    tc.Runtime->WaitFor("TEvProposeTransaction", [&] { return cap.Records.size() >= n; }, TDuration::Seconds(10));
 }
 
 } // namespace NKikimr::NPQ

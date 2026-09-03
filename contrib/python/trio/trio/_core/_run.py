@@ -33,7 +33,7 @@ from sortedcontainers import SortedDict
 from .. import _core
 from .._abc import Clock, Instrument
 from .._deprecate import warn_deprecated
-from .._util import NoPublicConstructor, coroutine_or_error, final
+from .._util import NoPublicConstructor, coroutine_or_error, final, raise_saving_context
 from ._asyncgens import AsyncGenerators
 from ._concat_tb import concat_tb
 from ._entry_queue import EntryQueue, TrioToken
@@ -75,7 +75,6 @@ if TYPE_CHECKING:
 
     # for some strange reason Sphinx works with outcome.Outcome, but not Outcome, in
     # start_guest_run. Same with types.FrameType in iter_await_frames
-    import outcome
     from typing_extensions import Self, TypeVar, TypeVarTuple, Unpack
 
     PosArgT = TypeVarTuple("PosArgT")
@@ -359,7 +358,7 @@ class CancelStatus:
     an abort when their direct parent CancelStatus becomes cancelled.
 
     You can think of CancelStatus as being responsible for the
-    "plumbing" of cancellations as oppposed to CancelScope which is
+    "plumbing" of cancellations as opposed to CancelScope which is
     responsible for the origination of them.
 
     """
@@ -808,13 +807,9 @@ class CancelScope:
         """
         if self._relative_deadline != inf:
             assert self._deadline == inf
-            warnings.warn(
-                DeprecationWarning(
-                    "unentered relative cancel scope does not have an absolute deadline. Use `.relative_deadline`",
-                ),
-                stacklevel=2,
+            raise RuntimeError(
+                "Unentered relative cancel scope does not have an absolute deadline."
             )
-            return current_time() + self._relative_deadline
         return self._deadline
 
     @deadline.setter
@@ -823,13 +818,9 @@ class CancelScope:
             raise ValueError("deadline must not be NaN")
         if self._relative_deadline != inf:
             assert self._deadline == inf
-            warnings.warn(
-                DeprecationWarning(
-                    "unentered relative cancel scope does not have an absolute deadline. Transforming into an absolute cancel scope. First set `.relative_deadline = math.inf` if you do want an absolute cancel scope.",
-                ),
-                stacklevel=2,
+            raise RuntimeError(
+                "Unentered relative cancel scope does not have an absolute deadline."
             )
-            self._relative_deadline = inf
         with self._might_change_registered_deadline():
             self._deadline = float(new_deadline)
 
@@ -852,7 +843,7 @@ class CancelScope:
         elif self._deadline != inf:
             assert self._relative_deadline == inf
             raise RuntimeError(
-                "unentered non-relative cancel scope does not have a relative deadline",
+                "Unentered non-relative cancel scope does not have a relative deadline",
             )
         return self._relative_deadline
 
@@ -868,7 +859,7 @@ class CancelScope:
         elif self._deadline != inf:
             assert self._relative_deadline == inf
             raise RuntimeError(
-                "unentered non-relative cancel scope does not have a relative deadline",
+                "Unentered non-relative cancel scope does not have a relative deadline",
             )
         else:
             self._relative_deadline = new_relative_deadline
@@ -1466,7 +1457,7 @@ class Nursery(metaclass=NoPublicConstructor):
                     # cancel this nursery:
             except BaseExceptionGroup as exc:
                 if len(exc.exceptions) == 1:
-                    raise exc.exceptions[0] from None
+                    raise_saving_context(exc.exceptions[0])
                 raise TrioInternalError(
                     "Internal nursery should not have multiple tasks. This can be "
                     'caused by the user managing to access the "old" nursery in '

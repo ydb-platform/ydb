@@ -471,7 +471,7 @@ void TQueryPlanPrinter::PrintJson(const TString& plan) {
 }
 
 void TQueryPlanPrinter::PrintSvg(const TString& plan) {
-    TPlanVisualizer planViz;
+    NPlan2Svg::TPlanVisualizer planViz;
     planViz.LoadPlans(plan);
     Output << planViz.PrintSvg() << Endl;
 }

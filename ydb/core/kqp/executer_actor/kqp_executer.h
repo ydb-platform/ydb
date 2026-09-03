@@ -124,6 +124,13 @@ struct TEvKqpExecuter {
         TDuration CpuTime;
     };
 
+    struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,
+        TKqpExecuterEvents::EvPqTopicResolveStatus>
+    {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
+
     struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,
         TKqpExecuterEvents::EvDelayedExecution>
     {

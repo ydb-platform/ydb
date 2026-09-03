@@ -20,7 +20,7 @@ ui64 CalculateBlockChecksum(TRope::TConstIterator it, size_t numBytes) {
         return XXH3_64bits(it.ContiguousData(), numBytes);
     }
 
-    XXH3_state_t state;
+    XXH3_state_t state{};
     XXH3_64bits_reset(&state);
     for (; numBytes && it.Valid(); it.AdvanceToNextContiguousBlock()) {
         const size_t n = Min(numBytes, it.ContiguousSize());
@@ -61,7 +61,7 @@ ui64 CalculateRawChecksumZeroedField(const void* data, size_t size, size_t field
     Y_ABORT_UNLESS(fieldOffset + fieldSize <= size);
     const char* bytes = static_cast<const char*>(data);
 
-    XXH3_state_t state;
+    XXH3_state_t state{};
     XXH3_64bits_reset(&state);
     if (fieldOffset) {
         XXH3_64bits_update(&state, bytes, fieldOffset);

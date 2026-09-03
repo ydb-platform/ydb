@@ -1,0 +1,31 @@
+PY3TEST()
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+
+FORK_TEST_FILES()
+FORK_TESTS()
+FORK_SUBTESTS()
+SPLIT_FACTOR(10)
+
+TEST_SRCS(
+    test_s3_router_metrics.py
+)
+
+SIZE(LARGE)
+REQUIREMENTS(cpu:4)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
+
+ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")
+
+DEPENDS(
+    ydb/apps/dstool
+    ydb/tests/library/compatibility/binaries
+)
+
+PEERDIR(
+    contrib/python/boto3
+    ydb/tests/library
+    ydb/tests/library/compatibility
+)
+
+END()

@@ -375,6 +375,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             pdiskConfig.SetPath(pdiskPath);
             pdiskConfig.SetGuid(1);
             pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+            pdiskConfig.SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
 
             if (node.VDisksMoved) {
                 continue;
@@ -955,6 +956,32 @@ TCmsTestEnv::RequestDDiskInfo(ui64 tabletId)
 
     TAutoPtr<IEventHandle> handle;
     auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskInfoGetResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrCms::TDDiskTabletListResponse
+TCmsTestEnv::RequestDDiskTabletList(const NKikimrCms::TDDiskTabletListRequest &request)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskTabletListRequest>();
+    event->Record.CopyFrom(request);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskTabletListResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrCms::TDDiskDiskListResponse
+TCmsTestEnv::RequestDDiskDiskList(const NKikimrCms::TDDiskDiskListRequest &request)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskDiskListRequest>();
+    event->Record.CopyFrom(request);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskDiskListResponse>(handle);
     UNIT_ASSERT(reply);
     return reply->Record;
 }

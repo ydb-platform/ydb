@@ -1,3 +1,5 @@
+* Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
+
 # v3.22.0
 
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.

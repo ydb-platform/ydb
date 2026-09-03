@@ -3612,7 +3612,7 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
     if (!maybeHopTraits) {
         return nullptr;
     }
-    const auto hopTraits = *maybeHopTraits;
+    const auto& hopTraits = *maybeHopTraits;
 
     const auto aggregateInputType = GetSeqItemType(*aggregate.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
     NHopping::TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hopTraits.Column);
@@ -3800,7 +3800,7 @@ TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStri
         return maybeUdfApply.Cast().Arg(1).Ptr();
     };
 
-    const auto directRes = directCase(apply);
+    auto directRes = directCase(apply);
     if (directRes.Get() != node.Get()) {
         return directRes;
     }

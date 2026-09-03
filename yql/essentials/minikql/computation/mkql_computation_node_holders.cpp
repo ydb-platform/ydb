@@ -263,8 +263,7 @@ public:
     {
     }
 
-    ~TVectorHolderBase() override {
-    }
+    ~TVectorHolderBase() override = default;
 
 private:
     class TValuesIterator: public TTemporaryComputationValue<TValuesIterator> {

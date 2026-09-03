@@ -62,38 +62,6 @@ jobs:
 
       - name: Dispatch docs build
         if: steps.docs-changes.outputs.has_docs == 'true'
-        run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Build
-        if: steps.docs-changes.outputs.has_docs == 'true'
-        uses: diplodoc-platform/docs-build-action@v3
-        with:
-          revision: "pr-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
-          src-root: "./ydb/docs"
-          cli-version: "stable"
-          use-ya-opensource: false
-
-      - name: Fail on documentation build issues
-        if: steps.docs-changes.outputs.has_docs == 'true'
-        run: |
-          set -euo pipefail
-          if [[ ! -f build-html.log ]]; then
-            echo "::error::Documentation build log (build-html.log) not found"
-            exit 1
-          fi
-          issue_count=$(grep -cE '^(ERR|WARN)' build-html.log || true)
-          if [[ "$issue_count" -gt 0 ]]; then
-            echo "::error::Documentation build has ${issue_count} error(s)/warning(s)"
-            grep -E '^(ERR|WARN)' build-html.log | sort -u | head -20
-            if [[ "$issue_count" -gt 20 ]]; then
-              echo "... and $((issue_count - 20)) more (see PR comment for full log)"
-            fi
-            exit 1
-          fi
-          echo "No documentation build warnings or errors"
-
-      - name: Remove rebuild_docs label
-        if: always()
         uses: actions/github-script@v8
         with:
           script: |

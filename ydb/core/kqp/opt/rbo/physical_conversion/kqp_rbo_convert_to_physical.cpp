@@ -1,6 +1,7 @@
 #include "kqp_rbo_physical_op_builder.h"
 #include "kqp_rbo_physical_convertion_utils.h"
 #include "kqp_rbo_physical_sort_builder.h"
+#include "kqp_rbo_physical_window_builder.h"
 #include "kqp_rbo_physical_aggregation_builder.h"
 #include "kqp_rbo_physical_map_builder.h"
 #include "kqp_rbo_physical_union_all_builder.h"
@@ -215,6 +216,22 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Sort " << opStageId;
+        } else if (op->Kind == EOperator::Window) {
+            auto window = CastOperator<TOpWindow>(op);
+            if (!currentStageBody) {
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
+                stageArgs[opStageId].push_back(stageArg);
+                currentStageBody = stageInput;
+            }
+            currentStageBody = Build<TPhysicalWindowBuilder>(window, ctx, op->Pos, currentStageBody);
+
+            if (!window->IsSingleConsumer()) {
+                currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, window->GetNumOfConsumers(), ctx, op->Pos);
+            }
+
+            stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
+            YQL_CLOG(TRACE, CoreDq) << "Converted Window " << opStageId;
         } else if (op->Kind == EOperator::Join) {
             auto join = CastOperator<TOpJoin>(op);
             Y_ENSURE(join->Props.UseBlockHashJoin.has_value(), "Physical join implementation has not been selected");

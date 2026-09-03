@@ -484,6 +484,12 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
         joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
     }
 
+    if (joinAlgo != NKikimr::NKqp::EJoinAlgoType::MapJoin && joinAlgo != NKikimr::NKqp::EJoinAlgoType::GraceJoin &&
+        joinAlgo != NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin) {
+        YQL_CLOG(DEBUG, CoreDq) << "Join algo " << static_cast<int>(joinAlgo) << " has no physical implementation here taking GraceJoin";
+        joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
+    }
+
     const auto leftInputType = Join->GetLeftInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     const auto rightInputType = Join->GetRightInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     TModifyKeysList remapLeft;

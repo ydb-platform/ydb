@@ -299,6 +299,7 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
+    ui64 AffectedRows = 0;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
     TVector<ui64> BreakerQuerySpanIds;
@@ -319,6 +320,7 @@ struct TKqpTableWriterStatistics {
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
             EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
+            AffectedRows += tableAccessStats.GetAffectedRows();
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
@@ -396,6 +398,7 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
+        tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
 
         ReadRows = 0;
         ReadBytes = 0;
@@ -403,6 +406,7 @@ struct TKqpTableWriterStatistics {
         WriteBytes = 0;
         EraseRows = 0;
         EraseBytes = 0;
+        AffectedRows = 0;
 
         tableStats->SetAffectedPartitions(
             tableStats->GetAffectedPartitions() + AffectedPartitions.size());
@@ -460,6 +464,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
         const NKikimrDataEvents::ELockMode lockMode,
+        const bool collectAffectedRows,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
@@ -468,6 +473,7 @@ public:
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
         , LockMode(lockMode)
+        , CollectAffectedRows(collectAffectedRows)
         , Database(database)
         , TableId(tableId)
         , TablePath(tablePath)
@@ -1343,6 +1349,8 @@ public:
             evWrite->Record.SetLockMode(LockMode);
         }
 
+        evWrite->Record.SetCollectAffectedRows(CollectAffectedRows);
+
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -1676,6 +1684,7 @@ private:
 
     const std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     const NKikimrDataEvents::ELockMode LockMode;
+    const bool CollectAffectedRows;
 
     const TString Database;
     const TTableId TableId;
@@ -2921,6 +2930,7 @@ public:
                 Alloc,
                 GetOptionalMvccSnapshot(Settings),
                 Settings.GetLockMode(),
+                Settings.GetCollectAffectedRows(),
                 nullptr,
                 TActorId{},
                 Counters,
@@ -3253,6 +3263,7 @@ struct TTransactionSettings {
     bool InconsistentTx = false;
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     NKikimrDataEvents::ELockMode LockMode;
+    bool CollectAffectedRows = false;
 };
 
 struct TWriteSettings {
@@ -3600,6 +3611,7 @@ public:
             Alloc,
             settings.TransactionSettings.MvccSnapshot,
             settings.TransactionSettings.LockMode,
+            settings.TransactionSettings.CollectAffectedRows,
             TxManager,
             SessionActorId,
             Counters,
@@ -6519,6 +6531,7 @@ private:
                     .InconsistentTx = Settings.GetInconsistentTx(),
                     .MvccSnapshot = GetOptionalMvccSnapshot(Settings),
                     .LockMode = Settings.GetLockMode(),
+                    .CollectAffectedRows = Settings.GetCollectAffectedRows(),
                 },
                 .Priority = Settings.GetPriority(),
                 .IsOlap = Settings.GetIsOlap(),

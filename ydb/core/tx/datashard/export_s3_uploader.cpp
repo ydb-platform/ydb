@@ -1158,3 +1158,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/statistics
     ydb/core/statistics/common
+    yql/essentials/minikql/computation
 )
 
 YQL_LAST_ABI_VERSION()

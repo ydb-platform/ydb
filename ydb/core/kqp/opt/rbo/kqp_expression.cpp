@@ -979,6 +979,36 @@ TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left
     return TExpression(lambda, ctx, props);
 }
 
+TExpression MakeUnaryCallable(const TString& callable, const TExpression& arg) {
+    Y_ENSURE(arg.Ctx);
+
+    auto node = arg.Ctx->NewCallable(arg.Node->Pos(), callable, {arg.GetExpressionBody()});
+    return TExpression(node, arg.Ctx, arg.PlanProps);
+}
+
+TExpression MakeEnsure(const TExpression& value, const TExpression& predicate, const TString& message) {
+    // Fetch context and plan properties from one of the arguments
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
+
+    for (const auto* expr : {&value, &predicate}) {
+        if (expr->Ctx) {
+            ctx = expr->Ctx;
+        }
+        if (expr->PlanProps) {
+            props = expr->PlanProps;
+        }
+    }
+
+    Y_ENSURE(ctx);
+    Y_ENSURE(props);
+
+    auto pos = value.Node->Pos();
+    auto messageNode = ctx->NewCallable(pos, "String", {ctx->NewAtom(pos, message)});
+    auto ensure = ctx->NewCallable(pos, "Ensure", {value.GetExpressionBody(), predicate.GetExpressionBody(), messageNode});
+    return TExpression(ensure, ctx, props);
+}
+
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);

@@ -1081,16 +1081,6 @@ private:
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
 
-        if (CheckpointCoordinatorId) {
-            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
-            CheckpointCoordinatorId = TActorId{};
-            const auto context = TasksGraph.GetMeta().UserRequestContext;
-            if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && context && !context->StreamingQueryPath.empty()) {
-                auto counters = Counters->Counters->GetKqpCounters();
-                counters = counters->GetSubgroup("host", "");
-                counters->RemoveSubgroup("path", context->StreamingQueryPath);
-            }
-        }
         TBase::PassAway();
     }
 

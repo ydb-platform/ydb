@@ -11,7 +11,6 @@
 #include <ydb/library/actors/core/events.h>
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/request_info.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/volume_label.h>

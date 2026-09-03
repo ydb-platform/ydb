@@ -87,6 +87,39 @@ private:
     std::atomic<ui32>* const ExecutionOwnerPoolId;
 };
 
+class THoldThreadActor : public NActors::TActorBootstrapped<THoldThreadActor> {
+public:
+    THoldThreadActor(TManualEvent* started, TManualEvent* release)
+        : Started(started)
+        , Release(release)
+    {}
+
+    void Bootstrap() {
+        Started->Signal();
+        Release->Wait();
+        PassAway();
+    }
+
+private:
+    TManualEvent* const Started;
+    TManualEvent* const Release;
+};
+
+class TSignalOnBootstrapActor : public NActors::TActorBootstrapped<TSignalOnBootstrapActor> {
+public:
+    explicit TSignalOnBootstrapActor(TManualEvent* done)
+        : Done(done)
+    {}
+
+    void Bootstrap() {
+        Done->Signal();
+        PassAway();
+    }
+
+private:
+    TManualEvent* const Done;
+};
+
 THolder<NActors::TActorSystemSetup> CreateActorSystemSetup(
         const NKikimrConfig::TActorSystemConfig& config)
 {
@@ -403,6 +436,101 @@ Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAfterIdle) {
     UNIT_ASSERT_C(ownerIsParked, "auto-configured adjacent User thread did not become idle");
     UNIT_ASSERT_C(completed,
         "auto-configured Batch pool did not execute a delayed event after its adjacent User owner became idle");
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        executionOwnerPoolId.load(std::memory_order_acquire),
+        ownerPoolId,
+        "Batch activation was not executed by its adjacent User owner");
+}
+
+Y_UNIT_TEST(AutoConfiguredAdjacentPoolWaitsForBusyOwnerWithoutForeignSlots) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetCpuCount(2);
+    config.SetUseSharedThreads(true);
+    config.SetUseUnitedPool(true);
+
+    ApplyAutoConfig(&config, false, false);
+
+    const ui32 ownerPoolId = config.GetSysExecutor();
+    const ui32 adjacentPoolId = config.GetBatchExecutor();
+    const ui32 foreignPoolId = config.GetServiceExecutor(0).GetExecutorId();
+    auto setup = CreateActorSystemSetup(config);
+
+    const auto& ownerPool = FindBasicPool(setup->CpuManager, ownerPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(ownerPool.DefaultThreadCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(
+        ownerPool.AdjacentPools,
+        (std::vector<i16>{static_cast<i16>(adjacentPoolId)}));
+
+    const auto& adjacentPool = FindBasicPool(setup->CpuManager, adjacentPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(adjacentPool.DefaultThreadCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(adjacentPool.ForcedForeignSlotCount, 0);
+
+    const auto& foreignPool = FindBasicPool(setup->CpuManager, foreignPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(foreignPool.DefaultThreadCount, 1);
+
+    NActors::TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    TManualEvent adjacentReady;
+    TManualEvent adjacentDone;
+    NActors::TActorId adjacentActorId;
+    std::atomic<ui32> executionOwnerPoolId = Max<ui32>();
+    actorSystem.Register(
+        new TStartAdjacentActor(
+            adjacentPoolId,
+            &adjacentReady,
+            &adjacentDone,
+            &adjacentActorId,
+            &executionOwnerPoolId),
+        NActors::TMailboxType::HTSwap,
+        ownerPoolId);
+    const bool adjacentActorIsReady = adjacentReady.WaitT(TDuration::Seconds(5));
+
+    TManualEvent ownerStarted;
+    TManualEvent releaseOwner;
+    if (adjacentActorIsReady) {
+        actorSystem.Register(
+            new THoldThreadActor(&ownerStarted, &releaseOwner),
+            NActors::TMailboxType::HTSwap,
+            adjacentPoolId);
+    }
+    const bool ownerIsBusy = adjacentActorIsReady
+        && ownerStarted.WaitT(TDuration::Seconds(5));
+
+    TManualEvent foreignDone;
+    if (ownerIsBusy) {
+        actorSystem.Register(
+            new TSignalOnBootstrapActor(&foreignDone),
+            NActors::TMailboxType::HTSwap,
+            foreignPoolId);
+    }
+    const bool foreignThreadIsAvailable = ownerIsBusy
+        && foreignDone.WaitT(TDuration::Seconds(5));
+
+    bool eventWasSent = false;
+    bool completedWhileOwnerWasBusy = false;
+    if (foreignThreadIsAvailable) {
+        eventWasSent = actorSystem.Send(
+            adjacentActorId,
+            new NActors::TEvents::TEvWakeup());
+        completedWhileOwnerWasBusy = eventWasSent
+            && adjacentDone.WaitT(TDuration::Seconds(1));
+    }
+
+    releaseOwner.Signal();
+    const bool completedAfterOwnerWasReleased = eventWasSent
+        && adjacentDone.WaitT(TDuration::Seconds(5));
+
+    actorSystem.Stop();
+    UNIT_ASSERT_C(adjacentActorIsReady, "auto-configured Batch actor did not initialize");
+    UNIT_ASSERT_C(ownerIsBusy, "adjacent User owner did not start blocking work");
+    UNIT_ASSERT_C(foreignThreadIsAvailable,
+        "non-adjacent shared thread did not execute while the adjacent owner was busy");
+    UNIT_ASSERT_C(eventWasSent, "failed to send an event to the auto-configured Batch actor");
+    UNIT_ASSERT_C(!completedWhileOwnerWasBusy,
+        "Batch activation used a foreign thread despite its zero forced foreign-slot limit");
+    UNIT_ASSERT_C(completedAfterOwnerWasReleased,
+        "Batch activation did not execute after its adjacent User owner was released");
     UNIT_ASSERT_VALUES_EQUAL_C(
         executionOwnerPoolId.load(std::memory_order_acquire),
         ownerPoolId,

@@ -4122,13 +4122,8 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         case TRule_table_hint::kAltTableHint4: {
             const auto& alt = rule.GetAlt_table_hint4();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
-            TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            TNodePtr expr = Unwrap(TSqlExpression(*this).Build(alt.GetRule_expr4()));
-            if (!expr) {
-                return false;
-            }
-            hints["watermark"] = {BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr))};
-            break;
+            Ctx_.Error(pos) << "WATERMARK AS (expr) syntax is deprecated and no longer supported, use WATERMARK = expr";
+            return false;
         }
 
         case TRule_table_hint::kAltTableHint5: {

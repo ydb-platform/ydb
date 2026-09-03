@@ -613,7 +613,7 @@ namespace NKikimr::NDDisk {
                     continue;
                 }
                 if (checksumsDisabled) {
-                    NextPersistentBufferHeaderUniqueId = Max(NextPersistentBufferHeaderUniqueId, header->PersistentBufferUniqueId + 1);
+                    NextPersistentBufferHeaderUniqueId = Max(NextPersistentBufferHeaderUniqueId, header->HeaderUniqueId + 1);
                 }
                 if (PersistentBufferBarriersManager.AddBarrier(header, chunkIdx, sectorIdx)) {
                     continue;

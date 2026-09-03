@@ -19,12 +19,24 @@ void TPlanVisualizer::LoadPlans(const NJson::TJsonValue& root) {
     Impl->LoadPlans(root);
 }
 
+void TPlanVisualizer::LoadPlansSafe(const TString& plans, bool simplified) {
+    Impl->LoadPlansSafe(plans, simplified);
+}
+
+void TPlanVisualizer::LoadPlansSafe(const NJson::TJsonValue& root) {
+    Impl->LoadPlansSafe(root);
+}
+
 TString TPlanVisualizer::PrintSvg() {
     return Impl->PrintSvg();
 }
 
 TString TPlanVisualizer::PrintSvgSafe() {
     return Impl->PrintSvgSafe();
+}
+
+const TString& TPlanVisualizer::GetLoadError() const {
+    return Impl->LoadError;
 }
 
 } // namespace NPlan2Svg

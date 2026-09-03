@@ -1937,6 +1937,13 @@ void ValidateSystemColumnSchema(
         return;
     }
 
+    if (options.AllowShuffleColumns) {
+        if (name == ShuffleProducerIdColumnName || name == ShuffleRowIdColumnName) {
+            validateType(ESimpleLogicalValueType::Int64);
+            return;
+        }
+    }
+
     if (options.AllowOperationColumns) {
         auto it = allowedOperationSystemColumns.find(name);
         if (it != allowedOperationSystemColumns.end()) {

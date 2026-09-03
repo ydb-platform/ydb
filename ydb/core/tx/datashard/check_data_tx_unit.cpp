@@ -340,3 +340,7 @@ THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

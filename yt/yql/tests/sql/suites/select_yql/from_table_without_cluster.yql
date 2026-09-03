@@ -1,5 +1,3 @@
-/* dqfile can not - missing langver support */
-/* hybridfile can not - missing langver support */
 /* custom error: No cluster name given and no default cluster is selected */
 PRAGMA YqlSelect = 'force';
 

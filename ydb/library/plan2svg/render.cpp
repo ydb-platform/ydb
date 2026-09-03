@@ -59,7 +59,7 @@ void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, co
         << "</g>" << Endl;
 }
 
-void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor) {
+void TPlan::PrintWaitTime(TStringBuilder& background, const std::shared_ptr<TSingleMetric>& metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor) {
 
     if (metric->WaitTime.MaxDeriv == 0) {
         return;
@@ -78,7 +78,7 @@ void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMet
         << "' stroke='none' fill='" << fillColor << "' />" << Endl;
 }
 
-void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed) {
+void TPlan::PrintSeries(TStringBuilder& canvas, const std::vector<std::pair<ui64, ui64>>& series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed) {
     if (MaxTime == 0 || maxValue == 0 || series.empty()) {
         return;
     }
@@ -402,7 +402,7 @@ void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     auto titleHeight = INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2;
 
     SummaryBuilder
-        << "<g data-group='g" << GroupId << "' class='selectable'><title> " << planName << "</title>" << Endl
+        << "<g data-group='g" << GroupId << "' class='selectable'><title> " << SvgEscape(planName) << "</title>" << Endl
         << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, TIME_HEIGHT + INTERNAL_HEIGHT, "background")
         << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, titleHeight, "Query - " + planName)
         << "</g>" << Endl;
@@ -502,10 +502,10 @@ void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
     ui32 y0 = INTERNAL_GAP_Y;
     ui32 index = 0;
-    for (auto op : s->Operators) {
+    for (const auto& op : s->Operators) {
         ui32 yt = y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2;
         s->Svg
-            << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
+            << "<g><title>" << SvgEscape(op.Name) << ": " << SvgEscape(op.Info) << (op.Blocks ? " Blocks: True" : "") << "</title>";
         if (op.Blocks) {
             auto h = INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y * 2;
             if (index == s->Operators.size() - 1) {
@@ -548,7 +548,7 @@ void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
                     auto it = Viz.CteSubPlans.find(input.PrecomputeRef);
                     if (it != Viz.CteSubPlans.end()) {
                         s->Svg
-                        << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
+                        << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << SvgEscape(it->second->NodeType) << "</title>" << Endl
                         << SvgStageId(opX, opY, "P")
                         << "</g>" << Endl;
                     }
@@ -823,36 +823,36 @@ void TPlan::PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui
         auto x = c->CteConnection ? c->CteIndentX : c->FromStage->IndentX;
         ui32 y = 0;
 
-        c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << c->NodeType << " connection";
+        c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << SvgEscape(c->NodeType) << " connection";
         if (!c->KeyColumns.empty()) {
             c->Svg << " KeyColumns: ";
             bool first = true;
-            for (auto k : c->KeyColumns) {
+            for (const auto& keyColumn : c->KeyColumns) {
                 if (first) {
                     first = false;
                 } else {
                     c->Svg << ", ";
                 }
-                c->Svg << k;
+                c->Svg << SvgEscape(keyColumn);
             }
         }
         if (!c->SortColumns.empty()) {
             c->Svg << " SortColumns: ";
             bool first = true;
-            for (auto s : c->SortColumns) {
+            for (const auto& sortColumn : c->SortColumns) {
                 if (first) {
                     first = false;
                 } else {
                     c->Svg << ", ";
                 }
-                c->Svg << s;
+                c->Svg << SvgEscape(sortColumn);
             }
         }
         if (c->Blocks) {
             c->Svg << " Blocks: True";
         }
         if (c->HashFunc) {
-            c->Svg << " HashFunc: " << c->HashFunc;
+            c->Svg << " HashFunc: " << SvgEscape(c->HashFunc);
         }
         if (c->Parallel) {
             c->Svg << " Parallel: True";
@@ -1087,7 +1087,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     offsetY += Height;
 }
 
-void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c) {
+void TPlan::PrintStage(TStringBuilder& builder, const std::shared_ptr<TStage>& stage, TConnection* c) {
 
     if (stage->Connections.size() > 1) {
         builder
@@ -1101,7 +1101,7 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
     builder << "</svg>" << Endl;
 
     auto y = stage->Height + GAP_Y;
-    for (auto c : stage->Connections) {
+    for (const auto& c : stage->Connections) {
         if (c->CteConnection) {
             builder << "<svg data-stage='outer cte' data-height='" << GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << y << "'>" << Endl;
             builder << "<svg data-stage='inner cte' data-height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << GAP_Y << "'>" << Endl;
@@ -1166,35 +1166,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, "NodeId = " + ToString(node->NodeId));
 
         ui32 y0 = INTERNAL_GAP_Y;
-/*
-        if (node->OutputBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            auto px = Config.TimelineLeft;
-            auto pw = Config.TimelineWidth;
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->OutputBytes.get(),
-                .Colors = Config.Palette.Output,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_output", Config.Palette.Output.Light, "0.0325 0.0325"},
-            });
-            PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.Output.Medium, Config.Palette.Output.Medium);
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-
-        if (node->MaxMemoryUsage) {
-            TString tooltip;
-            auto textSum = FormatTooltip(tooltip, "Memory", node->MaxMemoryUsage.get(), FormatBytes);
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->MaxMemoryUsage.get(),
-                .Colors = Config.Palette.Mem,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6"},
-            });
-        }
-*/
         ui32 px = Config.TimelineLeft;
         ui32 pw = Config.TimelineWidth - timelineDelta;
 
@@ -1221,11 +1192,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             builder << "</g>" << Endl;
         }
 
-/*
-            if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-                PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytes.Medium, Config.Palette.SpillingBytes.Light);
-            }
-*/
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (node->MemArrowDefault.Values.size() || node->MemMkqlAllocated.Values.size() || node->MemMkqlFreeList.Values.size()) {
@@ -1291,33 +1257,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             }
         }
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-/*
-        if (node->InputBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->InputBytes.get(),
-                .Colors = Config.Palette.Input,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_input", Config.Palette.Input.Light, "0.0325 0.0325"},
-            });
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-
-        if (node->IngressBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->IngressBytes.get(),
-                .Colors = Config.Palette.Ingress,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_ingress", Config.Palette.Ingress.Medium, "0.9 0.9"},
-            });
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-*/
         if (node->Tasks) {
             PrintUnfinishedTasks(builder, node->Tasks, node->FinishedTasks);
             builder
@@ -1350,15 +1289,35 @@ void TPlan::PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta) 
     builder << "</svg>" << Endl;
 }
 
+// A document carrying the message, rather than a partial render of a plan that
+// could not be drawn. It has to be well-formed too: this is what a browser gets
+// to show when everything else failed.
+static TString ErrorSvg(TStringBuf message) {
+    return TStringBuilder()
+        << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'>" << Endl
+        << "<text x='4' y='16' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px'>"
+        << SvgEscape(message) << "</text>" << Endl
+        << "</svg>" << Endl;
+}
+
 TString TVisualizer::PrintSvgSafe() {
+    if (LoadError) {
+        return ErrorSvg(LoadError);
+    }
     try {
         return PrintSvg();
     } catch (std::exception& e) {
-        return Sprintf("<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>%s<text></svg>", e.what());
+        return ErrorSvg(e.what());
     }
 }
 
 TString TVisualizer::PrintSvg() {
+    // Reached only by mixing LoadPlansSafe with the throwing printer; report the
+    // load failure rather than rendering the half-loaded plans behind it.
+    if (LoadError) {
+        ythrow yexception() << LoadError;
+    }
+
     TStringBuilder background;
     TStringBuilder svg;
 
@@ -1396,15 +1355,15 @@ TString TVisualizer::PrintSvg() {
             << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
             << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, Sprintf("%lu:%.2lu", t / 60, t % 60)) << Endl
             << "</g>" << Endl;
-        for (auto plan : Plans) {
+        for (auto& plan : Plans) {
             plan->SummaryBuilder << timeLabel;
         }
     }
-    for (auto plan : Plans) {
+    for (auto& plan : Plans) {
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
     }
 
-    for (auto plan : Plans) {
+    for (auto& plan : Plans) {
         plan->PrintSvg(background, MaxTime, timelineDelta);
     }
 
@@ -1479,9 +1438,6 @@ TString TVisualizer::PrintSvg() {
         << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
     }
 
-    // Blank line left over from a canvas builder that was never written to. Kept so that the
-    // output stays byte for byte identical; drop it together with a golden re-baseline.
-    svg << Endl;
     svg << "</svg>" << Endl;
 
     return svg;

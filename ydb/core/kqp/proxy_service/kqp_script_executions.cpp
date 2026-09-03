@@ -2535,14 +2535,14 @@ public:
     {}
 
 private:
-    static std::pair<TInstant, TString> ParsePageToken(const TString& token) {
+    static std::optional<std::pair<TInstant, TString>> ParsePageToken(const TString& token) {
         const size_t p = token.find('|');
-        if (p == TString::npos) {
-            throw std::runtime_error("Invalid page token");
+        ui64 ts = 0;
+        if (p == TString::npos || p + 1 == token.size() || !TryFromString(TStringBuf(token).SubString(0, p), ts)) {
+            return std::nullopt;
         }
 
-        const ui64 ts = FromString(TStringBuf(token).SubString(0, p));
-        return {TInstant::MicroSeconds(ts), token.substr(p + 1)};
+        return std::make_pair(TInstant::MicroSeconds(ts), token.substr(p + 1));
     }
 
     static TString MakePageToken(const TInstant ts, const std::string& executionId) {
@@ -2615,12 +2615,16 @@ private:
 
         if (PageToken) {
             auto pageTokenParts = ParsePageToken(PageToken);
+            if (!pageTokenParts) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Invalid page token");
+                return;
+            }
             params
                 .AddParam("$ts")
-                    .Timestamp(pageTokenParts.first)
+                    .Timestamp(pageTokenParts->first)
                     .Build()
                 .AddParam("$execution_id")
-                    .Utf8(pageTokenParts.second)
+                    .Utf8(pageTokenParts->second)
                     .Build();
         }
 

@@ -23,6 +23,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/containers/absl
+    library/cpp/html/pcdata
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/library/json_index

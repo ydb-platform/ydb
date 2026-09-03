@@ -1105,7 +1105,12 @@ void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, T
         }
 
         DeserializeSetting(PathPrefix);
-        DeserializeSetting(SyntaxVersion);
+        if (serializedSettings.HasSyntaxVersion()) {
+            // Syntax v0 settings may be persisted in old view definitions.
+            settings.SyntaxVersion = serializedSettings.GetSyntaxVersion() == 0
+                ? 1
+                : serializedSettings.GetSyntaxVersion();
+        }
         DeserializeSetting(AnsiLexer);
         DeserializeSetting(PgParser);
 

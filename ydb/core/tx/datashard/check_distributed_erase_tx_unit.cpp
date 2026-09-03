@@ -129,3 +129,7 @@ THolder<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard& self, TPip
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -134,7 +134,7 @@ ydb sql -f file1.sql --explain-analyze --format svg > plan1.svg
 
 ## Получение графического плана запроса в UI {#svg-ui}
 
-Чтобы в [{{ ydb-short-name }} UI](../../reference/embedded-ui/ydb-monitoring.md) отображался графический план запроса, включите настройку `Experiments | Execution plan`.
+Чтобы в [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md) отображался графический план запроса, включите настройку `Experiments | Execution plan`.
 
 {% note info %}
 

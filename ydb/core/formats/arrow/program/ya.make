@@ -66,3 +66,9 @@ CFLAGS(
 )
 
 END()
+
+RECURSE(
+    ascii_contains
+    benchmark
+    olap_kernels
+)

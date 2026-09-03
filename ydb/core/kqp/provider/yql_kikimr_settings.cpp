@@ -91,6 +91,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapPushdownRegexp);
+    REGISTER_SETTING(*this, OptEnableOlapFastAsciiIgnoreCase);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NKikimr::NKqp::TOptimizerHints::Parse(v); });
@@ -324,6 +325,10 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 bool TKikimrConfiguration::GetEnableOlapPushdownRegexp() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownRegexp.Get()) == EOptionalFlag::Enabled) ||
         TTableServiceConfig::GetEnableOlapPushdownRegexp());
+}
+
+bool TKikimrConfiguration::GetEnableOlapFastAsciiIgnoreCase() const {
+    return GetOptionalFlagValue(OptEnableOlapFastAsciiIgnoreCase.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {

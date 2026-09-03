@@ -510,10 +510,9 @@ public:
             grpcClient=GrpcClient,
             grpcConnection=GrpcConnection,
             resultPromise
-        ](const NThreading::TFuture<std::string>& f1) mutable {
+        ](const NThreading::TFuture<std::string>& future) mutable {
             try {
-                auto f2 = f1;
-                TString authInfo = GetAuthInfo(f2.ExtractValue(), clusterType);
+                TString authInfo = GetAuthInfo(future.GetValue(), clusterType);
 
                 NYdbGrpc::TCallMeta callMeta;
                 if (!authInfo.empty()) {
@@ -555,7 +554,7 @@ private:
         return CredentialsProvider->GetAuthInfoAsync();
     }
 
-    static TString GetAuthInfo(std::string authToken, auto clusterType) {
+    static TString GetAuthInfo(const auto& authToken, auto clusterType) {
         if (authToken.empty()) {
             return "";
         }
@@ -589,10 +588,9 @@ private:
            httpRetryPolicy=HttpRetryPolicy,
            clusterType=Settings.GetClusterType(),
            promise=std::move(promise)
-        ](const NThreading::TFuture<std::string>& f1) mutable {
+        ](const NThreading::TFuture<std::string>& future) mutable {
             try {
-                auto f2 = f1;
-                TString authInfo = GetAuthInfo(f2.ExtractValue(), clusterType);
+                TString authInfo = GetAuthInfo(future.GetValue(), clusterType);
 
                 IHTTPGateway::THeaders headers;
                 if (!authInfo.empty()) {

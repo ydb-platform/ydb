@@ -1260,13 +1260,16 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
     }
 
     // QueryAddHost() routes an add-host request to the partition-direct
-    // service, tagged with this DBG's index.
+    // service, tagged with this DBG's index and the membership generation it
+    // was built from.
     Y_UNIT_TEST_F(ShouldQueryAddHostThroughService, TDBGFixture)
     {
         auto executor = MakeExecutor();
         auto dbg = MakeDirectBlockGroup(
             executor,
-            std::make_shared<TStorageTransportMock>());
+            std::make_shared<TStorageTransportMock>(),
+            0,    // directBlockGroupIndex
+            7);   // connectionsGeneration
 
         auto initialReady = RunAndGetInitialReady(dbg);
         WaitReady(executor, initialReady);
@@ -1277,7 +1280,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             executor,
             [&]
             {
-                dbg->QueryAddHost(10);
+                dbg->QueryAddHost();
                 return true;
             })
             .GetValue(WaitTimeout);
@@ -1286,7 +1289,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(
             0,
             Service->AddHostRequests[0].DirectBlockGroupId);
-        UNIT_ASSERT_VALUES_EQUAL(10, Service->AddHostRequests[0].NewHostIndex);
+        UNIT_ASSERT_VALUES_EQUAL(7, Service->AddHostRequests[0].Generation);
     }
 
     // On restart a DBG comes up with the committed connection count (here N+1).

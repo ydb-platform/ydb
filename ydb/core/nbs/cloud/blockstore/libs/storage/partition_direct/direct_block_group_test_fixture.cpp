@@ -155,7 +155,8 @@ TDBGFixture::MakeDirectBlockGroup(
     NStorage::NTransport::TStorageTransportPtr transport,
     const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
     const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
-    size_t directBlockGroupIndex) const
+    size_t directBlockGroupIndex,
+    ui64 connectionsGeneration) const
 {
     return std::make_shared<TDirectBlockGroup>(
         Runtime->GetActorSystem(0),
@@ -165,6 +166,7 @@ TDBGFixture::MakeDirectBlockGroup(
         directBlockGroupIndex,
         ddisksIds,
         pbufferIds,
+        connectionsGeneration,
         std::move(transport),
         nullptr);
 }

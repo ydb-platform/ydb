@@ -195,9 +195,13 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set DumpHandler");
         return NThreading::TFuture<TDBGDumpResponse>();
     };
-    OnAddHostResultHandler = [](const auto&...)
+    OnAddHostSucceededHandler = [](const auto&...)
     {
-        Y_ABORT_UNLESS(false, "Should set OnAddHostResultHandler");
+        Y_ABORT_UNLESS(false, "Should set OnAddHostSucceededHandler");
+    };
+    OnAddHostFailedHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnAddHostFailedHandler");
     };
     TakeCopyRangeBudgetHandler = [](ui64)
     {
@@ -389,17 +393,22 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
     return ListPBuffersHandler(hostIndex);
 }
 
-void TDirectBlockGroupMock::OnAddHostResult(
-    const NProto::TError& error,
+void TDirectBlockGroupMock::OnAddHostSucceeded(
     THostIndex newHostIndex,
     NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+    ui64 generation)
 {
-    OnAddHostResultHandler(
-        error,
+    OnAddHostSucceededHandler(
         newHostIndex,
         std::move(ddiskId),
-        std::move(pbufferId));
+        std::move(pbufferId),
+        generation);
+}
+
+void TDirectBlockGroupMock::OnAddHostFailed(const NProto::TError& error)
+{
+    OnAddHostFailedHandler(error);
 }
 
 TDuration TDirectBlockGroupMock::TakeCopyRangeBudget(ui64 byteCount)

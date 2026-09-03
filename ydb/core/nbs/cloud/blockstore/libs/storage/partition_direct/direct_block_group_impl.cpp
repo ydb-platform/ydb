@@ -205,6 +205,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
+    ui64 connectionsGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
@@ -221,6 +222,7 @@ TDirectBlockGroup::TDirectBlockGroup(
               .TabletId = diskDescription.TabletId,
               .Generation = diskDescription.Generation,
               .DBGIndex = DirectBlockGroupIndex})
+    , ConnectionsGeneration(connectionsGeneration)
     , Oracle(StorageConfig, this)
     , Counters(std::move(counters))
 {
@@ -1300,24 +1302,25 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     return result;
 }
 
-void TDirectBlockGroup::OnAddHostResult(
-    const NProto::TError& error,
-    THostIndex newHostIndex,
-    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+void TDirectBlockGroup::OnAddHostFailed(const NProto::TError& error)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (HasError(error)) {
-        LOG_WARN(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s AddHost %s request failed: %s",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(newHostIndex).c_str(),
-            FormatError(error).Quote().c_str());
-        return;
-    }
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s AddHost request failed: %s",
+        LogTitle.GetWithTime().c_str(),
+        FormatError(error).Quote().c_str());
+}
+
+void TDirectBlockGroup::OnAddHostSucceeded(
+    THostIndex newHostIndex,
+    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+    ui64 generation)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     Y_ABORT_UNLESS(
         static_cast<size_t>(newHostIndex) == DDiskConnections.size(),
@@ -1332,13 +1335,15 @@ void TDirectBlockGroup::OnAddHostResult(
         newHostIndex,
         NBsController::TDDiskId(ddiskId),
         NBsController::TDDiskId(pbufferId));
+    ConnectionsGeneration = generation;
 
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s AddHost %s request OK",
+        "%s AddHost %s request OK, generation %lu",
         LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(newHostIndex).c_str());
+        PrintHostAndNode(newHostIndex).c_str(),
+        ConnectionsGeneration);
 
     DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
@@ -1445,21 +1450,21 @@ void TDirectBlockGroup::SetHostState(
     }
 }
 
-void TDirectBlockGroup::QueryAddHost(THostIndex newHostIndex)
+void TDirectBlockGroup::QueryAddHost()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(Service);
 
-    // No gate here: the authoritative MaxHostCount check is in the partition
-    // (the DBG's DDiskConnections count lags). The DBG just forwards.
+    // The position is chosen by the partition, which owns the persisted
+    // membership. This request only says which state it was asked from.
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s QueryAddHost %s",
+        "%s QueryAddHost, generation %lu",
         LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(newHostIndex).c_str());
+        ConnectionsGeneration);
 
-    Service->QueryAddHost(DirectBlockGroupIndex, newHostIndex);
+    Service->QueryAddHost(DirectBlockGroupIndex, ConnectionsGeneration);
 }
 
 TCountAndSize TDirectBlockGroup::GetPBuffersUsage(THostIndex hostIndex) const

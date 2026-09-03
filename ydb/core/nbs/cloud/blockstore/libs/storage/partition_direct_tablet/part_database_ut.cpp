@@ -195,6 +195,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 TAddHostInProgress intent;
                 intent.SetDirectBlockGroupId(3);
                 intent.SetNewHostIndex(5);
+                intent.SetGeneration(7);
                 partitionDb.StoreAddHostInProgress(intent);
             });
 
@@ -208,6 +209,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT(loaded.Defined());
                 UNIT_ASSERT_VALUES_EQUAL(3u, loaded->GetDirectBlockGroupId());
                 UNIT_ASSERT_VALUES_EQUAL(5u, loaded->GetNewHostIndex());
+                UNIT_ASSERT_VALUES_EQUAL(7u, loaded->GetGeneration());
             });
 
         executor.WriteTx(

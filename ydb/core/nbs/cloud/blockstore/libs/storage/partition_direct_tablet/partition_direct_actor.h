@@ -75,6 +75,7 @@ private:
     {
         size_t DirectBlockGroupId = 0;
         THostIndex NewHostIndex = InvalidHostIndex;
+        ui64 Generation = 0;
         NActors::TActorId BSPipeClient;
     };
 
@@ -268,7 +269,7 @@ private:
     bool ValidateAddHostToDBGRequest(
         const NActors::TActorContext& ctx,
         size_t dbgId,
-        THostIndex newHostIndex);
+        ui64 generation);
     void RejectAddHost(
         const NActors::TActorContext& ctx,
         size_t dbgId,

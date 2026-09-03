@@ -136,7 +136,7 @@ public:
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
 
-    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
+    void QueryAddHost(size_t directBlockGroupId, ui64 generation) override;
 
     ui64 GenerateLsn() override;
 

@@ -185,7 +185,7 @@ public:
 
             if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) {
                 if (reportStatsSettings->MaxInterval) {
-                    CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval);
+                    CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval << ", has checkpoints: " << (Checkpoints ? "true" : "false"));
                     this->Schedule(reportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
             }
@@ -385,6 +385,10 @@ protected:
         return MemoryQuota->GetMkqlMemoryLimit();
     }
 
+    virtual IDqSchedulerContextPtr GetSchedulerContext() const {
+        return nullptr;
+    }
+
     void DoExecute() {
         Y_ASSERT(!Terminated);
 
@@ -541,19 +545,23 @@ protected:
             }
         }
 
-        if (status != ERunStatus::Finished) {
+        if (status != ERunStatus::Finished ||
+            Checkpoints // We should send acks after finish in order to receive checkpoints
+        ) {
             // If the incoming channel's buffer was full at the moment when last ChannelDataAck event had been sent,
             // there will be no attempts to send a new piece of data from the other side of this channel.
             // So, if there is space in the channel buffer (and on previous step is was full), we send ChannelDataAck
             // event with the last known seqNo, and the process on the other side of this channel updates its state
             // and sends us a new batch of data.
+            //
+            // Note: in case of handling `Finished` status with Checkpoints, there is always DataWasSent=true, because outputs are finished.
             if (Channels) {
                 bool pollSent = false;
                 for (auto& [channelId, inputChannel] : InputChannelsMap) {
                     pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
                 }
 
-                if (!pollSent) {
+                if (status != ERunStatus::Finished && !pollSent) {
                     CA_LOG_T("Cannot poll input channels, continue execute, data was sent: " << ProcessOutputsState.DataWasSent);
                     if (ProcessOutputsState.DataWasSent) {
                         ContinueExecute(EResumeSource::CADataSent);
@@ -598,10 +606,16 @@ protected:
                         return;
                     }
                 }
+
                 if ((!Channels || Channels->CheckInFlight("Tasks execution finished")) && AllAsyncOutputsFinished()) {
                     State = NDqProto::COMPUTE_STATE_FINISHED;
                     CA_LOG_D("Compute state finished. All channels and sinks finished");
                     ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::SUCCESS, {TIssue("success")});
+
+                    if (Checkpoints) {
+                        // Continue checkpoints distribution after finish (now stale data in inputs may be skipped)
+                        ContinueExecute(EResumeSource::CAFinish);
+                    }
                 }
             }
         }
@@ -810,7 +824,9 @@ protected:
     }
 
     void ContinueExecute(EResumeSource source = EResumeSource::Default) {
-        if (!ResumeEventScheduled && Running) {
+        if (!ResumeEventScheduled && (Running ||
+            Checkpoints // After finish graph should continue checkpoints distribution
+        )) {
             ResumeEventScheduled = true;
             this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
         }
@@ -853,13 +869,15 @@ protected:
     }
 
     void OnSinkFinished(ui64 outputIndex) override final {
-        SinksMap.at(outputIndex).FinishIsAcknowledged = true;
-        ContinueExecute(EResumeSource::CASinkFinished);
+        if (!std::exchange(SinksMap.at(outputIndex).FinishIsAcknowledged, true)) {
+            ContinueExecute(EResumeSource::CASinkFinished);
+        }
     }
 
     void OnTransformFinished(ui64 outputIndex) override final {
-        OutputTransformsMap.at(outputIndex).FinishIsAcknowledged = true;
-        ContinueExecute(EResumeSource::CATransformFinished);
+        if (!std::exchange(OutputTransformsMap.at(outputIndex).FinishIsAcknowledged, true)) {
+            ContinueExecute(EResumeSource::CATransformFinished);
+        }
     }
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
@@ -884,9 +902,14 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
     void ResumeInputsByCheckpoint() override final {
         for (auto& [id, channelInfo] : InputChannelsMap) {
             if (channelInfo.PendingCheckpoint) {
+                if (const IDqInputChannel::TPtr channel = channelInfo.Channel) {
+                    Y_ENSURE(channel->Empty() || State == NDqProto::COMPUTE_STATE_FINISHED);
+                }
+
                 channelInfo.ResumeByCheckpoint();
             }
         }
+
         // sources or input channels was unpaused, trigger new poll
         ResumeExecution(EResumeSource::CAResumeByCheckpoint);
     }
@@ -1127,13 +1150,16 @@ protected:
 
         std::vector<TDrainedChannelMessage> DrainChannel(const ui32 countLimit) {
             std::vector<TDrainedChannelMessage> result;
-            if (Finished) {
+            const bool hasCheckpoint = CheckpointingMode != NDqProto::ECheckpointingMode::CHECKPOINTING_MODE_DISABLED;
+            if (Finished &&
+                !hasCheckpoint // Checkpoints can be sent after channel finish
+            ) {
                 Y_ABORT_UNLESS(Channel->IsFinished());
                 return result;
             }
 
             result.reserve(countLimit);
-            for (ui32 i = 0; i < countLimit && !Finished; ++i) {
+            for (ui32 i = 0; i < countLimit && (!Finished || hasCheckpoint); ++i) {
                 TDrainedChannelMessage message;
                 if (!message.ReadData(*this)) {
                     break;
@@ -1156,6 +1182,7 @@ protected:
         IDqComputeActorAsyncOutput* AsyncOutput = nullptr;
         NActors::IActor* Actor = nullptr;
         bool Finished = false; // If sink/transform is in finished state, it receives only checkpoints.
+        bool Failed = false; // If sink/transform reported fatal error, in this case we should stop pushing data
         bool FinishIsAcknowledged = false; // Async output has acknowledged its finish.
         TIssuesBuffer IssuesBuffer;
         bool PopStarted = false;
@@ -1283,9 +1310,14 @@ protected:
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
-                if (State == NDqProto::COMPUTE_STATE_EXECUTING || State == NDqProto::COMPUTE_STATE_UNKNOWN) {
+                if (State == NDqProto::COMPUTE_STATE_EXECUTING || State == NDqProto::COMPUTE_STATE_UNKNOWN ||
+                    Checkpoints // Tasks with checkpoints should stay after finishing
+                ) {
                     ReportStats();
-                    this->Schedule(RuntimeSettings.ReportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+
+                    const auto statsInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
+                    CA_LOG_T("Schedule next periodic stats " << statsInterval);
+                    this->Schedule(statsInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
                 break;
             }
@@ -2063,7 +2095,8 @@ protected:
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
                         .Arena = Task.GetArena(),
                         .TraceId = ComputeActorSpan.GetTraceId(),
-                        .DatumValidationMode = CoreRuntimeSettings->DatumValidation.Get()
+                        .DatumValidationMode = CoreRuntimeSettings->DatumValidation.Get(),
+                        .SchedulerContext = GetSchedulerContext(),
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -2242,27 +2275,36 @@ protected:
     }
 
     void OnSinkError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
+        const auto it = SinksMap.find(outputIndex);
+        YQL_ENSURE(it != SinksMap.end(), "Unexpected output index: " << outputIndex);
+
         if (fatalCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
-            SinksMap.at(outputIndex).IssuesBuffer.Push(issues);
+            it->second.IssuesBuffer.Push(issues);
             return;
         }
 
+        // Resources must be cleaned up from compute actor handler, so just schedule failure event
         CA_LOG_E("Sink[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
         this->Send(this->SelfId(), new TEvPrivate::TEvAsyncOutputError(fatalCode, issues));
+        it->second.Failed = true;
     }
 
     void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
+        const auto it = OutputTransformsMap.find(outputIndex);
+        YQL_ENSURE(it != OutputTransformsMap.end(), "Unexpected output index: " << outputIndex);
+
         if (fatalCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
-            OutputTransformsMap.at(outputIndex).IssuesBuffer.Push(issues);
+            it->second.IssuesBuffer.Push(issues);
             return;
         }
 
         CA_LOG_E("OutputTransform[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
         this->Send(this->SelfId(), new TEvPrivate::TEvAsyncOutputError(fatalCode, issues));
+        it->second.Failed = true;
     }
 
-    void HandleAsyncOutputError(const TEvPrivate::TEvAsyncOutputError::TPtr& ev) {
-        InternalError(ev->Get()->StatusCode, ev->Get()->Issues);
+    void HandleAsyncOutputError(TEvPrivate::TEvAsyncOutputError::TPtr& ev) {
+        InternalError(ev->Get()->StatusCode, std::move(ev->Get()->Issues));
     }
 
     void HandleCheckIdleness(const TEvPrivate::TEvCheckIdleness::TPtr& ev) {
@@ -2760,7 +2802,6 @@ protected:
     void ReportStats() {
         auto now = TInstant::Now();
         if ((State != NDqProto::COMPUTE_STATE_EXECUTING && !Task.GetCreateSuspended())      // non streaming queries
-            || ((State != NDqProto::COMPUTE_STATE_UNKNOWN && State != NDqProto::COMPUTE_STATE_EXECUTING) && Task.GetCreateSuspended())
             || !RuntimeSettings.ReportStatsSettings
             || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
             return;

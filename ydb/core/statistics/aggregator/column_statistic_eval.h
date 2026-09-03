@@ -60,19 +60,27 @@ class IMultiColumnStatisticEval {
 public:
     using TPtr = std::unique_ptr<IMultiColumnStatisticEval>;
 
+    // Sizing knobs from NKikimrConfig::TStatisticsConfig; ignored by types that do not need them.
+    struct THistogramSizing {
+        ui32 OversampleFactor = 8;      // f, so C = f * B
+        ui64 MaxStateBytes = 4u << 20;
+    };
+
     static TVector<EStatType> SupportedMultiColumnTypes();
     static TPtr MaybeCreate(
         EStatType,
         std::vector<TString> columnNames,
         std::vector<ui32> columnIds,
-        ui64 rowCount);
+        ui64 rowCount,
+        const THistogramSizing& sizing);
 
     virtual EStatType GetType() const = 0;
     virtual const std::vector<ui32>& GetColumnIds() const = 0;
     virtual size_t EstimateSize() const = 0;
     virtual void AddAggregations(TSelectBuilder&) = 0;
     virtual void Merge(const TVector<NYdb::TValue>& aggColumns) = 0;
-    virtual TString ExtractData(const TVector<NYdb::TValue>& aggColumns) = 0;
+    // nullopt == "no statistic for this table"; the caller stores no row at all.
+    virtual std::optional<TString> ExtractData(const TVector<NYdb::TValue>& aggColumns) = 0;
     virtual ~IMultiColumnStatisticEval() = default;
 };
 

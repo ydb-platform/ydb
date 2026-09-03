@@ -644,3 +644,7 @@ void TDataShard::Handle(TEvPrivate::TEvReplicationSourceOffsets::TPtr& ev, const
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

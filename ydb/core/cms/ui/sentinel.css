@@ -39,6 +39,11 @@
     color: green;
 }
 
+#sentinel-state .neutral {
+    font-weight: bold;
+    color: #6c757d;
+}
+
 #sentinel-loader {
     display: none;
 }

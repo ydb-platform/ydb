@@ -692,10 +692,12 @@ public:
     // query and has not already been accepted for it.
     bool AcceptWmAdmissionReply(ui64 queryId, TStringBuf eventName) {
         if (!QueryState || queryId != QueryState->QueryId || queryId <= LastAcceptedWmAdmissionQueryId) {
-            STLOG_W("Ignoring stale workload manager reply"
-                << " event=" << eventName
-                << " queryId=" << queryId,
-                (trace_id, TraceId()));
+            YDB_LOG_WARN("Ignoring stale workload manager reply",
+                {"marker", "KQPSA"},
+                {"logPrefix", LogPrefix()},
+                {"event", eventName},
+                {"queryId", queryId},
+                {"traceId", TraceId()});
             return false;
         }
         LastAcceptedWmAdmissionQueryId = queryId;

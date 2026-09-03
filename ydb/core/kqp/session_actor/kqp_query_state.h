@@ -718,6 +718,10 @@ public:
         return RequestEv->GetCollectDiagnostics();
     }
 
+    bool ShouldCollectCompileDiagnostics() const {
+        return UserFacingTrace != nullptr;
+    }
+
     TDuration GetProgressStatsPeriod() {
         return RequestEv->GetProgressStatsPeriod();
     }

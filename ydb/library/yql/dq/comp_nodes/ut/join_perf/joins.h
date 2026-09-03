@@ -26,7 +26,8 @@ struct TBenchmarkCaseResult {
     TDuration MedianWall;
     double CvPercent = 0.0;
     int Samples = 0;
-    int ItersPerSample = 0;
+    int MinItersPerSample = 0;
+    int MaxItersPerSample = 0;
     i64 OutputRows = 0;
     TTableSizes Sizes{};
     TSelectivity Selectivity{};

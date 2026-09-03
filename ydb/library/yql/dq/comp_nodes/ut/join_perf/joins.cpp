@@ -13,6 +13,7 @@
 #include <util/system/datetime.h>
 
 #include <cmath>
+#include <format>
 #include <optional>
 #include <random>
 #include <span>
@@ -71,7 +72,7 @@ ui64 KeyComponent(ui64 key, int col) { return col == 0 ? key : key * (7 + static
 
 TString FormatStringKey(ui64 key, int col, int stringBytes) {
     const ui64 num = KeyComponent(key, col) + 1234567;
-    TString result = Sprintf("%08u.%08u.%08u.", num, num, num);
+    TString result = std::format("{:08}.{:08}.{:08}.", num, num, num);
     Y_ABORT_IF(std::ssize(result) > stringBytes, "string key length is too small");
     result.resize(stringBytes, 'x');
     return result;
@@ -365,13 +366,20 @@ TDuration Stdev(const TVector<TDuration>& values, TDuration mean) {
 }
 
 TBenchmarkCaseResult Summarize(const TVector<TSample>& samples) {
+    Y_ENSURE(!samples.empty());
     TVector<TDuration> cpu;
     TVector<TDuration> wall;
     cpu.reserve(samples.size());
     wall.reserve(samples.size());
+    const i64 outputRows = samples.front().OutputRows;
+    int minIters = samples.front().Iters;
+    int maxIters = samples.front().Iters;
     for (const auto& sample : samples) {
+        Y_ENSURE(sample.OutputRows == outputRows, "non-deterministic output row count across samples");
         cpu.push_back(sample.Cpu);
         wall.push_back(sample.Wall);
+        minIters = Min(minIters, sample.Iters);
+        maxIters = Max(maxIters, sample.Iters);
     }
 
     TBenchmarkCaseResult result;
@@ -386,8 +394,9 @@ TBenchmarkCaseResult Summarize(const TVector<TSample>& samples) {
                            : 100.0 * static_cast<double>(result.StdevCpu.MicroSeconds()) /
                                  static_cast<double>(result.MeanCpu.MicroSeconds());
     result.Samples = static_cast<int>(samples.size());
-    result.ItersPerSample = samples.front().Iters;
-    result.OutputRows = samples.front().OutputRows;
+    result.MinItersPerSample = minIters;
+    result.MaxItersPerSample = maxIters;
+    result.OutputRows = outputRows;
     return result;
 }
 

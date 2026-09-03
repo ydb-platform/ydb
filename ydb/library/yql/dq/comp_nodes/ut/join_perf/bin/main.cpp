@@ -38,7 +38,8 @@ NJson::TJsonValue ResultJson(const NKikimr::NMiniKQL::TBenchmarkCaseResult& resu
     out["medianWallUs"] = result.MedianWall.MicroSeconds();
     out["cvPercent"] = result.CvPercent;
     out["samples"] = result.Samples;
-    out["itersPerSample"] = result.ItersPerSample;
+    out["minItersPerSample"] = result.MinItersPerSample;
+    out["maxItersPerSample"] = result.MaxItersPerSample;
     out["outputRows"] = result.OutputRows;
     out["leftRows"] = result.Sizes.Left;
     out["rightRows"] = result.Sizes.Right;

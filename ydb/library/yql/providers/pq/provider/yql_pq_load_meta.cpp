@@ -24,7 +24,6 @@ private:
     struct TPendingTopic {
         TPqState::TTopicMeta Meta;
         IPqGateway::TAsyncDescribeFederatedTopicResult Future;
-        bool IsWrite = false;
     };
     using TTopicKey = std::pair<TString, TString>;
     using TTopics = THashMap<TTopicKey, TPendingTopic>;
@@ -36,7 +35,7 @@ public:
 
     void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder, TTopics& pendingTopics) {
         const auto topicKey = std::make_pair(cluster, topicPath);
-        if (State_->Topics.FindPtr(topicKey) || pendingTopics.FindPtr(topicKey)) {
+        if (State_->Topics.contains(topicKey) || pendingTopics.FindPtr(topicKey)) {
             return;
         }
 
@@ -159,14 +158,9 @@ private:
                 }
             }
 
-            if (!itemType) {
-                itemType = CreateDefaultItemType(ctx);
-            }
-
             if (!pending.Meta.RowSpec) {
                 pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);
             }
-            // Do not overwrite an entry already stored by a read-side registration.
             State_->Topics.emplace(key, pending.Meta);
         }
         pendingTopics.clear();
@@ -176,8 +170,8 @@ private:
 
 
     void Rewind() final {
-        PendingReadTopics_.clear();
         PendingWriteTopics_.clear();
+        PendingReadTopics_.clear();
         AsyncFuture_ = {};
     }
 

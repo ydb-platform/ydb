@@ -168,7 +168,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_VERIFY_S(context.SS->Sequences.contains(pathId), "Sequence not found. PathId: " << pathId);
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        auto sequenceInfo = context.SS->Sequences.at(pathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -178,7 +178,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Sequences[pathId] = alterData;
+        context.SS->Sequences.SetUntracked(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -349,7 +349,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto sequenceInfo = context.SS->Sequences.at(pathId);
+        auto& sequenceInfo = context.SS->Sequences.UpdateUntracked(pathId);
         UpdateSequenceDescription(sequenceInfo->Description);
 
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
@@ -605,7 +605,7 @@ public:
         auto domainInfo = parentPath.DomainInfo();
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
-        TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
+        auto srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
         Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
 
         const auto& protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();
@@ -664,14 +664,16 @@ public:
             return result;
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
         context.SS->TabletCounters->Simple()[COUNTER_SEQUENCE_COUNT].Add(1);
 
         srcPath.Base()->PathState = TPathElement::EPathState::EPathStateCopying;
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
-        TPathId pathId = dstPath->PathId;
         dstPath->CreateTxId = OperationId.GetTxId();
         dstPath->LastTxId = OperationId.GetTxId();
         dstPath->PathState = TPathElement::EPathState::EPathStateCreate;
@@ -712,10 +714,9 @@ public:
         }
         context.SS->PersistPath(db, dstPath->PathId);
 
-        context.SS->Sequences[pathId] = sequenceInfo;
+        context.SS->Sequences.Set({.Path = pathId, .Value = sequenceInfo, .Changes = context.MemChanges});
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
         context.SS->PersistSequenceAlter(db, pathId, *alterData);
-        context.SS->IncrementPathDbRefCount(pathId);
 
         context.SS->PersistTxState(db, OperationId);
         context.SS->PersistUpdateNextPathId(db);

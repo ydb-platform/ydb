@@ -47,10 +47,10 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Add(1);
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
+        auto indexData = context.SS->Indexes.at(path->PathId);
         Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
         context.SS->PersistTableIndex(db, path->PathId);
-        context.SS->Indexes[path->PathId] = indexData->AlterData;
+        context.SS->Indexes.SetUntracked(path->PathId, indexData->AlterData);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
@@ -210,7 +210,6 @@ public:
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(parentPath.Base()->PathId);
@@ -231,8 +230,7 @@ public:
         newIndexPath->LastTxId = OperationId.GetTxId();
         newIndexPath->PathType = TPathElement::EPathType::EPathTypeTableIndex;
 
-        context.SS->Indexes[newIndexPath->PathId] = newIndexData;
-        context.SS->IncrementPathDbRefCount(newIndexPath->PathId);
+        context.SS->Indexes.Set({.Path = newIndexPath->PathId, .Value = newIndexData, .Changes = context.MemChanges});
 
         context.OnComplete.ActivateTx(OperationId);
 

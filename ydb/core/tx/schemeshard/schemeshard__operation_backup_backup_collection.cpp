@@ -63,7 +63,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     }
 
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
-    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+    const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
     // Reject empty collection up-front so no FullBackups row is created.
     if (bc->Description.GetExplicitEntryList().EntriesSize() == 0) {

@@ -463,8 +463,11 @@ public:
             pqChannelsBinding = tabletChannelsBinding;
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
 
         // Assign topic Id for SourceId→Partition mapping. For FirstClass topics use
         // the LocalPathId; for federation topics the Id should already be set from
@@ -491,8 +494,6 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_PQ_GROUP_COUNT].Add(1);
 
-        TPathId pathId = dstPath.Base()->PathId;
-
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreatePQGroup, pathId);
 
         ApplySharding(OperationId.GetTxId(), pathId, pqGroup, txState, tabletChannelsBinding, pqChannelsBinding, context.SS);
@@ -507,9 +508,8 @@ public:
         TTopicInfo::TPtr emptyGroup = new TTopicInfo;
         emptyGroup->Shards.swap(pqGroup->Shards);
 
-        context.SS->Topics[pathId] = emptyGroup;
-        context.SS->Topics[pathId]->AlterData = pqGroup;
-        context.SS->IncrementPathDbRefCount(pathId);
+        context.SS->Topics.Set({.Path = pathId, .Value = emptyGroup, .Changes = context.MemChanges});
+        context.SS->Topics.Update(pathId, context.MemChanges)->AlterData = pqGroup;
 
         context.DbChanges.PersistPersQueueGroup(pathId, emptyGroup);
         context.DbChanges.PersistAddPersQueueGroupAlter(pathId, pqGroup);
@@ -553,11 +553,9 @@ public:
         if (!acl.empty()) {
             dstPath.Base()->ApplyACL(acl);
         }
-        context.MemChanges.GrabPath(context.SS, dstPath.Base()->PathId);
         context.DbChanges.PersistPath(dstPath.Base()->PathId);
 
         ++parentPath.Base()->DirAlterVersion;
-        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
         context.DbChanges.PersistPath(parentPath.Base()->PathId);
         context.SS->ClearDescribePathCaches(parentPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, parentPath.Base()->PathId);

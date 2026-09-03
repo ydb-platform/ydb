@@ -163,7 +163,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     TString errStr;
     if (!isRebuild) {
-        if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes, indexDesc, errStr)) {
+        if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes.AsMap(), indexDesc, errStr)) {
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
         }
     }

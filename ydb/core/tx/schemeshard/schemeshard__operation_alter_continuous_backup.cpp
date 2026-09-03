@@ -10,7 +10,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-void DoAlterPqPart(const TOperationId& opId, const TPath& tablePath, const TPath& topicPath, TTopicInfo::TPtr topic, TVector<ISubOperation::TPtr>& result)
+void DoAlterPqPart(const TOperationId& opId, const TPath& tablePath, const TPath& topicPath, const TIntrusiveConstPtr<TTopicInfo>& topic, TVector<ISubOperation::TPtr>& result)
 {
     auto outTx = TransactionTemplate(topicPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
     // outTx.SetFailOnExist(!acceptExisted);
@@ -120,10 +120,10 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
     }
 
     const auto [_, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
-    TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+    auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
     const auto topicPath = streamPath.Child("streamImpl");
-    TTopicInfo::TPtr topic = context.SS->Topics.at(topicPath.Base()->PathId);
+    auto topic = context.SS->Topics.at(topicPath.Base()->PathId);
 
     const auto backupTablePath = workingDirPath.Child(cbOp.GetTakeIncrementalBackup().GetDstPath(), TPath::TSplitChildTag{});
 

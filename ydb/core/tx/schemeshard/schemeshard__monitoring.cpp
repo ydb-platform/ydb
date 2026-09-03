@@ -1540,7 +1540,7 @@ private:
 
                 for (const auto& tx : Self->TxInFlight) {
                     TOperationId opId = tx.first;
-                    const TTxState txState = tx.second;
+                    const TTxState& txState = tx.second;
                     TABLER() {
                         TABLED() { str << "<a href='app?" << TCgi::Page.AsCgiParam(TCgi::TPages::TransactionInfo)
                                                           << "&" << TCgi::TabletID.AsCgiParam(Self->TabletID())
@@ -1575,7 +1575,7 @@ private:
                     str << "Unknown Tx\n";
                 }
             } else {
-                const TTxState txState = *txInfo;
+                const TTxState& txState = *txInfo;
 
                 OutputOperationPartInfo(operationId, str);
 
@@ -1896,7 +1896,7 @@ private:
                                 if (path->Dropped() || !path->IsTable() || !Self->Tables.contains(pathId)) {
                                     str << "path is dropped or is not a table";
                                 } else {
-                                    const TTableInfo::TPtr table = Self->Tables.at(pathId);
+                                    auto table = Self->Tables.at(pathId);
                                     str << (table->GetPartitionStore().contains(shardIdx) ? "Active" : "Inactive");
                                 }
                             }

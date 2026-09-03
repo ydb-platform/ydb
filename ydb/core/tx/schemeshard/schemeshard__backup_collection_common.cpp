@@ -125,7 +125,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
     }
 
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
-    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+    const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
     auto& collectionPaths = paths[targetPath];
     collectionPaths.emplace(targetDir);
@@ -237,7 +237,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRestoreRequiredPaths(
     }
 
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
-    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+    const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
     auto& collectionPaths = paths[tx.GetWorkingDir()];
 

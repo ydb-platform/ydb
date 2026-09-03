@@ -226,7 +226,7 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
             TPathId pathId = *--itCandidate;
             Self->CleanDroppedSubDomainsCandidates.erase(itCandidate);
             TPathElement::TPtr path = Self->PathsById.at(pathId);
-            TSubDomainInfo::TPtr domain = Self->SubDomains.at(pathId);
+            auto domain = Self->SubDomains.at(pathId);
             if (path->Dropped() &&
                 path->DbRefCount == 1 &&
                 path->AllChildrenCount == 0 &&

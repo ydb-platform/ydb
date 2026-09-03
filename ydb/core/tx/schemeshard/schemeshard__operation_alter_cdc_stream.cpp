@@ -60,7 +60,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistCdcStream(db, pathId);
-        context.SS->CdcStreams[pathId]->FinishAlter();
+        context.SS->CdcStreams.UpdateUntracked(pathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -161,7 +161,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
-        auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
+        auto& stream = context.SS->CdcStreams.Update(streamPath.Base()->PathId, context.MemChanges);
 
         TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
         TCdcStreamInfo::EState newState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
@@ -195,7 +195,6 @@ public:
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, streamPath.Base()->PathId);
-        context.MemChanges.GrabCdcStream(context.SS, streamPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(streamPath.Base()->PathId);
@@ -241,7 +240,7 @@ protected:
         auto path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());

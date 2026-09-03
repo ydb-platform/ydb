@@ -40,7 +40,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterSolomonVolume);
 
-        auto solomon = context.SS->SolomonVolumes[txState->TargetPathId];
+        auto& solomon = context.SS->SolomonVolumes.UpdateUntracked(txState->TargetPathId);
         Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
         Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId);
 
@@ -101,7 +101,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto solomon = context.SS->SolomonVolumes[txState->TargetPathId];
+        auto solomon = context.SS->SolomonVolumes.at(txState->TargetPathId);
         Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
         Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId);
 
@@ -109,7 +109,7 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Add(solomon->AlterData->Partitions.size());
 
         context.SS->PersistSolomonVolume(db, txState->TargetPathId, solomon->AlterData);
-        context.SS->SolomonVolumes[txState->TargetPathId] = solomon->AlterData;
+        context.SS->SolomonVolumes.SetUntracked(txState->TargetPathId, solomon->AlterData);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -208,7 +208,7 @@ public:
                 .IsCommonSensePath();
 
             if (checks) {
-                TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
+                auto solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
                 if (alter.GetPartitionCount() > solomon->Partitions.size()) {
                     const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size();
 
@@ -225,7 +225,7 @@ public:
             }
         }
 
-        TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
+        auto& solomon = context.SS->SolomonVolumes.Update(path.Base()->PathId, context.MemChanges);
 
         if (!alter.HasPartitionCount() && !alter.GetUpdateChannelsBinding()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");

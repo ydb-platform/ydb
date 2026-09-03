@@ -192,7 +192,6 @@ public:
         const auto sysViewPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, sysViewPathId);
         context.MemChanges.GrabPath(context.SS, parentPath->PathId);
-        context.MemChanges.GrabNewSysView(context.SS, sysViewPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(sysViewPathId);
@@ -216,7 +215,7 @@ public:
         }
 
         TSysViewInfo::TPtr sysViewInfo = CreateSysView(sysViewDescription);
-        context.SS->SysViews[sysViewPathId] = sysViewInfo;
+        context.SS->SysViews.Set({.Path = sysViewPathId, .Value = sysViewInfo, .Changes = context.MemChanges});
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateSysView, sysViewPathId);
         txState.State = TTxState::Propose;

@@ -1083,13 +1083,16 @@ public:
             context.DbChanges.PersistShard(shard.Idx);
         }
 
-        TTableInfo::TPtr mutableTableInfo = context.SS->Tables.at(path->PathId);
+        auto& mutableTableInfo = context.SS->Tables.Update(path->PathId, context.MemChanges);
 
         mutableTableInfo->RegisterSplitMergeOp(OperationId, op);
-        context.SS->CreateTx(OperationId, TTxState::TxSplitTablePartition, path->PathId) = op;
+
+        auto& txState = context.SS->CreateTx(OperationId, TTxState::TxSplitTablePartition, path->PathId);
+        txState = std::move(op);
+        txState.AcquirePathRefs(context.SS);
         context.OnComplete.ActivateTx(OperationId);
 
-        for (const auto& shard : op.Shards) {
+        for (const auto& shard : txState.Shards) {
             Y_ABORT_UNLESS(shard.Operation == TTxState::TransferData || shard.Operation == TTxState::CreateParts);
             // Add new (DST) shards to the list of all shards and update LastTxId for the old (SRC) shards
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
@@ -1103,7 +1106,7 @@ public:
             }
         }
 
-        path.DomainInfo()->AddInternalShards(op, context.SS); //allow over commit for merge
+        path.DomainInfo()->AddInternalShards(txState, context.SS); //allow over commit for merge
         path->IncShardsInside(dstCount);
 
         SetState(NextState());
@@ -1114,7 +1117,7 @@ public:
             << ", tableId: " << pathId
             << ", opId: " << OperationId
             << ", at schemeshard: " << ssId
-            << ", op: " << op.SplitDescription->ShortDebugString()
+            << ", op: " << txState.SplitDescription->ShortDebugString()
             << ", request: " << info.ShortDebugString());
 
         return result;
@@ -1136,7 +1139,7 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
+        auto& tableInfo = context.SS->Tables.UpdateUntracked(pathId);
         Y_ABORT_UNLESS(tableInfo);
 
         // Undo the in-memory changes made by Propose() using inverse operations.

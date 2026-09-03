@@ -229,7 +229,7 @@ public:
             return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
         }
 
-        const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+        const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
         // Create in-flight operation object
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
@@ -378,7 +378,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     }
 
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
-    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+    const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
     TString lastFullBackupName;
     TVector<TString> incrBackupNames;
@@ -464,7 +464,7 @@ bool CreateLongIncrementalRestoreOp(
 bool CreateIncrementalBackupPathStateOps(
     TOperationId opId,
     const TTxTransaction& tx,
-    const TBackupCollectionInfo::TPtr& bc,
+    const TIntrusiveConstPtr<TBackupCollectionInfo>& bc,
     const TPath& bcPath,
     const TVector<TString>& incrBackupNames,
     TOperationContext& context,

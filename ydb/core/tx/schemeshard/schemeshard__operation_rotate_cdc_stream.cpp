@@ -69,11 +69,11 @@ public:
         context.SS->PersistCreateStep(db, newStreamPathId, step);
 
         context.SS->PersistCdcStream(db, newStreamPathId);
-        context.SS->CdcStreams[newStreamPathId] = newStream->AlterData;
+        context.SS->CdcStreams.SetUntracked(newStreamPathId, newStream->AlterData);
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
 
         context.SS->PersistCdcStream(db, oldStreamPathId);
-        context.SS->CdcStreams[oldStreamPathId]->FinishAlter();
+        context.SS->CdcStreams.UpdateUntracked(oldStreamPathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(oldStreamPath);
         context.SS->ClearDescribePathCaches(newStreamPath);
@@ -221,7 +221,7 @@ public:
 
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(oldStreamPath.Base()->PathId));
-        auto oldStream = context.SS->CdcStreams.at(oldStreamPath.Base()->PathId);
+        auto& oldStream = context.SS->CdcStreams.Update(oldStreamPath.Base()->PathId, context.MemChanges);
 
         TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
         TCdcStreamInfo::EState newState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
@@ -354,7 +354,6 @@ public:
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
-        context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         const auto pathId = context.SS->AllocatePathId();
@@ -362,7 +361,6 @@ public:
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabDomain(context.SS, newStreamPath.GetPathIdForDomain());
-        context.MemChanges.GrabNewCdcStream(context.SS, pathId);
 
         context.DbChanges.PersistPath(oldStreamPath.Base()->PathId);
         context.DbChanges.PersistAlterCdcStream(oldStreamPath.Base()->PathId);
@@ -380,7 +378,6 @@ public:
 
         auto newStream = TCdcStreamInfo::Create(newStreamDesc);
         Y_ABORT_UNLESS(newStream);
-        context.SS->CdcStreams[pathId] = newStream;
 
         newStreamPath.MaterializeLeaf(owner, pathId);
         result->SetPathId(pathId.LocalPathId);
@@ -400,7 +397,7 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.SS->IncrementPathDbRefCount(pathId);
+        context.SS->CdcStreams.Set({.Path = pathId, .Value = newStream, .Changes = context.MemChanges});
 
         newStreamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
@@ -432,7 +429,7 @@ protected:
         auto path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
 
         auto& notice = *tx.MutableRotateCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());

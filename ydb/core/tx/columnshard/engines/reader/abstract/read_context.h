@@ -77,8 +77,8 @@ public:
         return Resolver.get();
     }
 
-    ui64 GetConveyorProcessId() const {
-        return ConveyorProcessGuard.GetInternalProcessId();
+    bool SendTaskToExecute(const std::shared_ptr<NConveyorComposite::ITask>& task) const {
+        return ConveyorProcessGuard.SendTaskToExecute(task);
     }
 
     template <class T>

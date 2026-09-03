@@ -51,21 +51,15 @@ namespace NActors {
     }
 #endif
 
-    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
+    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
-        , UseRingQueueValue(useRingQueue)
         , ThreadsAffinity(affinity)
-    {
-        if (useRingQueue) {
-            Activations.emplace<TRingActivationQueueV4>(threads);
-        } else {
-            Activations.emplace<TUnorderedCacheActivationQueue>();
-        }
-    }
+        , Activations(threads)
+    {}
 
     TExecutorPoolBase::~TExecutorPoolBase() {
-        while (std::visit([](auto &x){return x.Pop(0);}, Activations))
+        while (Activations.Pop(0))
             ;
     }
 
@@ -130,11 +124,7 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(TMailbox* mailbox) {
-        if (UseRingQueue()) {
-            ScheduleActivationEx(mailbox, 0);
-        } else {
-            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
-        }
+        ScheduleActivationEx(mailbox, 0);
     }
 
     Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {
@@ -155,11 +145,7 @@ namespace NActors {
         if (!mailbox) {
             return;
         }
-        if (UseRingQueueValue) {
-            ScheduleActivationEx(mailbox, 0);
-        } else {
-            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
-        }
+        ScheduleActivationEx(mailbox, 0);
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType, ui64 revolvingWriteCounter, const TActorId& parentId) {
@@ -289,7 +275,4 @@ namespace NActors {
         return MailboxTable;
     }
 
-    bool TExecutorPoolBase::UseRingQueue() const {
-        return UseRingQueueValue;
-    }
 }

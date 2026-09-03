@@ -1,4 +1,13 @@
-/* syntax version 1 */
+$input = [
+    <|value: "Eyl\xC3\xBCl"u|>,
+    <|value: "\xD0\xB6\xD0\xBD\xD1\x96\xD1\x9E\xD0\xBD\xD1\x8F"u|>,
+    <|value: "\xC3\xBAnora"u|>,
+    <|value: "Ci\xD1\x87 Ci\xD1\x87"u|>,
+    <|value: "\xD0\xBF\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82 \xD0\xBF\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82"u|>,
+    <|value: "6"u|>,
+    <|value: ""u|>,
+];
+
 SELECT
     value AS value,
     Unicode::IsUtf(value) AS is,
@@ -12,4 +21,4 @@ SELECT
     Unicode::RFind(value, "ет"u) AS rfind,
     Unicode::Find(value, "ет"u, 7ul) AS find_from,
     Unicode::RFind(value, "ет"u, 7ul) AS rfind_from
-FROM Input
+FROM AS_TABLE($input)

@@ -224,24 +224,36 @@ protected:
     std::shared_ptr<arrow::DataType> ArrowType_;
 };
 
+// singular types (Void, Null, EmptyList, EmptyDict) have no payload buffer
+// DataSize == 0 --> tuple pack/unpack skips them
+template <bool IsNull>
 class TSingularColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TSingularColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
-        Y_UNUSED(type, pool);
+    TSingularColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool)
+        : Pool_(pool)
+    {
+        Y_UNUSED(type);
     }
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-        return {array->GetValues<ui8>(0)};
-    }
-
-    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) override {
         Y_UNUSED(array);
-        Y_UNUSED(nullBitmapRelocationBuffer);
         return {nullptr};
     }
 
+    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) override {
+        if constexpr (IsNull) {
+            auto bitmap = NYql::NUdf::MakeDenseFalseBitmap(array->length, Pool_);
+            nullBitmapRelocationBuffer.push_back(bitmap);
+            return {bitmap->data()};
+        } else {
+            Y_UNUSED(array, nullBitmapRelocationBuffer);
+            return {nullptr};
+        }
+    }
+
     TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
-        return {array->GetMutableValues<ui8>(0)};
+        Y_UNUSED(array);
+        return {nullptr};
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
@@ -250,7 +262,7 @@ public:
     }
 
     ui32 GetElementSize() override {
-        return 1; // or 0?
+        return 0;
     }
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {
@@ -259,12 +271,15 @@ public:
 
     std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
         Y_UNUSED(bytes);
-        return arrow::ArrayData::Make(arrow::null(), len, {nullptr}, len);
+        return NYql::NUdf::MakeSingularArray(IsNull, len);
     }
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
         extractors.push_back(this);
     }
+
+private:
+    arrow::MemoryPool* Pool_;
 };
 
 template <typename TStringType, bool Nullable>
@@ -607,7 +622,8 @@ struct TColumnDataExtractorTraits {
     using TResource = TResourceColumnDataExtractor<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateColumnDataExtractor<TTzDate, Nullable>;
-    using TSingular = TSingularColumnDataExtractor;
+    template <bool IsNull>
+    using TSingular = TSingularColumnDataExtractor<IsNull>;
 
     constexpr static bool PassType = true;
 
@@ -622,8 +638,7 @@ struct TColumnDataExtractorTraits {
 
     template <bool IsNull>
     static TResult::TPtr MakeSingular(const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
-        Y_UNUSED(IsNull);
-        return std::make_unique<TSingular>(type, pool);
+        return std::make_unique<TSingular<IsNull>>(type, pool);
     }
 
     static TResult::TPtr MakeResource(bool isOptional, const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
@@ -750,6 +765,9 @@ public:
 
     void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) override {
         columns.resize(Extractors_.size());
+        if (columns.empty()) {
+            return;
+        }
 
         std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
         TupleLayout_->CalculateColumnSizes(

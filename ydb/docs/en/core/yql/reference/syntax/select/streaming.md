@@ -1,6 +1,6 @@
 # Streaming read from a topic
 
-You can read data from a [topic](../../../../concepts/datamodel/topic.md) using a regular `SELECT` without creating a [streaming query](../../../../concepts/streaming-query/streaming-query.md). To do this, specify `STREAMING = TRUE` in the `WITH` block and set a limit on the number of output rows via `LIMIT`; otherwise, the query will not complete.
+You can read data from a [topic](../../../../concepts/datamodel/topic.md) using a regular `SELECT` without creating a [streaming query](../../../../concepts/streaming-query/streaming-query.md). To do this, specify `STREAMING = "TRUE"` in the `WITH` block and set a limit on the number of output rows via `LIMIT`; otherwise, the query will not complete.
 
 {% note warning %}
 
@@ -32,7 +32,7 @@ WITH (
     SCHEMA = (
         Data String
     ),
-    STREAMING = TRUE
+    STREAMING = "TRUE"
 )
 LIMIT 1
 ```

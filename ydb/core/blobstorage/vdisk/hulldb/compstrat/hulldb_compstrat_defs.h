@@ -36,6 +36,7 @@ namespace NKikimr {
             Explicit,
             BalanceLevel,
             BalanceFull,
+            Emergency,
             FreeSpace,
             Squeeze,
         };
@@ -425,6 +426,11 @@ namespace NKikimr {
             TInstant SqueezeBefore;
             // Full compact LevelIndex before this lsn
             std::optional<TFullCompactionAttrs> FullCompactionAttrs;
+            // Max index chunks the compaction job may allocate before commit (peak extra space).
+            // Max<ui32>() means no limit (budget unknown / plenty of space).
+            ui32 FreeChunksBudget = Max<ui32>();
+            // When true, skip unconstrained Balance and prefer Emergency packing/merges.
+            bool EmergencyMode = false;
         };
 
     } // NHullComp

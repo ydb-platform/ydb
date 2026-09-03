@@ -296,7 +296,11 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             'ReceiveMessageWaitTimeSeconds',
             'VisibilityTimeout',
         ))
+        assert_that(attributes['FifoQueue'], equal_to('true'))
         assert_that(attributes['VisibilityTimeout'], equal_to('30'))
+
+        fifo_only = self._sqs_api.get_queue_attributes(queue_url, attributes=['FifoQueue'])
+        assert_that(fifo_only, equal_to({'FifoQueue': 'true'}))
 
         self._sqs_api.set_queue_attributes(queue_url, {'VisibilityTimeout': '2'})
         attributes = self._sqs_api.get_queue_attributes(queue_url)

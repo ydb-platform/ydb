@@ -5,16 +5,13 @@
 #include <library/cpp/yt/string/format.h>
 
 #include <util/generic/strbuf.h>
+#include <util/generic/typetraits.h>
 
 #include <string>
 
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-//! Wraps the format spec passed to a tag-appending |With| and validates at compile time
-//! that it is a |%|-prefixed string literal (e.g. |"%v"|, |"%08x"|).
-class TLoggingTagSpec;
 
 //! Wraps a tag key and rejects, at compile time, the pre-migration printf spelling
 //! (|WithTag("Key: %v", value)|), which would otherwise bind to |WithTag(key, value)|
@@ -34,8 +31,6 @@ public:
 
     template <class TValue>
     TLoggingTagList& Add(TLoggingTagKey key, const TValue& value);
-    template <class TValue>
-    TLoggingTagList& Add(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec);
     template <class... TArgs>
     TLoggingTagList& AddFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args);
 
@@ -46,10 +41,6 @@ public:
     [[nodiscard]] TLoggingTagList With(TLoggingTagKey key, const TValue& value) const &;
     template <class TValue>
     [[nodiscard]] TLoggingTagList With(TLoggingTagKey key, const TValue& value) &&;
-    template <class TValue>
-    [[nodiscard]] TLoggingTagList With(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &;
-    template <class TValue>
-    [[nodiscard]] TLoggingTagList With(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&;
     template <class... TArgs>
     [[nodiscard]] TLoggingTagList WithFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &;
     template <class... TArgs>
@@ -65,7 +56,15 @@ private:
 
     template <class TValue>
     void DoAdd(TLoggingTagKey key, const TValue& value, TStringBuf spec);
-    void DoAdd(TLoggingTagKey key, TStringBuf value);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Marks a type as carrying a well-known tag under #Key.
+template <class T>
+struct TWellKnownLoggingTagTraits
+{
+    static_assert(TDependentFalse<T>, "Type does not carry a well-known logging tag; pass an explicit key");
 };
 
 ////////////////////////////////////////////////////////////////////////////////

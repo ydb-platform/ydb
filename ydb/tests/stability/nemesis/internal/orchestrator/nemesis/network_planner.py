@@ -84,6 +84,7 @@ class DnsNemesisPlanner(NetworkNemesisPlanner):
 
     def __init__(self) -> None:
         super().__init__(max_affected=1)
+        self.nemesis_type = "DnsNemesis"
 
 
 PAYLOAD_TIME_SKEW_INJECT = {"delta_sec": 300}

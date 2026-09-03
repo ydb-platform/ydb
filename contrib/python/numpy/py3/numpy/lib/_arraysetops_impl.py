@@ -68,6 +68,7 @@ def ediff1d(ary, to_end=None, to_begin=None):
 
     Examples
     --------
+    >>> import numpy as np
     >>> x = np.array([1, 2, 4, 7, 0])
     >>> np.ediff1d(x)
     array([ 1,  2,  3, -7])
@@ -176,8 +177,6 @@ def unique(ar, return_index=False, return_inverse=False,
         that contain objects are not supported if the `axis` kwarg is used. The
         default is None.
 
-        .. versionadded:: 1.13.0
-
     equal_nan : bool, optional
         If True, collapses multiple NaN values in the return array into one.
 
@@ -197,11 +196,10 @@ def unique(ar, return_index=False, return_inverse=False,
         The number of times each of the unique values comes up in the
         original array. Only provided if `return_counts` is True.
 
-        .. versionadded:: 1.9.0
-
     See Also
     --------
     repeat : Repeat elements of an array.
+    sort : Return a sorted copy of an array.
 
     Notes
     -----
@@ -215,17 +213,15 @@ def unique(ar, return_index=False, return_inverse=False,
     flattened subarrays are sorted in lexicographic order starting with the
     first element.
 
-    .. versionchanged: 1.21
-        If nan values are in the input array, a single nan is put
-        to the end of the sorted unique values.
-
-        Also for complex arrays all NaN values are considered equivalent
+    .. versionchanged:: 1.21
+        Like np.sort, NaN will sort to the end of the values.
+        For complex arrays all NaN values are considered equivalent
         (no matter whether the NaN is in the real or imaginary part).
         As the representant for the returned array the smallest one in the
         lexicographical order is chosen - see np.sort for how the lexicographical
         order is defined for complex arrays.
 
-    .. versionchanged: 2.0
+    .. versionchanged:: 2.0
         For multi-dimensional inputs, ``unique_inverse`` is reshaped
         such that the input can be reconstructed using
         ``np.take(unique, unique_inverse, axis=axis)``. The result is
@@ -238,6 +234,7 @@ def unique(ar, return_index=False, return_inverse=False,
 
     Examples
     --------
+    >>> import numpy as np
     >>> np.unique([1, 1, 2, 2, 3, 3])
     array([1, 2, 3])
     >>> a = np.array([[1, 1], [2, 3]])
@@ -286,7 +283,7 @@ def unique(ar, return_index=False, return_inverse=False,
     """
     ar = np.asanyarray(ar)
     if axis is None:
-        ret = _unique1d(ar, return_index, return_inverse, return_counts, 
+        ret = _unique1d(ar, return_index, return_inverse, return_counts,
                         equal_nan=equal_nan, inverse_shape=ar.shape, axis=None)
         return _unpack_tuple(ret)
 
@@ -411,14 +408,14 @@ def _unique_all_dispatcher(x, /):
 @array_function_dispatch(_unique_all_dispatcher)
 def unique_all(x):
     """
-    Find the unique elements of an array, and counts, inverse and indices.
+    Find the unique elements of an array, and counts, inverse, and indices.
 
-    This function is an Array API compatible alternative to:
+    This function is an Array API compatible alternative to::
 
-    >>> x = np.array([1, 1, 2])
-    >>> np.unique(x, return_index=True, return_inverse=True,
-    ...           return_counts=True, equal_nan=False)
-    (array([1, 2]), array([0, 2]), array([0, 0, 1]), array([2, 1]))
+        np.unique(x, return_index=True, return_inverse=True,
+                  return_counts=True, equal_nan=False)
+
+    but returns a namedtuple for easier access to each output.
 
     Parameters
     ----------
@@ -440,6 +437,19 @@ def unique_all(x):
     --------
     unique : Find the unique elements of an array.
 
+    Examples
+    --------
+    >>> import numpy as np
+    >>> x = [1, 1, 2]
+    >>> uniq = np.unique_all(x)
+    >>> uniq.values
+    array([1, 2])
+    >>> uniq.indices
+    array([0, 2])
+    >>> uniq.inverse_indices
+    array([0, 0, 1])
+    >>> uniq.counts
+    array([2, 1])
     """
     result = unique(
         x,
@@ -460,11 +470,11 @@ def unique_counts(x):
     """
     Find the unique elements and counts of an input array `x`.
 
-    This function is an Array API compatible alternative to:
+    This function is an Array API compatible alternative to::
 
-    >>> x = np.array([1, 1, 2])
-    >>> np.unique(x, return_counts=True, equal_nan=False)
-    (array([1, 2]), array([2, 1]))
+        np.unique(x, return_counts=True, equal_nan=False)
+
+    but returns a namedtuple for easier access to each output.
 
     Parameters
     ----------
@@ -483,6 +493,15 @@ def unique_counts(x):
     --------
     unique : Find the unique elements of an array.
 
+    Examples
+    --------
+    >>> import numpy as np
+    >>> x = [1, 1, 2]
+    >>> uniq = np.unique_counts(x)
+    >>> uniq.values
+    array([1, 2])
+    >>> uniq.counts
+    array([2, 1])
     """
     result = unique(
         x,
@@ -503,11 +522,11 @@ def unique_inverse(x):
     """
     Find the unique elements of `x` and indices to reconstruct `x`.
 
-    This function is Array API compatible alternative to:
+    This function is an Array API compatible alternative to::
 
-    >>> x = np.array([1, 1, 2])
-    >>> np.unique(x, return_inverse=True, equal_nan=False)
-    (array([1, 2]), array([0, 0, 1]))
+        np.unique(x, return_inverse=True, equal_nan=False)
+
+    but returns a namedtuple for easier access to each output.
 
     Parameters
     ----------
@@ -527,6 +546,15 @@ def unique_inverse(x):
     --------
     unique : Find the unique elements of an array.
 
+    Examples
+    --------
+    >>> import numpy as np
+    >>> x = [1, 1, 2]
+    >>> uniq = np.unique_inverse(x)
+    >>> uniq.values
+    array([1, 2])
+    >>> uniq.inverse_indices
+    array([0, 0, 1])
     """
     result = unique(
         x,
@@ -547,11 +575,9 @@ def unique_values(x):
     """
     Returns the unique elements of an input array `x`.
 
-    This function is Array API compatible alternative to:
+    This function is an Array API compatible alternative to::
 
-    >>> x = np.array([1, 1, 2])
-    >>> np.unique(x, equal_nan=False)
-    array([1, 2])
+        np.unique(x, equal_nan=False)
 
     Parameters
     ----------
@@ -566,6 +592,12 @@ def unique_values(x):
     See Also
     --------
     unique : Find the unique elements of an array.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> np.unique_values([1, 1, 2])
+    array([1, 2])
 
     """
     return unique(
@@ -603,8 +635,6 @@ def intersect1d(ar1, ar2, assume_unique=False, return_indices=False):
         arrays are returned. The first instance of a value is used if there are
         multiple. Default is False.
 
-        .. versionadded:: 1.15.0
-
     Returns
     -------
     intersect1d : ndarray
@@ -618,6 +648,7 @@ def intersect1d(ar1, ar2, assume_unique=False, return_indices=False):
 
     Examples
     --------
+    >>> import numpy as np
     >>> np.intersect1d([1, 3, 4, 3], [3, 1, 2, 1])
     array([1, 3])
 
@@ -693,7 +724,7 @@ def setxor1d(ar1, ar2, assume_unique=False):
         Input arrays.
     assume_unique : bool
         If True, the input arrays are both assumed to be unique, which
-        can speed up the calculation.  Default is False.
+        can speed up the calculation. Default is False.
 
     Returns
     -------
@@ -703,6 +734,7 @@ def setxor1d(ar1, ar2, assume_unique=False):
 
     Examples
     --------
+    >>> import numpy as np
     >>> a = np.array([1, 2, 3, 2, 4])
     >>> b = np.array([2, 3, 5, 7, 5])
     >>> np.setxor1d(a,b)
@@ -713,7 +745,7 @@ def setxor1d(ar1, ar2, assume_unique=False):
         ar1 = unique(ar1)
         ar2 = unique(ar2)
 
-    aux = np.concatenate((ar1, ar2))
+    aux = np.concatenate((ar1, ar2), axis=None)
     if aux.size == 0:
         return aux
 
@@ -773,8 +805,6 @@ def in1d(ar1, ar2, assume_unique=False, invert=False, *, kind=None):
           'table' may be faster in most cases. If 'table' is chosen,
           `assume_unique` will have no effect.
 
-        .. versionadded:: 1.8.0
-
     Returns
     -------
     in1d : (M,) ndarray, bool
@@ -802,10 +832,9 @@ def in1d(ar1, ar2, assume_unique=False, invert=False, *, kind=None):
     be automatically selected based only on memory usage, so one may
     manually set ``kind='table'`` if memory constraints can be relaxed.
 
-    .. versionadded:: 1.4.0
-
     Examples
     --------
+    >>> import numpy as np
     >>> test = np.array([0, 1, 2, 5, 0])
     >>> states = [0, 2]
     >>> mask = np.in1d(test, states)
@@ -876,11 +905,11 @@ def _in1d(ar1, ar2, assume_unique=False, invert=False, *, kind=None):
         # However, here we set the requirement that by default
         # the intermediate array can only be 6x
         # the combined memory allocation of the original
-        # arrays. See discussion on 
+        # arrays. See discussion on
         # https://github.com/numpy/numpy/pull/12065.
 
         if (
-            range_safe_from_overflow and 
+            range_safe_from_overflow and
             (below_memory_constraint or kind == 'table')
         ):
 
@@ -1037,7 +1066,6 @@ def isin(element, test_elements, assume_unique=False, invert=False, *,
 
     Notes
     -----
-
     `isin` is an element-wise function version of the python keyword `in`.
     ``isin(a, b)`` is roughly equivalent to
     ``np.array([item in b for item in a])`` if `a` and `b` are 1-D sequences.
@@ -1057,10 +1085,9 @@ def isin(element, test_elements, assume_unique=False, invert=False, *,
     be automatically selected based only on memory usage, so one may
     manually set ``kind='table'`` if memory constraints can be relaxed.
 
-    .. versionadded:: 1.13.0
-
     Examples
     --------
+    >>> import numpy as np
     >>> element = 2*np.arange(4).reshape((2, 2))
     >>> element
     array([[0, 2],
@@ -1130,6 +1157,7 @@ def union1d(ar1, ar2):
 
     Examples
     --------
+    >>> import numpy as np
     >>> np.union1d([-1, 0, 1], [-2, 0, 2])
     array([-2, -1,  0,  1,  2])
 
@@ -1172,6 +1200,7 @@ def setdiff1d(ar1, ar2, assume_unique=False):
 
     Examples
     --------
+    >>> import numpy as np
     >>> a = np.array([1, 2, 3, 2, 4, 1])
     >>> b = np.array([3, 4, 5, 6])
     >>> np.setdiff1d(a, b)

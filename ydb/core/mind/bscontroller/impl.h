@@ -1,7 +1,10 @@
 #pragma once
+
 #include "defs.h"
+
 #include "bsc.h"
 #include "cluster_balancing.h"
+#include "group_mapper.h"
 #include "scheme.h"
 #include "mood.h"
 #include "types.h"
@@ -10,8 +13,25 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+#include "yaml_config_helpers.h"
 
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/mind/table_adapter.h>
+#include <ydb/core/tablet/tablet_responsiveness_pinger.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/util/backoff.h>
+
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/counters_bs_controller.pb.h>
+
+#include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/hash_multi_map.h>
 
@@ -83,6 +103,8 @@ public:
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
+    class TTxListDDiskInfoTablets;
+    class TTxGetDDiskInfoTablet;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -506,8 +528,7 @@ public:
         }
 
         bool SlotSpaceEnforced(TBlobStorageController& self) const {
-            return Metrics.HasEnforcedDynamicSlotSize() &&
-                self.PDiskSpaceColorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW;
+            return TGroupMapper::SlotSpaceEnforced(Metrics, self.PDiskSpaceColorBorder);
         }
 
         bool HasFullMetrics() const {
@@ -525,26 +546,25 @@ public:
         }
 
         void UpdateOperational(bool nodeConnected) {
-            Operational = nodeConnected && (!Metrics.HasState() ||
-                Metrics.GetState() == NKikimrBlobStorage::TPDiskState::Normal);
+            Operational = TGroupMapper::IsPDiskOperational(nodeConnected, &Metrics);
         }
 
-        bool ShouldBeSettledBySelfHeal() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
-                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
-                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT
-                || MaintenanceStatus == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
-        }
-
-        bool IsSelfHealReasonDecommit() const {
-            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT &&
-                Status != NKikimrBlobStorage::EDriveStatus::FAULTY &&
-                Status != NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED;
+        ESelfHealReassignmentPriority GetSelfHealReassignmentPriority() const {
+            if (Status == NKikimrBlobStorage::EDriveStatus::FAULTY ||
+                    Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED) {
+                return ESelfHealReassignmentPriority::DriveStatus;
+            } else if (DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT) {
+                return ESelfHealReassignmentPriority::DecommitStatus;
+            } else if (MaintenanceStatus ==
+                    NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
+                return ESelfHealReassignmentPriority::MaintenanceStatus;
+            } else {
+                return ESelfHealReassignmentPriority::None;
+            }
         }
 
         bool UsableInTermsOfDecommission(bool isSelfHealReasonDecommit) const {
-            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE // acceptable in any case
-                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
+            return TGroupMapper::UsableInTermsOfDecommission(DecommitStatus, isSelfHealReasonDecommit);
         }
 
         bool BadInTermsOfSelfHeal() const {
@@ -553,29 +573,15 @@ public:
         }
 
         auto GetSelfHealStatusTuple() const {
-            return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
+            return std::make_tuple(GetSelfHealReassignmentPriority(), BadInTermsOfSelfHeal(), Decommitted());
         }
 
         bool AcceptsNewSlots() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
-                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED
-                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS;
+            return TGroupMapper::AcceptsNewSlots(Status, MaintenanceStatus);
         }
 
         bool Decommitted() const {
-            switch (DecommitStatus) {
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE:
-                    return false;
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING:
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT:
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED:
-                    return true;
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET:
-                case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
-                case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    break;
-            }
-            Y_ABORT("unexpected EDecommitStatus");
+            return TGroupMapper::IsDecommitted(DecommitStatus);
         }
 
         bool HasGoodExpectedStatus() const {
@@ -897,10 +903,10 @@ public:
             }
         }
 
-        bool FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+        bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
-        bool FillInResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const;
-        bool FillInVDiskResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const;
+        bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool countMaxSlots) const;
+        bool FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const;
 
         void UpdateSeenOperational() {
             TBlobStorageGroupInfo::TGroupFailDomains failed(Topology.get());
@@ -1546,6 +1552,7 @@ private:
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     TActorId ResponsivenessActorID;
+    TActorId CmsPipe;
     TTabletResponsivenessPinger* ResponsivenessPinger;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
@@ -1662,9 +1669,15 @@ private:
     IActor* CreateSystemViewsCollector();
     void UpdateSystemViews();
 
-    bool ValidateConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
-        bool suppressDisintegratedGroupsChecking, TString *errorDescription,
-        NKikimrBlobStorage::TConfigResponse *response = nullptr);
+    struct TValidateConfigUpdatesParameters {
+        bool SuppressFailModelChecking = false;
+        bool SuppressDegradedGroupsChecking = false;
+        bool SuppressDisintegratedGroupsChecking = false;
+        bool AllowDegradedWithSinglePhantomsOnly = false;
+    };
+
+    bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
+            TString* errorDescription, NKikimrBlobStorage::TConfigResponse* response = nullptr);
 
     std::optional<TString> ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
         TConfigTxFlags flags, TTransactionContext& txc,
@@ -1899,6 +1912,7 @@ public:
     // For test purposes, required for self heal actor
     void CreateEmptyHostRecordsMap() {
         HostRecords = std::make_shared<THostRecordMapImpl>();
+        EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
     }
 
     ui64 NextConfigTxSeqNo = 1;
@@ -2667,6 +2681,13 @@ public:
     class TTxAllocateDDiskBlockGroup;
 
     void Handle(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTablets::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTablet::TPtr ev);
+
+    // Handles both the CMS notification pipe (CmsPipe) and forwards other
+    // client pipes (e.g. Console) to their respective owners.
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE WARDEN PIPE LIFETIME MANAGEMENT

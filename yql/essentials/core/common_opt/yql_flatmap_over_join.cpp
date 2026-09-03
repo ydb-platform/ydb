@@ -1183,7 +1183,7 @@ private:
         return { Ctx_.ChangeChildren(*joinTree, std::move(children)), found1, found2 };
     }
 
-private:
+
     TVector<TStringBuf> CrossJoins_;
     TVector<TExprNode::TPtr> RestJoins_;
 
@@ -1490,7 +1490,7 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
 
         size_t count = 0;
         for (size_t i = 0; i < 2; ++i) {
-            TExprNode::TPtr side = sides[i];
+            const TExprNode::TPtr& side = sides[i];
             if (!side->IsCallable("Member") || &side->Head() != &row) {
                 ++count;
                 if (!remaps.contains(side.Get())) {

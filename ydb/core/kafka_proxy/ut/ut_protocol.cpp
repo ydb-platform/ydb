@@ -7,6 +7,7 @@
 #include "test_server.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/kafka_proxy/actors/kafka_api_versions_actor.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -19,6 +20,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
+
+#include <util/network/socket.h>
 
 using namespace NKafka;
 using namespace NYdb;
@@ -143,6 +146,25 @@ void AssertFetchedKafkaRecords(const TMessagePtr<TFetchResponseData>& msg) {
     UNIT_ASSERT_VALUES_EQUAL(TString(records[1].Value->data(), records[1].Value->size()), "value-1");
 }
 
+void AssertKafkaBatchPayload(const TKafkaRecordBatch& batch, TStringBuf firstValue, TStringBuf secondValue) {
+    UNIT_ASSERT_VALUES_EQUAL(batch.Records.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(TString(batch.Records[0].Key->data(), batch.Records[0].Key->size()), "key-0");
+    UNIT_ASSERT_VALUES_EQUAL(TString(batch.Records[0].Value->data(), batch.Records[0].Value->size()), TString(firstValue));
+    UNIT_ASSERT_VALUES_EQUAL(TString(batch.Records[1].Key->data(), batch.Records[1].Key->size()), "key-1");
+    UNIT_ASSERT_VALUES_EQUAL(TString(batch.Records[1].Value->data(), batch.Records[1].Value->size()), TString(secondValue));
+}
+
+void AssertKafkaBatchBaseOffsetWasRewrittenOnly(TStringBuf fetchedBatch, TStringBuf originalBatch, ui64 expectedBaseOffset) {
+    const auto parsed = ReadKafkaRecordBatch(fetchedBatch);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.BaseOffset, expectedBaseOffset);
+    UNIT_ASSERT_VALUES_EQUAL(fetchedBatch.size(), originalBatch.size());
+
+    const size_t baseOffsetSize = sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type);
+    UNIT_ASSERT_VALUES_EQUAL(
+        TString(fetchedBatch.data() + baseOffsetSize, fetchedBatch.size() - baseOffsetSize),
+        TString(originalBatch.data() + baseOffsetSize, originalBatch.size() - baseOffsetSize));
+}
+
 TString GetMessageMetaKey(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& msg, const TString& key) {
     if (msg.GetMessageMeta()) {
         for (auto& [k, v] : msg.GetMessageMeta()->Fields) {
@@ -158,6 +180,59 @@ TString GetMessageMetaKey(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
 void AssertMessageMeta(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& msg, const TString& field,
                        const TString& expectedValue) {
     UNIT_ASSERT_VALUES_EQUAL_C(GetMessageMetaKey(msg, field), expectedValue, "Field " << field << " not found in message meta");
+}
+
+TString MakeKafkaRequestFrame(TRequestHeaderData& header, const TString& body) {
+    TKafkaWriteBuffer payload(256);
+    TKafkaWritable writable(payload);
+    header.Write(writable, RequestHeaderVersion(header.RequestApiKey, header.RequestApiVersion));
+    writable.write(body.data(), body.size());
+
+    const TString payloadBytes = payload.AsString();
+    TKafkaWriteBuffer frame(256);
+    TKafkaWritable frameWritable(frame);
+    TKafkaInt32 size = payloadBytes.size();
+    frameWritable << size;
+    frameWritable.write(payloadBytes.data(), payloadBytes.size());
+    return frame.AsString();
+}
+
+TString MakeMetadataRequestWithHugeTopicsArray(TKafkaVersion version) {
+    TRequestHeaderData header;
+    header.RequestApiKey = NKafka::EApiKey::METADATA;
+    header.RequestApiVersion = version;
+    header.CorrelationId = 9101;
+    header.ClientId = "";
+
+    TKafkaWriteBuffer body(32);
+    TKafkaWritable writable(body);
+    constexpr TKafkaInt32 HugeLength = 2147483647;
+    if (version >= 9) {
+        writable.writeUnsignedVarint<ui32>(static_cast<ui32>(HugeLength) + 1);
+    } else {
+        writable << HugeLength;
+    }
+    return MakeKafkaRequestFrame(header, body.AsString());
+}
+
+void SendKafkaFrameAndExpectConnectionClose(ui16 port, const TString& frame) {
+    TNetworkAddress addr("localhost", port);
+    TSocket socket(addr);
+    socket.SetSocketTimeout(5, 0);
+
+    TSocketOutput output(socket);
+    output.Write(frame.data(), frame.size());
+    output.Flush();
+
+    TSocketInput input(socket);
+    char buf[16];
+    bool closed = false;
+    try {
+        closed = input.Read(buf, sizeof(buf)) == 0;
+    } catch (const yexception&) {
+        closed = true;
+    }
+    UNIT_ASSERT_C(closed, "server must close the kafka connection instead of allocating a huge array");
 }
 
 void AssertPartitionsIsUniqueAndCountIsExpected(std::vector<TReadInfo> readInfos, ui32 expectedPartitionsCount, TString topic) {
@@ -939,13 +1014,86 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(batches.size(), 2);
 
         const auto plainFetchedBatch = ReadKafkaRecordBatch(batches[0]);
+        UNIT_ASSERT_VALUES_EQUAL(plainFetchedBatch.BaseOffset, 0);
         UNIT_ASSERT_VALUES_EQUAL(plainFetchedBatch.Records.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[0].Key->data(), plainFetchedBatch.Records[0].Key->size()), "key-0");
         UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[0].Value->data(), plainFetchedBatch.Records[0].Value->size()), "value-0");
         UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[1].Key->data(), plainFetchedBatch.Records[1].Key->size()), "key-1");
         UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[1].Value->data(), plainFetchedBatch.Records[1].Value->size()), "value-1");
 
-        UNIT_ASSERT_VALUES_EQUAL(batches[1], compressedBatchBytes);
+        const auto compressedFetchedBatch = ReadKafkaRecordBatch(batches[1]);
+        UNIT_ASSERT_VALUES_EQUAL(compressedFetchedBatch.BaseOffset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(compressedFetchedBatch.Records.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(TString(compressedFetchedBatch.Records[0].Key->data(), compressedFetchedBatch.Records[0].Key->size()), "key-0");
+        UNIT_ASSERT_VALUES_EQUAL(TString(compressedFetchedBatch.Records[0].Value->data(), compressedFetchedBatch.Records[0].Value->size()), "value-0");
+        UNIT_ASSERT_VALUES_EQUAL(TString(compressedFetchedBatch.Records[1].Key->data(), compressedFetchedBatch.Records[1].Key->size()), "key-1");
+        UNIT_ASSERT_VALUES_EQUAL(TString(compressedFetchedBatch.Records[1].Value->data(), compressedFetchedBatch.Records[1].Value->size()), "value-1");
+    }
+
+    Y_UNIT_TEST(FetchFromMiddleOfRawKafkaBatchKeepsBatchBaseOffset) {
+        TInsecureTestServer testServer("2");
+        EnableTopicMessagesBatching(testServer);
+
+        TString topicName = "/Root/topic-fetch-from-middle-of-raw-kafka-batch";
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, 1, {});
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        const TString originalBatchBytes = WriteKafkaRecordBatch(MakeKafkaBatch(ECompressionType::ZSTD));
+        const auto produceResponse = client.Produce(topicName, 0, TKafkaBytes(ToRawBytes(originalBatchBytes)));
+        AssertProduceOk(produceResponse, topicName);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].BaseOffset, 0);
+
+        const auto fetchResponse = client.Fetch({{topicName, {0}}}, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        const auto batches = SplitFetchRecordBatches(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
+        AssertKafkaBatchBaseOffsetWasRewrittenOnly(batches[0], originalBatchBytes, 0);
+
+        const auto fetchedBatch = ReadKafkaRecordBatch(batches[0]);
+        AssertKafkaBatchPayload(fetchedBatch, "value-0", "value-1");
+    }
+
+    Y_UNIT_TEST(ProduceAndFetchTwoRawKafkaBatchesRewritesSecondBaseOffset) {
+        TInsecureTestServer testServer("2");
+        EnableTopicMessagesBatching(testServer);
+
+        TString topicName = "/Root/topic-two-raw-kafka-batches";
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, 1, {});
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        const TString firstBatchBytes = WriteKafkaRecordBatch(MakeKafkaBatch(ECompressionType::GZIP));
+        const auto firstProduceResponse = client.Produce(topicName, 0, TKafkaBytes(ToRawBytes(firstBatchBytes)));
+        AssertProduceOk(firstProduceResponse, topicName);
+        UNIT_ASSERT_VALUES_EQUAL(firstProduceResponse->Responses[0].PartitionResponses[0].BaseOffset, 0);
+
+        const TString secondBatchBytes = WriteKafkaRecordBatch(MakeKafkaBatch(ECompressionType::ZSTD));
+        const auto secondProduceResponse = client.Produce(topicName, 0, TKafkaBytes(ToRawBytes(secondBatchBytes)));
+        AssertProduceOk(secondProduceResponse, topicName);
+        UNIT_ASSERT_VALUES_EQUAL(secondProduceResponse->Responses[0].PartitionResponses[0].BaseOffset, 2);
+
+        const auto fetchResponse = client.Fetch({{topicName, {0}}});
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        const auto batches = SplitFetchRecordBatches(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 2);
+        AssertKafkaBatchBaseOffsetWasRewrittenOnly(batches[0], firstBatchBytes, 0);
+        AssertKafkaBatchBaseOffsetWasRewrittenOnly(batches[1], secondBatchBytes, 2);
+
+        AssertKafkaBatchPayload(ReadKafkaRecordBatch(batches[0]), "value-0", "value-1");
+        AssertKafkaBatchPayload(ReadKafkaRecordBatch(batches[1]), "value-0", "value-1");
     }
 
     Y_UNIT_TEST(ProduceAndFetchLegacyRawKafkaBatch) {
@@ -1776,11 +1924,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 for (const auto& topic : msg->Topics) {
                     UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                     for (const auto& partition : topic.Partitions) {
-                        if (partition.PartitionIndex != 1) {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                        } else {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
-                        }
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                     }
                 }
                 auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
@@ -1928,13 +2072,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // Check commit
 
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
-                // or a zero committed offset and metadata
-                // than no error is thrown and metadata is updated
-
-                // check that otherwise, if the committed offset exceeds current endoffset of the partition
-                // than an error is returned and passed committed metadata is not saved
-
+                // Kafka OffsetCommit accepts offsets beyond the current log end.
+                // Metadata is stored whenever it is present in the request.
                 if (i == 0) {
                     partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
                 } else if (i == 1) {
@@ -1952,23 +2091,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (const auto& topic : msg->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
-                    if (topic.Name.value() == firstTopicName) {
-                        // in first topic
-                        if (partition.PartitionIndex == 0 || partition.PartitionIndex == 1) {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                        } else {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
-                        }
-                    } else {
-                        if (partition.PartitionIndex == 1) {
-                            // nothing was produced in the second topic
-                            // check that if a zero offset is committed no error occurs and committed metadata is saved
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                        } else {
-                            // otherwise, an error occurs, because committed offset exceeds endoffset
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
-                        }
-                    }
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                 }
             }
         }
@@ -1987,16 +2110,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
             UNIT_ASSERT_VALUES_EQUAL(partition0->Metadata, commitedMetaData);
             int i = 0;
-            // checking committed metadata for the first topic
             for (auto it = partitions.begin(); it != partitions.end(); it++) {
                 if (i != 2) {
-                    // for i == 0 and i == 1 check that committed metadata == "additional-info" as committed offset didn't exceed endoffset
-                    // for other i != 2 values check that committed metadata is empty as no metadata was committed
-                    // that a new value of metadata is saved
                     UNIT_ASSERT_VALUES_EQUAL(it->Metadata, partitionsAndOffsets[i].Metadata);
                 } else {
-                    // check that in case an error has occurred (because committed offset exceeded endoffset)
-                    // committed metadata is not saved
+                    // PQ Strict rejects commit beyond EndOffset; Kafka response is
+                    // still NONE, but the offset/metadata are not stored.
                     UNIT_ASSERT_VALUES_EQUAL(it->Metadata, std::nullopt);
                 }
                 i += 1;
@@ -2012,7 +2131,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
             for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(partition.CommittedOffset, -1);
             }
         }
 
@@ -2045,7 +2165,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
             for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(partition.CommittedOffset, -1);
             }
         }
 
@@ -2848,7 +2969,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 if (*lastStartOffset >= minStartOffset) {
                     return;
                 }
-                Sleep(TDuration::MilliSeconds(500));
+                Sleep(TDuration::MilliSeconds(100));
             }
             UNIT_ASSERT_C(
                 false,
@@ -2858,8 +2979,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                                  << (lastStartOffset ? ToString(*lastStartOffset) : "n/a"));
         };
 
-        WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 3);
-        WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 20);
+        // 7_MB exceeds LowWatermark (6MB), so each write becomes its own blob and retention/compaction
+        // can move startOffset. Two blobs plus a few small records are enough to form a gap.
+        WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 2);
+        WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 3);
         waitStartOffsetAtLeast(1, TDuration::Seconds(60), "retention");
 
         auto msg = client.AlterConfigs(
@@ -2872,10 +2995,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         rSSettings.AppendTopics({topicFullPath});
         auto readSession = pqClient.CreateReadSession(rSSettings);
         bool seenMessage = false;
-        for (ui32 triesCount = 30; triesCount != 0 && !seenMessage; --triesCount) {
+        for (ui32 triesCount = 40; triesCount != 0 && !seenMessage; --triesCount) {
             auto results = Read(readSession, false);
             if (results.empty()) {
-                Sleep(TDuration::MilliSeconds(500));
+                Sleep(TDuration::MilliSeconds(50));
                 continue;
             }
             for (auto& dataEvent : results) {
@@ -3231,6 +3354,80 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, testServer.Port);
     }
 
+    Y_UNIT_TEST(HugeArrayLengthOverSocketDoesNotCrashServer) {
+        TInsecureTestServer testServer;
+        TKafkaTestClient healthyClient(testServer.Port);
+
+        {
+            auto apiVersions = healthyClient.ApiVersions();
+            UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        SendKafkaFrameAndExpectConnectionClose(testServer.Port, MakeMetadataRequestWithHugeTopicsArray(5));
+        SendKafkaFrameAndExpectConnectionClose(testServer.Port, MakeMetadataRequestWithHugeTopicsArray(12));
+
+        {
+            auto apiVersions = healthyClient.ApiVersions();
+            UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            auto metadataResponse = healthyClient.Metadata({});
+            UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ClusterId, "ydb-cluster");
+            UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers.size(), 1);
+        }
+
+        TKafkaTestClient newClient(testServer.Port);
+        auto metadataResponse = newClient.Metadata({});
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ClusterId, "ydb-cluster");
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers.size(), 1);
+    }
+
+    Y_UNIT_TEST(GetApiVersionsUnsupportedVersionUsesKip511Fallback) {
+        auto unsupported = GetApiVersions(5);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNSUPPORTED_VERSION));
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].ApiKey, static_cast<TKafkaInt16>(API_VERSIONS));
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].MinVersion, 0);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].MaxVersion, AdvertisedApiVersionsMax);
+
+        auto supported = GetApiVersions(2);
+        UNIT_ASSERT_VALUES_EQUAL(supported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(supported->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
+    }
+
+    Y_UNIT_TEST(ApiVersionsUnsupportedVersionKeepsConnection) {
+        TInsecureTestServer testServer;
+        TKafkaTestClient client(testServer.Port);
+
+        auto msg = client.ApiVersionsAtVersion(5);
+
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNSUPPORTED_VERSION));
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].ApiKey, static_cast<TKafkaInt16>(API_VERSIONS));
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].MinVersion, 0);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].MaxVersion, AdvertisedApiVersionsMax);
+
+        auto retry = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(retry->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
+    }
+
+    Y_UNIT_TEST(GetApiVersionsAdvertisesProduceMinZero) {
+        auto supported = GetApiVersions(2);
+        UNIT_ASSERT_VALUES_EQUAL(supported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        bool foundProduce = false;
+        for (const auto& key : supported->ApiKeys) {
+            if (key.ApiKey == PRODUCE) {
+                foundProduce = true;
+                UNIT_ASSERT_VALUES_EQUAL(key.MinVersion, 0);
+                UNIT_ASSERT_VALUES_EQUAL(key.MaxVersion, 9);
+            }
+        }
+        UNIT_ASSERT(foundProduce);
+    }
+
     Y_UNIT_TEST(MetadataInServerlessScenario) {
         TInsecureTestServer testServer("1", true);
         TKafkaTestClient client(testServer.Port);
@@ -3319,7 +3516,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
 
             {
-                // non-existent topic with non-existent consumer should return an error for unexistent topic
+                // non-existent topic with non-existent consumer: Kafka OffsetFetch
+                // returns NONE + committedOffset = -1
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 topicsToPartions[nonExistedTopicName] = std::vector<i32>{0};
                 auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
@@ -3329,7 +3527,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, nonExistedTopicName);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
             }
         }
         {
@@ -3428,7 +3627,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
 
             {
-                // existent topic with existent consumer but non-existent partition should return an error
+                // existent topic with existent consumer but non-existent partition:
+                // Kafka OffsetFetch returns NONE + committedOffset = -1
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 i32 tooBigpartitionIndex = 100;
                 topicsToPartions[existedTopicName] = std::vector<i32>{0, tooBigpartitionIndex};
@@ -3441,11 +3641,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].CommittedOffset, -1);
             }
 
             {
-                // existent topic with existent consumer but non-existent partition should return an error
+                // existent topic with existent consumer but non-existent partition
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 i32 tooBigpartitionIndex = 100;
                 topicsToPartions[existedTopicName] = std::vector<i32>{tooBigpartitionIndex};
@@ -3456,7 +3657,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, existedTopicName);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
             }
 
             {
@@ -3484,18 +3686,21 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 auto msg = client.OffsetFetch(request);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 3);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[1].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[1].CommittedOffset, -1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions[2].ErrorCode, EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[0].CommittedOffset, -1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[2].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
             }
 
 
             {
-                // existent topic with non-existent consumer and non-existent partition should return an error
+                // existent topic with non-existent consumer and non-existent partition
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 i32 tooBigpartitionIndex = 100;
                 topicsToPartions[existedTopicName] = std::vector<i32>{tooBigpartitionIndex};
@@ -3507,7 +3712,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, EKafkaErrors::NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, tooBigpartitionIndex);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
             }
 
             {
@@ -3558,7 +3764,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
         }
 
         {
@@ -3573,14 +3780,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
 
             std::map<TString, std::vector<i32>> topicsToPartions1;
             topicsToPartions1[existedTopicName] = std::vector<i32>{0};
             auto msg1 = client.OffsetFetch(newConsumer3, topicsToPartions1);
             UNIT_ASSERT_VALUES_EQUAL(msg1->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
 
 
             NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
@@ -4319,17 +4528,28 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         // CHECK ONE READER DEAD (NO HEARTBEAT)
 
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(2));
 
         UNIT_ASSERT_VALUES_EQUAL(
             clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode,
             static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
         );
 
-        Sleep(TDuration::Seconds(25));
         {
-            auto errorCode = clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode;
-            UNIT_ASSERT(errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS) || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
+            const auto deadline = TInstant::Now() + TDuration::MilliSeconds(heartbeatTimeout * 2);
+            TKafkaInt16 errorCode = static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR);
+            while (TInstant::Now() < deadline) {
+                errorCode = clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode;
+                if (errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS)
+                    || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION))
+                {
+                    break;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(errorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                Sleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT(errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS)
+                || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
         }
 
 
@@ -5170,41 +5390,33 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString transactionalId = TStringBuilder() << "my-tx-producer-" << TGUID::Create().AsUuidString();
         TString consumerName = "my-consumer";
 
-        // create input and output topics
-        CreateTopic(pqClient, outputTopicName, 3, {consumerName});
+        CreateTopic(pqClient, outputTopicName, 1, {consumerName});
 
-        // init producer id
-        ui64 txnTimeoutMs = 1000;
+        const ui64 txnTimeoutMs = 200;
         auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, txnTimeoutMs);
         UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
         TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
 
-        // add partitions to txn
         std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
         topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
         auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
         UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        // TTransactionActor starts TxnTimeoutMs from CreatedAt, which is set on this first txn request.
+        const auto txnStartedAt = TInstant::Now();
 
-        // produce data
-        // to part 0
         auto out0ProduceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"0", "123"}}, 0, producerInstanceId, transactionalId);
         UNIT_ASSERT_VALUES_EQUAL(out0ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
 
-        // init consumer
-        std::vector<TString> topicsToSubscribe{outputTopicName};
-        TString protocolName = "range";
-        auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
-
         kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
 
-        // move time forward after transaction timeout
-        Sleep(TDuration::MilliSeconds(txnTimeoutMs));
+        const auto expireAt = txnStartedAt + TDuration::MilliSeconds(txnTimeoutMs) + TDuration::MilliSeconds(50);
+        if (TInstant::Now() < expireAt) {
+            Sleep(expireAt - TInstant::Now());
+        }
 
-        // end txn
         auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
         UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::PRODUCER_FENCED);
 
-        // validate data is still not assessible in target topic
         auto fetchResponse1 = kafkaClient.Fetch({{outputTopicName, {0}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT(!fetchResponse1->Responses[0].Partitions[0].Records.has_value());
@@ -5276,12 +5488,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->Groups[0].Topics[0].Partitions[0].CommittedOffset, 0);
     }
 
-    Y_UNIT_TEST(TransactionShouldBeAbortedIfPartitionIsAddedToTransactionButNoWritesToItWereReceived) {
+    Y_UNIT_TEST(TransactionShouldCommitIfPartitionIsAddedToTransactionButNoWritesToItWereReceived) {
         TInsecureTestServer testServer("1", false, true);
         TKafkaTestClient kafkaClient(testServer.Port);
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         // use random values to avoid parallel execution problems
-        TString inputTopicName = TStringBuilder() << "input-topic-" << RandomNumber<ui64>();
         TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
         TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
         TString consumerName = "my-consumer";
@@ -5300,9 +5511,62 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
         UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
 
-        // end txn
+        // Kafka Streams EOS commits empty transactions; Java treats BROKER_NOT_AVAILABLE as fatal.
         auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
-        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::BROKER_NOT_AVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
+
+        // The same producer epoch must be able to commit a real transaction afterwards.
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+        auto addPartsResponse2 = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse2->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto produceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"0", "after-empty"}}, 0, producerInstanceId, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto endTxnResponse2 = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse2->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto fetchResponse = kafkaClient.Fetch({{outputTopicName, {0}}});
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        auto recordsBatch = ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TString(recordsBatch.Records[0].Value.value().data(), recordsBatch.Records[0].Value.value().size()), "after-empty");
+    }
+
+    Y_UNIT_TEST(TransactionShouldCommitIfSomeAddedPartitionsReceivedNoWrites) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        CreateTopic(pqClient, outputTopicName, 3, {consumerName});
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+        std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0, 1};
+        auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[1].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto produceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"0", "only-part-0"}}, 0, producerInstanceId, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto fetchResponse = kafkaClient.Fetch({{outputTopicName, {0, 1}}});
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        auto recordsBatch0 = ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch0.Records.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TString(recordsBatch0.Records[0].Value.value().data(), recordsBatch0.Records[0].Value.value().size()), "only-part-0");
+        UNIT_ASSERT(!fetchResponse->Responses[0].Partitions[1].Records.has_value());
     }
 
     Y_UNIT_TEST(ProducerFencedInTransactionScenario) {

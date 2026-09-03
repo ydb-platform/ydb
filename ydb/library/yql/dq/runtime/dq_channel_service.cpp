@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <queue>
 #include <mutex>
 
@@ -128,6 +129,10 @@ EDqFillLevel TLocalBuffer::GetFillLevel() const {
 }
 
 TLocalBuffer::~TLocalBuffer() {
+    if (QuotaManager) {
+        // InflightBytes are always allocated in the QuotaManager, release quota for the chunks which were never popped
+        QuotaManager->FreeQuota(InflightBytes.load());
+    }
     *Registry->LocalBufferInflightBytes -= InflightBytes.load();
     Registry->DeleteLocalBufferInfo(Info);
 }
@@ -139,7 +144,9 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
-    if (!FinishPushed && !Finished.load()) {
+    if ((!FinishPushed && !Finished.load()) ||
+        data.Checkpoint // Checkpoints may be generated after channel finish
+    ) {
         if (data.Finished) {
             FinishPushed = true;
         }
@@ -162,8 +169,11 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
 
     EDqFillLevel fillLevel = FillLevel;
 
+    RefreshMemoryPressure();
+    auto maxInflightBytes = GetMaxInflightBytes();
+
     if (Storage) {
-        if ((SpilledBytes.load() > 0) || InflightBytes.load() >= MaxInflightBytes) {
+        if ((SpilledBytes.load() > 0) || InflightBytes.load() >= maxInflightBytes) {
             // if there is something spilled and not loaded yet, continue to spill to avoid reordering
             SpilledChunkBytes.push(data.Bytes);
             SpilledBytes += data.Bytes;
@@ -171,24 +181,25 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             // and always report soft/hard limit even if we have small inflight
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
         } else {
-            InflightBytes += data.Bytes;
-            *Registry->LocalBufferInflightBytes += data.Bytes;
+            // allocate quota before the chunk is counted as inflight to keep InflightBytes always allocated
             if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
                 AbortChannelByMemoryLimit(data.Bytes);
                 return;
             }
+            InflightBytes += data.Bytes;
+            *Registry->LocalBufferInflightBytes += data.Bytes;
             Queue.push(std::move(data));
-            fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
+            fillLevel = InflightBytes.load() >= maxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
         }
     } else {
-        InflightBytes += data.Bytes;
-        *Registry->LocalBufferInflightBytes += data.Bytes;
         if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
             AbortChannelByMemoryLimit(data.Bytes);
             return;
         }
+        InflightBytes += data.Bytes;
+        *Registry->LocalBufferInflightBytes += data.Bytes;
         Queue.push(std::move(data));
-        fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
+        fillLevel = InflightBytes.load() >= maxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
 
     if (FillLevel != fillLevel) {
@@ -202,7 +213,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         NeedToNotifyOutput.store(true);
     }
 
-    NotifyInput(false);
+    NotifyInput(Finished.load());
 }
 
 bool TLocalBuffer::IsFinished() {
@@ -257,14 +268,22 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     InflightBytes -= data.Bytes;
     *Registry->LocalBufferInflightBytes -= data.Bytes;
 
+    RefreshMemoryPressure();
+
     if (data.Finished) {
         if (!Finished.exchange(true)) {
             FinishTime = TInstant::Now();
         }
         fillLevel = EDqFillLevel::NoLimit;
     } else {
-        while (InflightBytes.load() < MinInflightBytes && !SpilledChunkBytes.empty()) {
+        while (InflightBytes.load() < GetMinInflightBytes() && !SpilledChunkBytes.empty()) {
             auto bytes = SpilledChunkBytes.front();
+            // quota for a spilled chunk is allocated as soon as it is counted as inflight (and released on pop),
+            // no matter whether it is loaded right here or via LoadingQueue
+            if (QuotaManager && !QuotaManager->AllocateQuota(bytes)) {
+                AbortChannelByMemoryLimit(bytes);
+                break;
+            }
             SpilledChunkBytes.pop();
             InflightBytes += bytes;
             *Registry->LocalBufferInflightBytes += bytes;
@@ -282,11 +301,11 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
             }
         }
 
-        if (SpilledBytes.load() == 0 && InflightBytes.load() < MinInflightBytes) {
+        if (SpilledBytes.load() == 0 && InflightBytes.load() < GetMinInflightBytes()) {
             fillLevel = EDqFillLevel::NoLimit;
         } else if (Storage) {
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
-        } else if (InflightBytes.load() >= MaxInflightBytes) {
+        } else if (InflightBytes.load() >= GetMaxInflightBytes()) {
             fillLevel = EDqFillLevel::HardLimit;
         }
     }
@@ -349,10 +368,7 @@ void TLocalBuffer::StorageWakeupHandler() {
 
         TDataChunk data;
         BufferToData(data, std::move(info.Buffer));
-        if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
-            AbortChannelByMemoryLimit(data.Bytes);
-            return;
-        }
+        // quota is already allocated for this chunk in TLocalBuffer::Pop
         Queue.emplace(std::move(data));
         SpilledBytes -= info.Bytes;
 
@@ -425,8 +441,13 @@ void TLocalBuffer::AbortChannelByMemoryLimit(ui64 bytes) {
 }
 
 TOutputDescriptor::~TOutputDescriptor() {
-    if (QuotaManager) {
-        QuotaManager->FreeQuota(WaitQueueBytes.load());
+    if (PeerMemoryPressure.load()) {
+        (*OutputBufferThrottledCount)--;
+    }
+    if (IsQuotaAssigned()) {
+        // no concurrency here, all TOutputItems hold a reference to the descriptor and are already destroyed
+        auto waitQueueBytes = WaitQueueBytes.load();
+        FreeQuota(waitQueueBytes - std::min(waitQueueBytes, UnquotedWaitBytes));
     }
 }
 
@@ -439,7 +460,9 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         PushStats.Resume();
     }
 
-    if (FinishPushed.load() && !data.ConfirmFinish) {
+    if (FinishPushed.load() && !data.ConfirmFinish &&
+        !data.Checkpoint // Checkpoint traffic should be handled after finish
+    ) {
         return;
     }
 
@@ -451,7 +474,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         std::lock_guard lock(FlowControlMutex);
 
         auto fillLevel = FillLevel;
-        auto maxInflightBytes = (RemotePopBytes.load() == 0) ? ColdInflightBytes : MaxInflightBytes;
+        auto maxInflightBytes = GetMaxInflightBytes();
 
         if (Storage) {
             if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
@@ -502,6 +525,28 @@ void TOutputDescriptor::AddPopChunk(ui64 bytes, ui64 rows) {
     PopStats.Rows += rows;
 }
 
+bool TOutputDescriptor::RecalcFillLevel() {
+    EDqFillLevel fillLevel = FillLevel;
+
+    if (SpilledBytes.load() == 0 && PushBytes.load() < RemotePopBytes.load() + GetMinInflightBytes()) {
+        fillLevel = EDqFillLevel::NoLimit;
+    } else if (Storage) {
+        fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
+    } else if (PushBytes.load() >= RemotePopBytes.load() + GetMaxInflightBytes()) {
+        fillLevel = EDqFillLevel::HardLimit;
+    }
+
+    if (FillLevel == fillLevel) {
+        return false;
+    }
+
+    if (Aggregator) {
+        Aggregator->UpdateCount(FillLevel, fillLevel);
+    }
+    FillLevel = fillLevel;
+    return true;
+}
+
 void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     LOG_T(nodeState->LogPrefix << "OD UPDATE POP, ChannelId=" << Info.ChannelId
         << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
@@ -522,7 +567,7 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
         }
         RemotePopBytes.store(bytes);
 
-        while (PushBytes.load() < RemotePopBytes.load() + MaxInflightBytes && !SpilledChunkBytes.empty()) {
+        while (PushBytes.load() < RemotePopBytes.load() + GetMaxInflightBytes() && !SpilledChunkBytes.empty()) {
             auto bytes = SpilledChunkBytes.front();
             SpilledChunkBytes.pop();
             Y_ENSURE(TailBlobId < HeadBlobId);
@@ -540,25 +585,8 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
             }
         }
 
-        EDqFillLevel fillLevel = FillLevel;
-
-        if (SpilledBytes.load() == 0 && PushBytes.load() < RemotePopBytes.load() + MinInflightBytes) {
-            fillLevel = EDqFillLevel::NoLimit;
-        } else if (Storage) {
-            fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
-        } else if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
-            fillLevel = EDqFillLevel::HardLimit;
-        }
-
-        if (FillLevel == fillLevel) {
-            if (PushBytes.load() > RemotePopBytes.load()) {
-                return;
-            }
-        } else {
-            if (Aggregator) {
-                Aggregator->UpdateCount(FillLevel, fillLevel);
-            }
-            FillLevel = fillLevel;
+        if (!RecalcFillLevel() && PushBytes.load() > RemotePopBytes.load()) {
+            return;
         }
 
         flushed = PushBytes.load() == RemotePopBytes.load();
@@ -619,12 +647,57 @@ void TOutputDescriptor::AbortChannel(const TString& message) {
 
 void TOutputDescriptor::AbortChannelByMemoryLimit(ui64 bytes) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, QuotaManager, bytes).Release());
+        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, GetQuotaManager(), bytes).Release());
     }
 }
 
-void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+void TOutputDescriptor::UpdateMemoryPressure(bool memoryPressure, TNodeState* nodeState) {
+    // a peer with the feature enabled must not throttle this node while it is disabled here,
+    // PeerMemoryPressure stays false and the inflight window is the pre-feature one
+    if (!nodeState->Limits.EnableSpillingChannelBackpressure) {
+        return;
+    }
+
+    if (PeerMemoryPressure.exchange(memoryPressure) == memoryPressure) {
+        return;
+    }
+
+    LOG_D(nodeState->LogPrefix << "OD PRESSURE " << (memoryPressure ? "ON" : "OFF") << ", ChannelId=" << Info.ChannelId
+        << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
+        << ", PushBytes=" << PushBytes.load() << ", RemotePopBytes=" << RemotePopBytes.load());
+
+    if (memoryPressure) {
+        (*OutputBufferThrottledCount)++;
+    } else {
+        (*OutputBufferThrottledCount)--;
+    }
+
+    bool wakeup = false;
+
+    {
+        std::lock_guard lock(FlowControlMutex);
+        if (RecalcFillLevel()) {
+            if (FillLevel == EDqFillLevel::NoLimit) {
+                // the window has just reopened, always wake the output up - it may be parked without
+                // NeedToNotifyOutput set. The flag is set under this mutex by PushDataChunk, so it is
+                // cleared under it too: clearing it after the unlock would swallow a concurrent request
+                NeedToNotifyOutput.store(false);
+                wakeup = true;
+            } else {
+                NeedToNotifyOutput.store(true);
+            }
+        }
+    }
+
+    if (wakeup) {
+        ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    }
+}
+
+void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     if (!IsTerminatedOrAborted()) {
+        // before UpdatePopBytes, so that the fill level is recomputed with the new inflight window
+        UpdateMemoryPressure(memoryPressure, nodeState);
         if (earlyFinish) {
             EarlyFinished.store(true);
             PushDataChunk(TDataChunk(true), nodeState, self);
@@ -690,8 +763,8 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
 }
 
 TOutputItem::~TOutputItem() {
-    if (Descriptor->QuotaManager) {
-        Descriptor->QuotaManager->FreeQuota(Data.Bytes);
+    if (IsQuoted && Data.Bytes) {
+        Descriptor->FreeQuota(Data.Bytes);
     }
 }
 
@@ -711,7 +784,9 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {
-    if (!Descriptor->IsTerminatedOrAborted() && !Descriptor->IsFinished()) {
+    if (!Descriptor->IsTerminatedOrAborted() && (!Descriptor->IsFinished() ||
+        data.Checkpoint // Checkpoints may be generated after channel finish
+    )) {
         Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor);
     }
 }
@@ -746,6 +821,10 @@ void TOutputBuffer::ExportPopStats(TDqAsyncStats& stats) {
 }
 
 TInputDescriptor::~TInputDescriptor() {
+    if (QuotaManager) {
+        // QueueBytes are always allocated in the QuotaManager, release quota for the chunks which were never popped
+        QuotaManager->FreeQuota(QueueBytes.load());
+    }
     *InputBufferInflightBytes -= InflightBytes.load();
 }
 
@@ -772,10 +851,16 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
             Finished.store(true);
             ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
-        return false;
+
+        // Checkpoints may be generated after channel finish
+        if (!data.Checkpoint) {
+            return false;
+        }
     }
 
     std::lock_guard lock(QueueMutex);
+
+    RefreshMemoryPressure();
 
     if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
         AbortChannelByMemoryLimit(data.Bytes);
@@ -829,6 +914,7 @@ bool TInputDescriptor::IsEarlyFinished() {
 
 bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
     std::lock_guard lock(QueueMutex);
+    RefreshMemoryPressure();
     if (Queue.empty()) {
         NeedToNotifyInput.store(true);
         return false;
@@ -921,7 +1007,8 @@ bool TInputBuffer::IsEarlyFinished() {
 
 bool TInputBuffer::Pop(TDataChunk& data) {
     auto result = Descriptor->PopDataChunk(data);
-    if (result) {
+    // PopDataChunk refreshes MemoryPressure, so an empty pop is still a chance to report its flip
+    if (result || !Descriptor->IsMemoryPressureReported()) {
         NodeState->UpdateProgress(Descriptor);
     }
     return result;
@@ -960,7 +1047,13 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
             if (info.DstStageId) {
                 result->Info.DstStageId = info.DstStageId;
             }
-            if (!result->QuotaManager) {
+            // Normally we pass the same quota manager to every call, the only violation is reading result from KqpExecuter
+            // QuotaManager is not populated to KqpExecuter now, so it can create TLocalBuffer with empty QuotaManager
+            // when ComputeActor is bound later to TLocalBuffer, it may provide valid QuotaManager instance
+            // KqpExecuter never writes to TLocalBuffer, so all calls to QuotaManager are possible only after reassignment
+            // and synchronization on TLocalBuffer::Mutex, so no data race or any other error is possible now
+            // TODO: Better fix may include passing QuotaManager to KqpExecuter as well and make TLocalBuffer::QuotaManager
+            if (!result->QuotaManager && quotaManager) {
                 result->QuotaManager = quotaManager;
             }
             return result;
@@ -968,7 +1061,8 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
             LocalBuffers.erase(it);
         }
     }
-    auto result = std::make_shared<TLocalBuffer>(registry, info, quotaManager, ActorSystem, MaxInflightBytes, MinInflightBytes);
+    auto result = std::make_shared<TLocalBuffer>(registry, info, quotaManager, ActorSystem, MaxInflightBytes, MinInflightBytes, ColdInflightBytes,
+        EnableSpillingBackpressure);
     LocalBuffers.emplace(info, result);
     (*LocalBufferCount)++;
 
@@ -1007,8 +1101,10 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
-    if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(data.Bytes)) {
-        descriptor->AbortChannelByMemoryLimit(data.Bytes);
+    // hot path is lock free, the chunk is not tracked by the quota if QuotaManager is not assigned yet
+    bool quoted = descriptor->IsQuotaAssigned();
+    if (quoted && !descriptor->AllocateQuota(bytes)) {
+        descriptor->AbortChannelByMemoryLimit(bytes);
         return;
     }
 
@@ -1016,6 +1112,11 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         // we are not allowed to reorder messages
         std::lock_guard lock(descriptor->WaitQueueMutex);
         if (!descriptor->WaitQueue.empty()) {
+
+            if (!descriptor->PrepareWaitQuota(quoted, bytes)) {
+                descriptor->AbortChannelByMemoryLimit(bytes);
+                return;
+            }
 
             descriptor->WaitQueue.push(std::move(data));
             descriptor->WaitQueueBytes += bytes;
@@ -1036,7 +1137,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.RemoteSessionInflightBytes && Queue.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
                 descriptor->AddPopChunk(bytes, rows);
-                auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
+                auto item = std::make_shared<TOutputItem>(std::move(data), descriptor, quoted);
                 item->SeqNo = ++SeqNo;
                 item->ChannelSeqNo = descriptor->SeqNo.fetch_add(1) + 1;
                 item->Leading = descriptor->Leading.exchange(false);
@@ -1055,6 +1156,12 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     bool result = false;
 
     std::lock_guard lock(descriptor->WaitQueueMutex);
+
+    if (!descriptor->PrepareWaitQuota(quoted, bytes)) {
+        descriptor->AbortChannelByMemoryLimit(bytes);
+        return;
+    }
+
     if (descriptor->WaitQueue.empty()) {
         descriptor->WaitTimestamp = data.Timestamp;
         result = true;
@@ -1530,8 +1637,19 @@ now may need to send very last msg from terminated descriptor
                 auto& data = waiter->WaitQueue.front();
                 bytes = data.Bytes;
 
+                // unquoted chunks always precede quoted ones in the WaitQueue, see TOutputDescriptor::PrepareWaitQuota
+                bool quoted = true;
+                if (waiter->UnquotedWaitBytes) {
+                    quoted = false;
+                    Y_DEBUG_ABORT_UNLESS(waiter->UnquotedWaitBytes >= bytes,
+                        "UnquotedWaitBytes underflow: %" PRIu64 " < %" PRIu64, waiter->UnquotedWaitBytes, bytes);
+                    // clamped on purpose: an underflow here would make UnquotedWaitBytes wrap and every
+                    // subsequent chunk of the descriptor would be treated as unquoted, leaking the quota
+                    waiter->UnquotedWaitBytes -= std::min(waiter->UnquotedWaitBytes, bytes);
+                }
+
                 waiter->AddPopChunk(data.Bytes, data.Rows);
-                item = std::make_shared<TOutputItem>(std::move(data), waiter);
+                item = std::make_shared<TOutputItem>(std::move(data), waiter, quoted);
                 waiter->WaitQueue.pop();
                 waiter->WaitQueueBytes -= bytes;
                 waiter->WaitQueueSize--;
@@ -1670,7 +1788,9 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                             auto earlyFinished = record.GetEarlyFinished();
                             auto popBytes = record.GetPopBytes();
                             if (earlyFinished || popBytes) {
-                                item->Descriptor->HandleUpdate(earlyFinished, popBytes, false, this, item->Descriptor);
+                                // TEvChannelAckV2 carries no memory pressure, keep the last known value
+                                item->Descriptor->HandleUpdate(earlyFinished, popBytes, false,
+                                    item->Descriptor->PeerMemoryPressure.load(), this, item->Descriptor);
                             }
                         }
                     }
@@ -1717,8 +1837,13 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
     auto earlyFinished = record.GetEarlyFinished();
     auto popBytes = record.GetPopBytes();
     auto finishing = record.GetFinishing();
+    auto memoryPressure = record.GetMemoryPressure();
 
-    if (!earlyFinished && popBytes == 0) {
+    // an update carrying only a memory pressure request is meaningful, do not drop it as void.
+    // The mirror case - pressure released with no progress at all - is still dropped here, which is
+    // harmless: with popBytes == 0 the channel is at the cold window anyway (see IsCold), and the
+    // release is delivered by the first update that does carry progress.
+    if (!earlyFinished && popBytes == 0 && !record.HasMemoryPressure()) {
         LOG_W(LogPrefix << "UPDATE IGNORED/VOID, EarlyFinished=false, PopBytes=0");
         return;
     }
@@ -1727,9 +1852,10 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
-    auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
+    // an update which only reports memory pressure must not create a descriptor on its own
+    auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0 && earlyFinished);
     if (!descriptor) {
-        if (!finishing) // it's OK to miss update to confirm
+        if (!finishing && (earlyFinished || popBytes)) // it's OK to miss update to confirm or to throttle
         {
             if (LastLostInfo != info) {
                 LOG_W(LogPrefix << "UPDATE IGNORED/LOST, ChannelId=" << info.ChannelId
@@ -1744,12 +1870,12 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     LOG_T(LogPrefix << "RECV UPDATE, ChannelId=" << info.ChannelId
         << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
-        << ", EF=" << earlyFinished << ", Pop=" << popBytes << ", Fi=" << finishing
+        << ", EF=" << earlyFinished << ", Pop=" << popBytes << ", Fi=" << finishing << ", MP=" << memoryPressure
         << ", T:A=" << descriptor->Terminated.load() << ':' << descriptor->Aborted.load()
         << ", G=" << descriptor->GenMajor.load() << ", update.G=" << GenMajor << ", Log=" << GetReconciliationLog()
     );
     if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, TStringBuilder() << LogPrefix << "Inconsistent GenMajor in HandleUpdate " << TInstant::Now())) {
-        descriptor->HandleUpdate(earlyFinished, popBytes, finishing, this, descriptor);
+        descriptor->HandleUpdate(earlyFinished, popBytes, finishing, memoryPressure, this, descriptor);
     }
 }
 
@@ -1764,8 +1890,16 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
 
 void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
 
-    if (!descriptor->EarlyFinished.load() && descriptor->PopStats.Bytes.load() == 0) {
+    auto memoryPressure = descriptor->MemoryPressure.load();
+
+    // a flip of the memory pressure flag is worth an update on its own, even without any progress
+    if (!descriptor->EarlyFinished.load() && descriptor->PopStats.Bytes.load() == 0
+        && memoryPressure == descriptor->LastSentMemoryPressure) {
         return; // noop
+    }
+    descriptor->LastSentMemoryPressure = memoryPressure;
+    if (memoryPressure) {
+        (*InputBufferPressureReports)++;
     }
 
     auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
@@ -1781,6 +1915,11 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
     evUpdate->Record.SetEarlyFinished(descriptor->EarlyFinished.load());
     evUpdate->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
     evUpdate->Record.SetFinishing(descriptor->Finishing.load());
+    // set only when there is pressure, so that HasMemoryPressure() on the sender means exactly
+    // "the peer asks to throttle" - an absent field is "no pressure", same as from an old peer
+    if (memoryPressure) {
+        evUpdate->Record.SetMemoryPressure(true);
+    }
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
@@ -1790,7 +1929,7 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
     LOG_T(LogPrefix << "SEND UPDATE, ChannelId=" << descriptor->Info.ChannelId
         << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
         << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
-        << ", Finishing=" << descriptor->Finishing.load());
+        << ", Finishing=" << descriptor->Finishing.load() << ", MemoryPressure=" << memoryPressure);
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evUpdate.Release(), flags));
 }
@@ -1805,7 +1944,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
-            result->QuotaManager = quotaManager;
+            result->SetQuotaManager(std::move(quotaManager));
             ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;
@@ -1818,7 +1957,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
         return {};
     }
 
-    auto result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks,
+    auto result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks, OutputBufferThrottledCount,
         Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10, Limits.RemoteChannelColdInflightBytes);
     OutputDescriptors.emplace(info, result);
     (*OutputBufferCount)++;
@@ -1851,6 +1990,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
                 quotaManager = nullptr;
             }
             result->QuotaManager = quotaManager;
+            result->RefreshMemoryPressure();
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;
@@ -1863,7 +2003,8 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         return {};
     }
 
-    auto result = std::make_shared<TInputDescriptor>(info, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
+    auto result = std::make_shared<TInputDescriptor>(info, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes,
+        Limits.EnableSpillingChannelBackpressure);
     InputDescriptors.emplace(info, result);
     (*InputBufferCount)++;
     if (bound) {
@@ -2117,12 +2258,11 @@ TString TNodeState::GetDebugInfo() {
             << ", EF: " << descriptor->EarlyFinished.load()
             << ", PP:" << descriptor->PushBytes.load() << ':' << descriptor->RemotePopBytes.load() << Endl;
     }
+
     for (auto& [info, descriptor] : InputDescriptors) {
         builder << "  Input " << info.ChannelId << ", Empty=" << descriptor->IsEmpty()
             << ", Queue.size()=" << descriptor->GetQueueSize() << Endl;
     }
-
-    std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
 
     return builder;
 }
@@ -2279,7 +2419,7 @@ void TDqChannelService::FreeNodeSession(ui32 nodeId, NActors::TActorId sender) {
 
 // unbinded stubs
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetUnbindedBuffer(const TChannelFullInfo& info) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetUnboundBuffer(const TChannelFullInfo& info) {
     return std::make_shared<TChannelStub>(info);
 }
 
@@ -2342,12 +2482,12 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 // unbinded channels
 
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
+    auto buffer = GetUnboundBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqOutputChannel(Self, settings, buffer, false);
 }
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
+    auto buffer = GetUnboundBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqInputChannel(Self, settings, buffer);
 }
 
@@ -2375,7 +2515,6 @@ TString TDqChannelService::GetDebugInfo() {
 // TFastDqOutputChannel::
 
 bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) {
-
     if (PausedByCheckpoint) {
         return false;
     }
@@ -2498,6 +2637,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "InputBound"}}) {str << "I";}
                         TABLEH_ATTRS({{"title", "IsFinished"}}) {str << "F";}
                         TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
+                        TABLEH_ATTRS({{"title", "This node is under memory pressure"}}) {str << "MP";}
                         TABLEH() {str << "PushBytes";}
                         TABLEH() {str << "PopBytes";}
                         TABLEH() {str << "OutputNotificationTime";}
@@ -2540,6 +2680,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << sharedBuffer->InputBound.load();}
                                 TABLED() {str << sharedBuffer->Finished.load();}
                                 TABLED() {str << sharedBuffer->EarlyFinished.load();}
+                                TABLED() {str << sharedBuffer->MemoryPressure.load();}
                                 TABLED() {str << sharedBuffer->PushStats.Bytes.load();}
                                 TABLED() {str << sharedBuffer->PopStats.Bytes.load();}
                                 TABLED() {str << sharedBuffer->LastOutputNotificationTime.load();}
@@ -2661,8 +2802,9 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "Terminated"}}) {str << "T";}
                         TABLEH_ATTRS({{"title", "Aborted"}}) {str << "A";}
                         TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
-                        TABLEH() {str << "MaxInflightBytes";}
-                        TABLEH() {str << "MinInflightBytes";}
+                        TABLEH_ATTRS({{"title", "Peer node reports memory pressure"}}) {str << "MP";}
+                        TABLEH_ATTRS({{"title", "Effective MaxInflightBytes, cold while MP or before the 1st peer pop"}}) {str << "MaxInflightBytes";}
+                        TABLEH_ATTRS({{"title", "Effective MinInflightBytes, cold while MP or before the 1st peer pop"}}) {str << "MinInflightBytes";}
                         TABLEH() {str << "InflightBytes";}
                         TABLEH() {str << "WaitQueueBytes";}
                         TABLEH() {str << "SpilledBytes";}
@@ -2698,8 +2840,9 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->Terminated.load();}
                                 TABLED() {str << descriptor->Aborted.load();}
                                 TABLED() {str << descriptor->IsBound;}
-                                TABLED() {str << descriptor->MaxInflightBytes;}
-                                TABLED() {str << descriptor->MinInflightBytes;}
+                                TABLED() {str << descriptor->PeerMemoryPressure.load();}
+                                TABLED() {str << descriptor->GetMaxInflightBytes();}
+                                TABLED() {str << descriptor->GetMinInflightBytes();}
                                 TABLED() {str << (pushBytes - popBytes);}
                                 TABLED() {str << descriptor->WaitQueueBytes.load();}
                                 TABLED() {str << descriptor->SpilledBytes.load();}
@@ -2740,6 +2883,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "Finishing"}}) {str << "Fi";}
                         TABLEH_ATTRS({{"title", "Finished"}}) {str << "F";}
                         TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
+                        TABLEH_ATTRS({{"title", "This node reports memory pressure to the sender"}}) {str << "MP";}
                         TABLEH() {str << "OutputActorId";}
                         TABLEH() {str << "InputActorId";}
                     }
@@ -2761,6 +2905,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->Finishing.load();}
                                 TABLED() {str << descriptor->Finished.load();}
                                 TABLED() {str << descriptor->IsBound;}
+                                TABLED() {str << descriptor->MemoryPressure.load();}
                                 TABLED() {
                                     HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
                                         str << info.OutputActorId;

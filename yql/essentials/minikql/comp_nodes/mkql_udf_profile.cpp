@@ -10,8 +10,7 @@
 #include <util/datetime/base.h>
 #include <util/digest/numeric.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -49,10 +48,10 @@ public:
         }
 
         const TStringBuf group("_UdfProfile");
-        Provider_->GetCounter(group, FunctionName_ + "_CallCount", false).Set(CallCount_);
-        Provider_->GetCounter(group, FunctionName_ + "_SlowCallCount", false).Set(SlowCallCount_);
-        Provider_->GetCounter(group, FunctionName_ + "_Duration", false).Set(TotalTime_.MicroSeconds());
-        Provider_->GetCounter(group, FunctionName_ + "_Cardinality", false).Set(Hll_ ? Hll_->Estimate() : Set_.size());
+        Provider_->GetCounter(group, FunctionName_ + "_CallCount", /*deriv=*/false).Set(CallCount_);
+        Provider_->GetCounter(group, FunctionName_ + "_SlowCallCount", /*deriv=*/false).Set(SlowCallCount_);
+        Provider_->GetCounter(group, FunctionName_ + "_Duration", /*deriv=*/false).Set(TotalTime_.MicroSeconds());
+        Provider_->GetCounter(group, FunctionName_ + "_Cardinality", /*deriv=*/false).Set(Hll_ ? Hll_->Estimate() : Set_.size());
     }
 
     bool ShouldMeasure() const {
@@ -94,7 +93,7 @@ private:
     const ui32 Precision_;
     const ui64 SizeLimit_;
     NUdf::ICountersProvider* const Provider_;
-    THashSet<ui64, std::hash<ui64>, std::equal_to<ui64>, TMKQLAllocator<ui64>> Set_;
+    THashSet<ui64, std::hash<ui64>, std::equal_to<>, TMKQLAllocator<ui64>> Set_;
     TMaybe<THyperLogLogWithAlloc<TMKQLAllocator<ui8>>> Hll_;
 
     ui64 CallCount_ = 0;
@@ -232,5 +231,4 @@ NUdf::TUnboxedValue MaybeWrapUdfProfiling(
     return NUdf::TUnboxedValuePod(new TProfilingBoxedValue(std::move(value), funcType, &holder->GetState()));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

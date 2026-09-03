@@ -36,6 +36,17 @@ Three env vars drive behavior:
 - ``YDB_CLEANER_BIN``: path to clang-include-cleaner. Used by
   ``YDB_ANALYZE_INLINE``. Falls back to autodiscovery.
 
+Measurement tiers (see ``buildbench``) are driven by three more:
+
+- ``YDB_TIMETRACE_DIR``: append ``-ftime-trace`` (frontend/backend split).
+- ``YDB_PSTAT_DIR``: append ``-fproc-stat-report`` (per-TU user CPU time
+  and peak RSS, measured by the clang driver itself — no extra process).
+- ``YDB_PERF_DIR``: run each compile under ``perf stat`` to count
+  instructions retired, tuned by ``YDB_PERF_BIN`` / ``YDB_PERF_EVENTS``.
+
+All artifacts of one compile share the ``<digest>`` key computed by
+``tu_digest``, with a ``<digest>.src`` sidecar naming the source file.
+
 A separate post-processing step (``aggregate_entries``) concatenates
 all recorded JSON files into a single ``compile_commands.json``.
 """
@@ -200,6 +211,32 @@ def _analyze_inline(entry: dict) -> None:
             sys.stderr.flush()
 
 
+DEFAULT_PERF_EVENTS = "instructions:u,task-clock:u"
+DEFAULT_PERF_BIN = "/usr/bin/perf"
+
+
+def tu_digest(args: List[str]) -> Optional[Tuple[str, str]]:
+    """Return ``(abs_source, digest)`` identifying this compile, or None.
+
+    The digest matches the one ``record`` uses, so every per-TU artifact
+    of a single compile — compdb entry, time trace, proc-stat report,
+    perf counters — is filed under the same key and can be joined later.
+    """
+    source, output = split_source_and_output(args)
+    if not source:
+        return None
+    key = (output or source) + "::" + os.getcwd()
+    return os.path.abspath(source), hashlib.sha1(key.encode("utf-8")).hexdigest()
+
+
+def _write_src_sidecar(dir_path: Path, digest: str, source_abs: str) -> None:
+    """Map ``<digest>`` back to its source path for the aggregators."""
+    try:
+        (dir_path / f"{digest}.src").write_text(source_abs, encoding="utf-8")
+    except OSError:
+        pass
+
+
 def timetrace_flags(args: List[str], tt_dir: Path, granularity: str = "500") -> List[str]:
     """Return ``-ftime-trace`` flags directing the trace to ``tt_dir``.
 
@@ -208,28 +245,85 @@ def timetrace_flags(args: List[str], tt_dir: Path, granularity: str = "500") -> 
     trace path is explicit (not the default next-to-object location)
     because the object lives in ya's ephemeral build_root.
     """
-    source, output = split_source_and_output(args)
-    if not source:
+    d = tu_digest(args)
+    if d is None:
         return []
+    source_abs, digest = d
     tt_dir.mkdir(parents=True, exist_ok=True)
-    key = (output or source) + "::" + os.getcwd()
-    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()
+    _write_src_sidecar(tt_dir, digest, source_abs)
     trace_path = tt_dir / f"{digest}.json"
-    try:
-        (tt_dir / f"{digest}.src").write_text(os.path.abspath(source), encoding="utf-8")
-    except OSError:
-        pass
     return [f"-ftime-trace={trace_path}", f"-ftime-trace-granularity={granularity}"]
 
 
-def shim_handle(cmd: List[str], compdb_dir: Optional[str], tt_dir: Optional[str]) -> List[str]:
+def procstat_flags(args: List[str], ps_dir: Path) -> List[str]:
+    """Return the ``-fproc-stat-report`` flag directing output to ``ps_dir``.
+
+    The clang driver itself measures each subprocess it spawns (cc1) and
+    appends one CSV line ``"tool","output",wall_us,user_us,peak_rss_kb``.
+    That gives per-TU CPU time for free: no wrapper process, no perf, and
+    no dependency on kernel counter permissions.
+    """
+    d = tu_digest(args)
+    if d is None:
+        return []
+    source_abs, digest = d
+    ps_dir.mkdir(parents=True, exist_ok=True)
+    _write_src_sidecar(ps_dir, digest, source_abs)
+    return [f"-fproc-stat-report={ps_dir / f'{digest}.pstat'}"]
+
+
+def perf_wrap(cmd: List[str], perf_dir: Path, perf_bin: Optional[str] = None,
+              events: Optional[str] = None) -> List[str]:
+    """Wrap ``cmd`` in ``perf stat`` so the compile is counted in hardware.
+
+    Instructions retired is the one compile-cost metric that does not move
+    with machine load, SMT sharing or clock throttling, which makes it the
+    only trustworthy A/B signal on a busy dev box.
+
+    Returns ``cmd`` unchanged if perf is unavailable or this invocation is
+    not a recognizable compile — the build must never break over metrics.
+    """
+    perf_bin = perf_bin or os.environ.get("YDB_PERF_BIN") or DEFAULT_PERF_BIN
+    if not os.path.exists(perf_bin):
+        return cmd
+    d = tu_digest(cmd[1:])
+    if d is None:
+        return cmd
+    source_abs, digest = d
+    perf_dir.mkdir(parents=True, exist_ok=True)
+    _write_src_sidecar(perf_dir, digest, source_abs)
+    events = events or os.environ.get("YDB_PERF_EVENTS") or DEFAULT_PERF_EVENTS
+    return [
+        perf_bin, "stat", "-x,", "-e", events,
+        "-o", str(perf_dir / f"{digest}.perf"), "--",
+    ] + list(cmd)
+
+
+def shim_handle(cmd: List[str],
+                compdb_dir: Optional[str] = None,
+                tt_dir: Optional[str] = None,
+                ps_dir: Optional[str] = None,
+                perf_dir: Optional[str] = None) -> List[str]:
     """Single entry point for the compile-wrapper shim.
 
     Records the compile command (when ``compdb_dir`` is set, including
-    inline analysis if enabled) and/or appends ``-ftime-trace`` flags
-    (when ``tt_dir`` is set). Returns the possibly-augmented command for
-    the shim to exec.
+    inline analysis if enabled) and augments the command with whichever
+    measurement tiers are enabled: ``-ftime-trace``, ``-fproc-stat-report``
+    and a ``perf stat`` wrapper. Returns the command for the shim to exec.
+
+    Any argument left as ``None`` falls back to its environment variable,
+    so an older shim template that only passes the first two still picks
+    up the newer tiers.
     """
+    if compdb_dir is None:
+        compdb_dir = os.environ.get("YDB_COMPDB_DIR")
+    if tt_dir is None:
+        tt_dir = os.environ.get("YDB_TIMETRACE_DIR")
+    if ps_dir is None:
+        ps_dir = os.environ.get("YDB_PSTAT_DIR")
+    if perf_dir is None:
+        perf_dir = os.environ.get("YDB_PERF_DIR")
+
     if compdb_dir:
         try:
             record(cmd[0], cmd[1:], Path(compdb_dir))
@@ -238,6 +332,12 @@ def shim_handle(cmd: List[str], compdb_dir: Optional[str], tt_dir: Optional[str]
     if tt_dir:
         granularity = os.environ.get("YDB_TIMETRACE_GRANULARITY", "500")
         cmd = cmd + timetrace_flags(cmd[1:], Path(tt_dir), granularity)
+    if ps_dir:
+        cmd = cmd + procstat_flags(cmd[1:], Path(ps_dir))
+    # Must come last: it prepends to argv, so every compiler flag added
+    # above has to already be in place.
+    if perf_dir:
+        cmd = perf_wrap(cmd, Path(perf_dir))
     return cmd
 
 

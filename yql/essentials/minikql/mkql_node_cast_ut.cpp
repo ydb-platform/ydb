@@ -60,7 +60,6 @@ private:
         return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(value), NUdf::EDataSlot::Uint32, Env_), /*isImmediate=*/true);
     }
 
-private:
     TScopedAlloc Alloc_;
     TTypeEnvironment Env_;
 };

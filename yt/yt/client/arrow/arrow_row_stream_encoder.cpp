@@ -56,8 +56,8 @@ public:
         , OutputStream_(Data_)
         , AsyncOutputStream_(NConcurrency::CreateAsyncAdapter(&OutputStream_))
     {
-        YT_LOG_DEBUG("Row stream encoder created (Schema: %v)",
-            *Schema_);
+        YT_TLOG_DEBUG("Row stream encoder created")
+            .With("Schema", *Schema_);
     }
 
     TSharedRef Encode(
@@ -86,11 +86,11 @@ TSharedRef TArrowRowStreamEncoder::Encode(
 {
     auto columnarBatch = batch->TryAsColumnar();
     if (!columnarBatch) {
-        YT_LOG_DEBUG("Encoding non-columnar batch; running fallback");
+        YT_TLOG_DEBUG("Encoding non-columnar batch; running fallback");
         return FallbackEncoder_->Encode(batch, statistics);
     }
-    YT_LOG_DEBUG("Encoding columnar batch (RowCount: %v)",
-        batch->GetRowCount());
+    YT_TLOG_DEBUG("Encoding columnar batch")
+        .With("RowCount", batch->GetRowCount());
 
     NApi::NRpcProxy::NProto::TRowsetDescriptor descriptor;
     descriptor.set_wire_format_version(NApi::NRpcProxy::CurrentWireFormatVersion);

@@ -263,8 +263,7 @@ public:
     {
     }
 
-    ~TVectorHolderBase() override {
-    }
+    ~TVectorHolderBase() override = default;
 
 private:
     class TValuesIterator: public TTemporaryComputationValue<TValuesIterator> {
@@ -776,7 +775,6 @@ private:
         return true;
     }
 
-private:
     mutable TSortedSetFiller Filler_;
     const TKeyTypes Types_;
     const bool IsTuple_;
@@ -993,7 +991,6 @@ private:
         return true;
     }
 
-private:
     mutable TSortedDictFiller Filler_;
     const TKeyTypes Types_;
     const bool IsTuple_;
@@ -1054,7 +1051,6 @@ public:
             return true;
         }
 
-    private:
         const NUdf::TRefCountedPtr<THashedSetHolder> Parent_;
         TValuesDictHashSet::const_iterator Iterator_;
         TValuesDictHashSet::const_iterator End_;
@@ -1139,7 +1135,6 @@ private:
         return false;
     }
 
-private:
     void LazyBuildDict() const {
         if (IsBuilt_) {
             return;
@@ -1151,7 +1146,6 @@ private:
         IsBuilt_ = true;
     }
 
-private:
     mutable THashedSetFiller Filler_;
     const TKeyTypes Types_;
     mutable TValuesDictHashSet Set_;
@@ -1500,7 +1494,6 @@ private:
         return false;
     }
 
-private:
     TPagedArena Pool_;
     const TSetType Set_;
     mutable TValuePacker KeyPacker_;
@@ -1941,7 +1934,6 @@ private:
         return false;
     }
 
-private:
     void LazyBuildDict() const {
         if (IsBuilt_) {
             return;
@@ -1952,7 +1944,6 @@ private:
         IsBuilt_ = true;
     }
 
-private:
     mutable THashedDictFiller Filler_;
     const TKeyTypes Types_;
     mutable TValuesDictHashMap Map_;
@@ -2247,7 +2238,6 @@ private:
         return false;
     }
 
-private:
     TPagedArena Pool_;
     const TMapType Map_;
     const std::optional<ui64> NullPayload_;
@@ -2529,7 +2519,6 @@ private:
         return false;
     }
 
-private:
     TPagedArena Pool_;
     const TMapType Map_;
     const std::vector<ui64> NullPayloads_;
@@ -3017,7 +3006,6 @@ private:
         }
     }
 
-private:
     const THolderFactory& HolderFactory_;
     const TKeyTypes Types_;
     const bool IsTuple_;
@@ -3109,6 +3097,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui64 size, NUdf::
         itemsPtr = nullptr;
         return GetEmptyContainerLazy();
     }
+
+    MKQL_ENSURE(size <= TDirectArrayHolderInplace::GetMaxSize(), "Too large array size: " << size);
 
     const auto buffer = MKQLAllocFastWithSize(
         sizeof(TDirectArrayHolderInplace) + size * sizeof(NUdf::TUnboxedValue),

@@ -1,5 +1,6 @@
 #include "tablet_impl.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -20,6 +21,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     const TEvBlobStorage::TEvPut::ETactic CommitTactic;
 
     TIntrusivePtr<TTabletStorageInfo> Info;
+    const NKikimrBlobStorage::TDataKind::E DataKind;
     NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
     NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
@@ -50,7 +52,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
             YellowMoveChannels.push_back(channel);
         }
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+        if (msg->StatusFlags.Check(StopWritingStatusFlag(DataKind))) {
             YellowStopChannels.push_back(channel);
         }
         ApproximateFreeSpaceShareByChannel[channel] = msg->ApproximateFreeSpaceShare;
@@ -158,6 +160,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
                 .HandleClass = handleClass,
                 .Tactic = tactic,
                 .WriteSource = writeSource,
+                .DataKind = DataKind,
                 .IsZeroEntry = isZeroEntry,
                 .ExternalRelevanceWatcher = Relevance,
             }), cookie, std::move(traceId));
@@ -175,6 +178,7 @@ public:
         , LogEntry(entry)
         , CommitTactic(commitTactic)
         , Info(info)
+        , DataKind(DataKindByTabletType(info->TabletType))
         , RepliesToWait(Max<ui32>())
         , Relevance(std::move(relevance))
         , IsZeroEntry(isZeroEntry)

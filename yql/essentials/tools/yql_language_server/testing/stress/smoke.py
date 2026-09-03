@@ -20,18 +20,12 @@ def test_parallel():
     trace = list(LspRandom(random.Random(SEED), DID_CHANGE_PROB).generate_trace(OPS))
 
     with LanguageServer([SERVER_PATH, '-j', '1']) as server:
-        seq, seq_duration = replay(trace, server)
+        seq, _ = replay(trace, server)
 
     with LanguageServer([SERVER_PATH, '-j', '8']) as server:
-        par, par_duration = replay(trace, server)
+        par, _ = replay(trace, server)
 
     assert_equivalent(seq, par)
-
-    # FIXME(YQL-21399):
-    # now CompletionEngine is not thread safe,
-    # therefore all operations are serialized,
-    # but after the fix it should be good.
-    assert not (par_duration < seq_duration)
 
 
 def replay(trace, server):

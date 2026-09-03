@@ -6,6 +6,7 @@
 #include "hulldb_compstrat_space.h"
 #include "hulldb_compstrat_squeeze.h"
 #include "hulldb_compstrat_explicit.h"
+#include "hulldb_compstrat_emergency.h"
 
 namespace NKikimr {
     namespace NHullComp {
@@ -26,6 +27,7 @@ namespace NKikimr {
             using TStrategyPromoteSsts = NHullComp::TStrategyPromoteSsts<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategyStorageRatio = NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategySqueeze = NHullComp::TStrategySqueeze<TKeyLogoBlob, TMemRecLogoBlob>;
+            using TStrategyEmergency = NHullComp::TStrategyEmergency<TKeyLogoBlob, TMemRecLogoBlob>;
 
             // calculate storage ratio and gather space consumption statistics
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriersEssence = BarriersSnap.CreateEssence(HullCtx);
@@ -53,12 +55,22 @@ namespace NKikimr {
                 return action;
             }
 
-            // try to find what to compact based on levels balance
-            action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
+            // try to find what to compact based on levels balance (skipped in emergency mode;
+            // even then Balance refuses jobs whose estimated output exceeds the free-chunk budget)
+            if (!Params.EmergencyMode) {
+                action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
+                if (action != ActNothing) {
+                    Task->SelectStrategy = Task->IsFullCompaction
+                        ? ESelectStrategy::BalanceFull
+                        : ESelectStrategy::BalanceLevel;
+                    return action;
+                }
+            }
+
+            // reclaim index chunks with a small, budgeted compaction
+            action = TStrategyEmergency(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                Task->SelectStrategy = Task->IsFullCompaction
-                    ? ESelectStrategy::BalanceFull
-                    : ESelectStrategy::BalanceLevel;
+                Task->SelectStrategy = ESelectStrategy::Emergency;
                 return action;
             }
 

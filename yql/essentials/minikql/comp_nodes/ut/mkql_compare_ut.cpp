@@ -15,8 +15,7 @@
 
 #include <util/generic/guid.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -141,16 +140,16 @@ Y_UNIT_TEST_LLVM(SqlFloats) {
     using TResult = std::tuple<bool, bool, bool, bool, bool, bool>;
 
     // NaN comparisons: SQL treats NaN != NaN, and all order comparisons with NaN are false
-    const float nanF = 0.0f * HUGE_VALF;
+    const float nanF = 0.0F * HUGE_VALF;
     const double nanD = 0.0 * HUGE_VAL;
 
     auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
-                                                         {-7.0f, -7.0},
-                                                         {-7.0f, 3.0},
-                                                         {-7.0f, nanD},
-                                                         {3.0f, -7.0},
-                                                         {3.0f, 3.0},
-                                                         {3.0f, nanD},
+                                                         {-7.0F, -7.0},
+                                                         {-7.0F, 3.0},
+                                                         {-7.0F, nanD},
+                                                         {3.0F, -7.0},
+                                                         {3.0F, 3.0},
+                                                         {3.0F, nanD},
                                                          {nanF, -7.0},
                                                          {nanF, 3.0},
                                                          {nanF, nanD},
@@ -187,17 +186,17 @@ Y_UNIT_TEST_LLVM(AggrFloats) {
     using TRow = std::tuple<float, float>;
     using TResult = std::tuple<bool, bool, bool, bool, bool, bool>;
 
-    const float nanF = 0.0f * HUGE_VALF;
+    const float nanF = 0.0F * HUGE_VALF;
 
     auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
-                                                         {-7.0f, -7.0f},
-                                                         {-7.0f, 3.0f},
-                                                         {-7.0f, nanF},
-                                                         {3.0f, -7.0f},
-                                                         {3.0f, 3.0f},
-                                                         {3.0f, nanF},
-                                                         {nanF, -7.0f},
-                                                         {nanF, 3.0f},
+                                                         {-7.0F, -7.0F},
+                                                         {-7.0F, 3.0F},
+                                                         {-7.0F, nanF},
+                                                         {3.0F, -7.0F},
+                                                         {3.0F, 3.0F},
+                                                         {3.0F, nanF},
+                                                         {nanF, -7.0F},
+                                                         {nanF, 3.0F},
                                                          {nanF, nanF},
                                                      });
 
@@ -445,7 +444,7 @@ Y_UNIT_TEST_LLVM(TzMin) {
 
     const auto source = pb.Map(pb.Zip({pb.Reverse(dates), zones}),
                                [&](TRuntimeNode item) {
-                                   return pb.AddTimezone(pb.ToIntegral(pb.Nth(item, 0U), pb.NewDataType(NUdf::EDataSlot::Datetime, true)), pb.Nth(item, 1U));
+                                   return pb.AddTimezone(pb.ToIntegral(pb.Nth(item, 0U), pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true)), pb.Nth(item, 1U));
                                });
 
     const auto pgmReturn = pb.ToString(pb.Unwrap(pb.Fold1(source,
@@ -466,7 +465,7 @@ Y_UNIT_TEST_LLVM(TzMax) {
 
     const auto source = pb.Map(pb.Zip({dates, pb.Reverse(zones)}),
                                [&](TRuntimeNode item) {
-                                   return pb.AddTimezone(pb.ToIntegral(pb.Nth(item, 0U), pb.NewDataType(NUdf::EDataSlot::Datetime, true)), pb.Nth(item, 1U));
+                                   return pb.AddTimezone(pb.ToIntegral(pb.Nth(item, 0U), pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true)), pb.Nth(item, 1U));
                                });
 
     const auto pgmReturn = pb.ToString(pb.Unwrap(pb.Fold1(source,
@@ -489,7 +488,7 @@ Y_UNIT_TEST_LLVM(TzAggrMin) {
                                    [&](TRuntimeNode zone) {
                                        return pb.Map(dates,
                                                      [&](TRuntimeNode date) {
-                                                         return pb.AddTimezone(pb.ToIntegral(date, pb.NewDataType(NUdf::EDataSlot::Datetime, true)), zone);
+                                                         return pb.AddTimezone(pb.ToIntegral(date, pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true)), zone);
                                                      });
                                    });
 
@@ -513,7 +512,7 @@ Y_UNIT_TEST_LLVM(TzAggrMax) {
                                    [&](TRuntimeNode date) {
                                        return pb.Map(zones,
                                                      [&](TRuntimeNode zone) {
-                                                         return pb.AddTimezone(pb.ToIntegral(date, pb.NewDataType(NUdf::EDataSlot::Datetime, true)), zone);
+                                                         return pb.AddTimezone(pb.ToIntegral(date, pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true)), zone);
                                                      });
                                    });
 
@@ -530,7 +529,7 @@ Y_UNIT_TEST_LLVM(TestAggrMinMaxFloats) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0f * HUGE_VALF, HUGE_VALF, 3.14f, -2.13f, -HUGE_VALF});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0F * HUGE_VALF, HUGE_VALF, 3.14F, -2.13F, -HUGE_VALF});
     const auto pgmReturn = pb.FlatMap(list,
                                       [&](TRuntimeNode left) {
                                           return pb.Map(list,
@@ -552,31 +551,31 @@ Y_UNIT_TEST_LLVM(TestAggrMinMaxFloats) {
     UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14F);
     UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13F);
     UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+    UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), HUGE_VALF);
     UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), HUGE_VALF);
-    UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), HUGE_VALF);
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14F);
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13F);
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
 
     UNIT_ASSERT(iterator.Next(item));
@@ -584,44 +583,44 @@ Y_UNIT_TEST_LLVM(TestAggrMinMaxFloats) {
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14F);
     UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14F);
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14F);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14F);
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13F);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14F);
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14F);
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13F);
     UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13F);
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13F);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14F);
 
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13F);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13F);
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13F);
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
@@ -633,11 +632,11 @@ Y_UNIT_TEST_LLVM(TestAggrMinMaxFloats) {
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14F);
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13f);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13F);
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
@@ -760,5 +759,4 @@ Y_UNIT_TEST_LLVM(TestAggrDyNumberMinMax) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLCompareTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

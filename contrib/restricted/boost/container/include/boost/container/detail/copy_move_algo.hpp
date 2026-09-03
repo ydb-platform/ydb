@@ -535,11 +535,22 @@ inline typename dtl::disable_if_memtransfer_copy_constructible<I, F, F>::type
 {
    F back = r;
    BOOST_CONTAINER_TRY{
+      //GCC's value-range analysis issues a spurious -Wmaybe-uninitialized here
+      //when this copy-construct loop is inlined into a fixed-capacity container's
+      //(e.g. static_vector) copy constructor after a near-end single-element
+      //insert: it cannot prove the just-built trailing slot is initialized.
+#if defined(BOOST_GCC) && (BOOST_GCC >= 40600)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
       while (n) {
          --n;
          allocator_traits<Allocator>::construct(a, boost::movelib::iterator_to_raw_pointer(r), *f);
          ++f; ++r;
       }
+#if defined(BOOST_GCC) && (BOOST_GCC >= 40600)
+#pragma GCC diagnostic pop
+#endif
    }
    BOOST_CONTAINER_CATCH(...){
       for (; back != r; ++back){

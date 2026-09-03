@@ -169,6 +169,11 @@ T GetRawData(TChunkedInputBuffer& buf) {
 
 template <typename T>
 T UnpackInteger(TChunkedInputBuffer& buf) {
+    constexpr const TStringBuf badDataMessage = std::is_same_v<T, NYql::NDecimal::TInt128>
+                                                    ? "Bad decimal packed data"
+                                                : std::is_same_v<T, ui64> ? "Bad uint64 packed data"
+                                                                          : "Bad uint32 packed data";
+
     T res;
     size_t read;
     if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
@@ -188,7 +193,7 @@ T UnpackInteger(TChunkedInputBuffer& buf) {
 
     static_assert(MAX_PACKED_DECIMAL_SIZE > MAX_PACKED64_SIZE);
     std::array<char, MAX_PACKED_DECIMAL_SIZE> tmpBuf;
-    Y_DEBUG_ABORT_UNLESS(buf.size() < MAX_PACKED_DECIMAL_SIZE);
+    MKQL_ENSURE(buf.size() <= tmpBuf.size(), badDataMessage);
     std::memcpy(tmpBuf.data(), buf.data(), buf.size());
     size_t pos = buf.size();
     buf.Skip(buf.size());
@@ -196,11 +201,9 @@ T UnpackInteger(TChunkedInputBuffer& buf) {
     for (;;) {
         if (buf.size() == 0) {
             buf.Next();
-            MKQL_ENSURE(buf.size() > 0, (std::is_same_v<T, NYql::NDecimal::TInt128>
-                                             ? "Bad decimal packed data"
-                                             : "Bad uint packed data"));
+            MKQL_ENSURE(buf.size() > 0, badDataMessage);
         }
-        Y_DEBUG_ABORT_UNLESS(pos < MAX_PACKED_DECIMAL_SIZE);
+        MKQL_ENSURE(pos < tmpBuf.size(), badDataMessage);
         tmpBuf[pos++] = *buf.data();
         buf.Skip(1);
         if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {

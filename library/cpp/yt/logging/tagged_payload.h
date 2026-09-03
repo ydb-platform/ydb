@@ -66,7 +66,7 @@ private:
  *
  *  A "well-known" tag sets the high bit of its key-size field; the low 31 bits stay the
  *  key length and the key bytes are still written. Consumers may render such tags
- *  specially (see #GetWellKnownLoggingTag).
+ *  specially (see #TWellKnownLoggingTagTraits).
  *
  *  Both the producer (#TTaggedPayloadWriter) and the consumer
  *  (#TTaggedPayloadReader) own this single definition of the layout.
@@ -119,10 +119,15 @@ public:
     //! any well-known tag, which the layout requires to come last.
     TTaggedPayloadWriter& AppendTags(TLoggingTagListPayloadView tags) &;
 
-    //! Appends a single framed keyed tag to #tags, for producers that hold an
-    //! already-formatted value and accumulate a tag section of their own (see
-    //! #TLoggingTagList).
-    static void AppendTag(TLoggingTagListPayload* tags, TStringBuf key, TStringBuf value);
+    //! Appends a single framed keyed tag to #tags, for producers accumulating a tag
+    //! section of their own (see #TLoggingTagList). The value is written by #formatter
+    //! straight into #tags.
+    /*!
+     *  #formatter must not read or write #tags: it is being appended to -- and may be
+     *  reallocated -- while #formatter runs.
+     */
+    template <class TFormatter>
+    static void AppendTag(TLoggingTagListPayload* tags, TStringBuf key, const TFormatter& formatter);
 
     //! Returns the serialized payload. Must follow #EndMessage.
     TTaggedLogEventPayload Finish() &;
@@ -202,8 +207,13 @@ TTaggedLogEventPayload MakeTaggedPayloadFromMessage(TStringBuf message);
 //! views into #payload, which must outlive it.
 TStringBuf GetMessageFromTaggedPayload(const TTaggedLogEventPayload& payload);
 
-//! Consumer convenience: renders the payload as |Message (Key: Value, ...)|, or just
-//! the message if it carries no tags.
+//! Consumer convenience: renders the payload into #builder as |Message (Key: Value, ...)|,
+//! well-known tags on trailing lines. Pass a #TStringBuilder or -- to avoid allocating --
+//! a #TRawFormatter.
+template <class TBuilder>
+void FormatTaggedPayload(TBuilder* builder, const TTaggedLogEventPayload& payload);
+
+//! Same, returning a string.
 std::string FormatTaggedPayload(const TTaggedLogEventPayload& payload);
 
 ////////////////////////////////////////////////////////////////////////////////

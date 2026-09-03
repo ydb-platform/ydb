@@ -1,7 +1,9 @@
 #include "partition_scale_request.h"
 #include "read_balancer_log.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/actors/core/events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
@@ -92,55 +94,87 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
 void TPartitionScaleRequest::PassAway() {
     if (SchemePipeActorId) {
         NTabletPipe::CloseClient(this->SelfId(), SchemePipeActorId);
+        SchemePipeActorId = {};
     }
 
     TBase::PassAway();
 }
 
+bool TPartitionScaleRequest::IsOurPipe(const TActorId& clientId) const {
+    return SchemePipeActorId && clientId == SchemePipeActorId;
+}
+
+void TPartitionScaleRequest::ReplyAndDie(
+    TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
+    const TActorContext& ctx)
+{
+    if (!ReplySent) {
+        ReplySent = true;
+        Send(ParentActorId, new TEvPartitionScaleRequestDone(status));
+    }
+    Die(ctx);
+}
+
+void TPartitionScaleRequest::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    ReplySent = true;
+    Die(ctx);
+}
+
 void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+    if (!IsOurPipe(ev->Get()->ClientId)) {
+        return;
+    }
     if (ev->Get()->Status != NKikimrProto::OK) {
-        auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);
-        Send(ParentActorId, scaleRequestResult.release());
-        Die(ctx);
+        ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
     }
 }
 
-void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext &ctx) {
-    auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);
-    Send(ParentActorId, scaleRequestResult.release());
-    Die(ctx);
+void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext &ctx) {
+    if (!IsOurPipe(ev->Get()->ClientId)) {
+        return;
+    }
+    ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
 }
 
 void TPartitionScaleRequest::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& /*ev*/, const TActorContext& ctx) {
-    auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
-    Send(ParentActorId, scaleRequestResult.release());
-    Die(ctx);
+    ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, ctx);
 }
 
 void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const NActors::TActorContext& ctx) {
     auto msg = ev->Get();
+    const auto status = msg->Status();
 
-    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
-    if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress) {
-        auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(status);
-        TStringBuilder issues;
-        for (auto& issue : ev->Get()->Record.GetIssues()) {
-            issues << issue.ShortDebugString() + ", ";
-        }
-        YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split",
-            {"logPrefix", LogPrefix()},
-            {"request", issues});
-        Send(ParentActorId, scaleRequestResult.release());
-        Die(ctx);
-    } else {
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {.RetryLimitCount = 3};
-        if (!SchemePipeActorId) {
-            SchemePipeActorId = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, msg->Record.GetSchemeShardTabletId(), clientConfig));
-        }
+    switch (status) {
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress: {
+            NTabletPipe::TClientConfig clientConfig;
+            clientConfig.RetryPolicy = {.RetryLimitCount = 3};
+            if (!SchemePipeActorId) {
+                SchemePipeActorId = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, msg->Record.GetSchemeShardTabletId(), clientConfig));
+            }
 
-        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
-        NTabletPipe::SendData(this->SelfId(), SchemePipeActorId, request.release());
+            auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
+            NTabletPipe::SendData(this->SelfId(), SchemePipeActorId, request.release());
+            return;
+        }
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready:
+            YDB_LOG_DEBUG("TPartitionScaleRequest completed",
+                {"logPrefix", LogPrefix()},
+                {"status", TEvTxUserProxy::TResultStatus::Str(status)});
+            ReplyAndDie(status, ctx);
+            return;
+        default: {
+            TStringBuilder issues;
+            for (auto& issue : msg->Record.GetIssues()) {
+                issues << issue.ShortDebugString() + ", ";
+            }
+            YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a scale request",
+                {"logPrefix", LogPrefix()},
+                {"status", TEvTxUserProxy::TResultStatus::Str(status)},
+                {"request", issues});
+            ReplyAndDie(status, ctx);
+            return;
+        }
     }
 }
 

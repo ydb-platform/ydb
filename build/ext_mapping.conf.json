@@ -4,19 +4,22 @@
     "678806418": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/678806418",
     "770480022": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/770480022",
     "451427803": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/451427803",
-    "4966407557": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/4966407557"
+    "4966407557": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/4966407557",
+    "1234567891": "https://storage.yandexcloud.net/ydb-ci/kafka/cm-binary-test"
 
   },
   "resources_info": {
     "770480022": { "file_name": "docker-compose" },
     "451427803": { "file_name": "Robots.in" },
-    "4966407557": { "file_name": "psql" }
+    "4966407557": { "file_name": "psql" },
+    "1234567891": {"file_name": "cm-binary-test"}
   },
   "resources_descriptions": {
     "678806418": "Pg Linux pack",
     "770480022": "docker_compose for Linux",
     "451427803": "Robots.in",
-    "4966407557": "psql cli"
+    "4966407557": "psql cli",
+    "1234567891": "CM binary for federation tests"
   },
   "tasks": {}
 }

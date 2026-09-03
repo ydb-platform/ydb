@@ -10,7 +10,9 @@ SIZE(MEDIUM)
 #TIMEOUT(30)
 
 SRCS(
+    mlp_child_sync_ut.cpp
     mlp_commit_ut.cpp
+    mlp_consumer_order_ut.cpp
     mlp_consumer_split_ut.cpp
     mlp_consumer_ut.cpp
     mlp_counters_ut.cpp
@@ -23,7 +25,12 @@ SRCS(
 PEERDIR(
     ydb/core/persqueue/public/mlp/ut/common
     ydb/core/persqueue/ut/common
+    ydb/core/testlib/default
     library/cpp/iterator
 )
 
 END()
+
+RECURSE(
+    pipe
+)

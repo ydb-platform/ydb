@@ -161,6 +161,23 @@ private:
             if (!pending.Meta.RowSpec) {
                 pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);
             }
+            if (!isWrite) {
+                if (const auto consumer = State_->Configuration->Consumer.Get(); consumer && !consumer->empty() && meta.FederatedTopic) {
+                    for (const auto& topic : *meta.FederatedTopic) {
+                        // A zero partition count means that topic description failed or the physical cluster is unavailable for read.
+                        if (topic.PartitionsCount && !topic.Consumers.contains(*consumer)) {
+                            TStringBuilder message;
+                            message << "Consumer `" << *consumer << "` does not exist in topic `" << x.second << '`';
+                            if (!topic.Info.Name.empty()) {
+                                message << " on cluster `" << topic.Info.Name << '`';
+                            }
+                            ctx.AddError(TIssue(ctx.GetPosition(meta.Pos), message));
+                            return TStatus::Error;
+                        }
+                    }
+                }
+            }
+
             State_->Topics.emplace(key, pending.Meta);
         }
         pendingTopics.clear();

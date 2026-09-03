@@ -7,6 +7,7 @@
 #include <util/system/types.h>
 
 #include <algorithm>
+#include <barrier>
 #include <thread>
 #include <vector>
 
@@ -63,6 +64,69 @@ TEST(TPerCpuSensorTest, GaugePublishesLastValue)
     gauge->Update(1.0);
     gauge->Update(42.0);
     EXPECT_EQ(gauge->GetValue(), 42.0);
+}
+
+TEST(TPerCpuSensorTest, SummarySupportsReadResetAndRecordAfterReset)
+{
+    auto summary = New<TPerCpuSummary<double>>();
+
+    auto initial = summary->GetSummary();
+    EXPECT_EQ(initial.Count(), 0);
+    EXPECT_DOUBLE_EQ(initial.Sum(), 0.0);
+
+    summary->Record(2.0);
+    summary->Record(3.0);
+
+    auto current = summary->GetSummary();
+    EXPECT_EQ(current.Count(), 2);
+    EXPECT_DOUBLE_EQ(current.Sum(), 5.0);
+
+    auto drained = summary->GetSummaryAndReset();
+    EXPECT_EQ(drained.Count(), 2);
+    EXPECT_DOUBLE_EQ(drained.Sum(), 5.0);
+
+    auto empty = summary->GetSummaryAndReset();
+    EXPECT_EQ(empty.Count(), 0);
+    EXPECT_DOUBLE_EQ(empty.Sum(), 0.0);
+
+    summary->Record(7.0);
+
+    auto afterReset = summary->GetSummaryAndReset();
+    EXPECT_EQ(afterReset.Count(), 1);
+    EXPECT_DOUBLE_EQ(afterReset.Sum(), 7.0);
+}
+
+TEST(TPerCpuSensorTest, SummaryConcurrentDrainConservesSamples)
+{
+    auto summary = New<TPerCpuSummary<double>>();
+
+    constexpr int IterationCount = 10'000;
+    std::barrier barrier(2);
+
+    std::thread writer([&] {
+        for (int index = 0; index < IterationCount; ++index) {
+            barrier.arrive_and_wait();
+            summary->Record(static_cast<double>(index + 1));
+        }
+    });
+
+    i64 drainedCount = 0;
+    double drainedSum = 0.0;
+    for (int index = 0; index < IterationCount; ++index) {
+        barrier.arrive_and_wait();
+        auto drained = summary->GetSummaryAndReset();
+        drainedCount += drained.Count();
+        drainedSum += drained.Sum();
+    }
+
+    writer.join();
+
+    auto tail = summary->GetSummaryAndReset();
+    drainedCount += tail.Count();
+    drainedSum += tail.Sum();
+
+    EXPECT_EQ(drainedCount, IterationCount);
+    EXPECT_DOUBLE_EQ(drainedSum, static_cast<double>(IterationCount) * (IterationCount + 1) / 2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

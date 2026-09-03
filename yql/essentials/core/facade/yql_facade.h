@@ -120,7 +120,6 @@ public:
     using TStatus = IGraphTransformer::TStatus;
     using TFutureStatus = NThreading::TFuture<TStatus>;
 
-public:
     ~TProgram() override;
 
     void SetLanguageVersion(TLangVersion version);
@@ -289,6 +288,7 @@ public:
     void SetValidateOptions(NUdf::EValidateMode validateMode);
     void SetDisableNativeUdfSupport(bool disable);
     void SetUseTableMetaFromGraph(bool use);
+    void SetBridgeBinaryPath(const TString& path);
 
     void SetProgressWriter(TOperationProgressWriter writer) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
@@ -310,14 +310,7 @@ public:
         OperationOptions_.SharedId = id;
     }
 
-    void SetOperationTitle(const TString& title) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-        if (!title.Contains("YQL")) {
-            ythrow yexception() << "Please mention YQL in the title '" << title << "'";
-        }
-
-        OperationOptions_.Title = title;
-    }
+    void SetOperationTitle(const TString& title);
 
     void SetOperationUrl(const TString& url) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
@@ -399,7 +392,7 @@ private:
         TUdfIndexPackageSet::TPtr udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const IUrlPreprocessing::TPtr& urlPreprocessing,
-        const TGatewaysConfig* gatewaysConfig,
+        THolder<TGatewaysConfig> gatewaysConfig,
         TString filename,
         TString sourceCode,
         TString sessionId,
@@ -435,7 +428,6 @@ private:
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
     void SaveExprRoot();
 
-private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode();
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings);
@@ -471,7 +463,7 @@ private:
     const IUrlPreprocessing::TPtr UrlPreprocessing_;
     TUserDataTable SavedUserDataTable_;
     TUserDataStorage::TPtr UserDataStorage_;
-    const TGatewaysConfig* GatewaysConfig_;
+    const THolder<TGatewaysConfig> GatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
     ESourceSyntax SourceSyntax_;
@@ -493,6 +485,7 @@ private:
     NUdf::EValidateMode ValidateMode_ = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport_ = false;
     bool UseTableMetaFromGraph_ = false;
+    TString BridgeBinaryPath_;
     TMaybe<TSet<TString>> UsedClusters_;
     TMaybe<TSet<TString>> UsedProviders_;
     TMaybe<TString> ExternalQueryAst_;

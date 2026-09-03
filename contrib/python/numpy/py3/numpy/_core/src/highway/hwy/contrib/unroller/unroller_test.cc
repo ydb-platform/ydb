@@ -30,6 +30,7 @@
 HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
+namespace {
 
 template <typename T>
 T SimpleDot(const T* pa, const T* pb, size_t num) {
@@ -147,7 +148,7 @@ struct FindUnit : UnrollerUnit<FindUnit<T>, T, MakeSigned<T>> {
 
   hn::Vec<DI> YInitImpl() { return hn::Set(di, TI{-1}); }
 
-  hn::Vec<D> MaskLoadImpl(const ptrdiff_t idx, T* from,
+  hn::Vec<D> MaskLoadImpl(const ptrdiff_t idx, const T* from,
                           const ptrdiff_t places) {
     auto mask = hn::FirstN(d, static_cast<size_t>(places));
     auto maskneg = hn::Not(hn::FirstN(
@@ -235,7 +236,7 @@ struct MinUnit : UnrollerUnit<MinUnit<T>, T, T> {
 
   hn::Vec<TT> YInitImpl() { return hn::Set(d, HighestValue<T>()); }
 
-  hn::Vec<TT> MaskLoadImpl(const ptrdiff_t idx, T* from,
+  hn::Vec<TT> MaskLoadImpl(const ptrdiff_t idx, const T* from,
                            const ptrdiff_t places) {
     auto mask = hn::FirstN(d, static_cast<size_t>(places));
     auto maskneg = hn::Not(hn::FirstN(
@@ -267,7 +268,6 @@ struct MinUnit : UnrollerUnit<MinUnit<T>, T, T> {
   }
 
   ptrdiff_t ReduceImpl(const hn::Vec<TT> x, T* to) {
-    const hn::ScalableTag<T> d;
     auto minvect = hn::MinOfLanes(d, x);
     (*to) = hn::ExtractLane(minvect, 0);
     return 1;
@@ -376,7 +376,7 @@ struct TestDot {
       AccumulateUnit<T> accfn;
       T dot_via_mul_acc;
       Unroller(accfn, y, &dot_via_mul_acc, static_cast<ptrdiff_t>(num));
-      const double tolerance = 32.0 *
+      const double tolerance = 120.0 *
                                ConvertScalarTo<double>(hwy::Epsilon<T>()) *
                                ScalarAbs(expected_dot);
       HWY_ASSERT(ScalarAbs(expected_dot - dot_via_mul_acc) < tolerance);
@@ -452,7 +452,9 @@ struct TestFind {
 
       FindUnit<T> cvtfn(ConvertScalarTo<T>(num - 1));
       MakeSigned<T> idx = 0;
-      Unroller(cvtfn, a, &idx, static_cast<ptrdiff_t>(num));
+      // Explicitly test input can be const
+      const T* const_a = a;
+      Unroller(cvtfn, const_a, &idx, static_cast<ptrdiff_t>(num));
       HWY_ASSERT(static_cast<MakeUnsigned<T>>(idx) < num);
       HWY_ASSERT(a[idx] == ConvertScalarTo<T>(num - 1));
 
@@ -472,18 +474,20 @@ struct TestFind {
 
 void TestAllFind() { ForFloatTypes(ForPartialVectors<TestFind>()); }
 
+}  // namespace
 }  // namespace HWY_NAMESPACE
 }  // namespace hwy
 HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
-
 namespace hwy {
+namespace {
 HWY_BEFORE_TEST(UnrollerTest);
 HWY_EXPORT_AND_TEST_P(UnrollerTest, TestAllDot);
 HWY_EXPORT_AND_TEST_P(UnrollerTest, TestAllConvert);
 HWY_EXPORT_AND_TEST_P(UnrollerTest, TestAllFind);
 HWY_AFTER_TEST();
+}  // namespace
 }  // namespace hwy
-
-#endif
+HWY_TEST_MAIN();
+#endif  // HWY_ONCE

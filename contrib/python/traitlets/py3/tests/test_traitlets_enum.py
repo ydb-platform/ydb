@@ -2,6 +2,7 @@
 """
 Test the trait-type ``UseEnum``.
 """
+
 from __future__ import annotations
 
 import enum
@@ -33,7 +34,7 @@ class CSColor(enum.Enum):
     YeLLoW = 4
 
 
-color_choices = "red Green  BLUE YeLLoW".split()
+color_choices = ["red", "Green", "BLUE", "YeLLoW"]
 
 
 # -----------------------------------------------------------------------------
@@ -200,7 +201,7 @@ class TestUseEnum(unittest.TestCase):
             enum4 = UseEnum(CSColor, allow_none=False)
 
         for i in range(1, 5):
-            attr = "enum%s" % i
+            attr = f"enum{i}"
             enum = getattr(Example, attr)
 
             enum.allow_none = True

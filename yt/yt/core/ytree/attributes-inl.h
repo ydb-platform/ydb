@@ -23,7 +23,7 @@ T IAttributeDictionary::Get(TKeyView key) const
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error parsing attribute %Qv",
             key)
-            << ex;
+            .With(ex);
     }
 }
 
@@ -65,7 +65,7 @@ typename TOptionalTraits<T>::TOptional IAttributeDictionary::Find(TKeyView key) 
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error parsing attribute %Qv",
             key)
-            << ex;
+            .With(ex);
     }
 }
 

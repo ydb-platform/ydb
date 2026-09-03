@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 
+#include "opentelemetry/sdk/logs/log_record_limits.h"
 #include "opentelemetry/sdk/logs/logger_context.h"
 #include "opentelemetry/sdk/logs/logger_provider.h"
 #include "opentelemetry/sdk/logs/processor.h"
@@ -65,6 +66,15 @@ public:
       std::vector<std::unique_ptr<LogRecordProcessor>> &&processors,
       const opentelemetry::sdk::resource::Resource &resource,
       std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>> logger_configurator);
+
+  /**
+   * Create a LoggerProvider with explicit LogRecord limits.
+   */
+  static std::unique_ptr<opentelemetry::sdk::logs::LoggerProvider> Create(
+      std::vector<std::unique_ptr<LogRecordProcessor>> &&processors,
+      const opentelemetry::sdk::resource::Resource &resource,
+      std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>> logger_configurator,
+      LogRecordLimits log_record_limits);
 
   /**
    * Create a LoggerProvider.

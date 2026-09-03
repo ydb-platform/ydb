@@ -13,6 +13,7 @@ import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/sys_view_types.proto";
+import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/test_shard_control.proto";
@@ -292,69 +293,6 @@ message TTTLSettings {
     }
 
     reserved 3;
-}
-
-/**
- * The parameters for the detailed metrics for the given table.
- */
-message TTableDetailedMetricsSettings {
-    /**
-     * The level at which detailed metrics are aggregated and reported.
-     */
-    enum EMetricsLevel {
-        /**
-         * The detailed metrics level is not specified.
-         */
-        MetricsLevelUnspecified = 0;
-
-        /**
-         * All detailed metrics are disabled for the given table.
-         */
-        MetricsLevelDisabled = 1;
-
-        /**
-         * Detailed metrics are aggregated and reported for the entire table.
-         */
-        MetricsLevelTable = 2;
-
-        /**
-         * Detailed metrics are aggregated and reported for individual partitions.
-         */
-        MetricsLevelPartition = 3;
-    }
-
-    /**
-     * The container for the detailed metrics settings, which are explicitly configured.
-     */
-    message TConfigured {
-        /**
-         * The level at which detailed metrics are aggregated and reported.
-         */
-        optional EMetricsLevel MetricsLevel = 1;
-    }
-
-    /**
-     * The container for the detailed metrics settings, which are explicitly removed.
-     */
-    message TNotConfigured {
-    }
-
-    oneof Status {
-        /**
-         * Set, if the detailed metrics settings are explicitly configured.
-         */
-        TConfigured Configured = 1;
-
-        /**
-         * Set, if the detailed metrics settings are explicitly removed.
-         *
-         * @note This is used in ALTER TABLE requests to remove the detailed metrics settings,
-         *       which are currently configured for the given table. If the detailed metrics
-         *       settings are not configured, the corresponding DetailedMetricsSettings field
-         *       in the table description will not be set.
-         */
-        TNotConfigured NotConfigured = 2;
-    }
 }
 
 message TTableReplicationConfig {
@@ -674,6 +612,7 @@ message TOlapIndexDescription {
 enum EMultiColumnStatisticsType {
     MULTI_COLUMN_STATISTICS_UNSPECIFIED = 0;
     COUNT_MIN_SKETCH = 1;
+    EQ_HEIGHT_HISTOGRAM = 2;
 }
 
 // Multi-column table statistics
@@ -816,6 +755,7 @@ message TColumnTableSchemeOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
 }
 
 message TColumnTableSchema {
@@ -862,6 +802,7 @@ message TColumnTableRequestedOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
 }
 
 message TAlterColumnTableSchema {
@@ -1477,6 +1418,7 @@ message TIndexAlteringConfig {
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
+    repeated string DataColumnNames = 10;
 }
 
 message TIndexedTableCreationConfig {
@@ -1969,6 +1911,7 @@ message TUpgradeSubDomain {
 message TIndexBuildConfig {
     optional string Table = 1;
     optional TIndexCreationConfig Index = 2;
+    optional bool IsRebuild = 3 [ default = false ];
 }
 
 message TIndexBuildControl {

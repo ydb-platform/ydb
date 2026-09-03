@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 constexpr ui32 StateVersion = 1;
 
@@ -30,7 +29,7 @@ TSqueezeState::TSqueezeState(
     , OutSave(outSave)
     , InLoad(inLoad)
     , OutLoad(outLoad)
-    , StateType(stateType)
+    , StateType_(stateType)
 {
 }
 
@@ -44,7 +43,7 @@ TSqueezeState::TSqueezeState(const TSqueezeState& state)
     , OutSave(state.OutSave)
     , InLoad(state.InLoad)
     , OutLoad(state.OutLoad)
-    , StateType(state.StateType)
+    , StateType_(state.StateType_)
 {
 }
 
@@ -74,18 +73,18 @@ void TSqueezeState::Load(TComputationContext& ctx, const NUdf::TStringRef& state
 }
 
 const TValuePacker& TSqueezeState::GetPacker() const {
-    if (!Packer && StateType) {
-        Packer = MakeHolder<TValuePacker>(false, StateType);
+    if (!Packer_ && StateType_) {
+        Packer_ = MakeHolder<TValuePacker>(false, StateType_);
     }
-    return *Packer;
+    return *Packer_;
 }
 
 TSqueezeCodegenValue::TSqueezeCodegenValue(TMemoryUsageInfo* memInfo, const TSqueezeState& state, TFetchPtr fetch, TComputationContext& ctx, NUdf::TUnboxedValue&& stream)
     : TBase(memInfo)
-    , FetchFunc(fetch)
-    , Stream(std::move(stream))
-    , Ctx(ctx)
-    , State(state)
+    , FetchFunc_(fetch)
+    , Stream_(std::move(stream))
+    , Ctx_(ctx)
+    , State_(state)
 {
 }
 
@@ -94,23 +93,22 @@ ui32 TSqueezeCodegenValue::GetTraverseCount() const {
 }
 
 NUdf::TUnboxedValue TSqueezeCodegenValue::GetTraverseItem(ui32) const {
-    return Stream;
+    return Stream_;
 }
 
 NUdf::TUnboxedValue TSqueezeCodegenValue::Save() const {
-    return State.Save(Ctx);
+    return State_.Save(Ctx_);
 }
 
 void TSqueezeCodegenValue::Load(const NUdf::TStringRef& state) {
-    State.Load(Ctx, state);
+    State_.Load(Ctx_, state);
 }
 
 NUdf::EFetchStatus TSqueezeCodegenValue::Fetch(NUdf::TUnboxedValue& result) {
-    if (ESqueezeState::Finished == State.Stage) {
+    if (ESqueezeState::Finished == State_.Stage) {
         return NUdf::EFetchStatus::Finish;
     }
-    return FetchFunc(&Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result, State.Stage);
+    return FetchFunc_(&Ctx_, static_cast<const NUdf::TUnboxedValuePod&>(Stream_), result, State_.Stage);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

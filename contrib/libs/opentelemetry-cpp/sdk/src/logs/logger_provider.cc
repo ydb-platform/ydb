@@ -6,8 +6,6 @@
 #include <utility>
 #include <vector>
 
-#include "opentelemetry/common/key_value_iterable.h"
-#include "opentelemetry/logs/logger.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
@@ -107,6 +105,36 @@ opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> LoggerProvider::Ge
 void LoggerProvider::AddProcessor(std::unique_ptr<LogRecordProcessor> processor) noexcept
 {
   context_->AddProcessor(std::move(processor));
+}
+
+void LoggerProvider::UpdateLoggerConfigurator(
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>>
+        logger_configurator) noexcept
+{
+  if (!logger_configurator)
+  {
+    OTEL_INTERNAL_LOG_ERROR(
+        "[LoggerProvider::UpdateLoggerConfigurator] logger_configurator is null, "
+        "ignoring.");
+    return;
+  }
+
+  // Lock the provider mutex to ensure that calls to GetLogger are exclusive with respect to the
+  // LoggerConfigurator update and corresponding LoggerConfig updates. This ensures that a Logger
+  // will never be returned from GetLogger with a LoggerConfig that is out of date with respect to
+  // the provider-level LoggerConfigurator.
+  const std::lock_guard<std::mutex> guard(lock_);
+  context_->SetLoggerConfigurator(std::move(logger_configurator));
+
+  // The only way to set the LoggerConfig of a logger is on Logger construction in
+  // LoggerProvider::GetLogger or through Logger::UpdateLoggerConfig (which is private and only
+  // accessed by LoggerProvider).
+  for (auto &logger : loggers_)
+  {
+    LoggerConfig new_config =
+        context_->GetLoggerConfigurator().ComputeConfig(logger->GetInstrumentationScope());
+    logger->UpdateLoggerConfig(new_config);
+  }
 }
 
 const opentelemetry::sdk::resource::Resource &LoggerProvider::GetResource() const noexcept

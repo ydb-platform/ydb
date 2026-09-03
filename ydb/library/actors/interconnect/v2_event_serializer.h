@@ -18,6 +18,11 @@ namespace NActorsInterconnect {
 
 namespace NActors {
 
+    // Allocate a section buffer with the requested headroom/tailroom, aligning the payload pointer
+    // (TRcBuf::GetData()) to `alignment` when alignment > 1. Used by the v2 XDC receive path so
+    // GetPayloadWithHeader can take the reserved-headroom fast path.
+    TRcBuf AllocateXdcSectionBuffer(size_t size, size_t headroom, size_t tailroom, size_t alignment);
+
     class TEventSerializer {
     public:
 #pragma pack(push, 1)
@@ -46,6 +51,8 @@ namespace NActors {
                 kEventChunk = 0 << ChannelBits,
                 kEventHeader = 1 << ChannelBits,
                 kSystem = 2 << ChannelBits,
+                kXdcDeclare = 3 << ChannelBits,
+                kXdcPush = 4 << ChannelBits,
             };
 
             ui16 GetChannel() const {
@@ -56,10 +63,25 @@ namespace NActors {
                 return TypeChannel & TypeMask;
             }
         };
+
+        struct TXdcSection {
+            ui32 Headroom = 0;
+            ui32 Size = 0;
+            ui32 Tailroom = 0;
+            ui32 Alignment = 0;
+            ui8 Flags = 0;
+
+            static constexpr ui8 FlagInline = 1;
+        };
 #pragma pack(pop)
+
+        static_assert(sizeof(TXdcSection) == 17);
+
+        static constexpr size_t XdcPushFraming = sizeof(TChunkHeader) + sizeof(ui16);
 
     private:
         const bool Checksumming;
+        const bool UseExternalDataChannel;
 
         struct TPerChannelQuota {
             ui16 Channel; // channel number
@@ -68,7 +90,9 @@ namespace NActors {
         std::vector<TPerChannelQuota> PerChannelQuotaHeap;
         static constexpr ui16 DefaultQuota = 4096;
 
-        static constexpr size_t MinUsefulQuota = sizeof(TChunkHeader) + sizeof(ui32);
+        // Must cover a DECLARE record (header + one TXdcSection). A smaller floor lets a channel
+        // sit at the front of the quota heap unable to emit DECLARE, which stalls every channel.
+        static constexpr size_t MinUsefulQuota = sizeof(TChunkHeader) + sizeof(TXdcSection);
 
         static_assert(MinUsefulQuota <= DefaultQuota);
 
@@ -76,6 +100,7 @@ namespace NActors {
 
         enum class ESerializeStage {
             kInitial,
+            kXdcDeclare,
             kBufferSerializer,
             kChunkSerializer,
             kHeader,
@@ -120,6 +145,7 @@ namespace NActors {
             TEventQueue Events;
             std::deque<TRcBuf> SystemRequests;
             TEventHeader EventHeader;
+            size_t SerializedBytesPending = 0;
             size_t EventHeaderOffset = 0;
             TIntrusivePtr<TEventSerializedData> Buffer;
             TRope::TConstIterator Iter;
@@ -129,6 +155,22 @@ namespace NActors {
             const TEventSerializationInfo *EvSerInfo;
             ui16 Quota = 0; // must be the same as TPerChannelQuota for this channel
             XXH3_state_t ChecksumState;
+
+            bool UseXdcForEvent = false;
+            bool CurrentIsInline = true;
+            size_t SectionIndex = 0;
+            size_t SectionBytesRemain = 0;
+            size_t XdcDeclareIndex = 0;
+
+            // Absolute stream offsets just past the bytes *this* event produced on each medium, or 0 when
+            // it produced none there. Stamping a refcount item with the global CumulativeProduced* instead
+            // would make a main-only event wait for an unrelated earlier event's XDC bytes to drain.
+            ui64 EventMainEnd = 0;
+            ui64 EventXdcEnd = 0;
+
+            // Cleared for events carrying IEventHandle::FlagDisablePayloadChecksums: their external
+            // (XDC) sections are left out of the digest, mirroring v1's PUSH_DATA_NO_CHECKSUMS.
+            bool ChecksumExternal = true;
         };
         std::array<TPerChannelQueue, NumDefaultChannels> PerChannelQueue;
         THashMap<ui16, TPerChannelQueue> PerChannelQueueMap;
@@ -137,30 +179,35 @@ namespace NActors {
         // Refcounted objects tracking. An event's serialized bytes may be scattered across the output
         // stream (interleaved with other channels) and across several pipelined write batches, so we can
         // only release an event once *all* of its bytes have been sent. We track that with absolute stream
-        // offsets: an event's memory is freed once the total number of committed (sent) bytes reaches the
-        // stream offset just past the event's last produced byte. Releasing on a plain FIFO byte count is
-        // wrong -- committed bytes belonging to one channel would be charged against a different event at
-        // the head of the queue, freeing it while a later, still-in-flight batch aliases its memory.
+        // offsets: an event's memory is freed once the total number of committed (sent) bytes on *both*
+        // the main and XDC streams reach the offsets just past the event's last produced byte on each.
+        // Releasing on a plain FIFO byte count is wrong -- committed bytes belonging to one channel would
+        // be charged against a different event at the head of the queue, freeing it while a later,
+        // still-in-flight batch aliases its memory.
         struct TRefcountItem {
-            ui64 EndOffset = 0; // total produced bytes at the moment this event was fully produced
+            ui64 MainEndOffset = 0;
+            ui64 XdcEndOffset = 0;
             TIntrusivePtr<TEventSerializedData> Buffer;
             std::unique_ptr<IEventBase> Event;
             TRcBuf Scratch;
             size_t ScratchBytesUsed = 0;
-            ui64 EventReceivedTimestamp;
+            ui64 EventReceivedTimestamp = 0;
+            std::vector<y_absl::Cord> Cords; // keeping ownership of the following cords referring the data
         };
         std::deque<TRefcountItem> RefcountItems;
         size_t NumBytesInScratchBuffers = 0;
-        ui64 CumulativeProduced = 0; // total bytes ever produced into the output stream
-        ui64 CumulativeCommitted = 0; // total bytes ever reported as sent via CommitProducedBytes
+        ui64 CumulativeProducedMain = 0;
+        ui64 CumulativeProducedXdc = 0;
+        ui64 CumulativeCommittedMain = 0;
+        ui64 CumulativeCommittedXdc = 0;
 
-        ui64 Timestamp;
+        ui64 Timestamp = 0;
         ui64 SerializeEventTime = 0;
         ui64 BytesCopied = 0;
         ui64 BytesAliased = 0;
 
     public:
-        TEventSerializer(bool checksumming);
+        TEventSerializer(bool checksumming, bool useExternalDataChannel = false);
 
         void Push(std::unique_ptr<IEventHandle> ev);
 
@@ -169,11 +216,19 @@ namespace NActors {
         bool IsTrafficPending() const { return !PerChannelQuotaHeap.empty(); }
         bool HasOutOfBandTraffic() const { return !SystemChannelQueue.SystemRequests.empty(); }
 
-        // this function generates output stream for transmission; it returns number of bytes added to output spans
-        size_t ProduceOutputStream(TRcBuf& buffer, std::deque<TContiguousSpan> *out, size_t maxBytesToProduce = Max<size_t>());
+        // Generates output for transmission. Returns total bytes added to main and (if provided) XDC spans.
+        // Quota is charged for both media so logical channels stay fair regardless of which socket carries
+        // the payload. xdcBuffer/xdcOut may be null when XDC is not in use.
+        size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            size_t maxBytesToProduce = Max<size_t>());
+        size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut,
+            size_t maxBytesToProduce = Max<size_t>());
 
-        // notification issued when N produced bytes have been sent to the other party
-        void CommitProducedBytes(size_t numBytes, std::vector<ui64> *eventToWireTime = nullptr,
+        // Notification issued when produced bytes have been sent. Pass XDC bytes as the second argument
+        // when that socket completed a write; existing single-stream callers can omit it (defaults to 0).
+        void CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes = 0,
+            std::vector<ui64> *eventToWireTime = nullptr,
             std::vector<std::unique_ptr<IEventBase>> *events = nullptr,
             std::vector<TIntrusivePtr<TEventSerializedData>> *buffers = nullptr);
 
@@ -189,16 +244,34 @@ namespace NActors {
 
         size_t GetNumBytesInScratchBuffers() const { return NumBytesInScratchBuffers; }
 
+        ui64 GetCumulativeProducedMain() const { return CumulativeProducedMain; }
+        ui64 GetCumulativeProducedXdc() const { return CumulativeProducedXdc; }
+
     private:
         TPerChannelQueue& GetQueue(ui16 channel) {
             return channel < NumDefaultChannels ? PerChannelQueue[channel] :
                 channel == TChunkHeader::SystemChannel ? SystemChannelQueue : PerChannelQueueMap[channel];
         }
 
-        size_t ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce, TRcBuf& buffer,
-            std::deque<TContiguousSpan> *out, ui64 *bufferProduced);
+        struct TStreamState {
+            TMutableContiguousSpan Buffer;
+            TContiguousSpan BufferOrig;
+            std::vector<TContiguousSpan> *Out = nullptr;
+            const char *LastSpanEnd = nullptr;
+            ui64 *CumulativeProduced = nullptr;
+            ui64 *BufferProduced = nullptr;
+            // High-water mark of the queue currently being served; retargeted per channel.
+            ui64 *EventEnd = nullptr;
+            bool Enabled = false;
+        };
+
+        size_t ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce,
+            TStreamState& main, TStreamState *xdc);
 
         ui64 UpdateTimestamp();
+        static bool HasExternalSections(const TEventSerializationInfo *info);
+        static void EnsureSection(TPerChannelQueue& queue);
+        void ResetEventState(TPerChannelQueue& queue);
     };
 
     class TEventDeserializer {
@@ -206,19 +279,36 @@ namespace NActors {
 
         using TEventHeader = TEventSerializer::TEventHeader;
         using TChunkHeader = TEventSerializer::TChunkHeader;
+        using TXdcSection = TEventSerializer::TXdcSection;
 
         const TScopeId PeerScopeId;
 
-        struct TPerChannelQueue {
-            TRope Accum;
+        struct TPendingEvent {
+            TRope InternalPayload;
+            TRope ExternalPayload;
             TEventSerializationInfo EvSerInfo;
             TEventHeader EventHeader;
             size_t EventHeaderOffset = 0;
+            size_t XdcSizeLeft = 0;
+            size_t DeclaredSize = 0; // sum of all declared section sizes, bounded against EventMaxByteSize
+            std::deque<TMutableContiguousSpan> XdcBuffers;
+            bool HeaderComplete = false;
+            bool Declared = false;
+        };
+
+        struct TPerChannelQueue {
+            std::deque<TPendingEvent> Pending;
         };
         std::array<TPerChannelQueue, NumDefaultChannels> PerChannelQueue;
         THashMap<ui16, TPerChannelQueue> PerChannelQueueMap;
 
         TRope Accum;
+
+        struct TXdcInputItem {
+            ui16 Channel = 0;
+            TMutableContiguousSpan Span;
+        };
+        std::deque<TXdcInputItem> XdcInputQ;
 
     public:
         struct IEventProcessor {
@@ -231,10 +321,20 @@ namespace NActors {
         TEventDeserializer(TScopeId peerScopeId);
         void Push(TRcBuf buffer, IEventProcessor *eventProcessor, TActorId sessionId);
 
+        bool HasXdcReadPending() const { return !XdcInputQ.empty(); }
+        size_t PrepareXdcReadv(TIoVec *iov, size_t maxIov, size_t maxBytes);
+        void CommitXdcBytes(size_t n, IEventProcessor *eventProcessor, TActorId sessionId);
+
     private:
         TPerChannelQueue& GetQueue(ui16 channel) {
             return channel < NumDefaultChannels ? PerChannelQueue[channel] : PerChannelQueueMap[channel];
         }
+
+        TPendingEvent& CurrentEvent(TPerChannelQueue& queue);
+        void ApplyXdcDeclare(TPendingEvent& ev, const char *data, size_t length);
+        void ApplyXdcPush(ui16 channel, TPendingEvent& ev, ui16 nbytes);
+        void TryDeliver(TPerChannelQueue& queue, IEventProcessor *eventProcessor, TActorId sessionId);
+        static TRope Unshuffle(TPendingEvent& ev);
     };
 
 } // NActors

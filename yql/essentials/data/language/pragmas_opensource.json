@@ -3,6 +3,9 @@
     "name": "yt.Annotations"
   },
   {
+    "name": "yt.ApplyMaxJobCountToAll"
+  },
+  {
     "name": "yt.ApplyStoredConstraints"
   },
   {
@@ -711,6 +714,9 @@
     "name": "dq.ChunkSizeLimit"
   },
   {
+    "name": "dq.Clique"
+  },
+  {
     "name": "dq.CollectCoreDumps"
   },
   {
@@ -1014,6 +1020,9 @@
     "name": "DisableEmitUnionMerge"
   },
   {
+    "name": "DisableEvaluateExprCache"
+  },
+  {
     "name": "DisableExceptIntersectBefore202503"
   },
   {
@@ -1125,6 +1134,9 @@
     "name": "ErrorMsg"
   },
   {
+    "name": "EvaluateExprCache"
+  },
+  {
     "name": "ExceptIntersectBefore202503"
   },
   {
@@ -1234,6 +1246,9 @@
   },
   {
     "name": "Udf"
+  },
+  {
+    "name": "UdfBridge"
   },
   {
     "name": "UnicodeLiterals"

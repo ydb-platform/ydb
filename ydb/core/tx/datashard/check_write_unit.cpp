@@ -154,3 +154,7 @@ THolder<TExecutionUnit> CreateCheckWriteUnit(TDataShard &dataShard, TPipeline &p
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

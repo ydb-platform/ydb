@@ -220,7 +220,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error parsing value of column %Qv",
                 tableSchema.Columns()[id].Name())
-                << ex;
+                .With(ex);
         }
     };
 

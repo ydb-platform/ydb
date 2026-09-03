@@ -146,7 +146,7 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
 
     for (const auto& iu : subplanContextIUs) {
         const TTypeAnnotationNode* subplanType;
-        auto subplanEntry = props.Subplans.PlanMap.at(iu);
+        const auto& subplanEntry = props.Subplans.At(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
             auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
             const auto resultIUs = GetSubplanResultIUs(subplan);
@@ -187,7 +187,8 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType after scalars: " << *(TTypeAnnotationNode*)itemType;
 
 
-    auto& lambda = filter->FilterExpr.Node;
+    auto filterExpression = filter->GetFilterExpression();
+    auto lambda = filterExpression.Node;
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.ExprCtx)) {
         YQL_CLOG(TRACE, CoreDq) << "Could not update lambda arg types";
@@ -226,6 +227,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
         return IGraphTransformer::TStatus::Error;
     }
 
+    filter->SetFilterExpression(TExpression(std::move(lambda), filterExpression.Ctx, filterExpression.PlanProps));
     filter->Type = inputType;
 
     return TStatus::Ok;
@@ -237,7 +239,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
-    for (const auto& mapElement : map->MapElements) {
+    for (const auto& mapElement : map->GetMapElements()) {
         if (mapElement.IsRename()) {
             Y_ENSURE(mapElement.IsColumnAccess(), "Rename map element must be a plain column access");
             renameSources.insert(mapElement.GetRename());
@@ -250,9 +252,11 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         }
     }
 
-    for (auto& mapElement : map->MapElements) {
+    for (size_t index = 0; index < map->GetMapElements().size(); ++index) {
+        const auto& mapElement = map->GetMapElements()[index];
         // This is type annotation update inplace, which is different comparing to yql type annotation.
-        auto& lambda = mapElement.GetExpressionRef().Node;
+        auto expression = mapElement.GetExpression();
+        auto lambda = expression.Node;
         if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -272,6 +276,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         Y_ENSURE(lambdaType);
         auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
         resStructItemTypes.push_back(mapLambdaType);
+        map->SetMapElementExpression(index, TExpression(std::move(lambda), expression.Ctx, expression.PlanProps));
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);
@@ -476,6 +481,26 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpDependentJoin> dependentJoin, TRBOContext& ctx) {
+    const auto* domainItemType = dependentJoin->GetDomain()->Type->Cast<TListExprType>()->GetItemType();
+    const auto* inputItemType = dependentJoin->GetInput()->Type->Cast<TListExprType>()->GetItemType();
+
+    TVector<const TItemExprType*> structItemTypes = domainItemType->Cast<TStructExprType>()->GetItems();
+    THashSet<TStringBuf> domainNames;
+    for (const auto* item : structItemTypes) {
+        domainNames.insert(item->GetName());
+    }
+
+    for (const auto* item : inputItemType->Cast<TStructExprType>()->GetItems()) {
+        if (!domainNames.contains(item->GetName())) {
+            structItemTypes.push_back(item);
+        }
+    }
+
+    dependentJoin->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes));
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<TOpLimit> limit, TRBOContext& ctx) {
     auto inputType = limit->GetInput()->Type;
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -583,18 +608,21 @@ TStatus ComputeTypes(TIntrusivePtr<TOpIndexLookupJoin> lookupJoin, TRBOContext& 
     }
 
     const auto* tupleType = itemType->Cast<TTupleExprType>();
+    // (left row, optional(right row), cookie)
     Y_ENSURE(tupleType->GetSize() == 3, "Unexpected lookup join input tuple");
     const auto leftItemTypes = tupleType->GetItems()[0]->Cast<TStructExprType>()->GetItems();
-    auto rightItemTypes = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
-
-    // An unmatched left row of a left join produces NULLs on the right side.
-    if (lookupJoin->JoinKind == "Left") {
-        rightItemTypes = AddOptional(rightItemTypes, ctx);
-    }
 
     TVector<const TItemExprType*> structItemTypes;
     structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
-    structItemTypes.insert(structItemTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+
+    if (JoinOutputsRight(lookupJoin->JoinKind)) {
+        auto rightItemTypes = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
+        // An unmatched left row of a left join produces NULLs on the right side.
+        if (lookupJoin->JoinKind == "Left") {
+            rightItemTypes = AddOptional(rightItemTypes, ctx);
+        }
+        structItemTypes.insert(structItemTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+    }
 
     lookupJoin->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes));
     return TStatus::Ok;
@@ -630,6 +658,9 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
     else if(MatchOperator<TOpJoin>(op)) {
         return ComputeTypes(CastOperator<TOpJoin>(op), ctx);
+    }
+    else if(MatchOperator<TOpDependentJoin>(op)) {
+        return ComputeTypes(CastOperator<TOpDependentJoin>(op), ctx);
     }
     else if(MatchOperator<TOpUnionAll>(op)) {
         return ComputeTypes(CastOperator<TOpUnionAll>(op), ctx);

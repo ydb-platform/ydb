@@ -1,21 +1,21 @@
 #include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <typename TInput, typename TOutput, bool IsOptional>
 struct TByteAtArgs {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TByteAtArgs<TInput, TOutput, IsOptional>::Value[4] = {
-    {TOutput::Id, TFunctionParamMetadata::FlagIsNullable},
-    {TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
-    {NUdf::TDataType<ui32>::Id, 0},
-    {0, 0}};
+const std::array<TFunctionParamMetadata, 4> TByteAtArgs<TInput, TOutput, IsOptional>::Value = {{{TOutput::Id, TFunctionParamMetadata::FlagIsNullable},
+                                                                                                {TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+                                                                                                {NUdf::TDataType<ui32>::Id, 0},
+                                                                                                {0, 0}}};
 
 template <typename TInput, typename TOutput>
 struct TByteAt {
@@ -116,5 +116,4 @@ void RegisterByteAt(IBuiltinFunctionRegistry& registry) {
                          TByteAtArgs<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>, true>, TBinaryWrap<true, false>>(registry, name);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

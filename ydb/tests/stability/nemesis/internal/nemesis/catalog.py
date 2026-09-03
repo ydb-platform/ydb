@@ -142,7 +142,7 @@ def guard_mode_for(nemesis_type: str) -> GuardMode:
 
 
 def recovery_sec_for(nemesis_type: str) -> float | None:
-    """``auto_recovery_sec`` of the type: how long the fault is expected to last."""
+    """When the probe dispatches a toggle extract (budget is released by HC, not this timer)."""
     spec = NEMESIS_TYPES.get(nemesis_type)
     if spec is None:
         return DEFAULT_RECOVERY_SEC
@@ -158,29 +158,37 @@ def recovery_sec_for(nemesis_type: str) -> float | None:
 
 
 def recovery_mode_for(nemesis_type: str) -> str:
-    """``"self"`` — heals on its own (SIGKILL + systemd restart); ``"extract"`` — stays applied
-    until the probe dispatches an extract (clock skew, broken disk, stopped node)."""
+    """``"self"`` or ``"extract"``."""
     spec = NEMESIS_TYPES.get(nemesis_type)
     if spec is None:
         return "self"
     return "extract" if spec.get("recovery") == "extract" else "self"
 
 
-def impairment_hold_sec_for(nemesis_type: str, *, paired_extract: bool) -> float | None:
-    """``recovery_sec`` for ``record_inject``.
+# Stuck / confirm timeouts: DISK waits for resync, DATACENTER for tablet rejoin, else restart.
+DEFAULT_STUCK_TIMEOUT_SEC: float = 900.0
+_STUCK_TIMEOUT_BY_SCOPE: dict[ImpactScope, float] = {
+    ImpactScope.DISK: 3600.0,
+    ImpactScope.DATACENTER: 1800.0,
+}
 
-    ``paired_extract=True`` (manual inject, followed by a manual extract): a toggle fault holds its
-    budget until that extract. ``False`` (legacy loop, where the *next inject* toggles the fault
-    back): held for the length of the pulse, i.e. until the type's next tick.
-    """
-    if recovery_mode_for(nemesis_type) != "extract":
-        return recovery_sec_for(nemesis_type)
-    if paired_extract:
-        return None
-    spec = NEMESIS_TYPES.get(nemesis_type) or {}
-    interval = float(spec.get("schedule") or 60)
-    window = recovery_sec_for(nemesis_type)
-    return max(interval, window) if window is not None else interval
+
+def stuck_timeout_for(nemesis_type: str) -> float:
+    """Seconds the probe waits for the recovery predicate before reporting the fault stuck."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is not None and spec.get("stuck_timeout_sec") is not None:
+        return float(spec["stuck_timeout_sec"])
+    scope = impact_scope_for(nemesis_type)
+    return _STUCK_TIMEOUT_BY_SCOPE.get(scope, DEFAULT_STUCK_TIMEOUT_SEC)
+
+
+def confirm_timeout_for(nemesis_type: str) -> float:
+    """Seconds the probe waits for healthcheck to confirm a dispatched extract (toggle faults)."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is not None and spec.get("confirm_timeout_sec") is not None:
+        return float(spec["confirm_timeout_sec"])
+    scope = impact_scope_for(nemesis_type)
+    return _STUCK_TIMEOUT_BY_SCOPE.get(scope, DEFAULT_STUCK_TIMEOUT_SEC)
 
 
 def supports_boundary_scheduler(nemesis_type: str) -> bool:

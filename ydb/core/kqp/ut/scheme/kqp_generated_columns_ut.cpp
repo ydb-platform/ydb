@@ -4,6 +4,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 namespace NKikimr::NKqp {
 
@@ -18,6 +19,16 @@ static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig() {
     appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
     appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return appConfig;
+}
+
+static NKikimrPQ::TPQConfig GeneratedColumnsPQConfig() {
+    NKikimrPQ::TPQConfig pqConfig;
+    pqConfig.SetEnabled(true);
+    pqConfig.SetEnableProtoSourceIdInfo(true);
+    pqConfig.SetTopicsAreFirstClassCitizen(true);
+    pqConfig.SetRequireCredentialsInNewProtocol(false);
+    pqConfig.AddClientServiceType()->SetName("data-streams");
+    return pqConfig;
 }
 
 std::string GetShowCreateTable(NYdb::NQuery::TSession& session, const std::string& path) {
@@ -257,6 +268,27 @@ public:
         return FormatResultSetYson(result.GetResultSet(0));
     }
 
+    void CheckStaleEventually(const std::string& query, const TString& expected) {
+        const TString normalizedExpected = ReformatYson(expected);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        TString actual;
+
+        do {
+            auto result = Session.ExecuteQuery(
+                                     query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx())
+                              .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n"
+                                                               << result.GetIssues().ToString());
+            actual = FormatResultSetYson(result.GetResultSet(0));
+            if (ReformatYson(actual) == normalizedExpected) {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        } while (TInstant::Now() < deadline);
+
+        CompareYson(expected, actual, TStringBuilder() << "eventual result mismatch for: " << query);
+    }
+
     void CheckUnordered(const std::string& query, const TString& expected) {
         auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
@@ -304,6 +336,10 @@ public:
             new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), TTestTxConfig::SchemeShard, false));
         Sleep(TDuration::Seconds(3));
         NKikimr::Tests::TClient::RefreshPathCache(&runtime, TString(tablePath));
+    }
+
+    std::string ShowCreateTable(const std::string& tablePath) {
+        return GetShowCreateTable(Session, tablePath);
     }
 
 private:
@@ -752,6 +788,8 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         {
             const std::string query = R"(
+                PRAGMA classic_division = "0";
+
                 CREATE TABLE `/Root/Origin` (
                     k Int32 NOT NULL,
                     v1 Int32,
@@ -779,8 +817,15 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         const auto originSt = generatedOf("st");
         const auto originVt = generatedOf("vt");
+        UNIT_ASSERT_VALUES_EQUAL(originSt.GetContext(), originVt.GetContext());
+        UNIT_ASSERT_STRING_CONTAINS(originSt.GetContext(), "PRAGMA classic_division");
 
         const std::string ddl = GetShowCreateTable(session, "/Root/Origin");
+        const auto contextPos = ddl.find("PRAGMA classic_division = '0';");
+        const auto createTablePos = ddl.find("CREATE TABLE");
+        UNIT_ASSERT_C(contextPos != std::string::npos, ddl.c_str());
+        UNIT_ASSERT_C(createTablePos != std::string::npos, ddl.c_str());
+        UNIT_ASSERT_C(contextPos < createTablePos, ddl.c_str());
 
         // Replay the printed statement over the dropped original: it must recreate it as it was.
         {
@@ -798,12 +843,14 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetStored(), originSt.GetStored());
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetExprText(), originSt.GetExprText());
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.DependencyColumnNamesSize(), originSt.DependencyColumnNamesSize());
+        UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetContext(), "PRAGMA classic_division = '0';\n");
 
         const auto replayedVt = generatedOf("vt");
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetStored(), false);
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetStored(), originVt.GetStored());
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetExprText(), originVt.GetExprText());
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.DependencyColumnNamesSize(), originVt.DependencyColumnNamesSize());
+        UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetContext(), replayedSt.GetContext());
     }
 
     Y_UNIT_TEST(AlterRejected) {
@@ -2191,177 +2238,504 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
     }
 }
 
-// TODO (ditimizhev): wip
-//
-// Y_UNIT_TEST_SUITE(GeneratedVirtual) {
-//     Y_UNIT_TEST(DependsOnSerial) {
-//         auto appConfig = GeneratedColumnsAppConfig();
-//         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+    Y_UNIT_TEST_SUITE(GeneratedVirtual) {
+        Y_UNIT_TEST(DmlAndSchemaChangesIgnoreVirtualColumn) {
+            TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32,
+                b Int32,
+                note String,
+                stored_sum Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+                virtual_diff Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) - COALESCE(b, 0)) VIRTUAL,
+                PRIMARY KEY (k)
+            );
+        )");
 
-//         auto db = kikimr.GetQueryClient();
-//         auto session = db.GetSession().GetValueSync().GetSession();
+            fixture.Exec(R"(
+            INSERT INTO TestTable (k, a, b, note) VALUES
+                (1, 10, 1, "one"),
+                (2, 20, 2, "two");
+        )");
+            fixture.Check("SELECT k, a, b, note, stored_sum FROM TestTable ORDER BY k;",
+                          R"([[1;[10];[1];["one"];[11]];[2;[20];[2];["two"];[22]]])");
 
-//         {
-//             const std::string query = R"(
-//                 CREATE TABLE TestTable (
-//                     id Serial,
-//                     name String,
-//                     g Int32 GENERATED ALWAYS AS (id * 10) VIRTUAL,
-//                     PRIMARY KEY (id)
-//                 );
-//             )";
-//             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//         }
+            fixture.Exec("INSERT INTO TestTable (k, a, note) VALUES (3, 30, \"nullable\");");
+            fixture.Check("SELECT k, a, b, note, stored_sum FROM TestTable WHERE k = 3;",
+                          R"([[3;[30];#;["nullable"];[30]]])");
+            fixture.Exec("DELETE FROM TestTable WHERE k = 3;");
 
-//         {
-//             const std::string query = R"(
-//                 INSERT INTO TestTable (name) VALUES ("a");
-//             )";
-//             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//         }
+            fixture.Exec("UPSERT INTO TestTable (k, b) VALUES (1, 5);");
+            fixture.Exec("REPLACE INTO TestTable (k, a, b, note) VALUES (2, 7, 8, \"replaced\");");
+            fixture.Exec("UPDATE TestTable SET a = 30 WHERE k = 1;");
+            fixture.Exec("DELETE FROM TestTable WHERE k = 2;");
 
-//         {
-//             const std::string query = R"(
-//                 SELECT id, g FROM TestTable ORDER BY id;
-//             )";
-//             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//             CompareYson(R"([
-//                 [1;10]
-//             ])",
-//                 FormatResultSetYson(result.GetResultSet(0)));
-//         }
-//     }
+            fixture.Exec("ALTER TABLE TestTable ADD COLUMN tag Int32;");
+            fixture.Exec("UPSERT INTO TestTable (k, tag) VALUES (1, 9);");
+            fixture.Exec("ALTER TABLE `/Root/TestTable` RENAME TO `/Root/RenamedTable`;");
 
-//     Y_UNIT_TEST(AlterRejected) {
-//         CheckGeneratedColumnAlterRejections("VIRTUAL");
-//     }
+            const auto renamedDdl = fixture.ShowCreateTable("/Root/RenamedTable");
+            UNIT_ASSERT_STRING_CONTAINS_C(renamedDdl, "virtual_diff", renamedDdl);
+            UNIT_ASSERT_STRING_CONTAINS_C(renamedDdl, "VIRTUAL", renamedDdl);
 
-//     Y_UNIT_TEST(FeatureFlagDisabled) {
-//         auto appConfig = GeneratedColumnsAppConfig();
-//         appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(false);
-//         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+            fixture.Exec("ALTER TABLE `/Root/RenamedTable` DROP COLUMN virtual_diff;");
+            fixture.Exec("ALTER TABLE `/Root/RenamedTable` ADD COLUMN virtual_diff Int32;");
+            fixture.Exec("UPSERT INTO `/Root/RenamedTable` (k, virtual_diff) VALUES (1, 42);");
+            fixture.Exec("ALTER TABLE `/Root/RenamedTable` ADD INDEX idx_recreated GLOBAL SYNC ON (virtual_diff);");
+            fixture.Check("SELECT k FROM `/Root/RenamedTable` VIEW idx_recreated WHERE virtual_diff = 42;", "[[1]]");
 
-//         auto db = kikimr.GetQueryClient();
-//         auto session = db.GetSession().GetValueSync().GetSession();
+            fixture.Check("SELECT k, a, b, note, stored_sum, tag FROM `/Root/RenamedTable` ORDER BY k;",
+                          R"([[1;[30];[5];["one"];[35];[9]]])");
+        }
 
-//         {
-//             auto result = session
-//                               .ExecuteQuery(R"(
-//                 CREATE TABLE TVirtual (
-//                     k Int32 NOT NULL,
-//                     v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
-//                     PRIMARY KEY (k)
-//                 );
-//             )",
-//                                   TTxControl::NoTx())
-//                               .GetValueSync();
-//             UNIT_ASSERT_C(!result.IsSuccess(), "VIRTUAL generated column must be rejected when the flag is off");
-//             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "VIRTUAL GENERATED columns are disabled");
-//         }
+        Y_UNIT_TEST(BulkUpsertAndReadTableIgnoreVirtualColumn) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+            auto queryClient = kikimr.GetQueryClient();
+            auto tableClient = kikimr.GetTableClient();
 
-//         {
-//             auto result = session
-//                               .ExecuteQuery(R"(
-//                 CREATE TABLE TStored (
-//                     k Int32 NOT NULL,
-//                     v Int32 GENERATED ALWAYS AS (k + 1) STORED,
-//                     PRIMARY KEY (k)
-//                 );
-//             )",
-//                                   TTxControl::NoTx())
-//                               .GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//         }
-//     }
+            {
+                auto result = queryClient.ExecuteQuery(R"(
+                    CREATE TABLE `/Root/TestTable` (
+                        k Int32 NOT NULL,
+                        payload String,
+                        virtual_value Int32 NOT NULL GENERATED ALWAYS AS (k + 1) VIRTUAL,
+                        PRIMARY KEY (k)
+                        );
+                )", TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
 
-//     Y_UNIT_TEST(NotNullOptionalExprRejected) {
-//         CheckGeneratedColumnRejected(R"(
-//             CREATE TABLE TestTable (
-//                 k Int32 NOT NULL,
-//                 v1 Int32,
-//                 v Int32 NOT NULL GENERATED ALWAYS AS (v1 + 1) VIRTUAL,
-//                 PRIMARY KEY (k)
-//             );
-//         )",
-//             "is declared NOT NULL, but its expression can evaluate to NULL");
-//     }
+            NYdb::TValueBuilder rowsBuilder;
+            rowsBuilder.BeginList();
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("k")
+                .Int32(1)
+                .AddMember("payload")
+                .String("one")
+                .EndStruct();
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("k")
+                .Int32(2)
+                .AddMember("payload")
+                .String("two")
+                .EndStruct();
+            rowsBuilder.EndList();
 
-//     Y_UNIT_TEST(NotNullJsonExistsRejected) {
-//         CheckGeneratedColumnRejected(R"(
-//             CREATE TABLE TestTable (
-//                 k Int32 NOT NULL,
-//                 v Json,
-//                 hasKey Bool NOT NULL GENERATED ALWAYS AS (JSON_EXISTS(v, "$.key" UNKNOWN ON ERROR)) VIRTUAL,
-//                 PRIMARY KEY (k)
-//             );
-//         )",
-//             "is declared NOT NULL, but its expression can evaluate to NULL");
-//     }
+            {
+                auto result = tableClient.BulkUpsert("/Root/TestTable", rowsBuilder.Build()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
 
-//     Y_UNIT_TEST(KeyRejected) {
-//         CheckGeneratedColumnRejected(R"(
-//             CREATE TABLE TestTable (
-//                 k Int32,
-//                 v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
-//                 PRIMARY KEY (v)
-//             );
-//         )",
-//             "Generated columns cannot be part of the primary key");
-//     }
+            NYdb::TValueBuilder invalidRowsBuilder;
+            invalidRowsBuilder.BeginList();
+            invalidRowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("k")
+                .Int32(3)
+                .AddMember("payload")
+                .String("three")
+                .AddMember("virtual_value")
+                .Int32(4)
+                .EndStruct();
+            invalidRowsBuilder.EndList();
 
-//     Y_UNIT_TEST(Persisted) {
-//         CheckGeneratedColumnPersisted(R"(
-//             CREATE TABLE TestTable (
-//                 k Int32,
-//                 v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
-//                 PRIMARY KEY (k)
-//             );
-//         )",
-//             /* expectStored */ false);
-//     }
+            {
+                auto result = tableClient.BulkUpsert("/Root/TestTable", invalidRowsBuilder.Build()).ExtractValueSync();
+                UNIT_ASSERT_C(!result.IsSuccess(), "bulk upsert must not accept an explicit VIRTUAL generated column");
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "cannot be set explicitly");
+            }
 
-//     Y_UNIT_TEST(ComputedOnRead) {
-//         auto appConfig = GeneratedColumnsAppConfig();
-//         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-//         auto db = kikimr.GetQueryClient();
-//         auto session = db.GetSession().GetValueSync().GetSession();
+            {
+                Ydb::Formats::CsvSettings csvSettings;
+                csvSettings.set_header(true);
+                csvSettings.set_delimiter(",");
+                TString serializedCsvSettings;
+                UNIT_ASSERT(csvSettings.SerializeToString(&serializedCsvSettings));
 
-//         {
-//             auto result = session
-//                               .ExecuteQuery(R"(
-//                 CREATE TABLE TestTable (
-//                     k Int32,
-//                     v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
-//                     PRIMARY KEY (k)
-//                 );
-//             )",
-//                                   TTxControl::NoTx())
-//                               .GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//         }
-//         {
-//             auto result = session.ExecuteQuery("UPSERT INTO TestTable (k) VALUES (1), (2);", TTxControl::NoTx()).GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//         }
-//         {
-//             auto result = session.ExecuteQuery("SELECT k, v FROM TestTable ORDER BY k;", TTxControl::NoTx()).GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//             CompareYson(R"([[[1];[2]];[[2];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
-//         }
-//         {
-//             auto result = session.ExecuteQuery("SELECT v FROM TestTable ORDER BY k;", TTxControl::NoTx()).GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//             CompareYson(R"([[[2]];[[3]]])", FormatResultSetYson(result.GetResultSet(0)));
-//         }
-//         {
-//             auto result = session.ExecuteQuery("SELECT * FROM TestTable ORDER BY k;", TTxControl::NoTx()).GetValueSync();
-//             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-//             CompareYson(R"([[[1];[2]];[[2];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
-//         }
-//     }
-// }
+                auto result = tableClient.BulkUpsert("/Root/TestTable", NYdb::NTable::EDataFormat::CSV, "k,payload\n3,three\n",
+                    {}, NYdb::NTable::TBulkUpsertSettings().FormatSettings(serializedCsvSettings)).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                auto result = queryClient.ExecuteQuery("SELECT k, payload FROM `/Root/TestTable` ORDER BY k;", TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CompareYson(R"([[1;["one"]];[2;["two"]];[3;["three"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            auto session = tableClient.CreateSession().ExtractValueSync().GetSession();
+            auto settings = NYdb::NTable::TReadTableSettings()
+                .Ordered()
+                .AppendColumns("k")
+                .AppendColumns("payload");
+            auto iterator = session.ReadTable("/Root/TestTable", settings).ExtractValueSync();
+            UNIT_ASSERT_C(iterator.IsSuccess(), iterator.GetIssues().ToString());
+
+            TVector<std::pair<i32, TString>> rows;
+            for (;;) {
+                auto part = iterator.ReadNext().ExtractValueSync();
+                if (!part.IsSuccess()) {
+                    UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                    break;
+                }
+
+                NYdb::TResultSetParser parser(part.ExtractPart());
+                while (parser.TryNextRow()) {
+                    const auto key = parser.ColumnParser("k").GetOptionalInt32();
+                    const auto payload = parser.ColumnParser("payload").GetOptionalString();
+                    UNIT_ASSERT(key);
+                    UNIT_ASSERT(payload);
+                    rows.emplace_back(*key, *payload);
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(rows[0].first, 1);
+            UNIT_ASSERT_VALUES_EQUAL(rows[0].second, "one");
+            UNIT_ASSERT_VALUES_EQUAL(rows[1].first, 2);
+            UNIT_ASSERT_VALUES_EQUAL(rows[1].second, "two");
+            UNIT_ASSERT_VALUES_EQUAL(rows[2].first, 3);
+            UNIT_ASSERT_VALUES_EQUAL(rows[2].second, "three");
+
+            auto virtualIterator = session.ReadTable("/Root/TestTable", NYdb::NTable::TReadTableSettings().AppendColumns("virtual_value"))
+                .ExtractValueSync();
+            auto virtualPart = virtualIterator.ReadNext().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(virtualPart.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+
+        Y_UNIT_TEST(VirtualColumnCannotBeIndexKeyOrCover) {
+            TTestFixture fixture(R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )");
+
+            fixture.Rejects("ALTER TABLE TestTable ADD INDEX idx_v GLOBAL SYNC ON (v);", "VIRTUAL generated column");
+            fixture.Rejects("ALTER TABLE TestTable ADD INDEX idx_v_async GLOBAL ASYNC ON (v);", "VIRTUAL generated column");
+            fixture.Rejects("ALTER TABLE TestTable ADD INDEX idx_v_unique GLOBAL UNIQUE ON (v);", "VIRTUAL generated column");
+            fixture.Rejects("ALTER TABLE TestTable ADD INDEX idx_cover GLOBAL SYNC ON (a) COVER (v);", "VIRTUAL generated column");
+            fixture.Rejects(R"(
+                CREATE TABLE VirtualIndexKey (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL SYNC ON (v)
+                );
+            )", "VIRTUAL generated column");
+            fixture.Rejects(R"(
+                CREATE TABLE VirtualIndexCover (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL SYNC ON (a) COVER (v)
+                );
+            )", "VIRTUAL generated column");
+        }
+
+        Y_UNIT_TEST(SyncAndUniqueIndexBuildsIgnoreVirtualColumn) {
+            TTestFixture fixture(R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    b Int32,
+                    payload String,
+                    virtual_value Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) VIRTUAL,
+                    PRIMARY KEY (k),
+                    INDEX idx_inline GLOBAL SYNC ON (a) COVER (payload)
+                );
+            )");
+
+            fixture.Exec(R"(
+                UPSERT INTO TestTable (k, a, b, payload) VALUES
+                    (1, 10, 100, "one"),
+                    (2, 20, 200, "two");
+            )");
+            fixture.Exec("ALTER TABLE TestTable ADD INDEX idx_b GLOBAL SYNC ON (b) COVER (payload);");
+            fixture.Exec("ALTER TABLE TestTable ADD INDEX idx_payload GLOBAL UNIQUE ON (payload);");
+
+            fixture.Check("SELECT k, a, payload FROM TestTable VIEW idx_inline WHERE a = 10;",
+                          R"([[1;[10];["one"]]])");
+            fixture.Check("SELECT k, b, payload FROM TestTable VIEW idx_b WHERE b = 200;",
+                          R"([[2;[200];["two"]]])");
+            fixture.Check("SELECT k, payload FROM TestTable VIEW idx_payload WHERE payload = \"two\";",
+                          R"([[2;["two"]]])");
+
+            fixture.Exec("REPLACE INTO TestTable (k, a, b, payload) VALUES (1, 30, 300, \"uno\");");
+            fixture.Check("SELECT k, payload FROM TestTable VIEW idx_inline WHERE a = 10;", "[]");
+            fixture.Check("SELECT k, a, payload FROM TestTable VIEW idx_inline WHERE a = 30;",
+                          R"([[1;[30];["uno"]]])");
+            fixture.Check("SELECT k, b, payload FROM TestTable VIEW idx_b WHERE b = 300;",
+                          R"([[1;[300];["uno"]]])");
+            fixture.Check("SELECT k, payload FROM TestTable VIEW idx_payload WHERE payload = \"uno\";",
+                          R"([[1;["uno"]]])");
+
+            fixture.Exec("ALTER TABLE TestTable DROP COLUMN virtual_value;");
+            fixture.Exec("UPSERT INTO TestTable (k, a, b, payload) VALUES (3, 40, 400, \"three\");");
+            fixture.Check("SELECT k, b, payload FROM TestTable VIEW idx_b WHERE b = 400;",
+                          R"([[3;[400];["three"]]])");
+        }
+
+        Y_UNIT_TEST(AsyncIndexWritesIgnoreVirtualColumn) {
+            TTestFixture fixture(R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    index_key String,
+                    payload String,
+                    virtual_value Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )");
+
+            fixture.Exec("UPSERT INTO TestTable (k, index_key, payload) VALUES (1, \"a\", \"one\");");
+            fixture.Exec("ALTER TABLE TestTable ADD INDEX idx_async GLOBAL ASYNC ON (index_key) COVER (payload);");
+
+            fixture.Exec("UPSERT INTO TestTable (k, index_key, payload) VALUES (2, \"b\", \"two\");");
+            fixture.Exec("UPDATE TestTable SET payload = \"updated\" WHERE k = 1;");
+            fixture.Exec("REPLACE INTO TestTable (k, index_key, payload) VALUES (2, \"c\", \"replaced\");");
+            fixture.Exec("DELETE FROM TestTable WHERE k = 1;");
+            fixture.Exec("ALTER TABLE TestTable DROP COLUMN virtual_value;");
+            fixture.Exec("UPSERT INTO TestTable (k, index_key, payload) VALUES (3, \"d\", \"after-drop\");");
+
+            fixture.Check("SELECT k, index_key, payload FROM TestTable ORDER BY k;",
+                          R"([[2;["c"];["replaced"]];[3;["d"];["after-drop"]]])");
+            fixture.CheckStaleEventually("SELECT k, index_key, payload FROM TestTable VIEW idx_async ORDER BY index_key;",
+                                         R"([[2;["c"];["replaced"]];[3;["d"];["after-drop"]]])");
+
+            const auto ddl = fixture.ShowCreateTable("/Root/TestTable");
+            UNIT_ASSERT_STRING_CONTAINS_C(ddl, "INDEX `idx_async` GLOBAL ASYNC", ddl);
+            UNIT_ASSERT_C(ddl.find("virtual_value") == std::string::npos, ddl);
+        }
+
+        Y_UNIT_TEST(MetadataPersistsAcrossSchemeShardRestart) {
+            TTestFixture fixture(R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    stored_value Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) STORED,
+                    virtual_value Int32 GENERATED ALWAYS AS (COALESCE(a, 0) - 1) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )");
+
+            fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 10);");
+
+            const auto before = fixture.ShowCreateTable("/Root/TestTable");
+            UNIT_ASSERT_STRING_CONTAINS_C(before, "GENERATED ALWAYS AS (COALESCE(a, 0) + 1) STORED", before);
+            UNIT_ASSERT_STRING_CONTAINS_C(before, "GENERATED ALWAYS AS (COALESCE(a, 0) - 1) VIRTUAL", before);
+
+            fixture.RestartSchemeShard("/Root/TestTable");
+
+            const auto after = fixture.ShowCreateTable("/Root/TestTable");
+            UNIT_ASSERT_STRING_CONTAINS_C(after, "GENERATED ALWAYS AS (COALESCE(a, 0) + 1) STORED", after);
+            UNIT_ASSERT_STRING_CONTAINS_C(after, "GENERATED ALWAYS AS (COALESCE(a, 0) - 1) VIRTUAL", after);
+            fixture.Check("SELECT k, a, stored_value FROM TestTable;", "[[1;[10];[11]]]");
+
+            fixture.Exec("ALTER TABLE TestTable DROP COLUMN virtual_value;");
+            fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (2, 20);");
+            fixture.Check("SELECT k, a, stored_value FROM TestTable ORDER BY k;",
+                          "[[1;[10];[11]];[2;[20];[21]]]");
+        }
+
+        Y_UNIT_TEST(AlterAddGeneratedColumnIsRejected) {
+            TTestFixture fixture(R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    PRIMARY KEY (k)
+                );
+            )");
+
+            const TString expectedError =
+                "Column addition with a GENERATED ALWAYS AS expression is not supported";
+
+            fixture.Rejects(R"(
+                ALTER TABLE TestTable ADD COLUMN virtual_value
+                    Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL;
+            )", expectedError);
+            fixture.Rejects(R"(
+                ALTER TABLE TestTable ADD COLUMN stored_value
+                    Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) STORED;
+            )", expectedError);
+        }
+
+        Y_UNIT_TEST(ChangefeedExcludesVirtualColumn) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            TKikimrSettings settings(appConfig);
+            settings.SetWithSampleTables(false).SetPQConfig(GeneratedColumnsPQConfig());
+            TKikimrRunner kikimr(settings);
+            auto queryClient = kikimr.GetQueryClient();
+
+            auto exec = [&](const std::string& query) {
+                auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n"
+                                                                   << result.GetIssues().ToString());
+            };
+
+            exec(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    k Int32 NOT NULL,
+                    payload String,
+                    virtual_value Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )");
+            exec(R"(
+                ALTER TABLE `/Root/TestTable` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES', FORMAT = 'JSON'
+                );
+            )");
+            exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER `test_consumer`;");
+
+            exec("UPSERT INTO `/Root/TestTable` (k, payload) VALUES (1, \"one\");");
+            exec("UPDATE `/Root/TestTable` SET payload = \"updated\" WHERE k = 1;");
+            exec("DELETE FROM `/Root/TestTable` WHERE k = 1;");
+
+            NYdb::NTopic::TTopicClient topicClient(kikimr.GetDriver());
+            NYdb::NTopic::TReadSessionSettings readSettings;
+            readSettings.ConsumerName("test_consumer");
+            readSettings.AppendTopics(NYdb::NTopic::TTopicReadSettings().Path("/Root/TestTable/feed"));
+            auto readSession = topicClient.CreateReadSession(readSettings);
+
+            TVector<TString> messages;
+            bool sawPartitionStart = false;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (messages.size() < 3 && TInstant::Now() < deadline) {
+                if (!readSession->WaitEvent().Wait(TDuration::Seconds(1))) {
+                    continue;
+                }
+
+                for (auto& event : readSession->GetEvents(false)) {
+                    if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                        for (auto& message : data->GetMessages()) {
+                            messages.emplace_back(message.GetData());
+                        }
+                        data->Commit();
+                    } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
+                        start->Confirm();
+                        sawPartitionStart = true;
+                    } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
+                        stop->Confirm();
+                    } else if (auto* end = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
+                        end->Confirm();
+                    } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
+                        UNIT_FAIL("topic read session closed before all CDC messages arrived");
+                    } else if (std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
+                        UNIT_FAIL("topic partition session closed before all CDC messages arrived");
+                    }
+                }
+            }
+
+            UNIT_ASSERT_C(sawPartitionStart, "topic partition session did not start before the deadline");
+            UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), 3u, JoinSeq("\n", messages));
+            bool sawPayload = false;
+            bool sawErase = false;
+            for (const auto& message : messages) {
+                UNIT_ASSERT_C(!message.Contains("virtual_value"), message);
+                sawPayload = sawPayload || message.Contains("payload");
+                sawErase = sawErase || message.Contains("erase");
+            }
+            UNIT_ASSERT(sawPayload);
+            UNIT_ASSERT(sawErase);
+
+            exec("ALTER TABLE `/Root/TestTable` DROP COLUMN virtual_value;");
+            exec("ALTER TABLE `/Root/TestTable` DROP CHANGEFEED `feed`;");
+        }
+
+        Y_UNIT_TEST(NotNullPgVirtualDoesNotBecomeWriteConstraint) {
+            TTestFixture fixture(R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    payload PgText NOT NULL,
+                    virtual_value PgText NOT NULL GENERATED ALWAYS AS (payload) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )");
+
+            fixture.Exec("INSERT INTO TestTable (k, payload) VALUES (1, 'one'pt);");
+            fixture.Exec("UPSERT INTO TestTable (k, payload) VALUES (1, 'updated'pt);");
+            fixture.Exec("REPLACE INTO TestTable (k, payload) VALUES (2, 'two'pt);");
+            fixture.Exec("UPDATE TestTable SET payload = 'again'pt WHERE k = 1;");
+            fixture.Check("SELECT k FROM TestTable ORDER BY k;", "[[1];[2]]");
+        }
+
+        Y_UNIT_TEST(UnsupportedVirtualColumnUsagesAreRejected) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+            auto exec = [&](const std::string& query) {
+                auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n"
+                                                                   << result.GetIssues().ToString());
+            };
+            auto rejects = [&](const std::string& query, const TString& expectedError = {}) {
+                auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(!result.IsSuccess(), "expected query to be rejected: " << query);
+                if (expectedError) {
+                    UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, query);
+                }
+            };
+
+            exec(R"(
+                CREATE TABLE Writable (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )");
+            exec("UPSERT INTO Writable (k, a) VALUES (1, 10);");
+            rejects("INSERT INTO Writable (k, a, v) VALUES (2, 20, 21);", "cannot be set explicitly");
+            rejects("REPLACE INTO Writable (k, a, v) VALUES (2, 20, 21);", "cannot be set explicitly");
+            rejects("UPSERT INTO Writable (k, a, v) VALUES (1, 10, 11);", "cannot be set explicitly");
+            rejects("UPDATE Writable SET v = 11 WHERE k = 1;", "cannot be set explicitly");
+            rejects("UPDATE Writable ON (k, v) VALUES (1, 11);", "cannot be set explicitly");
+            rejects(R"(
+                CREATE TABLE StoredOverVirtual (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
+                    s Int32 GENERATED ALWAYS AS (COALESCE(v, 0) + 1) STORED,
+                    PRIMARY KEY (k)
+                );
+            )", "references another generated column");
+            rejects(R"(
+                ALTER TABLE Writable ADD COLUMN s
+                    Int32 GENERATED ALWAYS AS (COALESCE(v, 0) + 1) STORED;
+            )", "Column addition with a GENERATED ALWAYS AS expression is not supported");
+            rejects(R"(
+                CREATE TABLE VirtualPrimaryKey (
+                    k Int32,
+                    v Int32 GENERATED ALWAYS AS (COALESCE(k, 0) + 1) VIRTUAL,
+                    PRIMARY KEY (v)
+                );
+            )", "Generated columns cannot be part of the primary key");
+            rejects(R"(
+                CREATE TABLE VirtualTtl (
+                    k Int32 NOT NULL,
+                    ts Timestamp,
+                    expires Timestamp GENERATED ALWAYS AS (ts) VIRTUAL,
+                    PRIMARY KEY (k)
+                ) WITH (TTL = Interval("PT1H") ON expires);
+            )", "TTL column expires can not be a GENERATED column");
+            rejects(R"(
+                CREATE TABLE VirtualOlap (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
+                    PRIMARY KEY (k)
+                ) WITH (STORE = COLUMN);
+            )", "Generated columns are not supported in column tables");
+        }
+    } // Y_UNIT_TEST_SUITE(GeneratedVirtual)
 
 }   // namespace NKikimr::NKqp

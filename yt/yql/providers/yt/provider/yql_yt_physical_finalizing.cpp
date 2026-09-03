@@ -2970,7 +2970,7 @@ private:
             bool diffGroups = false;
             if (auto table = path.Table().Maybe<TYtTable>()) {
                 if (auto tableDesc = State_->TablesData->FindTable(copy.Cast().DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
-                    bool diffGroups = outGroup.empty() != tableDesc->ColumnGroupSpecAlts.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
+                    diffGroups = outGroup.empty() != tableDesc->ColumnGroupSpecAlts.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
                     if (diffGroups && !outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.empty()) {
                         TString expanded;
                         if (ExpandDefaultColumnGroup(outGroup, *GetSeqItemType(*copy.Output().Item(0).Ref().GetTypeAnn()).Cast<TStructExprType>(), expanded)) {

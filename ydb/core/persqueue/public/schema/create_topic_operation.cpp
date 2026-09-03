@@ -1,10 +1,14 @@
 #include "create_topic_operation.h"
 #include "schema_operation.h"
 #include "schema_propose.h"
+#include "check_dlq_topics.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
@@ -77,7 +81,18 @@ private:
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
-        auto topicName = CanonizePath(Settings.Strategy->GetTopicName());
+        // Federation create still expects the original legacy name so ForFederation can
+        // extract DC/producer metadata. ResolveName is only for FCC (literal modern path).
+        TString path;
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName());
+            if (!resolved) {
+                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TString{resolved.error()});
+            }
+            path = std::move(resolved->Path);
+        } else {
+            path = NormalizePath(database, CanonizePath(Settings.Strategy->GetTopicName()));
+        }
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
@@ -87,7 +102,6 @@ private:
             proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
         }
 
-        auto path = NormalizePath(database, topicName);
         auto [workingDir, name] = GetWorkingDirAndName(path);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
@@ -109,17 +123,9 @@ private:
         }
 
         ModifyScheme = modifyScheme;
-
-        if (Settings.PrepareOnly) {
-            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
-        } else {
-            RegisterWithSameMailbox(CreateSchemaOperation(
-                SelfId(),
-                path,
-                std::move(proposal),
-                Settings.Cookie
-            ));
-        }
+        TopicPath = path;
+        Proposal = std::move(proposal);
+        return DoCheckDlqOrPropose();
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
@@ -134,6 +140,56 @@ private:
             hFunc(TEvSchemaOperationResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
+    }
+
+private:
+    void DoCheckDlqOrPropose() {
+        const NKikimrPQ::TPQTabletConfig emptyOldConfig;
+        if (auto* actor = CreateCheckDlqTopicsActorIfNeeded(
+                SelfId(),
+                CanonizePath(Settings.Database),
+                ModifyScheme.GetCreatePersQueueGroup().GetPQTabletConfig(),
+                emptyOldConfig,
+                TCheckDlqTopicsSettings{
+                    .UserToken = Settings.UserToken
+                }))
+        {
+            Become(&TCreateTopicOperationActor::CheckDlqState);
+            RegisterWithSameMailbox(actor);
+            return;
+        }
+        return DoProposeOrReply();
+    }
+
+    void Handle(TEvCheckDlqTopicsResponse::TPtr& ev) {
+        YDB_LOG_DEBUG("Handle TEvCheckDlqTopicsResponse",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"status", ev->Get()->Status},
+            {"errorMessage", ev->Get()->ErrorMessage});
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            return ReplyAndDie(ev->Get()->Status, std::move(ev->Get()->ErrorMessage));
+        }
+        return DoProposeOrReply();
+    }
+
+    STFUNC(CheckDlqState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvCheckDlqTopicsResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    void DoProposeOrReply() {
+        if (Settings.PrepareOnly) {
+            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+        }
+        RegisterWithSameMailbox(CreateSchemaOperation(
+            SelfId(),
+            TopicPath,
+            std::move(Proposal),
+            Settings.Cookie
+        ));
+        Become(&TCreateTopicOperationActor::CreateState);
     }
 
 private:
@@ -157,6 +213,8 @@ private:
     const TActorId ParentId;
     const TCreateTopicOperationSettings Settings;
 
+    TString TopicPath;
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> Proposal;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
     NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
 };

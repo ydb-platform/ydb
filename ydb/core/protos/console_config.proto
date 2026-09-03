@@ -159,6 +159,7 @@ message TConfigItem {
         DeduGroupedMemoryLimiterConfig = 112;
         StatisticsConfigItem = 113;
         TliConfigItem = 120;
+        UserFacingTracingConfigItem = 123;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;

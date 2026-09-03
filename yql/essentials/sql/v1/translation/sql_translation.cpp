@@ -1990,7 +1990,7 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
         return nullptr;
     }
 
-    auto alt = typeNameNode.GetAlt_type_name2();
+    const auto& alt = typeNameNode.GetAlt_type_name2();
     auto& block = alt.GetBlock1();
     if (block.Alt_case() != TRule_type_name::TAlt2::TBlock1::kAlt2) {
         return nullptr;
@@ -2316,6 +2316,24 @@ bool StoreInt(const TRule_table_setting_value& from, TNodePtr& to, TContext& ctx
             return false;
     }
     return true;
+}
+
+bool StoreStringOrInt(const TNodePtr& from, TResetableSetting<TNodePtr, void>& to) {
+    if (!from) {
+        return false;
+    }
+    const bool nonEmptyString = from->IsLiteral() && from->GetLiteralType() == "String" && !from->GetLiteralValue().empty();
+    if (!from->IsIntegerLiteral() && !nonEmptyString) {
+        return false;
+    }
+    to.Set(from);
+    return true;
+}
+
+bool StoreStringOrInt(const TRule_table_setting_value& from, TResetableSetting<TNodePtr, void>& to,
+                      TContext& ctx) {
+    TNodePtr node;
+    return (StoreString(from, node, ctx) || StoreInt(from, node, ctx)) && StoreStringOrInt(/*from=*/node, to);
 }
 
 bool StoreInt(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
@@ -2787,6 +2805,13 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
+    } else if (to_lower(id.Name) == "metrics_level") {
+        if (reset) {
+            settings.MetricsLevel.Reset();
+        } else if (!StoreStringOrInt(*value, settings.MetricsLevel, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an integer or a string";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -3250,12 +3275,9 @@ bool StoreTopicSettingsEntry(
     } else if (to_lower(id.Name) == "metrics_level") {
         if (reset) {
             settings.MetricsLevel.Reset();
-        } else {
-            if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
-                return false;
-            }
-            settings.MetricsLevel.Set(valueExprNode);
+        } else if (!StoreStringOrInt(valueExprNode, settings.MetricsLevel)) {
+            ctx.Error() << to_upper(id.Name) << " value should be an integer or a string";
+            return false;
         }
     } else if (to_lower(id.Name) == "content_based_deduplication") {
         if (reset) {
@@ -3951,52 +3973,52 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
     return new TAstListNodeImpl(Ctx_.Pos(), std::move(values));
 }
 
-bool TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value) {
+TSQLStatus TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value) {
     // label expr
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::AsStringLiteral, /* topLevel */ false);
         TSqlExpression sqlExpr(*this);
-        if (!Unwrap(Expr(sqlExpr, labels, label))) {
-            return false;
+        if (auto result = Expr(sqlExpr, labels, label); !result) {
+            return std::unexpected(result.error());
         }
 
         TDeferredAtom atom;
         MakeTableFromExpression(Ctx_.Pos(), Ctx_, labels.back(), atom);
         labels.back() = atom.Build();
         if (!labels.back()) {
-            return false;
+            return std::unexpected(ESQLError::Basic);
         }
     }
 
     // value expr
     {
         TSqlExpression sqlExpr(*this);
-        if (!Unwrap(Expr(sqlExpr, values, value))) {
-            return false;
+        if (auto result = Expr(sqlExpr, values, value); !result) {
+            return std::unexpected(result.error());
         }
     }
 
-    return true;
+    return std::monostate();
 }
 
-TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
+TNodeResult TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
     TVector<TNodePtr> labels;
     TVector<TNodePtr> values;
     TPosition pos = Ctx_.TokenPosition(node.GetToken1());
     if (node.HasBlock2()) {
         const auto& list = node.GetBlock2().GetRule_expr_struct_list1();
 
-        if (!StructLiteralItem(labels, list.GetRule_expr1(), values, list.GetRule_expr3())) {
-            return {};
+        if (auto status = StructLiteralItem(labels, list.GetRule_expr1(), values, list.GetRule_expr3()); !status) {
+            return std::unexpected(status.error());
         }
 
         for (auto& b : list.GetBlock4()) {
-            if (!StructLiteralItem(labels, b.GetRule_expr2(), values, b.GetRule_expr4())) {
-                return {};
+            if (auto status = StructLiteralItem(labels, b.GetRule_expr2(), values, b.GetRule_expr4()); !status) {
+                return std::unexpected(status.error());
             }
         }
     }
-    return BuildStructure(pos, values, labels);
+    return Wrap(BuildStructure(pos, values, labels));
 }
 
 bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc) {
@@ -4121,18 +4143,6 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
 
         case TRule_table_hint::kAltTableHint4: {
             const auto& alt = rule.GetAlt_table_hint4();
-            const auto pos = Ctx_.TokenPosition(alt.GetToken1());
-            TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            TNodePtr expr = Unwrap(TSqlExpression(*this).Build(alt.GetRule_expr4()));
-            if (!expr) {
-                return false;
-            }
-            hints["watermark"] = {BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr))};
-            break;
-        }
-
-        case TRule_table_hint::kAltTableHint5: {
-            const auto& alt = rule.GetAlt_table_hint5();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
             TNodePtr expr = Unwrap(TSqlExpression(*this).Build(alt.GetRule_expr3()));
@@ -5082,7 +5092,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameS
         frameSpec->FrameType = EFrameType::FrameByGroups;
     }
 
-    auto frameExtent = node.GetRule_window_frame_extent2();
+    const auto& frameExtent = node.GetRule_window_frame_extent2();
     // window_frame_extent: window_frame_bound | window_frame_between;
     switch (frameExtent.Alt_case()) {
         case TRule_window_frame_extent::kAltWindowFrameExtent1: {

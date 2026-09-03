@@ -11,7 +11,7 @@
  */
 #ifndef NPY__CPU_DISPATCHER_CONF_H_
 #define NPY__CPU_DISPATCHER_CONF_H_
-/// This definition is required to provides comptablity with NumPy distutils
+/// This definition is required to provide compatibility with NumPy distutils
 #define NPY__CPU_MESON_BUILD
 /**
  * @def NPY_WITH_CPU_BASELINE
@@ -46,7 +46,7 @@
 /**
  * @def NPY_WITH_CPU_BASELINE_CALL(EXEC_CB, ...)
  * Call each enabled baseline feature sorted by lowest interest
- * using preprocessor callback without testing whiher the
+ * using preprocessor callback without testing whether the
  * feature is supported by CPU or not.
  *
  * Required for logging purposes only, for example, generating
@@ -389,5 +389,9 @@ NPY__CPU_EXPAND(EXEC_CB(SVE, __VA_ARGS__)) \
 
 #ifdef NPY_HAVE_NEON
     #include <arm_neon.h>
+#endif
+
+#ifdef NPY_HAVE_RVV
+#error    #include <riscv_vector.h>
 #endif
 #endif // NPY__CPU_DISPATCHER_CONF_H_

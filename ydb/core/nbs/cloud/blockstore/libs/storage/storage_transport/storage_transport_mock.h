@@ -47,6 +47,7 @@ public:
     TReplyStatusE WriteToPBufferStatus = TReplyStatus::OK;
     TReplyStatusE WriteToManyPBufferStatus = TReplyStatus::OK;
     TReplyStatusE SyncWithPBufferStatus = TReplyStatus::OK;
+    TReplyStatusE DeleteTabletChunksStatus = TReplyStatus::OK;
 
     // When set, WriteToManyPBuffers replies only for the first (coordinator)
     // DDisk in the request with the given status, emulating the node
@@ -109,7 +110,7 @@ public:
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
+        const TPBufferKey pBufferKey,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
@@ -151,12 +152,12 @@ public:
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-        TVector<ui64> lsns,
+        TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvErasePersistentBufferResult> BatchEraseFromPBuffer(
         const THostConnection& connection,
-        TVector<ui64> lsns,
+        TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvErasePersistentBufferResult> BarrierEraseFromPBuffer(
@@ -165,6 +166,9 @@ public:
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(
+        const THostConnection& connection) override;
+
+    NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
         const THostConnection& connection) override;
 
 private:

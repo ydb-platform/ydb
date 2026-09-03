@@ -54,9 +54,9 @@ public:
         return std::move(ret);
     }
 
-    void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr) final {}
+    void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) final {}
 
-    void Delete(TString, THeaders, TOnResult, TRetryPolicy::TPtr) final {}
+    void Delete(TString, THeaders, TOnResult, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) final {}
 
     void Download(
             TString url,
@@ -65,7 +65,8 @@ public:
             std::size_t sizeLimit,
             TOnResult callback,
             TString data,
-            TRetryPolicy::TPtr retryPolicy) final 
+            TRetryPolicy::TPtr retryPolicy,
+            IHttpRequestContext::TPtr) final
     {
 
         Y_UNUSED(sizeLimit);
@@ -92,12 +93,16 @@ public:
             TOnDownloadStart,
             TOnNewDataPart,
             TOnDownloadFinish,
-            const ::NMonitoring::TDynamicCounters::TCounterPtr&) final {
+            const ::NMonitoring::TDynamicCounters::TCounterPtr&,
+            IHttpRequestContext::TPtr) final {
         return {};
     }
 
     ui64 GetBuffersSizePerStream() final {
         return 0;
+    }
+
+    void UpdatePoolCaps(THashMap<NDq::TWorkScope, size_t>) final {
     }
 
     void AddDefaultResponse(TDataDefaultResponse response) {

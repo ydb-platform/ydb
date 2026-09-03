@@ -876,6 +876,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         auto tableClient = kikimr.GetTableClient();
@@ -900,6 +902,9 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(SelectPortionCount(tableClient, "/Root/olapStore/olapTable"), 12);
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
 
         csController->WaitCompactions(TDuration::Seconds(10));
         csController->WaitActualization(TDuration::Seconds(10));

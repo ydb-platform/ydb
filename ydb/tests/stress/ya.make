@@ -19,6 +19,7 @@ RECURSE(
     olap_workload
     oltp_workload
     reconfig_state_storage_workload
+    remove_storage_groups
     result_set_format
     s3_backups
     scheme_board
@@ -29,6 +30,7 @@ RECURSE(
     system_tablet_backup
     testshard_workload
     topic
+    topic_balancing
     topic_kafka
     sqs_topic
     transfer

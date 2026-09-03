@@ -1,5 +1,7 @@
 #include "completion.h"
 
+#include <yql/essentials/utils/json/reflection.h>
+
 namespace NYql::NJson {
 
 JSON_DEFINE_FROM(NLsp::TCompletionParams, json) {
@@ -14,42 +16,17 @@ JSON_DEFINE_TO(NLsp::ECompletionItemKind, value) {
 }
 
 JSON_DEFINE_TO(NLsp::EMarkupKind, value) {
-    switch (value) {
-        case NLsp::EMarkupKind::PlainText:
-            return TJsonValue("plaintext");
-        case NLsp::EMarkupKind::Markdown:
-            return TJsonValue("markdown");
-    }
+    return ToString(value);
 }
 
-JSON_DEFINE_TO(NLsp::TMarkupContent, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "kind", value.Kind);
-    SaveTo(json, "value", std::move(value.Value));
-    return json;
-}
+YQL_DERIVE_JSON_TO(NLsp::TMarkupContent);
 
 JSON_DEFINE_TO(NLsp::EInsertTextFormat, value) {
     return TJsonValue(static_cast<int>(value) + 1);
 }
 
-JSON_DEFINE_TO(NLsp::TCompletionItem, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "label", std::move(value.Label));
-    SaveTo(json, "kind", value.Kind);
-    SaveTo(json, "detail", std::move(value.Detail));
-    SaveTo(json, "documentation", std::move(value.Documentation));
-    SaveTo(json, "filterText", std::move(value.FilterText));
-    SaveTo(json, "insertText", std::move(value.InsertText));
-    SaveTo(json, "insertTextFormat", value.InsertTextFormat);
-    return json;
-}
+YQL_DERIVE_JSON_TO(NLsp::TCompletionItem);
 
-JSON_DEFINE_TO(NLsp::TCompletionList, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "isIncomplete", value.IsIncomplete);
-    SaveTo(json, "items", std::move(value.Items));
-    return json;
-}
+YQL_DERIVE_JSON_TO(NLsp::TCompletionList);
 
 } // namespace NYql::NJson

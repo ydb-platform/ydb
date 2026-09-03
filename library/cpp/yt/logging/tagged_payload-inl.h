@@ -92,28 +92,85 @@ inline TTaggedPayloadWriter& TTaggedPayloadWriter::AppendTags(TLoggingTagListPay
     return *this;
 }
 
-inline void TTaggedPayloadWriter::AppendTag(TLoggingTagListPayload* tags, TStringBuf key, TStringBuf value)
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Appends into an external |std::string| rather than owning a buffer. Until #Finish the
+//! string may be longer than what has been written, holding uninitialized spare capacity.
+class TTaggedPayloadStringBuilder
+    : public TStringBuilderBase
+{
+public:
+    explicit TTaggedPayloadStringBuilder(std::string* buffer)
+        : Buffer_(buffer)
+        , Offset_(buffer->size())
+    { }
+
+    void Finish()
+    {
+        YT_ASSERT(Offset_ + GetLength() <= Buffer_->size());
+        Buffer_->resize(Offset_ + GetLength());
+    }
+
+private:
+    std::string* const Buffer_;
+    const size_t Offset_;
+
+    void DoReset() override
+    { }
+
+    void DoReserve(size_t newLength) override
+    {
+        ResizeUninitialized(*Buffer_, Offset_ + newLength);
+        auto capacity = Buffer_->capacity();
+        ResizeUninitialized(*Buffer_, capacity);
+        Begin_ = Buffer_->data() + Offset_;
+        End_ = Buffer_->data() + capacity;
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
+template <class TFormatter>
+void TTaggedPayloadWriter::AppendTag(
+    TLoggingTagListPayload* tags,
+    TStringBuf key,
+    const TFormatter& formatter)
 {
     // High bit reserved for the well-known flag.
     YT_ASSERT(key.size() < WellKnownTagFlag);
 
-    auto keySize = static_cast<ui32>(key.size());
-    auto valueSize = static_cast<ui32>(value.size());
-
-    // Every appended byte is overwritten below, so skip zero-filling them.
     auto& buffer = tags->Underlying();
-    auto offset = buffer.size();
-    ResizeUninitialized(buffer, offset + 2 * sizeof(ui32) + key.size() + value.size());
+    auto tagOffset = buffer.size();
 
-    char* ptr = buffer.data() + offset;
-    auto write = [&] (const void* data, size_t size) {
-        ::memcpy(ptr, data, size);
-        ptr += size;
-    };
-    write(&keySize, sizeof(keySize));
-    write(key.data(), key.size());
-    write(&valueSize, sizeof(valueSize));
-    write(value.data(), value.size());
+    try {
+        // Every appended byte is overwritten below, so skip zero-filling them.
+        auto keySize = static_cast<ui32>(key.size());
+        ResizeUninitialized(buffer, tagOffset + 2 * sizeof(ui32) + key.size());
+        char* ptr = buffer.data() + tagOffset;
+        ::memcpy(ptr, &keySize, sizeof(keySize));
+        ::memcpy(ptr + sizeof(keySize), key.data(), key.size());
+        // The value-size prefix is left uninitialized; it is backpatched below.
+        auto prefixOffset = tagOffset + sizeof(ui32) + key.size();
+
+        NDetail::TTaggedPayloadStringBuilder builder(&buffer);
+        formatter(&builder);
+        builder.Finish();
+
+        auto valueLength = buffer.size() - prefixOffset - sizeof(ui32);
+        // A truncated prefix would desync the reader for every subsequent tag.
+        YT_ASSERT(valueLength <= Max<ui32>());
+        auto valueSize = static_cast<ui32>(valueLength);
+        // NB: The builder may have reallocated, so recompute the data pointer.
+        ::memcpy(buffer.data() + prefixOffset, &valueSize, sizeof(valueSize));
+    } catch (...) {
+        // Leave #tags exactly as it was; a half-written tag would desync the reader.
+        buffer.resize(tagOffset);
+        throw;
+    }
 }
 
 inline TTaggedLogEventPayload TTaggedPayloadWriter::Finish() &
@@ -132,6 +189,36 @@ inline void TTaggedPayloadWriter::ReserveLengthPrefix()
 inline void TTaggedPayloadWriter::BackpatchLengthPrefix()
 {
     Builder_.WritePodAt<ui32>(PrefixOffset_, Builder_.GetLength() - PrefixOffset_ - sizeof(ui32));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TBuilder>
+void FormatTaggedPayload(TBuilder* builder, const TTaggedLogEventPayload& payload)
+{
+    TTaggedPayloadReader reader(payload);
+    builder->AppendString(reader.ReadMessage());
+    // Well-known tags are last by construction (see #TWellKnownTaggedLoggingGuard), hence single-pass.
+    bool parenOpen = false;
+    while (auto tag = reader.TryReadTag()) {
+        if (tag->IsWellKnown) {
+            if (parenOpen) {
+                builder->AppendChar(')');
+                parenOpen = false;
+            }
+            builder->AppendChar('\n');
+            builder->AppendString(tag->Value);
+        } else {
+            builder->AppendString(parenOpen ? ", "_sb : " ("_sb);
+            parenOpen = true;
+            builder->AppendString(tag->Key);
+            builder->AppendString(": "_sb);
+            builder->AppendString(tag->Value);
+        }
+    }
+    if (parenOpen) {
+        builder->AppendChar(')');
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

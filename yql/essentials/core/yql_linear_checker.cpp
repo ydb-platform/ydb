@@ -333,7 +333,7 @@ private:
         Ctx_.AddError(TIssue(Ctx_.GetPosition(pos), message));
     }
 
-private:
+
     TExprContext& Ctx_;
     bool HasErrors_ = false;
     TNodeMap<TUsage> Visited_;
@@ -353,6 +353,14 @@ bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
                     return false;
                 }
             }
+        }
+
+        // AsErased hides a value inside an opaque box, defeating the single-use
+        // tracking that is the point of linear types, so reject boxing any linear value.
+        if (node.IsCallable("AsErased") && node.Head().GetTypeAnn()->HasStaticLinear()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "AsErased is not allowed for linear types"));
+            hasErrors = true;
+            return false;
         }
 
         return true;

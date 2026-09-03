@@ -40,7 +40,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxRequestTabletOwners::Complete",
             {"logPrefix", GetLogPrefix()});
-        Self->Send(Request->Sender, Response.Release());
+        Self->Send(Request->Sender, Response.Release(), 0, Request->Cookie);
     }
 };
 

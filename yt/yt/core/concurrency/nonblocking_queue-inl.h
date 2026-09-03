@@ -134,7 +134,7 @@ void TBoundedNonblockingQueue<T>::Drain(const TError& error)
 
     guard.Release();
 
-    auto resultError = TError("Queue was drained with error") << error;
+    auto resultError = TError("Queue was drained with error").With(error);
 
     for (const auto& consumer : consumers) {
         consumer.Set(resultError);

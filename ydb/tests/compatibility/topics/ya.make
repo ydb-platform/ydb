@@ -5,17 +5,18 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 FORK_TEST_FILES()
 FORK_TESTS()
 FORK_SUBTESTS()
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(16)
 
 TEST_SRCS(
     test_topic.py
+    test_direct_read.py
     test_sqs_topic.py
     test_sqs_topic_boto.py
     test_kafka_topic.py
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:8)
+REQUIREMENTS(cpu:8 network:full)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(

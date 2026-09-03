@@ -57,16 +57,18 @@ public:
 
     void AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
-    void AddSendVerb(TRcBuf packet,
+    bool AddSendVerb(const TRcBuf& packet,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
+    void AddSendVerb(std::span<const TSendSge> sgList,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
     size_t GetVerbsNum() const noexcept;
     ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr, size_t deviceIndex) noexcept;
 
 private:
     struct TWrVerbData {
-        ibv_sge Sg;
+        std::vector<ibv_sge> SgList;
         ibv_send_wr Wr;
-        TRcBuf SendBuf;
+        std::vector<const TMemRegion*> SendMemRegions;
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
     };
     std::vector<TWrVerbData> WorkBuf;

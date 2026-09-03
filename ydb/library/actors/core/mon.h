@@ -38,8 +38,17 @@ namespace NActors {
             {
             }
 
+            TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, const TString& userToken, const TString& database)
+                : Request(request)
+                , UserToken(userToken)
+                , Database(database)
+                , SubRequestId(0)
+            {
+            }
+
             const NMonitoring::IMonHttpRequest& Request;
             TString UserToken; // built and serialized
+            TString Database; // raw extracted from request; empty if not specified
             // SubRequestId != 0 means that we assemble reply from multiple parts and SubRequestId contains this part id
             int SubRequestId;
         };

@@ -180,7 +180,7 @@ public:
         YQL_ENSURE(newStage.Outputs());
         const auto outputsCount = newStage.Outputs().Cast().Size();
         if (outputsCount > 1) {
-            YQL_ENSURE(newStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+            YQL_ENSURE(newStage.Program().Body().Maybe<TDqReplicate>(), "Cannot push multiple async outputs into stage without TDqReplicate");
         }
 
         const auto maybeDqUnion = input.Maybe<TDqCnUnionAll>();

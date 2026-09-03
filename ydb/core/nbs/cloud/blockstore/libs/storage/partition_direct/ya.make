@@ -2,6 +2,7 @@ LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
 GENERATE_ENUM_SERIALIZATION(direct_block_group_impl.h)
+GENERATE_ENUM_SERIALIZATION(partition_direct_service.h)
 
 SRCS(
     ddisk_data_copier.cpp
@@ -10,18 +11,6 @@ SRCS(
     erase_request.cpp
     fast_path_service.cpp
     flush_request.cpp
-    load_actor_adapter.cpp
-    part_add_host_to_dbg.cpp
-    part_database.cpp
-    part_initschema.cpp
-    part_loadstate.cpp
-    part_storepartitionids.cpp
-    part_storevolumeconfig.cpp
-    part_updatevchunkconfig.cpp
-    part_monitoring.cpp
-    partition_direct_actor.cpp
-    partition_direct.cpp
-    region_geometry.cpp
     read_request_executor.cpp
     read_request_multiple_location.cpp
     read_request_single_location.cpp
@@ -43,6 +32,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
+    ydb/core/nbs/cloud/blockstore/libs/throttling
     ydb/core/nbs/cloud/storage/core/libs/coroutine
 
     ydb/core/protos
@@ -64,6 +54,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    partition_ut
+    benchmark
     ut
 )

@@ -33,7 +33,7 @@ NSQLTranslation::ILexer::TPtr MakeLexer(
 bool IsProbablyKeyword(const NSQLTranslation::TParsedToken& token);
 
 bool SplitQueryToStatements(
-    const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
+    const TString& query, const NSQLTranslation::ILexer::TPtr& lexer,
     TVector<TString>& statements, NYql::TIssues& issues, const TString& file = "",
     bool areBlankSkipped = true);
 } // namespace NSQLTranslationV1

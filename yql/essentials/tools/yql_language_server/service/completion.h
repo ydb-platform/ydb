@@ -1,27 +1,32 @@
 #pragma once
 
+#include "radix.h"
+
 #include <yql/essentials/tools/yql_language_server/lsp/message/completion.h>
 
 #include <yql/essentials/sql/v1/ide/completion/sql_complete.h>
 
-#include <mutex>
-
 namespace NLsp::NYql {
 
-class TCompletionService: public TThrRefBase {
+class TCompletionService final: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TCompletionService>;
 
     explicit TCompletionService(NSQLComplete::ISqlCompletionEngine::TPtr engine);
 
-    TCompletionList Completion(TStringBuf text, const TCompletionParams& params);
+    TCompletionList Completion(TStringBuf text, const TCompletionParams& params) const;
 
 private:
-    static ECompletionItemKind ToMessage(NSQLComplete::ECandidateKind kind);
-    static TCompletionItem ToMessage(NSQLComplete::TCandidate candidate);
-    static TCompletionList ToMessage(TVector<NSQLComplete::TCandidate> candidates);
+    TString SortText(size_t index, size_t length) const;
 
-    std::mutex Mutex_;
+    static ECompletionItemKind ToMessage(NSQLComplete::ECandidateKind kind);
+
+    TCompletionItem ToMessage(
+        NSQLComplete::TCandidate candidate, size_t index, size_t sortTextLen) const;
+
+    TCompletionList ToMessage(TVector<NSQLComplete::TCandidate> candidates) const;
+
+    TRadix Radix_;
     NSQLComplete::ISqlCompletionEngine::TPtr Engine_;
 };
 

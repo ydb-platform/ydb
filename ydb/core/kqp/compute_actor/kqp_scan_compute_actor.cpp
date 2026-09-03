@@ -27,7 +27,7 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 
 } // anonymous namespace
 
-TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableActorOptions schedulableOptions, const TActorId& executerId, ui64 txId,
+TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableOptions schedulableOptions, const TActorId& executerId, ui64 txId,
     NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode)
@@ -268,6 +268,23 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
 void TKqpScanComputeActor::DoBootstrap() {
     YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
         {"logPrefix", this->LogPrefix});
+
+    const auto& taskParams = GetTask().GetTaskParams();
+    if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)); it != taskParams.end()) {
+        try {
+            WasmQueryCompartment_.emplace(NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second));
+        } catch (const std::exception& e) {
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR,
+                TStringBuilder() << "Failed to acquire WASM query compartment: " << e.what());
+            return;
+        }
+    }
+
+    std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
+    if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
+        wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
+    }
+
     NDq::TDqTaskRunnerContext execCtx;
     execCtx.FuncRegistry = TBase::FunctionRegistry;
     execCtx.ComputeCtx = &ComputeCtx;

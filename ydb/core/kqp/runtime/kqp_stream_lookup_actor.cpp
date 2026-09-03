@@ -119,6 +119,9 @@ public:
         if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
+            if (StreamLookupWorker) {
+                StreamLookupWorker->ClearResults(Alloc->Ref());
+            }
             StreamLookupWorker.reset();
             StreamLockWorker.reset();
         }
@@ -463,6 +466,9 @@ private:
         {
             auto alloc = BindAllocator();
             Input.Clear();
+            if (StreamLookupWorker) {
+                StreamLookupWorker->ClearResults(Alloc->Ref());
+            }
             StreamLookupWorker.reset();
             StreamLockWorker.reset();
             for (auto& [id, state] : Reads) {
@@ -1062,6 +1068,15 @@ private:
             LockSendTime.erase(it);
         }
 
+        auto lockIt = Reads.findLock(requestId);
+        if (lockIt == Reads.endLocks() || lockIt->second.State != TLockState::EState::Running) {
+            YDB_LOG_DEBUG("Dropped result for stale/blocked lock request",
+                {"logPrefix", this->LogPrefix},
+                {"requestId", requestId},
+                {"status", record.GetStatus()});
+            return;
+        }
+
         auto getIssues = [&record]() {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
@@ -1084,12 +1099,7 @@ private:
                 YDB_LOG_DEBUG("Lock request returned STATUS_OVERLOADED",
                     {"logPrefix", this->LogPrefix},
                     {"shard", record.GetTabletId()});
-                auto lockIt = Reads.findLock(record.GetRequestId());
-                if (lockIt != Reads.endLocks()) {
-                    return RetryLock(lockIt->second, false);
-                }
-                // Ignore unknown overloaded
-                return;
+                return RetryLock(lockIt->second, false);
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
                 YDB_LOG_DEBUG("Lock request returned STATUS_DEADLOCK",
@@ -1108,10 +1118,10 @@ private:
                     getIssues());
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_INTERNAL_ERROR: {
-                return RuntimeError(
-                    TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. " << "Internal error",
-                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                    getIssues());
+                YDB_LOG_DEBUG("Lock request returned STATUS_INTERNAL_ERROR",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", record.GetTabletId()});
+                return RetryLock(lockIt->second, false, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_BAD_REQUEST: {
                 return RuntimeError(
@@ -1120,10 +1130,10 @@ private:
                     getIssues());
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_WRONG_SHARD_STATE: {
-                return RuntimeError(
-                    TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. " << "Wrong shard state.",
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    getIssues());
+                YDB_LOG_DEBUG("Lock request returned STATUS_WRONG_SHARD_STATE",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", record.GetTabletId()});
+                return RetryLock(lockIt->second, false);
             }
             default: {
                 return RuntimeError(
@@ -1146,10 +1156,7 @@ private:
 
         ReleaseLockQuota(requestId);
 
-        auto lockIt = Reads.findLock(requestId);
-        if (lockIt != Reads.endLocks()) {
-            Reads.eraseLock(lockIt->second);
-        }
+        Reads.eraseLock(lockIt->second);
 
         bool hasModifiedRows = false;
         bool hasUnmodifiedRows = false;
@@ -1241,7 +1248,8 @@ private:
             {"snapshotTxId", record.GetSnapshot().GetTxId()},
             {"step", record.GetSnapshot().GetStep()},
             {"lockTxId", record.GetLockTxId()},
-            {"lockNodeId", record.GetLockNodeId()});
+            {"lockNodeId", record.GetLockNodeId()},
+            {"lockMode", record.GetLockMode()});
 
         const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
 
@@ -1320,7 +1328,8 @@ private:
         }
     }
 
-    void RetryLock(TLockState& failedLock, bool allowInstantRetry = true) {
+    void RetryLock(TLockState& failedLock, bool allowInstantRetry = true,
+        NYql::NDqProto::StatusIds::StatusCode terminalStatus = NYql::NDqProto::StatusIds::UNAVAILABLE) {
         YDB_LOG_DEBUG("Retry locking",
             {"logPrefix", this->LogPrefix},
             {"shard", failedLock.ShardId},
@@ -1328,12 +1337,14 @@ private:
 
         if (CheckTotalRetriesExceeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' lock retry limit exceeded",
-                NYql::NDqProto::StatusIds::UNAVAILABLE);
+                terminalStatus);
         }
         ++TotalRetryAttempts;
 
         if (Reads.CheckShardRetriesExceededLock(failedLock)) {
             ReleaseLockQuota(failedLock.Id);
+            StreamLockWorker->ResetLockRowsProcessing(failedLock.Id);
+            LockSendTime.erase(failedLock.Id);
             Reads.eraseLock(failedLock);
             return ResolveTableShards();
         }

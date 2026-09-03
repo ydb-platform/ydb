@@ -47,7 +47,8 @@ C_ABI_VERSION = '0x02000000'
 # 0x00000010 - 1.24.x
 # 0x00000011 - 1.25.x
 # 0x00000012 - 2.0.x
-C_API_VERSION = '0x00000012'
+# 0x00000013 - 2.1.x
+C_API_VERSION = '0x00000013'
 
 # Check whether we have a mismatch between the set C API VERSION and the
 # actual C API VERSION. Will raise a MismatchCAPIError if so.
@@ -109,7 +110,8 @@ if use_highway
     ],
     cpp_args: '-DTOOLCHAIN_MISS_ASM_HWCAP_H',
     include_directories: ['src/highway'],
-    install: false
+    install: false,
+    gnu_symbol_visibility: 'hidden',
   )
 else
   highway_lib = []
@@ -118,6 +120,11 @@ endif
 use_intel_sort = not get_option('disable-intel-sort') and cpu_family in ['x86', 'x86_64']
 if use_intel_sort and not fs.exists('src/npysort/x86-simd-sort/README.md')
   error('Missing the `x86-simd-sort` git submodule! Run `git submodule update --init` to fix this.')
+endif
+
+if not fs.exists('src/common/pythoncapi-compat')
+  error('Missing the `pythoncapi-compat` git submodule! ' +
+        'Run `git submodule update --init` to fix this.')
 endif
 
 # Check sizes of types. Note, some of these landed in config.h before, but were
@@ -238,6 +245,8 @@ endforeach
 
 # variable attributes tested via "int %s a" % attribute
 optional_variable_attributes = [
+  ['thread_local', 'HAVE_THREAD_LOCAL'],    # C23
+  ['_Thread_local', 'HAVE__THREAD_LOCAL'],  # C11/C17
   ['__thread', 'HAVE__THREAD'],
   ['__declspec(thread)', 'HAVE___DECLSPEC_THREAD_']
 ]
@@ -256,7 +265,7 @@ foreach optional_attr: optional_variable_attributes
       return 0;
     }
   '''
-  if cc.compiles(code)
+  if cc.compiles(code, name: optional_attr[0])
     cdata.set10(optional_attr[1], true)
   endif
 endforeach
@@ -344,7 +353,7 @@ max_opt = {
   'msvc': ['/O2'],
   'intel-cl': ['/O3'],
 }.get(compiler_id, ['-O3'])
-max_opt = cc.has_multi_arguments(max_opt) ? max_opt : []
+max_opt = cc.has_multi_arguments(max_opt) and get_option('buildtype') != 'debug' ? max_opt : []
 
 # Optional GCC compiler builtins and their call arguments.
 # If given, a required header and definition name (HAVE_ prepended)
@@ -498,6 +507,10 @@ if cc.has_function_attribute('visibility:hidden') and host_machine.system() != '
 endif
 cdata.set('NPY_VISIBILITY_HIDDEN', visibility_hidden)
 
+# if not set, we're using lapack_lite
+if have_lapack
+  cdata.set10('HAVE_EXTERNAL_LAPACK', have_lapack)
+endif
 
 config_h = configure_file(
   input: 'config.h.in',
@@ -553,6 +566,7 @@ npymath_lib = static_library('npymath',
   install_dir: np_dir / '_core/lib',
   name_prefix: name_prefix_staticlib,
   name_suffix: name_suffix_staticlib,
+  gnu_symbol_visibility: 'hidden',
 )
 
 dir_separator = '/'
@@ -667,7 +681,6 @@ c_args_common = [
 
 # Same as NPY_CXX_FLAGS (TODO: extend for what ccompiler_opt adds)
 cpp_args_common = c_args_common + [
-  '-D__STDC_VERSION__=0',  # for compatibility with C headers
 ]
 if cc.get_argument_syntax() != 'msvc'
   cpp_args_common += [
@@ -700,7 +713,7 @@ py.extension_module('_multiarray_tests',
     src_file.process('src/multiarray/_multiarray_tests.c.src'),
     'src/common/mem_overlap.c',
     'src/common/npy_argparse.c',
-    'src/common/npy_hashtable.c',
+    'src/common/npy_hashtable.cpp',
     src_file.process('src/common/templ_common.h.src')
   ],
   c_args: c_args_common,
@@ -710,6 +723,7 @@ py.extension_module('_multiarray_tests',
   gnu_symbol_visibility: 'default',
   install: true,
   subdir: 'numpy/_core',
+  install_tag: 'tests'
 )
 
 _umath_tests_mtargets = mod_features.multi_targets(
@@ -746,6 +760,7 @@ foreach gen: test_modules_src
     install: true,
     subdir: 'numpy/_core',
     link_with: gen[2],
+    install_tag: 'tests'
   )
 endforeach
 
@@ -813,7 +828,7 @@ foreach gen_mtargets : [
     'highway_qsort.dispatch.h',
     'src/npysort/highway_qsort.dispatch.cpp',
     use_highway ? [
-      SVE, ASIMD, VSX2,  # FIXME: disable VXE due to runtime segfault
+      ASIMD, VSX2,  # FIXME: disable VXE due to runtime segfault
     ] : []
   ],
   [
@@ -933,12 +948,12 @@ foreach gen_mtargets : [
   ],
   [
     'loops_trigonometric.dispatch.h',
-    src_file.process('src/umath/loops_trigonometric.dispatch.c.src'),
+    'src/umath/loops_trigonometric.dispatch.cpp',
     [
-      AVX512F, [AVX2, FMA3],
+      AVX512_SKX, [AVX2, FMA3],
       VSX4, VSX3, VSX2,
       NEON_VFPV4,
-      VXE2, VXE
+      VXE2, VXE,
     ]
   ],
   [
@@ -1009,7 +1024,8 @@ foreach gen_mtargets : [
       'src/common',
       'src/multiarray',
       'src/npymath',
-      'src/umath'
+      'src/umath',
+      'src/highway',
     ]
   )
   if not is_variable('multiarray_umath_mtargets')
@@ -1026,7 +1042,8 @@ src_multiarray_umath_common = [
   'src/common/gil_utils.c',
   'src/common/mem_overlap.c',
   'src/common/npy_argparse.c',
-  'src/common/npy_hashtable.c',
+  'src/common/npy_hashtable.cpp',
+  'src/common/npy_import.c',
   'src/common/npy_longdouble.c',
   'src/common/ucsnarrow.c',
   'src/common/ufunc_override.c',
@@ -1049,6 +1066,7 @@ src_multiarray = multiarray_gen_headers + [
   'src/multiarray/array_coercion.c',
   'src/multiarray/array_converter.c',
   'src/multiarray/array_method.c',
+  'src/multiarray/array_api_standard.c',
   'src/multiarray/array_assign_scalar.c',
   'src/multiarray/array_assign_array.c',
   'src/multiarray/arrayfunction_override.c',
@@ -1090,6 +1108,7 @@ src_multiarray = multiarray_gen_headers + [
   'src/multiarray/nditer_constr.c',
   'src/multiarray/nditer_pywrap.c',
   src_file.process('src/multiarray/nditer_templ.c.src'),
+  'src/multiarray/npy_static_data.c',
   'src/multiarray/number.c',
   'src/multiarray/refcount.c',
   src_file.process('src/multiarray/scalartypes.c.src'),
@@ -1134,7 +1153,7 @@ src_umath = umath_gen_headers + [
   'src/umath/ufunc_type_resolution.c',
   'src/umath/clip.cpp',
   'src/umath/clip.h',
-  'src/umath/dispatching.c',
+  'src/umath/dispatching.cpp',
   'src/umath/extobj.c',
   'src/umath/legacy_array_method.c',
   'src/umath/override.c',
@@ -1195,7 +1214,8 @@ py.extension_module('_multiarray_umath',
     src_numpy_api[1],  # __multiarray_api.h
     src_umath_doc_h,
     npy_math_internal_h,
-  ] + svml_objects,
+  ],
+  objects: svml_objects,
   c_args: c_args_common,
   cpp_args: cpp_args_common,
   include_directories: [
@@ -1263,23 +1283,33 @@ py.extension_module('_simd',
   link_with: [npymath_lib, _simd_mtargets.static_lib('_simd_mtargets')],
   install: true,
   subdir: 'numpy/_core',
+  install_tag: 'tests',
 )
 
 python_sources = [
   '__init__.py',
   '__init__.pyi',
   '_add_newdocs.py',
+  '_add_newdocs.pyi',
   '_add_newdocs_scalars.py',
+  '_add_newdocs_scalars.pyi',
   '_asarray.py',
   '_asarray.pyi',
   '_dtype.py',
+  '_dtype.pyi',
   '_dtype_ctypes.py',
+  '_dtype_ctypes.pyi',
   '_exceptions.py',
+  '_exceptions.pyi',
   '_internal.py',
   '_internal.pyi',
   '_machar.py',
+  '_machar.pyi',
   '_methods.py',
+  '_methods.pyi',
+  '_simd.pyi',
   '_string_helpers.py',
+  '_string_helpers.pyi',
   '_type_aliases.py',
   '_type_aliases.pyi',
   '_ufunc_config.py',
@@ -1306,6 +1336,9 @@ python_sources = [
   'numerictypes.py',
   'numerictypes.pyi',
   'overrides.py',
+  'overrides.pyi',
+  'printoptions.py',
+  'printoptions.pyi',
   'records.py',
   'records.pyi',
   'shape_base.py',
@@ -1313,6 +1346,7 @@ python_sources = [
   'strings.py',
   'strings.pyi',
   'umath.py',
+  'umath.pyi',
 ]
 
 py.install_sources(
@@ -1321,4 +1355,4 @@ py.install_sources(
 )
 
 subdir('include')
-install_subdir('tests', install_dir: np_dir / '_core', install_tag: 'python-runtime')
+install_subdir('tests', install_dir: np_dir / '_core', install_tag: 'tests')

@@ -191,6 +191,10 @@ public:
         REGISTER_ALL(TGetFileFromCacheCommand,             "get_file_from_cache",             Null,       Structured, false, false);
         REGISTER_ALL(TPutFileToCacheCommand,               "put_file_to_cache",               Null,       Structured, true,  false);
 
+        REGISTER_ALL(TPartitionFileCommand,                "partition_file",                  Null,       Structured, false, false);
+
+        REGISTER    (TReadFilePartitionCommand,            "read_file_partition",             Null,       Binary,     false, true , ApiVersion4);
+
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Structured, true,  true , ApiVersion4);
         REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, true);
@@ -471,10 +475,10 @@ public:
         YT_VERIFY(entry.Descriptor.InputType == EDataType::Null || request.InputStream);
         YT_VERIFY(entry.Descriptor.OutputType == EDataType::Null || request.OutputStream);
 
-        YT_LOG_DEBUG("Command received (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-            request.Id,
-            request.CommandName,
-            identity.User);
+        YT_TLOG_DEBUG("Command received")
+            .WithFormat("RequestId", "%" PRIx64, request.Id)
+            .With("Command", request.CommandName)
+            .With("User", identity.User);
 
         auto options = TClientOptions::FromAuthenticationIdentity(identity);
         options.RequirePasswordInAuthenticationCommands = Config_->RequirePasswordInAuthenticationCommands;
@@ -607,10 +611,10 @@ private:
             traceContext->AddTag("request_id", request.Id);
         });
 
-        YT_LOG_DEBUG("Command started (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-            request.Id,
-            request.CommandName,
-            request.AuthenticatedUser);
+        YT_TLOG_DEBUG("Command started")
+            .WithFormat("RequestId", "%" PRIx64, request.Id)
+            .With("Command", request.CommandName)
+            .With("User", request.AuthenticatedUser);
 
         TError result;
         try {
@@ -620,15 +624,16 @@ private:
         }
 
         if (result.IsOK()) {
-            YT_LOG_DEBUG("Command completed (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-                request.Id,
-                request.CommandName,
-                request.AuthenticatedUser);
+            YT_TLOG_DEBUG("Command completed")
+                .WithFormat("RequestId", "%" PRIx64, request.Id)
+                .With("Command", request.CommandName)
+                .With("User", request.AuthenticatedUser);
         } else {
-            YT_LOG_DEBUG(result, "Command failed (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-                request.Id,
-                request.CommandName,
-                request.AuthenticatedUser);
+            YT_TLOG_DEBUG("Command failed")
+                .WithFormat("RequestId", "%" PRIx64, request.Id)
+                .With("Command", request.CommandName)
+                .With("User", request.AuthenticatedUser)
+                .With(result);
         }
 
         context->Finish();

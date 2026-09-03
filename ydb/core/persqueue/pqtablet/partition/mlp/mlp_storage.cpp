@@ -996,6 +996,25 @@ void TStorage::RemoveFirstMessageFromFastZone() {
     ++FirstOffset;
 }
 
+void TStorage::MoveFirstMessageFromFastZoneToSlowZone() {
+    AFL_ENSURE(!Messages.empty());
+    auto& message = Messages.front();
+    switch (message.GetStatus()) {
+        case EMessageStatus::Unprocessed:
+        case EMessageStatus::Locked:
+        case EMessageStatus::Delayed:
+        case EMessageStatus::DLQ:
+            SlowMessages.insert_or_assign(FirstOffset, message);
+            Batch.MoveToSlow(FirstOffset);
+            Messages.pop_front();
+            ++FirstOffset;
+            break;
+        case EMessageStatus::Committed:
+            RemoveFirstMessageFromFastZone();
+            break;
+    }
+}
+
 TStorage::TSlowMessagesMap::iterator TStorage::RemoveMessageFromSlowZone(TSlowMessagesMap::iterator it) {
     RemoveMessage(it->first, it->second);
     return SlowMessages.erase(it);
@@ -1010,28 +1029,19 @@ void TStorage::RemoveMessageFromSlowZone(ui64 offset) {
 bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay, ui64 logicalMessageCount) {
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
+    // Gap in offsets: move messages to the slow zone, since the fast zone has to be a contiguous region
     while (!Messages.empty() && offset > GetLastOffset()) {
-        RemoveFirstMessageFromFastZone();
+        MoveFirstMessageFromFastZoneToSlowZone();
     }
 
     if (Messages.size() >= MaxFastMessages) {
         // Move to slow zone
-        for (size_t i = std::max<size_t>(std::min(std::min(Messages.size(), MaxMessages / 64), MaxSlowMessages - SlowMessages.size()), 1); i; --i) {
-            auto& message = Messages.front();
-            switch (message.GetStatus()) {
-                case EMessageStatus::Unprocessed:
-                case EMessageStatus::Locked:
-                case EMessageStatus::Delayed:
-                case EMessageStatus::DLQ:
-                    SlowMessages.insert_or_assign(FirstOffset, message);
-                    Batch.MoveToSlow(FirstOffset);
-                    Messages.pop_front();
-                    ++FirstOffset;
-                    break;
-                case EMessageStatus::Committed:
-                    RemoveFirstMessageFromFastZone();
-                    break;
-            }
+        const size_t slowMoveLimit = (MaxSlowMessages >= SlowMessages.size()) ? MaxSlowMessages - SlowMessages.size() : 0;
+        const size_t fastMoveLimit = MaxMessages / 64;
+        const size_t limit = Min(slowMoveLimit, fastMoveLimit);
+        const size_t count = Max<size_t>(1, limit); // try to move at least one message
+        for (size_t i = Min(Messages.size(), count); i; --i) {
+            MoveFirstMessageFromFastZoneToSlowZone();
         }
     }
 
@@ -1062,6 +1072,10 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
             for (ui64 i = 0; i < logicalMessageCount; ++i) {
                 Batch.AddNewMessage(offset + i);
             }
+            // Advance past skipped offsets so FetchMessagesIfNeeded does not re-read them forever.
+            FirstOffset = offset + logicalMessageCount;
+            FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
+            FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
             return true;
         }
     }
@@ -1890,20 +1904,7 @@ size_t TStorage::GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents() const
 {
 }
 
-TOrderedMessageGroupIdHash::TOrderedMessageGroupIdHash(TOrderedMessageGroupIdHash&& other)
-    : GroupIdHash(other.GroupIdHash)
-{
-    TIntrusiveListItem<TOrderedMessageGroupIdHash>& lhs = *this;
-    TIntrusiveListItem<TOrderedMessageGroupIdHash>& rhs = other;
-    if (rhs.Empty()) {
-        return;
-    }
-    lhs.SetNext(rhs.Next());
-    lhs.SetPrev(rhs.Prev());
-    rhs.Next()->SetPrev(&lhs);
-    rhs.Prev()->SetNext(&lhs);
-    rhs.ResetItem();
-}
+TOrderedMessageGroupIdHash::TOrderedMessageGroupIdHash(TOrderedMessageGroupIdHash&& other) = default;
 
 bool TOrderedMessageGroupIdHash::operator==(const TOrderedMessageGroupIdHash& other) const {
     return GroupIdHash == other.GroupIdHash;
@@ -1921,10 +1922,12 @@ size_t TStorage::TMessageGroups::UnlockedMessageGroupsIdSize() const {
 }
 
 bool TStorage::TMessageGroups::UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash) {
-    size_t viewOrderSz0 = Y_IS_DEBUG_BUILD ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
+    constexpr size_t maxCheckSizeLimit = 15;
+    const bool checkSize = Y_IS_DEBUG_BUILD && UnlockedMessageGroupsId.size() < maxCheckSizeLimit;
+    size_t viewOrderSz0 = checkSize ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
     size_t n = UnlockedMessageGroupsId.erase(messageGroupIdHash);
-    size_t viewOrderSz1 = Y_IS_DEBUG_BUILD ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
-    Y_ASSERT(Y_IS_DEBUG_BUILD && (viewOrderSz0 == viewOrderSz1 + n));
+    size_t viewOrderSz1 = checkSize ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
+    Y_ASSERT(!checkSize || (viewOrderSz0 == viewOrderSz1 + n));
     return n > 0;
 }
 

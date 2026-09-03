@@ -244,10 +244,9 @@ public:
         request->Promise.OnCanceled(BIND(&TBucketThrottleRequest::Cancel, MakeWeak(request)));
         request->Promise.ToFuture().Subscribe(BIND(&TBucketThrottler::OnRequestComplete, MakeWeak(this), amount));
 
-        YT_LOG_DEBUG(
-            "Started waiting for throttler (Amount: %v, RequestId: %v)",
-            amount,
-            request->RequestId);
+        YT_TLOG_DEBUG("Started waiting for throttler")
+            .With("Amount", amount)
+            .With("RequestId", request->RequestId);
 
         auto guard = Guard(Lock_);
         Queue_.push_back(request);
@@ -733,17 +732,17 @@ private:
 
         RefillFromSharedBucket();
 
-        YT_LOG_DEBUG("Fair throttler tick (SharedBucket: %v, TickLimit: %v, FreeQuota: %v, DroppedQuota: %v)",
-            SharedBucket_->Limit.GetValue(),
-            tickLimit, // How many bytes was distributed?
-            freeQuota, // How many bytes was left unconsumed?
-            droppedQuota);
+        YT_TLOG_DEBUG("Fair throttler tick")
+            .With("SharedBucket", SharedBucket_->Limit.GetValue())
+            .With("TickLimit", tickLimit)
+            .With("FreeQuota", freeQuota)
+            .With("DroppedQuota", droppedQuota);
 
-        YT_LOG_DEBUG("Fair throttler tick details (BucketIncome: %v, BucketUsage: %v, BucketDemands: %v, BucketQuota: %v)",
-            bucketIncome,
-            bucketUsage,
-            bucketDemands,
-            bucketQuota);
+        YT_TLOG_DEBUG("Fair throttler tick details")
+            .With("BucketIncome", bucketIncome)
+            .With("BucketUsage", bucketUsage)
+            .With("BucketDemands", bucketDemands)
+            .With("BucketQuota", bucketQuota);
     }
 
     void DoUpdateFollower()
@@ -787,16 +786,16 @@ private:
 
         RefillFromSharedBucket();
 
-        YT_LOG_DEBUG("Fair throttler tick (SharedBucket: %v, InFlow: %v, OutFlow: %v)",
-            SharedBucket_->Limit.GetValue(),
-            inFlow,
-            outFlow);
+        YT_TLOG_DEBUG("Fair throttler tick")
+            .With("SharedBucket", SharedBucket_->Limit.GetValue())
+            .With("InFlow", inFlow)
+            .With("OutFlow", outFlow);
 
-        YT_LOG_DEBUG("Fair throttler tick details (BucketIncome: %v, BucketUsage: %v, BucketDemands: %v, BucketQuota: %v)",
-            bucketIncome,
-            bucketUsage,
-            bucketDemands,
-            bucketQuota);
+        YT_TLOG_DEBUG("Fair throttler tick details")
+            .With("BucketIncome", bucketIncome)
+            .With("BucketUsage", bucketUsage)
+            .With("BucketDemands", bucketDemands)
+            .With("BucketQuota", bucketQuota);
     }
 
     void RefillFromSharedBucket()
@@ -826,7 +825,7 @@ private:
         if (!IsLeader_ && Ipc_->TryLock()) {
             IsLeader_ = true;
 
-            YT_LOG_DEBUG("Throttler is leader");
+            YT_TLOG_DEBUG("Throttler is leader");
         }
 
         if (IsLeader_) {
@@ -894,11 +893,11 @@ std::vector<i64> IFairThrottler::ComputeFairDistribution(
     for ( ; i < std::ssize(weights); ++i) {
         auto [targetShare, targetIndex] = queue[i];
 
-        YT_LOG_TRACE("Examining bucket (Index: %v, TargetShare: %v, RemainingWeight: %v, RemainingCapacity: %v)",
-            targetIndex,
-            targetShare,
-            remainingWeight,
-            remainingCapacity);
+        YT_TLOG_TRACE("Examining bucket")
+            .With("Index", targetIndex)
+            .With("TargetShare", targetShare)
+            .With("RemainingWeight", remainingWeight)
+            .With("RemainingCapacity", remainingCapacity);
 
         if (targetShare * remainingWeight >= static_cast<double>(remainingCapacity)) {
             break;
@@ -908,9 +907,9 @@ std::vector<i64> IFairThrottler::ComputeFairDistribution(
         remainingCapacity -= totalLimits[targetIndex];
         remainingWeight -= weights[targetIndex];
 
-        YT_LOG_TRACE("Satisfied demand (Index: %v, Capacity: %v)",
-            targetIndex,
-            totalLimits[targetIndex]);
+        YT_TLOG_TRACE("Satisfied demand")
+            .With("Index", targetIndex)
+            .With("Capacity", totalLimits[targetIndex]);
     }
 
     auto finalShare = Max<double>(remainingCapacity, 0l) / Max(remainingWeight, 0.01);
@@ -918,9 +917,9 @@ std::vector<i64> IFairThrottler::ComputeFairDistribution(
         auto bucketIndex = queue[j].second;
         totalLimits[bucketIndex] = weights[bucketIndex] * finalShare;
 
-        YT_LOG_TRACE("Distributed remains (Index: %v, Capacity: %v)",
-            bucketIndex,
-            totalLimits[bucketIndex]);
+        YT_TLOG_TRACE("Distributed remains")
+            .With("Index", bucketIndex)
+            .With("Capacity", totalLimits[bucketIndex]);
     }
 
     return totalLimits;

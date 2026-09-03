@@ -52,6 +52,11 @@ if host_machine.system() == 'cygwin'
   c_args_random += ['-Wl,--export-all-symbols']
 endif
 
+cython_args = []
+if cy.version().version_compare('>=3.1.0')
+  cython_args += ['-Xfreethreading_compatible=True']
+endif
+
 # name, sources, extra c_args, extra static libs to link
 random_pyx_sources = [
   ['_bounded_integers', _bounded_integers_pyx, [], [npyrandom_lib, npymath_lib]],
@@ -83,6 +88,7 @@ foreach gen: random_pyx_sources
     link_with: gen[3],
     install: true,
     subdir: 'numpy/random',
+    cython_args: cython_args,
   )
 endforeach
 
@@ -98,6 +104,7 @@ py.install_sources(
     '_mt19937.pyi',
     '_pcg64.pyi',
     '_pickle.py',
+    '_pickle.pyi',
     '_philox.pyi',
     '_sfc64.pyi',
     'bit_generator.pxd',
@@ -123,7 +130,8 @@ py.install_sources(
     'tests/test_seed_sequence.py',
     'tests/test_smoke.py',
   ],
-  subdir: 'numpy/random/tests'
+  subdir: 'numpy/random/tests',
+  install_tag: 'tests'
 )
 
 py.install_sources(
@@ -143,7 +151,8 @@ py.install_sources(
     'tests/data/generator_pcg64_np126.pkl.gz',
     'tests/data/generator_pcg64_np121.pkl.gz',
   ],
-  subdir: 'numpy/random/tests/data'
+  subdir: 'numpy/random/tests/data',
+  install_tag: 'tests'
 )
 
 py.install_sources(

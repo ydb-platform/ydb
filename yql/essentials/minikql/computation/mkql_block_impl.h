@@ -85,7 +85,6 @@ private:
 
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
 
-private:
     NYql::EDatumValidationMode ValidateDatumMode_ = NYql::EDatumValidationMode::None;
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;
@@ -123,5 +122,45 @@ struct TBlockState: public TComputationValue<TBlockState> {
     ui64 Slice();
 
     NUdf::TUnboxedValuePod Get(ui64 sliceSize, const THolderFactory& holderFactory, size_t idx) const;
+};
+
+template <typename TStreamValue>
+class TBlockStreamValue: public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+
+public:
+    TBlockStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, size_t width)
+        : TBase(memInfo)
+        , HolderFactory_(holderFactory)
+        , State_(HolderFactory_.Create<TBlockState>(width))
+    {
+    }
+
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) final {
+        auto& state = GetState(width);
+        if (!state.Count) {
+            state.ClearValues();
+            if (const auto result = static_cast<TStreamValue*>(this)->DoWideFetch(state.Values.data(), width); result != NUdf::EFetchStatus::Ok) {
+                return result;
+            }
+            state.FillArrays();
+        }
+
+        const auto sliceSize = state.Slice();
+        for (ui32 index = 0; index < width; ++index) {
+            output[index] = state.Get(sliceSize, HolderFactory_, index);
+        }
+        return NUdf::EFetchStatus::Ok;
+    }
+
+private:
+    TBlockState& GetState(ui32 width) {
+        auto& state = *static_cast<TBlockState*>(State_.AsBoxed().Get());
+        MKQL_ENSURE(state.Values.size() == width, "The given width doesn't equal to the result type size");
+        return state;
+    }
+
+    const THolderFactory& HolderFactory_;
+    NUdf::TUnboxedValue State_;
 };
 } // namespace NKikimr::NMiniKQL

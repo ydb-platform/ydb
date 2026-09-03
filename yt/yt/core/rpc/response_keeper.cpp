@@ -65,9 +65,9 @@ public:
             : 0;
         Started_ = true;
 
-        YT_LOG_INFO("Response keeper started (WarmupTime: %v, ExpirationTime: %v)",
-            Config_->WarmupTime,
-            Config_->ExpirationTime);
+        YT_TLOG_INFO("Response keeper started")
+            .With("WarmupTime", Config_->WarmupTime)
+            .With("ExpirationTime", Config_->ExpirationTime);
     }
 
     void Stop() override
@@ -85,7 +85,7 @@ public:
         FinishedResponseSpace_.store(0, std::memory_order::release);
         Started_ = false;
 
-        YT_LOG_INFO("Response keeper stopped");
+        YT_TLOG_INFO("Response keeper stopped");
     }
 
     TFuture<TSharedRefArray> TryBeginRequest(TMutationId id, bool isRetry) override
@@ -117,9 +117,9 @@ public:
         }
 
         if (!response) {
-            YT_LOG_ALERT("Null response passed to response keeper (MutationId: %v, Remember: %v)",
-                id,
-                remember);
+            YT_TLOG_ALERT("Null response passed to response keeper")
+                .With("MutationId", id)
+                .With("Remember", remember);
         }
 
 
@@ -206,7 +206,8 @@ public:
             promise.TrySet(error);
         }
 
-        YT_LOG_INFO(error, "All pending requests canceled");
+        YT_TLOG_INFO("All pending requests canceled")
+            .With(error);
     }
 
     bool TryReplyFrom(const IServiceContextPtr& context, bool subscribeToResponse) override
@@ -319,7 +320,8 @@ private:
         if (pendingIt != PendingResponses_.end()) {
             ValidateRetry(id, isRetry);
 
-            YT_LOG_DEBUG("Replying with pending response (MutationId: %v)", id);
+            YT_TLOG_DEBUG("Replying with pending response")
+                .With("MutationId", id);
             return pendingIt->second;
         }
 
@@ -327,14 +329,15 @@ private:
         if (finishedIt != FinishedResponses_.end()) {
             ValidateRetry(id, isRetry);
 
-            YT_LOG_DEBUG("Replying with finished response (MutationId: %v)", id);
+            YT_TLOG_DEBUG("Replying with finished response")
+                .With("MutationId", id);
             return MakeFuture(finishedIt->second);
         }
 
         if (isRetry && IsWarmingUp()) {
             THROW_ERROR_EXCEPTION("Cannot reliably check for a duplicate mutating request")
-                << TErrorAttribute("mutation_id", id)
-                << TErrorAttribute("warmup_time", Config_->WarmupTime);
+                .With("mutation_id", id)
+                .With("warmup_time", Config_->WarmupTime);
         }
 
         return {};
@@ -348,7 +351,7 @@ private:
             return;
         }
 
-        YT_LOG_DEBUG("Response keeper eviction tick started");
+        YT_TLOG_DEBUG("Response keeper eviction tick started");
 
         NProfiling::TWallTimer timer;
         int counter = 0;
@@ -362,8 +365,8 @@ private:
 
             if (++counter % Config_->EvictionTickTimeCheckPeriod == 0) {
                 if (timer.GetElapsedTime() > Config_->MaxEvictionTickTime) {
-                    YT_LOG_DEBUG("Response keeper eviction tick interrupted (ResponseCount: %v)",
-                        counter);
+                    YT_TLOG_DEBUG("Response keeper eviction tick interrupted")
+                        .With("ResponseCount", counter);
                     return;
                 }
             }
@@ -376,8 +379,8 @@ private:
             ResponseEvictionQueue_.pop();
         }
 
-        YT_LOG_DEBUG("Response keeper eviction tick completed (ResponseCount: %v)",
-            counter);
+        YT_TLOG_DEBUG("Response keeper eviction tick completed")
+            .With("ResponseCount", counter);
     }
 };
 
@@ -394,7 +397,7 @@ void ValidateRetry(TMutationId mutationId, bool isRetry)
 {
     if (!isRetry) {
         THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
-             << TErrorAttribute("mutation_id", mutationId);
+             .With("mutation_id", mutationId);
     }
 }
 

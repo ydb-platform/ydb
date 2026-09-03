@@ -23,6 +23,10 @@ public:
 
     TCompletionList Completion(const TCompletionParams& params) const override;
 
+    TDocumentDiagnosticReport Diagnostic(TDocumentDiagnosticParams params) const override;
+
+    TVector<TTextEdit> Formatting(const TDocumentFormattingParams& params) const override;
+
 protected:
     void Send(NJsonRpc::TJsonRpcResponse response) const;
 

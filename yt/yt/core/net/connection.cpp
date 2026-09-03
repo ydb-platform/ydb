@@ -103,7 +103,7 @@ ssize_t WriteToFD(TFileDescriptor fd, const char* buffer, size_t length)
 TError MakeSystemError(TFormatString<> message)
 {
     return TError(message)
-        << TError::FromSystem();
+        .With(TError::FromSystem());
 }
 
 [[maybe_unused]] TErrorOr<int> CheckPipeBytesLeftToRead(TFileDescriptor fd) noexcept
@@ -521,15 +521,18 @@ public:
             YT_VERIFY(TryClose(fd, /*ignoreBadFD*/ false));
 
             if (!bytesLeftOrError.IsOK()) {
-                YT_LOG_ERROR(bytesLeftOrError, "Delivery fenced write failed");
+                YT_TLOG_ERROR("Delivery fenced write failed")
+                    .With(bytesLeftOrError);
                 return bytesLeftOrError;
             } else {
-                YT_LOG_DEBUG("Delivery fenced write pipe check finished (BytesLeft: %v)", bytesLeftOrError.Value());
+                YT_TLOG_DEBUG("Delivery fenced write pipe check finished")
+                    .With("BytesLeft", bytesLeftOrError.Value());
             }
 
             result.Value().Retry = (bytesLeftOrError.Value() != 0);
         } else {
-            YT_LOG_DEBUG("Delivery fenced write to pipe step finished (Result: %v)", result);
+            YT_TLOG_DEBUG("Delivery fenced write to pipe step finished")
+                .With("Result", result);
         }
 
         return result;
@@ -571,15 +574,18 @@ public:
             auto bytesLeftOrError = CheckPipeBytesLeftToRead(ReadFD_);
 
             if (!bytesLeftOrError.IsOK()) {
-                YT_LOG_ERROR(bytesLeftOrError, "Delivery fenced write failed");
+                YT_TLOG_ERROR("Delivery fenced write failed")
+                    .With(bytesLeftOrError);
                 return bytesLeftOrError;
             } else {
-                YT_LOG_DEBUG("Delivery fenced write pipe check finished (BytesLeft: %v)", bytesLeftOrError.Value());
+                YT_TLOG_DEBUG("Delivery fenced write pipe check finished")
+                    .With("BytesLeft", bytesLeftOrError.Value());
             }
 
             result.Value().Retry = (bytesLeftOrError.Value() != 0);
         } else {
-            YT_LOG_DEBUG("Delivery fenced write to pipe step finished (Result: %v)", result);
+            YT_TLOG_DEBUG("Delivery fenced write to pipe step finished")
+                .With("Result", result);
         }
 
         return result;
@@ -927,7 +933,7 @@ public:
 
     TFuture<void> Close()
     {
-        YT_LOG_DEBUG("Closing connection");
+        YT_TLOG_DEBUG("Closing connection");
         return AbortIO(TError("Connection closed"));
     }
 
@@ -950,7 +956,8 @@ public:
 
     TFuture<void> Abort(TError error)
     {
-        YT_LOG_DEBUG(error, "Aborting connection");
+        YT_TLOG_DEBUG("Aborting connection")
+            .With(error);
         return AbortIO(std::move(error));
     }
 
@@ -1095,7 +1102,7 @@ protected:
 
     ~TFDConnectionImpl()
     {
-        YT_LOG_DEBUG("Connection destroyed");
+        YT_TLOG_DEBUG("Connection destroyed");
     }
 
     void Arm(EPollControl additionalFlags = {})
@@ -1237,13 +1244,13 @@ private:
     TError AnnotateError(TError error) const
     {
         return std::move(error)
-            << TErrorAttribute("connection_id", Id_)
-            << TErrorAttribute("connection_endpoint", Endpoint_);
+            .With("connection_id", Id_)
+            .With("connection_endpoint", Endpoint_);
     }
 
     void Init()
     {
-        YT_LOG_DEBUG("Connection created");
+        YT_TLOG_DEBUG("Connection created");
 
         AbortFromReadTimeout_ = BIND(&TFDConnectionImpl::AbortFromReadTimeout, MakeWeak(this));
         AbortFromWriteTimeout_ = BIND(&TFDConnectionImpl::AbortFromWriteTimeout, MakeWeak(this));
@@ -1438,7 +1445,7 @@ private:
     void OnPeerDisconnected()
     {
         if (PeerDisconnectedList_.Fire()) {
-            YT_LOG_DEBUG("Peer disconnected");
+            YT_TLOG_DEBUG("Peer disconnected");
         }
     }
 };
@@ -1500,12 +1507,12 @@ private:
         , PipePath_(std::move(pipePath))
         , PipeCapacity_(capacity)
     {
-        YT_LOG_DEBUG("Delivery fenced connection created");
+        YT_TLOG_DEBUG("Delivery fenced connection created");
     }
 
     ~TDeliveryFencedWriteConnectionImpl()
     {
-        YT_LOG_DEBUG("Delivery fenced connection destroyed");
+        YT_TLOG_DEBUG("Delivery fenced connection destroyed");
     }
 
     DECLARE_NEW_FRIEND();
@@ -1569,7 +1576,7 @@ private:
             ThrowError("arm connection");
         }
 
-        YT_LOG_DEBUG("Delivery fenced connection initialized");
+        YT_TLOG_DEBUG("Delivery fenced connection initialized");
 
         ReadFD_ = readFdGuard.Release();
         WriteFD_ = writeFdGuard.Release();
@@ -1589,9 +1596,11 @@ private:
     {
         auto error = TError("Failed to %v for delivery fenced connection", action);
         if (!innerError.IsOK()) {
-            error <<= std::move(innerError);
+            error.Add(std::move(innerError));
         } else {
-            error <<= TError::FromSystem();
+            if (auto addedError = TError::FromSystem(); !addedError.IsOK()) {
+                error.Add(std::move(addedError));
+            }
         }
         THROW_ERROR(std::move(error));
     }
@@ -1769,7 +1778,7 @@ TFileDescriptor CreateWriteFDForConnection(
     TFileDescriptorGuard fd(HandleEintr(::open, pipePath.c_str(), flags));
     if (fd.Get() == -1) {
         THROW_ERROR_EXCEPTION(MakeSystemError("Failed to open named pipe"))
-            << TErrorAttribute("path", pipePath);
+            .With("path", pipePath);
     }
 
     try {
@@ -1783,18 +1792,16 @@ TFileDescriptor CreateWriteFDForConnection(
 
         SafeMakeNonblocking(fd.Get());
     } catch (const std::exception& ex) {
-        YT_LOG_WARNING(
-            TError(ex) << TError::FromSystem(),
-            "Failed to open pipe for writing (UseDeliveryFence: %v, Capacity: %v)",
-            useDeliveryFence,
-            capacity);
+        YT_TLOG_WARNING("Failed to open pipe for writing")
+            .With("UseDeliveryFence", useDeliveryFence)
+            .With("Capacity", capacity)
+            .With(TError(ex).With(TError::FromSystem()));
         throw;
     } catch (...) {
-        YT_LOG_WARNING(
-            "Failed to open pipe for writing (MaybeRelevantError: %v, UseDeliveryFence: %v, Capacity: %v)",
-            TError::FromSystem(),
-            useDeliveryFence,
-            capacity);
+        YT_TLOG_WARNING("Failed to open pipe for writing")
+            .With("MaybeRelevantError", TError::FromSystem())
+            .With("UseDeliveryFence", useDeliveryFence)
+            .With("Capacity", capacity);
         throw;
     }
     return fd.Release();
@@ -1870,7 +1877,7 @@ IConnectionReaderPtr CreateInputConnectionFromPath(
     TFileDescriptorGuard fd(HandleEintr(::open, pipePath.c_str(), flags));
     if (fd.Get() == -1) {
         THROW_ERROR_EXCEPTION(MakeSystemError("Failed to open named pipe"))
-            << TErrorAttribute("path", pipePath);
+            .With("path", pipePath);
     }
 
     auto connection = New<TFDConnection>(fd.Get(), std::move(poller), std::move(pipeHolder), std::move(pipePath));

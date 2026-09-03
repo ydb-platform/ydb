@@ -29,9 +29,7 @@ class TPyObjectPtr: public NYql::NUdf::TRefCountedPtr<PyObject, TPyPtrOps<PyObje
     using TSelf = NYql::NUdf::TRefCountedPtr<PyObject, TPyPtrOps<PyObject>>;
 
 public:
-    inline TPyObjectPtr()
-    {
-    }
+    inline TPyObjectPtr() = default;
 
     // Implicit ownership capturing is okay for smart pointers
     // NOLINTNEXTLINE(google-explicit-constructor)

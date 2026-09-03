@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 
@@ -57,7 +57,7 @@ def do(args):
             pdisk = pdiskBySerialNumber[device.SerialNumber]
             row['NodeId:PDiskId'] = '[%u:%u]' % (pdisk.NodeId, pdisk.PDiskId)
 
-            if device.LifeStage == kikimr_bsconfig.TDriveLifeStage.E.ADDED_BY_DSTOOL:
+            if device.LifeStage == kikimr_bs3.TDriveLifeStage.E.ADDED_BY_DSTOOL:
                 row['StorageStatus'] = 'PDISK_ADDED_BY_DSTOOL'
             else:
                 row['StorageStatus'] = 'PDISK_ADDED_BY_DEFINE_BOX'

@@ -13,6 +13,7 @@ class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
+    YDB_ACCESSOR_DEF(std::optional<bool>, DeduplicationEnabled);
     YDB_ACCESSOR_DEF(std::optional<bool>, InsertOptionsBuildIndexesEnabled);
     YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
@@ -22,6 +23,9 @@ public:
         SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
         if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
             ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
+        }
+        if (alterRequest.GetOptions().HasDeduplicationEnabled()) {
+            DeduplicationEnabled = alterRequest.GetOptions().GetDeduplicationEnabled();
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
             auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
@@ -54,6 +58,9 @@ public:
         alterRequest.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
         if (ScanReaderPolicyName) {
             alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+        }
+        if (DeduplicationEnabled) {
+            alterRequest.MutableOptions()->SetDeduplicationEnabled(*DeduplicationEnabled);
         }
         if (CompactionPlannerConstructor.HasObject()) {
             CompactionPlannerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableCompactionPlannerConstructor());

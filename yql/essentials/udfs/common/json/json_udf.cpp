@@ -10,7 +10,6 @@ class TGetField: public TBoxedValue {
 public:
     using TTypeAwareMarker = bool;
 
-public:
     static TStringRef Name() {
         return TStringRef::Of("GetField");
     }

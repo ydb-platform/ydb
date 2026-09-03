@@ -53,13 +53,15 @@ public:
         NColumnShard::TCounterGuard TasksGuard;
         const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
         const bool NeedNextStep;
+        const bool ScheduleContinuation;
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
 
     public:
         TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step,
-            const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep = true);
+            const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep = true,
+            const bool scheduleContinuation = true);
     };
 
     void AddAllocation(const TColumnsSetIds& ids, const EMemType memType) {
@@ -176,5 +178,9 @@ public:
         AFL_VERIFY(Columns.GetColumnsCount());
     }
 };
+
+// Shared by simple/trivial DoStartReserveMemory: sync vs async path with matching scheduleContinuation.
+TConclusion<bool> StartProgramStepReserveMemory(
+    const std::shared_ptr<IDataSource>& source, const ui64 sizeToReserve, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage);
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

@@ -1,0 +1,11 @@
+-- auxiliary "_yql_column_N" sort columns of an anonymous table must not leak into the read check
+PRAGMA yt.UseNativeDescSort = 'false';
+
+INSERT INTO plato.@tmp
+SELECT key, value
+FROM plato.Input
+ORDER BY key DESC;
+
+COMMIT;
+
+SELECT * FROM plato.@tmp;

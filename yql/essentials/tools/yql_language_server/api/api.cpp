@@ -26,6 +26,10 @@ public:
                 .CompletionProvider = TCompletionOptions{
                     .TriggerCharacters = TVector<TString>{"`", ".", ":", "/", "", " "},
                 },
+                .DocumentFormattingProvider = TDocumentFormattingOptions{},
+                .DiagnosticProvider = TDiagnosticOptions{
+                    .Identifier = "YQL",
+                },
             },
             .ServerInfo = TServerInfo{
                 .Name = "yql",
@@ -57,6 +61,19 @@ public:
     TCompletionList Completion(const TCompletionParams& params) const override {
         auto document = Service_.TextDocuments->Find(params.TextDocument);
         return Service_.Completion->Completion(document->Text, params);
+    }
+
+    TDocumentDiagnosticReport Diagnostic(TDocumentDiagnosticParams params) const override {
+        auto document = Service_.TextDocuments->Find(params.TextDocument);
+        return Service_.Diagnostic->Analyze(std::move(document), std::move(params.PreviousResultId));
+    }
+
+    TVector<TTextEdit> Formatting(const TDocumentFormattingParams& params) const override {
+        auto document = Service_.TextDocuments->Find(params.TextDocument);
+        if (auto edit = Service_.Formatting->Formatting(document->Text)) {
+            return {std::move(*edit)};
+        }
+        return {};
     }
 
 private:

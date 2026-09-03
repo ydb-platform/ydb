@@ -45,13 +45,6 @@ struct ILogManager;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Key of the tag carrying the trace context's logging tag, which is still a rendered
-//! |Key: Value, ...| string. Renderers splice its value in place of a |Key: Value| record,
-//! so output matches the pre-tag-list logger.
-constexpr TStringBuf TraceLoggingTagKey = "$Trace";
-
-////////////////////////////////////////////////////////////////////////////////
-
 //! Opaque payload of a plain-text log event: a message plus optional key/value tags,
 //! framed by #TTaggedPayloadWriter. Produced by the YT_LOG_*/YT_TLOG_* macros.
 YT_DEFINE_STRONG_TYPEDEF(TTaggedLogEventPayload, TSharedRef);

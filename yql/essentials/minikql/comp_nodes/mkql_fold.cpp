@@ -2,44 +2,43 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TFoldWrapper: public TMutableCodegeneratorRootNode<TFoldWrapper> {
-    typedef TMutableCodegeneratorRootNode<TFoldWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorRootNode<TFoldWrapper>;
 
 public:
     TFoldWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* item, IComputationExternalNode* state,
                  IComputationNode* newState, IComputationNode* initialState)
         : TBaseComputation(mutables, kind)
-        , List(list)
-        , Item(item)
-        , State(state)
-        , NewState(newState)
-        , InitialState(initialState)
+        , List_(list)
+        , Item_(item)
+        , State_(state)
+        , NewState_(newState)
+        , InitialState_(initialState)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        State->SetValue(compCtx, InitialState->GetValue(compCtx));
+        State_->SetValue(compCtx, InitialState_->GetValue(compCtx));
 
-        TThresher<false>::DoForEachItem(List->GetValue(compCtx),
+        TThresher<false>::DoForEachItem(List_->GetValue(compCtx),
                                         [this, &compCtx](NUdf::TUnboxedValue&& item) {
-                                            Item->SetValue(compCtx, std::move(item));
-                                            State->SetValue(compCtx, NewState->GetValue(compCtx));
+                                            Item_->SetValue(compCtx, std::move(item));
+                                            State_->SetValue(compCtx, NewState_->GetValue(compCtx));
                                         });
 
-        return State->GetValue(compCtx).Release();
+        return State_->GetValue(compCtx).Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    llvm::Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    llvm::Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto codegenState = dynamic_cast<ICodegeneratorExternalNode*>(State);
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenState = dynamic_cast<ICodegeneratorExternalNode*>(State_);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
 
         MKQL_ENSURE(codegenState, "State must be codegenerator node.");
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
@@ -47,11 +46,11 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrType = PointerType::getUnqual(valueType);
 
-        const auto init = GetNodeValue(InitialState, ctx, block);
+        const auto init = GetNodeValue(InitialState_, ctx, block);
 
         codegenState->CreateSetValue(ctx, block, init);
 
-        const auto list = GetNodeValue(List, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
 
         const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(ptrType, list, ctx.Codegen, block);
 
@@ -86,7 +85,7 @@ public:
 
             codegenItem->CreateSetValue(ctx, block, item);
 
-            const auto newState = GetNodeValue(NewState, ctx, block);
+            const auto newState = GetNodeValue(NewState_, ctx, block);
 
             codegenState->CreateSetValue(ctx, block, newState);
 
@@ -116,7 +115,7 @@ public:
             BranchInst::Create(good, stop, status, block);
             block = good;
 
-            const auto newState = GetNodeValue(NewState, ctx, block);
+            const auto newState = GetNodeValue(NewState_, ctx, block);
 
             codegenState->CreateSetValue(ctx, block, newState);
 
@@ -128,7 +127,7 @@ public:
         }
 
         block = done;
-        if (List->IsTemporaryValue()) {
+        if (List_->IsTemporaryValue()) {
             CleanupBoxed(list, ctx, block);
         }
         return codegenState->CreateGetValue(ctx, block);
@@ -137,18 +136,18 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(List);
-        this->DependsOn(InitialState);
-        this->Own(Item);
-        this->Own(State);
-        this->DependsOn(NewState);
+        this->DependsOn(List_);
+        this->DependsOn(InitialState_);
+        this->Own(Item_);
+        this->Own(State_);
+        this->DependsOn(NewState_);
     }
 
-    IComputationNode* const List;
-    IComputationExternalNode* const Item;
-    IComputationExternalNode* const State;
-    IComputationNode* const NewState;
-    IComputationNode* const InitialState;
+    IComputationNode* const List_;
+    IComputationExternalNode* const Item_;
+    IComputationExternalNode* const State_;
+    IComputationNode* const NewState_;
+    IComputationNode* const InitialState_;
 };
 
 } // namespace
@@ -168,5 +167,4 @@ IComputationNode* WrapFold(TCallable& callable, const TComputationNodeFactoryCon
     return new TFoldWrapper(ctx.Mutables, kind, list, item, state, newState, initialState);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

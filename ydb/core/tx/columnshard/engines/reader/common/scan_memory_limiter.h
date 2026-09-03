@@ -18,4 +18,6 @@ std::shared_ptr<NGroupedMemoryManager::TProcessGuard> BuildScanProcessGuard(ESca
 bool SendScanToAllocation(EScanGroupedMemoryLimiterOperator operatorType, const ui64 processId, const ui64 scopeId, const ui64 groupId,
     const std::vector<std::shared_ptr<NGroupedMemoryManager::IAllocation>>& tasks, const std::optional<ui32>& stageIdx);
 
+bool IsScanMemoryLimiterEnabled(EScanGroupedMemoryLimiterOperator operatorType);
+
 }   // namespace NKikimr::NOlap::NReader

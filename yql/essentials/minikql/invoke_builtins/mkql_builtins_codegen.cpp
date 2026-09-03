@@ -3,8 +3,7 @@
 #ifndef MKQL_DISABLE_CODEGEN
     #include "mkql_builtins_codegen_llvm.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace llvm;
 
@@ -247,6 +246,5 @@ std::string GetFuncNameForType<double>(const char* name) {
     return std::string(name) += ".f64";
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 #endif

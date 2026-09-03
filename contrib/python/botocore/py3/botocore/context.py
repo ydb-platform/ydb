@@ -20,7 +20,6 @@ from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Set
 
 
 @dataclass
@@ -33,7 +32,7 @@ class ClientContext:
     is used to add to this set.
     """
 
-    features: Set[str] = field(default_factory=set)
+    features: set[str] = field(default_factory=set)
 
 
 _context = ContextVar("_context")

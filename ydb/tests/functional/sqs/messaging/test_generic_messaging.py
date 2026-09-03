@@ -951,7 +951,10 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         ))
         assert_that(attributes['ReceiveMessageWaitTimeSeconds'], equal_to('0'))
         if is_fifo:
+            assert_that(attributes['FifoQueue'], equal_to('true'))
             assert_that(attributes['ContentBasedDeduplication'], equal_to('false'))
+            fifo_only = self._sqs_api.get_queue_attributes(queue_url, attributes=['FifoQueue'])
+            assert_that(fifo_only, equal_to({'FifoQueue': 'true'}))
 
         self._sqs_api.set_queue_attributes(queue_url, {'ReceiveMessageWaitTimeSeconds': '10', 'MaximumMessageSize': '111111'})
         attributes = self._sqs_api.get_queue_attributes(queue_url)

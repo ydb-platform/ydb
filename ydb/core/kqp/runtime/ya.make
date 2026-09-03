@@ -31,12 +31,14 @@ SRCS(
     kqp_vector_index_levels_cache.cpp
     kqp_vector_index_levels_cache.h
     kqp_vector_actor.cpp
+    kqp_vector_search_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp
 
     scheduler/kqp_compute_scheduler_service.cpp
-    scheduler/kqp_schedulable_actor.cpp
+    scheduler/kqp_dq_scheduler_context.cpp
+    scheduler/kqp_schedulable_base.cpp
     scheduler/kqp_schedulable_read.cpp
     scheduler/kqp_schedulable_task.cpp
     scheduler/tree/dynamic.cpp
@@ -80,4 +82,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_vector_search
 )

@@ -355,7 +355,7 @@ TEST_F(THazardPtrTest, SupportFork)
     auto childPid = fork();
     if (childPid < 0) {
         THROW_ERROR_EXCEPTION("fork failed")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     if (childPid == 0) {

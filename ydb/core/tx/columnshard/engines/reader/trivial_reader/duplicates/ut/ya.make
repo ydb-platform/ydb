@@ -28,6 +28,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/indexes
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/test_helper
+    ydb/core/tx/conveyor_composite/service
     ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/general_cache/usage
     ydb/library/actors/core

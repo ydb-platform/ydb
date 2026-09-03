@@ -3,8 +3,41 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/cputimer.h>
+#include <util/stream/output.h>
 
 namespace NYdb::NBS {
+
+namespace {
+
+enum class ETestMode: ui32
+{
+    IndirectWrite,
+    DirectWrite,
+};
+
+IOutputStream& operator<<(IOutputStream& out, ETestMode mode)
+{
+    switch (mode) {
+        case ETestMode::IndirectWrite:
+            return out << "IndirectWrite";
+        case ETestMode::DirectWrite:
+            return out << "DirectWrite";
+    }
+    Y_ABORT("unexpected ETestMode");
+}
+
+struct TTestRange
+{
+    ui64 Start = 0;
+    ui64 End = 0;
+};
+
+IOutputStream& operator<<(IOutputStream& out, TTestRange range)
+{
+    return out << "[" << range.Start << ".." << range.End << "]";
+}
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -49,45 +82,45 @@ Y_UNIT_TEST_SUITE(TLogTitleTest)
     {
         TLogTitle logTitle1(
             GetCycleCount(),
-            TLogTitle::TVolume{.TabletId = 12345, .DiskId = ""});
+            TLogTitle::TVolume{.DiskId = "", .TabletId = 12345});
 
         UNIT_ASSERT_STRINGS_EQUAL(
-            "[v:12345 g:? d:???]",
+            "[v:??? tbl:12345/0]",
             logTitle1.Get(TLogTitle::EDetails::Brief));
 
         logTitle1.SetDiskId("disk1");
         UNIT_ASSERT_STRINGS_EQUAL(
-            "[v:12345 g:? d:disk1]",
+            "[v:disk1 tbl:12345/0]",
             logTitle1.Get(TLogTitle::EDetails::Brief));
 
         logTitle1.SetGeneration(5);
         UNIT_ASSERT_STRINGS_EQUAL(
-            "[v:12345 g:5 d:disk1]",
+            "[v:disk1 tbl:12345/5]",
             logTitle1.Get(TLogTitle::EDetails::Brief));
 
         UNIT_ASSERT_STRING_CONTAINS(
             logTitle1.GetWithTime(),
-            "[v:12345 g:5 d:disk1 t:");
+            "[v:disk1 tbl:12345/5 t:");
     }
 
     Y_UNIT_TEST(GetForPartition)
     {
         TLogTitle logTitle1(
             GetCycleCount(),
-            TLogTitle::TPartitionDirect{.TabletId = 12345, .DiskId = "disk1"});
+            TLogTitle::TPartitionDirect{.DiskId = "disk1", .TabletId = 12345});
 
         UNIT_ASSERT_STRINGS_EQUAL(
-            "[pd:12345 g:? d:disk1]",
+            "[pd:disk1 tbl:12345/?]",
             logTitle1.Get(TLogTitle::EDetails::Brief));
 
         logTitle1.SetGeneration(5);
         UNIT_ASSERT_STRINGS_EQUAL(
-            "[pd:12345 g:5 d:disk1]",
+            "[pd:disk1 tbl:12345/5]",
             logTitle1.Get(TLogTitle::EDetails::Brief));
 
         UNIT_ASSERT_STRING_CONTAINS(
             logTitle1.GetWithTime(),
-            "[pd:12345 g:5 d:disk1 t:");
+            "[pd:disk1 tbl:12345/5 t:");
     }
 
     Y_UNIT_TEST(GetForDirectBlockGroup)
@@ -97,10 +130,12 @@ Y_UNIT_TEST_SUITE(TLogTitleTest)
             TLogTitle::TDirectBlockGroup{.DiskId = "disk1"}};
 
         UNIT_ASSERT_STRINGS_EQUAL(
-            "[dbg:disk1]",
+            "[dbg:disk1/0 tbl:0/0]",
             logTitle.Get(TLogTitle::EDetails::Brief));
 
-        UNIT_ASSERT_STRING_CONTAINS(logTitle.GetWithTime(), "[dbg:disk1 t:");
+        UNIT_ASSERT_STRING_CONTAINS(
+            logTitle.GetWithTime(),
+            "[dbg:disk1/0 tbl:0/0 t:");
     }
 
     Y_UNIT_TEST(GetChildLogger)
@@ -109,7 +144,7 @@ Y_UNIT_TEST_SUITE(TLogTitleTest)
             GetCycleCount() - GetCyclesPerMillisecond() * 2001;
         TLogTitle logTitle1(
             startTime,
-            TLogTitle::TVolume{.TabletId = 12345, .DiskId = "disk1"});
+            TLogTitle::TVolume{.DiskId = "disk1", .TabletId = 12345});
         logTitle1.SetGeneration(5);
 
         auto childLogTitle =
@@ -117,7 +152,7 @@ Y_UNIT_TEST_SUITE(TLogTitleTest)
 
         UNIT_ASSERT_STRING_CONTAINS(
             childLogTitle.GetWithTime(),
-            "[v:12345 g:5 d:disk1 t:1.001s + 1.");
+            "[v:disk1 tbl:12345/5 t:1.001s + 1.");
     }
 
     Y_UNIT_TEST(GetChildWithTagsLogger)
@@ -126,10 +161,10 @@ Y_UNIT_TEST_SUITE(TLogTitleTest)
             GetCycleCount() - GetCyclesPerMillisecond() * 2001;
         TLogTitle logTitle1(
             startTime,
-            TLogTitle::TVolume{.TabletId = 12345, .DiskId = "disk1"});
+            TLogTitle::TVolume{.DiskId = "disk1", .TabletId = 12345});
         logTitle1.SetGeneration(5);
 
-        std::pair<TString, TString> tags[] = {{"cp", "123"}};
+        TLogParam tags[] = {{"cp", "123"}};
 
         auto childLogTitle = logTitle1.GetChildWithTags(
             startTime + GetCyclesPerMillisecond() * 1001,
@@ -137,7 +172,30 @@ Y_UNIT_TEST_SUITE(TLogTitleTest)
 
         UNIT_ASSERT_STRING_CONTAINS(
             childLogTitle.GetWithTime(),
-            "[v:12345 g:5 d:disk1 cp:123 t:1.001s + 1.");
+            "[v:disk1 tbl:12345/5 cp:123 t:1.001s + 1.");
+    }
+
+    Y_UNIT_TEST(GetChildWithTypedTags)
+    {
+        const ui64 startTime =
+            GetCycleCount() - GetCyclesPerMillisecond() * 2001;
+        TLogTitle logTitle(
+            startTime,
+            TLogTitle::TVolume{.DiskId = "disk1", .TabletId = 12345});
+        logTitle.SetGeneration(5);
+
+        const ui64 lsn = 42;
+        const auto mode = ETestMode::DirectWrite;
+        const TTestRange range{.Start = 10, .End = 19};
+
+        auto childLogTitle = logTitle.GetChildWithTags(
+            startTime + GetCyclesPerMillisecond() * 1001,
+            {{"lsn", lsn}, {"t", mode}, {"r", range}});
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            childLogTitle.GetWithTime(),
+            "[v:disk1 tbl:12345/5 lsn:42 t:DirectWrite r:[10..19] t:1.001s + "
+            "1.");
     }
 }
 

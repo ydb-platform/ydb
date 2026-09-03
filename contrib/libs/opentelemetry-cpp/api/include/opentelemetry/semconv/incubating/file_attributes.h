@@ -96,6 +96,24 @@ static constexpr const char *kFileGroupName = "file.group.name";
 static constexpr const char *kFileInode = "file.inode";
 
 /**
+  The lock mechanism such as noted by <a
+  href="https://pubs.opengroup.org/onlinepubs/9699919799/functions/fcntl.html">POSIX</a>
+ */
+static constexpr const char *kFileLockMechanism = "file.lock.mechanism";
+
+/**
+  Mode of lock or operation such as documented by <a
+  href="https://pubs.opengroup.org/onlinepubs/9699919799/functions/fcntl.html">POSIX</a>
+ */
+static constexpr const char *kFileLockMode = "file.lock.mode";
+
+/**
+  The lock type as represented by i.e. <a
+  href="https://pubs.opengroup.org/onlinepubs/9699919799/functions/fcntl.html">POSIX</a>'s l_type.
+ */
+static constexpr const char *kFileLockType = "file.lock.type";
+
+/**
   Mode of the file in octal representation.
  */
 static constexpr const char *kFileMode = "file.mode";
@@ -137,6 +155,15 @@ static constexpr const char *kFileSize = "file.size";
   This attribute is only applicable to symbolic links.
  */
 static constexpr const char *kFileSymbolicLinkTargetPath = "file.symbolic_link.target_path";
+
+namespace FileLockTypeValues
+{
+
+static constexpr const char *kRead = "read";
+
+static constexpr const char *kWrite = "write";
+
+}  // namespace FileLockTypeValues
 
 }  // namespace file
 }  // namespace semconv

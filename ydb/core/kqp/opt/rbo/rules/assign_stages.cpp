@@ -14,8 +14,9 @@ using namespace NKikimr::NKqp;
 
 void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
     auto& props = join.Props;
+    const auto& config = *rboCtx.KqpCtx.Config;
     if (!props.JoinAlgo.has_value()) {
-        const auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
+        const auto joinMode = config.GetHashJoinMode();
         switch (joinMode) {
             case NYql::NDq::EHashJoinMode::Map: {
                 props.JoinAlgo = EJoinAlgoType::MapJoin;
@@ -29,8 +30,16 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
     }
 
     const auto joinKind = GetValidJoinKind(join.JoinKind);
+    if (joinKind == "Cross") {
+        props.UseBlockHashJoin = config.GetUseBlockHashJoin() && config.GetUseBlockHashJoinForCross();
+        if (props.UseBlockHashJoin) {
+            props.JoinAlgo = EJoinAlgoType::GraceJoin;
+        }
+        return;
+    }
+
     const auto joinAlgo = *props.JoinAlgo;
-    props.UseBlockHashJoin = rboCtx.KqpCtx.Config->GetUseBlockHashJoin()
+    props.UseBlockHashJoin = config.GetUseBlockHashJoin()
         && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin)
         && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
 }
@@ -39,7 +48,7 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
 // TODO: We can also push to row storage stage, but it requires an implementation on physical plan generation.
 void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPlanProps& props) {
     const auto readStageId = *read->Props.StageId;
-    if (!op->IsSingleConsumer() || !read->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
+    if (!read->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
         const auto newStageId = props.StageGraph.AddStage();
         op->Props.StageId = newStageId;
         props.StageGraph.Connect(readStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(readStageId)));
@@ -206,10 +215,10 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
-        if (!aggregate->KeyColumns.empty()) {
-            auto connection = MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex);
-
-            props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));
+        if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TMapConnection>(outputIndex));
+        } else if (!aggregate->KeyColumns.empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex));
         } else {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }
@@ -233,10 +242,9 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         TKqpStreamLookupSettings settings;
         NYql::TExprNode::TPtr inputTypeNode;
         if (lookup->IsJoin()) {
-            settings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
-            // TODO: move this settings to lookuptable operator. It sets to 0, because it depends on pushed point predicate on the right side. 
-            // Currently we do not push them, we use original predicate to filter after.
-            settings.AllowNullKeysPrefixSize = 0;
+            settings.Strategy = lookup->JoinKind == "LeftSemi" ? EStreamLookupStrategyType::LookupSemiJoinRows : EStreamLookupStrategyType::LookupJoinRows;
+            // For point prefix lookup we allow null keys with it size.
+            settings.AllowNullKeysPrefixSize = lookup->Prefix ? lookup->Prefix->Columns.size() : 0;
         } else {
             settings.Strategy = EStreamLookupStrategyType::LookupRows;
 
@@ -264,7 +272,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         input->Props.StageId = *lookup->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
     } else {
-        Y_ENSURE(false, "Unknown operator encountered");
+        Y_ENSURE(false, TStringBuilder() << "Unknown operator encountered: " << input->GetExplainName());
     }
 
     return true;

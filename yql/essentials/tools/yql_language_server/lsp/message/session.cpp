@@ -1,64 +1,32 @@
 #include "session.h"
 
+#include <yql/essentials/utils/json/reflection.h>
+
 namespace NYql::NJson {
 
-JSON_DEFINE_FROM(NLsp::TClientInfo, json) {
-    NLsp::TClientInfo x;
-    JSON_MOVE_FROM(json, "name", x.Name);
-    JSON_MOVE_FROM(json, "version", x.Version);
-    return x;
-}
+YQL_DERIVE_JSON_FROM(NLsp::TClientInfo);
 
-JSON_DEFINE_FROM(NLsp::TInitializeParams, json) {
-    NLsp::TInitializeParams x;
-    JSON_MOVE_FROM(json, "clientInfo", x.ClientInfo);
-    JSON_MOVE_FROM(json, "initializationOptions", x.InitializationOptions);
-    JSON_MOVE_FROM(json, "capabilities", x.Capabilities);
-    return x;
-}
+YQL_DERIVE_JSON_FROM(NLsp::TInitializeParams);
 
 JSON_DEFINE_TO(NLsp::ETextDocumentSyncKind, value) {
     return TJsonValue(static_cast<int>(value));
 }
 
-JSON_DEFINE_TO(NLsp::TTextDocumentSyncOptions, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "openClose", value.OpenClose);
-    SaveTo(json, "change", value.Change);
-    return json;
-}
+YQL_DERIVE_JSON_TO(NLsp::TTextDocumentSyncOptions);
 
-JSON_DEFINE_TO(NLsp::TCompletionOptions, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "triggerCharacters", std::move(value.TriggerCharacters));
-    return json;
-}
+YQL_DERIVE_JSON_TO(NLsp::TCompletionOptions);
 
-JSON_DEFINE_TO(NLsp::TServerCapabilities, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "textDocumentSync", std::move(value.TextDocumentSync));
-    SaveTo(json, "completionProvider", std::move(value.CompletionProvider));
-    return json;
-}
+YQL_DERIVE_JSON_TO(NLsp::TDocumentFormattingOptions);
 
-JSON_DEFINE_TO(NLsp::TServerInfo, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "name", std::move(value.Name));
-    SaveTo(json, "version", std::move(value.Version));
-    return json;
-}
+YQL_DERIVE_JSON_TO(NLsp::TDiagnosticOptions);
 
-JSON_DEFINE_TO(NLsp::TInitializeResult, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "capabilities", std::move(value.Capabilities));
-    SaveTo(json, "serverInfo", std::move(value.ServerInfo));
-    return json;
-}
+YQL_DERIVE_JSON_TO(NLsp::TServerCapabilities);
 
-JSON_DEFINE_FROM(NLsp::TInitializedParams, json) {
-    Y_UNUSED(json);
-    return NLsp::TInitializedParams();
-}
+YQL_DERIVE_JSON_TO(NLsp::TServerInfo);
+
+YQL_DERIVE_JSON_TO(NLsp::TInitializeResult);
+
+YQL_DERIVE_JSON_FROM(NLsp::TInitializedParams);
 
 JSON_DEFINE_FROM(NLsp::ETraceValue, json) {
     if (!json.IsString()) {
@@ -77,10 +45,6 @@ JSON_DEFINE_FROM(NLsp::ETraceValue, json) {
     }
 }
 
-JSON_DEFINE_FROM(NLsp::TSetTraceParams, json) {
-    NLsp::TSetTraceParams x;
-    JSON_MOVE_FROM(json, "value", x.Value);
-    return x;
-}
+YQL_DERIVE_JSON_FROM(NLsp::TSetTraceParams);
 
 } // namespace NYql::NJson

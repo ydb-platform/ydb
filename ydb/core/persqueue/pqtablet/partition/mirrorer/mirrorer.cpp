@@ -59,14 +59,6 @@ ui64 GetLogicalMessageCount(const TPersQueueReadEvent::TDataReceivedEvent::TComp
     return GetBatchInfo(message).LogicalMessageCount;
 }
 
-ui64 GetWriteRequestEndOffset(const NKikimrClient::TPersQueuePartitionRequest& request) {
-    ui64 offset = request.GetCmdWriteOffset();
-    for (const auto& cmd : request.GetCmdWrite()) {
-        offset += cmd.GetLogicalMessageCount();
-    }
-    return offset;
-}
-
 } // namespace
 
 TMirrorer::TMirrorer(
@@ -140,10 +132,11 @@ void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) 
     Die(ctx);
 }
 
-bool TMirrorer::AddToWriteRequest(
+bool AppendToWriteRequest(
     NKikimrClient::TPersQueuePartitionRequest& request,
     TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message,
-    bool& incorrectRequest
+    bool& incorrectRequest,
+    ui64& nextOffset
 ) {
     if (!request.HasCmdWriteOffset()) {
         if (request.CmdWriteSize() > 0) {
@@ -151,8 +144,9 @@ bool TMirrorer::AddToWriteRequest(
             return false;
         }
         request.SetCmdWriteOffset(message.GetOffset());
+        nextOffset = message.GetOffset();
     }
-    if (GetWriteRequestEndOffset(request) != message.GetOffset()) {
+    if (nextOffset != message.GetOffset()) {
         return false;
     }
 
@@ -168,18 +162,30 @@ bool TMirrorer::AddToWriteRequest(
     write->SetSourceId(NSourceIdEncoding::EncodeSimple(producerId));
     write->SetSeqNo(message.GetSeqNo());
     write->SetCreateTimeMS(message.GetCreateTime().MilliSeconds());
-    if (Config.GetSyncWriteTime()) {
-        write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
-    }
+    // SyncWriteTime removed; mirrored topics always preserve source write time
+    // (same as PQv1 remote_mirror_rule + client_write_disabled).
+    write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
     write->SetDisableDeduplication(true);
     write->SetUncompressedSize(message.GetUncompressedSize());
 
     const auto batchInfo = GetBatchInfo(message);
+    ui64 logicalMessageCount = 1;
     if (batchInfo.LogicalMessageCount > 1) {
-        write->SetLogicalMessageCount(batchInfo.LogicalMessageCount);
+        logicalMessageCount = batchInfo.LogicalMessageCount;
+        write->SetLogicalMessageCount(logicalMessageCount);
         write->SetMaxSeqNo(*batchInfo.MaxSeqNo);
     }
+    nextOffset += logicalMessageCount;
     return true;
+}
+
+bool TMirrorer::AddToWriteRequest(
+    NKikimrClient::TPersQueuePartitionRequest& request,
+    TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message,
+    bool& incorrectRequest,
+    ui64& nextOffset
+) {
+    return AppendToWriteRequest(request, message, incorrectRequest, nextOffset);
 }
 
 void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg) {
@@ -423,7 +429,8 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
     req->SetCookie(WRITE_REQUEST_COOKIE);
 
     bool incorrectRequest = false;
-    while (!Queue.empty() && AddToWriteRequest(*req, Queue.front(), incorrectRequest)) {
+    ui64 nextOffset = 0;
+    while (!Queue.empty() && AddToWriteRequest(*req, Queue.front(), incorrectRequest, nextOffset)) {
         WriteInFlight.emplace_back(std::move(Queue.front()));
         Queue.pop_front();
     }
@@ -657,7 +664,8 @@ static EStaleReadStatus ReadSessionStaleStatus(const TActorContext& ctx, bool ha
 }
 
 void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
-    if (!Config.GetSyncWriteTime() || WriteRequestInFlight || !StreamStatus) {
+    // SyncWriteTime removed; mirrored topics always sync source write-time watermark.
+    if (WriteRequestInFlight || !StreamStatus) {
         return;
     }
     const EStaleReadStatus staleStatus = ReadSessionStaleStatus(ctx, LastReadOffset.Defined(), LastInitStageTimestamp, StreamStatus.Get());

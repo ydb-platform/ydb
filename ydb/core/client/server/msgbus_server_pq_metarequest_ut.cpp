@@ -11,6 +11,8 @@
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/mock_pq_metacache.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/tx_processing.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -165,17 +167,18 @@ protected:
         return id;
     }
 
-    THolder<TEvPersQueue::TEvUpdateConfig> MakeUpdatePQRequest(const TString& topic, const TVector<size_t>& partitions) {
+    THolder<TEvPersQueue::TEvProposeTransactionBuilder> MakeUpdatePQRequest(const TString& topic, const TVector<size_t>& partitions) {
         static int version = 0;
         ++version;
 
-        auto request = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
-        for (size_t i : partitions) {
-            request->Record.MutableTabletConfig()->AddPartitionIds(i);
-        }
-        request->Record.MutableTabletConfig()->SetCacheSize(10*1024*1024);
+        auto request = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
         request->Record.SetTxId(12345);
-        auto tabletConfig = request->Record.MutableTabletConfig();
+        ActorIdToProto(EdgeActorId, request->Record.MutableSourceActor());
+        auto* tabletConfig = request->Record.MutableConfig()->MutableTabletConfig();
+        for (size_t i : partitions) {
+            tabletConfig->AddPartitionIds(i);
+        }
+        tabletConfig->SetCacheSize(10*1024*1024);
         tabletConfig->SetTopicName(topic);
         tabletConfig->SetVersion(version);
         auto config = tabletConfig->MutablePartitionConfig();
@@ -206,15 +209,32 @@ protected:
 
         TAutoPtr<IEventHandle> handle;
         {
-            THolder<TEvPersQueue::TEvUpdateConfig> request = MakeUpdatePQRequest(topic, partitions);
+            THolder<TEvPersQueue::TEvProposeTransactionBuilder> request = MakeUpdatePQRequest(topic, partitions);
             Runtime->SendToPipe(tabletId, EdgeActorId, request.Release(), 0, GetPipeConfigWithRetries());
-            TEvPersQueue::TEvUpdateConfigResponse* result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
+            auto* prepared = Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(handle);
+            UNIT_ASSERT(prepared);
+            UNIT_ASSERT_C(prepared->Record.HasStatus() &&
+                          prepared->Record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::PREPARED,
+                          "rec: " << prepared->Record);
+            UNIT_ASSERT_C(prepared->Record.HasTxId() && prepared->Record.GetTxId() == 12345, "rec: " << prepared->Record);
+            UNIT_ASSERT_C(prepared->Record.HasOrigin() && prepared->Record.GetOrigin() == tabletId, "rec: " << prepared->Record);
 
-            UNIT_ASSERT(result);
-            auto& rec = result->Record;
-            UNIT_ASSERT_C(rec.HasStatus() && rec.GetStatus() == NKikimrPQ::OK, "rec: " << rec);
-            UNIT_ASSERT_C(rec.HasTxId() && rec.GetTxId() == 12345, "rec: " << rec);
-            UNIT_ASSERT_C(rec.HasOrigin() && result->GetOrigin() == tabletId, "rec: " << rec);
+            auto plan = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+            plan->Record.SetStep(1);
+            auto* tx = plan->Record.AddTransactions();
+            tx->SetTxId(12345);
+            ActorIdToProto(EdgeActorId, tx->MutableAckTo());
+            Runtime->SendToPipe(tabletId, EdgeActorId, plan.Release(), 0, GetPipeConfigWithRetries());
+
+            UNIT_ASSERT(Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(handle));
+            UNIT_ASSERT(Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(handle));
+            auto* complete = Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(handle);
+            UNIT_ASSERT(complete);
+            UNIT_ASSERT_C(complete->Record.HasStatus() &&
+                          complete->Record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+                          "rec: " << complete->Record);
+            UNIT_ASSERT_C(complete->Record.HasTxId() && complete->Record.GetTxId() == 12345, "rec: " << complete->Record);
+            UNIT_ASSERT_C(complete->Record.HasOrigin() && complete->Record.GetOrigin() == tabletId, "rec: " << complete->Record);
         }
 
         {

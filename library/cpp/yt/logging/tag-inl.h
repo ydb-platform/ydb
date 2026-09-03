@@ -4,35 +4,13 @@
 #include "tag.h"
 #endif
 
+#include "tagged_payload.h"
+
 #include <library/cpp/yt/string/string_builder.h>
 
 #include <utility>
 
 namespace NYT::NLogging {
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TLoggingTagSpec
-{
-public:
-    template <size_t N>
-    consteval TLoggingTagSpec(const char (&spec)[N])
-        : Spec_(spec + 1, N - 2)
-    {
-        static_assert(N >= 2, "Logging tag format spec must be a non-empty string literal");
-        if (spec[0] != '%') {
-            throw "Logging tag format spec must start with '%'";
-        }
-    }
-
-    TStringBuf Get() const
-    {
-        return Spec_;
-    }
-
-private:
-    const TStringBuf Spec_;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -46,6 +24,9 @@ public:
         static_assert(N >= 2, "Logging tag key must be a non-empty string literal");
         for (size_t index = 0; index + 1 < N; ++index) {
             if (key[index] == '%' || key[index] == ':') {
+                // Throwing rather than calling an undefined function: a default member
+                // initializer makes the compiler emit this ctor as a runtime function, and
+                // an undefined sentinel would then fail at link time.
                 throw "Logging tag key must not contain '%' or ':'";
             }
         }
@@ -79,19 +60,12 @@ TLoggingTagList& TLoggingTagList::Add(TLoggingTagKey key, const TValue& value)
     return *this;
 }
 
-template <class TValue>
-TLoggingTagList& TLoggingTagList::Add(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec)
-{
-    DoAdd(key, value, spec.Get());
-    return *this;
-}
-
 template <class... TArgs>
 TLoggingTagList& TLoggingTagList::AddFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args)
 {
-    TStringBuilder builder;
-    Format(&builder, format, std::forward<TArgs>(args)...);
-    DoAdd(key, builder.GetBuffer());
+    TTaggedPayloadWriter::AppendTag(&Payload_, key.Get(), [&] (TStringBuilderBase* builder) {
+        Format(builder, format, std::forward<TArgs>(args)...);
+    });
     return *this;
 }
 
@@ -107,21 +81,6 @@ template <class TValue>
 TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value) &&
 {
     Add(key, value);
-    return std::move(*this);
-}
-
-template <class TValue>
-TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &
-{
-    auto result = *this;
-    result.Add(key, value, spec);
-    return result;
-}
-
-template <class TValue>
-TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&
-{
-    Add(key, value, spec);
     return std::move(*this);
 }
 
@@ -163,9 +122,9 @@ inline const TLoggingTagListPayload& TLoggingTagList::GetPayload() const
 template <class TValue>
 void TLoggingTagList::DoAdd(TLoggingTagKey key, const TValue& value, TStringBuf spec)
 {
-    TStringBuilder builder;
-    FormatValue(&builder, value, spec);
-    DoAdd(key, builder.GetBuffer());
+    TTaggedPayloadWriter::AppendTag(&Payload_, key.Get(), [&] (TStringBuilderBase* builder) {
+        FormatValue(builder, value, spec);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

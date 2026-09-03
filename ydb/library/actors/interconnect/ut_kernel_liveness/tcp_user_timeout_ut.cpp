@@ -224,11 +224,7 @@ private:
     bool FloodStarted = false;
 };
 
-} // namespace
-
-Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
-
-    Y_UNIT_TEST(TcpUserTimeoutBlackholeDisconnectsSession) {
+void RunTcpUserTimeoutBlackholeDisconnectsSession(TTestICCluster::Flags flags) {
         constexpr size_t messages = 512;
         constexpr size_t payloadSize = 64 * 1024;
         constexpr TDuration userTimeout = TDuration::Seconds(3);
@@ -250,7 +246,7 @@ Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
             .Disconnect = false,
         };
 
-        TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr, TTestICCluster::DISABLE_RDMA,
+        TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr, flags,
             {}, TDuration::Seconds(30), 128 * 1024 * 1024, settingsCustomizer);
 
         auto* recipient12 = new TDropRecipientActor;
@@ -342,6 +338,19 @@ Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
         UNIT_ASSERT_VALUES_EQUAL(sender21->GetObservedUnion(), messages);
         UNIT_ASSERT_C(sender12->GetUndelivered() > 0 || sender21->GetUndelivered() > 0,
             "expected at least one undelivered event after forced termination");
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
+
+    Y_UNIT_TEST(TcpUserTimeoutBlackholeDisconnectsSession) {
+        RunTcpUserTimeoutBlackholeDisconnectsSession(TTestICCluster::DISABLE_RDMA);
+    }
+
+    Y_UNIT_TEST(TcpUserTimeoutBlackholeDisconnectsSessionWithTls) {
+        RunTcpUserTimeoutBlackholeDisconnectsSession(
+            TTestICCluster::Flags(TTestICCluster::USE_TLS | TTestICCluster::DISABLE_RDMA));
     }
 
     Y_UNIT_TEST(TcpUserTimeoutNoReconnectGeneratesUndelivered) {

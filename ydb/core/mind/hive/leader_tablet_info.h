@@ -320,7 +320,7 @@ public:
     void ReleaseAllocationUnits();
     bool AcquireAllocationUnit(ui32 channelId);
     bool ReleaseAllocationUnit(ui32 channelId);
-    const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* FindFreeAllocationUnit(ui32 channelId);
+    const NKikimrBlobStorage::TGroupMetrics::TGroupParameters* FindFreeAllocationUnit(ui32 channelId);
     TString GetChannelStoragePoolName(const TTabletChannelInfo& channel) const;
     TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) const;
     TString GetChannelStoragePoolName(ui32 channelId) const;

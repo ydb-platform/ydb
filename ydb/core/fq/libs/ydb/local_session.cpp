@@ -1,8 +1,8 @@
 #include <ydb/core/fq/libs/ydb/local_session.h>
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <library/cpp/threading/future/core/future.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/core/fq/libs/ydb/query_actor.h>
 
@@ -57,6 +57,38 @@ public:
             desc.SetNotNull(!optional);
             columns.push_back(desc);
         }
+
+        TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy;
+        const auto& partitioningSettings = TableDesc.GetPartitioningSettings();
+        const auto& proto = partitioningSettings.GetProto();
+        if (const auto partitioningBySize = partitioningSettings.GetPartitioningBySize()) {
+            NKikimrSchemeOp::TPartitioningPolicy policy;
+            if (*partitioningBySize) {
+                // ENABLED: apply partition_size_mb if set, otherwise use 2 GiB default
+                const ui64 sizeToSplit = proto.partition_size_mb()
+                    ? static_cast<ui64>(proto.partition_size_mb()) << 20
+                    : 2ul << 30; // default 2 GiB
+                policy.SetSizeToSplit(sizeToSplit);
+            } else {
+                // DISABLED
+                policy.SetSizeToSplit(0);
+            }
+            partitioningPolicy = policy;
+        } else if (proto.partition_size_mb()) {
+            // STATUS_UNSPECIFIED but partition_size_mb is explicitly set:
+            // apply it as-is, matching the behaviour in ydb_convert/table_settings.cpp
+            NKikimrSchemeOp::TPartitioningPolicy policy;
+            policy.SetSizeToSplit(static_cast<ui64>(proto.partition_size_mb()) << 20);
+            partitioningPolicy = policy;
+        }
+
+        if (const auto minPartitionsCount = partitioningSettings.GetMinPartitionsCount()) {
+            if (!partitioningPolicy) {
+                partitioningPolicy = NKikimrSchemeOp::TPartitioningPolicy{};
+            }
+            partitioningPolicy->SetMinPartitionsCount(static_cast<ui32>(minPartitionsCount));
+        }
+
         Register(
             NKikimr::CreateTableCreator(
                 NKikimr::SplitPath(Path),
@@ -66,7 +98,7 @@ public:
                 Nothing(),
                 {},
                 /* isSystemUser */ true,
-                Nothing(),
+                partitioningPolicy,
                 Acl
             )
         );

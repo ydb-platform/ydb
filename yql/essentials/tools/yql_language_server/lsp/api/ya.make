@@ -8,6 +8,8 @@ SRCS(
     api.cpp
     base.cpp
     completion.cpp
+    diagnostic.cpp
+    formatting.cpp
     session.cpp
     synchronization.cpp
 )

@@ -81,7 +81,7 @@ public:
 
         ArmPoller();
 
-        YT_LOG_INFO("Bus server started");
+        YT_TLOG_INFO("Bus server started");
     }
 
     void Reconfigure(const NBus::NTcp::TBusServerDynamicConfigPtr& config)
@@ -93,7 +93,7 @@ public:
 
     TFuture<void> Stop()
     {
-        YT_LOG_INFO("Stopping Bus server");
+        YT_TLOG_INFO("Stopping Bus server");
 
         UnarmPoller();
 
@@ -110,7 +110,7 @@ public:
             }
 
             return AllConnectionsTerminatedPromise_.ToFuture().Apply(BIND([this, this_ = MakeStrong(this)] {
-                YT_LOG_INFO("Bus server stopped");
+                YT_TLOG_INFO("Bus server stopped");
             }));
         }));
     }
@@ -247,7 +247,7 @@ protected:
     {
         auto guard = Guard(ControlSpinLock_);
 
-        YT_LOG_DEBUG("Opening server socket");
+        YT_TLOG_DEBUG("Opening server socket");
 
         CreateServerSocket();
 
@@ -258,7 +258,7 @@ protected:
             throw;
         }
 
-        YT_LOG_DEBUG("Server socket opened");
+        YT_TLOG_DEBUG("Server socket opened");
     }
 
     void CloseServerSocket()
@@ -269,7 +269,7 @@ protected:
                 unlink(Config_->UnixDomainSocketPath->c_str());
             }
             ServerSocket_ = INVALID_SOCKET;
-            YT_LOG_DEBUG("Server socket closed");
+            YT_TLOG_DEBUG("Server socket closed");
         }
     }
 
@@ -294,7 +294,8 @@ protected:
             try {
                 clientSocket = AcceptSocket(ServerSocket_, &clientAddress);
             } catch (const std::exception& ex) {
-                YT_LOG_WARNING(ex, "Error accepting client connection");
+                YT_TLOG_WARNING("Error accepting client connection")
+                    .With(ex);
                 break;
             }
 
@@ -314,20 +315,20 @@ protected:
             auto connectionLimit = Config_->MaxSimultaneousConnections;
             auto formattedClientAddress = ToString(clientAddress, NNet::TNetworkAddressFormatOptions{.IncludePort = false});
             if (connectionCount >= connectionLimit) {
-                YT_LOG_WARNING("Connection dropped (Address: %v, ConnectionCount: %v, ConnectionLimit: %v)",
-                    formattedClientAddress,
-                    connectionCount,
-                    connectionLimit);
+                YT_TLOG_WARNING("Connection dropped")
+                    .With("Address", formattedClientAddress)
+                    .With("ConnectionCount", connectionCount)
+                    .With("ConnectionLimit", connectionLimit);
                 rejectConnection();
                 continue;
             }
 
-            YT_LOG_DEBUG("Connection accepted (ConnectionId: %v, Address: %v, Network: %v, ConnectionCount: %v, ConnectionLimit: %v)",
-                connectionId,
-                formattedClientAddress,
-                clientNetwork,
-                connectionCount,
-                connectionLimit);
+            YT_TLOG_DEBUG("Connection accepted")
+                .With("ConnectionId", connectionId)
+                .With("Address", formattedClientAddress)
+                .With("Network", clientNetwork)
+                .With("ConnectionCount", connectionCount)
+                .With("ConnectionLimit", connectionLimit);
 
             InitClientSocket(clientSocket);
 
@@ -383,9 +384,11 @@ protected:
                     CloseServerSocket();
 
                     THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, TRuntimeFormat(errorMessage))
-                        << ex;
+                        .With(ex);
                 } else {
-                    YT_LOG_WARNING(ex, "Error binding socket, starting %v retry", attempt + 1);
+                    YT_TLOG_WARNING("Error binding socket, starting retry")
+                        .With("Attempt", attempt + 1)
+                        .With(ex);
                     Sleep(Config_->BindRetryBackoff);
                 }
             }
@@ -430,12 +433,12 @@ private:
     {
         if (Config_->EnableNoDelay) {
             if (!TrySetSocketNoDelay(clientSocket)) {
-                YT_LOG_DEBUG("Failed to set socket no delay option");
+                YT_TLOG_DEBUG("Failed to set socket no delay option");
             }
         }
 
         if (!TrySetSocketKeepAlive(clientSocket)) {
-            YT_LOG_DEBUG("Failed to set socket keep alive option");
+            YT_TLOG_DEBUG("Failed to set socket keep alive option");
         }
     }
 };
@@ -592,7 +595,8 @@ private:
             CertChainToExpiry_->Update(NCrypto::GetCertTimeToExpiry(Config_->CertificateChain));
         } catch (const std::exception& ex) {
             const auto& Logger = BusLogger();
-            YT_LOG_WARNING(ex, "Failed to update cert sensors");
+            YT_TLOG_WARNING("Failed to update cert sensors")
+                .With(ex);
         }
     }
 };

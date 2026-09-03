@@ -47,7 +47,7 @@ struct TStorageGroupInfo {
     absl::flat_hash_set<TLeaderTabletInfo::TChannel, TChannelHash> Units;
     TStorageResources AcquiredResources;
     TStorageResources MaximumResources;
-    NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters GroupParameters;
+    NKikimrBlobStorage::TGroupMetrics::TGroupParameters GroupParameters;
     EGroupState Status = EGroupState::Active;
 
     TStorageGroupInfo(const TStoragePoolInfo& storagePool, TStorageGroupId id);
@@ -57,7 +57,7 @@ struct TStorageGroupInfo {
     TStorageGroupInfo& operator =(TStorageGroupInfo&&) = delete;
     bool AcquireAllocationUnit(const TLeaderTabletInfo::TChannel& channel);
     bool ReleaseAllocationUnit(const TLeaderTabletInfo::TChannel& channel);
-    void UpdateStorageGroup(const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters);
+    void UpdateStorageGroup(const TGroupMetrics::TGroupParameters& groupParameters);
     bool IsMatchesParameters(const TGroupFilter& filter) const;
     double GetUsage(const TStorageResources& resources) const;
     double GetUsage() const;

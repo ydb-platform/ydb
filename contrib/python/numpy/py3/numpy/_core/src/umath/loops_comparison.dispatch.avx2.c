@@ -11,6 +11,7 @@
 #define NPY_HAVE_SSE42
 #define NPY_HAVE_AVX
 #define NPY_HAVE_F16C
+#define NPY_HAVE_FMA3
 #define NPY_HAVE_AVX2
 
 #undef NPY_MTARGETS_BASELINE

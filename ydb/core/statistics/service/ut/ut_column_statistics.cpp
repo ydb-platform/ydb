@@ -8,6 +8,8 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/protos/statistics.pb.h>
 
+#include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
+
 #include <type_traits>
 
 namespace NKikimr::NStat {
@@ -209,6 +211,17 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
+    Y_UNIT_TEST(CountMinSketchNestedTable) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "subdir/Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
     Y_UNIT_TEST(CountMinSketchMultiColumnStatistics) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
@@ -351,6 +364,41 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Int64);
         auto estimator = TEqWidthHistogramEstimator(histogram);
         UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<i64>(0), 500);
+    }
+
+    Y_UNIT_TEST(EqHeightHistogram) {
+        // Service-level EQ_HEIGHT over (Value1, Value2). Only boundary probes:
+        // merge/compaction is not exact (see eq_height_histogram_ut.cpp).
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnEqHeightColumnTable(env, "Database", "Table1");
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        // Fetch the histogram via the stat service using the multi-column
+        // variant (the single-column GetStatistics would construct a
+        // TColumnTags(ui32) that only collides with the multi-column key by
+        // coincidence of SerializeColumnTags).
+        auto responses = GetStatisticsMultiColumn(
+            runtime, tableInfo.PathId, EStatType::EQ_HEIGHT_HISTOGRAM, {2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+
+        const auto& resp = responses.at(0);
+        UNIT_ASSERT(resp.Success);
+        const auto& histogram = resp.EqHeightHistogram.Data;
+        UNIT_ASSERT(histogram);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->GetTotalCount(), ColumnTableRowsNumber);
+        UNIT_ASSERT(histogram->GetNumBuckets() >= 1);
+
+        // Optional-null String tuple sorts first. "zz" is above all digit-only values.
+        UNIT_ASSERT_VALUES_EQUAL(
+            histogram->EstimateLessOrEqual(MakeNullStringTuplePresortKey(2)), 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            histogram->EstimateLessOrEqual(
+                MakeStringTuplePresortKey({"zz", "zz"}, /*isOptional=*/true)),
+            ColumnTableRowsNumber);
     }
 
     Y_UNIT_TEST(ManyColumns) {

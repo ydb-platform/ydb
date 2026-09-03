@@ -6,6 +6,8 @@ TServiceLayer MakeServiceLayer() {
     return {
         .TextDocuments = MakeTextDocuments(),
         .Completion = MakeCompletionService(),
+        .Formatting = MakeFormattingService(),
+        .Diagnostic = MakeDiagnosticService(),
     };
 }
 

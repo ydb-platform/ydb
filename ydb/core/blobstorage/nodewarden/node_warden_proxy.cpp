@@ -66,6 +66,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                                 .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
                                 .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                                 .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
+                                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
@@ -95,6 +96,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                             .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
                             .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                             .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
+                            .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
                             ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                             ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                             ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
@@ -114,6 +116,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
                 .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                 .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
+                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
                 ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
@@ -129,8 +132,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     auto id = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 
     // determine if we want to inject BS errors
-    if (Cfg->BlobStorageConfig.GetServiceSet().HasFailureInjectionConfig()) {
-        auto const& fiConfig = Cfg->BlobStorageConfig.GetServiceSet().GetFailureInjectionConfig();
+    if (Cfg->BlobStorageConfig->GetServiceSet().HasFailureInjectionConfig()) {
+        auto const& fiConfig = Cfg->BlobStorageConfig->GetServiceSet().GetFailureInjectionConfig();
         if (fiConfig.GetFailureProbability() > 0) {
             const auto gid = TGroupId::FromValue(groupId);
             if (IsDynamicGroup(gid) || fiConfig.GetIncludeStaticGroups()) {
@@ -277,6 +280,7 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
             .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
             .HandleClass = msg.Record.GetHandleClass(),
             .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .DataKind = item.GetDataKind(),
             .IssueKeepFlag = item.GetIssueKeepFlag(),
             .IgnoreBlock = item.GetIgnoreBlock(),
             .AlreadyEncrypted = item.GetAlreadyEncrypted(),

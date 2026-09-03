@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NTest;
 
@@ -129,5 +128,4 @@ Y_UNIT_TEST(TestWithSingularTypes) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockExistsTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -42,6 +42,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <functional>
+#include <optional>
 
 namespace NInterconnect {
     class TInterconnectZcProcessor;
@@ -100,7 +101,7 @@ namespace NActors {
         const ui64 UpperLimit;
     };
 
-    static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
+    // DEFAULT_DEADPEER_TIMEOUT lives in interconnect_common.h -- it is shared with the v2 data plane.
     static constexpr TDuration DEFAULT_LOST_CONNECTION_TIMEOUT = TDuration::Seconds(10);
     static constexpr ui32 DEFAULT_MAX_INFLIGHT_DATA = 10240 * 1024;
     static constexpr ui32 DEFAULT_TOTAL_INFLIGHT_DATA = 4 * 10240 * 1024;
@@ -161,7 +162,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                std::optional<ui32> RdmaCumulativeCheckSum;
+                std::optional<ui32> RdmaReadCumulativeCheckSum;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -254,6 +255,7 @@ namespace NActors {
                           TSessionParams params);
     protected:
         STATEFN(WorkingState);
+        bool ProcessWorkingEvent(TAutoPtr<IEventHandle>& ev);
         bool ReadyToReceive() const noexcept {
             return bool(Context);
         }
@@ -274,8 +276,8 @@ namespace NActors {
             hFunc(TEvPollerReady, Handle)
             hFunc(TEvPollerRegisterResult, Handle)
             hFunc(NInterconnect::NRdma::TEvRdmaReadDone, Handle)
-            hFunc(NInterconnect::NRdma::TEvRdmaIoReceiveDone, Handle)
-            cFunc(EvResumeReceiveData, ReceiveData)
+            hFunc(NInterconnect::NRdma::TEvRdmaIoReceiveDone, ReceiveDataMainChannelRdma)
+            cFunc(EvResumeReceiveData, ReceiveDataTCP)
             cFunc(TEvInterconnect::TEvCloseInputSession::EventType, CloseInputSession)
             cFunc(EvCheckDeadPeer, HandleCheckDeadPeer)
             cFunc(TEvConfirmUpdate::EventType, HandleConfirmUpdate)
@@ -351,6 +353,8 @@ namespace NActors {
         ui64 StarvingInRow = 0;
 
         bool CloseInputSessionRequested = false;
+        // Preserve main-socket readiness if processing yields before reaching ReadMore().
+        bool ReadMainChannelRequested = false;
 
         void CloseInputSession();
 
@@ -358,8 +362,9 @@ namespace NActors {
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void HandleConfirmUpdate();
         void Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev);
-        void Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev);
-        void ReceiveData();
+        void ReceiveDataMainChannelRdma(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev);
+        void ReceiveDataTCP();
+        void ReceiveDataTCP(bool readMainChannel);
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
         void ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead);
@@ -374,6 +379,9 @@ namespace NActors {
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
         TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma);
+        bool UseRdmaSendReceiveTransport() const {
+            return Params.AllowRdmaSendReceive && RdmaQp && RdmaCq;
+        }
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 
@@ -419,6 +427,7 @@ namespace NActors {
         ui64 PacketsReadFromSocket = 0;
         ui64 DataPacketsReadFromSocket = 0;
         ui64 IgnoredDataPacketsFromSocket = 0;
+        ui64 BytesRdmaRecieved = 0;
 
         ui64 BytesReadFromXdcSocket = 0;
         ui64 XdcSections = 0;
@@ -502,8 +511,7 @@ namespace NActors {
 
         void Init(const TSessionParams& params) override;
         void CloseInputSession() override;
-        bool IsRdmaInUse() override;
-        bool HasRdmaState() const override;
+        ERdmaState GetRdmaState() const override;
         bool SupportsContinuation() const override { return true; }
 
         static TEvTerminate* NewEvTerminate(TDisconnectReason reason) {
@@ -571,6 +579,7 @@ namespace NActors {
                 hFunc(TEvSocketDisconnect, OnDisconnect)
                 hFunc(TEvTerminate, Handle)
                 hFunc(TEvProcessPingRequest, Handle)
+                hFunc(NInterconnect::NRdma::TEvRdmaIoDone, Handle)
                 cFunc(static_cast<ui32>(ENetwork::EvProcessDirectSessionQueue), HandleProcessDirectSessionQueue)
             )
             UpdateUtilization();
@@ -604,7 +613,21 @@ namespace NActors {
 
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
-        void WriteData();
+        void Handle(NInterconnect::NRdma::TEvRdmaIoDone::TPtr& ev);
+
+        class IWriteStrategy {
+        public:
+            virtual ~IWriteStrategy() = default;
+            virtual size_t Write(NInterconnect::TOutgoingStream& stream, size_t maxBytes) = 0;
+            virtual size_t GetMaxBytesAtOnce() const = 0;
+            virtual size_t GetExpectedWriteLength() const = 0;
+            virtual bool IsWriteBlocked() const = 0;
+        };
+
+        class TTcpWriteStrategy;
+        class TRdmaSendStrategy;
+
+        void WriteData(IWriteStrategy& mainWriter);
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
@@ -632,6 +655,10 @@ namespace NActors {
             return KernelLivenessMode;
         }
 
+        bool UseRdmaSendReceiveTransport() const {
+            return Params.AllowRdmaSendReceive && RdmaQp && RdmaCq;
+        }
+
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // pinger
@@ -649,12 +676,14 @@ namespace NActors {
         TWatchdogTimer<TEvCheckLostConnection> LostConnectionWatchdog;
 
         void OnCloseOnIdleTimerHit() {
-            LOG_INFO_IC("ICS27", "CloseOnIdle timer hit, session terminated");
+            YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "CloseOnIdle timer hit, session terminated",
+                {"marker", "ICS27"});
             Terminate(TDisconnectReason::CloseOnIdle());
         }
 
         void OnLostConnectionTimerHit() {
-            LOG_ERROR_IC("ICS28", "LostConnection timer hit, session terminated");
+            YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "LostConnection timer hit, session terminated",
+                {"marker", "ICS28"});
             Terminate(TDisconnectReason::LostConnection());
         }
 
@@ -717,6 +746,10 @@ namespace NActors {
         TPollerToken::TPtr PollerToken;
         TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
+
+        ui64 RdmaSendWrSubmitted = 0;
+        ui64 RdmaSendWrCompleted = 0;
+
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 
@@ -791,6 +824,7 @@ namespace NActors {
             TInterconnectProxyTCP* const proxy,
             NInterconnect::NRdma::TQueuePair::TPtr rdmaQp);
         NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
+        NInterconnect::NRdma::ICq::TPtr RdmaCq;
 
     private:
 

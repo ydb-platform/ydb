@@ -33,37 +33,43 @@ typedef struct {
 
 
 /* Use a free list, since we should normally only need one at a time */
+#ifndef Py_GIL_DISABLED
 #define NPY_LOOP_DATA_CACHE_SIZE 5
 static int loop_data_num_cached = 0;
 static  legacy_array_method_auxdata *loop_data_cache[NPY_LOOP_DATA_CACHE_SIZE];
-
+#else
+#define NPY_LOOP_DATA_CACHE_SIZE 0
+#endif
 
 static void
 legacy_array_method_auxdata_free(NpyAuxData *data)
 {
+#if NPY_LOOP_DATA_CACHE_SIZE > 0
     if (loop_data_num_cached < NPY_LOOP_DATA_CACHE_SIZE) {
         loop_data_cache[loop_data_num_cached] = (
                 (legacy_array_method_auxdata *)data);
         loop_data_num_cached++;
     }
-    else {
+    else
+#endif
+    {
         PyMem_Free(data);
     }
 }
-
-#undef NPY_LOOP_DATA_CACHE_SIZE
-
 
 NpyAuxData *
 get_new_loop_data(
         PyUFuncGenericFunction loop, void *user_data, int pyerr_check)
 {
     legacy_array_method_auxdata *data;
+#if NPY_LOOP_DATA_CACHE_SIZE > 0
     if (NPY_LIKELY(loop_data_num_cached > 0)) {
         loop_data_num_cached--;
         data = loop_data_cache[loop_data_num_cached];
     }
-    else {
+    else
+#endif
+    {
         data = PyMem_Malloc(sizeof(legacy_array_method_auxdata));
         if (data == NULL) {
             return NULL;
@@ -77,6 +83,7 @@ get_new_loop_data(
     return (NpyAuxData *)data;
 }
 
+#undef NPY_LOOP_DATA_CACHE_SIZE
 
 /*
  * This is a thin wrapper around the legacy loop signature.
@@ -304,7 +311,7 @@ get_initial_from_ufunc(
         }
     }
     else if (context->descriptors[0]->type_num == NPY_OBJECT
-            && !reduction_is_empty) {
+             && !reduction_is_empty) {
         /* Allows `sum([object()])` to work, but use 0 when empty. */
         Py_DECREF(identity_obj);
         return 0;
@@ -314,13 +321,6 @@ get_initial_from_ufunc(
     Py_DECREF(identity_obj);
     if (res < 0) {
         return -1;
-    }
-
-    if (PyTypeNum_ISNUMBER(context->descriptors[0]->type_num)) {
-        /* For numbers we can cache to avoid going via Python ints */
-        memcpy(context->method->legacy_initial, initial,
-               context->descriptors[0]->elsize);
-        context->method->get_reduction_initial = &copy_cached_initial;
     }
 
     /* Reduction can use the initial value */
@@ -420,11 +420,47 @@ PyArray_NewLegacyWrappingArrayMethod(PyUFuncObject *ufunc,
     };
 
     PyBoundArrayMethodObject *bound_res = PyArrayMethod_FromSpec_int(&spec, 1);
+
     if (bound_res == NULL) {
         return NULL;
     }
     PyArrayMethodObject *res = bound_res->method;
+
+    // set cached initial value for numeric reductions to avoid creating
+    // a python int in every reduction
+    if (PyTypeNum_ISNUMBER(bound_res->dtypes[0]->type_num) &&
+        ufunc->nin == 2 && ufunc->nout == 1) {
+
+        PyArray_Descr *descrs[3];
+
+        for (int i = 0; i < 3; i++) {
+            // only dealing with numeric legacy dtypes so this should always be
+            // valid
+            descrs[i] = bound_res->dtypes[i]->singleton;
+        }
+
+        PyArrayMethod_Context context = {
+                (PyObject *)ufunc,
+                bound_res->method,
+                descrs,
+        };
+
+        int ret = get_initial_from_ufunc(&context, 0, context.method->legacy_initial);
+
+        if (ret < 0) {
+            Py_DECREF(bound_res);
+            return NULL;
+        }
+
+        // only use the cached initial value if it's valid
+        if (ret > 0) {
+            context.method->get_reduction_initial = &copy_cached_initial;
+        }
+    }
+
+
     Py_INCREF(res);
     Py_DECREF(bound_res);
+
     return res;
 }

@@ -27,11 +27,10 @@
 
 namespace NYT::NTableClient {
 
-using NYT::ToProto;
-using NYT::FromProto;
-
 using NChunkClient::NProto::TDataStatistics;
 using NCrypto::TMD5Hash;
+using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -53,7 +52,7 @@ static constexpr ui64 MinusOne = static_cast<ui64>(-1);
 static_assert(sizeof(i64) == SerializationAlignment, "Wrong serialization alignment");
 static_assert(sizeof(double) == SerializationAlignment, "Wrong serialization alignment");
 static_assert(sizeof(TUnversionedValue) == 16, "sizeof(TUnversionedValue) != 16");
-static_assert(sizeof(TUnversionedValueData) == 8, "sizeof(TUnversionedValueData) == 8");
+static_assert(sizeof(TUnversionedValueData) == 8, "sizeof(TUnversionedValueData) != 8");
 static_assert(sizeof(TUnversionedRowHeader) == 8, "sizeof(TUnversionedRowHeader) != 8");
 static_assert(sizeof(TVersionedValue) == 24, "sizeof(TVersionedValue) != 24");
 static_assert(sizeof(TVersionedRowHeader) == 16, "sizeof(TVersionedRowHeader) != 16");
@@ -378,7 +377,7 @@ private:
             UnsafeWritePod(value.Data);
         }
         // Write timestamp.
-        UnsafeWritePod<ui64>(value.Timestamp);
+        UnsafeWritePod<ui64>(value.Timestamp.Underlying());
     }
 
     TUnversionedValueRange RemapValues(
@@ -775,8 +774,8 @@ public:
                 };
             }
             default:
-                YT_LOG_FATAL("Unknown write command (Command: %v)",
-                    command);
+                YT_TLOG_FATAL("Unknown write command")
+                    .With("Command", command);
         }
     }
 
@@ -786,7 +785,6 @@ private:
 
     TSharedRef Data_;
     TIterator Current_;
-
 
     void ValidateSizeAvailable(size_t size)
     {
@@ -936,7 +934,7 @@ private:
         } else if (IsValueType(value->Type)) {
             rawValue[1] = ReadUint64();
         }
-        value->Timestamp = ReadUint64();
+        value->Timestamp = NTransactionClient::TTimestamp(ReadUint64());
     }
 
     void DoReadSchemafulValueRange(
@@ -1014,7 +1012,7 @@ private:
             THROW_ERROR_EXCEPTION("Versioned row data weight is too large: %v > %v",
                 dataWeight,
                 Options_.MaxVersionedRowDataWeight)
-                << TErrorAttribute("key", ToOwningKey(row));
+                .With("key", ToOwningKey(row));
         }
     }
 };
@@ -1095,9 +1093,9 @@ public:
         , Options_(std::move(options))
         , CompressedBlocks_(std::move(compressedBlocks))
     {
-        YT_LOG_DEBUG("Wire protocol rowset reader created (BlockCount: %v, TotalCompressedSize: %v)",
-            CompressedBlocks_.size(),
-            GetByteSize(CompressedBlocks_));
+        YT_TLOG_DEBUG("Wire protocol rowset reader created")
+            .With("BlockCount", CompressedBlocks_.size())
+            .With("TotalCompressedSize", GetByteSize(CompressedBlocks_));
     }
 
     IUnversionedRowBatchPtr Read(const TRowBatchReadOptions& /*options*/) override
@@ -1108,20 +1106,20 @@ public:
 
         if (BlockIndex_ >= std::ssize(CompressedBlocks_)) {
             Finished_ = true;
-            YT_LOG_DEBUG("Wire protocol rowset reader finished");
+            YT_TLOG_DEBUG("Wire protocol rowset reader finished");
             return nullptr;
         }
 
-        YT_LOG_DEBUG("Started decompressing rowset reader block (BlockIndex: %v, CompressedSize: %v)",
-            BlockIndex_,
-            CompressedBlocks_[BlockIndex_].Size());
+        YT_TLOG_DEBUG("Started decompressing rowset reader block")
+            .With("BlockIndex", BlockIndex_)
+            .With("CompressedSize", CompressedBlocks_[BlockIndex_].Size());
 
         auto uncompressedBlock = Codec_->Decompress(CompressedBlocks_[BlockIndex_]);
         CompressedBlocks_[BlockIndex_].Reset();
 
-        YT_LOG_DEBUG("Finished decompressing rowset reader block (BlockIndex: %v, UncompressedSize: %v)",
-            BlockIndex_,
-            uncompressedBlock.Size());
+        YT_TLOG_DEBUG("Finished decompressing rowset reader block")
+            .With("BlockIndex", BlockIndex_)
+            .With("UncompressedSize", uncompressedBlock.Size());
 
         auto rowBuffer = New<TRowBuffer>(
             GetRefCountedTypeCookie<TWireProtocolReaderTag>(),
@@ -1235,15 +1233,15 @@ public:
         , Schemaful_(schemaful)
         , Logger(logger.WithTag("WriterId", TGuid::Create()))
     {
-        YT_LOG_DEBUG("Wire protocol rowset writer created (Codec: %v, DesiredUncompressedBlockSize: %v)",
-            codecId,
-            DesiredUncompressedBlockSize_);
+        YT_TLOG_DEBUG("Wire protocol rowset writer created")
+            .With("Codec", codecId)
+            .With("DesiredUncompressedBlockSize", DesiredUncompressedBlockSize_);
     }
 
     TFuture<void> Close() override
     {
         if (!Closed_) {
-            YT_LOG_DEBUG("Wire protocol rowset writer closed");
+            YT_TLOG_DEBUG("Wire protocol rowset writer closed");
             FlushBlock();
             Closed_ = true;
         }
@@ -1301,7 +1299,6 @@ private:
     bool Closed_ = false;
     bool SchemaWritten_ = false;
 
-
     void FlushBlock()
     {
         if (!WireWriter_) {
@@ -1310,13 +1307,13 @@ private:
 
         auto uncompressedBlocks = WireWriter_->Finish();
 
-        YT_LOG_DEBUG("Started compressing rowset writer block (BlockIndex: %v, UncompressedSize: %v)",
-            CompressedBlocks_.size(),
-            GetByteSize(uncompressedBlocks));
+        YT_TLOG_DEBUG("Started compressing rowset writer block")
+            .With("BlockIndex", CompressedBlocks_.size())
+            .With("UncompressedSize", GetByteSize(uncompressedBlocks));
         auto compressedBlock = Codec_->Compress(uncompressedBlocks);
-        YT_LOG_DEBUG("Finished compressing rowset writer block (BlockIndex: %v, CompressedSize: %v)",
-            CompressedBlocks_.size(),
-            compressedBlock.Size());
+        YT_TLOG_DEBUG("Finished compressing rowset writer block")
+            .With("BlockIndex", CompressedBlocks_.size())
+            .With("CompressedSize", compressedBlock.Size());
 
         CompressedBlocks_.push_back(compressedBlock);
         WireWriter_.reset();

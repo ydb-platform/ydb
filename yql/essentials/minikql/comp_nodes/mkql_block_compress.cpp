@@ -10,8 +10,7 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -23,32 +22,32 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
 }
 
 struct TCompressBlocksState: public TBlockState {
-    size_t InputSize_ = 0;
-    size_t OutputPos_ = 0;
-    bool IsFinished_ = false;
+    size_t InputSize = 0;
+    size_t OutputPos = 0;
+    bool IsFinished = false;
 
-    const size_t MaxLength_;
+    const size_t MaxLength;
 
-    std::vector<std::shared_ptr<arrow::ArrayData>> Arrays_;
-    std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+    std::vector<std::shared_ptr<arrow::ArrayData>> Arrays;
+    std::vector<std::unique_ptr<IArrayBuilder>> Builders;
 
-    NYql::NUdf::TCounter CounterOutputRows_;
+    NYql::NUdf::TCounter CounterOutputRows;
 
     TCompressBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TBlockType*>& types)
         : TBlockState(memInfo, types.size() + 1U)
-        , MaxLength_(CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL, [](size_t max, const TBlockType* type) { return std::max(max, CalcMaxBlockItemSize(type->GetItemType())); })))
-        , Arrays_(types.size() + 1U)
-        , Builders_(types.size())
+        , MaxLength(CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL, [](size_t max, const TBlockType* type) { return std::max(max, CalcMaxBlockItemSize(type->GetItemType())); })))
+        , Arrays(types.size() + 1U)
+        , Builders(types.size())
     {
         for (ui32 i = 0; i < types.size(); ++i) {
             if (types[i]->GetShape() != TBlockType::EShape::Scalar) {
-                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), ctx.ArrowMemoryPool, MaxLength_, &ctx.Builder->GetPgBuilder());
+                Builders[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), ctx.ArrowMemoryPool, MaxLength, &ctx.Builder->GetPgBuilder());
             }
         }
         if (ctx.CountersProvider) {
             // id will be assigned externally in future versions
             TString id = TString(Operator_Filter) + "0";
-            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            CounterOutputRows = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, /*deriv=*/false);
         }
     }
 
@@ -59,9 +58,9 @@ struct TCompressBlocksState: public TBlockState {
     };
 
     EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
-        Y_ABORT_UNLESS(!IsFinished_);
-        Y_ABORT_UNLESS(!InputSize_);
-        auto& bitmap = Arrays_.back();
+        Y_ABORT_UNLESS(!IsFinished);
+        Y_ABORT_UNLESS(!InputSize);
+        auto& bitmap = Arrays.back();
         bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
 
         if (!bitmap->length) {
@@ -70,13 +69,13 @@ struct TCompressBlocksState: public TBlockState {
 
         const auto popCount = GetBitmapPopCount(bitmap);
 
-        CounterOutputRows_.Add(popCount);
+        CounterOutputRows.Add(popCount);
 
         if (!popCount) {
             return EStep::Skip;
         }
 
-        if (!OutputPos_ && ui64(bitmap->length) == popCount) {
+        if (!OutputPos && ui64(bitmap->length) == popCount) {
             return EStep::Copy;
         }
 
@@ -84,50 +83,50 @@ struct TCompressBlocksState: public TBlockState {
     }
 
     bool Sparse() {
-        auto& bitmap = Arrays_.back();
-        if (!InputSize_) {
-            InputSize_ = bitmap->length;
-            for (size_t i = 0; i < Builders_.size(); ++i) {
-                if (Builders_[i]) {
-                    Arrays_[i] = TArrowBlock::From(Values[i]).GetDatum().array();
-                    Y_ABORT_UNLESS(ui64(Arrays_[i]->length) == InputSize_);
+        auto& bitmap = Arrays.back();
+        if (!InputSize) {
+            InputSize = bitmap->length;
+            for (size_t i = 0; i < Builders.size(); ++i) {
+                if (Builders[i]) {
+                    Arrays[i] = TArrowBlock::From(Values[i]).GetDatum().array();
+                    Y_ABORT_UNLESS(ui64(Arrays[i]->length) == InputSize);
                 }
             }
         }
 
-        size_t outputAvail = MaxLength_ - OutputPos_;
+        size_t outputAvail = MaxLength - OutputPos;
         size_t takeInputLen = 0;
         size_t takeInputPopcnt = 0;
 
         const auto bitmapData = bitmap->GetValues<ui8>(1);
-        while (takeInputPopcnt < outputAvail && takeInputLen < InputSize_) {
+        while (takeInputPopcnt < outputAvail && takeInputLen < InputSize) {
             takeInputPopcnt += bitmapData[takeInputLen++];
         }
         Y_ABORT_UNLESS(takeInputLen > 0);
-        for (size_t i = 0; i < Builders_.size(); ++i) {
-            if (Builders_[i]) {
-                auto& arr = Arrays_[i];
-                auto& builder = Builders_[i];
+        for (size_t i = 0; i < Builders.size(); ++i) {
+            if (Builders[i]) {
+                auto& arr = Arrays[i];
+                auto& builder = Builders[i];
                 auto slice = Chop(arr, takeInputLen);
                 builder->AddMany(*slice, takeInputPopcnt, bitmapData, takeInputLen);
             }
         }
 
         Chop(bitmap, takeInputLen);
-        OutputPos_ += takeInputPopcnt;
-        InputSize_ -= takeInputLen;
-        return MaxLength_ > OutputPos_;
+        OutputPos += takeInputPopcnt;
+        InputSize -= takeInputLen;
+        return MaxLength > OutputPos;
     }
 
     void FlushBuffers(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
-        for (ui32 i = 0; i < Builders_.size(); ++i) {
-            if (Builders_[i]) {
-                Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_), validationMode);
+        for (ui32 i = 0; i < Builders.size(); ++i) {
+            if (Builders[i]) {
+                Values[i] = holderFactory.CreateArrowBlock(Builders[i]->Build(IsFinished), validationMode);
             }
         }
 
-        Values.back() = MakeBlockCount(holderFactory, OutputPos_, validationMode);
-        OutputPos_ = 0;
+        Values.back() = MakeBlockCount(holderFactory, OutputPos, validationMode);
+        OutputPos = 0;
         FillArrays();
     }
 };
@@ -170,12 +169,12 @@ public:
     }
 
 private:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-        using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
 
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, NYql::NUdf::TUnboxedValue state, ui32 bitmapIndex, const TVector<TBlockType*>& types, ui32 inputWidth, NYql::EDatumValidationMode validationMode)
-            : TBase(memInfo)
+            : TBase(memInfo, holderFactory, inputWidth - 1U)
             , HolderFactory_(holderFactory)
             , Stream_(std::move(stream))
             , State_(std::move(state))
@@ -186,7 +185,7 @@ private:
         {
         }
 
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) final {
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             if constexpr (CompressType == ECompressType::BitmapIsScalar) {
                 return BitmapIsScalar(output, width);
             } else if constexpr (CompressType == ECompressType::AllScalars) {
@@ -194,7 +193,7 @@ private:
             } else if constexpr (CompressType == ECompressType::Blocks) {
                 return Blocks(output, width);
             } else {
-                static_assert(0, "Unhandled case");
+                static_assert(false, "Unhandled case");
             }
         }
 
@@ -256,18 +255,18 @@ private:
 
             if (!state.Count) {
                 do {
-                    if (!state.InputSize_) {
-                        state.ClearValues();
+                    if (!state.InputSize) {
                         auto wideFetchResult = Stream_.WideFetch(Input_.data(), Input_.size());
-                        MoveAllExceptBitmap(state.Values.data());
 
                         switch (wideFetchResult) {
                             case NUdf::EFetchStatus::Yield:
                                 return NUdf::EFetchStatus::Yield;
                             case NUdf::EFetchStatus::Finish:
-                                state.IsFinished_ = true;
+                                state.IsFinished = true;
                                 break;
                             case NUdf::EFetchStatus::Ok:
+                                state.ClearValues();
+                                MoveAllExceptBitmap(state.Values.data());
                                 switch (state.Check(bitmap)) {
                                     case TCompressBlocksState::EStep::Copy:
                                         for (ui32 i = 0; i < state.Values.size(); ++i) {
@@ -282,9 +281,9 @@ private:
                                 break;
                         }
                     }
-                } while (!state.IsFinished_ && state.Sparse());
+                } while (!state.IsFinished && state.Sparse());
 
-                if (state.OutputPos_) {
+                if (state.OutputPos) {
                     state.FlushBuffers(HolderFactory_, ValidationMode_);
                 } else {
                     return NUdf::EFetchStatus::Finish;
@@ -374,5 +373,4 @@ IComputationNode* WrapBlockCompress(TCallable& callable, const TComputationNodeF
     return new TCompressWrapper<ECompressType::Blocks>(ctx.Mutables, compressArg, bitmapIndex, inputWidth, std::move(types));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

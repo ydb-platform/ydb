@@ -5,8 +5,9 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -235,8 +236,8 @@ struct TAnyDateTimeSubIntervalT {
         const auto zero = ConstantInt::get(type, 0);
 
         if (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(type, APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(type, APInt(128, 2, init.data()));
             const auto tzid = BinaryOperator::CreateAnd(left, mask, "tzid", block);
             const auto full = BinaryOperator::CreateOr(wide, tzid, "full", block);
             const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
@@ -683,5 +684,4 @@ void RegisterSub(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Sub"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

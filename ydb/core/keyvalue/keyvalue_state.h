@@ -265,7 +265,7 @@ protected:
     // blob moving stage
     bool MoveDataBlobMovingIsInProgress = false;
     bool MoveDataBlobMovingNeedsAnotherPass = false;
-    TString MoveDataKey;
+    std::optional<TString> MoveDataKey;
     ui32 MoveDataChainIndex = 0;
     bool MoveDataRecordTouched = false;
     TLogoBlobID MoveDataBlobId;
@@ -425,10 +425,14 @@ public:
     bool NeedMoveBlob(const TLogoBlobID& blobId) const;
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> AdvanceMoveData(ISimpleDb& db);
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> BlobCopied(
-        const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ISimpleDb& db);
+        TEvKeyValue::TEvBlobCopied::EResult result,
+        const TLogoBlobID& blobId,
+        const TLogoBlobID& newBlobId,
+        ISimpleDb& db);
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TryCheckTrash();
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> CheckTrash();
     void FinishMoveData(const TActorContext& ctx);
+    void CancelMoveData();
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,

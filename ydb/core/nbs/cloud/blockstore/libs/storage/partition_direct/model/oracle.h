@@ -6,6 +6,7 @@
 #include "host_mask.h"
 #include "host_stat.h"
 #include "host_state.h"
+#include "mon_model.h"
 #include "time_predictor.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
@@ -16,34 +17,6 @@
 #include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-////////////////////////////////////////////////////////////////////////////////
-
-enum class EHostHealth
-{
-    Online,
-    Sufferer,
-    TemporaryOffline,
-    Offline,
-    Broken,   // changes strictly outside of Oracle
-};
-
-struct TOracleHostStat
-{
-    TOracleHostStat(
-        THostIndex index,
-        const THostState& state,
-        EHostHealth health,
-        const THostStat& hostStat,
-        TInstant now);
-
-    THostIndex Index;
-    EHostState State;
-    EHostHealth Health;
-    TInflightByOperation InflightByOperation;
-    THostStat::TErrorsInfo Errors;
-    ui64 PBufferUsedSize;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -175,7 +148,8 @@ public:
     // Check if it's valid to QueryAddHost from HostStateController and do it.
     void MaybeQueryAddHost();
 
-    [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
+    [[nodiscard]] TVector<THostSnapshot> BuildHostStats(TInstant now) const;
+    [[nodiscard]] size_t GetLatencyHistoryCapacity() const;
 
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);

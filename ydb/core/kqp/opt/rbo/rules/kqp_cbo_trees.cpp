@@ -423,7 +423,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
     for (const auto& leaf : leaves) {
         auto stats = BuildLeafOptimizerStatistics(leaf, typeCtx);
         auto relNode = std::make_shared<NOpt::TRBORelOptimizerNode>(
-            TVector<TString>{leaf.RelationName}, stats, leaf.Op);
+            TVector<TString>{leaf.RelationName}, stats, leaf.Op, leaf.CBOToColumns);
         rels.push_back(relNode);
         leafNodeMap.insert({leaf.Edge, relNode});
     }

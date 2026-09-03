@@ -9,7 +9,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/sglist_test.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -224,6 +226,8 @@ private:
 
         VhostServer = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             VHostStats,
             VhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -291,6 +295,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -339,6 +345,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -443,6 +451,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
         auto vhostStats = std::make_shared<TTestVHostStats>();
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             CreateVhostQueueFactory(),
             CreateDefaultDeviceHandlerFactory(),
@@ -485,6 +495,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -530,6 +542,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -575,6 +589,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
         auto vhostStats = std::make_shared<TTestVHostStats>();
         auto vhostServer = CreateServer(
             logging,
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             vhostQueueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -668,6 +684,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
         };
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -891,6 +909,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -1018,6 +1038,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -1138,6 +1160,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),

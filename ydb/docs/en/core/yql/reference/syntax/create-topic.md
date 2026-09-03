@@ -24,7 +24,7 @@ Consumer parameters:
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — list of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the consumer.
+* `supported_codecs` — list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the consumer.
 
 {% endif %}
 
@@ -44,11 +44,7 @@ Allowed values: `disabled`, `paused`, `scale_up`, default value — `disabled`.
 
 {% if feature_topic_codecs %}
 
-<<<<<<< HEAD
-* `supported_codecs` — list of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type — `String`.
-=======
-* `supported_codecs` — a list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. The value type is `String`.
->>>>>>> e719c475d0b (YDBDOCS: enable topic codecs (#49486))
+* `supported_codecs` — list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. Value type — `String`.
 
 {% endif %}
 
@@ -64,18 +60,7 @@ The following command creates a topic without consumers with default settings:
 CREATE TOPIC `my_topic`;
 ```
 
-<<<<<<< HEAD
-{% if feature_topic_codecs %}
-
-* `supported_codecs` - list of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type - `String`.
-
-{% endif %}
-
 To create a topic with an important consumer and a data retention period of 1 day, run the following command:
-=======
-To create a topic with an important reader and a data retention period of 1 day, run the command:
-
->>>>>>> e719c475d0b (YDBDOCS: enable topic codecs (#49486))
 
 ```yql
 CREATE TOPIC `my_topic` (

@@ -54,6 +54,12 @@ public:
     void TryShrinkMemory() override {
         ++Shrinks;
         Alloc.ReleaseFreePages();
+        if (InitialLimit) {
+            // like TDqMemoryQuota: give the unused part of the limit back, never below the initial one
+            const ui64 newLimit = std::max<ui64>(Alloc.GetAllocated(), InitialLimit);
+            LimitLowered = LimitLowered || newLimit < Alloc.GetLimit();
+            Alloc.SetLimit(newLimit);
+        }
     }
 
     size_t CountOptionalRefusals() const {
@@ -66,6 +72,8 @@ public:
 
     i64 Availability = std::numeric_limits<i64>::max();
     bool RefuseOptional = false;
+    ui64 InitialLimit = 0; // non-zero: a shrink lowers the allocator limit, as the real quota does
+    bool LimitLowered = false;
     size_t Shrinks = 0;
     std::vector<TRequest> Requests;
 
@@ -859,6 +867,11 @@ void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
             break;
         }
     }
+
+    // release the operator state before the quota scope ends, as the compute actor does: the teardown
+    // (here in the middle of a spill) must not need the quota
+    resultStream.Clear();
+    graph.Reset();
 }
 
 template<bool UseLLVM, bool Spilling, typename StreamCreator>
@@ -1288,6 +1301,29 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
         UNIT_ASSERT_GE(endState.SpillsStarted, 1);
         UNIT_ASSERT_GE(endState.ShrinksRequested, 1);
         UNIT_ASSERT_GE(quota.Shrinks, 1);
+    }
+
+    Y_UNIT_TEST_QUAD(TestBoundAggregationRefillsAfterShrink, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+        constexpr ui64 initialLimit = 1_MB; // the task grows on demand from here and shrinks back to it
+        TFakeQuotaEnv env(setup.Alloc, initialLimit);
+        TScriptedMemoryQuota quota(setup.Alloc);
+        quota.InitialLimit = initialLimit;
+        auto endState = RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
+            return new TWideKVStream(ctx, 100000, 10, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                if (rowNum == 100000) {
+                    // over target from here on: the spill drops the hash table, the shrink hands the unused
+                    // limit back, and the read-back has to build a table again with the optional path refused
+                    quota.Availability = -1;
+                    quota.RefuseOptional = true;
+                }
+            });
+        }, 2, false, false, &quota);
+        // the results (checked by the runner) survive a shrink that really hands the memory back: the table
+        // the spill dropped is rebuilt for the read-back, with the optional path refused all the way
+        UNIT_ASSERT_GE(endState.SpillsStarted, 1);
+        UNIT_ASSERT_GE(endState.ShrinksRequested, 1);
+        UNIT_ASSERT(quota.LimitLowered);
     }
 
     Y_UNIT_TEST_QUAD(TestBoundAggregationIgnoresYellowZone, UseLLVM, UseFlow) {

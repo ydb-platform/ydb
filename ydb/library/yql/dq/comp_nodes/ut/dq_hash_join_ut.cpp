@@ -1986,7 +1986,9 @@ struct TFakeDqMemoryQuota : public NYql::NDq::IDqOperatorMemoryQuota {
             ++MandatoryRequests;
         }
         if (grant && Alloc) {
-            Alloc->SetLimit(Alloc->GetLimit() + AlignUp<ui64>(bytes, 1_MB));
+            // the caller sized its request against the limit it saw, so grow that limit: a real quota never
+            // moves the limit on an availability read, TightenLimitOnRead below does
+            Alloc->SetLimit(std::max(Alloc->GetLimit(), LimitBeforeTightening) + AlignUp<ui64>(bytes, 1_MB));
         }
         return grant;
     }
@@ -1995,6 +1997,7 @@ struct TFakeDqMemoryQuota : public NYql::NDq::IDqOperatorMemoryQuota {
         if (TightenLimitOnRead && Alloc) {
             // keep the allocator limit tight, like a real quota after a shrink: the join then has to ask
             // for every table it builds (TJoinTestData otherwise leaves the headroom of freed transients)
+            LimitBeforeTightening = Alloc->GetLimit();
             Alloc->SetLimit(std::max<ui64>(Alloc->GetAllocated(), 1));
         }
         return Availability;
@@ -2009,6 +2012,7 @@ struct TFakeDqMemoryQuota : public NYql::NDq::IDqOperatorMemoryQuota {
     bool GrantMandatory = true;
     bool TightenLimitOnRead = false;
     TScopedAlloc* Alloc = nullptr;
+    mutable ui64 LimitBeforeTightening = 0;
     int OptionalRequests = 0;
     int OptionalGranted = 0;
     int MandatoryRequests = 0;
@@ -2152,9 +2156,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         quota.Availability = 1_GB;
         quota.TightenLimitOnRead = true;
         TestBound(td, BlockJoin, quota, /* expectSpilling = */ false, /* forceYellowZone = */ true);
-        // the allocator limit is kept tight, so every in-memory table asks the quota and is granted
+        // the allocator limit is kept tight, so every in-memory table asks the quota and is granted;
+        // nothing spilled, so the mandatory reservation of the spilled partition rebuild is never reached
         UNIT_ASSERT_GE(quota.OptionalRequests, 1);
-        UNIT_ASSERT_VALUES_EQUAL(quota.OptionalGranted, quota.OptionalRequests);
+        UNIT_ASSERT_VALUES_EQUAL(quota.MandatoryRequests, 0);
     }
 
     Y_UNIT_TEST_TWIN(TestBoundOptionalRefusalBeforeBuildSpills, BlockJoin) {

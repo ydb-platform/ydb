@@ -1145,7 +1145,10 @@ protected:
         auto canFitMoreKeys = [&]() -> bool {
             if (isNew) {
                 const bool hasMemoryForProcessing = HasMemoryForProcessing();
-                CheckAutoGrowMap(hasMemoryForProcessing);
+                // Growing the table may only be asked for optionally where a refusal has a fallback (drain
+                // for combine, spilling for aggregate); without one the operator can only fail, so it must
+                // ask for the memory it needs and let the quota manager decide on the mandatory path.
+                CheckAutoGrowMap(hasMemoryForProcessing, /* optionalReserve = */ !IsAggregation || EnableSpilling);
                 if (Map->GetSize() >= MaxRowCount) {
                     return false;
                 }
@@ -1177,10 +1180,14 @@ protected:
             }
         }
 
-        if (IsAggregation && EnableSpilling && SpillingTime() && Map->GetSize() >= LowerFixedRowCount) {
+        if (IsAggregation && EnableSpilling &&
+            (HardSpillingTime() || (SpillingTime() && Map->GetSize() >= LowerFixedRowCount)))
+        {
             // The SpillingTime() limit is presumably lower than the yellow zone
             // so it can trigger separately, earlier than !HasMemoryForProcessing().
-            // An almost empty table is never worth spilling on a soft signal.
+            // A hard signal (the quota manager or the allocator asks for memory back) spills at any table
+            // size: a handful of keys can hold arbitrarily large boxed states. Only the soft signal (an
+            // optional request was refused) is not worth spilling an almost empty table for.
             if (InitiateSpilling()) {
                 return EFillState::Yield;
             }
@@ -1337,12 +1344,13 @@ protected:
         if (auto* quota = NYql::NDq::GetDqOperatorMemoryQuota()) {
             const i64 availability = quota->GetMemoryAvailability();
             Pressure.HasMemory = availability > 0 && !SoftPressure;
-            Pressure.SpillingTime = availability < 0 || SoftPressure || TlsAllocState->GetMaximumLimitValueReached();
+            Pressure.HardSpillingTime = availability < 0 || TlsAllocState->GetMaximumLimitValueReached();
             PressureRefreshCountdown = PressureRefreshInterval;
         } else {
             Pressure.HasMemory = !TlsAllocState->IsMemoryYellowZoneEnabled();
-            Pressure.SpillingTime = !Pressure.HasMemory || TlsAllocState->GetMaximumLimitValueReached();
+            Pressure.HardSpillingTime = !Pressure.HasMemory || TlsAllocState->GetMaximumLimitValueReached();
         }
+        Pressure.SpillingTime = Pressure.HardSpillingTime || SoftPressure;
     }
 
     Y_FORCE_INLINE void MaybeRefreshPressure() {
@@ -1359,6 +1367,10 @@ protected:
 
     Y_FORCE_INLINE bool SpillingTime() const {
         return Pressure.SpillingTime;
+    }
+
+    Y_FORCE_INLINE bool HardSpillingTime() const {
+        return Pressure.HardSpillingTime;
     }
 
     bool IsOverMemoryTarget() const {
@@ -1623,7 +1635,8 @@ protected:
 
     struct TMemoryPressure {
         bool HasMemory = true;
-        bool SpillingTime = false;
+        bool HardSpillingTime = false; // the quota manager or the allocator asks to give memory back
+        bool SpillingTime = false;     // hard signal, or an optional request was refused (soft pressure)
     };
     TMemoryPressure Pressure;             // snapshot, see RefreshPressure
     bool SoftPressure = false;            // an optional growth request was refused since the last release point

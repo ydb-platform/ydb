@@ -1,12 +1,12 @@
 #pragma once
 
 #include <regex>
-#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/utility.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 
@@ -32,8 +32,7 @@ inline void CheckRegexMatch(
             std::sregex_iterator(str.begin(), str.end(), expression),
             std::sregex_iterator());
 
-        UNIT_ASSERT_VALUES_EQUAL_C(expectedMatchCount, matchCount,
-            TStringBuilder() << "Pattern: " << regexString << "\nLogs:\n" << str);
+        Y_ABORT_UNLESS(expectedMatchCount == static_cast<size_t>(matchCount), "%s", (TStringBuilder() << "Pattern: " << regexString << "\nLogs:\n" << str).c_str());
     }
 }
 

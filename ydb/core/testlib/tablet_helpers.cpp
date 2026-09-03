@@ -38,7 +38,8 @@
 #include <util/system/sanitizers.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
@@ -769,7 +770,7 @@ namespace NKikimr {
         if (!configureResponse->Record.GetResponse().GetSuccess()) {
             Cerr << "\n\n configResponse is #" << configureResponse->Record.DebugString() << "\n\n";
         }
-        UNIT_ASSERT(configureResponse->Record.GetResponse().GetSuccess());
+        Y_ABORT_UNLESS(configureResponse->Record.GetResponse().GetSuccess());
     }
 
     void RunTestWithReboots(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
@@ -802,9 +803,9 @@ namespace NKikimr {
                 }, activeZone);
             }
             catch (yexception& e) {
-                UNIT_FAIL("Failed"
+                Y_ABORT("%s", (TStringBuilder() << "Failed"
                           << " at dispatch " << INITIAL_TEST_DISPATCH_NAME
-                          << " with exception " << e.what() << "\n");
+                          << " with exception " << e.what() << "\n").c_str());
             }
         }
 
@@ -858,9 +859,9 @@ namespace NKikimr {
                         }, activeZone);
                     hasReboot = rebootingObserver.HasReboot();
                 } catch (yexception& e) {
-                    UNIT_FAIL("Failed"
+                    Y_ABORT("%s", (TStringBuilder() << "Failed"
                               << " at dispatch " << dispatchName
-                              << " with exception " << e.what() << "\n");
+                              << " with exception " << e.what() << "\n").c_str());
                 }
 
                 if (ENABLE_REBOOT_DISPATCH_LOG)
@@ -949,7 +950,7 @@ namespace NKikimr {
                 hasReboot = pipeResetingObserver.HasReset();
             }
             catch (yexception& e) {
-                UNIT_FAIL("Failed at dispatch " << dispatchName << " with exception " << e.what() << "\n");
+                Y_ABORT("%s", (TStringBuilder() << "Failed at dispatch " << dispatchName << " with exception " << e.what() << "\n").c_str());
             }
 
             if (ENABLE_REBOOT_DISPATCH_LOG)
@@ -1068,7 +1069,7 @@ namespace NKikimr {
         runtime.Send(new IEventHandle(pdiskServiceId, sender, nullptr));
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
-        UNIT_ASSERT(event);
+        Y_ABORT_UNLESS(event);
         //Cout << event->Answer << "\n";
         ui64 totalFreeSize = 0;
         for (ui32 i = 0; i < 2; ++i) {

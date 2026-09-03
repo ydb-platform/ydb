@@ -8,7 +8,8 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <yql/essentials/types/binary_json/write.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
@@ -26,13 +27,13 @@ void THelperSchemaless::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modi
     auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     auto status = ev->Get()->Record.GetStatus();
     ui64 txId = ev->Get()->Record.GetTxId();
-    UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
+    Y_ABORT_UNLESS(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
     WaitForSchemeOperation(sender, txId);
 }
 
 void THelperSchemaless::CreateTestOlapStore(TString scheme) {
     NKikimrSchemeOp::TColumnStoreDescription store;
-    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &store));
+    Y_ABORT_UNLESS(::google::protobuf::TextFormat::ParseFromString(scheme, &store));
     NKikimrSchemeOp::TModifyScheme op;
     op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
     op.SetWorkingDir(ROOT_PATH);
@@ -42,7 +43,7 @@ void THelperSchemaless::CreateTestOlapStore(TString scheme) {
 
 void THelperSchemaless::CreateTestOlapTable(TString storeOrDirName, TString scheme) {
     NKikimrSchemeOp::TColumnTableDescription table;
-    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &table));
+    Y_ABORT_UNLESS(::google::protobuf::TextFormat::ParseFromString(scheme, &table));
     TString workingDir = ROOT_PATH;
     if (!storeOrDirName.empty()) {
         workingDir += "/" + storeOrDirName;
@@ -59,12 +60,12 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
     const Ydb::StatusIds_StatusCode& expectedStatus, const TString& expectedIssuePrefix) const {
     auto* runtime = Server.GetRuntime();
 
-    UNIT_ASSERT(batch);
-    UNIT_ASSERT(batch->num_rows());
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(batch->num_rows());
     auto data = NArrow::SerializeBatchNoCompression(batch);
-    UNIT_ASSERT(!data.empty());
+    Y_ABORT_UNLESS(!data.empty());
     TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
-    UNIT_ASSERT(serializedSchema);
+    Y_ABORT_UNLESS(serializedSchema);
 
     Ydb::Table::BulkUpsertRequest request;
     request.mutable_arrow_batch_settings()->set_schema(serializedSchema);
@@ -84,8 +85,8 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
             issues << "\n";
         }
         Cerr << issues;
-        UNIT_ASSERT_VALUES_EQUAL(op.status(), expectedStatus);
-        UNIT_ASSERT(issues.StartsWith(expectedIssuePrefix));
+        Y_ABORT_UNLESS((op.status()) == (expectedStatus));
+        Y_ABORT_UNLESS(issues.StartsWith(expectedIssuePrefix));
         responses.fetch_add(1);
     });
 
@@ -390,12 +391,12 @@ std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
 
 std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui64 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
-    UNIT_ASSERT(schema);
-    UNIT_ASSERT(schema->num_fields());
+    Y_ABORT_UNLESS(schema);
+    Y_ABORT_UNLESS(schema->num_fields());
 
     std::unique_ptr<arrow::RecordBatchBuilder> builders;
     auto res = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), rowCount, &builders);
-    UNIT_ASSERT(res.ok());
+    Y_ABORT_UNLESS(res.ok());
 
     for (i32 col = 0; col < schema->num_fields(); ++col) {
         auto& field = schema->field(col);
@@ -404,29 +405,29 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
             ui64 value = begin + row;
             switch (typeId) {
                 case arrow::Type::INT16: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::Int16Builder>(col)->Append(value).ok());
+                    Y_ABORT_UNLESS(builders->GetFieldAs<arrow::Int16Builder>(col)->Append(value).ok());
                     break;
                 }
                 case arrow::Type::INT32: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::Int32Builder>(col)->Append(value).ok());
+                    Y_ABORT_UNLESS(builders->GetFieldAs<arrow::Int32Builder>(col)->Append(value).ok());
                     break;
                 }
                 case arrow::Type::INT64: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::Int64Builder>(col)->Append(value).ok());
+                    Y_ABORT_UNLESS(builders->GetFieldAs<arrow::Int64Builder>(col)->Append(value).ok());
                     break;
                 }
                 case arrow::Type::TIMESTAMP: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::TimestampBuilder>(col)->Append(begin + row * tsStepUs).ok());
+                    Y_ABORT_UNLESS(builders->GetFieldAs<arrow::TimestampBuilder>(col)->Append(begin + row * tsStepUs).ok());
                     break;
                 }
                 case arrow::Type::BINARY: {
                     auto str = ToString(value);
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::BinaryBuilder>(col)->Append(str.data(), str.size()).ok());
+                    Y_ABORT_UNLESS(builders->GetFieldAs<arrow::BinaryBuilder>(col)->Append(str.data(), str.size()).ok());
                     break;
                 }
                 case arrow::Type::STRING: {
                     auto str = ToString(value);
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::StringBuilder>(col)->Append(str.data(), str.size()).ok());
+                    Y_ABORT_UNLESS(builders->GetFieldAs<arrow::StringBuilder>(col)->Append(str.data(), str.size()).ok());
                     break;
                 }
                 default:
@@ -436,10 +437,10 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
     }
 
     std::shared_ptr<arrow::RecordBatch> batch;
-    UNIT_ASSERT(builders->Flush(&batch).ok());
-    UNIT_ASSERT(batch);
-    UNIT_ASSERT(batch->num_rows());
-    UNIT_ASSERT(batch->Validate().ok());
+    Y_ABORT_UNLESS(builders->Flush(&batch).ok());
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(batch->num_rows());
+    Y_ABORT_UNLESS(batch->Validate().ok());
     return batch;
 }
 

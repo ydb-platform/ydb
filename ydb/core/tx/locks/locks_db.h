@@ -110,27 +110,29 @@ public:
             }
         }
 
-        // Load write seq nums
-        if (db.HaveTable<typename Schema::LockWriteSeqNums>()) {
-            auto rowset = db.Table<typename Schema::LockWriteSeqNums>().Select();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-            while (!rowset.EndOfSet()) {
-                auto lockId = rowset.template GetValue<typename Schema::LockWriteSeqNums::LockId>();
-                auto it = lockIndex.find(lockId);
-                if (it != lockIndex.end()) {
-                    auto& lock = rows[it->second];
-                    NDataShard::TWriteSeqNumState state;
-                    state.WriterIndex = rowset.template GetValue<typename Schema::LockWriteSeqNums::WriterIndex>();
-                    state.WriteSeqNum = rowset.template GetValue<typename Schema::LockWriteSeqNums::WriteSeqNum>();
-                    state.SerializedResult = rowset.template GetValueOrDefault<typename Schema::LockWriteSeqNums::WriteResult>();
-                    if (state.WriteSeqNum) {
-                        lock.WriteSeqNumStates.push_back(std::move(state));
-                    }
-                }
-                if (!rowset.Next()) {
+        // Load write seq nums (DataShard only; ColumnShard has no LockWriteSeqNums table)
+        if constexpr (requires { typename Schema::LockWriteSeqNums; }) {
+            if (db.HaveTable<typename Schema::LockWriteSeqNums>()) {
+                auto rowset = db.Table<typename Schema::LockWriteSeqNums>().Select();
+                if (!rowset.IsReady()) {
                     return false;
+                }
+                while (!rowset.EndOfSet()) {
+                    auto lockId = rowset.template GetValue<typename Schema::LockWriteSeqNums::LockId>();
+                    auto it = lockIndex.find(lockId);
+                    if (it != lockIndex.end()) {
+                        auto& lock = rows[it->second];
+                        NDataShard::TWriteSeqNumState state;
+                        state.WriterIndex = rowset.template GetValue<typename Schema::LockWriteSeqNums::WriterIndex>();
+                        state.WriteSeqNum = rowset.template GetValue<typename Schema::LockWriteSeqNums::WriteSeqNum>();
+                        state.SerializedResult = rowset.template GetValueOrDefault<typename Schema::LockWriteSeqNums::WriteResult>();
+                        if (state.WriteSeqNum) {
+                            lock.WriteSeqNumStates.push_back(std::move(state));
+                        }
+                    }
+                    if (!rowset.Next()) {
+                        return false;
+                    }
                 }
             }
         }
@@ -168,18 +170,28 @@ public:
 
     void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) override {
         using Schema = TSchemaDescription;
-        NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::LockWriteSeqNums>().Key(lockId, writerIndex).Update(
-            NIceDb::TUpdate<typename Schema::LockWriteSeqNums::WriteSeqNum>(writeSeqNum),
-            NIceDb::TUpdate<typename Schema::LockWriteSeqNums::WriteResult>(serializedResult));
-        HasChanges_ = true;
+        if constexpr (requires { typename Schema::LockWriteSeqNums; }) {
+            NIceDb::TNiceDb db(DB);
+            db.Table<typename Schema::LockWriteSeqNums>().Key(lockId, writerIndex).Update(
+                NIceDb::TUpdate<typename Schema::LockWriteSeqNums::WriteSeqNum>(writeSeqNum),
+                NIceDb::TUpdate<typename Schema::LockWriteSeqNums::WriteResult>(serializedResult));
+            HasChanges_ = true;
+        } else {
+            Y_UNUSED(lockId, writerIndex, writeSeqNum, serializedResult);
+            Y_ABORT("WriteSeqNum is not supported");
+        }
     }
 
     void PersistRemoveLockWriteSeqNum(ui64 lockId, ui64 writerIndex) override {
         using Schema = TSchemaDescription;
-        NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::LockWriteSeqNums>().Key(lockId, writerIndex).Delete();
-        HasChanges_ = true;
+        if constexpr (requires { typename Schema::LockWriteSeqNums; }) {
+            NIceDb::TNiceDb db(DB);
+            db.Table<typename Schema::LockWriteSeqNums>().Key(lockId, writerIndex).Delete();
+            HasChanges_ = true;
+        } else {
+            Y_UNUSED(lockId, writerIndex);
+            Y_ABORT("WriteSeqNum is not supported");
+        }
     }
 
     // Persist adding/removing info on locked ranges

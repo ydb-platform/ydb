@@ -55,8 +55,7 @@ struct Schema: NIceDb::Schema {
         NormalizersTableId,
         NormalizerEventsTableId,
         ColumnsV1TableId,
-        ColumnsV2TableId,
-        LockWriteSeqNumsTableId
+        ColumnsV2TableId
     };
 
     enum class ETierTables: ui32 {
@@ -652,20 +651,6 @@ struct Schema: NIceDb::Schema {
         using TColumns = TableColumns<LockId, TxId>;
     };
 
-    // Per-writer uncommitted write seq num.
-    struct LockWriteSeqNums: Table<LockWriteSeqNumsTableId> {
-        struct LockId: Column<1, NScheme::NTypeIds::Uint64> {};
-
-        struct WriterIndex: Column<2, NScheme::NTypeIds::Uint64> {};
-
-        struct WriteSeqNum: Column<3, NScheme::NTypeIds::Uint64> {};
-
-        struct WriteResult: Column<4, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<LockId, WriterIndex>;
-        using TColumns = TableColumns<LockId, WriterIndex, WriteSeqNum, WriteResult>;
-    };
-
     struct IndexPortions: NIceDb::Schema::Table<PortionsTableId> {
         struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
 
@@ -794,8 +779,7 @@ struct Schema: NIceDb::Schema {
         TableInfo, TableVersionInfo, LongTxWrites, BlobsToKeep, BlobsToDelete, BlobsToDeleteWT, InsertTable, IndexGranules, IndexColumns,
         IndexCounters, SmallBlobs, OneToOneEvictedBlobs, Operations, TierBlobsDraft, TierBlobsToDelete, TierBlobsToDeleteWT, IndexIndexes,
         SharedBlobIds, BorrowedBlobIds, SourceSessions, DestinationSessions, OperationTxIds, IndexPortions, BackgroundSessions, ShardingInfo,
-        Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1,
-        LockWriteSeqNums>;
+        Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1>;
 
     //
 

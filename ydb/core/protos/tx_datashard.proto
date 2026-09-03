@@ -2143,6 +2143,10 @@ message TEvBuildFulltextDictRequest {
     // [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the dict scan must skip these
     // to locate the token and to group/compact segments per (prefix, token).
     repeated string PrefixColumns = 18;
+    // Statistics table is required for prefixed indexes with relevance
+    optional string StatsTableName = 19;
+    optional bool SkipFirstPrefix = 20;
+    optional bool SkipLastPrefix = 21;
 }
 
 message TEvBuildFulltextDictResponse {
@@ -2164,6 +2168,14 @@ message TEvBuildFulltextDictResponse {
     optional uint64 FirstTokenRows = 10;
     optional string LastToken = 11;
     optional uint64 LastTokenRows = 12;
+
+    // First and last prefix document statistics if skipped in the scan
+    optional string FirstPrefix = 13;
+    optional uint64 FirstPrefixDocCount = 14;
+    optional uint64 FirstPrefixSumDocLength = 15;
+    optional string LastPrefix = 16;
+    optional uint64 LastPrefixDocCount = 17;
+    optional uint64 LastPrefixSumDocLength = 18;
 }
 
 message TEvCdcStreamScanRequest {

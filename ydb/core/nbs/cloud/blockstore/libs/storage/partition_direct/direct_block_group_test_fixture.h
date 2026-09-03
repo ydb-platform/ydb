@@ -82,7 +82,7 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
 
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
-        std::unique_ptr<NTransport::IStorageTransport> transport,
+        NTransport::TStorageTransportPtr transport,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
         size_t directBlockGroupIndex = 0) const;
@@ -91,7 +91,7 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         requires std::derived_from<TTransport, NTransport::IStorageTransport>
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
-        std::unique_ptr<TTransport> transport,
+        std::shared_ptr<TTransport> transport,
         size_t directBlockGroupIndex = 0) const
     {
         auto ddisks = transport->GetDDiskIds();

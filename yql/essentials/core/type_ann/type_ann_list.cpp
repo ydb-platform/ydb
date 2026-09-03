@@ -2607,30 +2607,6 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* InferDecimalListFromRangeType(
-        const TExprNode::TPtr& input, const TDataExprType* beginType,
-        const TDataExprType* endType, const TDataExprType* stepType, TExtContext& ctx)
-    {
-        if (!EnsureAvailable(input->Pos(), NFeature::DecimalListFromRange, ctx.Expr, ctx.Types)) {
-            return nullptr;
-        }
-        if (!IsDataTypeDecimal(beginType->GetSlot()) || !IsDataTypeDecimal(endType->GetSlot()) ||
-            (stepType && !IsDataTypeDecimal(stepType->GetSlot())))
-        {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                "ListFromRange over Decimal requires Decimal Start, End, and Step arguments"));
-            return nullptr;
-        }
-        if (!IsSameAnnotation(*beginType, *endType) ||
-            (stepType && !IsSameAnnotation(*beginType, *stepType)))
-        {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                "ListFromRange over Decimal requires Start, End, and Step with the same precision and scale"));
-            return nullptr;
-        }
-        return beginType;
-    }
-
     IGraphTransformer::TStatus ListFromRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 2U, 3U, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2750,13 +2726,17 @@ namespace {
             (stepItemType && IsDataTypeDecimal(stepItemType->GetSlot()));
         const TTypeAnnotationNode* commonType = nullptr;
         if (hasDecimalArgument) {
-            commonType = InferDecimalListFromRangeType(
-                input, beginItemType, endItemType, stepItemType, ctx);
+            if (!EnsureAvailable(input->Pos(), NFeature::DecimalListFromRange, ctx.Expr, ctx.Types)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            commonType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types);
             if (!commonType) {
                 return IGraphTransformer::TStatus::Error;
             }
-            if (beginIsOpt || endIsOpt || stepIsOpt) {
-                commonType = ctx.Expr.MakeType<TOptionalExprType>(commonType);
+            if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types);
+                status != IGraphTransformer::TStatus::Ok)
+            {
+                return status;
             }
         } else if (stepType && IsDataTypeFloat(stepItemType->GetSlot())) {
             commonType = ((beginIsOpt || endIsOpt) && !stepIsOpt)

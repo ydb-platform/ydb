@@ -174,7 +174,8 @@ IS3Lister::TPtr MakeS3Lister(
     const TMaybe<TString>& delimiter,
     bool allowLocalFiles,
     NActors::TActorSystem* actorSystem,
-    TSharedListingContextPtr sharedCtx = nullptr);
+    TSharedListingContextPtr sharedCtx = nullptr,
+    IHttpRequestContext::TPtr requestContext = nullptr);
 
 class IS3ListerFactory {
 public:

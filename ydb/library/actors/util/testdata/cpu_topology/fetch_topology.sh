@@ -32,6 +32,10 @@ do
   copy_file "$f"
 done
 
+# Cgroup cpuset limits (v1 and v2 layouts)
+copy_file /sys/fs/cgroup/cpuset/cpuset.effective_cpus
+copy_file /sys/fs/cgroup/cpuset.cpus.effective
+
 # Per-CPU topology
 for f in /sys/devices/system/cpu/cpu[0-9]*/topology/*; do
   copy_file "$f"

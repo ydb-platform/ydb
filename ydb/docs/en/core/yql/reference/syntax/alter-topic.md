@@ -34,7 +34,7 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 * `metering_mode` — resource metering method (`RESERVED_CAPACITY` — by dedicated resources or `REQUEST_UNITS` — by actual usage). Relevant for topics in serverless databases. Value type — `String`.
 * `min_active_partitions` — the minimum number of active partitions of the topic. [Auto-partitioning](../../../../concepts/datamodel/topic#autopartitioning) will not reduce the number of active partitions below this value. Type — `integer`, default value — `1`.
 * `max_active_partitions` — the maximum number of active partitions of the topic. [Auto-partitioning](../../../../concepts/datamodel/topic#autopartitioning) will not increase the number of active partitions above this value. Type — `integer`, default is `min_active_partitions`.
-* `retention_period`: Data retention period in the topic. Value type: `Interval`, default value: `18h`.
+* `retention_period`: Data retention period in the topic. Value type: `Interval`.
 * `retention_storage_mb`: Limit on the maximum disk space occupied by the topic data. When this value is exceeded, the older data is cleared, like under a retention policy. The consumed space may exceed the set value when autopartitioning is enabled. Value type: `integer`, default value: `0` (no limit).
 * `partition_write_burst_bytes` — the size of the write quota reserve for a partition to handle write bursts. When set to `0`, the actual write_burst value is taken to be equal to the quota value (which allows write bursts of up to 1 second). Value type — `integer`, default value: `0`.
 * `partition_write_speed_bytes_per_second`: Maximum allowed write speed per partition. If a write speed for a given partition exceeds this value, the write speed will be capped. Value type: `integer`, default value: `2097152` (2MB).
@@ -45,7 +45,7 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs`: List of [codecs](../../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type: `String`.
+* `supported_codecs` — a list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}
 

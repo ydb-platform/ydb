@@ -765,6 +765,87 @@ Y_UNIT_TEST_SUITE(TOlap) {
         checkMultiColumnStatistics("s2");
     }
 
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogram) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkEqHeight = [&](const TSet<TString>& expectedNames) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/EqHeightColumnTable");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            TSet<TString> names;
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
+                names.insert(stat.GetName());
+                UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                UNIT_ASSERT(stat.TypesSize() > 0);
+                for (const auto type : stat.GetTypes()) {
+                    UNIT_ASSERT_EQUAL(
+                        static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                        NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+        };
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "h1" ColumnNames: "key1" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkEqHeight({"h1"});
+
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkEqHeight({"h1"});
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightColumnTable"
+            UpsertMultiColumnStatistics { Name: "h2" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkEqHeight({"h1", "h2"});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogramRejectsJson) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "js" Type: "Json" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "js" Type: "Json" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            UpsertMultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+    }
+
     Y_UNIT_TEST(CreateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

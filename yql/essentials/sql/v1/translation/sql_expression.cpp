@@ -733,7 +733,7 @@ void TSqlExpression::AddJsonValueCaseHandlers(const TRule_json_value& node, TVec
     TNodePtr onError;
     EJsonValueHandlerMode onErrorMode = EJsonValueHandlerMode::DefaultValue;
     for (size_t i = 0; i < node.Block5Size(); i++) {
-        const auto block = node.GetBlock5(i);
+        const auto& block = node.GetBlock5(i);
         const bool isEmptyClause = to_lower(block.GetToken3().GetValue()) == "empty";
 
         if (isEmptyClause && onEmpty != nullptr) {
@@ -1329,7 +1329,7 @@ TNodeResult TSqlExpression::LambdaRule(const TRule_lambda& rule) {
     if (!SqlLambdaParams(parenthesis, args, optionalArgumentsCount)) {
         return std::unexpected(ESQLError::Basic);
     }
-    auto bodyBlock = alt.GetBlock2();
+    const auto& bodyBlock = alt.GetBlock2();
     Token(bodyBlock.GetToken1());
     TPosition pos(Ctx_.Pos());
     TVector<TNodePtr> exprSeq;
@@ -2111,7 +2111,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
             }
             case TRule_cond_expr::kAltCondExpr2: {
                 // | NOT? IN COMPACT? in_expr
-                auto altInExpr = cond.GetAlt_cond_expr2();
+                const auto& altInExpr = cond.GetAlt_cond_expr2();
 
                 if (IsYqlSelectProduced_) {
                     return YqlXorSubExpr(std::move(*res), altInExpr, tail);
@@ -2160,7 +2160,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
                 return Wrap((notNoll && isNull) ? isNull->ApplyUnaryOp(Ctx_, pos, "Not") : isNull);
             }
             case TRule_cond_expr::kAltCondExpr4: {
-                auto alt = cond.GetAlt_cond_expr4();
+                const auto& alt = cond.GetAlt_cond_expr4();
                 const bool symmetric = alt.HasBlock3() && IS_TOKEN(alt.GetBlock3().GetToken1().GetId(), SYMMETRIC);
                 const bool negation = alt.HasBlock1();
 
@@ -2218,7 +2218,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
                 }
             }
             case TRule_cond_expr::kAltCondExpr5: {
-                auto alt = cond.GetAlt_cond_expr5();
+                const auto& alt = cond.GetAlt_cond_expr5();
                 auto getNode = [](const TRule_cond_expr::TAlt5::TBlock1& b) -> const TRule_eq_subexpr& { return b.GetRule_eq_subexpr2(); };
                 return BinOpList(node.GetRule_eq_subexpr1(), getNode, alt.GetBlock1().begin(), alt.GetBlock1().end(), tail);
             }

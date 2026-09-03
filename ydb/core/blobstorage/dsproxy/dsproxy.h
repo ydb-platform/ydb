@@ -212,6 +212,14 @@ public:
     };
 
 public:
+    // The batched put path builds the actor out of a queue of events instead of a single one and
+    // leaves Event unset; each of those events keeps its own kind, so the request-wide one is never
+    // consulted there.
+    template<typename TEv>
+    static NKikimrBlobStorage::TDataKind::E DataKindOf(const TEv *ev) {
+        return ev ? ev->DataKind : NKikimrBlobStorage::TDataKind::USER;
+    }
+
     template<typename TGroupRequestParameters>
     TBlobStorageGroupRequestActor(TGroupRequestParameters& params)
         : TActor(&TThis::InitialStateFunc, params.TypeSpecific.Activity)
@@ -222,6 +230,7 @@ public:
         , LogCtx(params.TypeSpecific.LogComponent, params.Common.LogAccEnabled)
         , ParentSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), params.TypeSpecific.Name)
         , RestartCounter(params.Common.RestartCounter)
+        , DataKind(DataKindOf(params.Common.Event))
         , CostModel(GroupQueues->CostModel)
         , RequestStartTime(params.Common.Now)
         , Source(params.Common.Source)
@@ -334,6 +343,10 @@ protected:
     ui32 GeneratedSubrequestBytes = 0;
     bool Dead = false;
     const ui32 RestartCounter = 0;
+    // Admission hint of the request being served; it has to reach every write this request makes on
+    // its own -- notably the parts a MustRestoreFirst read rewrites -- and every internal request it
+    // spawns on the way there.
+    const NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
     std::shared_ptr<const TCostModel> CostModel;
     const TMonotonic RequestStartTime;
     THashMap<ui32, TActorId> NodeSubscriptions;
@@ -447,6 +460,7 @@ struct TBlobStorageGroupPatchParameters {
     };
 
     bool UseVPatch = false;
+    bool EnableVPatchForTesting = false;
 };
 IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params);
 

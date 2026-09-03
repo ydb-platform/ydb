@@ -23,7 +23,7 @@ namespace NKikimr {
         bool AllowVPutLikeWrite(const TActorContext& ctx, bool ignoreBlock, bool isZeroEntry, ui32 size,
             NKikimrBlobStorage::TDataKind::E dataKind) const;
         bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const;
-        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVBlock::TPtr &ev) const;
+        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVBlock::TPtr &ev, bool hasExistingEntry) const;
         bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVCollectGarbage::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvLocalSyncData::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr &ev) const;

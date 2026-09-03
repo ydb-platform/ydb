@@ -128,20 +128,20 @@ using TGeneratorPtr = Value* (*)(Value *const * args, const TCodegenContext& ctx
 
 class ICodegeneratorRootNode {
 public:
-    virtual ~ICodegeneratorRootNode() {}
+    virtual ~ICodegeneratorRootNode() = default;
     virtual void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) = 0;
     virtual void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) = 0;
 };
 
 class ICodegeneratorInlineNode {
 public:
-    virtual ~ICodegeneratorInlineNode() {}
+    virtual ~ICodegeneratorInlineNode() = default;
     virtual Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
 };
 
 class ICodegeneratorInlineWideNode {
 public:
-    virtual ~ICodegeneratorInlineWideNode() {}
+    virtual ~ICodegeneratorInlineWideNode() = default;
 
     using TGettersList = std::vector<std::function<Value*(const TCodegenContext& ctx, BasicBlock*&)>>;
     using TGenerateResult = std::pair<Value*, TGettersList>;
@@ -175,7 +175,7 @@ public:
 
 class ICodegeneratorRunNode {
 public:
-    virtual ~ICodegeneratorRunNode() {}
+    virtual ~ICodegeneratorRunNode() = default;
     virtual void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const = 0;
 };
 

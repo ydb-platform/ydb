@@ -107,3 +107,7 @@ THolder<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard& self, TPipelin
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

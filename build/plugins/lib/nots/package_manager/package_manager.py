@@ -3,8 +3,10 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 from .constants import (
+    LOCAL_PNPM_INSTALL_CONCURRENCY,
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     VIRTUAL_STORE_DIRNAME,
     NPM_REGISTRY_URL,
@@ -44,30 +46,47 @@ class PackageManagerCommandError(PackageManagerError):
 
 
 """
-Creates a decorator that synchronizes access to a function using a mutex file.
+Creates a decorator that limits concurrent access to a function using mutex files.
 
-The decorator uses file locking (fcntl.LOCK_EX) to ensure only one process can execute the decorated function at a time.
-The lock is released (fcntl.LOCK_UN) when the function completes.
+The decorator uses non-blocking file locks (fcntl.LOCK_EX) as semaphore slots.
+At most ``concurrency`` processes can execute the decorated function at a time.
+The acquired lock is released (fcntl.LOCK_UN) when the function completes.
 
 Args:
-    mutex_filename (str): Path to the file used as a mutex lock.
+    mutex_filename (str): Base path for the files used as semaphore slots.
+    concurrency (int): Maximum number of concurrent function executions.
 
 Returns:
     function: A decorator function that applies the synchronization logic.
 """
 
 
-def sync_mutex_file(mutex_filename):
+def sync_mutex_file(mutex_filename, concurrency=LOCAL_PNPM_INSTALL_CONCURRENCY):
+    if concurrency < 1:
+        raise ValueError("concurrency must be at least 1")
+
     def decorator(function):
         def wrapper(*args, **kwargs):
             import fcntl
 
-            with open(mutex_filename, "w+") as mutex:
-                fcntl.lockf(mutex, fcntl.LOCK_EX)
-                result = function(*args, **kwargs)
-                fcntl.lockf(mutex, fcntl.LOCK_UN)
+            mutexes = [open("{}.{}".format(mutex_filename, slot), "w+") for slot in range(concurrency)]
+            try:
+                while True:
+                    for mutex in mutexes:
+                        try:
+                            fcntl.lockf(mutex, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        except BlockingIOError:
+                            continue
 
-            return result
+                        try:
+                            return function(*args, **kwargs)
+                        finally:
+                            fcntl.lockf(mutex, fcntl.LOCK_UN)
+
+                    time.sleep(0.1)
+            finally:
+                for mutex in mutexes:
+                    mutex.close()
 
         return wrapper
 

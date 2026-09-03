@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const std::string sourceName = "sourceName";
         const std::string inputTopicName = "inputTopicName";
-        const std::string outputTopicName = "outputTopicName";
+        const TString outputTopicName = "outputTopicName";
         const std::string tableName = "tableName";
 
         CreateTopic(outputTopicName);
@@ -336,11 +336,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphBasic, TStreamingTestFixture) {
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph";
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphBasic, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopic";
+        const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -387,9 +388,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphGroupByHop, TStreamingTestFixture) {
-        constexpr char sourceTopicName[] = "restoreScriptGroupByHopTopicSource";
-        constexpr char sinkTopicName[] = "restoreScriptGroupByHopTopicSink";
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphGroupByHop, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto sourceTopicName = TStringBuilder() << Name_ << "TopicSource";
+        const auto sinkTopicName = TStringBuilder() << Name_ << "TopicSink";
         CreateTopic(sourceTopicName);
         CreateTopic(sinkTopicName);
 
@@ -445,13 +447,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetry, TStreamingTestFixture) {
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphOnRetry, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph_on_retry";
+        const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopicOnRetry";
+        const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -2569,6 +2572,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
             ExecQuery(query, EStatus::GENERIC_ERROR);
         }
+    }
+
+    Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
+        const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(outputTopic);
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT String::JoinFromList(ListReplicate("X", 10000000), "-");)",
+            "pq_source"_a = pqSourceName,
+            "output_topic"_a = outputTopic
+        ), EStatus::EXTERNAL_ERROR, "Max message size for YDS is 1048576 bytes but received message with size of");
     }
 }
 

@@ -15,7 +15,6 @@ from zoneinfo import ZoneInfoNotFoundError
 
 from clickhouse_connect import common
 from clickhouse_connect.common import version
-from clickhouse_connect.datatypes import dynamic as dynamic_module
 from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver import options, tzutil
@@ -29,9 +28,10 @@ from clickhouse_connect.driver._backend.orchestration import (
 )
 from clickhouse_connect.driver.binding import bind_query, str_query_value
 from clickhouse_connect.driver.common import (
+    ShowClickHouseErrors,
     StreamContext,
-    coerce_bool,
     coerce_int,
+    coerce_show_clickhouse_errors,
     dict_copy,
     version_at_least,
 )
@@ -76,6 +76,15 @@ arrow_str_setting = "output_format_arrow_string_as_string"
 # Orchestration queries are internal, so their decode must not be affected by
 # user-configured global read formats such as set_default_formats("String", "bytes").
 _INTERNAL_QUERY_FORMATS = {"String": "string"}
+
+# Names the ClickHouse HTTP interface consumes as request parameters, not query settings.
+# The subset already carried in valid_transport_settings (database, role, query_id, ...) is
+# forwarded on purpose; these remaining names have no meaning as settings and would corrupt
+# the request if placed in the query string, so they are rejected rather than forwarded.
+_HTTP_RESERVED_SETTING_NAMES = frozenset({"query", "user", "password", "default_format", "stacktrace", "close_session"})
+# Prefixes the HTTP interface reserves. param_ is the bound-parameter namespace emitted by
+# bind_query, so a setting named param_x would override an actual query parameter value.
+_HTTP_RESERVED_SETTING_PREFIXES = ("param_",)
 
 
 def _strip_utc_timezone_from_arrow(table: pyarrow.Table) -> pyarrow.Table:
@@ -133,12 +142,18 @@ class Client(ABC):
     _initial_settings: dict[str, Any] | None = None
     valid_transport_settings: set[str] = set()
     optional_transport_settings: set[str] = set()
+    # Names and name prefixes the transport reserves for request parameters rather than query
+    # settings. They must never be forwarded as a setting even when unknown to system.settings,
+    # because a transport (e.g. HTTP query params) would treat them as something other than a
+    # setting and silently corrupt the request.
+    _reserved_setting_names: set[str] = set()
+    _reserved_setting_prefixes: tuple[str, ...] = ()
     database = None
     max_error_message = 0
     _tz_source: TzSource = "auto"
     _apply_server_tz = False
     tz_mode: TzMode = "naive_utc"
-    show_clickhouse_errors = True
+    show_clickhouse_errors: ShowClickHouseErrors = True
 
     @property
     def tz_source(self) -> TzSource:
@@ -163,7 +178,7 @@ class Client(ABC):
         server_host_name: str | None,
         tz_source: TzSource | None = None,
         tz_mode: TzMode | None = None,
-        show_clickhouse_errors: bool | None = None,
+        show_clickhouse_errors: bool | str | None = None,
         autoconnect: bool = True,
     ):
         """
@@ -178,6 +193,8 @@ class Client(ABC):
           naive UTC timestamps.  "aware" forces timezone-aware UTC datetimes.  "schema" returns datetimes that
           match the server's column definition which means timezone-aware when the column defines a timezone and naive
           for bare DateTime columns.
+        :param show_clickhouse_errors: True for full error detail (including URL/version), False for a generic
+          message, or "scrub" for the SQL error without host/URL or version trailer.
         :param autoconnect: If True, immediately connect to server and fetch settings. If False,
           defer connection to _connect() method. Used by async clients to avoid blocking I/O in __init__.
         """
@@ -186,7 +203,7 @@ class Client(ABC):
         if database and database != "__default__":
             self.database = database
         if show_clickhouse_errors is not None:
-            self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
+            self.show_clickhouse_errors = coerce_show_clickhouse_errors(show_clickhouse_errors)
         self.server_host_name = server_host_name
         self.uri = uri
         self.tz_mode = tz_mode if tz_mode is not None else "naive_utc"
@@ -237,14 +254,18 @@ class Client(ABC):
         self.server_settings = dict(server_info.settings)
         if result.protocol_version:
             self.protocol_version = result.protocol_version
-        if result.json_serialization_format is not None:
-            dynamic_module.json_serialization_format = result.json_serialization_format
         for key, value in result.client_setting_writes:
             self.set_client_setting(key, value)
 
     def _validate_settings(self, settings: dict[str, Any] | None) -> dict[str, str]:
         """
-        This strips any ClickHouse settings that are not recognized or are read only.
+        Filter and normalize ClickHouse settings before they are sent to the server.
+
+        Settings known to be readonly on this server are handled according to the
+        common ``invalid_setting_action`` option. Settings that do not appear in
+        ``system.settings`` for the current user (for example custom settings made
+        ``CHANGEABLE_IN_READONLY`` on a role) are forwarded to ClickHouse so the
+        server can accept or reject them.
         :param settings:  Dictionary of setting name and values
         :return: A filtered dictionary of settings with values rendered as strings
         """
@@ -285,16 +306,31 @@ class Client(ABC):
             if setting_def and setting_def.value == str_value:
                 if setting_def.readonly or (current_setting is not None and current_setting == setting_def.value):
                     return None
-            if setting_def is None or setting_def.readonly:
+            if setting_def is None:
+                # Not present in system.settings for this user. May be a custom setting,
+                # including one made CHANGEABLE_IN_READONLY on a role, which the client cannot
+                # discover without extra privileges. Forward it and let ClickHouse accept or
+                # reject it.
+                if key in self.optional_transport_settings:
+                    return None
+                if key in self._reserved_setting_names or key.startswith(self._reserved_setting_prefixes):
+                    raise ProgrammingError(f"{key} is a reserved transport parameter and cannot be sent as a setting") from None
+                if invalid_action == "drop":
+                    # Honor the caller's opt-in to strip settings the client cannot validate,
+                    # which keeps a single settings dict portable across server versions.
+                    logger.warning("Dropping setting %s not found in system.settings", key)
+                    return None
+                return str_value
+            if setting_def.readonly:
                 if key in self.optional_transport_settings:
                     return None
                 if invalid_action == "send":
-                    logger.warning("Attempting to send unrecognized or readonly setting %s", key)
+                    logger.warning("Attempting to send readonly setting %s", key)
                 elif invalid_action == "drop":
-                    logger.warning("Dropping unrecognized or readonly settings %s", key)
+                    logger.warning("Dropping readonly setting %s", key)
                     return None
                 else:
-                    raise ProgrammingError(f"Setting {key} is unknown or readonly") from None
+                    raise ProgrammingError(f"Setting {key} is readonly") from None
         return str_value
 
     def _setting_status(self, key: str) -> SettingStatus:
@@ -345,9 +381,11 @@ class Client(ABC):
     @abstractmethod
     def set_client_setting(self, key: str, value: Any) -> None:
         """
-        Set a clickhouse setting for the client after initialization.  If a setting is not recognized by ClickHouse,
-        or the setting is identified as "read_only", this call will either throw a Programming exception or attempt
-        to send the setting anyway based on the common setting 'invalid_setting_action'
+        Set a clickhouse setting for the client after initialization. Settings identified as read only on the
+        server honor the common setting 'invalid_setting_action', which can throw a ProgrammingError, drop the
+        setting, or send it anyway. Settings not present in system.settings for the current user (for example a
+        custom setting made CHANGEABLE_IN_READONLY on a role) are forwarded to ClickHouse, which accepts or
+        rejects them, unless 'invalid_setting_action' is 'drop', in which case they are dropped.
         :param key: ClickHouse setting name
         :param value: ClickHouse setting value
         """
@@ -1208,6 +1246,7 @@ class Client(ABC):
                 settings,
                 data,
                 transport_settings,
+                server_tz=self.server_tz,
             ),
             self._execute_operation,
         )

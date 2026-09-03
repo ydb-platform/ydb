@@ -654,14 +654,4 @@ struct TLocalRequestBase {
 
 };
 
-struct TGetPartitionsLocationRequest : public TLocalRequestBase {
-    TGetPartitionsLocationRequest() = default;
-    TGetPartitionsLocationRequest(const TString& topic, const TString& database, const TString& token, const TVector<ui32>& partitionIds)
-        : TLocalRequestBase(topic, database, token)
-        , PartitionIds(partitionIds)
-    {}
-
-    TVector<ui32> PartitionIds;
-};
-
 }

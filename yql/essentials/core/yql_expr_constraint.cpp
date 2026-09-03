@@ -1884,6 +1884,8 @@ private:
         TStatus status = TStatus::Ok;
         TDynBitMap outFromChildren; // children, from which take a multi constraint for output
         const auto* inputStreaming = input->Head().GetConstraint<TStreamingConstraintNode>();
+        const auto* inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
+        const bool isVariantOutput = GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant;
 
         if (const auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
             for (size_t i = 2; i < input->ChildrenSize(); ++i) {
@@ -1922,7 +1924,19 @@ private:
         } else {
             TConstraintNode::TListType argConstraintsList;
             if (GetSeqItemType(*input->Head().GetTypeAnn()).GetKind() != ETypeAnnotationKind::Variant) {
-                argConstraintsList = input->Head().GetAllConstraints();
+                if (inputVarIndex && isVariantOutput) {
+                    for (const auto* constraint : input->Head().GetAllConstraints()) {
+                        if (constraint->GetName() != TVarIndexConstraintNode::Name()) {
+                            argConstraintsList.push_back(constraint);
+                        }
+                    }
+
+                    // A handler of a non-variant input has one local alternative. Keep its VarIndex
+                    // in local coordinates and compose it with the input VarIndex below.
+                    argConstraintsList.push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(1U));
+                } else {
+                    argConstraintsList = input->Head().GetAllConstraints();
+                }
             } else if (inputStreaming) {
                 argConstraintsList.push_back(inputStreaming);
             }
@@ -1937,10 +1951,9 @@ private:
             return status;
         }
 
-        const auto inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
         const bool emptyInput = input->Head().GetConstraint<TEmptyConstraintNode>();
         bool hasStreamingOutput = false;
-        if (GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant) {
+        if (isVariantOutput) {
             ui32 outIndexOffset = 0;
             TMultiConstraintNode::TMapType multiItems;
             TVarIndexConstraintNode::TMapType remapItems;

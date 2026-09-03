@@ -823,9 +823,6 @@ optimizer_trace::Node BuildPlanNode(
             .detail(BuildColumnValueTable("Order enforcer", BuildOrderEnforcerRows(*op->Props.OrderEnforcer)));
     }
 
-    if (op->Props.EnsureAtMostOne) {
-        node.field("EnsureAtMostOne", "true");
-    }
 
     if ((opts & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata))
         && op->Props.Metadata.has_value()) {
@@ -933,8 +930,8 @@ optimizer_trace::Node BuildPlanNode(
 }
 
 optimizer_trace::Node BuildPlanNodeFromRoot(TOpRoot& root, TExprContext& ctx, ui32 opts, TTraceBuildState* state) {
-    const auto& subplans = root.PlanProps.Subplans.PlanMap;
-    if (subplans.empty()) {
+    const auto& subplans = root.PlanProps.Subplans;
+    if (subplans.Empty()) {
         return BuildPlanNode(root.GetInput(), ctx, root.PlanProps, opts, "n-0", state);
     }
     optimizer_trace::Node container("n", "Plan", "Plan");
@@ -969,7 +966,6 @@ void DefineHtmlTraceFields(optimizer_trace::Trace& trace) {
         {"LeftShuffleBy", "Left shuffle"},
         {"RightShuffleBy", "Right shuffle"},
         {"OrderEnforcer", "Order"},
-        {"EnsureAtMostOne", "At most one"},
         {"Storage", "Storage"},
         {"KeyColumns", "Key columns"},
         {"SortBy", "Sort by"},

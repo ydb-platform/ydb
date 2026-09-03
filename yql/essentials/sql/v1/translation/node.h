@@ -244,13 +244,9 @@ public:
     TPtr AstNode(TPtr node) const;
     TPtr AstNode(const TString& str) const;
 
-    template <typename TVal, typename... TVals>
-    void Add(TVal val, TVals... vals) {
-        DoAdd(AstNode(val));
-        Add(vals...);
-    }
-
-    void Add() {
+    template <typename... TVals>
+    void Add(TVals... vals) {
+        (DoAdd(AstNode(vals)), ...);
     }
 
     // Y() Q() L()
@@ -851,8 +847,7 @@ public:
     const TNodePtr OrderExpr;
     const bool Ascending;
     TIntrusivePtr<TSortSpecification> Clone() const;
-    ~TSortSpecification() {
-    }
+    ~TSortSpecification() = default;
 
 private:
     const TNodePtr CleanOrderExpr_;
@@ -884,8 +879,7 @@ struct TFrameBound: public TSimpleRefCount<TFrameBound> {
     EFrameSettings Settings = FrameUndefined;
 
     TIntrusivePtr<TFrameBound> Clone() const;
-    ~TFrameBound() {
-    }
+    ~TFrameBound() = default;
 };
 using TFrameBoundPtr = TIntrusivePtr<TFrameBound>;
 
@@ -896,8 +890,7 @@ struct TFrameSpecification: public TSimpleRefCount<TFrameSpecification> {
     EFrameExclusions FrameExclusion = FrameExclNone;
 
     TIntrusivePtr<TFrameSpecification> Clone() const;
-    ~TFrameSpecification() {
-    }
+    ~TFrameSpecification() = default;
 };
 using TFrameSpecificationPtr = TIntrusivePtr<TFrameSpecification>;
 
@@ -906,11 +899,9 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     TNodePtr Hop;
     TNodePtr Interval;
     TNodePtr Delay;
-    bool DataWatermarks;
 
     TIntrusivePtr<TLegacyHoppingWindowSpec> Clone() const;
-    ~TLegacyHoppingWindowSpec() {
-    }
+    ~TLegacyHoppingWindowSpec() = default;
 };
 using TLegacyHoppingWindowSpecPtr = TIntrusivePtr<TLegacyHoppingWindowSpec>;
 
@@ -923,8 +914,7 @@ struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
     TFrameSpecificationPtr Frame;
 
     TIntrusivePtr<TWindowSpecification> Clone() const;
-    ~TWindowSpecification() {
-    }
+    ~TWindowSpecification() = default;
 };
 using TWindowSpecificationPtr = TIntrusivePtr<TWindowSpecification>;
 using TWinSpecs = TMap<TString, TWindowSpecificationPtr>;
@@ -1286,13 +1276,14 @@ struct TTableSettings {
     TNodePtr PartitionByHashFunction;
     TMaybe<TIdentifier> StoreExternalBlobs;
     TNodePtr ExternalDataChannelsCount;
+    NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
 
     TNodePtr DataSourcePath;
     NYql::TResetableSetting<TNodePtr, void> Location;
     TVector<NYql::TResetableSetting<std::pair<TIdentifier, TNodePtr>, TIdentifier>> ExternalSourceParameters;
 
     bool IsSet() const {
-        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount;
+        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount || MetricsLevel;
     }
 };
 
@@ -1468,8 +1459,7 @@ struct TAlterTableParameters {
 
 struct TRoleParameters {
 protected:
-    TRoleParameters() {
-    }
+    TRoleParameters() = default;
 
 public:
     TVector<TDeferredAtom> Roles;

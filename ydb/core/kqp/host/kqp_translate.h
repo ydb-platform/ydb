@@ -125,11 +125,6 @@ public:
         return *this;
     }
 
-    TKqpTranslationSettingsBuilder& SetSqlVersion(const TMaybe<ui16>& value) {
-        SqlVersion = value;
-        return *this;
-    }
-
     TKqpTranslationSettingsBuilder& SetLangVer(ui32 langVer) {
         LangVer = langVer;
         return *this;
@@ -161,7 +156,6 @@ public:
 
 private:
     const NYql::EKikimrQueryType QueryType;
-    ui16 KqpYqlSyntaxVersion = 1;
     const TString Cluster;
     const TString QueryText;
     const NSQLTranslation::EBindingsMode BindingsMode;
@@ -172,7 +166,6 @@ private:
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameters = {};
-    TMaybe<ui16> SqlVersion = {};
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     bool IsAmbiguityError = false;

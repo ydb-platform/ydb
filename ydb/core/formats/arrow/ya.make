@@ -3,10 +3,10 @@ LIBRARY()
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/formats/arrow/serializer
-    ydb/core/kqp/common/result_set_format
     ydb/core/scheme
     ydb/library/actors/core
     ydb/library/formats/arrow
+    ydb/library/formats/arrow/minikql
     ydb/library/formats/arrow/modifier
     ydb/library/services
     yql/essentials/minikql

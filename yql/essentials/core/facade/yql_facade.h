@@ -288,6 +288,7 @@ public:
     void SetValidateOptions(NUdf::EValidateMode validateMode);
     void SetDisableNativeUdfSupport(bool disable);
     void SetUseTableMetaFromGraph(bool use);
+    void SetBridgeBinaryPath(const TString& path);
 
     void SetProgressWriter(TOperationProgressWriter writer) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
@@ -309,14 +310,7 @@ public:
         OperationOptions_.SharedId = id;
     }
 
-    void SetOperationTitle(const TString& title) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-        if (!title.Contains("YQL")) {
-            ythrow yexception() << "Please mention YQL in the title '" << title << "'";
-        }
-
-        OperationOptions_.Title = title;
-    }
+    void SetOperationTitle(const TString& title);
 
     void SetOperationUrl(const TString& url) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
@@ -491,6 +485,7 @@ private:
     NUdf::EValidateMode ValidateMode_ = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport_ = false;
     bool UseTableMetaFromGraph_ = false;
+    TString BridgeBinaryPath_;
     TMaybe<TSet<TString>> UsedClusters_;
     TMaybe<TSet<TString>> UsedProviders_;
     TMaybe<TString> ExternalQueryAst_;

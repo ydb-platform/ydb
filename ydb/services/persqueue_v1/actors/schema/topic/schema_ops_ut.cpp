@@ -12,7 +12,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
-#include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
@@ -244,20 +243,6 @@ void AssertDescribeAliases(
         const auto describe = DescribeTopic(runtime, name);
         UNIT_ASSERT_VALUES_EQUAL_C(describe.partitioning_settings().min_active_partitions(), 1, name);
     }
-}
-
-THolder<TEvPQProxy::TEvPartitionLocationResponse> DoPartitionsLocationRequest(
-    NActors::TTestActorRuntime& runtime,
-    const TGetPartitionsLocationRequest& request,
-    TDuration waitTimeout = TDuration::Seconds(30))
-{
-    const auto edge = runtime.AllocateEdgeActor();
-    TEnableScheduleForRootGuard schedule(runtime);
-    schedule.SetRoot(runtime.Register(CreatePartitionsLocationActor(edge, request)));
-    runtime.DispatchEvents();
-    auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, waitTimeout);
-    UNIT_ASSERT(handle);
-    return THolder(handle->Release());
 }
 
 auto BreakFirstLocationForward(NActors::TTestActorRuntime& runtime, size_t& broken) {
@@ -1086,167 +1071,6 @@ Y_UNIT_TEST(DescribeTopicInternalRequestAllowedWithoutToken) {
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
-Y_UNIT_TEST(PartitionsLocationSmokeAndErrors) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_smoke";
-    CreateTopic(runtime, path, /*partitions=*/3);
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 3u);
-        UNIT_ASSERT_GT(ev->PathId, 0);
-        UNIT_ASSERT_GT(ev->SchemeShardId, 0);
-        for (const auto& p : ev->Partitions) {
-            UNIT_ASSERT_GT(p.NodeId, 0);
-            UNIT_ASSERT_GT(p.Generation, 0);
-            UNIT_ASSERT_LT(p.PartitionId, 3);
-        }
-    }
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {0, 2}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 2u);
-    }
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1, 1, 1}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions[0].PartitionId, 1u);
-    }
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1000}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT(ev->Issues.ToString().Contains("No partition"));
-    }
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {"/Root/missing_topic", "/Root", "", {}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SCHEME_ERROR);
-    }
-}
-
-Y_UNIT_TEST(PartitionsLocationRetriesWithSyncWhenStaleCache) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_stale_cache";
-    CreateTopic(runtime, path, /*partitions=*/2);
-
-    size_t staleNavigates = 0;
-    size_t syncNavigates = 0;
-    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
-        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            if (!ev || !ev->Get()->Request) {
-                return;
-            }
-            for (const auto& entry : ev->Get()->Request->ResultSet) {
-                if (!entry.PQGroupInfo) {
-                    continue;
-                }
-                if (entry.SyncVersion) {
-                    ++syncNavigates;
-                } else {
-                    ++staleNavigates;
-                }
-            }
-            StripPartitionFromNavigateResult(ev, /*partitionId=*/1, /*onlyWithoutSync=*/true);
-        });
-
-    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1}});
-    UNIT_ASSERT_GT(staleNavigates, 0u);
-    UNIT_ASSERT_GT(syncNavigates, 0u);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions[0].PartitionId, 1u);
-}
-
-Y_UNIT_TEST(PartitionsLocationMissingAfterSync) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_missing_after_sync";
-    CreateTopic(runtime, path, /*partitions=*/2);
-
-    size_t syncNavigates = 0;
-    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
-        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            if (!ev || !ev->Get()->Request) {
-                return;
-            }
-            for (const auto& entry : ev->Get()->Request->ResultSet) {
-                if (entry.PQGroupInfo && entry.SyncVersion) {
-                    ++syncNavigates;
-                }
-            }
-            StripPartitionFromNavigateResult(ev, /*partitionId=*/1, /*onlyWithoutSync=*/false);
-        });
-
-    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1}});
-    UNIT_ASSERT_GT(syncNavigates, 0u);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::BAD_REQUEST);
-    UNIT_ASSERT(ev->Issues.ToString().Contains("No partition 1 in topic"));
-}
-
-Y_UNIT_TEST(PartitionsLocationRetriesOnDeliveryProblem) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_retry";
-    CreateTopic(runtime, path);
-
-    size_t broken = 0;
-    auto breakObserver = BreakFirstLocationForward(runtime, broken);
-    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {0}});
-    UNIT_ASSERT_VALUES_EQUAL(broken, 1u);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
-    UNIT_ASSERT_GT(ev->Partitions[0].NodeId, 0);
-}
-
-Y_UNIT_TEST(PartitionsLocationTimesOutWhenStuck) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_timeout";
-    CreateTopic(runtime, path);
-
-    auto dropObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
-        [](TEvPipeCache::TEvForward::TPtr& ev) {
-            if (ev && ev->Get()->Ev &&
-                ev->Get()->Ev->Type() == TEvPersQueue::TEvGetPartitionsLocation::EventType)
-            {
-                ev.Reset();
-            }
-        });
-
-    const auto edge = runtime.AllocateEdgeActor();
-    TEnableScheduleForRootGuard schedule(runtime);
-    schedule.SetRoot(runtime.Register(CreatePartitionsLocationActor(
-        edge, TGetPartitionsLocationRequest{path, "/Root", "", {0}})));
-
-    runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
-    runtime.AdvanceCurrentTime(TDuration::Seconds(31));
-
-    auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, TDuration::Seconds(5));
-    UNIT_ASSERT(handle);
-    const auto* ev = handle->Get();
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::TIMEOUT);
-    UNIT_ASSERT(ev->Issues.ToString().Contains("timed out"));
-}
-
-Y_UNIT_TEST(PartitionsLocationUnauthenticatedRejectedWhenRequired) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_auth";
-    CreateTopic(runtime, path);
-    runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
-
-    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {}});
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
-    UNIT_ASSERT(ev->Issues.ToString().Contains("Unauthenticated access is forbidden"));
-}
-
 Y_UNIT_TEST(DropTopicSuccessAndMissing) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -1533,40 +1357,33 @@ Y_UNIT_TEST(UnauthenticatedRejectedWhenRequired) {
     AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
 }
 
-Y_UNIT_TEST(FccTopicNameFormatsCreateAndDescribeAliases) {
+Y_UNIT_TEST(FccKeepsLiteralDashDashTopicName) {
     auto setup = CreateSetup("TopicNameFormatsFcc");
     auto& runtime = setup->GetRuntime();
 
-    MkDir(*setup, "/Root", "fcclegacy");
+    const TString name = "TestSchemeList--test-topic-1";
+    const TString path = "/Root/" + name;
+    CreateTopic(runtime, name);
+    AssertDescribeAliases(runtime, {name, path}, path);
+
+    auto ls = setup->GetServer().AnnoyingClient->Ls("/Root");
+    UNIT_ASSERT(ls);
+    bool listed = false;
+    for (const auto& child : ls->Record.GetPathDescription().GetChildren()) {
+        if (child.GetName() == name) {
+            listed = true;
+            UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypePersQueueGroup);
+        }
+        UNIT_ASSERT_VALUES_UNEQUAL(child.GetName(), "TestSchemeList");
+    }
+    UNIT_ASSERT(listed);
+
     MkDir(*setup, "/Root", "fccmodern");
-    MkDir(*setup, "/Root", "fccshort");
-
-    const TVector<TString> legacyAliases = {
-        "rt3.dc1--fcclegacy--topic",
-        "fcclegacy--topic",
-        "fcclegacy/topic",
-        "/Root/fcclegacy/topic",
-    };
-    CreateTopic(runtime, "rt3.dc1--fcclegacy--topic");
-    AssertDescribeAliases(runtime, legacyAliases, "/Root/fcclegacy/topic");
-
-    const TVector<TString> modernAliases = {
-        "rt3.dc1--fccmodern--topic",
-        "fccmodern--topic",
-        "fccmodern/topic",
-        "/Root/fccmodern/topic",
-    };
     CreateTopic(runtime, "fccmodern/topic");
-    AssertDescribeAliases(runtime, modernAliases, "/Root/fccmodern/topic");
-
-    const TVector<TString> shortAliases = {
-        "rt3.dc1--fccshort--topic",
-        "fccshort--topic",
-        "fccshort/topic",
-        "/Root/fccshort/topic",
-    };
-    CreateTopic(runtime, "fccshort--topic");
-    AssertDescribeAliases(runtime, shortAliases, "/Root/fccshort/topic");
+    AssertDescribeAliases(
+        runtime,
+        {"fccmodern/topic", "/Root/fccmodern/topic"},
+        "/Root/fccmodern/topic");
 }
 
 Y_UNIT_TEST(FederationTopicNameFormats) {

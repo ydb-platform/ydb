@@ -484,6 +484,12 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
         joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
     }
 
+    if (joinAlgo != NKikimr::NKqp::EJoinAlgoType::MapJoin && joinAlgo != NKikimr::NKqp::EJoinAlgoType::GraceJoin &&
+        joinAlgo != NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin) {
+        YQL_CLOG(DEBUG, CoreDq) << "Join algo " << static_cast<int>(joinAlgo) << " has no physical implementation here taking GraceJoin";
+        joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
+    }
+
     const auto leftInputType = Join->GetLeftInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     const auto rightInputType = Join->GetRightInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     TModifyKeysList remapLeft;
@@ -650,10 +656,11 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
 TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
     const auto joinKind = to_lower(Join->JoinKind);
-    if (joinKind == "cross") {
+    if (joinKind == "cross" && !useBlockHashJoin) {
         return BuildCrossJoin(leftInput, rightInput);
     }
 
-    Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" || joinKind == "full");
+    Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" ||
+             joinKind == "full" || joinKind == "cross");
     return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin, typesCtx);
 }

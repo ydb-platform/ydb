@@ -81,7 +81,7 @@ namespace {
                     if (describePathResult.GetStatus() == NYdb::EStatus::CLIENT_UNAUTHENTICATED && !addRoot) {
                         return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
                     }
-                    TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
+                    TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
                     YDB_LOG_WARN_CTX(*actorSystem, message,
                         {"issues", describePathResult.GetIssues()});
                     auto rootIssue = NYql::TIssue(message);
@@ -236,6 +236,7 @@ namespace {
         SolomonGatewayConfig = queryServiceConfig.GetSolomon();
 
         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
+        S3ReadActorFactoryConfig.EnableScheduling = appConfig.GetFeatureFlags().GetEnableS3Scheduling();
 
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
@@ -416,7 +417,7 @@ namespace {
         const TString& structuredTokenJson,
         const TString& path) {
         if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
-            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database with endpoint",
+            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database",
                 {"path", path},
                 {"database", database},
                 {"endpoint", endpoint});

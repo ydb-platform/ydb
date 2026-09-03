@@ -165,7 +165,6 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
                 .SysLogSize = 0,
                 .CommonLogSize = 0,
                 .MaxCommonLogChunks = 0,
-                .HasStaticGroups = false,
                 .SpaceColorBorder = borderColor,
                 .SeparateCommonLog = true,
             };

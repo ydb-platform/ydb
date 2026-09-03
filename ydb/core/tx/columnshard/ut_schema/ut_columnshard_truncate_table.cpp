@@ -283,8 +283,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         auto specials = TTestSchema::TTableSpecials().SetTtl(TDuration::Seconds(3600));
         specials.SetTtlColumn(TTestSchema::DefaultTtlColumn);
-        const auto alterBody = TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/1,
-            testTable.Schema, testTable.Pk, specials);
+        const auto alterBody =
+            TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/1, testTable.Schema, testTable.Pk, specials);
         ui64 txId = 10;
         auto planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });

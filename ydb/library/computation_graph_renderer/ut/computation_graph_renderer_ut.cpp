@@ -86,10 +86,16 @@ static const TString PlanWithStats = R"({
 
 namespace {
 
-TGraph Build(TStringBuf json) {
+std::optional<TGraph> TryBuild(TStringBuf json) {
     NJson::TJsonValue doc;
     NJson::ReadJsonTree(json, &doc, false);
     return BuildGraph(doc);
+}
+
+TGraph Build(TStringBuf json) {
+    auto g = TryBuild(json);
+    UNIT_ASSERT(g);
+    return *g;
 }
 
 bool HasLink(const TGraph& g, ui32 from, ui32 to) {
@@ -115,17 +121,16 @@ const TNode& NodeByName(const TGraph& g, TStringBuf name) {
 
 Y_UNIT_TEST_SUITE(ComputationGraphRenderer) {
 
-Y_UNIT_TEST(EmptyPlanGivesEmptyGraph) {
-    {
-        TGraph g = BuildGraph(NJson::TJsonValue());
-        UNIT_ASSERT(g.Nodes.empty());
-        UNIT_ASSERT(g.Links.empty());
-    }
-    {
-        TGraph g = Build("{}");
-        UNIT_ASSERT(g.Nodes.empty());
-        UNIT_ASSERT(g.Links.empty());
-    }
+Y_UNIT_TEST(MalformedDocGivesNothing) {
+    UNIT_ASSERT(!BuildGraph(NJson::TJsonValue()));
+    UNIT_ASSERT(!TryBuild("{}"));
+    UNIT_ASSERT(!TryBuild(R"({"meta": {"version": "0.2"}})"));
+}
+
+Y_UNIT_TEST(PlanWithoutStagesGivesEmptyGraph) {
+    TGraph g = Build(R"({"Plan": {"Node Type": "Query", "PlanNodeType": "Query"}})");
+    UNIT_ASSERT(g.Nodes.empty());
+    UNIT_ASSERT(g.Links.empty());
 }
 
 Y_UNIT_TEST(FixtureShape) {

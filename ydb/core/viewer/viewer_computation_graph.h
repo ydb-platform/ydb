@@ -31,8 +31,11 @@ public:
             if (!NJson::ReadJsonTree(body, &plan)) {
                 return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "invalid plan json"));
             }
-            return ReplyAndPassAway(GetHTTPOK("image/svg+xml",
-                NComputationGraphRenderer::ToSvg(NComputationGraphRenderer::BuildGraph(plan))));
+            const auto graph = NComputationGraphRenderer::BuildGraph(plan);
+            if (!graph) {
+                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "not a query plan"));
+            }
+            return ReplyAndPassAway(GetHTTPOK("image/svg+xml", NComputationGraphRenderer::ToSvg(*graph)));
         }
         const TString path = Params.Get("path");
         if (!path) {
@@ -116,8 +119,9 @@ public:
             return ReplyAndPassAway(GetHTTPOKJSON(json));
         }
 
+        const auto graph = NComputationGraphRenderer::BuildGraph(plan);
         ReplyAndPassAway(GetHTTPOK("image/svg+xml",
-            NComputationGraphRenderer::ToSvg(NComputationGraphRenderer::BuildGraph(plan))));
+            NComputationGraphRenderer::ToSvg(graph.value_or(NComputationGraphRenderer::TGraph{}))));
     }
 
     static YAML::Node GetSwagger() {

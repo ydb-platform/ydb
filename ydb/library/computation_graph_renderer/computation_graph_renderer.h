@@ -4,6 +4,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NKikimr::NComputationGraphRenderer {
 
 enum class ENodeType {
@@ -38,8 +40,7 @@ struct TGraph {
     TVector<TLink> Links;
 };
 
-// Empty or malformed input yields an empty graph.
-TGraph BuildGraph(const NJson::TJsonValue& doc);
+std::optional<TGraph> BuildGraph(const NJson::TJsonValue& doc);
 
 TString ToSvg(const TGraph& graph);
 

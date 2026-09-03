@@ -186,9 +186,9 @@ TString XmlEscape(TStringBuf s) {
 
 } // namespace
 
-TGraph BuildGraph(const NJson::TJsonValue& doc) {
+std::optional<TGraph> BuildGraph(const NJson::TJsonValue& doc) {
     if (!doc.IsMap()) {
-        return {};
+        return std::nullopt;
     }
     const NJson::TJsonValue* root = nullptr;
     if (doc.Has("Plan") && doc["Plan"].IsMap()) {
@@ -196,10 +196,10 @@ TGraph BuildGraph(const NJson::TJsonValue& doc) {
     } else if (doc.Has("Node Type")) {
         root = &doc;
     } else {
-        return {};
+        return std::nullopt;
     }
     if (!root->Has("Plans") || !(*root)["Plans"].IsArray()) {
-        return {};
+        return TGraph{};
     }
     TBuilder b;
     for (const auto& child : (*root)["Plans"].GetArray()) {

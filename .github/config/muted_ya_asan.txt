@@ -35,6 +35,7 @@ ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDat
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert-UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
+ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/kqp/ut/query KqpLimits.CancelAfterRoTxWithFollowerStreamLookupDepededRead
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
@@ -220,7 +221,9 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPosting
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPostingWithKeyRange
+ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPostingWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.NullEmbedding
+ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToPosting
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.BadRequest
@@ -245,6 +248,7 @@ ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
 ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_topic_cloud_events unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_acl_write
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
@@ -445,6 +449,7 @@ ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_deletion
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_deletion_nonexistent
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_vhost_unaligned_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write

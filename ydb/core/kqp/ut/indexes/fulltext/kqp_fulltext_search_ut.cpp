@@ -2405,7 +2405,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
     }
 }
 
-Y_UNIT_TEST(ExplainFulltextIndexContains) {
+Y_UNIT_TEST(ExplainFulltextIndexLongUTF8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
     CreateTexts(db);
@@ -2415,30 +2415,38 @@ Y_UNIT_TEST(ExplainFulltextIndexContains) {
     auto tableClient = kikimr.GetTableClient();
     auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
-    TString query = R"sql(
-        SELECT Key, Text
-        FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FulltextMatch(Text, "cats")
-    )sql";
-    auto result = session.ExplainDataQuery(query).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    for (int prefix = 0; prefix < 2; prefix++) {
+        TString query = Sprintf(R"sql(
+            SELECT Key, Text
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "%sтетрагидропиранилциклопентилтетрагидропиридопиридиновые")
+        )sql", prefix ? "_" : "");
+        auto result = session.ExplainDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-    Cerr << result.GetPlan() << Endl;
+        Cerr << result.GetPlan() << Endl;
 
-    NJson::TJsonValue plan;
-    NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-    // Verify ReadFullTextIndex operator is present
-    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
-    UNIT_ASSERT(readFullTextIndex.IsDefined());
+        // Verify ReadFullTextIndex operator is present
+        auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+        UNIT_ASSERT(readFullTextIndex.IsDefined());
 
-    // Verify operator properties
-    const auto& opProps = readFullTextIndex.GetMapSafe();
-    UNIT_ASSERT(opProps.contains("Table"));
-    UNIT_ASSERT(opProps.contains("Index"));
-    UNIT_ASSERT(opProps.contains("Columns"));
-    UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+        // Verify operator properties
+        const auto& opProps = readFullTextIndex.GetMapSafe();
+        UNIT_ASSERT(opProps.contains("Table"));
+        UNIT_ASSERT(opProps.contains("Index"));
+        UNIT_ASSERT(opProps.contains("Columns"));
+        UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+
+        // Verify correct UTF-8 truncation (at odd and even positions)
+        auto expected = prefix
+            ? "\"_тетрагидропиранилциклопентилтетрагидропиридопир ...\""
+            : "\"тетрагидропиранилциклопентилтетрагидропиридопири ...\"";
+        UNIT_ASSERT_VALUES_EQUAL(opProps.at("Query").GetStringSafe(), expected);
+    }
 }
 
 Y_UNIT_TEST(ExplainFulltextIndexRelevance) {

@@ -3403,6 +3403,12 @@ message TStatisticsConfig {
 
     // Intermediate-state byte budget. Clamped to MaxStatisticSize (8 MB).
     optional uint64 AnalyzeHistogramMaxStateBytes = 12 [default = 4194304];
+
+    // Initial delay (in seconds) before SchemeShard sends the first base stats
+    // batch to the StatisticsAggregator after initialization. This gives table
+    // shards time to report their statistics. Not required for correctness,
+    // but avoids sending incomplete stats on the very first cycle.
+    optional uint32 BaseStatsSendInitialDelaySeconds = 13 [default = 30];
 };
 
 message TSystemTabletBackupConfig {

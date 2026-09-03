@@ -5393,7 +5393,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         CreateTopic(pqClient, outputTopicName, 1, {consumerName});
 
         const ui64 txnTimeoutMs = 200;
-        const auto txnStartedAt = TInstant::Now();
         auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, txnTimeoutMs);
         UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
         TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
@@ -5402,6 +5401,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
         auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
         UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        // TTransactionActor starts TxnTimeoutMs from CreatedAt, which is set on this first txn request.
+        const auto txnStartedAt = TInstant::Now();
 
         auto out0ProduceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"0", "123"}}, 0, producerInstanceId, transactionalId);
         UNIT_ASSERT_VALUES_EQUAL(out0ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);

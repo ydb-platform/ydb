@@ -7,6 +7,7 @@ RECURSE(
     opt
     runtime
     tasks
+    tools
     transform
     type_ann
 )

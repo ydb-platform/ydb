@@ -3457,11 +3457,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         BasicHashJoinTest(UseBlockHashJoin);
     }
 
-    Y_UNIT_TEST(BlockHashCrossJoin) {
+    Y_UNIT_TEST_QUAD(BlockHashJoinCrossWithJoinFilters, UseBlockHashJoin, UseBlockHashJoinForCross) {
+        constexpr bool UseBlockCrossJoin = UseBlockHashJoin && UseBlockHashJoinForCross;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
-        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoinForCross(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(UseBlockHashJoin);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoinForCross(UseBlockHashJoinForCross);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -3508,7 +3509,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(db.BulkUpsert("/Root/t2", rightRows.Build()).GetValueSync().IsSuccess());
 
         auto queryClient = kikimr.GetQueryClient();
-        auto run = [&](const TString& query, const TString& expectedYson) {
+        auto run = [&](const TString& query, const TString& expectedYson, ui32 expectedJoinFilters = 0) {
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             const TString fullQuery = TString(R"(
                 PRAGMA ydb.CostBasedOptimizationLevel='0';
@@ -3521,7 +3522,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
             const auto ast = TString{*explain.GetStats()->GetAst()};
-            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"), ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("BlockHashJoinCore"), UseBlockCrossJoin, ast);
+
+            const auto plan = TString{*explain.GetStats()->GetPlan()};
+            const auto simplifiedPlan = GetSimplifiedPlan(plan);
+            const auto* crossJoin = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Cross");
+            UNIT_ASSERT_C(crossJoin, plan);
+            const auto filters = crossJoin->GetMapSafe().find("Filters");
+            if (UseBlockCrossJoin && expectedJoinFilters) {
+                UNIT_ASSERT_C(filters != crossJoin->GetMapSafe().end() && filters->second.IsArray(), plan);
+                UNIT_ASSERT_VALUES_EQUAL_C(filters->second.GetArraySafe().size(), expectedJoinFilters, plan);
+            } else {
+                UNIT_ASSERT_C(filters == crossJoin->GetMapSafe().end(), plan);
+            }
 
             auto result = session.ExecuteQuery(
                 fullQuery, NYdb::NQuery::TTxControl::NoTx(),
@@ -3533,15 +3546,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         // 2 x 3 cartesian product
         run(R"(
-            SELECT t1.a, t2.a FROM `/Root/t1` AS t1 CROSS JOIN `/Root/t2` AS t2 ORDER BY t1.a, t2.a;
+            PRAGMA AnsiImplicitCrossJoin;
+            SELECT t1.a, t2.a FROM `/Root/t1` AS t1, `/Root/t2` AS t2 ORDER BY t1.a, t2.a;
         )", R"([[0;0];[0;1];[0;2];[1;0];[1;1];[1;2]])");
 
-        // Cartesian product filtered by a residual predicate (no equality key)
+        // Common filter.
         run(R"(
-            SELECT t1.a, t2.a FROM `/Root/t1` AS t1 CROSS JOIN `/Root/t2` AS t2
+            PRAGMA AnsiImplicitCrossJoin;
+            SELECT t1.a, t2.a FROM `/Root/t1` AS t1, `/Root/t2` AS t2
             WHERE t2.b > t1.b + 9
             ORDER BY t1.a, t2.a;
-        )", R"([[0;1];[0;2];[1;2]])");
+        )", R"([[0;1];[0;2];[1;2]])", 1);
+
+        // Left and right pushed, common is a join filter.
+        run(R"(
+            PRAGMA AnsiImplicitCrossJoin;
+            SELECT t1.a, t2.a FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.b > 0 AND t2.b > 10 AND t2.b > t1.b + 9
+            ORDER BY t1.a, t2.a;
+        )", R"([[0;1];[0;2];[1;2]])", 1);
     }
 
     Y_UNIT_TEST(InlineJoinFiltersAfterCBOChangesJoinTree) {

@@ -377,7 +377,8 @@ message TFeatureFlags {
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
     optional bool EnableInsecureMirrorFactory = 322 [default = false];
+    optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
     // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
     // size-class slots. Reads of the stripe format work even when this flag is off.
-    optional bool EnableVDiskHeapAllocator = 323 [default = false];
+    optional bool EnableVDiskHeapAllocator = 324 [default = false];
 }

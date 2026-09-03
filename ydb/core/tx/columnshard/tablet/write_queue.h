@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 
+#include <library/cpp/lwtrace/all.h>
+
 namespace NKikimr::NColumnShard {
 class TColumnShard;
 class TArrowData;
@@ -31,6 +33,8 @@ private:
     const ui64 TxId;
     const bool IsBulk;
     const std::optional<ui64> OverloadSubscribeSeqNo;
+    const std::shared_ptr<NLWTrace::TOrbit> Orbit;
+    const TMonotonic ReceivedAt;
 
 public:
     bool operator<(const TWriteTask& item) const {
@@ -45,7 +49,8 @@ public:
         const NActors::TActorId recipientId, const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie,
         const NOlap::TSnapshot& mvccSnapshot, const ui64 lockId, const ui64 lockNodeId, const NKikimrDataEvents::ELockMode lockMode,
         const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout,
-        const ui64 txId, const bool isBulk, const std::optional<ui64>& overloadSubscribeSeqNo)
+        const ui64 txId, const bool isBulk, const std::optional<ui64>& overloadSubscribeSeqNo, std::shared_ptr<NLWTrace::TOrbit> orbit,
+        const TMonotonic receivedAt)
         : ArrowData(arrowData)
         , Schema(schema)
         , SourceId(sourceId)
@@ -63,6 +68,8 @@ public:
         , TxId(txId)
         , IsBulk(isBulk)
         , OverloadSubscribeSeqNo(overloadSubscribeSeqNo)
+        , Orbit(std::move(orbit))
+        , ReceivedAt(receivedAt)
     {
     }
 

@@ -33,7 +33,13 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 
+#include <atomic>
+#include <memory>
 #include <queue>
+
+#if defined(__linux__)
+#include <ydb/library/pdisk_io/uring_router.h>
+#endif
 
 namespace NKikimr {
 namespace NPDisk {
@@ -224,6 +230,15 @@ public:
     // Incapsulated components
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
+#if defined(__linux__)
+    // DDisk/PB hold IUringRouterClient copies of this pointer. PDisk releases
+    // it during Stop() only when no clients remain; otherwise the final owner
+    // destroys the router, drains accepted I/O, and closes the duplicated fd.
+    std::shared_ptr<TUringRouter> SharedUringRouter;
+    std::shared_ptr<std::atomic<TDeviceOverestimationAggregator*>> UringSampleAggregator;
+#endif
+    bool SharedUringCreateAttempted = false;
+    bool SharedUringFailureReported = false;
     THolder<TLogWriter> CommonLogger;
     THolder<TSysLogWriter> SysLogger;
 
@@ -398,6 +413,9 @@ public:
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
+    void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
+    void EnsureSharedUringRouter(ui32 idleSpinUs);
+    void CheckSharedUringRouter(); // Called by the PDisk worker
     void YardResize(TYardResize &evYardResize);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
     void NormalizeExpectedSlotSettings();

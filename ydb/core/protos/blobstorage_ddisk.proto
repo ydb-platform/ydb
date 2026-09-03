@@ -24,6 +24,7 @@ message TReplyStatus {
         // The request cannot be served because the session context is no longer valid. Causes:
         // - tablet restarted (generation changed)
         // - DDisk or persistent buffer actor restarted
+        // - DDisk or persistent buffer actor is stopping and cannot finish the request
         // - interconnect session was re-established
         // - DDiskInstanceGuid mismatch (DDisk lost its data and was re-initialized)
         SESSION_MISMATCH = 5;

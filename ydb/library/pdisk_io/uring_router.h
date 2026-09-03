@@ -1,6 +1,7 @@
 #pragma once
 
 #include "uring_operation.h"
+#include "uring_router_client.h"
 #include "device_io_sample.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -8,11 +9,13 @@
 
 #include <util/generic/string.h>
 #include <util/system/event.h>
+#include <util/system/file.h>
 #include <util/system/fhandle.h>
 
 #include <sys/uio.h>
 
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <memory>
 
@@ -25,26 +28,24 @@ namespace NActors {
 
 namespace NKikimr::NPDisk {
 
+namespace NUringPrivate {
+    class IUringRouterBackend;
+}
+
 enum class EUringFavor {
     SingleIssuer,   // IORING_SETUP_SINGLE_ISSUER | DEFER_TASKRUN | TASKRUN_FLAG (kernel >= 6.1)
     Plain,          // fallback: plain ring, no modern flags, still one dedicated I/O thread
     FallbackPDisk,  // io_uring unavailable at all; caller routes I/O through PDisk instead
 };
 
-struct TUringRouterConfig {
-    // Target SQ ring size (number of submission slots). The kernel creates a
-    // CQ of twice this size by default. Typical devices have hardware queue
-    // depth around 128; using 256 entries gives additional headroom to reduce
-    // the risk of SQ exhaustion and improve device utilization. Submissions
-    // beyond this cap are absorbed by the submit queue (see Submit()).
-    ui32 QueueDepth = 256;
-
-    // How long (in microseconds) the dedicated I/O thread busy-polls the
-    // submission queue and completion ring before parking when idle. Lower
-    // values trade CPU for submit-wakeup latency.
-    ui32 IdleSpinUs = 10;
-
-    TString ToString() const;
+enum class EUringRouterState : ui32 {
+    Created = 0,
+    Running,
+    Broken,
+    Stopping,
+    StoppingBroken,
+    Stopped,
+    StoppedBroken,
 };
 
 struct TUringCounters {
@@ -52,35 +53,68 @@ struct TUringCounters {
     NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadBusyTimeNs;
 };
 
-// TUringRouter owns one io_uring instance for one device. Submit(), Read(),
-// Write(), ReadFixed(), and WriteFixed() are safe to call concurrently: callers
-// only publish operations to an MPSC queue. One dedicated I/O thread is the
-// ring's sole submitter and reaper, as required by IORING_SETUP_SINGLE_ISSUER
-// and IORING_SETUP_DEFER_TASKRUN. It batches submissions, reaps completions,
-// and invokes operation callbacks.
+// TUringRouter owns one io_uring instance for one device, including the
+// duplicated disk fd passed to the constructor. Submit(), Read(), Write(),
+// ReadFixed(), and WriteFixed() are safe to call concurrently: callers only
+// publish operations to an MPSC queue. One dedicated I/O thread is the ring's
+// sole submitter and reaper, as required by IORING_SETUP_SINGLE_ISSUER and
+// IORING_SETUP_DEFER_TASKRUN. It batches submissions, reaps completions, and
+// invokes operation callbacks.
 //
 // RegisterFile(), RegisterBuffers(), SetSampleSink(), and Start() are setup
 // operations and must be called by one thread before concurrent submission.
-// Stop() closes admission, waits for producers already inside Submit(), then
-// drains every accepted operation through OnComplete() before returning. It
-// may run concurrently with Submit() and with another Stop().
+// StopAsync() closes admission without waiting; that is the non-blocking path
+// to stop PDisk.
+//
+// DDisk and PersistentBuffer should hold IUringRouterClient, not TUringRouter,
+// so they cannot start or stop a shared ring. PDisk is the logical owner and
+// is the entity responsible for constructing, starting, and stopping a
+// TUringRouter instance.
+//
+// If PDisk is being restarted, then all TUringRouters must also be restarted.
+// It is safe to restart them after PDisk:
+// 1. A restarted PDisk instance doesn't wait for I/O to be completed.
+// 2. The next PDisk reincarnation must take an exclusive lock on the device,
+//    thus it waits for all the previous I/O (the previous lock will be held
+//    until I/O is completed, even when the process is reaped).
+// This means that PDisk can safely restart without waiting for slots that use
+// a shared TUringRouter.
+//
+// TUringRouter is responsible for detecting device and I/O issues and switching
+// to the Broken state. A fatal ring failure closes admission and freezes
+// submission. It is up to PDisk to see this and initiate restart (itself and
+// slots).
+//
+// When a TUringRouter client is requested to stop, it is always responsible
+// for waiting for its own I/O. Even if the router is in the Broken state, the
+// client waits for completions. This allows completions to safely reference
+// the actors that started I/O. Client must set timer and if I/O is not completed
+// within assumed timeout, client should report itself as broken.
+//
+// The last owner of the shared router instance destroys the router.
+// Its destructor drops accepted operations (calls their OnDrop() method),
+// that have not reached the kernel, drains submitted operations, and stops
+// the I/O thread.
 //
 // Optional device I/O sample sink: if set via SetSampleSink() before Start(),
 // the I/O thread invokes it once per successfully completed Read/Write CQE.
 // The sink must be cheap and thread-safe on its own.
 using TDeviceIoSampleSink = std::function<void(const TDeviceIoSample&)>;
 
-class TUringRouter {
+class TUringRouter : public IUringRouterClient {
+    friend class TUringRouterTestPeer;
+
 public:
     TUringRouter(
-        FHANDLE fd,
+        TFileHandle fd,
         NActors::TActorSystem* actorSystem,
         TUringRouterConfig config = {},
-        TUringCounters* counters = nullptr);
+        TUringCounters counters = {});
+    TUringRouter(FHANDLE, NActors::TActorSystem*, TUringRouterConfig = {}, TUringCounters = {}) = delete;
 
-    ~TUringRouter();
+    ~TUringRouter() override;
 
-    const TUringRouterConfig& GetConfig() const {
+    const TUringRouterConfig& GetConfig() const override {
         return Config;
     }
 
@@ -103,34 +137,59 @@ public:
     // iovs must remain valid until Start() returns.
     void RegisterBuffers(const struct iovec* iovs, unsigned count);
 
-    // Starts the dedicated I/O thread and blocks until the ring has been
-    // enabled and requested registrations have completed.
+    // Starts the dedicated I/O thread and blocks until initialization finishes.
+    // Required initialization failures leave IsBroken() true and admission closed.
     void Start();
 
+    // Close admission without waiting for accepted operations. A Submit() that
+    // already observed Running may still be accepted; it will receive exactly
+    // one terminal callback. The duplicated device fd remains open until the
+    // last owner destroys the router, so a replacement PDisk waits for the old
+    // I/O at flock acquisition.
+    void StopAsync(bool makeBroken = false);
+
+private:
+    // Called only by the destructor. Close admission and post the stop sentinel.
+    // HandleStop drops unsubmitted operations and drains submitted I/O before
+    // Join returns. Abort if any operations remain unresolved, then tear down
+    // the ring.
+    void StopSync();
+
+    // Test-only. Blocks until every accepted operation has received its
+    // terminal callback. Unlike StopSync() it does not close admission, so a
+    // test can wait for quiescence and keep submitting afterwards. It relies
+    // on the I/O thread making progress: unresolved operations keep it blocked
+    // if the router was never started or a fatal ring error prevents completion.
+    void WaitSync();
+
+public:
     // --- Submission (thread-safe) ---
+
+    // Number of accepted operations that are queued, submitted, or currently
+    // executing their completion callback.
+    [[nodiscard]] ui64 GetInflight() const;
 
     // Enqueue a prepared operation. Publishing transfers its lifetime to the
     // router, and the I/O thread may invoke OnComplete() even before Submit()
     // returns. A caller transferring a smart pointer must therefore release it
     // before this call and restore it only if false is returned. False means
     // the router has not been started or is stopping/stopped and no callback
-    // will be delivered. Every accepted operation gets exactly one OnComplete()
-    // callback before Stop() returns.
-    bool Submit(TUringOperationBase* op);
+    // will be delivered. Every accepted operation gets exactly one terminal
+    // callback: OnComplete() after kernel submission, or OnDrop() if shutdown
+    // reaches it first.
+    //
+    // Concurrent callers must keep the router alive for the entire call. With
+    // shared ownership, each submitting component therefore retains its own
+    // shared_ptr. Destruction cannot race a Submit() that observed Running and
+    // will see its queue publication without a separate submitter counter.
+    [[nodiscard]] bool Submit(TUringOperationBase* op);
 
-    bool Read(TUringOperationBase* op);
-    bool Write(TUringOperationBase* op);
+    [[nodiscard]] bool Read(TUringOperationBase* op) override;
+    [[nodiscard]] bool Write(TUringOperationBase* op) override;
 
     // Fixed-buffer variants require successful RegisterBuffers() during Start().
-    bool ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op);
-    bool WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op);
-
-    // Compatibility no-op. The I/O thread owns batching and submission.
-    void Flush();
-
-    // Close admission, drain accepted operations, stop the I/O thread, and
-    // tear down the ring. Safe to call repeatedly and concurrently.
-    void Stop();
+    [[nodiscard]] bool ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op);
+    [[nodiscard]] bool WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufIndex, TUringOperationBase* op);
 
     bool IsFileRegistered() const;
     bool AreBuffersRegistered() const;
@@ -139,21 +198,19 @@ public:
 
     EUringFavor GetUringFavor() const;
 
-    // Number of accepted operations that are queued, submitted, or currently
-    // executing their completion callback.
-    ui32 GetInflight() const;
+    // True while the router is Broken, StoppingBroken, or StoppedBroken.
+    [[nodiscard]] bool IsBroken() const;
 
     // Returns true if a disabled io_uring instance can be created and enabled
     // with either the modern flags or the plain fallback configuration.
-    static bool Probe(TUringRouterConfig config = {});
+    [[nodiscard]] static bool Probe(TUringRouterConfig config = {});
 
 private:
-    static constexpr ui32 LifecycleCreated = 0;
-    static constexpr ui32 LifecycleRunning = 1;
-    static constexpr ui32 LifecycleStopping = 2;
-    static constexpr ui32 LifecycleStopped = 3;
-
     class TIoThread;
+
+    TUringRouter(TFileHandle fd, NActors::TActorSystem* actorSystem,
+        TUringRouterConfig config, TUringCounters counters,
+        std::unique_ptr<NUringPrivate::IUringRouterBackend> backend);
 
     struct io_uring_sqe* GetSqe();
     void PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op);
@@ -162,28 +219,32 @@ private:
     void InitializeOnIoThread();
     bool DrainSubmitQueue();
     ui32 ReapCompletions();
-    void SubmitPendingSqes();
+    bool SubmitPendingSqes(bool allowWhileStopping = false);
+    void DropPendingSqes();
+    void DropOperation(TUringOperationBase* op);
+    void CompleteOperation(TUringOperationBase* op, i64 result);
+    void FailRing(const char* call, int result);
+    void WaitForProgress();
     void ParkAndWait();
     void HandleStop();
 
-    bool BeginSubmit();
-    void EndSubmit();
-    void WakeIoThreadIfParked();
-
-    static ui64 PackLifecycle(ui32 state, ui32 producers);
-    static ui32 UnpackLifecycle(ui64 value);
-    static ui32 UnpackProducers(ui64 value);
-    static TUringOperationBase* QueueStopSentinel();
-
 private:
-    FHANDLE Fd;
+    TFileHandle Fd;
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
-    TUringCounters* Counters;
+    TUringCounters Counters;
     TDeviceIoSampleSink SampleSink;
 
+    std::unique_ptr<NUringPrivate::IUringRouterBackend> Backend;
     std::unique_ptr<struct io_uring> Ring;
+    bool RingInitialized = false;
+    bool RingEnabled = false;
     bool UsedModernFlags = false;
+
+    // Unlike an ordinary StopAsync(true), a failed ring must never publish or
+    // submit its unresolved SQ suffix again. Only the issuer accesses these.
+    bool FatalRingError = false;
+    bool NeedBackoff = false;
 
     int FixedFdIndex = -1;
     bool BuffersRegistered = false;
@@ -203,20 +264,17 @@ private:
 
     // Operation popped from Queue while the SQ was full.
     TUringOperationBase* PendingSubmit = nullptr;
+    std::deque<TUringOperationBase*> Continuations;
 
     bool StopSeen = false;
-    bool SawStopCqeMarker = false;
+    bool StopCqePending = false;
 
     NThreading::TObstructiveConsumerQueue<TUringOperationBase, /*DeleteItems=*/false> Queue;
 
-    // High 32 bits: lifecycle state. Low 32 bits: producers between admission
-    // and completed queue publication. Stop closes the state, waits for that
-    // count to reach zero, and only then appends the stop sentinel.
-    std::atomic<ui64> Lifecycle{PackLifecycle(LifecycleCreated, 0)};
-    TManualEvent SubmittersDrained;
-    TManualEvent StoppedEvent;
-
-    std::atomic<ui32> InFlightCount{0};
+    // Lifetime ownership makes destruction the synchronization point after the
+    // last possible queue publication; State only controls admission.
+    alignas(64) std::atomic<EUringRouterState> State{EUringRouterState::Created};
+    alignas(64) std::atomic<ui64> InFlightCount{0};
 
     TManualEvent ReadyEvent;
     std::unique_ptr<TIoThread> IoThread;

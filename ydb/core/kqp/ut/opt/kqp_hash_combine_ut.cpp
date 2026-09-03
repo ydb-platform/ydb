@@ -34,8 +34,9 @@ namespace {
 
     void RunAggregateSpillingCase(double spillingPercent, bool expectSpilling, bool enableOperatorMemoryQuota)
     {
-        // the final aggregation is spread over as many tasks as there are cores (~100 on CI); every task
-        // needs a hash table of more than 1024 keys (LowerFixedRowCount) before the operator considers spilling
+        // the planner spreads the final aggregation over many tasks (96 on a large dev box, fewer on CI); every
+        // task needs a hash table of more than 1024 keys (LowerFixedRowCount) before the operator considers
+        // spilling, so the group count is sized for the largest task count
         constexpr i64 rowCount = 600000;
         constexpr i64 groupCount = 200000;
         constexpr i64 rowsPerBatch = 30000;

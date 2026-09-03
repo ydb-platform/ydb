@@ -326,17 +326,14 @@ inline void ReserveOrThrow(NYql::NDq::IDqOperatorMemoryQuota* quota, ui64 bytes)
     }
 }
 
-// Spilling is how the join gives memory back. Bound: the numeric availability is negative (give back) or an
-// optional reservation was refused (soft pressure). Unbound: the allocator yellow zone, as before.
-inline bool NeedToSpill(NYql::NDq::IDqOperatorMemoryQuota* quota, bool hasSpiller, bool softPressure) {
+// Spilling is how the join gives memory back. Bound: the numeric availability is negative (give back).
+// Unbound: the allocator yellow zone, as before.
+inline bool NeedToSpill(NYql::NDq::IDqOperatorMemoryQuota* quota, bool hasSpiller) {
     if (!hasSpiller) {
         return false;
     }
     if (!quota) {
         return TlsAllocState->IsMemoryYellowZoneEnabled();
-    }
-    if (softPressure) {
-        return true;
     }
     i64 availability = quota->GetMemoryAvailability();
     if (availability < 0) {
@@ -676,17 +673,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         NYql::NDq::IDqOperatorMemoryQuota* const quota = NYql::NDq::GetDqOperatorMemoryQuota();
         const bool hasSpiller = !!Spiller_;
         const bool accountOffload = quota != nullptr;
-        auto notEnoughMemory = [this, quota, hasSpiller] {
-            return NeedToSpill(quota, hasSpiller, SoftPressure_);
+        auto notEnoughMemory = [quota, hasSpiller] {
+            return NeedToSpill(quota, hasSpiller);
         };
-        // a round that ran out of pages served the soft pressure: the refused bucket is on disk now
         auto spillWhileNeeded = [&](auto& spiller) {
             spiller.SetAccountOffload(accountOffload);
-            const ESpillResult res = spiller.SpillWhile(notEnoughMemory);
-            if (res == ESpillResult::DontHavePages) {
-                SoftPressure_ = false;
-            }
-            return res;
+            return spiller.SpillWhile(notEnoughMemory);
         };
         auto giveBack = [quota] {
             if (quota) {
@@ -806,12 +798,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 TBucket& buildBucket = state.Spiller.GetBuckets()[*smallestBucket];
 
                 // Ask for the table memory optionally when spilling is the alternative; a refusal sends this
-                // bucket to the spilled path (the routing above) and its pages to disk (soft pressure).
+                // bucket alone to the spilled path (the routing above): its pages stay in memory until the
+                // availability turns negative or the end of probing dumps them, no other bucket is affected.
                 if (hasSpiller && !TryReserveMemory(quota, TableBuildBytes(*table, buildBucket.InMemoryPages()), /* isOptional = */ true)) {
                     Logger_.LogDebug(Sprintf("optional memory quota refused, bucket %i (%i pages) goes to the spilled path",
                                              *smallestBucket, static_cast<int>(buildBucket.InMemoryPages().size())));
                     buildBucket.SpilledPages.emplace();
-                    SoftPressure_ = true;
                 } else {
                     table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
                     MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
@@ -1067,7 +1059,6 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     const Logger Logger_;
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
-    bool SoftPressure_ = false; // an optional reservation was refused: spill until the pages are on disk
     Sources Sources_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};

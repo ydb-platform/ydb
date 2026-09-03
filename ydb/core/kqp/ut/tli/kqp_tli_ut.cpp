@@ -146,6 +146,7 @@ namespace {
 
     // Extract query texts field (BreakerQueryTexts or VictimQueryTexts based on context)
     std::vector<TString> ExtractTliQueryTexts(const TString& logs,
+        const TString& querySpanIdFieldName,
         ui64 querySpanId,
         const TString& messagePattern)
     {
@@ -156,7 +157,7 @@ namespace {
                 continue;
             }
 
-            auto id = ExtractNumericField(record, "querySpanId");
+            auto id = ExtractNumericField(record, querySpanIdFieldName);
             if (!id.has_value() || id.value() != querySpanId) {
                 continue;
             }
@@ -191,30 +192,41 @@ namespace {
     std::optional<ui64> ExtractBreakerQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
     {
+        Cerr << "DEBUG: ExtractBreakerQuerySpanId" <<
+            " component=" << component <<
+            " messagePattern=" << component <<
+            " expectedBreakerQueryText=" << expectedBreakerQueryText.value_or("<empty>") <<
+            Endl;
+
         for (const auto& record : ExtractTliRecords(logs)) {
+            Cerr << "DEBUG: " << record << Endl;
             if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
+                Cerr << "DEBUG: 1" << Endl;
                 continue;
             }
             if (expectedBreakerQueryText && component == "SessionActor") {
                 auto text = ExtractQueryTextFromRecord(record);
+                Cerr << "DEBUG: ExtractedText=" << text.value_or("<empty>") << Endl;
                 if (!text || *text != *expectedBreakerQueryText) {
+                    Cerr << "DEBUG: 2" << Endl;
                     continue;
                 }
             }
 
             std::optional<ui64> result;
             if (component == "SessionActor") {
-                if (!record.Contains("isBreakerQuery=true")) {
-                    continue;
-                }
-                result = ExtractNumericField(record, "querySpanId");
+                result = ExtractNumericField(record, "breakerTxSpanId");
             } else {
                 result = ExtractNumericField(record, "breakerQuerySpanId");
             }
             if (result.has_value()) {
+                Cerr << "DEBUG: return " << result.value() << Endl;
                 return result.value();
+            } else {
+                Cerr << "DEBUG: 3" << Endl;
             }
         }
+        Cerr << "DEBUG: 4" << Endl;
         return std::nullopt;
     }
 
@@ -234,10 +246,7 @@ namespace {
 
             std::optional<ui64> result;
             if (component == "SessionActor") {
-                if (!record.Contains("isVictimQuery=true")) {
-                    continue;
-                }
-                result = ExtractNumericField(record, "querySpanId");
+                result = ExtractNumericField(record, "victimTxSpanId");
             } else {
                 result = ExtractNumericField(record, "victimQuerySpanId");
             }
@@ -356,19 +365,16 @@ namespace {
             if (!record.Contains("component=DataShard") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
+
             auto breakerQuerySpanId = ExtractNumericField(record, "breakerQuerySpanId");
             if (breakerQuerySpanId && *breakerQuerySpanId == *breakerQuerySpanIdFromKQP) {
+
                 // At least one record found
                 foundRecord = true;
 
                 auto victimId = ExtractNumericField(record, "victimQuerySpanId");
                 if (victimId.has_value()) {
                     matchingVictimIds.push_back(victimId.value());
-                }
-
-                auto otherVictimId = ExtractNumericField(record, "otherVictimQuerySpanId");
-                if (otherVictimId.has_value()) {
-                    matchingVictimIds.push_back(otherVictimId.value());
                 }
 
                 foundRecord = true;
@@ -403,9 +409,9 @@ namespace {
     {
         TExtractedTliData data;
         data.BreakerSessionBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
-        data.BreakerQueryTexts = ExtractTliQueryTexts(logs, data.BreakerSessionBreakerQuerySpanId.value_or(0), patterns.BreakerSessionActorMessagePattern);
+        data.BreakerQueryTexts = ExtractTliQueryTexts(logs, "breakerTxSpanId", data.BreakerSessionBreakerQuerySpanId.value_or(0), patterns.BreakerSessionActorMessagePattern);
         data.VictimSessionVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
-        data.VictimQueryTexts = ExtractTliQueryTexts(logs, data.VictimSessionVictimQuerySpanId.value_or(0), patterns.VictimSessionActorMessagePattern);
+        data.VictimQueryTexts = ExtractTliQueryTexts(logs, "victimTxSpanId", data.VictimSessionVictimQuerySpanId.value_or(0), patterns.VictimSessionActorMessagePattern);
         data.BreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
         data.VictimQueryText = ExtractQueryText(logs, patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
         data.BreakerShardBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "DataShard", patterns.BreakerDatashardMessage);
@@ -450,6 +456,7 @@ namespace {
         UNIT_ASSERT_C(data.MatchingDsBreakerVictimQuerySpanIds.has_value(), "matching DataShard breaker record should have VictimQuerySpanIds");
         bool victimInBreaker = std::find(data.MatchingDsBreakerVictimQuerySpanIds->begin(), data.MatchingDsBreakerVictimQuerySpanIds->end(),
             *data.VictimSessionVictimQuerySpanId) != data.MatchingDsBreakerVictimQuerySpanIds->end();
+
         UNIT_ASSERT_C(victimInBreaker,
             "victim VictimQuerySpanId should be in matching DataShard breaker's VictimQuerySpanIds");
 
@@ -1377,7 +1384,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.reset();
 
         // Verify issue and TLI logs using common verification function
-        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect, {}, 1, 2, 1, 1);
     }
 
     // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
@@ -1416,7 +1423,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.reset();
 
         // Verify issue and TLI logs using common verification function
-        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect, {}, 1, 2, 1, 1);
     }
 
     // ==================== 2-Node Tests ====================
@@ -1524,7 +1531,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.reset();
 
         // Verify issue and TLI logs
-        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect, {}, 1, 2, 1, 1);
     }
 
     // Test: Basic TLI flow with Wilson tracing enabled.

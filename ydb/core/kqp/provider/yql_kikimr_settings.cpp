@@ -58,8 +58,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpSlowLogWarningThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogNoticeThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogTraceThresholdMs);
-    REGISTER_SETTING(*this, _KqpYqlSyntaxVersion);
-    REGISTER_SETTING(*this, _KqpYqlAntlr4Parser);
+    REGISTER_SETTING(*this, _KqpYqlSyntaxVersion).Deprecated("ignored: YQL v1 is always used");
+    REGISTER_SETTING(*this, _KqpYqlAntlr4Parser).Deprecated("ignored: ANTLR4 parser is always used");
     REGISTER_SETTING(*this, _KqpAllowUnsafeCommit);
     REGISTER_SETTING(*this, _KqpMaxComputeActors);
     REGISTER_SETTING(*this, _KqpEnableSpilling);

@@ -72,8 +72,6 @@ Prepare the {{ ydb-short-name }} configuration file according to your chosen top
         node: [1, 2, 3]
         nto_select: 3
         ssid: 1
-    table_service_config:
-    sql_version: 1
     actor_system_config:
     executor:
       - name: System
@@ -259,8 +257,6 @@ Prepare the {{ ydb-short-name }} configuration file according to your chosen top
         node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
         nto_select: 9
         ssid: 1
-  table_service_config:
-    sql_version: 1
   actor_system_config:
     executor:
       - name: System
@@ -446,8 +442,6 @@ Prepare the {{ ydb-short-name }} configuration file according to your chosen top
         node: [1, 2, 3, 4, 5, 6, 7, 8]
         nto_select: 5
         ssid: 1
-  table_service_config:
-    sql_version: 1
   actor_system_config:
     executor:
       - name: System

@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/lib/init_yt_api
     yql/essentials/core/file_storage
     yql/essentials/utils/log

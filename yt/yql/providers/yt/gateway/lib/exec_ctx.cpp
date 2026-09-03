@@ -374,7 +374,11 @@ TString TExecContextBaseSimple::GetAuth(const TYtSettings::TConstPtr& config) co
 
     if (!auth || auth->empty()) {
         if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
-            auth = ytTokenResolver->ResolveClusterToken(Cluster_);
+            auto ytName = Clusters_->TryGetYtName(Cluster_);
+            if (!ytName) {
+                ythrow yexception() << "Unknown cluster name: " << Cluster_;
+            }
+            auth = ytTokenResolver->ResolveClusterToken(ytName);
         }
     }
 

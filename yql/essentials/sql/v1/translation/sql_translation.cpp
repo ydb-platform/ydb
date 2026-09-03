@@ -2318,6 +2318,24 @@ bool StoreInt(const TRule_table_setting_value& from, TNodePtr& to, TContext& ctx
     return true;
 }
 
+bool StoreStringOrInt(const TNodePtr& from, TResetableSetting<TNodePtr, void>& to) {
+    if (!from) {
+        return false;
+    }
+    const bool nonEmptyString = from->IsLiteral() && from->GetLiteralType() == "String" && !from->GetLiteralValue().empty();
+    if (!from->IsIntegerLiteral() && !nonEmptyString) {
+        return false;
+    }
+    to.Set(from);
+    return true;
+}
+
+bool StoreStringOrInt(const TRule_table_setting_value& from, TResetableSetting<TNodePtr, void>& to,
+                      TContext& ctx) {
+    TNodePtr node;
+    return (StoreString(from, node, ctx) || StoreInt(from, node, ctx)) && StoreStringOrInt(/*from=*/node, to);
+}
+
 bool StoreInt(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
     switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue3: {
@@ -2787,6 +2805,13 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
+    } else if (to_lower(id.Name) == "metrics_level") {
+        if (reset) {
+            settings.MetricsLevel.Reset();
+        } else if (!StoreStringOrInt(*value, settings.MetricsLevel, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an integer or a string";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -3250,12 +3275,9 @@ bool StoreTopicSettingsEntry(
     } else if (to_lower(id.Name) == "metrics_level") {
         if (reset) {
             settings.MetricsLevel.Reset();
-        } else {
-            if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
-                return false;
-            }
-            settings.MetricsLevel.Set(valueExprNode);
+        } else if (!StoreStringOrInt(valueExprNode, settings.MetricsLevel)) {
+            ctx.Error() << to_upper(id.Name) << " value should be an integer or a string";
+            return false;
         }
     } else if (to_lower(id.Name) == "content_based_deduplication") {
         if (reset) {
@@ -4121,13 +4143,6 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
 
         case TRule_table_hint::kAltTableHint4: {
             const auto& alt = rule.GetAlt_table_hint4();
-            const auto pos = Ctx_.TokenPosition(alt.GetToken1());
-            Ctx_.Error(pos) << "WATERMARK AS (expr) syntax is deprecated and no longer supported, use WATERMARK = expr";
-            return false;
-        }
-
-        case TRule_table_hint::kAltTableHint5: {
-            const auto& alt = rule.GetAlt_table_hint5();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
             TNodePtr expr = Unwrap(TSqlExpression(*this).Build(alt.GetRule_expr3()));

@@ -228,8 +228,8 @@ public:
         AddEvent(NYdb::NTopic::TSessionClosedEvent(status, std::move(issues)));
     }
 
-    void ExpectSessionClosed() final {
-        WaitFor(OperationTimeout, "close read session", [this]() {
+    void ExpectSessionClosed(std::optional<TDuration> timeout) final {
+        WaitFor(timeout.value_or(OperationTimeout), "close read session", [this]() {
             return Closed.load();
         });
     }
@@ -330,7 +330,7 @@ public:
         auto message = NYdb::NTopic::TWriteMessage::CompressedMessage(data, codec, originalSize);
         message.SeqNo(seqNo);
         message.CreateTimestamp(createTimestamp);
-        Write(std::move(continuationToken), data, seqNo, createTimestamp);
+        Write(std::move(continuationToken), std::move(message), /* tx */ nullptr);
     }
 
     bool Close(TDuration /*closeTimeout*/) final {
@@ -527,13 +527,23 @@ private:
 class TMockPqGateway final : public IMockPqGateway {
     class TMockTopicClient final : public NYql::ITopicClient {
     public:
-        explicit TMockTopicClient(TMockPqGateway* self)
+        explicit TMockTopicClient(TMockPqGateway* const self)
             : Self(self)
+            , Topics(self->Settings.Topics)
         {}
 
-        NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& /*path*/, const NYdb::NTopic::TDescribeTopicSettings& /*settings*/) final {
+        NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& path, const NYdb::NTopic::TDescribeTopicSettings& /*settings*/) final {
+            TMockPqGatewaySettings::TTopicInfo settings;
+            if (const auto it = Topics.find(path); it != Topics.end()) {
+                settings = it->second;
+            }
+
             Ydb::Topic::DescribeTopicResult describe;
-            describe.add_partitions();
+            for (ui64 i = 0; i < settings.PartitionCount; ++i) {
+                auto* partition = describe.add_partitions();
+                partition->set_partition_id(i);
+            }
+
             return NThreading::MakeFuture(NYdb::NTopic::TDescribeTopicResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(describe)));
         }
 
@@ -565,7 +575,8 @@ class TMockPqGateway final : public IMockPqGateway {
         }
 
     private:
-        TMockPqGateway* Self;
+        TMockPqGateway* const Self = nullptr;
+        const std::unordered_map<TString, TMockPqGatewaySettings::TTopicInfo> Topics;
     };
 
     class TMockFederatedTopicClient final : public NYql::IFederatedTopicClient {
@@ -616,8 +627,6 @@ class TMockPqGateway final : public IMockPqGateway {
         //// IDeferredPublishClient interface implementation
 
         NYdb::NTopic::TAsyncBeginPublicationResult BeginPublication(const TString& extPublicationId, const NYdb::NTopic::TBeginPublicationSettings& settings) final {
-            Y_UNUSED(settings);
-
             ui64 intId = 0;
             with_lock (Mutex) {
                 intId = ++PublicationIntId;
@@ -748,7 +757,7 @@ class TMockPqGateway final : public IMockPqGateway {
 
     struct TTopicInfo {
         std::unordered_map<ui64, IMockPqReadSession::TPtr> ReadSessionsByPartition;
-        ui64 LastCreatedPartitionId = 0;
+        std::queue<ui64> CreatedPartitionIds;
         TMockPqWriteSession::TPtr WriteSession;
     };
 
@@ -792,9 +801,14 @@ public:
         return NThreading::MakeFuture<TListStreams>(std::move(streams));
     }
 
-    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& /*path*/, const TString& /*token*/) final {
+    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& path, const TString& /*token*/) final {
+        TMockPqGatewaySettings::TTopicInfo topicSettings;
+        if (const auto it = Settings.Topics.find(path); it != Settings.Topics.end()) {
+            topicSettings = it->second;
+        }
+
         return NThreading::MakeFuture<TDescribeFederatedTopicResult>(IPqGateway::TDescribeFederatedTopicResult{{
-            .PartitionsCount = 1,
+            .PartitionsCount = topicSettings.PartitionCount,
         }});
     }
 
@@ -834,12 +848,16 @@ public:
         IMockPqReadSession::TPtr session;
         with_lock (Mutex) {
             auto& info = Topics[topic];
-            auto it = info.ReadSessionsByPartition.find(info.LastCreatedPartitionId);
-            if (it != info.ReadSessionsByPartition.end()) {
-                session = std::move(it->second);
-                info.ReadSessionsByPartition.erase(it);
+            if (info.CreatedPartitionIds.empty()) {
+                return session;
             }
+
+            const auto it = info.ReadSessionsByPartition.find(info.CreatedPartitionIds.front());
+            Y_ENSURE(it != info.ReadSessionsByPartition.end());
+            info.CreatedPartitionIds.pop();
+            session = it->second;
         }
+
         return session;
     }
 
@@ -894,7 +912,7 @@ private:
         with_lock (Mutex) {
             auto& info = Topics[path];
             info.ReadSessionsByPartition[partitionId] = session;
-            info.LastCreatedPartitionId = partitionId;
+            info.CreatedPartitionIds.emplace(partitionId);
         }
 
         if (Settings.Runtime && Settings.Notifier) {

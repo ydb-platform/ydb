@@ -376,5 +376,6 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
-    optional bool EnableSysViewOrderByLimitPushdown = 322 [default = false];
+    optional bool EnableInsecureMirrorFactory = 322 [default = false];
+    optional bool EnableSysViewOrderByLimitPushdown = 323 [default = false];
 }

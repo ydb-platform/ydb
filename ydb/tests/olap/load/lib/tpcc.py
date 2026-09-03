@@ -5,7 +5,13 @@ from pathlib import Path
 from time import time
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
-from ydb.tests.olap.lib.tpcc_deviation import DeviationCheckResult, check_tpcc_deviation
+from ydb.tests.olap.lib.tpcc_deviation import (
+    METRICS as TPCC_DEVIATION_METRICS,
+    DeviationCheckResult,
+    check_tpcc_deviation,
+    key_measurement_description,
+    key_measurement_intervals,
+)
 from ydb.tests.olap.lib.allure_utils import time_interval_str
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
@@ -115,7 +121,25 @@ class TpccSuiteBase(LoadSuiteBase):
                 LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
             ], 'Transactions per minute C of TPC-C'),
             *cls._tpcc_latency_key_measurements(),
+            *cls._tpcc_deviation_key_measurements(),
         ], ''
+
+    @classmethod
+    def _tpcc_deviation_key_measurements(cls) -> list[LoadSuiteBase.KeyMeasurement]:
+        """Degradation against the baseline, present only when the check has run."""
+        intervals = [
+            LoadSuiteBase.KeyMeasurement.Interval(color, min, max)
+            for color, min, max in key_measurement_intervals()
+        ]
+        return [
+            LoadSuiteBase.KeyMeasurement(
+                metric.signal,
+                f'TPC-C {metric.name} degradation, %',
+                intervals,
+                key_measurement_description(metric),
+            )
+            for metric in TPCC_DEVIATION_METRICS
+        ]
 
     @classmethod
     def _tpcc_latency_key_measurements(cls) -> list[LoadSuiteBase.KeyMeasurement]:
@@ -192,6 +216,8 @@ class TpccSuiteBase(LoadSuiteBase):
             ResultsProcessor.upload_tpcc_results(stats['tpcc_json'], run_type, result.start_time)
         if deviation.summary:
             allure_table_strings['deviation_check'] = deviation.summary
+        for signal, value in deviation.measurements.items():
+            result.add_stat('test', signal, value)
         for error in deviation.errors:
             result.add_error(error)
         self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings, node_errors=node_errors, verify_errors=verify_errors)

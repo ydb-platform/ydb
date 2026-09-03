@@ -145,6 +145,24 @@ private:
     std::atomic<ui32>* const ExecutionOwnerPoolId;
 };
 
+class TSendWakeupActor : public NActors::TActorBootstrapped<TSendWakeupActor> {
+public:
+    TSendWakeupActor(NActors::TActorId target, TManualEvent* sent)
+        : Target(target)
+        , Sent(sent)
+    {}
+
+    void Bootstrap() {
+        Send(Target, new NActors::TEvents::TEvWakeup());
+        Sent->Signal();
+        PassAway();
+    }
+
+private:
+    const NActors::TActorId Target;
+    TManualEvent* const Sent;
+};
+
 THolder<NActors::TActorSystemSetup> CreateActorSystemSetup(
         const NKikimrConfig::TActorSystemConfig& config)
 {
@@ -203,6 +221,110 @@ bool WaitForSharedThreadToPark(
         }
     }
     return false;
+}
+
+enum class EAdjacentActivationSource {
+    DirectSend,
+    ActorSend,
+    Registration,
+};
+
+void TestAutoConfiguredAdjacentPoolActivationAfterIdle(
+        EAdjacentActivationSource source)
+{
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetCpuCount(2);
+    config.SetUseSharedThreads(true);
+    config.SetUseUnitedPool(true);
+
+    ApplyAutoConfig(&config, false, false);
+
+    const ui32 ownerPoolId = config.GetSysExecutor();
+    const ui32 adjacentPoolId = config.GetBatchExecutor();
+    const ui32 foreignPoolId = config.GetServiceExecutor(0).GetExecutorId();
+    auto setup = CreateActorSystemSetup(config);
+
+    const auto& ownerPool = FindBasicPool(setup->CpuManager, ownerPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(ownerPool.DefaultThreadCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(
+        ownerPool.AdjacentPools,
+        (std::vector<i16>{static_cast<i16>(adjacentPoolId)}));
+
+    const auto& adjacentPool = FindBasicPool(setup->CpuManager, adjacentPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(adjacentPool.DefaultThreadCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(adjacentPool.ForcedForeignSlotCount, 0);
+
+    const auto& foreignPool = FindBasicPool(setup->CpuManager, foreignPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(foreignPool.DefaultThreadCount, 1);
+
+    NActors::TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    TManualEvent ready;
+    TManualEvent sent;
+    TManualEvent done;
+    NActors::TActorId adjacentActorId;
+    std::atomic<ui32> executionOwnerPoolId = Max<ui32>();
+
+    bool actorIsReady = source == EAdjacentActivationSource::Registration;
+    if (!actorIsReady) {
+        actorSystem.Register(
+            new TStartAdjacentActor(
+                adjacentPoolId,
+                &ready,
+                &done,
+                &adjacentActorId,
+                &executionOwnerPoolId),
+            NActors::TMailboxType::HTSwap,
+            ownerPoolId);
+        actorIsReady = ready.WaitT(TDuration::Seconds(5));
+    }
+
+    const bool ownerIsParked = actorIsReady
+        && WaitForSharedThreadToPark(actorSystem, ownerPoolId, TDuration::Seconds(5));
+
+    bool activationWasPublished = false;
+    if (ownerIsParked) {
+        switch (source) {
+            case EAdjacentActivationSource::DirectSend:
+                activationWasPublished = actorSystem.Send(
+                    adjacentActorId,
+                    new NActors::TEvents::TEvWakeup());
+                break;
+
+            case EAdjacentActivationSource::ActorSend:
+                actorSystem.Register(
+                    new TSendWakeupActor(adjacentActorId, &sent),
+                    NActors::TMailboxType::HTSwap,
+                    foreignPoolId);
+                activationWasPublished = sent.WaitT(TDuration::Seconds(5));
+                break;
+
+            case EAdjacentActivationSource::Registration:
+                actorSystem.Register(
+                    new TRecordOwnerOnBootstrapActor(&done, &executionOwnerPoolId),
+                    NActors::TMailboxType::HTSwap,
+                    adjacentPoolId);
+                activationWasPublished = true;
+                break;
+        }
+    }
+
+    const bool completed = activationWasPublished
+        && done.WaitT(TDuration::Seconds(5));
+
+    actorSystem.Stop();
+    UNIT_ASSERT_C(actorIsReady, "auto-configured Batch actor did not initialize");
+    UNIT_ASSERT_C(ownerIsParked,
+        "auto-configured adjacent User owner did not become idle");
+    UNIT_ASSERT_C(activationWasPublished,
+        "failed to publish an activation to the auto-configured Batch pool");
+    UNIT_ASSERT_C(completed,
+        "auto-configured Batch activation did not execute after its owner became idle");
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        executionOwnerPoolId.load(std::memory_order_acquire),
+        ownerPoolId,
+        "Batch activation was not executed by its adjacent User owner");
 }
 
 } // anonymous namespace
@@ -634,6 +756,21 @@ Y_UNIT_TEST(AutoConfiguredSingleCpuOwnerRunsAllAdjacentPoolsAfterIdle) {
             "single-CPU adjacent pool " << adjacentPoolIds[i]
                 << " was not executed by its IC owner");
     }
+}
+
+Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAfterIdleOnDirectSend) {
+    TestAutoConfiguredAdjacentPoolActivationAfterIdle(
+        EAdjacentActivationSource::DirectSend);
+}
+
+Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAfterIdleOnActorSend) {
+    TestAutoConfiguredAdjacentPoolActivationAfterIdle(
+        EAdjacentActivationSource::ActorSend);
+}
+
+Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAfterIdleOnRegistration) {
+    TestAutoConfiguredAdjacentPoolActivationAfterIdle(
+        EAdjacentActivationSource::Registration);
 }
 
 } // Y_UNIT_TEST_SUITE(AutoConfig)

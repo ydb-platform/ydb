@@ -149,15 +149,17 @@ constexpr int FontSizeTask  = 22;
 constexpr int FontSizeBadge = 14;
 constexpr int FontSizeLabel = 16;
 
-constexpr TStringBuf ColBackground    = "#222222";
-constexpr TStringBuf ColEdge          = "#9a9a9a";
-constexpr TStringBuf ColIoFill        = "#3a3a3a";
-constexpr TStringBuf ColIoBorder      = "#6b6b6b";
-constexpr TStringBuf ColPendingFill   = "#4a4a4a";
-constexpr TStringBuf ColPendingStr    = "#7a7a7a";
-constexpr TStringBuf ColOpActiveFill  = "#3f6b3f";
-constexpr TStringBuf ColOpActiveStr   = "#9ccc9c";
-constexpr TStringBuf ColText          = "#ffffff";
+using namespace std::string_view_literals;
+
+constexpr TStringBuf ColBackground    = "#222222"sv;
+constexpr TStringBuf ColEdge          = "#9a9a9a"sv;
+constexpr TStringBuf ColIoFill        = "#3a3a3a"sv;
+constexpr TStringBuf ColIoBorder      = "#6b6b6b"sv;
+constexpr TStringBuf ColPendingFill   = "#4a4a4a"sv;
+constexpr TStringBuf ColPendingStr    = "#7a7a7a"sv;
+constexpr TStringBuf ColOpActiveFill  = "#3f6b3f"sv;
+constexpr TStringBuf ColOpActiveStr   = "#9ccc9c"sv;
+constexpr TStringBuf ColText          = "#ffffff"sv;
 
 TString XmlEscape(TStringBuf s) {
     TStringBuilder b;

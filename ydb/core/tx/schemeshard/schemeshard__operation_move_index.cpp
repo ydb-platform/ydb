@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
@@ -286,6 +287,9 @@ public:
 
         context.SS->PersistTableAlterVersion(db, path->PathId, table);
 
+        NTableIndexVersion::SyncChildIndexVersions(path.Base(), table, table->AlterVersion, OperationId, context, db);
+
+        context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
@@ -407,7 +411,6 @@ public:
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
 

@@ -603,6 +603,12 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
 
+        if (context.SS->IsTableInBackupCollection(path.Base()->PathId)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Alter schema forbidden: table is part of a backup collection. Remove it from collection first.");
+            return result;
+        }
+
         if (table->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");
             return result;

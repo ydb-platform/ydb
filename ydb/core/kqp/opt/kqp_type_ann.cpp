@@ -1696,9 +1696,18 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
             }
         }
         if (!keyItemType) {
-            const auto jsonVals = FindNodes(inputPtr, [&](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
-            if (jsonVals.size() == 1) {
-                if (const auto* ta = jsonVals.front()->GetTypeAnn().Get()) {
+            // Legacy shape: the DISTINCT key is a SELECT alias of a pushed JSON_VALUE projection whose column is named
+            // after the source column. Consider only projection-hosted JSON_VALUE nodes: JSON_VALUE inside pushed
+            // filter conditions (KqpOlapFilter) must not make the key ambiguous.
+            TExprNode::TListType projectionJsonVals;
+            for (const auto& projNode : FindNodes(inputPtr, [](const TExprNode::TPtr& n) { return TKqpOlapProjection::Match(n.Get()); })) {
+                const auto& op = projNode->ChildRef(TKqpOlapProjection::idx_OlapOperation);
+                if (TKqpOlapJsonValue::Match(op.Get())) {
+                    projectionJsonVals.push_back(op);
+                }
+            }
+            if (projectionJsonVals.size() == 1) {
+                if (const auto* ta = projectionJsonVals.front()->GetTypeAnn().Get()) {
                     keyItemType = ta;
                 }
             }
@@ -1708,7 +1717,9 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
         ctx.AddError(TIssue(
             ctx.GetPosition(key->Pos()),
             TStringBuilder() << "OLAP DISTINCT key '" << keyName
-                << "' is not present in the input row type and no matching OLAP projection or JSON_VALUE was found"
+                << "' is neither a stored column nor a pushed OLAP projection output. "
+                << "Alias the DISTINCT expression `AS " << keyName << "`, enable "
+                << "PRAGMA kikimr.OptEnableOlapPushdownProjections and make sure OptForceOlapPushdownDistinct names that alias."
         ));
         return TStatus::Error;
     }

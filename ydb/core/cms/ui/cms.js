@@ -49,6 +49,7 @@ function main() {
     initConsoleLogTab();
     initCmsSentinelTab();
     initStateStorageTab();
+    initNbs2TabletsTab();
 
     $('#popup').on('click', function(e) {
         if (e.target !== this)

@@ -16,6 +16,7 @@ struct TLspServerOptions {
 void LspServe(
     IInputStream& cin,
     IOutputStream& cout,
+    IOutputStream& mout,
     TLspServerOptions options,
     TLspListenerFactory factory);
 

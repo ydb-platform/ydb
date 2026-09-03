@@ -865,6 +865,8 @@ private:
 
     TRuntimeNode InvokeBinary(const std::string_view& callableName, TType* type, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode AggrCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
+    TRuntimeNode ConvertIntegralToDecimal(TRuntimeNode data);
+    std::pair<TRuntimeNode, TRuntimeNode> ConvertIntegralToDecimalForComparison(std::pair<TRuntimeNode, TRuntimeNode> comparisonData);
     TRuntimeNode DataCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
 
     TRuntimeNode BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);

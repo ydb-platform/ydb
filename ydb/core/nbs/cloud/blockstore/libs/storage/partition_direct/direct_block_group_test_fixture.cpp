@@ -152,7 +152,7 @@ TExecutorPtr TDBGFixture::MakeExecutor()
 [[nodiscard]] std::shared_ptr<TDirectBlockGroup>
 TDBGFixture::MakeDirectBlockGroup(
     const TExecutorPtr& executor,
-    std::unique_ptr<NStorage::NTransport::IStorageTransport> transport,
+    NStorage::NTransport::TStorageTransportPtr transport,
     const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
     const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
     size_t directBlockGroupIndex) const
@@ -248,7 +248,7 @@ size_t TDBGFixture::ReplyUpdateRequests()
 {
     auto requests = std::move(Service->UpdateConfigRequests);
     for (auto& r: requests) {
-        r.Promise.SetValue();
+        r.Promise.SetValue(EPersistResult::Success);
     }
     return requests.size();
 }

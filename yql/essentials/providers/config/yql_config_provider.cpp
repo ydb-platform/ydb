@@ -139,7 +139,7 @@ public:
     };
 
     TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, TString username,
-                    TAllowSettingPolicy policy, bool forPartialTypeCheck)
+                    TAllowSettingPolicy policy, bool forPartialTypeCheck, const TVector<TString>& activatedGroups)
         : Types_(types)
         , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
@@ -147,6 +147,9 @@ public:
         , Username_(std::move(username))
         , Policy_(std::move(policy))
     {
+        for (const auto& activationGroup : activatedGroups) {
+            RecordActivation(CoreActivationLabel, activationGroup);
+        }
     }
 
     TStringBuf GetName() const override {
@@ -517,6 +520,18 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << err.AsStrBuf() << ", available modes: " << NKikimr::NUdf::ValidateModeAvailables()));
                 return false;
             }
+        } else if (name == "UdfBridge") {
+            if (!args.empty()) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+
+            if (Types_.BridgeBinaryPath.empty()) {
+                ctx.AddError(TIssue(pos, "udf_bridge is not available"));
+                return false;
+            }
+
+            Types_.BridgeMode = NKikimr::NUdf::EBridgeMode::OutProcess;
         } else if (name == "LLVM_OFF") {
             if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -782,6 +797,10 @@ private:
                 return false;
             }
 
+            if (ForPartialTypeCheck_) {
+                return true;
+            }
+
             if (!Types_.UdfIndex) {
                 ctx.AddError(TIssue(pos, "UdfIndex is not available"));
                 return false;
@@ -1029,10 +1048,12 @@ private:
             }
 
             auto arg = TString{args[0]};
-            if (!TryFromString(arg, Types_.DecimalConversionMode)) {
+            EDecimalConversionMode decimalConversionMode;
+            if (!TryFromString(arg, decimalConversionMode)) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `without_common_type_fixup|with_common_type_fixup', but got: " << args[0]));
                 return false;
             }
+            Types_.UpdateDecimalConversionMode(decimalConversionMode);
         } else if (name == "OptimizerFlags") {
             for (auto& arg : args) {
                 if (arg.empty()) {
@@ -1504,7 +1525,6 @@ private:
         return parseResult == TWarningRule::EParseResult::PARSE_OK;
     }
 
-private:
     void RecordActivation(TStringBuf activationLabel, TStringBuf feature) {
         Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << activationLabel << feature, 0, 0, 0, 0, 1);
     }
@@ -1523,9 +1543,10 @@ private:
 } // namespace
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
+                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck,
+                                                  const TVector<TString>& activatedGroups)
 {
-    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck);
+    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck, activatedGroups);
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

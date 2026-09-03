@@ -1,10 +1,10 @@
 #include "client_impl.h"
 
 #include "config.h"
-#include "chaos_lease.h"
 #include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
+#include "request_info.h"
 #include "row_batch_reader.h"
 #include "row_batch_writer.h"
 #include "row_stream.h"
@@ -14,6 +14,7 @@
 #include "timestamp_provider.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/chaos_lease.h>
 #include <yt/yt/client/api/formatted_table_reader.h>
 #include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/table_partition_reader.h>
@@ -36,8 +37,6 @@
 
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/distributed_file_session.h>
-
-#include <yt/yt/client/rpc/request_info.h>
 
 #include <yt/yt/client/ypath/rich.h>
 
@@ -261,9 +260,7 @@ TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
     TChaosLeaseId chaosLeaseId,
     const TChaosLeaseAttachOptions& options)
 {
-    auto connection = GetRpcProxyConnection();
     auto client = GetRpcProxyClient();
-    auto channel = GetRetryingChannel();
 
     auto chaosLeasePath = Format("%v/@", FromObjectId(chaosLeaseId));
 
@@ -273,11 +270,10 @@ TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
 
         auto chaosLease = CreateChaosLease(
             std::move(client),
-            std::move(channel),
             chaosLeaseId,
             timeout,
             options.PingAncestors,
-            options.PingPeriod);
+            RpcProxyClientLogger());
 
         if (options.Ping) {
             return chaosLease->Ping({}).Apply(BIND([=] {
@@ -293,7 +289,6 @@ TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions
 {
     auto connection = GetRpcProxyConnection();
     auto client = GetRpcProxyClient();
-    auto channel = GetRetryingChannel();
 
     auto createOptions = TCreateNodeOptions{};
     auto timeout = options.LeaseTimeout.value_or(connection->GetConfig()->DefaultChaosLeaseTimeout);
@@ -306,12 +301,26 @@ TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions
     return client->CreateObject(EObjectType::ChaosLease, {}).Apply(BIND([=] (const TChaosLeaseId& chaosLeaseId) {
         return CreateChaosLease(
             std::move(client),
-            std::move(channel),
             chaosLeaseId,
             timeout,
             options.PingAncestors,
-            options.PingPeriod);
+            RpcProxyClientLogger());
     }));
+}
+
+TFuture<void> TClient::PingChaosLease(
+    TChaosLeaseId chaosLeaseId,
+    const TChaosLeasePingOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PingChaosLease();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_chaos_lease_id(), chaosLeaseId);
+    req->set_ping_ancestors(options.PingAncestors);
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<void> TClient::SetUserBanned(
@@ -905,6 +914,8 @@ TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
+    SetWriteTableFragmentRequestInfo(req, cookie);
+
     auto schema = New<TTableSchema>();
     auto promise = NewPromise<TSignedWriteFragmentResultPtr>();
 
@@ -943,6 +954,8 @@ IFileFragmentWriterPtr TClient::CreateFileFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
+    SetWriteFileFragmentRequestInfo(req, cookie);
+
     return NRpcProxy::CreateFileFragmentWriter(std::move(req));
 }
 
@@ -963,6 +976,12 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
     req->set_offset(offset);
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+        req->TracingTags().emplace_back("yt.offset", ToString(offset));
+        req->TracingTags().emplace_back("yt.partition_index", ToString(partitionIndex));
+    }
 
     req->set_use_native_tablet_node_api(options.UseNativeTabletNodeApi);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -995,6 +1014,15 @@ TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
     YT_OPTIONAL_SET_PROTO(req, offset, offset);
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.consumer_path", ToString(consumerPath));
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+        if (offset) {
+            req->TracingTags().emplace_back("yt.offset", ToString(*offset));
+        }
+        req->TracingTags().emplace_back("yt.partition_index", ToString(partitionIndex));
+    }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
 
@@ -1987,6 +2015,21 @@ TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
     }));
 }
 
+TFuture<TFilePartitions> TClient::PartitionFile(
+    const NYPath::TYPath& /*path*/,
+    const std::vector<TFileReadRange>& /*ranges*/,
+    const TPartitionFileOptions& /*options*/)
+{
+    THROW_ERROR_EXCEPTION("PartitionFile is not implemented yet");
+}
+
+TFuture<IFileReaderPtr> TClient::CreateFilePartitionReader(
+    const TFilePartitionCookiePtr& /*cookie*/,
+    const TReadFilePartitionOptions& /*options*/)
+{
+    THROW_ERROR_EXCEPTION("CreateFilePartitionReader is not implemented yet");
+}
+
 TFuture<TClusterMeta> TClient::GetClusterMeta(
     const TGetClusterMetaOptions& /*options*/)
 {
@@ -2108,6 +2151,8 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
+    SetPartitionTablesRequestInfo(req, paths, *req);
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
     }));
@@ -2125,6 +2170,8 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, /*format*/ std::nullopt, options);
+
+    SetReadTablePartitionRequestInfo(req, *req);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) -> TFuture<ITablePartitionReaderPtr>{
@@ -2183,10 +2230,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
 
     FillRequest(req.Get(), path, format, options);
 
-    SetReadTableRequestInfo(
-        req,
-        path,
-        *req);
+    SetReadTableRequestInfo(req, path, *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2215,6 +2259,8 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, format, options);
+
+    SetReadTablePartitionRequestInfo(req, *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {

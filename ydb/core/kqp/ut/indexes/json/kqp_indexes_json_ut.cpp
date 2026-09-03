@@ -1,6 +1,8 @@
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_ut_common.h>
 #include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
+#include <ydb/core/tx/datashard/const.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr::NKqp {
 
@@ -35,6 +37,62 @@ TKikimrRunner KikimrJsonRowIdCompact() {
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return TKikimrRunner(settings);
+}
+
+TKikimrRunner KikimrJsonPrefixRowId(bool compact) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    if (compact) {
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    }
+    return TKikimrRunner(settings);
+}
+
+void ExecuteJsonStatement(TQueryClient& db, const TString& sql, TParams params = TParamsBuilder().Build()) {
+    auto result = db.ExecuteQuery(sql, TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+TString SelectJsonRows(TQueryClient& db, const TString& sql, TParams params = TParamsBuilder().Build()) {
+    auto result = db.ExecuteQuery(sql, TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    return FormatResultSetYson(result.GetResultSet(0));
+}
+
+TString JsonLiteralToken(TStringBuf json) {
+    TString error;
+    auto tokens = NJsonIndex::TokenizeJson(json, error);
+    UNIT_ASSERT_C(error.empty(), error);
+    UNIT_ASSERT_C(!tokens.empty(), "JSON produced no index tokens");
+    return tokens.back();
+}
+
+TString FormatUint32Keys(TVector<ui32> keys) {
+    Sort(keys);
+    TStringBuilder yson;
+    yson << '[';
+    for (size_t i = 0; i < keys.size(); ++i) {
+        yson << (i ? ";" : "") << "[[" << keys[i] << "u]]";
+    }
+    yson << ']';
+    return yson;
+}
+
+TString MakeScalarJson(TStringBuf marker, size_t scalarSize) {
+    return TStringBuilder() << R"({"marker":")" << marker
+        << R"(","payload":")" << TString(scalarSize, 'x') << R"("})";
+}
+
+TString MakeWhitespaceJson(TStringBuf marker, size_t totalSize) {
+    const TString prefix = TStringBuilder() << R"({"marker":")" << marker << '"';
+    UNIT_ASSERT_C(totalSize > prefix.size() + 1, totalSize);
+    return prefix + TString(totalSize - prefix.size() - 1, ' ') + '}';
 }
 
 } // namespace
@@ -143,8 +201,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
-    Y_UNIT_TEST(NoMultipleColumns) {
-        auto kikimr = Kikimr();
+    Y_UNIT_TEST(NoMultipleColumnsWithoutFeatureFlag) {
+        // With the prefix feature flag off, multi-column JSON indexes are rejected.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableFulltextIndexPrefix(false);
+        featureFlags.SetEnableJsonIndexAutoSelect(false);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -169,7 +233,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index requires exactly one key column, but 2 are requested");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Prefixed fulltext/json index support is disabled");
         }
     }
 
@@ -734,14 +798,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
                         [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
                         [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
                         [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
                         [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
                         [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
@@ -760,36 +824,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
                 [[1u];"\3k1\0\3v1"];
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
                 [[2u];"\3k2\0\3v2"];
                 [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
-                [[3u];""];
                 [[3u];"\3k3"];
                 [[3u];"\3k3\0\0"];
                 [[3u];"\3k3\0\3v3"];
                 [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-                [[4u];""];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
-
 
         {
             auto writeResult = WriteJsonIndexWithKeys(db, "UPSERT", "TestTable", jsonType, {{1, 3}, {3, 2}, {5, 5}}, WithReturning);
@@ -797,55 +850,44 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[3u];["{\"k2\":[\"v2\",2,true]}"]];
-                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]]
+                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[3u];["{\"k2\": [\"v2\", 2, true]}"]];
-                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]]
+                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-                [[1u];"\3k3\0\3v3"];
-                [[1u];"\3k3\0\0"];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k3"];
-                [[1u];""];
-                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
-                [[2u];""];
+                [[1u];"\3k3\0\0"];
+                [[1u];"\3k3\0\3v3"];
+                [[1u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
                 [[2u];"\3k2\0\3v2"];
-                [[3u];"\3k2\0\4\0\0\0\0\0\0\0@"];
-                [[3u];"\3k2\0\3v2"];
-                [[3u];"\3k2\0\1"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];"\3k2"];
-                [[3u];""];
-                [[4u];""];
+                [[3u];"\3k2\0\1"];
+                [[3u];"\3k2\0\3v2"];
+                [[3u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
-                [[5u];""];
                 [[5u];"\3k5"];
                 [[5u];"\3k5\0\0"];
                 [[5u];"\3k5\0\3v5"];
                 [[5u];"\3k5\0\4\0\0\0\0\0\0\x14@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -863,14 +905,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
                         [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
                         [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
                         [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
                         [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
                         [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
@@ -889,36 +931,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
                 [[1u];"\3k1\0\3v1"];
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
                 [[2u];"\3k2\0\3v2"];
                 [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
-                [[3u];""];
                 [[3u];"\3k3"];
                 [[3u];"\3k3\0\0"];
                 [[3u];"\3k3\0\3v3"];
                 [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-                [[4u];""];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
-
 
         {
             auto writeResult = WriteJsonIndexWithKeys(db, "REPLACE", "TestTable", jsonType, {{1, 3}, {3, 2}, {5, 5}}, WithReturning);
@@ -926,55 +957,44 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[3u];["{\"k2\":[\"v2\",2,true]}"]];
-                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]]
+                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[3u];["{\"k2\": [\"v2\", 2, true]}"]];
-                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]]
+                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-                [[1u];"\3k3\0\3v3"];
-                [[1u];"\3k3\0\0"];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k3"];
-                [[1u];""];
-                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
-                [[2u];""];
+                [[1u];"\3k3\0\0"];
+                [[1u];"\3k3\0\3v3"];
+                [[1u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
                 [[2u];"\3k2\0\3v2"];
-                [[3u];"\3k2\0\4\0\0\0\0\0\0\0@"];
-                [[3u];"\3k2\0\3v2"];
-                [[3u];"\3k2\0\1"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];"\3k2"];
-                [[3u];""];
-                [[4u];""];
+                [[3u];"\3k2\0\1"];
+                [[3u];"\3k2\0\3v2"];
+                [[3u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
-                [[5u];""];
                 [[5u];"\3k5"];
                 [[5u];"\3k5\0\0"];
                 [[5u];"\3k5\0\3v5"];
                 [[5u];"\3k5\0\4\0\0\0\0\0\0\x14@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -992,14 +1012,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
                         [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
                         [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
                         [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
                         [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
                         [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
@@ -1018,34 +1038,24 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
                 [[1u];"\3k1\0\3v1"];
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
                 [[2u];"\3k2\0\3v2"];
                 [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
-                [[3u];""];
                 [[3u];"\3k3"];
                 [[3u];"\3k3\0\0"];
                 [[3u];"\3k3\0\3v3"];
                 [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-                [[4u];""];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1054,58 +1064,46 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 3"];[5u];["{\"k3\":[\"v3\",3,false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[6u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[5u];["{\"k3\":[\"v3\",3,false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 3"];[5u];["{\"k3\": [\"v3\", 3, false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[6u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[5u];["{\"k3\": [\"v3\", 3, false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
                 [[1u];"\3k1\0\3v1"];
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
-                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[2u];"\3k2\0\3v2"];
-                [[3u];""];
-                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-                [[3u];"\3k3\0\3v3"];
-                [[3u];"\3k3\0\0"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];"\3k3"];
-                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
-                [[4u];""];
+                [[3u];"\3k3\0\0"];
+                [[3u];"\3k3\0\3v3"];
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
                 [[5u];"\3k3"];
                 [[5u];"\3k3\0\0"];
-                [[5u];""];
                 [[5u];"\3k3\0\3v3"];
                 [[5u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-                [[6u];"\3k2\0\1"];
-                [[6u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[6u];"\3k2"];
-                [[6u];""];
-                [[6u];"\3k2\0\3v2"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+                [[6u];"\3k2\0\1"];
+                [[6u];"\3k2\0\3v2"];
+                [[6u];"\3k2\0\4\0\0\0\0\0\0\0@"]
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1114,44 +1112,32 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
                 [[1u];"\3k1\0\3v1"];
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
-                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[2u];"\3k2\0\3v2"];
-                [[3u];""];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[3u];"\3k3\0\3v3"];
                 [[3u];"\3k3\0\0"];
                 [[3u];"\3k3"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
-                [[4u];""];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[5u];"\3k3"];
                 [[5u];"\3k3\0\0"];
-                [[5u];""];
                 [[5u];"\3k3\0\3v3"];
                 [[5u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[6u];"\3k2\0\1"];
                 [[6u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[6u];"\3k2"];
-                [[6u];""];
                 [[6u];"\3k2\0\3v2"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -1177,34 +1163,24 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
                 [[1u];"\3k1\0\3v1"];
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
                 [[2u];"\3k2\0\3v2"];
                 [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
-                [[3u];""];
                 [[3u];"\3k3"];
                 [[3u];"\3k3\0\0"];
                 [[3u];"\3k3\0\3v3"];
                 [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-                [[4u];""];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1222,48 +1198,38 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 10"];[3u];["{\"k10\":[\"v10\",10,true]}"]];
-                        [["data 10"];[2u];["{\"k10\":[\"v10\",10,true]}"]]
+                    CompareYsonUnordered(R"([
+                        [["data 10"];[2u];["{\"k10\":[\"v10\",10,true]}"]];
+                        [["data 10"];[3u];["{\"k10\":[\"v10\",10,true]}"]]
                     ])", FormatResultSetYson(updateResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 10"];[3u];["{\"k10\": [\"v10\", 10, true]}"]];
-                        [["data 10"];[2u];["{\"k10\": [\"v10\", 10, true]}"]]
+                    CompareYsonUnordered(R"([
+                        [["data 10"];[2u];["{\"k10\": [\"v10\", 10, true]}"]];
+                        [["data 10"];[3u];["{\"k10\": [\"v10\", 10, true]}"]]
                     ])", FormatResultSetYson(updateResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
                 [[1u];"\3k1\0\3v1"];
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\4k10"];
                 [[2u];"\4k10\0\1"];
                 [[2u];"\4k10\0\3v10"];
                 [[2u];"\4k10\0\4\0\0\0\0\0\0$@"];
-                [[3u];""];
                 [[3u];"\4k10"];
                 [[3u];"\4k10\0\1"];
                 [[3u];"\4k10\0\3v10"];
                 [[3u];"\4k10\0\4\0\0\0\0\0\0$@"];
-                [[4u];""];
                 [[4u];"\3k4"];
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1280,52 +1246,42 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 100"];[4u];["{\"k100\":[\"v100\",100,false]}"]];
-                        [["data 100"];[3u];["{\"k100\":[\"v100\",100,false]}"]];
+                    CompareYsonUnordered(R"([
+                        [["data 100"];[1u];["{\"k100\":[\"v100\",100,false]}"]];
                         [["data 100"];[2u];["{\"k100\":[\"v100\",100,false]}"]];
-                        [["data 100"];[1u];["{\"k100\":[\"v100\",100,false]}"]]
+                        [["data 100"];[3u];["{\"k100\":[\"v100\",100,false]}"]];
+                        [["data 100"];[4u];["{\"k100\":[\"v100\",100,false]}"]]
                     ])", FormatResultSetYson(updateResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 100"];[4u];["{\"k100\": [\"v100\", 100, false]}"]];
-                        [["data 100"];[3u];["{\"k100\": [\"v100\", 100, false]}"]];
+                    CompareYsonUnordered(R"([
+                        [["data 100"];[1u];["{\"k100\": [\"v100\", 100, false]}"]];
                         [["data 100"];[2u];["{\"k100\": [\"v100\", 100, false]}"]];
-                        [["data 100"];[1u];["{\"k100\": [\"v100\", 100, false]}"]]
+                        [["data 100"];[3u];["{\"k100\": [\"v100\", 100, false]}"]];
+                        [["data 100"];[4u];["{\"k100\": [\"v100\", 100, false]}"]]
                     ])", FormatResultSetYson(updateResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\5k100"];
                 [[1u];"\5k100\0\0"];
                 [[1u];"\5k100\0\3v100"];
                 [[1u];"\5k100\0\4\0\0\0\0\0\0Y@"];
-                [[2u];""];
                 [[2u];"\5k100"];
                 [[2u];"\5k100\0\0"];
                 [[2u];"\5k100\0\3v100"];
                 [[2u];"\5k100\0\4\0\0\0\0\0\0Y@"];
-                [[3u];""];
                 [[3u];"\5k100"];
                 [[3u];"\5k100\0\0"];
                 [[3u];"\5k100\0\3v100"];
                 [[3u];"\5k100\0\4\0\0\0\0\0\0Y@"];
-                [[4u];""];
                 [[4u];"\5k100"];
                 [[4u];"\5k100\0\0"];
                 [[4u];"\5k100\0\3v100"];
                 [[4u];"\5k100\0\4\0\0\0\0\0\0Y@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -1362,12 +1318,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
                         [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
                         [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
@@ -1376,24 +1332,16 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
                 [[1u];"\3k1\0\3v1"];
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
-                [[3u];""];
                 [[3u];"\3k3"];
                 [[3u];"\3k3\0\0"];
                 [[3u];"\3k3\0\3v3"];
-                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"]
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1408,12 +1356,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
                         [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
                         [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
@@ -1422,20 +1370,98 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_ContextObject, IsJsonDocument, IsStrict) {
         TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, jsonExists("$"));
+            ValidateError(db, jsonExists("$"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
         });
+    }
+
+    Y_UNIT_TEST_QUAD(ExecutionStatisticsMatchActualSelectivity, IsJsonDocument, Compact) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableCompactFulltextIndex(Compact);
+        auto runnerSettings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        if (Compact) {
+            runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        }
+        auto kikimr = TKikimrRunner(runnerSettings);
+        auto db = kikimr.GetQueryClient();
+        const std::string jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType, /* withIndex */ true);
+
+        {
+            TStringBuilder query;
+            query << "UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES\n";
+            for (ui64 key = 1; key <= 1000; ++key) {
+                const char* json = key <= 10
+                    ? R"({"segment":"rare","tracked":true})"
+                    : key <= 100
+                        ? R"({"segment":"common","tracked":true})"
+                        : R"({"noise":0})";
+                query << "(" << key << ", " << jsonType << "('" << json << "'), \"row_" << key << "\")";
+                query << (key == 1000 ? ";" : ",\n");
+            }
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto settings = TExecuteQuerySettings().StatsMode(EStatsMode::Basic);
+        const auto hasTableAccess = [](const TExecuteQueryResult& result, TStringBuf table) {
+            const auto& stats = TProtoAccessor::GetProto(*result.GetStats());
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    if (access.name() == table) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        const auto execute = [&](const std::string& view, const std::string& predicate) {
+            const auto query = std::format(R"(
+                SELECT Key, Data FROM `/Root/TestTable` VIEW {}
+                WHERE {}
+                ORDER BY Key;
+            )", view, predicate);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "Predicate: " + predicate + ", issues: " + result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetStats(), "Execution statistics are missing for: " + predicate);
+            return result;
+        };
+
+        const auto validate = [&](const std::string& predicate, ui64 expectedMatches, ui64 expectedIndexReads) {
+            const auto scanResult = execute("PRIMARY KEY", predicate);
+            const auto indexResult = execute("`json_idx`", predicate);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(scanResult.GetResultSet(0).RowsCount(), expectedMatches, predicate);
+            CompareYson(FormatResultSetYson(scanResult.GetResultSet(0)),
+                FormatResultSetYson(indexResult.GetResultSet(0)), TString(predicate));
+
+            AssertTableStats(scanResult, "/Root/TestTable", {
+                .ExpectedReads = 1000,
+            });
+            AssertTableStats(indexResult, "/Root/TestTable", {
+                .ExpectedReads = expectedMatches,
+            });
+            AssertTableStats(indexResult, "/Root/TestTable/json_idx/indexImplTable", {
+                .ExpectedReads = expectedIndexReads,
+            });
+            UNIT_ASSERT_C(hasTableAccess(indexResult, "/Root/TestTable/json_idx/indexImplTable"),
+                "Execution statistics have no physical JSON index table access for: " + predicate);
+        };
+
+        // Plain indexes read one posting row per matched document. Compact indexes read one
+        // segment row for the searched token, while the main-table reads still reflect matches
+        validate(R"(JSON_VALUE(Text, '$.segment' RETURNING Utf8) == "rare"u)", 10, Compact ? 1 : 10);
+        validate(R"(JSON_EXISTS(Text, '$.tracked'))", 100, Compact ? 1 : 100);
+        validate(R"(JSON_EXISTS(Text, '$.missing'))", 0, 0);
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_MemberAccess, IsJsonDocument, IsStrict) {
@@ -1468,7 +1494,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, jsonExists("$.\"\".\"\".\"\".\"\""));
             ValidatePredicate(db, jsonExists("$.\"\".\"\".\"\".\"\".\"\""));
 
-            ValidatePredicate(db, jsonExists("$.*"));
+            ValidateError(db, jsonExists("$.*"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
             ValidatePredicate(db, jsonExists("$.k1.*"));
             ValidatePredicate(db, jsonExists("$.k2.*"));
             ValidatePredicate(db, jsonExists("$.k1.k1.*"));
@@ -1479,38 +1506,52 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_ArrayAccess, IsJsonDocument, IsStrict) {
         TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, jsonExists("$[0]"));
-            ValidatePredicate(db, jsonExists("$[0, 3]"));
-            ValidatePredicate(db, jsonExists("$[1 to 3]"));
-            ValidatePredicate(db, jsonExists("$[last]"));
-            ValidatePredicate(db, jsonExists("$[*]"));
-            ValidatePredicate(db, jsonExists("$[0][0][0]"));
+            ValidateError(db, jsonExists("$[0]"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$[0, 3]"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$[1 to 3]"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$[last]"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$[*]"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$[0][0][0]"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
             ValidatePredicate(db, jsonExists("$[0].k1"));
             ValidatePredicate(db, jsonExists("$[0, 3].k1"));
             ValidatePredicate(db, jsonExists("$[1 to 3].k1"));
             ValidatePredicate(db, jsonExists("$[last].k1"));
             ValidatePredicate(db, jsonExists("$[*].k1"));
-            ValidatePredicate(db, jsonExists("$[0].*"));
-            ValidatePredicate(db, jsonExists("$[*].*"));
+            ValidateError(db, jsonExists("$[0].*"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$[*].*"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
             ValidatePredicate(db, jsonExists("$.k1[0]"));
             ValidatePredicate(db, jsonExists("$.k1[0, 3]"));
             ValidatePredicate(db, jsonExists("$.k1[1 to 3]"));
             ValidatePredicate(db, jsonExists("$.k1[last]"));
             ValidatePredicate(db, jsonExists("$.k1[0 to last]"));
             ValidatePredicate(db, jsonExists("$.k1[*]"));
-            ValidatePredicate(db, jsonExists("$.*[0]"));
-            ValidatePredicate(db, jsonExists("$.*[*]"));
+            ValidateError(db, jsonExists("$.*[0]"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$.*[*]"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
         });
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_Methods, IsJsonDocument, IsStrict) {
         TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             auto validateMethod = [&](const std::string& method) {
-                ValidatePredicate(db, jsonExists(std::format("$.{}", method)));
+                ValidateError(db, jsonExists(std::format("$.{}", method)),
+                    "JSON index cannot be used: full-range search cannot be performed using full-text search");
                 ValidatePredicate(db, jsonExists(std::format("$.k1.{}", method)));
-                ValidatePredicate(db, jsonExists(std::format("$.*.{}", method)));
-                ValidatePredicate(db, jsonExists(std::format("$[0].{}", method)));
-                ValidatePredicate(db, jsonExists(std::format("$[*].{}", method)));
+                ValidateError(db, jsonExists(std::format("$.*.{}", method)),
+                    "JSON index cannot be used: full-range search cannot be performed using full-text search");
+                ValidateError(db, jsonExists(std::format("$[0].{}", method)),
+                    "JSON index cannot be used: full-range search cannot be performed using full-text search");
+                ValidateError(db, jsonExists(std::format("$[*].{}", method)),
+                    "JSON index cannot be used: full-range search cannot be performed using full-text search");
             };
 
             validateMethod("type()");
@@ -1798,11 +1839,16 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, jsonExists("$.k1[last] ? (@.k1 == 20)"));
             ValidatePredicate(db, jsonExists("$.k1[*] ? (@.k1 == 999)"));
 
-            ValidatePredicate(db, jsonExists("$.* ? (@ == 1)"));
-            ValidatePredicate(db, jsonExists("$.* ? (@ == \"1\")"));
-            ValidatePredicate(db, jsonExists("$.* ? (@ == true)"));
-            ValidatePredicate(db, jsonExists("$.* ? (@ == null)"));
-            ValidatePredicate(db, jsonExists("$.* ? (@ == 42)"));
+            ValidateError(db, jsonExists("$.* ? (@ == 1)"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$.* ? (@ == \"1\")"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$.* ? (@ == true)"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$.* ? (@ == null)"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+            ValidateError(db, jsonExists("$.* ? (@ == 42)"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
 
             ValidatePredicate(db, jsonExists("$.k1.size() ? (@ == 3)"));
             ValidatePredicate(db, jsonExists("$.k1.size() ? (@ > 0)"));
@@ -2120,13 +2166,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         };
 
         auto ensureIndexEmpty = [&]() {
-            auto index = ReadIndex(db);
-            UNIT_ASSERT_VALUES_EQUAL(index.RowsCount(), 0);
+            auto index = FormatFulltextIndex(kikimr);
+            UNIT_ASSERT_VALUES_EQUAL(index, "[]");
         };
 
         auto ensureIndexNonEmpty = [&]() {
-            auto index = ReadIndex(db);
-            UNIT_ASSERT_GT(index.RowsCount(), 0);
+            auto index = FormatFulltextIndex(kikimr);
+            UNIT_ASSERT(index != "[]");
         };
 
         upsertData();
@@ -2668,11 +2714,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        CompareYson(R"([
-            [[1u];""];
+        CompareYsonUnordered(R"([
             [[1u];"\x09ключ"];
             [[1u];"\x09ключ\0\3я mop"]
-        ])", FormatResultSetYson(ReadIndex(db)));
+        ])", FormatFulltextIndex(kikimr));
     }
 
     Y_UNIT_TEST_TWIN(CyrillicPredicates, IsJsonDocument) {
@@ -2837,18 +2882,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\2a"];
                 [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\2b"];
                 [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -2861,15 +2900,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         // Key 1 tokens must be gone; key 2 is unchanged.
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [[2u];""];
+            CompareYsonUnordered(R"([
                 [[2u];"\2b"];
                 [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -2892,15 +2926,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         // Only key 2 has tokens; key 1 (NULL) has none.
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [[2u];""];
+            CompareYsonUnordered(R"([
                 [[2u];"\2b"];
                 [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -2913,18 +2942,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         // Now both keys have tokens.
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\2a"];
                 [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"];
-                [[2u];""];
                 [[2u];"\2b"];
                 [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -2946,11 +2969,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -2970,11 +2989,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -2984,11 +2999,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -3009,15 +3020,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\2a"];
                 [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -3027,11 +3033,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
 
         // Insert NULL for the same key.
@@ -3045,11 +3047,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         // Index must stay empty
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -3069,11 +3067,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -3091,15 +3085,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [[1u];""];
+            CompareYsonUnordered(R"([
                 [[1u];"\2a"];
                 [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -3274,39 +3263,927 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
-    const TTtlNotAllowedIndexTestConfig JsonTtlNotAllowedConfig{
-        .TextColumnType = "Json",
-        .IndexInCreateTable = "INDEX json_idx GLOBAL USING json ON (Text),",
-        .AlterAddIndex = R"(
-            ALTER TABLE TestTable ADD INDEX json_idx
-                GLOBAL USING json ON (Text);
-        )",
-        .ExpectedError = "Table with EIndexTypeGlobalJson index doesn't support TTL",
-    };
+    TTtlNotAllowedIndexTestConfig MakeJsonTtlNotAllowedConfig(TKikimrRunner& kikimr) {
+        const bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
+        const char* enumType = compact ? "EIndexTypeGlobalJsonCompact" : "EIndexTypeGlobalJson";
+        return {
+            .TextColumnType = "Json",
+            .IndexInCreateTable = "INDEX json_idx GLOBAL USING json ON (Text),",
+            .AlterAddIndex = R"(
+                ALTER TABLE TestTable ADD INDEX json_idx
+                    GLOBAL USING json ON (Text);
+            )",
+            .ExpectedError = std::format("Table with {} index doesn't support TTL", enumType),
+        };
+    }
 
     Y_UNIT_TEST(TtlNotAllowed_Both) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
+    }
+
+    Y_UNIT_TEST_TWIN(MultiShardHighFanoutBuildAndDml, Compact) {
+        const auto oldMaxDelta = NDataShard::gFulltextMaxDelta;
+        const auto oldMaxSegment = NDataShard::gFulltextMaxSegment;
+        Y_DEFER {
+            NDataShard::gFulltextMaxDelta = oldMaxDelta;
+            NDataShard::gFulltextMaxSegment = oldMaxSegment;
+        };
+        if (Compact) {
+            NDataShard::gFulltextMaxDelta = 2;
+            NDataShard::gFulltextMaxSegment = 2;
+        }
+
+        auto kikimr = KikimrJson(/* enableJsonIndexAutoSelect */ false, Compact);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteJsonStatement(db, R"(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint32,
+                Text JsonDocument,
+                Data Utf8,
+                PRIMARY KEY (Key)
+            ) WITH (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                UNIFORM_PARTITIONS = 4
+            );
+        )");
+
+        TStringBuilder upsert;
+        upsert << "UPSERT INTO `/Root/Docs` (Key, Text, Data) VALUES\n";
+        TVector<ui32> allKeys;
+        TVector<ui32> evenGroupKeys;
+        for (ui32 i = 1; i <= 128; ++i) {
+            const ui32 key = i * 2654435761u;
+            const ui32 group = i % 4;
+            allKeys.push_back(key);
+            if (group == 0) {
+                evenGroupKeys.push_back(key);
+            }
+            upsert << "(" << key << "u, JsonDocument('{\"common\":\"all\",\"group\":\"g"
+                   << group << "\",\"tags\":[\"repeat\",\"repeat\"]}'), \"row_" << i << "\"u)"
+                   << (i == 128 ? ";" : ",\n");
+        }
+        ExecuteJsonStatement(db, upsert);
+        ExecuteJsonStatement(db, R"(
+            ALTER TABLE `/Root/Docs` ADD INDEX json_idx
+                GLOBAL USING json ON (Text);
+        )");
+
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), "/Root/Docs");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 4);
+
+        Sort(allKeys);
+        Sort(evenGroupKeys);
+        const auto compareViews = [&](const TString& predicate, const TVector<ui32>& expected) {
+            for (const TStringBuf view : {TStringBuf("PRIMARY KEY"), TStringBuf("json_idx")}) {
+                TStringBuilder query;
+                query << "SELECT Key FROM `/Root/Docs` VIEW " << view << '\n'
+                      << "WHERE " << predicate << '\n'
+                      << "ORDER BY Key;";
+                CompareYson(FormatUint32Keys(expected), SelectJsonRows(db, query));
+            }
+        };
+
+        const TString commonPredicate = R"(JSON_VALUE(Text, '$.common' RETURNING Utf8) = "all"u)";
+        const TString groupPredicate = R"(JSON_VALUE(Text, '$.group' RETURNING Utf8) = "g0"u)";
+        const TString repeatPredicate = R"(JSON_EXISTS(Text, '$.tags ? (@ == "repeat")'))";
+        compareViews(commonPredicate, allKeys);
+        compareViews(groupPredicate, evenGroupKeys);
+        compareViews(repeatPredicate, allKeys);
+
+        ExecuteJsonStatement(db, R"(
+            INSERT INTO `/Root/Docs` (Key, Text, Data) VALUES
+                (268435456u,
+                 JsonDocument('{"common":"all","group":"g0","tags":["repeat","repeat"]}'),
+                 "inserted"u);
+        )");
+        ExecuteJsonStatement(db, R"(
+            UPDATE `/Root/Docs`
+            SET Text = JsonDocument('{"common":"all","group":"changed","tags":["repeat","repeat"]}')
+            WHERE Key = 2027808452u;
+        )");
+        ExecuteJsonStatement(db, R"(
+            DELETE FROM `/Root/Docs` WHERE Key = 3668339987u;
+        )");
+
+        const ui32 insertedKey = 0x10000000u;
+        const ui32 updatedKey = 4u * 2654435761u;
+        const ui32 deletedKey = 3u * 2654435761u;
+        const auto eraseKey = [](TVector<ui32>& keys, ui32 key) {
+            const auto it = Find(keys, key);
+            UNIT_ASSERT_C(it != keys.end(), "Expected key is missing");
+            keys.erase(it);
+        };
+        eraseKey(allKeys, deletedKey);
+        allKeys.push_back(insertedKey);
+        eraseKey(evenGroupKeys, updatedKey);
+        evenGroupKeys.push_back(insertedKey);
+        Sort(allKeys);
+        Sort(evenGroupKeys);
+
+        compareViews(commonPredicate, allKeys);
+        compareViews(groupPredicate, evenGroupKeys);
+        compareViews(repeatPredicate, allKeys);
+
+        const TString commonToken = JsonLiteralToken(R"({"common":"all"})");
+        auto params = TParamsBuilder()
+            .AddParam("$token").String(commonToken).Build()
+            .Build();
+        auto result = db.ExecuteQuery(R"(
+            DECLARE $token AS String;
+            SELECT COUNT(*) AS Rows
+            FROM `/Root/Docs/json_idx/indexImplTable`
+            WHERE __ydb_token = $token;
+        )", TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const ui64 physicalRows = parser.ColumnParser("Rows").GetUint64();
+        UNIT_ASSERT(!parser.TryNextRow());
+        if (Compact) {
+            UNIT_ASSERT_C(physicalRows > 1, "Compact posting table did not split the common token");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(physicalRows, allKeys.size());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TextJsonDuplicateKeys, Compact) {
+        auto kikimr = KikimrJson(/* enableJsonIndexAutoSelect */ true, Compact);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteJsonStatement(db, R"(
+            CREATE TABLE `/Root/DuplicateDocs` (
+                Key Uint64,
+                Text Json,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+
+        const TVector<std::pair<ui64, TString>> rows = {
+            {1, R"({ "dup" : "same", "dup" : "same", "nested" : { "n" : 1, "n" : 1 } })"},
+            {2, R"({"dup":"first","dup":"second"})"},
+            {3, R"({"dup":1,"dup":"one"})"},
+            {4, R"({"other":true})"},
+        };
+        for (const auto& [key, text] : rows) {
+            auto params = TParamsBuilder()
+                .AddParam("$key").Uint64(key).Build()
+                .AddParam("$text").Json(text).Build()
+                .Build();
+            ExecuteJsonStatement(db, R"(
+                DECLARE $key AS Uint64;
+                DECLARE $text AS Json;
+                UPSERT INTO `/Root/DuplicateDocs` (Key, Text) VALUES ($key, $text);
+            )", params);
+        }
+
+        auto textResult = db.ExecuteQuery(R"(
+            SELECT Text FROM `/Root/DuplicateDocs` VIEW PRIMARY KEY WHERE Key = 1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(textResult.GetStatus(), EStatus::SUCCESS, textResult.GetIssues().ToString());
+        TResultSetParser parser(textResult.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Text").GetOptionalJson().value(), rows[0].second);
+        UNIT_ASSERT(!parser.TryNextRow());
+
+        const auto assertViews = [&](const TString& predicate, const TString& expected) {
+            TStringBuilder primaryQuery;
+            primaryQuery << "SELECT Key FROM `/Root/DuplicateDocs` VIEW PRIMARY KEY WHERE "
+                         << predicate << " ORDER BY Key;";
+            const TString primaryRows = SelectJsonRows(db, primaryQuery);
+
+            TStringBuilder indexQuery;
+            indexQuery << "SELECT Key FROM `/Root/DuplicateDocs` VIEW json_idx WHERE "
+                       << predicate << " ORDER BY Key;";
+            const TString indexRows = SelectJsonRows(db, indexQuery);
+
+            CompareYson(expected, primaryRows);
+            CompareYson(expected, indexRows);
+            CompareYson(primaryRows, indexRows);
+        };
+
+        const TString samePredicate = R"(JSON_VALUE(Text, '$.dup' RETURNING Utf8) = "same"u)";
+        const TString firstPredicate = R"(JSON_VALUE(Text, '$.dup' RETURNING Utf8) = "first"u)";
+        const TString numericPredicate = R"(JSON_VALUE(Text, '$.dup' RETURNING Int64) = 1)";
+        const TString nestedPredicate = R"(JSON_VALUE(Text, '$.nested.n' RETURNING Int64) = 1)";
+
+        assertViews(samePredicate, "[[[1u]]]");
+        assertViews(firstPredicate, "[[[2u]]]");
+        assertViews(R"(JSON_VALUE(Text, '$.dup' RETURNING Utf8) = "second"u)", "[]");
+        assertViews(numericPredicate, "[[[3u]]]");
+        assertViews(R"(JSON_VALUE(Text, '$.dup' RETURNING Utf8) = "one"u)", "[]");
+        assertViews(nestedPredicate, "[[[1u]]]");
+
+        const auto assertAutoSelect = [&](const TString& predicate, const TString& expected) {
+            ValidateAutoSelect(db, predicate, "json_idx", "DuplicateDocs");
+            TStringBuilder query;
+            query << "SELECT Key FROM `/Root/DuplicateDocs` WHERE " << predicate << " ORDER BY Key;";
+            CompareYson(expected, SelectJsonRows(db, query));
+        };
+        assertAutoSelect(samePredicate, "[[[1u]]]");
+        assertAutoSelect(firstPredicate, "[[[2u]]]");
+        assertAutoSelect(numericPredicate, "[[[3u]]]");
+        assertAutoSelect(nestedPredicate, "[[[1u]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(TextJsonPostingKeySizeLimit, Compact) {
+        auto kikimr = KikimrJson(/* enableJsonIndexAutoSelect */ false, Compact);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteJsonStatement(db, R"(
+            CREATE TABLE `/Root/SizeDocs` (
+                Key Uint64,
+                Text Json,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+
+        const size_t margin = 64_KB;
+        const size_t below = NDataShard::NLimits::MaxWriteKeySize - margin;
+        const size_t above = NDataShard::NLimits::MaxWriteKeySize + margin;
+        const TString acceptedPayload(below, 'x');
+        const TString rejectedPayload(above, 'x');
+        const TString accepted = MakeScalarJson("posting-accepted", acceptedPayload.size());
+        const TString rejected = MakeScalarJson("posting-too-large", rejectedPayload.size());
+        const TString upsert = R"(
+            DECLARE $key AS Uint64;
+            DECLARE $text AS Json;
+            UPSERT INTO `/Root/SizeDocs` (Key, Text) VALUES ($key, $text);
+        )";
+
+        auto acceptedParams = TParamsBuilder()
+            .AddParam("$key").Uint64(1).Build()
+            .AddParam("$text").Json(accepted).Build()
+            .Build();
+        auto acceptedResult = db.ExecuteQuery(upsert, TTxControl::NoTx(), acceptedParams).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            acceptedResult.GetStatus(), EStatus::SUCCESS, acceptedResult.GetIssues().ToString());
+
+        auto payloadParams = TParamsBuilder()
+            .AddParam("$payload").Utf8(acceptedPayload).Build()
+            .Build();
+        for (const TStringBuf view : {TStringBuf("PRIMARY KEY"), TStringBuf("json_idx")}) {
+            TStringBuilder query;
+            query << "DECLARE $payload AS Utf8;\n"
+                  << "SELECT Key FROM `/Root/SizeDocs` VIEW " << view << '\n'
+                  << "WHERE JSON_VALUE(Text, '$.payload' RETURNING Utf8) = $payload;";
+            CompareYson("[[[1u]]]", SelectJsonRows(db, query, payloadParams));
+        }
+
+        auto rejectedParams = TParamsBuilder()
+            .AddParam("$key").Uint64(2).Build()
+            .AddParam("$text").Json(rejected).Build()
+            .Build();
+        auto rejectedResult = db.ExecuteQuery(upsert, TTxControl::NoTx(), rejectedParams).ExtractValueSync();
+        UNIT_ASSERT_C(!rejectedResult.IsSuccess(), "Oversized JSON posting key unexpectedly succeeded");
+        const TString issues = rejectedResult.GetIssues().ToString();
+
+        auto keyParams = TParamsBuilder()
+            .AddParam("$key").Uint64(2).Build()
+            .Build();
+        CompareYson("[]", SelectJsonRows(db, R"(
+            DECLARE $key AS Uint64;
+            SELECT Key FROM `/Root/SizeDocs` VIEW PRIMARY KEY WHERE Key = $key;
+        )", keyParams));
+
+        auto markerParams = TParamsBuilder()
+            .AddParam("$marker").Utf8("posting-too-large").Build()
+            .Build();
+        CompareYson("[]", SelectJsonRows(db, R"(
+            DECLARE $marker AS Utf8;
+            SELECT Key FROM `/Root/SizeDocs` VIEW json_idx
+            WHERE JSON_VALUE(Text, '$.marker' RETURNING Utf8) = $marker;
+        )", markerParams));
+
+        UNIT_ASSERT_C(issues.Contains("Row key size"), issues);
+        UNIT_ASSERT_C(issues.Contains("larger than the allowed threshold"), issues);
+    }
+
+    Y_UNIT_TEST_TWIN(TextJsonValueSizeLimit, Compact) {
+        auto kikimr = KikimrJson(/* enableJsonIndexAutoSelect */ false, Compact);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteJsonStatement(db, R"(
+            CREATE TABLE `/Root/ValueSizeDocs` (
+                Key Uint64,
+                Text Json,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+
+        const size_t margin = 64_KB;
+        const TString accepted = MakeWhitespaceJson(
+            "value-accepted", NDataShard::NLimits::MaxWriteValueSize - margin);
+        const TString rejected = MakeWhitespaceJson(
+            "value-too-large", NDataShard::NLimits::MaxWriteValueSize + margin);
+        const TString upsert = R"(
+            DECLARE $key AS Uint64;
+            DECLARE $text AS Json;
+            UPSERT INTO `/Root/ValueSizeDocs` (Key, Text) VALUES ($key, $text);
+        )";
+        const auto querySettings = TExecuteQuerySettings().ClientTimeout(TDuration::Minutes(2));
+        const auto write = [&](ui64 key, const TString& text) {
+            auto params = TParamsBuilder()
+                .AddParam("$key").Uint64(key).Build()
+                .AddParam("$text").Json(text).Build()
+                .Build();
+            return db.ExecuteQuery(upsert, TTxControl::NoTx(), params, querySettings).ExtractValueSync();
+        };
+
+        auto acceptedResult = write(1, accepted);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            acceptedResult.GetStatus(), EStatus::SUCCESS, acceptedResult.GetIssues().ToString());
+
+        auto acceptedMarkerParams = TParamsBuilder()
+            .AddParam("$marker").Utf8("value-accepted").Build()
+            .Build();
+        for (const TStringBuf view : {TStringBuf("PRIMARY KEY"), TStringBuf("json_idx")}) {
+            TStringBuilder query;
+            query << "DECLARE $marker AS Utf8;\n"
+                  << "SELECT Key FROM `/Root/ValueSizeDocs` VIEW " << view << '\n'
+                  << "WHERE JSON_VALUE(Text, '$.marker' RETURNING Utf8) = $marker;";
+            CompareYson("[[[1u]]]", SelectJsonRows(db, query, acceptedMarkerParams));
+        }
+
+        auto rejectedResult = write(2, rejected);
+        UNIT_ASSERT_C(!rejectedResult.IsSuccess(), "Oversized JSON cell unexpectedly succeeded");
+        const TString issues = rejectedResult.GetIssues().ToString();
+
+        auto keyParams = TParamsBuilder()
+            .AddParam("$key").Uint64(2).Build()
+            .Build();
+        CompareYson("[]", SelectJsonRows(db, R"(
+            DECLARE $key AS Uint64;
+            SELECT Key FROM `/Root/ValueSizeDocs` VIEW PRIMARY KEY WHERE Key = $key;
+        )", keyParams));
+
+        auto rejectedMarkerParams = TParamsBuilder()
+            .AddParam("$marker").Utf8("value-too-large").Build()
+            .Build();
+        CompareYson("[]", SelectJsonRows(db, R"(
+            DECLARE $marker AS Utf8;
+            SELECT Key FROM `/Root/ValueSizeDocs` VIEW json_idx
+            WHERE JSON_VALUE(Text, '$.marker' RETURNING Utf8) = $marker;
+        )", rejectedMarkerParams));
+
+        UNIT_ASSERT_C(issues.Contains("Row cell size"), issues);
+        UNIT_ASSERT_C(issues.Contains("larger than the allowed threshold"), issues);
+    }
+
+    Y_UNIT_TEST_QUAD(PrefixedJsonSinglePrefixMatrix, IsJsonDocument, Compact) {
+        const std::string jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        // These four variants form a pairwise matrix for JSON type, index format and build path.
+        const bool useAlter = IsJsonDocument != Compact;
+        auto kikimr = KikimrJsonPrefix(/* enableJsonIndexAutoSelect */ false, Compact);
+        auto db = kikimr.GetQueryClient();
+
+        auto exec = [&](const std::string& query) {
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+        auto select = [&](const std::string& query, TParams params = TParamsBuilder().Build()) {
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        exec(std::format(R"(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                UserId Uint64,
+                Text {},
+                PRIMARY KEY (Key)
+                {}
+            );
+        )", jsonType, useAlter ? "" : ", INDEX json_idx GLOBAL USING json ON (UserId, Text)"));
+
+        const auto json = [&](const std::string& value) {
+            return std::format("{}('{}')", jsonType, value);
+        };
+        exec(std::format(R"(
+            UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                (1, 100, {}),
+                (2, 100, {}),
+                (3, 200, {}),
+                (4, 200, {});
+        )",
+            json(R"({"kind":"shared","score":10})"),
+            json(R"({"kind":"own","score":20})"),
+            json(R"({"kind":"shared","score":20})"),
+            json(R"({"other":true,"score":30})")));
+
+        if (useAlter) {
+            exec(R"(
+                ALTER TABLE `/Root/Docs` ADD INDEX json_idx
+                    GLOBAL USING json ON (UserId, Text);
+            )");
+        }
+
+        CompareYson("[[[1u]];[[2u]]]", select(R"(
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE UserId = 100 AND JSON_EXISTS(Text, '$.kind')
+            ORDER BY Key;
+        )"));
+
+        CompareYson("[[[3u]]]", select(R"(
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE 200 = UserId AND JSON_VALUE(Text, '$.score' RETURNING Int64) = 20
+            ORDER BY Key;
+        )"));
+
+        auto params = TParamsBuilder().AddParam("$uid").Uint64(200).Build().Build();
+        CompareYson("[[[3u]]]", select(R"(
+            DECLARE $uid AS Uint64;
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE UserId = $uid AND JSON_EXISTS(Text, '$.kind')
+            ORDER BY Key;
+        )", params));
+    }
+
+    Y_UNIT_TEST_TWIN(PrefixedJsonMultiPrefixMatrix, Compact) {
+        // Pair storage type with the opposite format here; the full type/format cross is covered above.
+        const std::string jsonType = Compact ? "Json" : "JsonDocument";
+        auto kikimr = KikimrJsonPrefix(/* enableJsonIndexAutoSelect */ false, Compact);
+        auto db = kikimr.GetQueryClient();
+
+        auto exec = [&](const std::string& query) {
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+        auto select = [&](const std::string& query, TParams params = TParamsBuilder().Build()) {
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+        auto expectPrefixError = [&](const std::string& query) {
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        };
+
+        exec(std::format(R"(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                Tenant Utf8,
+                UserId Uint64,
+                Text {},
+                Data Utf8,
+                PRIMARY KEY (Key)
+            );
+        )", jsonType));
+
+        const auto json = [&](const std::string& value) {
+            return std::format("{}('{}')", jsonType, value);
+        };
+        exec(std::format(R"(
+            UPSERT INTO `/Root/Docs` (Key, Tenant, UserId, Text, Data) VALUES
+                (1, "acme"u,   100, {}, "data1"u),
+                (2, "acme"u,   100, {}, "data2"u),
+                (3, "acme"u,   200, {}, "data3"u),
+                (4, "globex"u, 100, {}, "data4"u),
+                (6, "sentinel"u, 999, {}, "stable"u);
+        )",
+            json(R"({"kind":"cats","score":10})"),
+            json(R"({"kind":"dogs","score":20})"),
+            json(R"({"kind":"cats","score":30})"),
+            json(R"({"kind":"cats","score":40})"),
+            json(R"({"kind":"stable","score":999})")));
+
+        exec(R"(
+            ALTER TABLE `/Root/Docs` ADD INDEX json_idx
+                GLOBAL USING json ON (Tenant, UserId, Text);
+        )");
+
+        auto searchKind = [&](const std::string& tenant, ui64 userId, const std::string& kind) {
+            return select(std::format(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE Tenant = "{}"u AND UserId = {}
+                    AND JSON_VALUE(Text, '$.kind' RETURNING Utf8) = "{}"u
+                ORDER BY Key;
+            )", tenant, userId, kind));
+        };
+        auto searchScore = [&](const std::string& tenant, ui64 userId, i64 score) {
+            return select(std::format(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE Tenant = "{}"u AND UserId = {}
+                    AND JSON_VALUE(Text, '$.score' RETURNING Int64) = {}
+                ORDER BY Key;
+            )", tenant, userId, score));
+        };
+        auto assertSentinel = [&] {
+            CompareYson("[[[6u]]]", searchKind("sentinel", 999, "stable"));
+            CompareYson("[[[6u]]]", searchScore("sentinel", 999, 999));
+        };
+
+        CompareYson("[[[1u]]]", searchKind("acme", 100, "cats"));
+        CompareYson("[[[1u]]]", searchScore("acme", 100, 10));
+        assertSentinel();
+        CompareYson("[[[3u]]]", select(R"(
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE JSON_VALUE(Text, '$.kind' RETURNING Utf8) = "cats"u
+                AND UserId = 200 AND Tenant = "acme"u
+            ORDER BY Key;
+        )"));
+        CompareYson("[[[4u]]]", select(R"(
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE "globex"u = Tenant AND 100 = UserId AND JSON_EXISTS(Text, '$.kind')
+            ORDER BY Key;
+        )"));
+
+        auto params = TParamsBuilder()
+            .AddParam("$tenant").Utf8("acme").Build()
+            .AddParam("$uid").Uint64(100).Build()
+            .Build();
+        CompareYson("[[[1u]];[[2u]]]", select(R"(
+            DECLARE $tenant AS Utf8;
+            DECLARE $uid AS Uint64;
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE UserId = $uid AND JSON_EXISTS(Text, '$.kind') AND Tenant = $tenant
+            ORDER BY Key;
+        )", params));
+
+        expectPrefixError(R"(
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE UserId = 100 AND JSON_EXISTS(Text, '$.kind');
+        )");
+        expectPrefixError(R"(
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE Tenant = "acme"u AND JSON_EXISTS(Text, '$.kind');
+        )");
+        expectPrefixError(R"(
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE (Tenant = "acme"u OR Tenant = "globex"u)
+                AND UserId = 100 AND JSON_EXISTS(Text, '$.kind');
+        )");
+        expectPrefixError(R"(
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE Tenant = "acme"u AND UserId > 0 AND JSON_EXISTS(Text, '$.kind');
+        )");
+
+        if (Compact) {
+            // The pairwise matrix assigns prefix-changing JSON DML to the plain twin; the compact
+            // twin covers the same typed multi-prefix build/read and predicate-validation paths
+            return;
+        }
+
+        exec(std::format(R"(
+            INSERT INTO `/Root/Docs` (Key, Tenant, UserId, Text, Data) VALUES
+                (5, "acme"u, 100, {}, "inserted"u);
+        )", json(R"({"kind":"cats","score":50})")));
+        CompareYson("[[[1u]];[[5u]]]", searchKind("acme", 100, "cats"));
+        CompareYson("[[[5u]]]", searchScore("acme", 100, 50));
+        CompareYson("[[[1u]]]", searchScore("acme", 100, 10));
+        CompareYson("[[[3u]]]", searchKind("acme", 200, "cats"));
+        assertSentinel();
+
+        exec(std::format(R"(
+            UPSERT INTO `/Root/Docs` (Key, Tenant, UserId, Text, Data) VALUES
+                (1, "globex"u, 200, {}, "upserted"u);
+        )", json(R"({"kind":"owls","score":60})")));
+        CompareYson("[[[5u]]]", searchKind("acme", 100, "cats"));
+        CompareYson("[]", searchScore("acme", 100, 10));
+        CompareYson("[[[1u]]]", searchKind("globex", 200, "owls"));
+        CompareYson("[[[1u]]]", searchScore("globex", 200, 60));
+        assertSentinel();
+
+        exec(std::format(R"(
+            UPDATE `/Root/Docs`
+            SET Tenant = "globex"u, UserId = 100, Text = {}, Data = "updated"u
+            WHERE Key = 2;
+        )", json(R"({"kind":"birds","score":70})")));
+        CompareYson("[]", searchKind("acme", 100, "dogs"));
+        CompareYson("[]", searchScore("acme", 100, 20));
+        CompareYson("[[[2u]]]", searchKind("globex", 100, "birds"));
+        CompareYson("[[[2u]]]", searchScore("globex", 100, 70));
+        assertSentinel();
+
+        exec(std::format(R"(
+            REPLACE INTO `/Root/Docs` (Key, Tenant, UserId, Text, Data) VALUES
+                (3, "acme"u, 100, {}, "replaced"u);
+        )", json(R"({"kind":"cats","score":80})")));
+        CompareYson("[]", searchKind("acme", 200, "cats"));
+        CompareYson("[]", searchScore("acme", 200, 30));
+        CompareYson("[[[3u]];[[5u]]]", searchKind("acme", 100, "cats"));
+        CompareYson("[[[3u]]]", searchScore("acme", 100, 80));
+        assertSentinel();
+
+        exec(R"(DELETE FROM `/Root/Docs` WHERE Key = 4;)");
+        CompareYson("[]", searchKind("globex", 100, "cats"));
+        CompareYson("[]", searchScore("globex", 100, 40));
+        CompareYson("[[[2u]]]", searchKind("globex", 100, "birds"));
+        CompareYson("[[[1u]]]", searchKind("globex", 200, "owls"));
+        assertSentinel();
+    }
+
+    Y_UNIT_TEST_TWIN(PrefixedJsonRowIdComplexPk, Compact) {
+        // __ydb_row_id is the posting doc-id; index reads must resolve it back to the composite PK
+        auto kikimr = KikimrJsonPrefixRowId(Compact);
+        auto db = kikimr.GetQueryClient();
+
+        auto exec = [&](const std::string& query) {
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+        auto select = [&](const std::string& query) {
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        exec(R"(
+            CREATE TABLE `/Root/Docs` (
+                Org Utf8 NOT NULL,
+                Pk Utf8 NOT NULL,
+                Tenant Utf8,
+                Text JsonDocument,
+                __ydb_row_id Uint64 NOT NULL,
+                PRIMARY KEY (Org, Pk)
+            );
+        )");
+        exec(R"(
+            ALTER TABLE `/Root/Docs`
+                ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
+        )");
+        exec(R"(
+            ALTER TABLE `/Root/Docs` ADD INDEX json_idx
+                GLOBAL USING json ON (Tenant, Text);
+        )");
+        exec(R"(
+            UPSERT INTO `/Root/Docs` (Org, Pk, Tenant, Text) VALUES
+                ("acme"u,   "a1"u, "red"u,  JsonDocument('{"kind":"cats","score":10}')),
+                ("acme"u,   "a2"u, "red"u,  JsonDocument('{"kind":"dogs","score":20}')),
+                ("acme"u,   "a3"u, "blue"u, JsonDocument('{"kind":"cats","score":30}')),
+                ("globex"u, "a1"u, "red"u,  JsonDocument('{"kind":"cats","score":40}'));
+        )");
+
+        CompareYson(R"([["acme";"a1"];["globex";"a1"]])", select(R"(
+            SELECT Org, Pk FROM `/Root/Docs` VIEW json_idx
+            WHERE Tenant = "red"u
+                AND JSON_VALUE(Text, '$.kind' RETURNING Utf8) = "cats"u
+            ORDER BY Org, Pk;
+        )"));
+        CompareYson(R"([["acme";"a3"]])", select(R"(
+            SELECT Org, Pk FROM `/Root/Docs` VIEW json_idx
+            WHERE Tenant = "blue"u AND JSON_EXISTS(Text, '$.kind')
+            ORDER BY Org, Pk;
+        )"));
+        CompareYson(R"([["acme";"a2"]])", select(R"(
+            SELECT Org, Pk FROM `/Root/Docs` VIEW json_idx
+            WHERE "red"u = Tenant
+                AND JSON_VALUE(Text, '$.kind' RETURNING Utf8) = "dogs"u
+            ORDER BY Org, Pk;
+        )"));
+    }
+
+    Y_UNIT_TEST(PrefixedJsonDdlValidation) {
+        auto kikimr = KikimrJsonPrefix();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE `/Root/PrefixOnPk` (
+                    Key Uint64,
+                    Text Json,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Key, Text)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "JSON index prefix column 'Key' must not be a primary key column");
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE `/Root/InvalidPrefixType` (
+                    Key Uint64,
+                    BadPrefix Json,
+                    Text JsonDocument,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (BadPrefix, Text)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Column BadPrefix has wrong key type Json");
+        }
+    }
+
+    Y_UNIT_TEST(PrefixedJsonCreate) {
+        auto kikimr = KikimrJsonPrefix();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/Docs` (
+                    Key Uint64,
+                    UserId Uint64,
+                    Text Json,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (UserId, Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                    (1, 100, Json('{"k1": "v1"}')),
+                    (2, 100, Json('{"k2": "v2"}')),
+                    (3, 200, Json('{"k1": "v1"}')),
+                    (4, 200, Json('{"k3": "v3"}'));
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Query with prefix equality + JSON predicate: user 100 sees only its own docs
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[1u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // User 200 sees only its own docs with k1
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = 200 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[3u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // Prefix value passed as a parameter
+        {
+            auto params = TParamsBuilder().AddParam("$uid").Uint64(200).Build().Build();
+            auto result = db.ExecuteQuery(R"(
+                DECLARE $uid AS Uint64;
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = $uid AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[3u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(PrefixedJsonQueryMissingPrefix) {
+        auto kikimr = KikimrJsonPrefix();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/Docs` (
+                    Key Uint64,
+                    UserId Uint64,
+                    Text Json,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (UserId, Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Missing equality on the prefix column => error
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        }
+
+        // More complex expression (OR) => error
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE (UserId = 100 OR UserId = 200) AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        }
+
+        // More complex expression (sqrt :D) => error
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE (UserId * UserId) = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        }
+    }
+
+    Y_UNIT_TEST(PrefixedJsonAlterAdd) {
+        auto kikimr = KikimrJsonPrefix();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/Docs` (
+                    Key Uint64,
+                    UserId Uint64,
+                    Text Json,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                    (1, 100, Json('{"k1": "v1"}')),
+                    (2, 100, Json('{"k2": "v2"}')),
+                    (3, 200, Json('{"k1": "v1"}')),
+                    (4, 200, Json('{"k3": "v3"}'));
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // ALTER TABLE ADD INDEX with prefix columns
+        {
+            auto result = db.ExecuteQuery(R"(
+                ALTER TABLE `/Root/Docs` ADD INDEX json_idx GLOBAL USING json ON (UserId, Text)
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Query with prefix equality after ALTER
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[1u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // Insert more data after the index is built
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                    (5, 100, Json('{"k1": "v5"}'));
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Verify the new row is returned
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[1u]];[[5u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 }
 

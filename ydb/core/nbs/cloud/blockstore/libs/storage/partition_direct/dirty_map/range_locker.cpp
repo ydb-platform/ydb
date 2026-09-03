@@ -6,7 +6,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TRangeLock::TRangeLock(TRangeLock&& other) noexcept
     : LockableRanges(std::move(other.LockableRanges))
-    , Lsn(other.Lsn)
+    , PBufferKey(other.PBufferKey)
     , Range(other.Range)
     , Mask(other.Mask)
     , LockRange(other.LockRange)
@@ -25,7 +25,7 @@ TRangeLock& TRangeLock::operator=(TRangeLock&& other) noexcept
     Disarm();
 
     LockableRanges = std::move(other.LockableRanges);
-    Lsn = other.Lsn;
+    PBufferKey = other.PBufferKey;
     Range = other.Range;
     Mask = other.Mask;
     LockRange = other.LockRange;
@@ -43,8 +43,8 @@ void TRangeLock::Arm()
     Armed = true;
 
     if (auto lockableRanges = LockableRanges.lock()) {
-        if (Lsn) {
-            lockableRanges->LockPBuffer(Lsn);
+        if (PBufferKey.Lsn) {
+            lockableRanges->LockPBuffer(PBufferKey);
         } else {
             Y_ABORT_UNLESS(!Mask.Empty());
             LockRange = lockableRanges->LockDDiskRange(Range, Mask);
@@ -60,17 +60,19 @@ void TRangeLock::Disarm()
     Armed = false;
 
     if (auto lockableRanges = LockableRanges.lock()) {
-        if (Lsn) {
-            lockableRanges->UnlockPBuffer(Lsn);
+        if (PBufferKey.Lsn) {
+            lockableRanges->UnlockPBuffer(PBufferKey);
         } else {
             lockableRanges->UnLockDDiskRange(LockRange);
         }
     }
 }
 
-TRangeLock::TRangeLock(ILockableRangesWeakPtr lockableRanges, ui64 lsn)
+TRangeLock::TRangeLock(
+    ILockableRangesWeakPtr lockableRanges,
+    TPBufferKey pBufferKey)
     : LockableRanges(std::move(lockableRanges))
-    , Lsn(lsn)
+    , PBufferKey(pBufferKey)
 {}
 
 TRangeLock::TRangeLock(

@@ -4,8 +4,8 @@
              port,
              type=socket.SOCK_STREAM,
              family=family,
--            flags=socket.AI_ADDRCONFIG,
-+            # flags=socket.AI_ADDRCONFIG,
+-            flags=_AI_ADDRCONFIG,
++            # flags=_AI_ADDRCONFIG,
          )
  
          hosts = []

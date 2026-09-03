@@ -2,17 +2,23 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/grpc_request/grpc_request.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
-#include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <util/generic/hash_set.h>
+#include <util/generic/size_literals.h>
+#include <util/generic/vector.h>
 #include <util/thread/pool.h>
 
 #include <memory>
@@ -168,24 +174,75 @@ Ydb::Topic::CreateTopicRequest MakeCreateTopicRequest(const TString& path, ui32 
     return request;
 }
 
-void CreateTopic(NActors::TTestActorRuntime& runtime, const TString& path, ui32 partitions = 1) {
+void CreateTopic(
+    NActors::TTestActorRuntime& runtime,
+    const TString& path,
+    ui32 partitions = 1,
+    const TString& database = "/Root")
+{
     auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
-        runtime, MakeCreateTopicRequest(path, partitions), CreateCreateTopicActor, path);
+        runtime, MakeCreateTopicRequest(path, partitions), CreateCreateTopicActor, path, database);
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
-THolder<TEvPQProxy::TEvPartitionLocationResponse> DoPartitionsLocationRequest(
+Ydb::Topic::DescribeTopicResult DescribeTopic(
     NActors::TTestActorRuntime& runtime,
-    const TGetPartitionsLocationRequest& request,
-    TDuration waitTimeout = TDuration::Seconds(30))
+    const TString& path)
 {
-    const auto edge = runtime.AllocateEdgeActor();
-    TEnableScheduleForRootGuard schedule(runtime);
-    schedule.SetRoot(runtime.Register(CreatePartitionsLocationActor(edge, request)));
-    runtime.DispatchEvents();
-    auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, waitTimeout);
-    UNIT_ASSERT(handle);
-    return THolder(handle->Release());
+    Ydb::Topic::DescribeTopicRequest request;
+    request.set_path(path);
+    auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+        runtime, request, CreateDescribeTopicActor, path);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    return GetResult<Ydb::Topic::DescribeTopicResult>(result);
+}
+
+NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
+    NActors::TTestActorRuntime& runtime,
+    const TString& path,
+    const TString& database = "/Root")
+{
+    auto edge = runtime.AllocateEdgeActor();
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(edge, database, {path}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
+    const auto& topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    return topic.Info->Description.GetPQTabletConfig();
+}
+
+void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
+    NYdb::TDriver driver(setup.MakeDriverConfig());
+    NYdb::NQuery::TQueryClient client(driver);
+    auto session = client.GetSession().GetValueSync().GetSession();
+    auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    driver.Stop(true);
+}
+
+void MkDir(TTopicSdkTestSetup& setup, const TString& parent, const TString& name) {
+    setup.GetServer().AnnoyingClient->MkDir(parent, name);
+}
+
+void AssertDescribeAliases(
+    NActors::TTestActorRuntime& runtime,
+    const TVector<TString>& names,
+    const TString& expectedRealPath,
+    const TString& database = "/Root")
+{
+    for (const auto& name : names) {
+        auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(NPQ::NDescriber::CreateDescriberActor(edge, database, {name}));
+        auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Topics.size(), 1u, name);
+        const auto it = response->Topics.find(name);
+        UNIT_ASSERT_C(it != response->Topics.end(), name);
+        UNIT_ASSERT_VALUES_EQUAL_C(it->second.Status, NPQ::NDescriber::EStatus::SUCCESS, name);
+        UNIT_ASSERT_VALUES_EQUAL_C(it->second.RealPath, expectedRealPath, name);
+
+        const auto describe = DescribeTopic(runtime, name);
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.partitioning_settings().min_active_partitions(), 1, name);
+    }
 }
 
 auto BreakFirstLocationForward(NActors::TTestActorRuntime& runtime, size_t& broken) {
@@ -1014,167 +1071,6 @@ Y_UNIT_TEST(DescribeTopicInternalRequestAllowedWithoutToken) {
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
-Y_UNIT_TEST(PartitionsLocationSmokeAndErrors) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_smoke";
-    CreateTopic(runtime, path, /*partitions=*/3);
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 3u);
-        UNIT_ASSERT_GT(ev->PathId, 0);
-        UNIT_ASSERT_GT(ev->SchemeShardId, 0);
-        for (const auto& p : ev->Partitions) {
-            UNIT_ASSERT_GT(p.NodeId, 0);
-            UNIT_ASSERT_GT(p.Generation, 0);
-            UNIT_ASSERT_LT(p.PartitionId, 3);
-        }
-    }
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {0, 2}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 2u);
-    }
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1, 1, 1}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions[0].PartitionId, 1u);
-    }
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1000}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT(ev->Issues.ToString().Contains("No partition"));
-    }
-
-    {
-        auto ev = DoPartitionsLocationRequest(runtime, {"/Root/missing_topic", "/Root", "", {}});
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SCHEME_ERROR);
-    }
-}
-
-Y_UNIT_TEST(PartitionsLocationRetriesWithSyncWhenStaleCache) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_stale_cache";
-    CreateTopic(runtime, path, /*partitions=*/2);
-
-    size_t staleNavigates = 0;
-    size_t syncNavigates = 0;
-    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
-        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            if (!ev || !ev->Get()->Request) {
-                return;
-            }
-            for (const auto& entry : ev->Get()->Request->ResultSet) {
-                if (!entry.PQGroupInfo) {
-                    continue;
-                }
-                if (entry.SyncVersion) {
-                    ++syncNavigates;
-                } else {
-                    ++staleNavigates;
-                }
-            }
-            StripPartitionFromNavigateResult(ev, /*partitionId=*/1, /*onlyWithoutSync=*/true);
-        });
-
-    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1}});
-    UNIT_ASSERT_GT(staleNavigates, 0u);
-    UNIT_ASSERT_GT(syncNavigates, 0u);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions[0].PartitionId, 1u);
-}
-
-Y_UNIT_TEST(PartitionsLocationMissingAfterSync) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_missing_after_sync";
-    CreateTopic(runtime, path, /*partitions=*/2);
-
-    size_t syncNavigates = 0;
-    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
-        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            if (!ev || !ev->Get()->Request) {
-                return;
-            }
-            for (const auto& entry : ev->Get()->Request->ResultSet) {
-                if (entry.PQGroupInfo && entry.SyncVersion) {
-                    ++syncNavigates;
-                }
-            }
-            StripPartitionFromNavigateResult(ev, /*partitionId=*/1, /*onlyWithoutSync=*/false);
-        });
-
-    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1}});
-    UNIT_ASSERT_GT(syncNavigates, 0u);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::BAD_REQUEST);
-    UNIT_ASSERT(ev->Issues.ToString().Contains("No partition 1 in topic"));
-}
-
-Y_UNIT_TEST(PartitionsLocationRetriesOnDeliveryProblem) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_retry";
-    CreateTopic(runtime, path);
-
-    size_t broken = 0;
-    auto breakObserver = BreakFirstLocationForward(runtime, broken);
-    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {0}});
-    UNIT_ASSERT_VALUES_EQUAL(broken, 1u);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
-    UNIT_ASSERT_GT(ev->Partitions[0].NodeId, 0);
-}
-
-Y_UNIT_TEST(PartitionsLocationTimesOutWhenStuck) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_timeout";
-    CreateTopic(runtime, path);
-
-    auto dropObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
-        [](TEvPipeCache::TEvForward::TPtr& ev) {
-            if (ev && ev->Get()->Ev &&
-                ev->Get()->Ev->Type() == TEvPersQueue::TEvGetPartitionsLocation::EventType)
-            {
-                ev.Reset();
-            }
-        });
-
-    const auto edge = runtime.AllocateEdgeActor();
-    TEnableScheduleForRootGuard schedule(runtime);
-    schedule.SetRoot(runtime.Register(CreatePartitionsLocationActor(
-        edge, TGetPartitionsLocationRequest{path, "/Root", "", {0}})));
-
-    runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
-    runtime.AdvanceCurrentTime(TDuration::Seconds(31));
-
-    auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, TDuration::Seconds(5));
-    UNIT_ASSERT(handle);
-    const auto* ev = handle->Get();
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::TIMEOUT);
-    UNIT_ASSERT(ev->Issues.ToString().Contains("timed out"));
-}
-
-Y_UNIT_TEST(PartitionsLocationUnauthenticatedRejectedWhenRequired) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_partitions_location_auth";
-    CreateTopic(runtime, path);
-    runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
-
-    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {}});
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
-    UNIT_ASSERT(ev->Issues.ToString().Contains("Unauthenticated access is forbidden"));
-}
-
 Y_UNIT_TEST(DropTopicSuccessAndMissing) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -1223,6 +1119,233 @@ Y_UNIT_TEST(AlterTopicSuccessAndMissing) {
     }
 }
 
+Y_UNIT_TEST(CreateTopicDefaultsAndIdempotentCreate) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_create_defaults";
+
+    CreateTopic(runtime, path);
+
+    const auto describe = DescribeTopic(runtime, path);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partitioning_settings().min_active_partitions(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(describe.retention_period().seconds(), TDuration::Days(1).Seconds());
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_speed_bytes_per_second(), NPQ::DEFAULT_PARTITION_SPEED);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_burst_bytes(), NPQ::DEFAULT_PARTITION_SPEED);
+    UNIT_ASSERT_VALUES_EQUAL(
+        describe.partition_write_speed_messages_per_second(),
+        NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+    UNIT_ASSERT_VALUES_EQUAL(
+        describe.partition_write_burst_messages(),
+        NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+    UNIT_ASSERT_VALUES_EQUAL(describe.consumers_size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.consumers(0).name(), "user");
+    UNIT_ASSERT(!describe.content_based_deduplication());
+    UNIT_ASSERT_VALUES_EQUAL(describe.supported_codecs().codecs_size(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.attributes().at("_partitions_per_tablet"), "1");
+
+    // gRPC CreateTopic uses IfNotExists=true, so a second create is SUCCESS.
+    auto duplicate = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, MakeCreateTopicRequest(path), CreateCreateTopicActor, path);
+    AssertStatus(duplicate, Ydb::StatusIds::SUCCESS);
+}
+
+Y_UNIT_TEST(CreateTopicWithCodecsWriteSpeedAndRetention) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_create_explicit";
+
+    auto request = MakeCreateTopicRequest(path, /*partitions=*/3);
+    request.mutable_retention_period()->set_seconds(TDuration::Hours(2).Seconds());
+    request.set_partition_write_speed_bytes_per_second(9000);
+    request.set_partition_write_burst_bytes(18000);
+    request.set_partition_write_speed_messages_per_second(111);
+    request.set_partition_write_burst_messages(222);
+    request.set_content_based_deduplication(true);
+    request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
+    request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_GZIP);
+
+    auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, request, CreateCreateTopicActor, path);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+
+    const auto describe = DescribeTopic(runtime, path);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partitioning_settings().min_active_partitions(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partitions_size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.retention_period().seconds(), TDuration::Hours(2).Seconds());
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_speed_bytes_per_second(), 9000u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_burst_bytes(), 18000u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_speed_messages_per_second(), 111u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_burst_messages(), 222u);
+    UNIT_ASSERT(describe.content_based_deduplication());
+    UNIT_ASSERT_VALUES_EQUAL(describe.supported_codecs().codecs_size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.supported_codecs().codecs(0), Ydb::Topic::CODEC_RAW);
+    UNIT_ASSERT_VALUES_EQUAL(describe.supported_codecs().codecs(1), Ydb::Topic::CODEC_GZIP);
+}
+
+Y_UNIT_TEST(CreateTopicUnknownCodecRejected) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto request = MakeCreateTopicRequest("/Root/topic_bad_codec");
+    request.mutable_supported_codecs()->add_codecs(0);
+    auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, request, CreateCreateTopicActor, request.path());
+    AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Unknown codec");
+}
+
+Y_UNIT_TEST(CreateTopicSharedConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
+    const TString path = "/Root/topic_shared_consumer";
+
+    auto request = MakeCreateTopicRequest(path);
+    request.mutable_consumers(0)->set_name("shared_c");
+    request.mutable_consumers(0)->mutable_shared_consumer_type()->set_keep_messages_order(true);
+    auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, request, CreateCreateTopicActor, path);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+
+    const auto config = DescribeTabletConfig(runtime, path);
+    const auto* consumer = NPQ::GetConsumer(config, "shared_c");
+    UNIT_ASSERT(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+    UNIT_ASSERT(consumer->GetKeepMessageOrder());
+}
+
+Y_UNIT_TEST(CreateTopicSharedConsumerDisabledRejected) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicMessageLevelParallelism(false);
+
+    auto request = MakeCreateTopicRequest("/Root/topic_shared_disabled");
+    request.mutable_consumers(0)->mutable_shared_consumer_type();
+    auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, request, CreateCreateTopicActor, request.path());
+    AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "shared consumers are disabled");
+}
+
+Y_UNIT_TEST(AlterTopicAddAndDropConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_alter_consumers";
+    CreateTopic(runtime, path);
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* consumer = request.add_add_consumers();
+        consumer->set_name("extra");
+        consumer->mutable_streaming_consumer_type();
+        auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    }
+
+    {
+        const auto describe = DescribeTopic(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(describe.consumers_size(), 2u);
+        THashSet<TString> names;
+        for (const auto& consumer : describe.consumers()) {
+            names.insert(consumer.name());
+        }
+        UNIT_ASSERT(names.contains("user"));
+        UNIT_ASSERT(names.contains("extra"));
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.add_drop_consumers("extra");
+        auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    }
+
+    {
+        const auto describe = DescribeTopic(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(describe.consumers_size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(describe.consumers(0).name(), "user");
+    }
+}
+
+Y_UNIT_TEST(AlterTopicWriteLimits) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_alter_limits";
+    CreateTopic(runtime, path);
+
+    Ydb::Topic::AlterTopicRequest request;
+    request.set_path(path);
+    request.set_set_partition_write_speed_bytes_per_second(9000);
+    request.set_set_partition_write_burst_bytes(18000);
+    request.set_set_partition_write_speed_messages_per_second(1234);
+    request.set_set_partition_write_burst_messages(5678);
+    auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+        runtime, request, CreateAlterTopicActor, path);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+
+    const auto describe = DescribeTopic(runtime, path);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_speed_bytes_per_second(), 9000u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_burst_bytes(), 18000u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_speed_messages_per_second(), 1234u);
+    UNIT_ASSERT_VALUES_EQUAL(describe.partition_write_burst_messages(), 5678u);
+}
+
+Y_UNIT_TEST(CannotChangeConsumerType) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
+    const TString path = "/Root/topic_type_change";
+    CreateTopic(runtime, path);
+
+    Ydb::Topic::AlterTopicRequest request;
+    request.set_path(path);
+    auto* alter = request.add_alter_consumers();
+    alter->set_name("user");
+    alter->mutable_alter_shared_consumer_type();
+    auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+        runtime, request, CreateAlterTopicActor, path);
+    AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type");
+}
+
+Y_UNIT_TEST(AlterCdcAllowsRetentionAndWriteLimits) {
+    auto setup = CreateSetup();
+    ExecuteDDL(*setup, "CREATE TABLE table_cdc (id Uint64, PRIMARY KEY (id))");
+    ExecuteDDL(*setup, "ALTER TABLE table_cdc ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/table_cdc/feed";
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.set_set_retention_storage_mb(100);
+        request.set_set_partition_write_speed_bytes_per_second(9000);
+        request.set_set_partition_write_burst_bytes(100500);
+        auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    }
+
+    const auto config = DescribeTabletConfig(runtime, path);
+    const auto& partConfig = config.GetPartitionConfig();
+    UNIT_ASSERT_VALUES_EQUAL(partConfig.GetStorageLimitBytes(), 100_MB);
+    UNIT_ASSERT_VALUES_EQUAL(partConfig.GetWriteSpeedInBytesPerSecond(), 9000u);
+    UNIT_ASSERT_VALUES_EQUAL(partConfig.GetBurstSize(), 100500u);
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        (*request.mutable_alter_attributes())["_allowed_codecs"] = "RAW";
+        auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Full alter of cdc stream is forbidden");
+    }
+}
+
 Y_UNIT_TEST(UnauthenticatedRejectedWhenRequired) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -1232,6 +1355,74 @@ Y_UNIT_TEST(UnauthenticatedRejectedWhenRequired) {
     auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
         runtime, request, CreateCreateTopicActor, request.path());
     AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
+}
+
+Y_UNIT_TEST(FccKeepsLiteralDashDashTopicName) {
+    auto setup = CreateSetup("TopicNameFormatsFcc");
+    auto& runtime = setup->GetRuntime();
+
+    const TString name = "TestSchemeList--test-topic-1";
+    const TString path = "/Root/" + name;
+    CreateTopic(runtime, name);
+    AssertDescribeAliases(runtime, {name, path}, path);
+
+    auto ls = setup->GetServer().AnnoyingClient->Ls("/Root");
+    UNIT_ASSERT(ls);
+    bool listed = false;
+    for (const auto& child : ls->Record.GetPathDescription().GetChildren()) {
+        if (child.GetName() == name) {
+            listed = true;
+            UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypePersQueueGroup);
+        }
+        UNIT_ASSERT_VALUES_UNEQUAL(child.GetName(), "TestSchemeList");
+    }
+    UNIT_ASSERT(listed);
+
+    MkDir(*setup, "/Root", "fccmodern");
+    CreateTopic(runtime, "fccmodern/topic");
+    AssertDescribeAliases(
+        runtime,
+        {"fccmodern/topic", "/Root/fccmodern/topic"},
+        "/Root/fccmodern/topic");
+}
+
+Y_UNIT_TEST(FederationTopicNameFormats) {
+    auto setup = CreateSetup("TopicNameFormatsFed");
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+
+    {
+        auto request = MakeCreateTopicRequest("fedshort--topic");
+        auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, request, CreateCreateTopicActor, request.path());
+        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "expected legacy-style name");
+    }
+
+    CreateTopic(runtime, "rt3.dc1--fedleaf--topic");
+    AssertDescribeAliases(
+        runtime,
+        {"/Root/rt3.dc1--fedleaf--topic"},
+        "/Root/rt3.dc1--fedleaf--topic");
+
+    runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/LbCommunal");
+    MkDir(*setup, "/Root", "LbCommunal");
+    MkDir(*setup, "/Root/LbCommunal", "account");
+
+    auto modern = MakeCreateTopicRequest("/Root/LbCommunal/account/fedtopic");
+    (*modern.mutable_attributes())["_federation_account"] = "account";
+    auto modernResult = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, modern, CreateCreateTopicActor, modern.path(), "/Root/LbCommunal/account");
+    AssertStatus(modernResult, Ydb::StatusIds::SUCCESS);
+
+    AssertDescribeAliases(
+        runtime,
+        {
+            "rt3.dc1--account--fedtopic",
+            "account--fedtopic",
+            "account/fedtopic",
+            "/Root/LbCommunal/account/fedtopic",
+        },
+        "/Root/LbCommunal/account/fedtopic");
 }
 
 } // Y_UNIT_TEST_SUITE(SchemaOps_TopicAPI)

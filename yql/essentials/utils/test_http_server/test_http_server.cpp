@@ -121,7 +121,6 @@ private:
         return RequestHandler_(request);
     }
 
-private:
     THttpServer HttpServer_;
     const int Port_;
     TRequestHandler RequestHandler_;
@@ -145,7 +144,7 @@ TString TTestHttpServer::GetUrl() const {
 }
 
 void TTestHttpServer::SetRequestHandler(TRequestHandler handler) {
-    return Impl_->SetRequestHandler(std::move(handler));
+    Impl_->SetRequestHandler(std::move(handler));
 }
 
 } // namespace NYql

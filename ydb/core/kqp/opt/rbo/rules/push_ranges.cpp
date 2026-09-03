@@ -497,7 +497,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
-    auto lambda = TCoLambda(GetLambdaForRangeExtractor(filter->FilterExpr.Node, read->Type, rboCtx));
+    auto lambda = TCoLambda(GetLambdaForRangeExtractor(filter->GetFilterExpression().Node, read->Type, rboCtx));
     auto originalLambda = ctx.DeepCopyLambda(*lambda.Ptr());
     // Predicate extract lib requires constraints.
     auto arg = lambda.Args().Arg(0).Ptr();

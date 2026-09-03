@@ -45,14 +45,14 @@ public:
 
     ESyntax GetEffectiveSyntax();
 
-    const TAstParseResult* TranslateSql(TIssues& issues);
-    const TAstParseResult* TranslatePg(TIssues& issues);
-    const TAstParseResult* TranslateSExpr(TIssues& issues);
+    const TAstParseResult* TranslateSql(TIssues* issues);
+    const TAstParseResult* TranslatePg(TIssues* issues);
+    const TAstParseResult* TranslateSExpr(TIssues* issues);
 
-    bool CheckLexer(TIssues& issues);
-    google::protobuf::Message* ParseSql(TIssues& issues);
-    const NYql::TPGParseResult* ParsePg(TIssues& issues);
-    const TAstParseResult* ParseSExpr(TIssues& issues);
+    bool CheckLexer(TIssues* issues);
+    google::protobuf::Message* ParseSql(TIssues* issues);
+    const NYql::TPGParseResult* ParsePg(TIssues* issues);
+    const TAstParseResult* ParseSExpr(TIssues* issues);
 
 private:
     const TChecksRequest& Request_;

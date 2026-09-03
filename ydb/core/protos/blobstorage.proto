@@ -476,6 +476,7 @@ message TEvVBlock {
     optional uint64 TabletId = 1;
     optional uint32 Generation = 2;
     optional uint64 IssuerGuid = 5;
+    optional uint32 Version = 6;
 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
     optional bool NotifyIfNotReady = 4;
@@ -489,6 +490,7 @@ message TEvVBlockResult {
     optional uint32 Generation = 3;
 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 4;
+    optional bool IsTabletStorageInfoVersionObsolete = 5 [default = false];
     optional TMsgQoS MsgQoS = 10;
 
     optional fixed64 IncarnationGuid = 30;
@@ -1653,6 +1655,49 @@ message TEvControllerAllocateDDiskBlockGroupResult {
         optional bool Error = 4; // if an error has occured while processing this item
     }
     repeated TDirectBlockGroup DirectBlockGroups = 4;
+}
+
+// CMS pull API for observing DirectBlockGroup allocations. The tablet list and
+// one tablet state are intentionally returned as single responses.
+message TEvControllerDDiskInfoListTablets {
+}
+
+message TEvControllerDDiskInfoListTabletsResult {
+    message TTabletRevision {
+        optional uint64 TabletId = 1;
+        optional uint64 Revision = 2;
+        optional uint32 GroupsCount = 3;
+        optional uint64 LastChangedAt = 4;
+    }
+
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    repeated TTabletRevision Tablets = 3;
+}
+
+message TEvControllerDDiskInfoGetTablet {
+    optional uint64 TabletId = 1;
+    optional uint64 KnownRevision = 2;
+}
+
+message TEvControllerDDiskInfoGetTabletResult {
+    message TDirectBlockGroup {
+        optional uint64 DirectBlockGroupId = 1;
+        optional uint32 NumVChunksClaimed = 2;
+        repeated NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 3;
+        repeated NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 4;
+    }
+
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional uint64 TabletId = 3;
+    optional uint64 Revision = 4;
+    repeated TDirectBlockGroup Groups = 5;
+}
+
+message TEvControllerDDiskInfoTabletRevisionChanged {
+    optional uint64 TabletId = 1;
+    optional uint64 Revision = 2;
 }
 
 message TEvInterpilePut {

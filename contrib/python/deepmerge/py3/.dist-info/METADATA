@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: deepmerge
-Version: 2.1.0
+Version: 3.0
 Summary: A toolset for deeply merging Python dictionaries.
 Author-email: Yusuke Tsutsumi <yusuke@tsutsumi.io>
 License: MIT Licence

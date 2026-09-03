@@ -51,7 +51,7 @@ Suitable for:
 - Data migration between clusters.
 - Long-term archiving.
 
-For more details on configuring NFS for backup and recovery, see the recipe [Backup and recovery via NFS](../recipes/nfs-backup/nfs-backup.md).
+For more details on configuring NFS for backup and recovery, see the recipe [Backup and recovery via NFS](../recipes/backup/nfs-backup/nfs-backup.md).
 
 ## Incremental backup {#incremental-backup}
 
@@ -91,7 +91,7 @@ If the volume of databases allows for a standard restore, use [export/import](#s
 
 {% note info %}
 
-For practical instructions on enabling and restoring, see [recipes for system tablet backup](../recipes/system-tablet-backup/index.md).
+For practical instructions on enabling and restoring, see [recipes for system tablet backup](../recipes/backup/system-tablet-backup/index.md).
 
 {% endnote %}
 
@@ -133,7 +133,7 @@ The number of stored backups on a host is limited in the [configuration](../refe
 
 - [Backup and restore](../devops/backup-and-recovery/index.md) — practical guide
 - [Backup collections](datamodel/backup-collection.md) — architecture and limitations
-- [Recipes for system tablet backup](../recipes/system-tablet-backup/index.md) — enabling and restoring
+- [Recipes for system tablet backup](../recipes/backup/system-tablet-backup/index.md) — enabling and restoring
 - [Backup and restore](../devops/backup-and-recovery/index.md) — practical guide
 - [Export/import reference](../reference/ydb-cli/export-import/index.md) — CLI commands
 - YQL reference:

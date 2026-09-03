@@ -782,6 +782,46 @@ Y_UNIT_TEST(TableWithMultiColumnStatistics) {
     );
 }
 
+Y_UNIT_TEST(TableWithEqHeightHistogram) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (EQ_HEIGHT_HISTOGRAM)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`) WITH (EQ_HEIGHT_HISTOGRAM),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (EQ_HEIGHT_HISTOGRAM)
+            )
+            WITH (STORE = COLUMN);
+        )", "test_show_create"
+    );
+}
+
 Y_UNIT_TEST(TableWithMultiColumnStatisticsWithoutWith) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
@@ -1298,7 +1338,12 @@ Y_UNIT_TEST(TableTemporary) {
 }
 
 Y_UNIT_TEST(Table) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableFulltextIndex = true});
+    TTestEnv env(1, 4, {
+        .StoragePools = 3,
+        .ShowCreateTable = true,
+        .EnableFulltextIndex = true,
+        .EnableSuperLemmer = true,
+    });
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1330,6 +1375,17 @@ Y_UNIT_TEST(Table) {
     checker.CheckShowCreateTable(
         R"(
             CREATE TABLE test_show_create (
+                Key Uint64,
+                Text String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, language=russian, use_filter_superlemmer=true)
+            );
+        )", "test_show_create"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
                 Key1 Int64 NOT NULL,
                 Key2 Utf8 NOT NULL,
                 Key3 PgInt2 NOT NULL,
@@ -1351,6 +1407,19 @@ Y_UNIT_TEST(Table) {
                 Data String,
                 PRIMARY KEY (Key),
                 INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
+            );
+            ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
+        )", "test_show_create"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx GLOBAL USING fulltext_relevance ON (Text) WITH (tokenizer=alphanumeric, use_filter_snowball=true, language="russian")
             );
             ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
         )", "test_show_create"
@@ -2075,7 +2144,7 @@ void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNati
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`%s`, `ENABLE_NATIVE_COLUMNS`=`%s`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`%s`, `ENABLE_NATIVE_COLUMNS`=`%s`, `DENSE_ENCODING_VERSION`=`1`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col3 SET ENCODING (DICT);
@@ -2099,7 +2168,7 @@ void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNati
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `%s`, `ENABLE_NATIVE_COLUMNS` = `%s`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `%s`, `ENABLE_NATIVE_COLUMNS` = `%s`, `DENSE_ENCODING_VERSION` = `1`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
         )", fractionStr.c_str(), nativeColumnsStr.c_str());

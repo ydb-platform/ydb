@@ -167,16 +167,21 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const TVector<TString>& prefixColumns);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const TVector<TString>& prefixColumns);
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
+
+bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableInfo, const TString& columnName);
+bool IsVirtualGeneratedIndexColumn(const NKikimrSchemeOp::TTableDescription& tableDesc, const TString& columnName);
 
 void FillIndexTableColumns(
     const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
@@ -277,6 +282,24 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
+    for (const auto& columnName : indexKeys.KeyColumns) {
+        if (IsVirtualGeneratedIndexColumn(tableDesc, columnName)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "VIRTUAL generated column '" << columnName
+                                     << "' cannot be used as an index key";
+            return false;
+        }
+    }
+
+    for (const auto& columnName : indexKeys.DataColumns) {
+        if (IsVirtualGeneratedIndexColumn(tableDesc, columnName)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "VIRTUAL generated column '" << columnName
+                                     << "' cannot be used as an index data column";
+            return false;
+        }
+    }
+
     if (!IsCompatibleIndex(GetIndexType(indexDesc), baseTableColumns, indexKeys, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
@@ -290,7 +313,65 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
     implTableColumns = CalcTableImplDescription(GetIndexType(indexDesc), baseTableColumns, indexKeys);
 
-    switch (GetIndexType(indexDesc)) {
+    const auto indexType = GetIndexType(indexDesc);
+
+    auto checkInvertedIndex = [&](const char* typeName) {
+        // We have already checked this in IsCompatibleIndex
+        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+
+        // Fulltext index key columns are [prefix..., text]; more than one key column means the
+        // index has prefix columns. Enforce the feature flag server-side so direct scheme
+        // operations or older clients cannot bypass the KQP-side check.
+        if (indexKeys.KeyColumns.size() > 1) {
+            if (!AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
+                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+                error = "Prefixed fulltext/json index support is disabled";
+                return false;
+            }
+
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
+                // Old prefixed fulltext_relevance index requires updating stats in kqp/effects,
+                // but it's not implemented and won't be because the index type is EOL.
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = "Only compact prefixed fulltext indexes with relevance are supported";
+                return false;
+            }
+
+            const THashSet<TString> pkColumns{baseTableColumns.Keys.begin(), baseTableColumns.Keys.end()};
+            for (size_t i = 0; i < indexKeys.KeyColumns.size()-1; ++i) {
+                const auto& col = indexKeys.KeyColumns[i];
+                // Prefix columns must be disjoint from the primary key (doc-id) columns
+                if (pkColumns.contains(col)) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    error = TStringBuilder() << typeName << " index prefix column '"
+                        << col << "' must not be a primary key column";
+                    return false;
+                }
+                // Prefix columns must have types allowed for the primary key
+                Y_ABORT_UNLESS(baseColumnTypes.contains(col));
+                auto typeInfo = baseColumnTypes.at(col);
+                if (!NKikimr::IsAllowedKeyType(typeInfo)) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    error = TStringBuilder() << "Column " << col
+                        << " has wrong key type " << NScheme::TypeName(typeInfo);
+                    return false;
+                }
+            }
+        }
+
+        // __ydb_row_id opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
+        // skip the single-integer-PK requirement (the doc_id is __ydb_row_id, not the PK).
+        if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
+            if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, typeName, error)) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -323,27 +404,16 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
-            // We have already checked this in IsCompatibleIndex
-            Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
-
-            // Fulltext index key columns are [prefix..., text]; more than one key column means the
-            // index has prefix columns. Enforce the feature flag server-side so direct scheme
-            // operations or older clients cannot bypass the KQP-side check.
-            if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
+            if (NKikimr::NFulltext::HasSuperLemmer(indexDesc.GetFulltextIndexDescription().GetSettings())
+                && !AppData()->FeatureFlags.GetEnableSuperLemmer()) {
                 status = NKikimrScheme::EStatus::StatusPreconditionFailed;
-                error = "Fulltext index prefix columns support is disabled";
+                error = "SuperLemmer support is disabled";
                 return false;
             }
 
-            // __ydb_row_id opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
-            // skip the single-integer-PK requirement (the doc_id is __ydb_row_id, not the PK).
-            if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
-                if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "Fulltext", error)) {
-                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    return false;
-                }
+            if (!checkInvertedIndex("Fulltext")) {
+                return false;
             }
-
 
             // Here we only check that fulltext index columns matches table description
             // the rest will be checked in NFulltext::ValidateSettings (called separately outside of CommonCheck)
@@ -367,21 +437,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         }
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact: {
-            Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
-
-            // __ydb_row_id opt-in: when the rowid mode has been enabled (ClassifyFulltextRowId /
-            // MaybeEnableFulltextRowIdMode), skip the single-integer-PK requirement - the doc_id is
-            // __ydb_row_id, not the PK. Mirrors the fulltext case above.
-            if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
-                if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "JSON", error)) {
-                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    return false;
-                }
-            }
-
-            if (indexKeys.KeyColumns.size() != 1) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "JSON index requires exactly one key column, but " << indexKeys.KeyColumns.size() << " are requested";
+            if (!checkInvertedIndex("JSON")) {
                 return false;
             }
 
@@ -391,13 +447,15 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 return false;
             }
 
-            for (const auto& column : indexKeys.KeyColumns) {
-                auto typeInfo = baseColumnTypes.at(column);
+            // Only the last key column must be Json/JsonDocument (prefix columns can be any type).
+            {
+                const auto& jsonColumn = indexKeys.KeyColumns.back();
+                auto typeInfo = baseColumnTypes.at(jsonColumn);
                 if (typeInfo.GetTypeId() != NScheme::NTypeIds::Json &&
                     typeInfo.GetTypeId() != NScheme::NTypeIds::JsonDocument)
                 {
                     status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    error = TStringBuilder() << "JSON column '" << column <<
+                    error = TStringBuilder() << "JSON column '" << jsonColumn <<
                         "' must have type 'Json' or 'JsonDocument' but got " << NScheme::TypeName(typeInfo);
                     return false;
                 }

@@ -24,11 +24,10 @@ struct THunkDescriptor
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSerializableHunkDescriptor
+struct TSerializableHunkDescriptor
     : public THunkDescriptor
     , public NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSerializableHunkDescriptor);
 
     static void Register(TRegistrar registrar);
@@ -104,11 +103,10 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
     NTransactionClient::TTimestamp Timestamp;
 };
 
-class TSerializableGetOrderedTabletSafeTrimRowCountRequest
+struct TSerializableGetOrderedTabletSafeTrimRowCountRequest
     : public TGetOrderedTabletSafeTrimRowCountRequest
     , public NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSerializableGetOrderedTabletSafeTrimRowCountRequest);
 
     static void Register(TRegistrar registrar);

@@ -283,7 +283,7 @@ public:
 private:
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const TProcessorContext& context, const TDataAddress& addr) = 0;
-    virtual void DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) = 0;
+    virtual TConclusionStatus DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) = 0;
 
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& context, const TFetchIndexContext& fetchContext) = 0;
@@ -343,8 +343,8 @@ public:
         return DoStartFetchData(context, addr);
     }
 
-    void AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
-        DoAssembleAccessor(context, columnId, subColumnName);
+    TConclusionStatus AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+        return DoAssembleAccessor(context, columnId, subColumnName);
     }
 };
 
@@ -420,8 +420,10 @@ private:
         AFL_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
-    virtual void DoAssembleAccessor(const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+    virtual TConclusionStatus DoAssembleAccessor(
+        const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
+        return TConclusionStatus::Fail("unreachable");
     }
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
@@ -453,7 +455,9 @@ private:
         const TProcessorContext& /*context*/, const TDataAddress& /*addr*/) override {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
-    virtual void DoAssembleAccessor(const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+    virtual TConclusionStatus DoAssembleAccessor(
+        const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+        return TConclusionStatus::Success();
     }
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
@@ -501,7 +505,7 @@ private:
         }
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
-    virtual void DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusionStatus DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {

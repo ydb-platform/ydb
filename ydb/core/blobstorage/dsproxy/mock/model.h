@@ -51,6 +51,7 @@ namespace NFake {
         };
 
         THashMap<TTabletId, TGeneration> Blocks;
+        THashMap<TTabletId, ui32> BlockVersions;
         THashMap<std::pair<TTabletId, TChannel>, TBarrier> Barriers;
         THashMap<std::pair<TTabletId, TChannel>, TBarrier> HardBarriers;
         TMap<TLogoBlobID, TBlob> Blobs;
@@ -224,6 +225,38 @@ namespace NFake {
         TEvBlobStorage::TEvBlockResult* Handle(TEvBlobStorage::TEvBlock *msg) {
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
 
+            if (msg->WriteSource == TWriteSource::SyncerMergeBlock && msg->TabletId >> 63) {
+                ui32& version = BlockVersions[~msg->TabletId];
+                if (msg->Generation <= version) {
+                    status = NKikimrProto::ALREADY;
+                } else {
+                    version = msg->Generation;
+                }
+                return new TEvBlobStorage::TEvBlockResult(status);
+            }
+
+            auto result = std::make_unique<TEvBlobStorage::TEvBlockResult>(status);
+            if (msg->WriteSource != TWriteSource::SyncerMergeBlock) {
+                if (!msg->TabletId || msg->TabletId >> 63) {
+                    result->Status = NKikimrProto::ERROR;
+                    return result.release();
+                }
+                ui32& version = BlockVersions[msg->TabletId];
+                if (msg->Version < version) {
+                    result->Status = NKikimrProto::ERROR;
+                    result->IsTabletStorageInfoVersionObsolete = true;
+                    return result.release();
+                }
+                if (msg->Version > version) {
+                    if (const auto it = Blocks.find(msg->TabletId);
+                            it != Blocks.end() && msg->Generation <= it->second) {
+                        result->Status = NKikimrProto::ERROR;
+                        return result.release();
+                    }
+                    version = msg->Version;
+                }
+            }
+
             auto it = Blocks.find(msg->TabletId);
             if (it == Blocks.end()) {
                 Blocks.emplace(msg->TabletId, msg->Generation);
@@ -233,7 +266,8 @@ namespace NFake {
                 it->second = msg->Generation;
             }
 
-            return new TEvBlobStorage::TEvBlockResult(status);
+            result->Status = status;
+            return result.release();
         }
 
         TEvBlobStorage::TEvGetBlockResult* Handle(TEvBlobStorage::TEvGetBlock *msg) {

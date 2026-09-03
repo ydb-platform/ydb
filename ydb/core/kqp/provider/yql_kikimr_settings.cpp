@@ -58,8 +58,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpSlowLogWarningThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogNoticeThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogTraceThresholdMs);
-    REGISTER_SETTING(*this, _KqpYqlSyntaxVersion);
-    REGISTER_SETTING(*this, _KqpYqlAntlr4Parser);
+    REGISTER_SETTING(*this, _KqpYqlSyntaxVersion).Deprecated("ignored: YQL v1 is always used");
+    REGISTER_SETTING(*this, _KqpYqlAntlr4Parser).Deprecated("ignored: ANTLR4 parser is always used");
     REGISTER_SETTING(*this, _KqpAllowUnsafeCommit);
     REGISTER_SETTING(*this, _KqpMaxComputeActors);
     REGISTER_SETTING(*this, _KqpEnableSpilling);
@@ -101,10 +101,13 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OptValidateStreamingConstraints);
+    REGISTER_SETTING(*this, OptValidateStreamingCheckpoints);
     REGISTER_SETTING(*this, OptFallbackToLegacyOptimizer);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
+    REGISTER_SETTING(*this, UseBlockHashJoinForCross);
+    REGISTER_SETTING(*this, EnableNewRBOPhysicalStagePeephole);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
@@ -385,6 +388,15 @@ bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
 
 bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
+}
+
+bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
+    return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
+}
+
+bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
+    return EnableNewRBOPhysicalStagePeephole.Get().GetOrElse(
+        TTableServiceConfig::GetEnableNewRBOPhysicalStagePeephole());
 }
 
 bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {

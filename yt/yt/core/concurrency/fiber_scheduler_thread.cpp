@@ -1092,7 +1092,7 @@ void TFiberSchedulerThread::ThreadMain()
     } catch (const std::exception& ex) {
         YT_TLOG_FATAL("Unhandled exception in thread main")
             .With("Name", GetThreadName())
-            .With(TError(ex));
+            .With(ex);
     }
 }
 

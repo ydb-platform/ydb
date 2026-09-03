@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const std::string sourceName = "sourceName";
         const std::string inputTopicName = "inputTopicName";
-        const std::string outputTopicName = "outputTopicName";
+        const TString outputTopicName = "outputTopicName";
         const std::string tableName = "tableName";
 
         CreateTopic(outputTopicName);
@@ -336,11 +336,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphBasic, TStreamingTestFixture) {
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph";
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphBasic, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopic";
+        const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -351,6 +352,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto executeQuery = [&](TScriptQuerySettings settings) {
             const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 INSERT INTO `{s3_sink}`.`folder/` WITH (FORMAT = "json_each_row")
                 SELECT * FROM `{source}`.`{topic}` WITH (
                     STREAMING = "TRUE",
@@ -386,9 +388,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphGroupByHop, TStreamingTestFixture) {
-        constexpr char sourceTopicName[] = "restoreScriptGroupByHopTopicSource";
-        constexpr char sinkTopicName[] = "restoreScriptGroupByHopTopicSink";
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphGroupByHop, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto sourceTopicName = TStringBuilder() << Name_ << "TopicSource";
+        const auto sinkTopicName = TStringBuilder() << Name_ << "TopicSink";
         CreateTopic(sourceTopicName);
         CreateTopic(sinkTopicName);
 
@@ -398,6 +401,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         std::vector<std::string> expectedMessages;
         const auto executeQuery = [&](TScriptQuerySettings settings) {
             const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 $input = SELECT * FROM `{source}`.`{source_topic}` WITH (
                     STREAMING = "TRUE",
                     FORMAT = "json_each_row",
@@ -443,13 +447,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetry, TStreamingTestFixture) {
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphOnRetry, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph_on_retry";
+        const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopicOnRetry";
+        const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -459,6 +464,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateS3Source(writeBucket, s3SinkName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+            PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
             PRAGMA s3.AtomicUploadCommit = "true";
 
             INSERT INTO `{s3_sink}`.`folder/` WITH (FORMAT = "json_each_row")
@@ -506,7 +512,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 $input = SELECT key, value FROM `{source}`.`{input_topic}` WITH (
                     STREAMING = "TRUE",
@@ -562,7 +568,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -630,7 +636,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -658,7 +664,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         writeSession->Lock();
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
-        const std::string value(1_KB, 'x');
+        const TString value(1_KB, 'x');
         TInstant time = TInstant::Now();
         for (ui64 i = 0; i < 100000; ++i, time += TDuration::Hours(2)) {
             readSession->AddDataReceivedEvent(i, fmt::format(R"({{"time": "{time}", "event": "{event}"}})", "time"_a = time.ToString(), "event"_a = value));
@@ -1481,6 +1487,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
         constexpr char cloudId[] =  "testcloud4";
+        constexpr char cloudIdAlt[] =  "testcloud5";
 
         constexpr char sourceName[] = "sourceName";
         constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
@@ -1607,6 +1614,53 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ReadTopicMessages(topicName, TVector<std::string> { testData }, topicClient, now, true);
 
         driver.Stop(true);
+
+        ExecQuery(fmt::format(
+                "DROP EXTERNAL DATA SOURCE {pq_source}",
+                "pq_source"_a = sourceName
+        ));
+
+        // Check successful EDS creation with overridden RESOURCE_ID
+        ExecQuery(fmt::format(
+                R"(
+                CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "{pq_location}",
+                    DATABASE_NAME = "{pq_database_name}",
+                    AUTH_METHOD = "IAM",
+                    INITIAL_TOKEN_SECRET_PATH = "{secret}",
+                    RESOURCE_ID = "{cloud_id}",
+                    SERVICE_ACCOUNT_ID = "{service_account_id}"
+                );)",
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = badSecretPath,
+                "cloud_id"_a = cloudIdAlt,
+                "service_account_id"_a = serviceAccountId
+        ));
+
+        // Verify EDS description
+        {
+            const auto externalDataSourceDesc = Navigate(
+                    GetRuntime(),
+                    GetRuntime().AllocateEdgeActor(),
+                    TStringBuilder() << "/Root/" << sourceName,
+                    NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+            UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+            UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
+            auto& info = *externalDataSource.ExternalDataSourceInfo;
+            auto& description = info.Description;
+            UNIT_ASSERT_VALUES_EQUAL(description.GetSourceType(), "Ydb");
+            auto& auth = description.GetAuth();
+            UNIT_ASSERT(auth.HasIam());
+            auto& iam = auth.GetIam();
+            UNIT_ASSERT(iam.HasServiceAccountId());
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetServiceAccountId(), serviceAccountId);
+            UNIT_ASSERT(iam.HasResourceId());
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudIdAlt);
+        }
 
         ExecQuery(fmt::format(
                 "DROP EXTERNAL DATA SOURCE {pq_source}",
@@ -2454,6 +2508,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
             ExecQuery(query, EStatus::GENERIC_ERROR);
         }
+    }
+
+    Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
+        const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(outputTopic);
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT String::JoinFromList(ListReplicate("X", 600000), "-");)",
+            "pq_source"_a = pqSourceName,
+            "output_topic"_a = outputTopic
+        ), EStatus::EXTERNAL_ERROR, "Max message size for YDS is 1048576 bytes but received message with size of");
     }
 }
 

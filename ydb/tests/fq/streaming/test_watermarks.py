@@ -41,6 +41,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         idle_timeout_seconds: int | None = None,
         settings: dict[str, str] = {},
         input_parsing: bool = False,
+        replicate_after_parsing: bool = False,
         cascade_hopping: bool = False,
     ) -> str:
         query_name = entity_name(scenario)
@@ -52,6 +53,8 @@ class TestWatermarksInYdb(StreamingTestBase):
 
         settings_str = f"WITH ({', '.join(f'{k} = {v}' for k, v in settings.items())})" if settings else ""
         idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{idle_timeout_seconds}S"' if partitions_count > 1 else ''
+
+        suffixes = ["0", "1"] if replicate_after_parsing else ["0"]
         input = (
             f'''
             $input = (
@@ -75,8 +78,9 @@ class TestWatermarksInYdb(StreamingTestBase):
                     $input
                     FLATTEN COLUMNS
             );
-
-            $input = (
+            ''' + ''.join(
+                f'''
+            $input{suffix} = (
                 SELECT
                     CAST(ts AS Timestamp) AS event_time,
                     pass,
@@ -88,9 +92,11 @@ class TestWatermarksInYdb(StreamingTestBase):
                     ) AS input
             );
         '''
+                for suffix in suffixes
+            )
             if input_parsing
             else f'''
-            $input = (
+            $input0 = (
                 SELECT
                     CAST(ts AS Timestamp) AS event_time,
                     pass,
@@ -105,30 +111,49 @@ class TestWatermarksInYdb(StreamingTestBase):
             );
         '''
         )
-        process = '''
-            $process = (
+
+        build_process: Callable[[str], str] = lambda suffix: (f'''
+            $process{suffix} = (
                 SELECT
                     HOP_END() AS event_time,
                     AGGREGATE_LIST(id) AS id
                 FROM
-                    $input
+                    $input{suffix}
                 WHERE
                     pass > 0
                 GROUP BY
                     HoppingWindow(event_time, 'PT1S', 'PT1S')
             );
-        ''' if cascade_hopping else '''
-            $process = (
+        ''' if cascade_hopping else f'''
+            $process{suffix} = (
                 SELECT
                     event_time,
                     id
                 FROM
-                    $input
+                    $input{suffix}
                 WHERE
                     pass > 0
             );
+        ''') + f'''
+            $output{suffix} = (
+                SELECT
+                    HOP_END() AS event_time,
+                    AGGREGATE_LIST(id) AS id
+                FROM
+                    $process{suffix}
+                GROUP BY
+                    HoppingWindow(event_time, 'PT1S', 'PT1S')
+            );
         '''
-        kikimr.ydb_client.query(f'''
+
+        process = f'''
+        {''.join(build_process(suffix) for suffix in suffixes)}
+        $output = (
+            {' UNION ALL '.join(f'SELECT * FROM $output{suffix}' for suffix in suffixes)}
+        );
+        '''
+
+        sql = f'''
             CREATE STREAMING QUERY `{query_name}` {settings_str} AS DO BEGIN
             PRAGMA ydb.MaxTasksPerStage = '{tasks}';
 
@@ -136,21 +161,12 @@ class TestWatermarksInYdb(StreamingTestBase):
 
             {process}
 
-            $output = (
-                SELECT
-                    HOP_END() AS event_time,
-                    AGGREGATE_LIST(id) AS id
-                FROM
-                    $process
-                GROUP BY
-                    HoppingWindow(event_time, 'PT1S', 'PT1S')
-            );
-
             INSERT INTO {output_name}
             SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(id))))
             FROM $output;
             END DO;
-        ''')
+        '''
+        kikimr.ydb_client.query(sql)
         self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
         return query_name
 
@@ -562,6 +578,47 @@ class TestWatermarksInYdb(StreamingTestBase):
 
             expected = ['["40"]', '["50"]']
             self._read_topic_check(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
+
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    @pytest.mark.parametrize("tasks", [1, 2])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_wm_after_parsing_2(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        shared_reading: bool,
+        tasks: int,
+        local_topics: bool,
+    ) -> None:
+        if shared_reading:
+            pytest.skip("Shared reading is not supported for watermarks after parsing yet")
+
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
+        query_name = f"wm_after_parsing_2_{shared_reading}{tasks}{local_topics}"
+        query_name = self._create_query(
+            kikimr,
+            entity_name,
+            query_name,
+            local_topics,
+            shared_reading,
+            tasks,
+            input_parsing=True,
+            replicate_after_parsing=True,
+        )
+
+        try:
+            self._write_topic(
+                ydb_client,
+                [
+                    f'{self._event(40, "40")}..{self._event(50, "50")}..{self._event(60, "60", filter=True)}',
+                ],
+            )
+            self._wait_for_idle(shared_reading, tasks)
+
+            expected = ["40", "40", "50", "50"]
+            self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
 

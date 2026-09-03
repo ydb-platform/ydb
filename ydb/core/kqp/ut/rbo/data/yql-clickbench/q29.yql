@@ -1,0 +1,3 @@
+SELECT key, AVG(length(Referer)) AS l, COUNT(*) AS c, MIN(Referer)
+FROM `/Root/hits` WHERE Referer <> '' GROUP BY Url::CutWWW(Url::GetHost(Referer)) as key
+HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;

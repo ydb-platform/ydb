@@ -30,7 +30,8 @@ public:
     using TDDiskId = NKikimr::NBsController::TDDiskId;
 
     explicit TICStorageTransportTestAdapter(
-        NActors::TTestActorRuntime* runtime);
+        NActors::TTestActorRuntime* runtime,
+        bool enableChecksums = true);
     ~TICStorageTransportTestAdapter() override = default;
 
     [[nodiscard]] const TVector<TDDiskId>& GetDDiskIds() const
@@ -46,6 +47,11 @@ public:
     [[nodiscard]] ui32 GetNodeId() const
     {
         return NodeId;
+    }
+
+    [[nodiscard]] NActors::TActorId GetTransportActorId() const
+    {
+        return TransportActorId;
     }
 
     // Inject a TFakeDirectSession for NodeId so datapath uses IDirectSession.
@@ -109,7 +115,8 @@ private:
 
     TICStorageTransportTestAdapter(
         NActors::TTestActorRuntime* runtime,
-        TBootstrap bootstrap);
+        TBootstrap bootstrap,
+        bool enableChecksums);
 
     [[nodiscard]] static TKey MakeKey(
         EConnectionType type,

@@ -24,8 +24,9 @@ namespace NKikimr::NDDisk {
 // Pure-logic (no I/O) owner of IntegrityChunk / IntegrityExtent allocation and of the in-memory
 // per-data-chunk integrity state: used-block bitmaps, data block checksums and per-TIntegrityBlock
 // digests. It performs no I/O itself: every disk operation it needs is queued as a TAction
-// (allocate an integrity chunk / write a buffer); TDDiskActor drains the queue with TakeActions(),
-// executes the async I/O and feeds completions back via OnIntegrityChunkAllocated / OnIoCompleted.
+// (allocate an integrity chunk / read or write a buffer); TDDiskActor drains the queue with
+// TakeActions(), executes the async I/O and feeds completions back via
+// OnIntegrityChunkAllocated / OnIoCompleted / OnReadIoCompleted.
 // This makes the whole state machine unit-testable without a DDisk.
 //
 // PDisk never restarts separately from DDisk, so a reserved chunk may be formatted immediately
@@ -83,20 +84,57 @@ public:
     struct TAllocateIntegrityChunk {};
 
     // Actor must write Data at the given chunk offset and call OnIoCompleted(IoId) on success.
+    enum class EWriteIoKind {
+        Pair,
+        ChunkHeader,
+        ExtentFormat,
+    };
+
     struct TWriteIo {
         ui64 IoId = 0;
         TChunkIdx ChunkIdx = 0;
         ui32 OffsetInBytes = 0;
         TRcBuf Data; // page-aligned, ready for direct I/O
+        EWriteIoKind Kind = EWriteIoKind::Pair;
     };
 
-    using TAction = std::variant<TAllocateIntegrityChunk, TWriteIo>;
+    // Actor must read Size bytes and call OnReadIoCompleted(IoId, Data) on success. Integrity pair
+    // reads are always one adjacent A/B pair (8 KiB).
+    struct TReadIo {
+        ui64 IoId = 0;
+        TChunkIdx ChunkIdx = 0;
+        ui32 OffsetInBytes = 0;
+        ui32 Size = 0;
+    };
+
+    using TAction = std::variant<TAllocateIntegrityChunk, TWriteIo, TReadIo>;
+
+    enum class EOperationKind {
+        Write,
+        Read,
+    };
+
+    enum class EOperationStatus {
+        Ok,
+        Corrupted,
+    };
+
+    struct TOperationResult {
+        ui64 OperationId = 0;
+        EOperationKind Kind = EOperationKind::Write;
+        EOperationStatus Status = EOperationStatus::Ok;
+        TString ErrorReason;
+        bool LostWriteDetected = false;
+
+        // Read only. One pure checksum per requested 4 KiB block.
+        std::vector<ui64> Checksums;
+    };
 
     // ---- read plans ----
 
     struct TReadPlan {
         enum EKind {
-            Passthrough, // read from disk as-is (untracked chunk, or every block of the range is used)
+            Passthrough, // read from disk as-is because every block of the range is used
             AllZero,     // no block of the range was ever written: reply zeros without disk I/O
             Mixed,       // read from disk, then zero the unused blocks according to UsedBlocks
         };
@@ -192,6 +230,7 @@ public:
     // Reports successful completion of a TWriteIo. Returns the data chunk keys whose extents
     // became Ready as a result (empty for chunk header writes that do not finish an extent).
     std::vector<TDataChunkKey> OnIoCompleted(ui64 ioId);
+    void OnReadIoCompleted(ui64 ioId, TRope data);
 
     // True when the key needs no further integrity work before its mapping may be logged: its
     // extent is formatted and the owning chunk's headers are written.
@@ -199,15 +238,20 @@ public:
 
     // ---- write path (called at data-write submission) ----
 
-    // Marks the 4 KiB blocks covered by [offsetInBytes, offsetInBytes + size) as used. checksums
-    // may be empty (write carried no checksums): the blocks are then marked used with unknown
-    // checksums. When non-empty, the range must be IntegrityUnitSize-aligned and checksums must
-    // hold one entry per block; per-TIntegrityBlock digests are updated incrementally.
-    void OnBlocksWritten(TDataChunkKey key, ui32 offsetInBytes, ui32 size, const std::vector<ui64>& checksums);
+    // Starts persistence of the supplied pure data checksums. The range must be 4 KiB aligned and
+    // carry exactly one checksum per block. Completion is reported by TakeCompletedOperations only
+    // after every affected pair image is durable.
+    ui64 BeginBlocksWrite(TDataChunkKey key, ui32 offsetInBytes, ui32 size,
+        const std::vector<ui64>& checksums);
 
     // ---- read path ----
 
     TReadPlan MakeReadPlan(TDataChunkKey key, ui32 offsetInBytes, ui32 size) const;
+
+    // Starts a metadata read and returns an operation id. The result is always delivered through
+    // TakeCompletedOperations (possibly immediately, without queued I/O).
+    ui64 BeginChecksumRead(TDataChunkKey key, ui32 offsetInBytes, ui32 size);
+    [[nodiscard]] std::vector<TOperationResult> TakeCompletedOperations();
 
     // ---- persistence hooks ----
 
@@ -247,6 +291,7 @@ public:
     // Currently cached TIntegrityBlockState count and the cache capacity (for unit tests).
     size_t CachedBlockStates() const { return BlockStateCount; }
     size_t MaxCachedBlockStates() const { return MaxBlockStates; }
+    bool HasInFlightOperationsForTablet(ui64 tabletId) const;
 
 private:
     enum class EChunkState {
@@ -274,10 +319,45 @@ private:
     // manager-wide LRU (checksums, Known and Digest live and die together).
     struct TIntegrityBlockState : TIntrusiveListItem<TIntegrityBlockState> {
         TDataChunkKey Key;   // owning extent, for eviction
-        ui32 BlockIdx = 0;   // TIntegrityBlock index within the extent
-        ui64 Digest = 0;
+        ui32 PairIdx = 0;    // TIntegrityBlock pair index within the extent
+        ui64 PairSequenceNumber = 0;
         TDynBitMap Known;              // per checksum slot: Checksums[slot] is recorded
         std::vector<ui64> Checksums;   // ChecksumsPerIntegrityBlock entries
+    };
+
+    enum class EPairSlot : ui8 {
+        Unknown,
+        A,
+        B,
+    };
+
+    // Small, pinned state used for lost-write detection. Checksum arrays remain evictable, but the
+    // expected digest must survive their eviction.
+    struct TPairMeta {
+        ui64 Digest = 0;
+        ui32 OperationPins = 0;
+        EPairSlot CurrentSlot = EPairSlot::Unknown;
+        bool DigestKnown : 1 = false;
+        bool BitmapKnown : 1 = false;
+        bool Resident : 1 = false;
+        bool Corrupted : 1 = false;
+    };
+
+    static_assert(sizeof(TPairMeta) <= 16);
+
+    // Sparse state only for pairs with queued/in-flight work (or a remembered corruption). It is
+    // removed when a pair becomes idle, keeping the per-disk pinned footprint at TPairMeta size.
+    struct TPairRuntime {
+        ui64 MutationVersion = 0;
+        ui64 DurableVersion = 0;
+        ui64 ReadIoId = 0;
+        ui64 WriteIoId = 0;
+        ui64 WriteVersion = 0;
+        bool Dirty = false;
+        bool LostWriteCorruption = false;
+        TString CorruptionReason;
+        std::vector<ui64> LoadWaiters;
+        std::vector<std::pair<ui64, ui64>> DurabilityWaiters; // operation id, required version
     };
 
     struct TExtentInfo {
@@ -290,13 +370,11 @@ private:
         // logical snapshots, but its physical slot is quarantined until that record is durable.
         bool DeletionPending = false;
 
-        // Restored via ApplyMappingSnapshot: the on-disk bitmap of the previous incarnation is not
-        // recoverable yet, so reads must pass through unchanged regardless of UsedBlocks (which
-        // only reflects writes made after the restore).
-        bool BitmapUnknown = false;
-
         // Empty until the first write to the chunk; never evicted (reads depend on it).
         TDynBitMap UsedBlocks; // per data block of the chunk
+        // One pinned entry per on-disk A/B pair.
+        std::vector<TPairMeta> Pairs;
+        absl::flat_hash_map<ui32, TPairRuntime> PairRuntime;
         // Sparse per-TIntegrityBlock checksum/digest states, keyed by TIntegrityBlock index.
         absl::flat_hash_map<ui32, std::unique_ptr<TIntegrityBlockState>> BlockStates;
     };
@@ -321,7 +399,32 @@ private:
         ui32 ExtentSlot = 0;
     };
 
-    using TIoRef = std::variant<THeaderWriteRef, TExtentFormatRef, TOrphanedExtentFormatRef>;
+    struct TPairReadRef {
+        TDataChunkKey Key;
+        ui32 PairIdx = 0;
+    };
+
+    struct TPairWriteRef {
+        TDataChunkKey Key;
+        ui32 PairIdx = 0;
+        ui64 Version = 0;
+        EPairSlot Slot = EPairSlot::Unknown;
+    };
+
+    using TIoRef = std::variant<THeaderWriteRef, TExtentFormatRef, TOrphanedExtentFormatRef,
+        TPairReadRef, TPairWriteRef>;
+
+    struct TPendingOperation {
+        EOperationKind Kind = EOperationKind::Write;
+        TDataChunkKey Key;
+        ui32 OffsetInBytes = 0;
+        ui32 Size = 0;
+        std::vector<ui64> Checksums;
+        ui32 PendingLoads = 0;
+        ui32 PendingDurability = 0;
+        bool Applied = false;
+        bool PairsPinned = false;
+    };
 
 private:
     ui64 AllocateGeneration() { return ++GenerationCounter; }
@@ -332,12 +435,30 @@ private:
     void FreeExtent(TDataChunkKey key, TExtentInfo& extent);
     void ReleaseSlot(TChunkIdx chunkIdx, ui32 extentSlot);
     void MaybeCompleteExtent(TDataChunkKey key, TExtentInfo& extent, std::vector<TDataChunkKey>& readyKeys);
+    ui32 FirstPair(ui32 offsetInBytes) const;
+    ui32 EndPair(ui32 offsetInBytes, ui32 size) const;
+    void QueuePairRead(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
+    void QueuePairWrite(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
+    void ApplyWriteOperation(ui64 operationId, TPendingOperation& operation);
+    void CompleteReadOperation(ui64 operationId, TPendingOperation& operation);
+    void CompleteOperation(ui64 operationId, EOperationStatus status = EOperationStatus::Ok,
+        TString errorReason = {}, bool lostWriteDetected = false);
+    void NotifyPairLoaded(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
+    void NotifyPairDurable(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
+    bool LoadPairImage(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx, const TRope& data,
+        TString* errorReason, bool* lostWriteDetected);
+    TIntegrityBlockIdentity MakeBlockIdentity(TDataChunkKey key, const TExtentInfo& extent,
+        ui32 pairIdx) const;
+    bool PairHasAllUsedChecksums(const TExtentInfo& extent, ui32 pairIdx,
+        const TIntegrityBlockState& state) const;
+    TPairRuntime& GetPairRuntime(TExtentInfo& extent, ui32 pairIdx);
+    void MaybeDropPairRuntime(TExtentInfo& extent, ui32 pairIdx);
 
     // Get-or-create the state of the given TIntegrityBlock, touching the LRU; creation may evict
     // the least recently used state (of any extent) when over budget.
-    TIntegrityBlockState& GetOrCreateBlockState(TDataChunkKey key, TExtentInfo& extent, ui32 blockIdx);
+    TIntegrityBlockState& GetOrCreateBlockState(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
     // Lookup without creation (still touches the LRU); nullptr when absent (never written/evicted).
-    TIntegrityBlockState* FindBlockState(TExtentInfo& extent, ui32 blockIdx);
+    TIntegrityBlockState* FindBlockState(TExtentInfo& extent, ui32 pairIdx);
     void EvictBlockStatesOverBudget();
     void DropBlockStates(TExtentInfo& extent);
 
@@ -372,6 +493,9 @@ private:
     std::vector<TAction> Actions;
     absl::flat_hash_map<ui64, TIoRef> IosInFlight;
     ui64 NextIoId = 1;
+    absl::flat_hash_map<ui64, TPendingOperation> PendingOperations;
+    std::vector<TOperationResult> CompletedOperations;
+    ui64 NextOperationId = 1;
 };
 
 } // namespace NKikimr::NDDisk

@@ -24,6 +24,18 @@ Value* GenIsNormal(Value* val, LLVMContext &context, BasicBlock* block);
 Value* GenIsAbnormal(Value* val, LLVMContext &context, BasicBlock* block);
 Value* GenIsComparable(Value* val, LLVMContext &context, BasicBlock* block);
 Value* GenIsNonComparable(Value* val, LLVMContext &context, BasicBlock* block);
+Value* GenIsLess(
+    Value* left, Value* right, i8 scaleDifference, bool aggregate, BasicBlock*& block);
+Value* GenIsGreater(
+    Value* left, Value* right, i8 scaleDifference, bool aggregate, BasicBlock*& block);
+Value* GenIsEqual(
+    Value* left, Value* right, i8 scaleDifference, bool aggregate, BasicBlock*& block);
+Value* GenIsLessOrEqual(
+    Value* left, Value* right, i8 scaleDifference, bool aggregate, BasicBlock*& block);
+Value* GenIsGreaterOrEqual(
+    Value* left, Value* right, i8 scaleDifference, bool aggregate, BasicBlock*& block);
+Value* GenIsNotEqual(
+    Value* left, Value* right, i8 scaleDifference, bool aggregate, BasicBlock*& block);
 
 template <bool And, Value* (*Checker)(Value*, LLVMContext&, BasicBlock*)>
 inline Value* CheckBoth(Value* left, Value* right, LLVMContext &context, BasicBlock* block) {

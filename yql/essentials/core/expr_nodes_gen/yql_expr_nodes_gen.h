@@ -250,7 +250,6 @@ public:
         return TChildIterator<TItem>();
     }
 
-public:
     static bool Match(const TExprNode* node) {
         return node && node->IsList();
     }
@@ -308,7 +307,6 @@ public:
         return Ref().Content();
     }
 
-public:
     static bool Match(const TExprNode* node) {
         return node && node->IsCallable();
     }
@@ -506,7 +504,6 @@ protected:
     {
     }
 
-protected:
     TExprContext& Ctx_;
     TPositionHandle Pos_;
     GetArgFuncType GetArgFunc_;

@@ -118,7 +118,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                            "explicit CROSS JOIN or enable it via PRAGMA AnsiImplicitCrossJoin";
                 return false;
             }
-            auto alt = node.GetAlt_join_op1();
+            const auto& alt = node.GetAlt_join_op1();
             if (!CollectJoinLinkSettings(Ctx_.TokenPosition(alt.GetToken1()), linkSettings, Ctx_)) {
                 return false;
             }
@@ -126,7 +126,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
             break;
         }
         case TRule_join_op::kAltJoinOp2: {
-            auto alt = node.GetAlt_join_op2();
+            const auto& alt = node.GetAlt_join_op2();
             if (alt.HasBlock1()) {
                 Ctx_.IncrementMonCounter("sql_join_operations", "Natural");
                 Error() << "Natural join is not implemented yet";
@@ -352,8 +352,8 @@ TSourcePtr TSqlSelect::FlattenSource(const TRule_flatten_source& node) {
         return nullptr;
     }
     if (node.HasBlock2()) {
-        auto flatten = node.GetBlock2();
-        auto flatten2 = flatten.GetBlock2();
+        const auto& flatten = node.GetBlock2();
+        const auto& flatten2 = flatten.GetBlock2();
         switch (flatten2.Alt_case()) {
             case TRule_flatten_source::TBlock2::TBlock2::kAlt1: {
                 TString mode = "auto";
@@ -450,7 +450,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
     // ;
     switch (node.Alt_case()) {
         case TRule_result_column::kAltResultColumn1: {
-            auto alt = node.GetAlt_result_column1();
+            const auto& alt = node.GetAlt_result_column1();
 
             Token(alt.GetToken2());
             auto idAsteriskQualify = OptIdPrefixAsStr(alt.GetRule_opt_id_prefix1(), *this);
@@ -459,7 +459,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
             break;
         }
         case TRule_result_column::kAltResultColumn2: {
-            auto alt = node.GetAlt_result_column2();
+            const auto& alt = node.GetAlt_result_column2();
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
             TSqlExpression expr(*this);
             TNodePtr term(Unwrap(expr.Build(alt.GetRule_expr1())));
@@ -1160,7 +1160,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         }
     }
     if (node.HasBlock10()) {
-        auto block = node.GetBlock10();
+        const auto& block = node.GetBlock10();
         Token(block.GetToken1());
         TPosition pos(Ctx_.Pos());
         TNodePtr where;
@@ -1393,7 +1393,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     /// LIMIT INTEGER block
     TNodePtr skipTake;
     if (node.HasBlock2()) {
-        auto block = node.GetBlock2();
+        const auto& block = node.GetBlock2();
 
         Token(block.GetToken1());
         TPosition pos(Ctx_.Pos());

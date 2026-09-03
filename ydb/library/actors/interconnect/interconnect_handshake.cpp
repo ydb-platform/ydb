@@ -372,6 +372,7 @@ namespace NActors {
         TActorId HandshakeBroker;
         std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
         std::optional<TString> HandshakeId; // for XDC
+        THolder<TEvReportConnection::THandle> PendingXdcConnection;
         bool SubscribedForConnection = false;
 
         struct {
@@ -492,7 +493,9 @@ namespace NActors {
                     if (Params.UseExternalDataChannel) {
                         if (incoming) {
                             Y_ABORT_UNLESS(SubscribedForConnection);
-                            auto ev = WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
+                            auto ev = PendingXdcConnection
+                                ? std::move(PendingXdcConnection)
+                                : WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
                             SubscribedForConnection = false;
                             if (ev->Get()->HandshakeId != *HandshakeId) {
                                 Y_DEBUG_ABORT_UNLESS(false);
@@ -504,7 +507,7 @@ namespace NActors {
                                 auto ack = TryRdmaRead(rdmaIncomingRead.value());
                                 SendExBlock(MainChannel, ack, "TRdmaHandshakeReadAck");
                                 if (ack.HasDigest()) {
-                                    Params.UseRdma = true;
+                                    Params.UseRdmaRead = true;
                                 } else {
                                     Rdma.Clear();
                                 }
@@ -523,7 +526,7 @@ namespace NActors {
                                     // session with rdma in a future
                                     RunDelayedRdmaHandshake = true;
                                 } else {
-                                    Params.UseRdma = true;
+                                    Params.UseRdmaRead = true;
                                 }
                             }
                         }
@@ -614,6 +617,10 @@ namespace NActors {
 
                 case TEvPollerReady::EventType:
                    break;
+
+                case TEvReportConnection::EventType:
+                    PendingXdcConnection.Reset(static_cast<TEvReportConnection::THandle*>(ev.Release()));
+                    break;
 
                 case TEvents::TSystem::Poison:
                    throw TExPoison();
@@ -1047,9 +1054,10 @@ namespace NActors {
                 // v2 session is incompatible with encryption and needs the io_uring data plane; only
                 // request it when encryption is disabled locally and io_uring is available (buffer rings
                 // are used when present, with a fallback to ordinary buffers on older kernels)
-                request.SetRequestSessionV2(Common->Settings.V2.Enable &&
+                const bool requestSessionV2 = Common->Settings.V2.Enable &&
                     Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
-                    TUringContext::IsAvailable());
+                    TUringContext::IsAvailable();
+                request.SetRequestSessionV2(requestSessionV2);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;

@@ -32,6 +32,24 @@ TRuntimeNode ToBlockList(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
 
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize, const TArrayRef<TType* const> types,
                                 const NUdf::TUnboxedValuePod& values) {
+    const auto& holderFactory = ctx.HolderFactory;
+    const size_t width = types.size();
+    const size_t total = values.GetListLength();
+
+    if (width == 0) {
+        TDefaultListRepresentation listValues;
+        size_t converted = 0;
+        while (converted < total) {
+            const size_t thisBlock = std::min(blockSize, total - converted);
+            NUdf::TUnboxedValue* items = nullptr;
+            const auto tuple = holderFactory.CreateDirectArrayHolder(1, items);
+            items[0] = MakeBlockCount(holderFactory, thisBlock, NYql::DefaultDatumTestValidationMode);
+            listValues = listValues.Append(std::move(tuple));
+            converted += thisBlock;
+        }
+        return holderFactory.CreateDirectListHolder(std::move(listValues));
+    }
+
     const auto maxLength =
         CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL, [](size_t max, const TType* type) {
             return std::max(max, CalcMaxBlockItemSize(type));
@@ -41,9 +59,6 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize, cons
         return MakeArrayBuilder(TTypeInfoHelper(), type, ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder());
     });
 
-    const auto& holderFactory = ctx.HolderFactory;
-    const size_t width = types.size();
-    const size_t total = values.GetListLength();
     NUdf::TUnboxedValue iterator = values.GetListIterator();
     NUdf::TUnboxedValue current;
     size_t converted = 0;

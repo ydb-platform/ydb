@@ -49,9 +49,6 @@ void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui
     *proto.MutableColumns()->Add() = columns[1].CreateColumn(ValueColumnId);
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(presetId);
-    proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
-    *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
 }
 
 ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptions& options) {

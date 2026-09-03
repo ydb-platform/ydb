@@ -221,6 +221,8 @@ struct TGraphMeta {
     bool AllowOlapDataQuery = true; // used by Data executer - always true for Scan executer
     bool StreamResult = false;
     Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+    bool CollectAffectedRows = false;
+    bool AllowCheckpoints = false;
 
     // TODO: stuff about shards on nodes should be private or protected.
     using TShardToNodeMap = TMap<ui64 /* shardId */, ui64 /* nodeId */>;
@@ -414,6 +416,8 @@ public:
 
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
+
+    void FillExternalSourceSecureParams(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
 private:
     void FillStages();

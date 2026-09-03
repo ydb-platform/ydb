@@ -58,10 +58,11 @@ void TTablet::SendFollowerAttach(const TActorId& leader) {
 
 void TTablet::ReportTabletStateChange(ETabletState state) {
     const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
+    const ui32 generation = ActualGeneration ? ActualGeneration : SuggestedGeneration;
     if (state == TTabletStateInfo::Created || state == TTabletStateInfo::ResolveLeader) {
-        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, Info, StateStorageInfo.KnownGeneration, Leader));
+        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, Info, generation, Leader));
     } else {
-        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, StateStorageInfo.KnownGeneration));
+        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, generation));
     }
 }
 
@@ -976,6 +977,7 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
         { // ok, we marked ourselves as generation owner
             NeedCleanupOnLockedPath = false;
             StateStorageInfo.Update(msg);
+            ActualGeneration = StateStorageInfo.KnownGeneration;
             for (const auto& followerInfo : msg->Followers) {
                 if (followerInfo.Follower == SelfId())
                     continue;
@@ -2504,6 +2506,7 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , Info(info)
     , SetupInfo(setupInfo)
     , SuggestedGeneration(suggestedGeneration)
+    , ActualGeneration(0)
     , NeedCleanupOnLockedPath(false)
     , GcCounter(0)
     , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(info->TabletID))

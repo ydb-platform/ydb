@@ -223,6 +223,7 @@ class TTablet : public TActor<TTablet> {
     TIntrusivePtr<TTabletStorageInfo> Info;
     TIntrusivePtr<TTabletSetupInfo> SetupInfo;
     ui32 SuggestedGeneration;
+    ui32 ActualGeneration;
     bool NeedCleanupOnLockedPath;
     ui32 GcCounter;
     THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;

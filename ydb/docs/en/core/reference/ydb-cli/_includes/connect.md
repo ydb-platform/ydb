@@ -21,15 +21,25 @@ To learn about potential situations where the {{ ydb-short-name }} CLI won't try
 
 DB connection options in the command line are specified before defining the command and its parameters:
 
+
 ```bash
-{{ ydb-cli }} <connection_options> <command> <command_options>
+{{ ydb-cli }} <опции_соединения> <команда> <опции_команды>
 ```
+
+
+### Database connection parameters {#connection}
 
 - `-e, --endpoint <endpoint>` is the [endpoint](../../../concepts/connect.md#endpoint), that is, the main connection parameter that allows finding a {{ ydb-short-name }} server on the network. If no port is specified, port 2135 is used. If no protocol is specified, gRPCs (with encryption) is used in {{ ydb-short-name }} CLI public builds.
 - `-d, --database <database>` is the [database path](../../../concepts/connect.md#database).
 - `--no-discovery` means do not perform discovery (client balancing) for ydb cluster connection. If this option is set the user provided endpoint (by `-e` option) will be used to setup a connections.
 
+### Authentication parameters {#authentication}
+
 {% include [auth/options.md](auth/options.md) %}
+
+### TLS connection parameters {#tls}
+
+{% include [auth/options_client_cert.md](auth/options_client_cert.md) %}
 
 ## Parameters from the profile set by the command-line option {#profile}
 
@@ -57,19 +67,7 @@ If the CLI completed all the steps listed at the beginning of this article but f
 
 If the authentication mode is known, but the necessary additional parameters are not, the command is aborted and an error message describing the issue is returned:
 
-```text
-(No such file or directory) util/system/file.cpp:857:
-can't open "<filepath>" with mode RdOnly|Seq (0x00000028)
-```
-
-— Couldn't open and read the file `<filepath>` specified in a parameter passing the file name and path.
-
-
-## Additional parameters {#additional}
-
-When using gRPCs (with encryption), you may need to [select a root certificate](../../../concepts/connect.md#tls-cert).
-
-- `--ca-file <filepath>`: Root certificate PEM file for a TLS connection.
+- `(No such file or directory) util/system/file.cpp:857: can't open "<filepath>" with mode RdOnly|Seq (0x00000028)` — failed to open for reading the file `<filepath>` specified in one of the parameters that takes a file name with a path
 
 ## Authentication {#whoami}
 

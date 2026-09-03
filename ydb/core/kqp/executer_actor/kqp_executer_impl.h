@@ -318,6 +318,52 @@ protected:
                 // TODO: make sure we don't miss any shards
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
+
+                // CsWriteAffinity: For CTAS (MODE_FILL) sink stages with EnableCsWriteAffinity,
+                // the target column table's shards are NOT automatically added to shardIds above
+                // (because they are sinks, not scan sources). We add them here so they get
+                // resolved to nodes via the shard resolver, enabling per-shard task creation
+                // in CountComputeTasks and ColumnShardHashV1 shuffle routing.
+                if (stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
+                    for (const auto& sink : stage.GetSinks()) {
+                        if (sink.HasInternalSink()
+                                && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                            NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                            if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                                    && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL
+                                    && stageInfo.Meta.ShardKey) {
+                                for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                                    shardIds.insert(partition.ShardId);
+                                }
+                            }
+                        }
+                    }
+                }
+
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+                // Invariant: with the force flag, CTAS sink stages must have
+                // destination shards in shardIds so they get resolved to nodes.
+                bool hasCtasSink = false;
+                for (const auto& sink : stage.GetSinks()) {
+                    if (sink.HasInternalSink()
+                            && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                        NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                        if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                                && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                            hasCtasSink = true;
+                            break;
+                        }
+                    }
+                }
+                AFL_VERIFY(!stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
+                            || !hasCtasSink
+                            || !shardIds.empty())
+                    ("stageId", stageInfo.Id)
+                    ("hasCtasSink", hasCtasSink)
+                    ("shardIdsSize", shardIds.size())
+                    ("hasShardKey", stageInfo.Meta.ShardKey != nullptr)
+                    ("msg", "QP_FORCE_CS_WRITE_AFFINITY requires destination shards in shardIds for CTAS sink stages");
+#endif
             }
         }
 

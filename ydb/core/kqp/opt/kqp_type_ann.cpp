@@ -832,7 +832,7 @@ TStatus AnnotateKeyTuple(const TExprNode::TPtr& node, TExprContext& ctx) {
 
 TStatus AnnotateFillTable(const TExprNode::TPtr& node, TExprContext& ctx)
 {
-    if (!EnsureMinMaxArgsCount(*node, 4, 4, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 4, 5, ctx)) {  // 4 required + 1 optional (CtasShardingColumns)
         return TStatus::Error;
     }
 
@@ -858,6 +858,14 @@ TStatus AnnotateFillTable(const TExprNode::TPtr& node, TExprContext& ctx)
 
     if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
         return TStatus::Error;
+    }
+
+    if (node->ChildrenSize() > TKqlFillTable::idx_CtasShardingColumns) {
+        if (!EnsureTupleOfAtoms(*node->Child(TKqlFillTable::idx_CtasShardingColumns), ctx)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                "CtasShardingColumns must be a list of column names"));
+            return TStatus::Error;
+        }
     }
 
     auto effectType = MakeKqpEffectType(ctx);

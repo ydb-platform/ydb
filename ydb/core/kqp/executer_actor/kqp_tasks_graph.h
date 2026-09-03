@@ -91,7 +91,12 @@ struct TStageInfoMeta {
     ETableKind TableKind{};
     TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
-    std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // CTAS only
+    std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // Populated by table resolver for OLAP sinks
+    // For CTAS affinity (EnableCsWriteAffinity): hash-sharding columns of the target column table.
+    // Populated by TKqpTableResolver from ColumnTableInfoPtr during name resolution.
+    // Used in BuildKqpStageChannels to configure ColumnShardHashV1 shuffle on the upstream
+    // Transform Stage so rows are routed directly to the node owning each target shard.
+    std::vector<TString> CsShardingColumns;
     std::unordered_map<TString, TActorId> ControlPlaneActors;
 
     TVector<bool> SkipNullKeys;

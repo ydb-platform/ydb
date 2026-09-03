@@ -176,6 +176,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
             }
         });
     REGISTER_SETTING(*this, UseKqpTasksGraphV2);
+    REGISTER_SETTING(*this, EnableCsWriteAffinity);
 
     /* CBO internal constants for tuning */
     REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
@@ -409,5 +410,10 @@ bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
 bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
     return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
 }
+
+bool TKikimrConfiguration::GetEnableCsWriteAffinity() const {
+    return EnableCsWriteAffinity.Get().GetOrElse(false);
+}
+
 
 } // namespace NYql

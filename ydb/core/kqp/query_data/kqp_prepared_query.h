@@ -68,6 +68,10 @@ public:
         return Proto->GetDqChannelVersion();
     }
 
+    bool EnableCsWriteAffinity() const {
+        return Proto->GetEnableCsWriteAffinity();
+    }
+
     const NKqpProto::TKqpPhyStage& GetStages(size_t index) const {
         return Proto->GetStages(index);
     }

@@ -29,7 +29,7 @@ items:
     href: balancing-prefer-local.md
   - name: Prefer specific availability zone
     href: balancing-prefer-location.md
-  - name: Prefer pool with specific state
+  - name: Prefer a pile with a specific state
     href: balancing-prefer-pile.md
 - name: Retry queries
   href: retry.md

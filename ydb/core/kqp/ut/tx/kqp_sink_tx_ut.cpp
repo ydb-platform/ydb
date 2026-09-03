@@ -708,11 +708,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
-    // Regression test: InconsistentTx (streaming) writes looped forever on
-    // STATUS_SCHEME_CHANGED after a concurrent ALTER TABLE, because the stale
-    // schema version baked into TEvWrite is never refreshed by resolve.
-    // IsStreamingQuery=true is injected into the request context so the sink
-    // compiles with InconsistentTx=true.
+    // ALTER TABLE during an in-flight InconsistentTx write must fail the query, not retry forever.
     class TSchemeChangedDuringInconsistentWrite : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

@@ -466,9 +466,9 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             return EActionResult::Ok;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "",
-            {"result", ToString(error.Code).data()},
-            {"reason", error.Reason.GetMessage().data()});
+        YDB_LOG_DEBUG_CTX(ctx, "Result",
+            {"error", ToString(error.Code)},
+            {"reason", error.Reason.GetMessage()});
 
         if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
             response.MutableStatus()->SetCode(error.Code);
@@ -1041,7 +1041,9 @@ bool TCms::TryToLockNode(const TAction& action,
         return false;
     }
 
-    if (opts.CapEnabled && ClusterInfo->NodeHasRunningSystemTablet(node.NodeId)) {
+    if (opts.CapEnabled
+        && ClusterInfo->NodeHasRunningSystemTablet(node.NodeId))
+    {
         error.Code = TStatus::DISALLOW_TEMP_SYS_TABLET;
         error.Reason = TReason(
             TStringBuilder() << "Node " << node.NodeId

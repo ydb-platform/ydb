@@ -3126,6 +3126,41 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
     }
 
+    Y_UNIT_TEST(SysTabletsRunningLeaderDeferredWithoutBootstrapConfig)
+    {
+        TCmsTestEnv env(TTestEnvOpts(4, 0));
+
+        TFakeNodeWhiteboardService::BootstrapConfig.Clear();
+        env.EnableSysNodeChecking();
+        SetRunningSysTablet(env.GetNodeId(0), true);
+        env.RestartCms();
+
+        auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,
+            /* schedule = */ true,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        req->Record.SetMaxPermissionCount(2);
+
+        auto resp = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 2);
+        UNIT_ASSERT(!resp.GetRequestId().empty());
+
+        THashSet<TString> grantedHosts;
+        for (const auto &permission : resp.GetPermissions()) {
+            grantedHosts.insert(permission.GetAction().GetHost());
+            env.CheckDonePermission("user", permission.GetId());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(grantedHosts.size(), 2);
+        UNIT_ASSERT(grantedHosts.contains(ToString(env.GetNodeId(1))));
+        UNIT_ASSERT(grantedHosts.contains(ToString(env.GetNodeId(2))));
+
+        auto finalResp = env.CheckRequest("user", resp.GetRequestId(), false,
+                                          MODE_MAX_AVAILABILITY, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalResp.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(0)));
+    }
+
     Y_UNIT_TEST(SysTabletsNodeDeferredOnCheckRequestAfterMigration)
     {
         TCmsTestEnv env(TTestEnvOpts(16, 0));
@@ -3231,7 +3266,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             hostOf(2), hostOf(3), hostOf(4),  hostOf(5), hostOf(6),
             hostOf(7), hostOf(8), hostOf(9), hostOf(10), hostOf(11),
         };
-        const THashSet<TString> initialG3Hosts = {hostOf(0), hostOf(1)};
 
         // Shuffled action list mixing all three groups.
         auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,

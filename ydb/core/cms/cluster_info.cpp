@@ -24,12 +24,34 @@ using namespace NKikimrCms;
 namespace {
 
 bool IsSystemTablet(TTabletTypes::EType type) {
+    // Keep this allowlist closed so that new shard types are not treated as
+    // system tablets until their cluster-wide role is known.
     switch (type) {
-    case TTabletTypes::DataShard:
-    case TTabletTypes::KeyValue:
+    case TTabletTypes::Coordinator:
+    case TTabletTypes::Mediator:
+    case TTabletTypes::Hive:
+    case TTabletTypes::BSController:
+    case TTabletTypes::SchemeShard:
+    case TTabletTypes::Cms:
+    case TTabletTypes::NodeBroker:
+    case TTabletTypes::TxAllocator:
+    case TTabletTypes::TenantSlotBroker:
+    case TTabletTypes::Console:
+    case TTabletTypes::SysViewProcessor:
+    case TTabletTypes::StatisticsAggregator:
+    case TTabletTypes::GraphShard:
+    case TTabletTypes::BackupController:
+        return true;
+    // New tablet types are introduced by renaming one of these reserved
+    // values. Keep them explicit so that such a change fails to compile here
+    // until the new type is classified.
+    case TTabletTypes::Reserved46:
+    case TTabletTypes::Reserved47:
+    case TTabletTypes::Reserved48:
+    case TTabletTypes::Reserved49:
         return false;
     default:
-        return true;
+        return false;
     }
 }
 
@@ -444,7 +466,7 @@ void TClusterInfo::ClearNode(ui32 nodeId)
         return;
 
     auto &node = NodeRef(nodeId);
-    NodeTabletsByNode.erase(nodeId);
+    RunningSystemTabletsByNode.erase(nodeId);
     for (auto tablet : node.Tablets)
         Tablets.erase(tablet);
     node.Tablets.clear();
@@ -480,14 +502,28 @@ void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateI
     if (!HasNode(nodeId))
         return;
 
-    TTabletInfo &tablet = NodeTabletsByNode[nodeId][info.GetTabletId()];
+    TTabletInfo &tablet = Tablets[info.GetTabletId()];
     tablet.TabletId = info.GetTabletId();
     tablet.Type = info.GetType();
     tablet.State = info.GetState();
     tablet.Leader = info.GetLeader();
     tablet.NodeId = nodeId;
 
-    Tablets[info.GetTabletId()] = tablet;
+    const TTabletInstanceId tabletInstanceId = {
+        info.GetTabletId(),
+        info.GetFollowerId(),
+    };
+    if (tablet.Leader
+        && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
+        && IsSystemTablet(tablet.Type))
+    {
+        RunningSystemTabletsByNode[nodeId].insert(tabletInstanceId);
+    } else if (auto it = RunningSystemTabletsByNode.find(nodeId); it != RunningSystemTabletsByNode.end()) {
+        it->second.erase(tabletInstanceId);
+        if (it->second.empty()) {
+            RunningSystemTabletsByNode.erase(it);
+        }
+    }
 
     auto &node = NodeRef(nodeId);
     node.Tablets.insert(tablet.TabletId);
@@ -1046,33 +1082,10 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
             NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
     }
-
-    GenerateNodesWithRunningSystemTablet();
-}
-
-void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
-    NodesWithRunningSystemTablet.clear();
-
-    for (const auto &[nodeId, tablets] : NodeTabletsByNode) {
-        if (!HasNode(nodeId)) {
-            continue;
-        }
-
-        for (const auto &[_, tablet] : tablets) {
-            // Match by type intentionally: this also covers tenant system tablets.
-            if (tablet.Leader
-                && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
-                && IsSystemTablet(tablet.Type))
-            {
-                NodesWithRunningSystemTablet.insert(nodeId);
-                break;
-            }
-        }
-    }
 }
 
 bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
-    return NodesWithRunningSystemTablet.contains(nodeId);
+    return RunningSystemTabletsByNode.contains(nodeId);
 }
 
 bool TClusterInfo::HostHasRunningSystemTablet(const TString &hostName) const {

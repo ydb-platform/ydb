@@ -627,6 +627,96 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         }
     }
 
+    Y_UNIT_TEST(SysTabletLeaderAndFollowerOnDifferentNodes) {
+        TClusterInfoPtr cluster(new TClusterInfo);
+        const TEvInterconnect::TNodeInfo node1 = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
+        const TEvInterconnect::TNodeInfo node2 = { 2, "::2", "test2", "test2", 2, TNodeLocation() };
+        cluster->AddNode(node1, nullptr);
+        cluster->AddNode(node2, nullptr);
+
+        const ui64 tabletId = MakeBSControllerID();
+        cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController,
+                                             TTabletStateInfo::Active, true));
+        cluster->AddTablet(2, MakeTabletInfo(tabletId, TTabletTypes::BSController,
+                                             TTabletStateInfo::Active, false));
+        cluster->GenerateSysTabletsNodesCheckers();
+
+        UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+        UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(2));
+    }
+
+    Y_UNIT_TEST(SysTabletFollowerDoesNotHideLeaderOnSameNode) {
+        TClusterInfoPtr cluster(new TClusterInfo);
+        const TEvInterconnect::TNodeInfo node = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
+        cluster->AddNode(node, nullptr);
+
+        const ui64 tabletId = MakeBSControllerID();
+        auto leader = MakeTabletInfo(tabletId, TTabletTypes::BSController,
+                                     TTabletStateInfo::Active, true);
+        leader.SetFollowerId(0);
+        auto follower = MakeTabletInfo(tabletId, TTabletTypes::BSController,
+                                       TTabletStateInfo::Active, false);
+        follower.SetFollowerId(1);
+
+        cluster->AddTablet(1, leader);
+        cluster->AddTablet(1, follower);
+
+        UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+    }
+
+    Y_UNIT_TEST(SysTabletTypesAreClassifiedExplicitly) {
+        const TEvInterconnect::TNodeInfo nodeInfo = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
+
+        for (const auto type : {
+                TTabletTypes::Coordinator,
+                TTabletTypes::Mediator,
+                TTabletTypes::Hive,
+                TTabletTypes::BSController,
+                TTabletTypes::SchemeShard,
+                TTabletTypes::Cms,
+                TTabletTypes::NodeBroker,
+                TTabletTypes::TxAllocator,
+                TTabletTypes::TenantSlotBroker,
+                TTabletTypes::Console,
+                TTabletTypes::SysViewProcessor,
+                TTabletTypes::StatisticsAggregator,
+                TTabletTypes::GraphShard,
+                TTabletTypes::BackupController,
+            })
+        {
+            TClusterInfoPtr cluster(new TClusterInfo);
+            cluster->AddNode(nodeInfo, nullptr);
+            cluster->AddTablet(1, MakeTabletInfo(1000 + type, type, TTabletStateInfo::Active, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT_C(cluster->NodeHasRunningSystemTablet(1), "tablet type " << type);
+        }
+
+        for (const auto type : {
+                TTabletTypes::DataShard,
+                TTabletTypes::KeyValue,
+                TTabletTypes::PersQueue,
+                TTabletTypes::Kesus,
+                TTabletTypes::ColumnShard,
+                TTabletTypes::SequenceShard,
+                TTabletTypes::ReplicationController,
+                TTabletTypes::BlobDepot,
+                // New tablet types are introduced by renaming one of these
+                // reserved values, which must force this classification test
+                // to be updated.
+                TTabletTypes::Reserved46,
+                TTabletTypes::Reserved47,
+                TTabletTypes::Reserved48,
+                TTabletTypes::Reserved49,
+            })
+        {
+            TClusterInfoPtr cluster(new TClusterInfo);
+            cluster->AddNode(nodeInfo, nullptr);
+            cluster->AddTablet(1, MakeTabletInfo(1000 + type, type, TTabletStateInfo::Active, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT_C(!cluster->NodeHasRunningSystemTablet(1), "tablet type " << type);
+        }
+    }
+
     void CheckNodeRoles(TClusterInfo &cluster, ui32 nodeId,
                         const TSet<int> &expected)
     {

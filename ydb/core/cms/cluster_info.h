@@ -31,6 +31,8 @@
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace Ydb::Maintenance {
     class Node;
 }
@@ -694,7 +696,8 @@ class TClusterInfo : public TThrRefBase {
 public:
     using TNodes = THashMap<ui32, TNodeInfoPtr>;
     using TTablets = THashMap<ui64, TTabletInfo>;
-    using TNodeTabletsMap = THashMap<ui32, TTablets>;
+    using TTabletInstanceId = std::pair<ui64, ui32>;
+    using TRunningSystemTabletsByNode = THashMap<ui32, THashSet<TTabletInstanceId>>;
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
@@ -725,7 +728,6 @@ public:
 
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
-    void GenerateNodesWithRunningSystemTablet();
     void GenerateClusterNodesCheckers();
 
     bool IsStateStorageReplicaNode(ui32 nodeId) const {
@@ -1090,7 +1092,7 @@ private:
 
     TNodes Nodes;
     TTablets Tablets;
-    TNodeTabletsMap NodeTabletsByNode;
+    TRunningSystemTabletsByNode RunningSystemTabletsByNode;
     TPDisks PDisks;
     TVDisks VDisks;
     TBSGroups BSGroups;
@@ -1112,7 +1114,6 @@ public:
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
-    THashSet<ui32> NodesWithRunningSystemTablet;
 
     THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 

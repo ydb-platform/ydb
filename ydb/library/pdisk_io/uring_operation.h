@@ -21,7 +21,7 @@ class TUringOperationBase {
 public:
     // NHPTimer cycle count captured by TUringRouter right before the operation
     // is submitted to the kernel (SQE prepared). Used together with the
-    // completion timestamp (captured by the completion poller) to build a
+    // completion timestamp (captured by the I/O thread) to build a
     // TDeviceIoSample for device-overestimation tracking. 0 if unset.
     ui64 SubmitCycles = 0;
 
@@ -37,14 +37,15 @@ public:
 public:
     // Callbacks
 
-    // Called from the dedicated completion polling thread outside actor system,
+    // Called from the dedicated I/O thread outside actor system,
     // thus MUST NOT use TActivationContext, instead should use actorSystem->Send().
     // After OnComplete() returns, TUringRouter will not access object anymore.
     virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept = 0;
 
-    // A cleanup callback called by TUringRouter::Stop() for CQEs drained
-    // after shutdown without invoking OnComplete. Use this to release operation-
-    // owned memory/resources for in-flight requests that are no longer delivered.
+    // Cleanup callback for abortive/failure teardown paths. Graceful
+    // TUringRouter::Stop() drains every accepted operation through OnComplete.
+    // Use this to release operation-owned memory/resources if an owner must
+    // explicitly abandon an operation after a terminal router failure.
     // After OnDrop() returns, TUringRouter will not access object anymore.
     virtual void OnDrop() noexcept = 0;
 
@@ -69,6 +70,9 @@ public:
 
     void SetOperationType(EOperationType opType) { OperationType = opType; }
     EOperationType GetOperationType() const { return OperationType; }
+
+    bool IsFixedBuffer() const { return FixedBuffer; }
+    ui16 GetBufIndex() const { return BufIndex; }
 
     // Returns the number of bytes remaining in the current (possibly partially
     // advanced) iovec window — used by OnComplete to detect short I/O.
@@ -102,10 +106,13 @@ public:
     // Reset all submission/completion state so the object can be reused from a pool.
     // Must be called before PrepareIov() when recycling an operation.
     void ResetSubmissionState() {
+        SubmitCycles = 0;
         Result = 0;
         OperationType = ENOT_SET;
         TotalSize = 0;
         DiskOffset = 0;
+        FixedBuffer = false;
+        BufIndex = 0;
 #if defined(__linux__)
         Iov.clear();
         IovBegin = 0;
@@ -123,6 +130,13 @@ public:
 #endif
 
 private:
+    // Set by TUringRouter::ReadFixed/WriteFixed before the operation is handed
+    // to the I/O thread.
+    void SetFixedBuffer(ui16 bufIndex) {
+        FixedBuffer = true;
+        BufIndex = bufIndex;
+    }
+
     // Filled by TUringRouter on completion
     i32 Result = 0;  // io_uring cqe->res: bytes transferred on success, -errno on failure
 
@@ -136,6 +150,11 @@ private:
     ui64 TotalSize = 0;
 
     ui64 DiskOffset = 0;
+
+    // Fixed-buffer operations must remember their registered-buffer index
+    // until the I/O thread prepares the SQE.
+    bool FixedBuffer = false;
+    ui16 BufIndex = 0;
 
 #if defined(__linux__)
     // Iovec array for readv/writev submissions.  Supports scatter-gather: holds one

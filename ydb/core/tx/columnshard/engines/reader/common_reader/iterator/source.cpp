@@ -160,6 +160,7 @@ ui32 IDataSource::GetRecordsCount() const {
 void IDataSource::OnStartProcessing() {
     AFL_VERIFY(!SourceCreatedTimestamp);
     SourceCreatedTimestamp = TMonotonic::Now();
+    GetContext()->GetCommonContext()->GetCounters().OnSourceStartProcessing(IsConflicting());
     if (!NLWTrace::HasShuttles(DataSourceOrbit) && !NLWTrace::HasShuttles(*GetContext()->GetCommonContext()->GetScanOrbit()) &&
         !LWPROBE_ENABLED(StartSourceProcessing) && !LWPROBE_ENABLED(ScanStartSource)) {
         return;

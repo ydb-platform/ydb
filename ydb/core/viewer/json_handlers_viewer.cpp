@@ -31,6 +31,7 @@
 #include "viewer_query.h"
 #include "viewer_render.h"
 #include "viewer_storage.h"
+#include "viewer_computation_graph.h"
 #include "viewer_storage_usage.h"
 #include "viewer_tabletcounters.h"
 #include "viewer_tenantinfo.h"
@@ -317,6 +318,10 @@ void InitViewerPlan2SvgJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/plan2svg", new TJsonHandler<TJsonPlanToSvg>(TJsonPlanToSvg::GetSwagger()));
 }
 
+void InitViewerComputationGraphJsonHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/computation_graph", new TJsonHandler<TJsonComputationGraph>(TJsonComputationGraph::GetSwagger()));
+}
+
 void InitViewerSimpleCounterHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/simple_counter", new THttpHandler<TViewerSimpleCounter>());
 }
@@ -374,6 +379,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerCheckAccessJsonHandler(jsonHandlers);
     InitViewerFeatureFlagsJsonHandler(jsonHandlers);
     InitViewerPlan2SvgJsonHandler(jsonHandlers);
+    InitViewerComputationGraphJsonHandler(jsonHandlers);
     InitViewerSimpleCounterHandler(jsonHandlers);
     InitViewerMultipartCounterHandler(jsonHandlers);
     InitViewerTextStreamCounterHandler(jsonHandlers);

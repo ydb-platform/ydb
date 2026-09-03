@@ -96,6 +96,7 @@ SRCS(
     viewer_request.h
     viewer_storage.h
     viewer_storage_stats.h
+    viewer_computation_graph.h
     viewer_storage_usage.h
     viewer_sysinfo.h
     viewer_tabletcounters.h
@@ -870,6 +871,7 @@ PEERDIR(
     ydb/core/viewer/json
     ydb/core/viewer/yaml
     ydb/core/viewer/protos
+    ydb/library/computation_graph
     ydb/library/persqueue/topic_parser
     ydb/library/yaml_config
     ydb/public/api/protos

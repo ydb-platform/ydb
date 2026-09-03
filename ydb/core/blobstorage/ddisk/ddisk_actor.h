@@ -1123,7 +1123,8 @@ namespace NKikimr::NDDisk {
                 // behavior. Declared last so it never conflicts with designated-initializer ordering
                 // at existing call sites that only name fields up to PayloadChecksums.
                 ui8 DirectBlockGroupIndex = 0;
-
+                bool ChecksumsDisabled = false;
+                ui64 HeaderUniqueId;
                 TRope JoinData(ui32 sectorSize);
             };
 
@@ -1147,6 +1148,7 @@ namespace NKikimr::NDDisk {
         };
 
         ui64 PersistentBufferBatchWriteCookie = 0;
+        ui64 NextPersistentBufferHeaderUniqueId = 0;
         absl::flat_hash_map<TPersistentBufferLocation, absl::flat_hash_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
         absl::flat_hash_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
@@ -1165,7 +1167,13 @@ namespace NKikimr::NDDisk {
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
         bool PersistentBufferReady = false;
 
-        absl::flat_hash_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
+        struct TPersistentBufferDataSectorInfo {
+            ui64 Checksum;
+            ui64 HeaderUniqueId;
+        };
+        // During restoration every data sector is inspected once for both
+        // on-disk formats; the record header flag selects the value to validate.
+        absl::flat_hash_map<ui64, std::vector<TPersistentBufferDataSectorInfo>> PersistentBufferDataSectorsInfo;
         absl::flat_hash_set<ui32> PersistentBufferAllocatedChunks;
         absl::flat_hash_set<ui32> PersistentBufferRestoringChunks;
 
@@ -1183,7 +1191,7 @@ namespace NKikimr::NDDisk {
         void IssuePersistentBufferChunkAllocation();
         void ProcessDeallocatePersistentBufferChunk(bool forceToNextChunk = false);
         void ProcessPersistentBufferQueue();
-        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors, const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex = 0);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors, const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex = 0, ui64 headerUniqueId = 0);
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBufferData(TRope& data, std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);

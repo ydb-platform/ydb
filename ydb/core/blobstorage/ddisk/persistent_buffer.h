@@ -14,9 +14,14 @@ namespace NKikimr::NDDisk {
     struct TPersistentBufferSectorInfo {
         ui64 ChunkIdx : 32;
         ui64 SectorIdx : 16;
+        // Used for either format when the data sector's first byte (checksum or
+        // sector index) equals the persistent-buffer header marker.
         ui64 HasSignatureCorrection : 1;
         ui64 Reserved : 15;
-        ui64 Checksum : 64;
+        // In the checksum-free format this stores the original first eight data
+        // bytes; ChunkIdx/SectorIdx form the expected sector index. The format is
+        // selected exclusively by TPersistentBufferHeader::CHECKSUMS_DISABLED.
+        ui64 ChecksumOrData : 64;
     };
 
     // DirectBlockGroupIndex extends the persistent buffer key from plain TabletId to
@@ -56,6 +61,10 @@ namespace NKikimr::NDDisk {
             // [OffsetInBytes, OffsetInBytes + Size). Empty when the record was written without
             // checksums (legacy / internal writes) - opt-in, mirrors the wire-level semantics.
             std::vector<ui64> PayloadChecksums;
+            // The on-disk header determines this independently of the current setting,
+            // allowing records written in both formats to coexist during migration.
+            bool ChecksumsDisabled = false;
+            ui64 HeaderUniqueId;
         };
 
         std::map<ui64, TRecord> Records;

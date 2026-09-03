@@ -268,6 +268,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasListPersistentBufferRetryPeriodMilliseconds()) {
                     pbufferFormat.ListPersistentBufferRetryPeriodMilliseconds = Cfg->PBufferConfig->GetListPersistentBufferRetryPeriodMilliseconds();
                 }
+                if (Cfg->PBufferConfig->HasEnableChecksums()) {
+                    pbufferFormat.EnableChecksums = Cfg->PBufferConfig->GetEnableChecksums();
+                }
                 if (Cfg->PBufferConfig->HasPreallocateFreeSpaceThresholdPercent()) {
                     auto newValue = Cfg->PBufferConfig->GetPreallocateFreeSpaceThresholdPercent();
                     if (newValue >= 100) {

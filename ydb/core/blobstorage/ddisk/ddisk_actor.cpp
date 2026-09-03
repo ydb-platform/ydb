@@ -119,7 +119,7 @@ namespace {
         DiskFd = std::move(diskFd);
         InitPersistentBuffer();
         for (auto idx : initPersistentBufferChunks) {
-            auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
+            auto [it, inserted] = PersistentBufferDataSectorsInfo.insert({idx, {}});
             it->second.resize(SectorInChunk);
             if (!inserted) {
                 YDB_LOG_ERROR("TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log",

@@ -23,7 +23,7 @@ CREATE TOPIC topic_path (
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — список [кодеков](../../../../concepts/topic.md#message-codec), поддерживаемых читателем.
+* `supported_codecs` — список [кодеков](../../../concepts/topic.md#message-codec), поддерживаемых читателем.
 
 {% endif %}
 
@@ -43,7 +43,7 @@ CREATE TOPIC topic_path (
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — список [кодеков](../../../../concepts/topic.md#message-codec), поддерживаемых топиком. Тип значения — `String`.
+* `supported_codecs` — список [кодеков](../../../concepts/topic.md#message-codec), поддерживаемых топиком. Тип значения — `String`.
 
 {% endif %}
 

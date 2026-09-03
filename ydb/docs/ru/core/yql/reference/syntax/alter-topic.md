@@ -40,7 +40,7 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — список [кодеков](../../../../concepts/topic.md#message-codec), поддерживаемых топиком. Тип значения — `String`.
+* `supported_codecs` — список [кодеков](../../../concepts/topic.md#message-codec), поддерживаемых топиком. Тип значения — `String`.
 
 {% endif %}
 
@@ -125,7 +125,7 @@ ALTER TOPIC topic_path ADD CONSUMER consumer_name [WITH (option = value[, ...])]
 * `important`— определяет важного читателя. Никакие данные из топика не будут удалены, пока все важные читатели их не прочитали. Тип значения — `boolean`, значение по умолчанию: `false`.
 * `read_from`— определяет момент времени записи сообщений, начиная с которого читатель будет получать данные. Данные, записанные ранее этого момента, прочитаны не будут. Тип значения: `Datetime` ИЛИ `Timestamp` или `integer` (unix-timestamp в виде числа). Значение по умолчанию — `0` (чтение с самого раннего доступного в топике времени).
 {% if feature_topic_codecs %}
-* `supported_codecs` — список [кодеков](../../../../concepts/topic.md#message-codec), поддерживаемых читателем.
+* `supported_codecs` — список [кодеков](../../../concepts/topic.md#message-codec), поддерживаемых читателем.
 {% endif %}
 
 Следующая команда добавит к топику читателя с настройками по умолчанию:

@@ -187,7 +187,7 @@ namespace NKikimr::NHttpProxy {
                     signature.AccessKeyId = Signature->GetAccessKeyId();
                     signature.StringToSign = Signature->GetStringToSign();
                     signature.Signature = Signature->GetParsedSignature();
-                    signature.Service = "kinesis";
+                    signature.Service = Signature->GetService();
                     signature.Region = Signature->GetRegion();
                     signature.SignedAt = signedAt;
 
@@ -213,7 +213,7 @@ namespace NKikimr::NHttpProxy {
                 signature.set_signature(Signature->GetParsedSignature());
 
                 auto& v4params = *signature.mutable_v4_parameters();
-                v4params.set_service("kinesis");
+                v4params.set_service(Signature->GetService());
                 v4params.set_region(Signature->GetRegion());
 
                 const ui64 nanos = signedAt.NanoSeconds();

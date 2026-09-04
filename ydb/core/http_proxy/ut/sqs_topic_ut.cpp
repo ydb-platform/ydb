@@ -2880,6 +2880,26 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
     }
 
+    Y_UNIT_TEST_F(TestSqsSigV4ServiceIsForwardedToAccessService, TFixture) {
+        auto res = SendHttpRequest(
+            "/Root",
+            "AmazonSQS.ListQueues",
+            NJson::TJsonMap{},
+            FormAuthorizationStr("ru-central1", "sqs"));
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+
+        TString capturedService;
+        with_lock (AccessServiceMock.MetadataMutex) {
+            capturedService = AccessServiceMock.CapturedAuthenticateService;
+        }
+        if (capturedService.empty()) {
+            with_lock (AccessServiceMockV2.MetadataMutex) {
+                capturedService = AccessServiceMockV2.CapturedAuthenticateService;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(capturedService, "sqs");
+    }
+
     Y_UNIT_TEST_F(TestCreateQueueSetsDefaultTopicMessageRateLimit, TFixture) {
         const TString queueName = "CreateQueueDefaultRateLimit";
 

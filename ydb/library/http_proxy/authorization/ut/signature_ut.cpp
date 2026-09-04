@@ -35,7 +35,21 @@ bb579772317eb040ac9ed261061d46c1f17a8133879d6129b6e1c25292927e63)__";
         UNIT_ASSERT_EQUAL(canonicalizedRequest, signature.GetCanonicalRequest());
         UNIT_ASSERT_EQUAL(stringToSign, signature.GetStringToSign());
         UNIT_ASSERT_EQUAL("us-east-1", signature.GetRegion());
+        UNIT_ASSERT_EQUAL("service", signature.GetService());
         UNIT_ASSERT_EQUAL("5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31", signature.CalcSignature(superSecretAmazonKey));
+    }
+
+    Y_UNIT_TEST(TestParsesSqsServiceFromCredential) {
+        const TString request = \
+R"__(POST / HTTP/1.1
+Host:example.amazonaws.com
+X-Amz-Date:20150830T123600Z
+Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/ru-central1/sqs/aws4_request, SignedHeaders=host;x-amz-date, Signature=5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b)__";
+
+        TAwsRequestSignV4 signature(request);
+        UNIT_ASSERT_EQUAL("ru-central1", signature.GetRegion());
+        UNIT_ASSERT_EQUAL("sqs", signature.GetService());
+        UNIT_ASSERT_EQUAL("AKIDEXAMPLE", signature.GetAccessKeyId());
     }
 
     Y_UNIT_TEST(TestPostVanilla) {

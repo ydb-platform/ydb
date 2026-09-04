@@ -44,7 +44,7 @@ namespace NKikimr::NBlobDepot {
                     EndWithError(NKikimrProto::ERROR, "incorrect TEvBlockResult response");
                 } else if (const auto status = msg.Record.GetStatus(); status != NKikimrProto::OK) {
                     EndWithError(status, msg.Record.GetErrorReason(),
-                        msg.Record.GetIsTabletStorageInfoVersionObsolete());
+                        msg.Record.GetIsTabletStorageInfoVersionObsolete(), msg.Record.GetActualGeneration());
                 } else {
                     // update blocks cache
                     auto& blockContext = context->Obtain<TBlockContext>();

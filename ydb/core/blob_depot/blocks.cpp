@@ -65,8 +65,10 @@ namespace NKikimr::NBlobDepot {
                 response.SetStatus(NKikimrProto::ERROR);
                 response.SetErrorReason("obsolete tablet storage info version");
                 response.SetIsTabletStorageInfoVersionObsolete(true);
+                response.SetActualGeneration(block.BlockedGeneration);
             } else if (hasBlock && !block.CanSetNewBlock(BlockedGeneration, IssuerGuid)) {
                 response.SetStatus(Version == block.Version ? NKikimrProto::ALREADY : NKikimrProto::ERROR);
+                response.SetActualGeneration(block.BlockedGeneration);
                 if (Version > block.Version) {
                     response.SetErrorReason("generation check failed while increasing tablet storage info version");
                 }
@@ -114,6 +116,7 @@ namespace NKikimr::NBlobDepot {
         std::unique_ptr<IEventHandle> Response;
         ui32 BlocksPending = 0;
         ui32 RetryCount = 0;
+        ui32 ActualGeneration = 0;
         THashSet<ui32> NodesWaitingForPushResult;
         std::weak_ptr<TToken> Token;
 
@@ -145,6 +148,7 @@ namespace NKikimr::NBlobDepot {
             } else {
                 auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
                 r.SetStatus(NKikimrProto::ALREADY);
+                r.SetActualGeneration(block.BlockedGeneration);
                 Finish();
                 return true;
             }
@@ -270,6 +274,7 @@ namespace NKikimr::NBlobDepot {
                 {"blockedTabletId", TabletId},
                 {"blockedGeneration", BlockedGeneration},
                 {"groupId", ev->Cookie});
+            ActualGeneration = Max(ActualGeneration, ev->Get()->ActualGeneration);
             switch (ev->Get()->Status) {
                 case NKikimrProto::OK:
                     if (!--BlocksPending) {
@@ -307,6 +312,8 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Finish() {
+            auto& record = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+            record.SetActualGeneration(Max(ActualGeneration, record.GetActualGeneration()));
             TActivationContext::Send(Response.release());
             PassAway();
         }

@@ -418,7 +418,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
 
                 if (checks) {
                     // DROP TABLE statement has no info is it a drop of row or column table
-                    return {CreateDropColumnTable(nextId, tx)};
+                    return DropColumnTableWithLocalIndexes(nextId, tx, context);
                 }
             } else {
                 checks

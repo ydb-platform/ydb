@@ -44,6 +44,11 @@ public:
 
     TMutex UserIpMutex;
     TString CapturedXUserIP;
+<<<<<<< HEAD
+=======
+    TString CapturedUserAgent;
+    TString CapturedAuthenticateService;
+>>>>>>> 1a9063a1faf ([http_proxy] Use SigV4 service from the request instead of hardcoded kinesis (#52182))
 
     template <class TResponseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
@@ -61,10 +66,22 @@ public:
         yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override
     {
         TString key;
+<<<<<<< HEAD
         if (request->has_signature()) {
             key = request->signature().v4_parameters().service();
         } else {
             key = request->iam_token();
+=======
+        with_lock (MetadataMutex) {
+            CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+                key = CapturedAuthenticateService;
+            } else {
+                key = request->iam_token();
+            }
+>>>>>>> 1a9063a1faf ([http_proxy] Use SigV4 service from the request instead of hardcoded kinesis (#52182))
         }
 
         auto it = AuthenticateData.find(key);
@@ -118,6 +135,11 @@ public:
 
     TMutex UserIpMutex;
     TString CapturedXUserIP;
+<<<<<<< HEAD
+=======
+    TString CapturedUserAgent;
+    TString CapturedAuthenticateService;
+>>>>>>> 1a9063a1faf ([http_proxy] Use SigV4 service from the request instead of hardcoded kinesis (#52182))
 
     template <class TResponseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
@@ -135,10 +157,22 @@ public:
         yandex::cloud::priv::accessservice::v2::AuthenticateResponse* response) override
     {
         TString key;
+<<<<<<< HEAD
         if (request->has_signature()) {
             key = request->signature().v4_parameters().service();
         } else {
             key = request->iam_token();
+=======
+        with_lock (MetadataMutex) {
+            CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+                key = CapturedAuthenticateService;
+            } else {
+                key = request->iam_token();
+            }
+>>>>>>> 1a9063a1faf ([http_proxy] Use SigV4 service from the request instead of hardcoded kinesis (#52182))
         }
 
         auto it = AuthenticateData.find(key);
@@ -185,6 +219,14 @@ public:
         {
             std::lock_guard guard(UserIpMutex);
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+<<<<<<< HEAD
+=======
+            CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+            }
+>>>>>>> 1a9063a1faf ([http_proxy] Use SigV4 service from the request instead of hardcoded kinesis (#52182))
         }
 
         for (const auto& action : request->actions().items()) {

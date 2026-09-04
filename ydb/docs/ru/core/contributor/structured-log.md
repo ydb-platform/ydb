@@ -131,10 +131,7 @@ YDB_LOG_CTX_COMP(ctx, prio, comp, message, ...values...)
 1. Сообщение без параметров:
 
 ```cpp
-YDB_LOG_CTX_COMP(env, PRI_INFO, 1, "Module started");
-```
-
-В данном примере происходит запись сообщения с текстом `Module started` без дополнительных параметров. Для передачи сообщения актору логирования используется контекст исполнения `env`, а в качестве кода компонента передаётся `1`.
+YDB_LOG_CTX_COMP(ctx, PRI_INFO, 1, "Module started");
 
 2. Сообщение с параметрами:
 
@@ -290,7 +287,7 @@ YDB_LOG_CTX(env, PRI_ERROR, "Unable to open file",
 ```cpp
 #define YDB_LOG_THIS_FILE_COMPONENT 1
 ...
-YDB_LOG_ERROR_CTX(env, PRI_ERROR, "Unable to open file",
+YDB_LOG_ERROR_CTX(env, "Unable to open file",
     {"path", filename},
     {"errorCode", err});
 ```
@@ -339,7 +336,7 @@ void MyFunction(const std::string& filename) {
         return;
     }
     ...
-    YDB_LOG_NOTICE("MyFunction successed",
+    YDB_LOG_NOTICE("MyFunction succeeded",
         context);                               // Use message parameters
 }
 ```
@@ -389,7 +386,7 @@ context.RemoveValue("socket");
 void MyFunction() {
     // Create message parameters
     auto context = YDB_LOG_CREATE_MESSAGE(
-        {"operation", "read"}
+        {"operation", "read"},
         {"path", filename});
     ...
     if (err != 0 ) {
@@ -427,7 +424,7 @@ void MyFunction() {
     if (errorCode != 0 ) {
         YDB_LOG_ERROR("MyFunction failed",     // К сообщению будут прикреплены параметры path и error
             {"error", errorCode});
-        return l;
+        return;
     }
     ...
     YDB_LOG_NOTICE("MyFunction successed");    // К сообщению будет прикреплен параметры path
@@ -477,7 +474,7 @@ void MyFunction() {
 - если текст представляет собой отдельное предложение, то точка в конце сообщения не ставится;
 - если текст состоит из нескольких предложений, то они разделяются точками, но после последнего предложения точка не ставится.
 
-2. Текст может содержать имена классов и функций. Если актор логирует факт получения некоторого сообщения, то хорошей практикой является логирование с текстом "Handle <имя класса—события>".
+2. Текст может содержать имена классов и функций. Если актор логирует факт получения некоторого сообщения, то хорошей практикой является логирование с текстом `Handle <имя класса—события>`.
 3. Сообщения являются фиксированным текстом без динамически формируемых фрагментов.
 4. Вся динамическая информация, известная только на момент исполнения, должна помещаться в виде прикрепляемых параметров.
 
@@ -494,9 +491,6 @@ YDB_LOG_ERROR_CTX(env, "Unable to open file",
 
 Формируемое описание события выглядит так (параметры сообщения перечисляются в алфавитном порядке):
 
-``
-Unable to open file (errorCode=..., path=...)
-``
 
 {% endcut %}
 
@@ -543,11 +537,11 @@ YDB_LOG_INFO("Started transaction",
     {"txId", transactionId});
 ...
 YDB_LOG_INFO("Transaction modifies table",
-    {"tableId", queryId});
+    {"tableId", queryId},
     {"txId", transactionId});
 ...
 YDB_LOG_INFO("Query commits transaction",
-    {"queryId", queryId});
+    {"queryId", queryId},
     {"txId", transactionId});
 ...
 ```
@@ -574,16 +568,6 @@ YDB_LOG_INFO("Query commits transaction",
 
 3. Названия параметров пишутся в `camelCase`.
 
-{% cut "Почему выбран camelCase" %}
-
-Выбор `camelCase` сделан исходя из следующих соображений:
-
-- для многих сущностей уже есть устоявшиеся названия, которые уже пишутся `camelCase`;
-- до перехода на структурированное логирование для обозначения параметров в тексте сообщений использовался `camelCase`;
-- использование `camelCase` согласуется со стилем именования переменных в исходном коде системы;
-- как правило, названия параметров являются короткими строками, состоящими из 2—3 слов. В данном случае, использование `snake_case` не добавит наглядности.
-
-{% endcut %}
 
 ### Частные рекомендации по именованию отдельных параметров
 

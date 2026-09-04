@@ -238,7 +238,13 @@ void TPartitionActor::HandleUpdateVolumeConfigDuringDelete(
         "%s Reject UpdateVolumeConfig: partition is being deleted",
         LogTitle.GetWithTime().c_str());
 
-    ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
+    // Schemeshard aborts on any status other than OK or
+    // ERROR_UPDATE_IN_PROGRESS. The partition cannot apply a new config while
+    // it is tearing down, so report that the update is still in progress.
+    ReplyUpdateVolumeConfig(
+        ctx,
+        ev,
+        NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
 }
 
 // Ignore update vchunk config during delete

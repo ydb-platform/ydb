@@ -200,6 +200,35 @@ ui64 CreatePartitionTablet(
     return PartitionTabletId;
 }
 
+// Sends UpdateVolumeConfig to the partition tablet and returns the response.
+NKikimrBlockStore::TUpdateVolumeConfigResponse SendUpdateVolumeConfig(
+    TEnvironmentSetup& env,
+    const NKikimrBlockStore::TVolumeConfig& volumeConfig,
+    ui64 txId)
+{
+    auto updateEvent =
+        std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
+    updateEvent->Record.MutableVolumeConfig()->CopyFrom(volumeConfig);
+    updateEvent->Record.SetTxId(txId);
+
+    const TActorId& edge = env.Runtime->AllocateEdgeActor(
+        env.Settings.ControllerNodeId,
+        __FILE__,
+        __LINE__);
+
+    env.Runtime->SendToPipe(
+        PartitionTabletId,
+        edge,
+        updateEvent.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+
+    auto response = env.WaitForEdgeActorEvent<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
+    UNIT_ASSERT(response);
+    return response->Get()->Record;
+}
+
 TPersistResultFuture SendVChunkConfigUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
@@ -798,16 +827,16 @@ void ShouldWriteAndReadMultipleBlocks(
     const ui64 blocksPerStripe = DefaultStripeSize / blockSize;
     UNIT_ASSERT(blocksPerStripe > 0);
 
-    // FastPathService does not split requests; a write larger than a stripe
-    // trips GetVChunkIndex. Cap at one stripe and start on the last block of
-    // the first stripe so the payload still spans a stripe boundary.
+    // The load actor adapter forwards ranges to the fast path unsplit (the
+    // vhost path gets a splitter in TServer::CreateWrappers), so a request
+    // has to stay inside one stripe. Use the whole second stripe.
     const ui32 blocksToWrite =
         static_cast<ui32>(Min<ui64>(128, blocksPerStripe));
     TString expectedData = NUnitTest::RandomString(
         static_cast<size_t>(blockSize) * blocksToWrite,
         RandomNumber<ui32>());
 
-    const ui64 startIndex = blocksPerStripe - 1;
+    const ui64 startIndex = blocksPerStripe;
     {
         auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
         request->Record.SetStartIndex(startIndex);
@@ -1455,6 +1484,43 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(
             response->Get()->Record.GetOrigin(),
             PartitionTabletId);
+    }
+
+    Y_UNIT_TEST(ShouldReplyOkToRepeatedAppliedVolumeConfig)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        CreatePartitionTablet(env);
+
+        const auto volumeConfig = CreateVolumeConfig(32768);
+        const auto response = SendUpdateVolumeConfig(env, volumeConfig, 2);
+        UNIT_ASSERT(response.GetStatus() == NKikimrBlockStore::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
+    }
+
+    Y_UNIT_TEST(ShouldReplyUpdateInProgressToNewerVolumeConfig)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        CreatePartitionTablet(env);
+
+        auto volumeConfig = CreateVolumeConfig(32768);
+        volumeConfig.SetVersion(1);
+        const auto response = SendUpdateVolumeConfig(env, volumeConfig, 2);
+        UNIT_ASSERT(
+            response.GetStatus() ==
+            NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
 
     // Test implementation for IndirectWrite write mode

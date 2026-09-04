@@ -716,13 +716,29 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         msg->Record.GetVolumeConfig().GetVersion());
 
     if (DDiskBlockGroupAllocated) {
-        LOG_ERROR(
+        // The config is already applied and the partition cannot be
+        // reconfigured while it serves IO. Schemeshard aborts on any status
+        // other than OK or ERROR_UPDATE_IN_PROGRESS, so answer a repeated
+        // delivery of the applied config idempotently and report a newer one
+        // as not applied yet.
+        const ui64 appliedVersion = VolumeConfig.GetVersion();
+        const ui64 requestedVersion =
+            msg->Record.GetVolumeConfig().GetVersion();
+        const auto status = requestedVersion <= appliedVersion
+                                ? NKikimrBlockStore::OK
+                                : NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS;
+
+        LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Already has ddisk connections",
-            LogTitle.GetWithTime().c_str());
+            "%s Already has ddisk connections, applied version %lu, "
+            "requested version %lu, status %s",
+            LogTitle.GetWithTime().c_str(),
+            appliedVersion,
+            requestedVersion,
+            NKikimrBlockStore::EStatus_Name(status).c_str());
 
-        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
+        ReplyUpdateVolumeConfig(ctx, ev, status);
         return;
     }
 

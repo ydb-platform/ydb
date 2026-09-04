@@ -1,4 +1,6 @@
 
+#include "tablet_sys.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -2103,7 +2105,8 @@ bool TTablet::StopTablet(
                 FollowerStStGuardian = { };
             }
 
-            ReportTabletStateChange(TTabletStateInfo::Terminating, ActualGeneration);
+            const ui32 reportGeneration = ActualGeneration ? ActualGeneration : SuggestedGeneration;
+            ReportTabletStateChange(TTabletStateInfo::Terminating, reportGeneration);
             SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating);
         }
 

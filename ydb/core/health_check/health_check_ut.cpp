@@ -765,10 +765,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
         UNIT_ASSERT_C(issue, "Issue of type " << types.front() << " not found");
         for (auto it = std::next(types.begin()); it != types.end(); ++it) {
-            UNIT_ASSERT_GE(issue->reason().size(), 0);
-            const auto reasonIt = issueById.find(issue->reason(0));
-            UNIT_ASSERT_C(reasonIt != issueById.end(), "Reason " << issue->reason(0) << " of " << issue->type() << " issue not found");
-            issue = reasonIt->second;
+            UNIT_ASSERT_C(issue->reason_size() > 0, "Issue " << issue->type() << " has no reasons");
+            const auto& reasonId = issue->reason(0);
+            const auto reasonIt = issueById.find(reasonId);
+            UNIT_ASSERT_C(reasonIt != issueById.end(), "Reason " << reasonId << " of " << issue->type() << " issue not found");
             UNIT_ASSERT_VALUES_EQUAL(issue->type(), *it);
         }
     }

@@ -1560,6 +1560,10 @@ TSession::TSession(const TActorId& pipe)
             , Order(RandomNumber<size_t>()) {
 }
 
+bool TSession::IsPipeCacheSession() const {
+    return PhysicalPipe && PhysicalPipe != Pipe;
+}
+
 bool TSession::WithGroups() const { return !Partitions.empty(); }
 
 template<typename TCollection>
@@ -1822,29 +1826,12 @@ void TBalancer::DropSession(absl::flat_hash_map<TActorId, std::unique_ptr<TSessi
                             const TActorContext& ctx)
 {
     auto& session = it->second;
-    if (!session->SessionName.empty()) {
-        YDB_LOG_NOTICE("Dropping reading session",
-            {"logPrefix", LogPrefix()},
-            {"pipe", session->Pipe},
-            {"physicalPipe", session->PhysicalPipe},
-            {"sessionClientId", session->ClientId},
-            {"sessionName", session->SessionName});
-
-        auto* consumer = GetConsumer(session->ClientId);
-        if (consumer) {
-            consumer->UnregisterReadingSession(session.get(), ctx);
-
-            if (consumer->Sessions.empty()) {
-                Notify(consumer->ConsumerName, NKikimrPQ::TEvBalancingSubscribeNotify::FREE, ctx);
-                Consumers.erase(consumer->ConsumerName);
-            } else {
-                consumer->ScheduleBalance(ctx);
-            }
-        }
-    } else {
+    if (session->SessionName.empty()) {
         YDB_LOG_INFO("Dropping pipe without reading session",
             {"logPrefix", LogPrefix()},
             {"pipe", session->Pipe});
+    } else {
+        ClearReadingSession(session.get(), ctx);
     }
 
     if (session->IsPipeCacheSession()) {
@@ -1857,6 +1844,39 @@ void TBalancer::DropSession(absl::flat_hash_map<TActorId, std::unique_ptr<TSessi
     }
 
     Sessions.erase(it);
+}
+
+void TBalancer::ClearReadingSession(TSession* session, const TActorContext& ctx) {
+    if (!session || session->SessionName.empty()) {
+        return;
+    }
+
+    YDB_LOG_NOTICE("Clearing reading session",
+        {"logPrefix", LogPrefix()},
+        {"pipe", session->Pipe},
+        {"physicalPipe", session->PhysicalPipe},
+        {"sessionClientId", session->ClientId},
+        {"sessionName", session->SessionName});
+
+    auto* consumer = GetConsumer(session->ClientId);
+    if (consumer) {
+        consumer->UnregisterReadingSession(session, ctx);
+
+        if (consumer->Sessions.empty()) {
+            Notify(consumer->ConsumerName, NKikimrPQ::TEvBalancingSubscribeNotify::FREE, ctx);
+            Consumers.erase(consumer->ConsumerName);
+        } else {
+            consumer->ScheduleBalance(ctx);
+        }
+    }
+
+    session->ClientId.clear();
+    session->SessionName.clear();
+    session->Sender = {};
+    session->Partitions.clear();
+    session->ClientNode.clear();
+    session->ProxyNodeId = 0;
+    session->CreateTimestamp = {};
 }
 
 void TBalancer::DropSessionsOnPhysicalPipe(const TActorId& physicalPipe, const TActorContext& ctx) {
@@ -2040,6 +2060,61 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     auto* consumer = it->second.get();
     consumer->RegisterReadingSession(session, ctx);
     consumer->ScheduleBalance(ctx);
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvUnregisterClient::TPtr& ev, const TActorContext& ctx) {
+    const auto& r = ev->Get()->Record;
+    TActorId pipe = ActorIdFromProto(r.GetPipeClient());
+
+    YDB_LOG_NOTICE("Consumer unregister session for pipe session",
+        {"logPrefix", LogPrefix()},
+        {"consumerName", r.GetClientId()},
+        {"pipe", pipe},
+        {"session", r.GetSession()});
+
+    if (!pipe) {
+        YDB_LOG_CRIT("Ignored the session unregistration with empty Pipe",
+            {"logPrefix", LogPrefix()});
+        return;
+    }
+
+    auto jt = Sessions.find(pipe);
+    if (jt == Sessions.end()) {
+        YDB_LOG_DEBUG("Unregister for unknown pipe session",
+            {"logPrefix", LogPrefix()},
+            {"pipe", pipe},
+            {"session", r.GetSession()});
+        return;
+    }
+
+    auto* session = jt->second.get();
+    if (!session->SessionName.empty()) {
+        if (r.HasSession() && !r.GetSession().empty() && session->SessionName != r.GetSession()) {
+            YDB_LOG_CRIT("Ignored unregister with mismatched session name",
+                {"logPrefix", LogPrefix()},
+                {"pipe", pipe},
+                {"expected", session->SessionName},
+                {"got", r.GetSession()});
+            return;
+        }
+        if (r.HasClientId() && !r.GetClientId().empty() && session->ClientId != r.GetClientId()) {
+            YDB_LOG_CRIT("Ignored unregister with mismatched consumer",
+                {"logPrefix", LogPrefix()},
+                {"pipe", pipe},
+                {"expected", session->ClientId},
+                {"got", r.GetClientId()});
+            return;
+        }
+    }
+
+    if (session->IsPipeCacheSession()) {
+        // Logical holder on a shared pipe: remove completely. Physical pipe stays open.
+        DropSession(jt, ctx);
+        return;
+    }
+
+    // Dedicated pipe: drop reading session but keep the pipe slot (ServerActors).
+    ClearReadingSession(session, ctx);
 }
 
 void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx) {

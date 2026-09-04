@@ -274,9 +274,7 @@ struct TSession {
     // the number of pipes connected from SessionActor to ReadBalancer
     ui32 ServerActors = 0;
 
-    bool IsPipeCacheSession() const {
-        return PhysicalPipe && PhysicalPipe != Pipe;
-    }
+    bool IsPipeCacheSession() const;
 
     // The number of active partitions
     size_t ActivePartitionCount = 0;
@@ -339,6 +337,7 @@ public:
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext&);
 
     void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvUnregisterClient::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx);
 
@@ -361,6 +360,7 @@ private:
     void DropSession(absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>>::iterator it,
                      const TActorContext& ctx);
     void DropSessionsOnPhysicalPipe(const TActorId& physicalPipe, const TActorContext& ctx);
+    void ClearReadingSession(TSession* session, const TActorContext& ctx);
 
 private:
     TPersQueueReadBalancer& TopicActor;

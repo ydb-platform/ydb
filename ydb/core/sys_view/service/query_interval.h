@@ -2,6 +2,8 @@
 
 #include "query_history.h"
 
+#include <ydb/core/sys_view/common/query_metrics_limits.h>
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -17,8 +19,6 @@ class TQueryInterval {
     ui64 CompletedQueries = 0;
     ui64 RejectedQueries = 0;
     ui64 EvictedHashes = 0;
-
-    static constexpr size_t CountLimit = 1024;
 
 public:
     bool Empty() const;

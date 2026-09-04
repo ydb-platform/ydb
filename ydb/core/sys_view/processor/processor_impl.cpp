@@ -161,7 +161,7 @@ ui32 TSysViewProcessor::PersistMinuteQueryMetrics(NIceDb::TNiceDb& db,
     ui32 rank = 0;
 
     for (const auto& entry : rankedMetrics) {
-        if (rank == PublicMinuteLimit) {
+        if (rank == NQueryMetricsLimits::OneMinuteResultCount) {
             break;
         }
         auto key = std::make_pair(intervalEndUs, ++rank);
@@ -226,7 +226,7 @@ ui32 TSysViewProcessor::PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db,
 
     ui32 hourRank = 0;
     for (const auto& [_, queryHash] : rankedMetrics) {
-        if (hourRank == PublicHourLimit) {
+        if (hourRank == NQueryMetricsLimits::OneHourResultCount) {
             break;
         }
 
@@ -286,7 +286,8 @@ void TSysViewProcessor::EnforceMetricsOneHourByteLimit(
     }
 
     const auto plan = PlanQueryMetricsRetention(
-        bucketBytes, activeHourEnd.MicroSeconds(), MetricsOneHourByteLimit);
+        bucketBytes, activeHourEnd.MicroSeconds(),
+        NQueryMetricsLimits::OneHourHistoryByteLimit);
 
     for (ui64 hourEndUs : plan.BucketsToEvict) {
         auto it = MetricsOneHour.lower_bound(std::make_pair(hourEndUs, 0));

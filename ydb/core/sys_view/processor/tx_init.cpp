@@ -64,7 +64,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         if (!LoadQueryMetricsOneHour(
                 db,
                 Self->CurrentHourEnd.MicroSeconds(),
-                Self->MetricsOneHourByteLimit,
+                NQueryMetricsLimits::OneHourHistoryByteLimit,
                 Self->MetricsOneHourEvictBeforeHourEndUs,
                 loaded))
         {

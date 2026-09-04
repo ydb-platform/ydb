@@ -57,29 +57,42 @@ Y_UNIT_TEST_SUITE(TQueryIntervalTest) {
 
     Y_UNIT_TEST(BoundsCandidatesAndCountsLoss) {
         TQueryInterval interval;
-        for (ui64 hash = 1; hash <= 1024; ++hash) {
+        for (ui64 hash = 1;
+            hash <= NQueryMetricsLimits::NodeCandidateCount;
+            ++hash)
+        {
             interval.Add(MakeQueryStats(hash, 2));
         }
 
-        interval.Add(MakeQueryStats(2000, 1));
-        UNIT_ASSERT_VALUES_EQUAL(interval.GetCompletedQueries(), 1025);
-        UNIT_ASSERT_VALUES_EQUAL(interval.GetTotalCpuTimeUs(), 2049);
-        UNIT_ASSERT_VALUES_EQUAL(interval.GetRetainedCpuTimeUs(), 2048);
+        const ui64 rejectedHash = NQueryMetricsLimits::NodeCandidateCount + 1;
+        interval.Add(MakeQueryStats(rejectedHash, 1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            interval.GetCompletedQueries(), NQueryMetricsLimits::NodeCandidateCount + 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            interval.GetTotalCpuTimeUs(), 2 * NQueryMetricsLimits::NodeCandidateCount + 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            interval.GetRetainedCpuTimeUs(), 2 * NQueryMetricsLimits::NodeCandidateCount);
         UNIT_ASSERT_VALUES_EQUAL(interval.GetRejectedQueries(), 1);
         UNIT_ASSERT_VALUES_EQUAL(interval.GetEvictedHashes(), 0);
 
-        interval.Add(MakeQueryStats(2001, 3));
-        UNIT_ASSERT_VALUES_EQUAL(interval.GetCompletedQueries(), 1026);
-        UNIT_ASSERT_VALUES_EQUAL(interval.GetTotalCpuTimeUs(), 2052);
-        UNIT_ASSERT_VALUES_EQUAL(interval.GetRetainedCpuTimeUs(), 2049);
+        const ui64 admittedHash = rejectedHash + 1;
+        interval.Add(MakeQueryStats(admittedHash, 3));
+        UNIT_ASSERT_VALUES_EQUAL(
+            interval.GetCompletedQueries(), NQueryMetricsLimits::NodeCandidateCount + 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            interval.GetTotalCpuTimeUs(), 2 * NQueryMetricsLimits::NodeCandidateCount + 4);
+        UNIT_ASSERT_VALUES_EQUAL(
+            interval.GetRetainedCpuTimeUs(), 2 * NQueryMetricsLimits::NodeCandidateCount + 1);
         UNIT_ASSERT_VALUES_EQUAL(interval.GetRejectedQueries(), 1);
         UNIT_ASSERT_VALUES_EQUAL(interval.GetEvictedHashes(), 1);
 
         NKikimrSysView::TEvIntervalQuerySummary::TQuerySet summary;
         interval.FillSummary(summary);
-        UNIT_ASSERT_VALUES_EQUAL(summary.HashesSize(), 1024);
-        UNIT_ASSERT_VALUES_EQUAL(summary.ValuesSize(), 1024);
-        UNIT_ASSERT_VALUES_EQUAL(summary.GetHashes(0), 2001);
+        UNIT_ASSERT_VALUES_EQUAL(
+            summary.HashesSize(), NQueryMetricsLimits::NodeCandidateCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            summary.ValuesSize(), NQueryMetricsLimits::NodeCandidateCount);
+        UNIT_ASSERT_VALUES_EQUAL(summary.GetHashes(0), admittedHash);
         UNIT_ASSERT_VALUES_EQUAL(summary.GetValues(0), 3);
     }
 

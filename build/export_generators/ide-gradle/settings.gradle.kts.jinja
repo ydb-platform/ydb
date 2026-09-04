@@ -58,6 +58,24 @@ dependencyResolutionManagement {
             }
         }
 {%- endif %}
+    {%- if yandex_qa_maven_repo %}
+        maven {
+            name = "yandex_qa_releases"
+            url = uri("https://bucket.yandex-team.ru/v1/maven/yandex_qa_releases")
+            credentials {
+                username = bucketUsername
+                password = bucketPassword
+            }
+        }
+        maven {
+            name = "yandex_qa_snapshots"
+            url = uri("https://bucket.yandex-team.ru/v1/maven/yandex_qa_snapshots")
+            credentials {
+                username = bucketUsername
+                password = bucketPassword
+            }
+        }
+{%- endif %}
     }
 }
 

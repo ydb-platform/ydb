@@ -283,7 +283,7 @@ public:
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
         NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
-        IDqSchedulerContextPtr SchedulerContext;
+        IDqSchedulableWorkFactoryPtr SchedulableWorkFactory;
     };
 
     struct TLookupSourceArguments {

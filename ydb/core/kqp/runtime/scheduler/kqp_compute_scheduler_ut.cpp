@@ -1139,13 +1139,13 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
             void ExecuteAndPassAway(std::atomic<bool>& shutdown) {
                 std::thread([&shutdown, this] {
-                    while (!StartExecution(Now()) && !shutdown) {
-                        Sleep(CalculateDelay(Now()));
+                    std::optional<TDuration> delay;
+                    while ((delay = TryStartExecution(TMonotonic::Now())) && !shutdown) {
+                        Sleep(*delay);
                     }
 
-                    if (!shutdown) {
-                        bool forcedResume = false;
-                        StopExecution(forcedResume);
+                    if (!delay) {
+                        StopExecution();
                     }
                 }).join();
             }

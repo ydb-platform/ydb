@@ -154,7 +154,7 @@ def get_all_cgi_params(url):
                 END DO
             """
             if i == 0:
-                self.create_streaming_query(kikimr_udfs, path, sql)
+                self.create_streaming_query(kikimr_udfs, path, sql, stop_start=False)
             else:
                 kikimr_udfs.ydb_client.query(sql)
 

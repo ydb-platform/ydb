@@ -2480,6 +2480,42 @@ void PatchQueryPhysicalGraphForRescaling(
 
     Cerr << "[Rescaling] Phase 8: channels rebuilt for " << connectionsToRebuild.size() << " connections" << Endl;
 
+    // RestoreTasksGraphInfo() recreates runtime channels by appending them in
+    // their serialized-id order and checks that the generated id matches the
+    // one in the physical graph.  Removing channels of rescaled connections
+    // leaves holes in the original id sequence, while rebuilt channels are
+    // allocated above the old maximum.  Compact the ids after rebuilding so
+    // every channel can be addressed through TDqTasksGraph::GetChannel(id).
+    THashMap<ui64, ui64> channelIdRemapping;
+    ui64 nextChannelId = 0;
+    for (const auto& task : graph.GetTasks()) {
+        for (const auto& output : task.GetDqTask().GetOutputs()) {
+            for (const auto& channel : output.GetChannels()) {
+                channelIdRemapping.emplace(channel.GetId(), ++nextChannelId);
+            }
+        }
+    }
+    for (auto& task : *graph.MutableTasks()) {
+        for (auto& input : *task.MutableDqTask()->MutableInputs()) {
+            for (auto& channel : *input.MutableChannels()) {
+                const auto it = channelIdRemapping.find(channel.GetId());
+                YQL_ENSURE(it != channelIdRemapping.end(),
+                    "Input channel " << channel.GetId() << " has no output counterpart after rescaling");
+                channel.SetId(it->second);
+            }
+        }
+        for (auto& output : *task.MutableDqTask()->MutableOutputs()) {
+            for (auto& channel : *output.MutableChannels()) {
+                const auto it = channelIdRemapping.find(channel.GetId());
+                YQL_ENSURE(it != channelIdRemapping.end(),
+                    "Output channel " << channel.GetId() << " has no remapped id after rescaling");
+                channel.SetId(it->second);
+            }
+        }
+    }
+
+    Cerr << "[Rescaling] Phase 8.1: compacted " << nextChannelId << " channel ids" << Endl;
+
     // Phase 9: Generate new ReadRanges for PQ source stages.
     // Unlike the old round-robin redistribution of stale serialized ranges, we generate
     // fresh TDqReadTaskParams entries using the same formula as TPqDqIntegration::PartitionTopicRead():

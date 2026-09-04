@@ -175,6 +175,7 @@ struct TPlanProps {
     TSubplans Subplans;
     bool PgSyntax = false;
     std::optional<TPinnedNames> PinnedNames;
+    bool WithEffects = false;
 };
 
 }

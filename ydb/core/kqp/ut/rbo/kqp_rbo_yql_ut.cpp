@@ -619,6 +619,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 v Int64,
                 PRIMARY KEY (id)
             );
+
+            ALTER TABLE `/Root/dst` ADD INDEX Index1 GLOBAL ON (id, v);
+            ALTER TABLE `/Root/dst` ADD INDEX Index12 GLOBAL ON (v);
+
         )";
 
         auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();

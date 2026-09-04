@@ -10,6 +10,7 @@
 
 #include <ydb/library/actors/core/events.h>
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/request_info.h>
@@ -20,6 +21,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
@@ -114,9 +116,21 @@ public:
         const auto* request = GetProtoRequest();
         DiskId = request->GetDiskId();
         const TString storagePoolName = request->GetStoragePoolName();
-        const ui32 blockSize = request->GetBlockSize() ? request->GetBlockSize() : 4096;
+        const ui32 blockSize = request->GetBlockSize()
+            ? request->GetBlockSize()
+            : NYdb::NBS::NBlockStore::DefaultBlockSize;
         const ui64 blocksCount = request->GetBlocksCount() ? request->GetBlocksCount() : 32768;
         const ui32 storageMedia = request->GetStorageMedia();
+        if (!NYdb::NBS::NBlockStore::IsSupportedBlockSize(blockSize)) {
+            auto issue = NYql::TIssue(TStringBuilder()
+                << "Unsupported block size: " << blockSize
+                << " (allowed: power of two in ["
+                << NYdb::NBS::NBlockStore::DefaultBlockSize << ", "
+                << NYdb::NBS::NBlockStore::MaxBlockSize << "])");
+            Request_->RaiseIssue(issue);
+            Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            return;
+        }
 
         NKikimrBlockStore::TVolumeConfig volumeConfig;
         volumeConfig.SetBlockSize(blockSize);

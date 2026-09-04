@@ -359,6 +359,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             nbsService->StorageConfig,
             executors[dbgIndex],
             DiskDescription,
+            VolumeConfig.GetBlockSize(),
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
@@ -680,6 +681,27 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 
 ///////////////////////////////////////////////////////////////////////////////
 
+void TPartitionActor::ReplyUpdateVolumeConfig(
+    const NActors::TActorContext& ctx,
+    const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+    NKikimrBlockStore::EStatus status)
+{
+    auto response = std::make_unique<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
+    response->Record.SetTxId(ev->Get()->Record.GetTxId());
+    response->Record.SetOrigin(TabletID());
+    response->Record.SetStatus(status);
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Sending UpdateVolumeConfig response %s",
+        LogTitle.GetWithTime().c_str(),
+        NKikimrBlockStore::EStatus_Name(status).c_str());
+
+    ctx.Send(ev->Sender, response.release());
+}
+
 void TPartitionActor::HandleUpdateVolumeConfig(
     const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -694,21 +716,46 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         msg->Record.GetVolumeConfig().GetVersion());
 
     if (DDiskBlockGroupAllocated) {
-        LOG_ERROR(
+        // The config is already applied and the partition cannot be
+        // reconfigured while it serves IO. Schemeshard aborts on any status
+        // other than OK or ERROR_UPDATE_IN_PROGRESS, so answer a repeated
+        // delivery of the applied config idempotently and report a newer one
+        // as not applied yet.
+        const ui64 appliedVersion = VolumeConfig.GetVersion();
+        const ui64 requestedVersion =
+            msg->Record.GetVolumeConfig().GetVersion();
+        const auto status = requestedVersion <= appliedVersion
+                                ? NKikimrBlockStore::OK
+                                : NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS;
+
+        LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Already has ddisk connections",
-            LogTitle.GetWithTime().c_str());
+            "%s Already has ddisk connections, applied version %lu, "
+            "requested version %lu, status %s",
+            LogTitle.GetWithTime().c_str(),
+            appliedVersion,
+            requestedVersion,
+            NKikimrBlockStore::EStatus_Name(status).c_str());
 
-        auto response = std::make_unique<
-            NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-        response->Record.SetStatus(NKikimrBlockStore::ERROR);
-        ctx.Send(ev->Sender, response.release());
+        ReplyUpdateVolumeConfig(ctx, ev, status);
         return;
     }
 
     const auto& volumeConfig = msg->Record.GetVolumeConfig();
     Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
+
+    if (!IsSupportedBlockSize(volumeConfig.GetBlockSize())) {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Unsupported block size: %u",
+            LogTitle.GetWithTime().c_str(),
+            volumeConfig.GetBlockSize());
+
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
+        return;
+    }
 
     LOG_INFO(
         ctx,
@@ -719,20 +766,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 
     ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
-    // Send response back to volume
-    auto response = std::make_unique<
-        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-    response->Record.SetTxId(msg->Record.GetTxId());
-    response->Record.SetOrigin(TabletID());
-    response->Record.SetStatus(NKikimrBlockStore::OK);
-
-    LOG_INFO(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s Sending UpdateVolumeConfig response OK",
-        LogTitle.GetWithTime().c_str());
-
-    ctx.Send(ev->Sender, response.release());
+    ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
 void TPartitionActor::HandleUpdateVChunkConfig(

@@ -60,6 +60,8 @@
 
 #include <util/generic/intrlist.h>
 
+#include <variant>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SKELETON
 
 using namespace NKikimrServices;
@@ -76,6 +78,7 @@ namespace NKikimr {
                 EvCheckSnapshotExpiration = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvProcessLocalSyncDataQueue,
                 EvProcessLocalSyncDataQueueWakeup,
+                EvFreshSpaceCreditRetry,
             };
 
             struct TEvProcessLocalSyncDataQueue :
@@ -83,7 +86,35 @@ namespace NKikimr {
 
             struct TEvProcessLocalSyncDataQueueWakeup :
                 TEventLocal<TEvProcessLocalSyncDataQueueWakeup, EvProcessLocalSyncDataQueueWakeup> {};
+
+            struct TEvFreshSpaceCreditRetry :
+                TEventLocal<TEvFreshSpaceCreditRetry, EvFreshSpaceCreditRetry> {};
         };
+
+        using TMaintenanceEvent = std::variant<
+            TEvDelLogoBlobDataSyncLog::TPtr,
+            TEvAnubisOsirisPut::TPtr,
+            TEvRecoveredHugeBlob::TPtr,
+            TEvDetectedPhantomBlob::TPtr>;
+
+        struct TMaintenanceQueueItem {
+            TMaintenanceEvent Event;
+            ui64 Bytes;
+        };
+
+        using TFreshCreditWaitEvent = std::variant<
+            TEvBlobStorage::TEvVPut::TPtr,
+            TEvBlobStorage::TEvVMultiPut::TPtr,
+            TEvBlobStorage::TEvVBlock::TPtr,
+            TEvBlobStorage::TEvVCollectGarbage::TPtr>;
+
+        struct TFreshCreditWaitItem {
+            TFreshCreditWaitEvent Event;
+            ui64 Bytes;
+        };
+
+        static constexpr size_t MaxFreshMaintenanceEvents = 10'000;
+        static constexpr ui64 MaxFreshMaintenanceBytes = 64_MBs;
 
         ////////////////////////////////////////////////////////////////////////
         // WHITEBOARD SECTOR
@@ -199,6 +230,12 @@ namespace NKikimr {
         void LevelIndexCompactionFinished(const TActorContext &ctx) {
             // after commit to LevelIndex recalculate Level Satisfaction Ranks
             ProcessPostponedEvents(ctx, true);
+            if (!ReleaseSurplusFreshSpaceCredits(ctx)) {
+                RequestFreshSpaceCredits(ctx);
+            }
+            ProcessFreshMaintenanceQueue(ctx);
+            ProcessLocalSyncDataQueue(ctx);
+            ProcessFreshCreditWaitQueue(ctx);
         }
 
         void KickEmergencyPutQueue(const TActorContext &ctx) {
@@ -246,6 +283,7 @@ namespace NKikimr {
                         Hull->ApplyHugeBlobSize(MinHugeBlobInBytes, ctx);
                     }
                     ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
+                    RequestFreshSpaceCredits(ctx);
                 }
             }
         }
@@ -257,6 +295,10 @@ namespace NKikimr {
             }
             MinHugeBlobInBytes = alignedSize;
             IFaceMonGroup->MinHugeBlobInBytes(MinHugeBlobInBytes);
+            if (HullCtx) {
+                HullCtx->FreshSpaceTracker->UpdateMaxInPlaceLogoBlobSize(
+                    ui64(MinHugeBlobInBytes) + TDiskBlob::MaxHeaderSize);
+            }
             return true;
         }
 
@@ -470,6 +512,7 @@ namespace NKikimr {
             bool IssueKeepFlag = false;
             bool IgnoreBlock = false;
             TWriteSource WriteSource;
+            TFreshSpaceAdmission FreshSpaceAdmission;
 
             TVPutInfo(TLogoBlobID blobId, TRope &&buffer, std::optional<ui64> checksum,
                     std::optional<NKikimrBlobStorage::TChecksumType> checksumType,
@@ -492,6 +535,74 @@ namespace NKikimr {
         void UpdatePDiskWriteBytes(size_t size) {
             *PDiskWriteBytes += size; // actual size for small blobs may be up to one block, but it may be
             // batched along with other VDisk log entries on the PDisk
+        }
+
+        bool TryAdmitFreshSpace(const TFreshSpaceAdmission& admission, const TActorContext& ctx) {
+            auto& tracker = *HullCtx->FreshSpaceTracker;
+            if (tracker.TryAdmit(admission, GetFreshSpaceDebtChunks())) {
+                RequestFreshSpaceCredits(ctx);
+                return true;
+            }
+            RequestFreshSpaceCredits(ctx, &admission);
+            return false;
+        }
+
+        template<typename TEventPtr>
+        bool EnqueueFreshCreditWait(TEventPtr ev, ui64 bytes) {
+            if (!HullCtx->FreshSpaceTracker->HasPendingCreditOperation()) {
+                return false;
+            }
+            if (FreshCreditWaitQueue.size() >= MaxFreshMaintenanceEvents
+                    || bytes > MaxFreshMaintenanceBytes - FreshCreditWaitQueueBytes) {
+                return false;
+            }
+            FreshCreditWaitQueue.push_back({TFreshCreditWaitEvent(std::move(ev)), bytes});
+            FreshCreditWaitQueueBytes += bytes;
+            return true;
+        }
+
+        void ProcessFreshCreditWaitQueue(const TActorContext& ctx) {
+            size_t events = FreshCreditWaitQueue.size();
+            while (events-- && !FreshCreditWaitQueue.empty()) {
+                TFreshCreditWaitItem item = std::move(FreshCreditWaitQueue.front());
+                FreshCreditWaitQueue.pop_front();
+                Y_ABORT_UNLESS(item.Bytes <= FreshCreditWaitQueueBytes);
+                FreshCreditWaitQueueBytes -= item.Bytes;
+                std::visit([&](auto& ev) { Handle(ev, ctx); }, item.Event);
+            }
+        }
+
+        template<typename TEventPtr>
+        bool EnqueueFreshMaintenance(TEventPtr ev, ui64 bytes) {
+            if (FreshMaintenanceQueue.size() + LocalSyncDataQueue.size() >= MaxFreshMaintenanceEvents
+                    || bytes > MaxFreshMaintenanceBytes - FreshMaintenanceQueueBytes - LocalSyncDataQueueBytes) {
+                return false;
+            }
+            FreshMaintenanceQueue.push_back({TMaintenanceEvent(std::move(ev)), bytes});
+            FreshMaintenanceQueueBytes += bytes;
+            return true;
+        }
+
+        bool EnqueueLocalSyncData(TEvLocalSyncData::TPtr ev) {
+            const ui64 bytes = ev->Get()->ByteSize();
+            if (FreshMaintenanceQueue.size() + LocalSyncDataQueue.size() >= MaxFreshMaintenanceEvents
+                    || bytes > MaxFreshMaintenanceBytes - FreshMaintenanceQueueBytes - LocalSyncDataQueueBytes) {
+                return false;
+            }
+            LocalSyncDataQueue.push(std::move(ev));
+            LocalSyncDataQueueBytes += bytes;
+            return true;
+        }
+
+        void ProcessFreshMaintenanceQueue(const TActorContext& ctx) {
+            size_t events = FreshMaintenanceQueue.size();
+            while (events-- && !FreshMaintenanceQueue.empty()) {
+                TMaintenanceQueueItem item = std::move(FreshMaintenanceQueue.front());
+                FreshMaintenanceQueue.pop_front();
+                Y_ABORT_UNLESS(item.Bytes <= FreshMaintenanceQueueBytes);
+                FreshMaintenanceQueueBytes -= item.Bytes;
+                std::visit([&](auto& ev) { Handle(ev, ctx); }, item.Event);
+            }
         }
 
         template<typename TEvResult> struct TLoggedRecType {};
@@ -537,6 +648,7 @@ namespace NKikimr {
             auto loggedRec = new typename TLoggedRecType<TEvResult>::T(seg, confirmSyncLogAlso, id, ingress,
                 std::move(buffer), info.Checksum, std::move(result), sender, cookie, std::move(info.TraceId), handleClass,
                 SelfVDiskId, Config, VCtx);
+            loggedRec->SetFreshSpaceAdmission(std::move(info.FreshSpaceAdmission));
             intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
@@ -557,7 +669,7 @@ namespace NKikimr {
             UpdatePDiskWriteBytes(info.Buffer.GetSize());
             return std::make_unique<TEvHullWriteHugeBlob>(sender, cookie, info.BlobId, info.Ingress,
                 std::move(info.Buffer), ignoreBlock, info.IssueKeepFlag, handleClass, std::move(res),
-                &info.ExtraBlockChecks, info.WriteSource, rewriteBlob);
+                &info.ExtraBlockChecks, info.WriteSource, rewriteBlob, std::move(info.FreshSpaceAdmission));
         }
 
         THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
@@ -745,6 +857,30 @@ namespace NKikimr {
                 lsnCount += info.HullStatus.Status == NKikimrProto::OK;
             }
 
+            if (lsnCount) {
+                const TFreshSpaceAdmission admission =
+                    HullCtx->FreshSpaceTracker->MakeAdmission(EFreshDb::LogoBlobs, lsnCount);
+                if (!TryAdmitFreshSpace(admission, ctx)) {
+                    if (EnqueueFreshCreditWait(ev, ev->GetSize())) {
+                        return;
+                    }
+                    for (TVPutInfo& info : putsInfo) {
+                        if (info.HullStatus.Status == NKikimrProto::OK) {
+                            info.HullStatus = {NKikimrProto::OUT_OF_SPACE,
+                                "Fresh space credit exhausted", false};
+                        }
+                    }
+                    lsnCount = 0;
+                } else {
+                    for (TVPutInfo& info : putsInfo) {
+                        if (info.HullStatus.Status == NKikimrProto::OK) {
+                            info.FreshSpaceAdmission =
+                                HullCtx->FreshSpaceTracker->MakeAdmission(EFreshDb::LogoBlobs);
+                        }
+                    }
+                }
+            }
+
             TBatchedVec<NKikimrProto::EReplyStatus> statuses;
             for (auto &info : putsInfo) {
                 if (info.HullStatus.Postponed) {
@@ -907,6 +1043,17 @@ namespace NKikimr {
             }
             info.Ingress = *ingressOpt;
 
+            info.FreshSpaceAdmission = info.IsHugeBlob
+                ? HullCtx->FreshSpaceTracker->MakeMetadataAdmission(EFreshDb::LogoBlobs)
+                : HullCtx->FreshSpaceTracker->MakeAdmission(EFreshDb::LogoBlobs);
+            if (!TryAdmitFreshSpace(info.FreshSpaceAdmission, ctx)) {
+                if (EnqueueFreshCreditWait(ev, ev->GetSize())) {
+                    return;
+                }
+                ReplyError({NKikimrProto::OUT_OF_SPACE, "Fresh space credit exhausted", 0, false}, ev, ctx, now);
+                return;
+            }
+
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_PUT, "TEvVPut",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"result", ev->Get()->ToString()},
@@ -952,7 +1099,7 @@ namespace NKikimr {
             } else {
                 ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,
                     info.IssueKeepFlag, ev->Sender, ev->Cookie, handleClass, std::move(result), &info.ExtraBlockChecks,
-                    info.WriteSource),
+                    info.WriteSource, false, false, std::move(info.FreshSpaceAdmission)),
                     0, 0, std::move(info.TraceId));
             }
         }
@@ -980,6 +1127,8 @@ namespace NKikimr {
                 } else {
                     SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, VCtx, ev->Get()->HandleClass);
                 }
+
+                HullCtx->FreshSpaceTracker->CancelAdmission(msg->FreshSpaceAdmission);
 
                 return;
             } else if (writtenBeyondBarrier) {
@@ -1015,8 +1164,10 @@ namespace NKikimr {
             // prepare TLoggedRecVPutHuge
             auto traceId = ev->TraceId.Clone();
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVPutHuge(seg, confirmSyncLogAlso, Db->HugeKeeperID, ev,
-                    SelfVDiskId, Config, VCtx));
+            auto* loggedRec = new TLoggedRecVPutHuge(seg, confirmSyncLogAlso, Db->HugeKeeperID, ev,
+                SelfVDiskId, Config, VCtx);
+            loggedRec->SetFreshSpaceAdmission(std::move(msg->FreshSpaceAdmission));
+            intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHugeLogoBlob, dataToWrite, seg,
@@ -1034,6 +1185,16 @@ namespace NKikimr {
             TInstant now = TAppData::TimeProvider->Now();
             auto msg = ev->Get();
 
+            const TFreshSpaceAdmission freshSpaceAdmission =
+                HullCtx->FreshSpaceTracker->MakeMetadataAdmission(EFreshDb::LogoBlobs);
+            if (!TryAdmitFreshSpace(freshSpaceAdmission, ctx)) {
+                if (!EnqueueFreshMaintenance(ev, msg->ByteSize())) {
+                    ctx.Send(ev->Sender, new TEvDelLogoBlobDataSyncLogResult(msg->Id, msg->OrderId,
+                        NKikimrProto::OUT_OF_SPACE, now), 0, ev->Cookie);
+                }
+                return;
+            }
+
             TLsnSeg seg = Db->LsnMngr->AllocLsnForHullAndSyncLog();
             TString serializedLogRecord;
             NKikimrBlobStorage::THandoffDelLogoBlob dump;
@@ -1048,8 +1209,10 @@ namespace NKikimr {
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
             THullDbInsert insert{.Id=msg->Id, .Ingress=msg->Ingress};
-            intptr_t loggedRecId = LoggedRecsVault.Put(
-                    new TLoggedRecDelLogoBlobDataSyncLog(seg, confirmSyncLogAlso, insert, std::move(result), ev->Sender, ev->Cookie));
+            auto* loggedRec = new TLoggedRecDelLogoBlobDataSyncLog(seg, confirmSyncLogAlso, insert,
+                std::move(result), ev->Sender, ev->Cookie);
+            loggedRec->SetFreshSpaceAdmission(freshSpaceAdmission);
+            intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHandoffDelLogoBlob,
@@ -1232,6 +1395,16 @@ namespace NKikimr {
                 {"version", record.GetVersion()},
                 {"marker", "BSVS00"});
 
+            const TFreshSpaceAdmission freshSpaceAdmission =
+                HullCtx->FreshSpaceTracker->MakeAdmission(EFreshDb::Blocks);
+            if (!TryAdmitFreshSpace(freshSpaceAdmission, ctx)) {
+                if (EnqueueFreshCreditWait(ev, ev->Get()->GetCachedByteSize())) {
+                    return;
+                }
+                ReplyError(NKikimrProto::OUT_OF_SPACE, "Fresh space credit exhausted", ev, ctx, now);
+                return;
+            }
+
             TLsnSeg seg;
             ui32 actGen = 0;
             bool versionChanged = false;
@@ -1246,6 +1419,7 @@ namespace NKikimr {
             }
 
             if (checkStatus.Status != NKikimrProto::OK) {
+                HullCtx->FreshSpaceTracker->CancelAdmission(freshSpaceAdmission);
                 if (checkStatus.Postponed) {
                     Hull->PostponeReplyUntilCommitted(result.release(), ev->Sender, ev->Cookie, std::move(ev->TraceId),
                         checkStatus.Lsn);
@@ -1285,8 +1459,11 @@ namespace NKikimr {
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(new NSyncLog::TEvSyncLogPut(seg.Point(), tabletId, gen,
                 record.GetIssuerGuid()));
 
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVBlock(seg, true, tabletId, gen, issuerGuid,
-                std::move(result), ev->Sender, ev->Cookie));
+            bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
+            auto* loggedRec = new TLoggedRecVBlock(seg, confirmSyncLogAlso, tabletId, gen,
+                issuerGuid, std::move(result), ev->Sender, ev->Cookie);
+            loggedRec->SetFreshSpaceAdmission(freshSpaceAdmission);
+            intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
 
             // create log msg
@@ -1385,8 +1562,23 @@ namespace NKikimr {
 
             TLsnSeg seg;
             TBarrierIngress ingress(HullCtx->IngressCache.Get());
+            TFreshSpaceAdmission freshSpaceAdmission;
+            freshSpaceAdmission.Add(EFreshDb::LogoBlobs,
+                HullCtx->FreshSpaceTracker->EstimateMetadataBytes(
+                    record.KeepSize() + record.DoNotKeepSize()));
+            freshSpaceAdmission.Add(EFreshDb::Barriers,
+                HullCtx->FreshSpaceTracker->EstimateBytes(EFreshDb::Barriers,
+                    record.HasCollectGeneration()));
+            if (!TryAdmitFreshSpace(freshSpaceAdmission, ctx)) {
+                if (EnqueueFreshCreditWait(ev, ev->Get()->GetCachedByteSize())) {
+                    return;
+                }
+                ReplyError({NKikimrProto::OUT_OF_SPACE, "Fresh space credit exhausted"}, ev, ctx, now);
+                return;
+            }
             THullCheckStatus status = Hull->CheckGCCmdAndAllocLsn(ctx, record, ingress, &seg);
             if (status.Status != NKikimrProto::OK) {
+                HullCtx->FreshSpaceTracker->CancelAdmission(freshSpaceAdmission);
                 ReplyError(status, ev, ctx, now);
                 return;
             }
@@ -1403,7 +1595,9 @@ namespace NKikimr {
 
             auto traceId = ev->TraceId.Clone();
             TString data = ev->GetChainBuffer()->GetString();
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVCollectGarbage(seg, true, ingress, std::move(result), ev));
+            auto* loggedRec = new TLoggedRecVCollectGarbage(seg, true, ingress, std::move(result), ev);
+            loggedRec->SetFreshSpaceAdmission(freshSpaceAdmission);
+            intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureGC, data, seg, loggedRecCookie,
@@ -1753,13 +1947,22 @@ namespace NKikimr {
 #endif
 
             if (!LocalSyncDataQueue.empty()) {
-                LocalSyncDataQueue.push(ev);
+                if (!EnqueueLocalSyncData(ev)) {
+                    ReplyError(NKikimrProto::OUT_OF_SPACE, "Fresh maintenance queue is full", ev, ctx,
+                        TAppData::TimeProvider->Now());
+                    return;
+                }
                 ProcessLocalSyncDataQueue(ctx);
                 return;
             }
 
             if (!Config->EnableFreshSyncDataThrottling) {
-                ProcessLocalSyncData(ev, ctx);
+                if (!ProcessLocalSyncData(ev, ctx)) {
+                    if (!EnqueueLocalSyncData(ev)) {
+                        ReplyError(NKikimrProto::OUT_OF_SPACE, "Fresh maintenance queue is full", ev, ctx,
+                            TAppData::TimeProvider->Now());
+                    }
+                }
                 return;
             }
 
@@ -1782,15 +1985,25 @@ namespace NKikimr {
                 Hull->GetBarrierSyncDataSizeInFlight());
 
             if (freeLogoBlobsSpace == 0 || freeBlocksSpace == 0 || freeBarriersSpace == 0) {
-                LocalSyncDataQueue.push(ev);
+                if (!EnqueueLocalSyncData(ev)) {
+                    ReplyError(NKikimrProto::OUT_OF_SPACE, "Fresh maintenance queue is full", ev, ctx,
+                        TAppData::TimeProvider->Now());
+                }
                 return;
             }
 
-            ProcessLocalSyncData(ev, ctx);
+            if (!ProcessLocalSyncData(ev, ctx)) {
+                if (!EnqueueLocalSyncData(ev)) {
+                    ReplyError(NKikimrProto::OUT_OF_SPACE, "Fresh maintenance queue is full", ev, ctx,
+                        TAppData::TimeProvider->Now());
+                }
+            }
         }
 
         void HandleFreshCompactionStarted(const TActorContext &ctx) {
             ProcessLocalSyncDataQueue(ctx);
+            ProcessFreshMaintenanceQueue(ctx);
+            ProcessFreshCreditWaitQueue(ctx);
         }
 
         void HandleProcessLocalSyncDataQueue(const TActorContext &ctx) {
@@ -1803,13 +2016,39 @@ namespace NKikimr {
             ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
         }
 
-        void ProcessLocalSyncData(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
+        bool ProcessLocalSyncData(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
             TInstant now = TAppData::TimeProvider->Now();
             SyncLogIFaceGroup.LocalSyncMsgs()++;
 
             if (!OutOfSpaceLogic->Allow(ctx, ev)) {
                 ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
-                return;
+                return true;
+            }
+
+            TFreshSpaceAdmission freshSpaceAdmission;
+#ifdef UNPACK_LOCALSYNCDATA
+            freshSpaceAdmission.Add(EFreshDb::LogoBlobs,
+                HullCtx->FreshSpaceTracker->EstimateBytes(EFreshDb::LogoBlobs,
+                    ev->Get()->Extracted.LogoBlobs ? ev->Get()->Extracted.LogoBlobs->GetSize() : 0));
+            freshSpaceAdmission.Add(EFreshDb::Blocks,
+                HullCtx->FreshSpaceTracker->EstimateBytes(EFreshDb::Blocks,
+                    ev->Get()->Extracted.Blocks ? ev->Get()->Extracted.Blocks->GetSize() : 0));
+            freshSpaceAdmission.Add(EFreshDb::Barriers,
+                HullCtx->FreshSpaceTracker->EstimateBytes(EFreshDb::Barriers,
+                    ev->Get()->Extracted.Barriers ? ev->Get()->Extracted.Barriers->GetSize() : 0));
+#else
+            freshSpaceAdmission.Add(EFreshDb::LogoBlobs,
+                HullCtx->FreshSpaceTracker->EstimateBytes(EFreshDb::LogoBlobs,
+                    ev->Get()->LogoBlobsSize / (sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob))));
+            freshSpaceAdmission.Add(EFreshDb::Blocks,
+                HullCtx->FreshSpaceTracker->EstimateBytes(EFreshDb::Blocks,
+                    ev->Get()->BlocksSize / (sizeof(TKeyBlock) + sizeof(TMemRecBlock))));
+            freshSpaceAdmission.Add(EFreshDb::Barriers,
+                HullCtx->FreshSpaceTracker->EstimateBytes(EFreshDb::Barriers,
+                    ev->Get()->BarriersSize / (sizeof(TKeyBarrier) + sizeof(TMemRecBarrier))));
+#endif
+            if (!TryAdmitFreshSpace(freshSpaceAdmission, ctx)) {
+                return false;
             }
 
 #ifdef UNPACK_LOCALSYNCDATA
@@ -1829,14 +2068,16 @@ namespace NKikimr {
             auto traceId = ev->TraceId.Clone();
             TString data = ev->Get()->Serialize();
             Y_ABORT_UNLESS(Db->SyncLogID);
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecLocalSyncData(seg, false, std::move(result), ev,
-                    Db->SyncLogID));
+            auto* loggedRec = new TLoggedRecLocalSyncData(seg, false, std::move(result), ev, Db->SyncLogID);
+            loggedRec->SetFreshSpaceAdmission(freshSpaceAdmission);
+            intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLocalSyncData, data, seg,
                     loggedRecCookie, nullptr, nullptr, TWriteSource::SkeletonLocalSyncData);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
+            return true;
         }
 
         void ProcessLocalSyncDataQueue(const TActorContext &ctx) {
@@ -1867,8 +2108,13 @@ namespace NKikimr {
 
                 processedSize += ev->Get()->LogoBlobsSize + ev->Get()->BlocksSize + ev->Get()->BarriersSize;
 
-                ProcessLocalSyncData(ev, ctx);
+                if (!ProcessLocalSyncData(ev, ctx)) {
+                    return;
+                }
 
+                const ui64 bytes = LocalSyncDataQueue.front()->Get()->ByteSize();
+                Y_ABORT_UNLESS(bytes <= LocalSyncDataQueueBytes);
+                LocalSyncDataQueueBytes -= bytes;
                 LocalSyncDataQueue.pop();
             }
 
@@ -1908,6 +2154,14 @@ namespace NKikimr {
             }
 
             THullDbInsert insert = msg->PrepareInsert(VCtx->Top.get(), VCtx->ShortSelfVDisk);
+            const TFreshSpaceAdmission freshSpaceAdmission =
+                HullCtx->FreshSpaceTracker->MakeMetadataAdmission(EFreshDb::LogoBlobs);
+            if (!TryAdmitFreshSpace(freshSpaceAdmission, ctx)) {
+                if (!EnqueueFreshMaintenance(ev, msg->ByteSize())) {
+                    ReplyError(NKikimrProto::OUT_OF_SPACE, "Fresh maintenance queue is full", ev, ctx, now);
+                }
+                return;
+            }
             TLsnSeg seg = Db->LsnMngr->AllocLsnForHullAndSyncLog();
 
             // Manage PDisk scheduler weights
@@ -1922,7 +2176,9 @@ namespace NKikimr {
             // prepare synclog msg in advance
             auto syncLogMsg = std::make_unique<NSyncLog::TEvSyncLogPut>(Db->GType, seg.Point(), insert.Id, insert.Ingress);
 
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecAnubisOsirisPut(seg, true, insert, std::move(result), ev));
+            auto* loggedRec = new TLoggedRecAnubisOsirisPut(seg, true, insert, std::move(result), ev);
+            loggedRec->SetFreshSpaceAdmission(freshSpaceAdmission);
+            intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureAnubisOsirisPut, data, seg,
@@ -1979,6 +2235,7 @@ namespace NKikimr {
 
                 std::unique_ptr<ILoggedRec> loggedRec(LoggedRecsVault.Extract(loggedRecId));
                 Db->LsnMngr->ConfirmLsnForHull(loggedRec->Seg, loggedRec->ConfirmSyncLogAlso);
+                HullCtx->FreshSpaceTracker->CommitAdmission(loggedRec->GetFreshSpaceAdmission());
                 loggedRec->Replay(*Hull, ctx);
             }
             if (VDiskCompactionState && !results.empty()) {
@@ -2004,6 +2261,19 @@ namespace NKikimr {
                 {"id", id},
                 {"marker", "BSVS26"});
 
+            const TFreshSpaceAdmission freshSpaceAdmission =
+                HullCtx->FreshSpaceTracker->MakeMetadataAdmission(EFreshDb::LogoBlobs);
+            if (!TryAdmitFreshSpace(freshSpaceAdmission, ctx)) {
+                if (!EnqueueFreshMaintenance(ev, msg->ByteSize())) {
+                    auto result = std::make_unique<TEvBlobStorage::TEvVPutResult>(NKikimrProto::OUT_OF_SPACE,
+                        id, SelfVDiskId, nullptr, VCtx->GetOutOfSpaceState().GetGlobalStatusFlags(), now, 0,
+                        nullptr, nullptr, IFaceMonGroup->RecoveredHugeBlobResMsgsPtr(), nullptr,
+                        msg->Data.GetSize(), 0, "Fresh maintenance queue is full");
+                    ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
+                }
+                return;
+            }
+
             TRope buf = std::move(msg->Data);
             const ui64 bufSize = buf.GetSize();
             Y_VERIFY_S(bufSize <= Config->MaxLogoBlobDataSize, VCtx->VDiskLogPrefix <<
@@ -2020,16 +2290,26 @@ namespace NKikimr {
             if (buf) {
                 ctx.Send(Db->HugeKeeperID, new TEvHullWriteHugeBlob(ev->Sender, ev->Cookie, id, ingress, std::move(buf),
                     true, false, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr,
-                    TWriteSource::RecoveredHugeBlob, false));
+                    TWriteSource::RecoveredHugeBlob, false, freshSpaceAdmission));
             } else {
                 ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, id, ingress, TDiskPart(), true, false, ev->Sender,
                     ev->Cookie, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr,
-                    TWriteSource::RecoveredHugeBlob));
+                    TWriteSource::RecoveredHugeBlob, false, false, freshSpaceAdmission));
             }
         }
 
         void Handle(TEvDetectedPhantomBlob::TPtr& ev, const TActorContext& ctx) {
             TEvDetectedPhantomBlob *msg = ev->Get();
+
+            const TFreshSpaceAdmission freshSpaceAdmission =
+                HullCtx->FreshSpaceTracker->MakeMetadataAdmission(EFreshDb::LogoBlobs, msg->Phantoms.size());
+            if (!TryAdmitFreshSpace(freshSpaceAdmission, ctx)) {
+                if (!EnqueueFreshMaintenance(ev, msg->ByteSize())) {
+                    ctx.Send(ev->Sender, new TEvDetectedPhantomBlobCommitted(NKikimrProto::OUT_OF_SPACE,
+                        std::move(msg->Phantoms)), 0, ev->Cookie);
+                }
+                return;
+            }
 
             for (const TLogoBlobID& logoBlobId : msg->Phantoms) {
                 YDB_LOG_INFO_CTX(ctx, "Adding DoNotKeep to phantom",
@@ -2052,7 +2332,9 @@ namespace NKikimr {
             bool res = record.SerializeToString(&data);
             Y_VERIFY_S(res, VCtx->VDiskLogPrefix);
 
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecPhantoms(seg, true, ev));
+            auto* loggedRec = new TLoggedRecPhantoms(seg, true, ev);
+            loggedRec->SetFreshSpaceAdmission(freshSpaceAdmission);
+            intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignaturePhantomBlobs, data, seg,
@@ -2277,7 +2559,110 @@ namespace NKikimr {
             ctx.Send(MetadataActorId, new TEvCommitVDiskMetadata);
         }
 
+        ui64 GetFreshSpaceDebtChunks() const {
+            if (Hull) {
+                return Hull->GetFreshSpaceDebtChunks();
+            }
+            if (LocalRecoveryDoneEvent && LocalRecoveryDoneEvent->Get()->Uncond) {
+                const auto hullDs = LocalRecoveryDoneEvent->Get()->Uncond->GetHullDs();
+                return hullDs->LogoBlobs->GetFreshSpaceDebtChunks()
+                    + hullDs->Blocks->GetFreshSpaceDebtChunks()
+                    + hullDs->Barriers->GetFreshSpaceDebtChunks();
+            }
+            return 0;
+        }
+
+        void RequestFreshSpaceCredits(const TActorContext& ctx,
+                const TFreshSpaceAdmission* desiredAdmission = nullptr) {
+            if (!HullCtx || !HullCtx->FreshSpaceTracker->IsEnabled()) {
+                return;
+            }
+            if (const auto chunks = HullCtx->FreshSpaceTracker->BeginCreditRequest(
+                    GetFreshSpaceDebtChunks(), desiredAdmission)) {
+                ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkCreditReserve(
+                    PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, *chunks));
+            }
+        }
+
+        bool ReleaseSurplusFreshSpaceCredits(const TActorContext& ctx) {
+            if (!HullCtx || !HullCtx->FreshSpaceTracker->IsEnabled()) {
+                return false;
+            }
+            if (const auto chunks = HullCtx->FreshSpaceTracker->BeginCreditRelease(
+                    GetFreshSpaceDebtChunks())) {
+                ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkCreditRelease(
+                    PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, *chunks));
+                return true;
+            }
+            return false;
+        }
+
+        void ScheduleFreshSpaceCreditRetry(const TActorContext& ctx) {
+            if (FreshSpaceCreditRetryScheduled) {
+                return;
+            }
+            FreshSpaceCreditRetryScheduled = true;
+            const ui64 baseUs = FreshSpaceCreditRetryDelay.MicroSeconds();
+            const ui64 jitterUs = baseUs / 10;
+            FreshSpaceCreditRetrySequence = FreshSpaceCreditRetrySequence * 6364136223846793005ULL + 1;
+            const ui64 spread = jitterUs ? FreshSpaceCreditRetrySequence % (2 * jitterUs + 1) : 0;
+            ctx.Schedule(TDuration::MicroSeconds(baseUs - jitterUs + spread),
+                new TEvPrivate::TEvFreshSpaceCreditRetry);
+            FreshSpaceCreditRetryDelay = Min(FreshSpaceCreditRetryDelay * 2, TDuration::Seconds(5));
+        }
+
+        void HandleFreshSpaceCreditRetry(const TActorContext& ctx) {
+            FreshSpaceCreditRetryScheduled = false;
+            HullCtx->FreshSpaceTracker->AllowCreditRequest();
+            RequestFreshSpaceCredits(ctx);
+        }
+
         void HandleMetadata(TEvCommitVDiskMetadataDone::TPtr& /*ev*/, const TActorContext& ctx) {
+            RequestFreshSpaceCredits(ctx);
+            FinishMetadataInitialization(ctx);
+        }
+
+        void HandleFreshSpaceCreditReserveResult(NPDisk::TEvChunkCreditReserveResult::TPtr& ev,
+                const TActorContext& ctx) {
+            CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
+            HullCtx->FreshSpaceTracker->CompleteCreditRequest(ev->Get()->GrantedChunks);
+            if (ev->Get()->GrantedChunks) {
+                FreshSpaceCreditRetryDelay = TDuration::MilliSeconds(100);
+            }
+
+            if (Hull) {
+                ProcessFreshMaintenanceQueue(ctx);
+                ProcessLocalSyncDataQueue(ctx);
+                ProcessFreshCreditWaitQueue(ctx);
+                if (ev->Get()->GrantedChunks) {
+                    Hull->CompactFreshIfRequired(ctx);
+                }
+            }
+            ReleaseSurplusFreshSpaceCredits(ctx);
+
+            const ui64 freshChunks = GetFreshSpaceDebtChunks();
+            const ui64 required = HullCtx->FreshSpaceTracker->GetRequiredChunks(freshChunks);
+            const ui64 granted = HullCtx->FreshSpaceTracker->GetGrantedChunks();
+            if (granted < required || !ev->Get()->GrantedChunks) {
+                ScheduleFreshSpaceCreditRetry(ctx);
+            }
+        }
+
+        void HandleFreshSpaceCreditReleaseResult(NPDisk::TEvChunkCreditReleaseResult::TPtr& ev,
+                const TActorContext& ctx) {
+            CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
+            HullCtx->FreshSpaceTracker->CompleteCreditRelease(ev->Get()->ReleasedChunks);
+            if (!ReleaseSurplusFreshSpaceCredits(ctx)) {
+                RequestFreshSpaceCredits(ctx);
+            }
+            if (Hull) {
+                ProcessFreshMaintenanceQueue(ctx);
+                ProcessLocalSyncDataQueue(ctx);
+                ProcessFreshCreditWaitQueue(ctx);
+            }
+        }
+
+        void FinishMetadataInitialization(const TActorContext& ctx) {
             auto& ev = LocalRecoveryDoneEvent;
 
             // notify skeketon front about recovery status
@@ -2292,7 +2677,7 @@ namespace NKikimr {
             TString localRecovInfoStr = Db->LocalRecoveryInfo ? Db->LocalRecoveryInfo->ToString() : TString("{}");
             auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(VCtx, PDiskCtx, Db->LsnMngr,
                     ctx.SelfID, (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID),
-                    localRecovInfoStr, Config->BaseInfo.ReadOnly);
+                    localRecovInfoStr, Config->BaseInfo.ReadOnly, HullCtx->FreshSpaceTracker);
             hugeKeeperCtx->HugeBlobCtx = HugeBlobCtx;
             auto hugeKeeper = CreateHullHugeBlobKeeper(hugeKeeperCtx, ev->Get()->RepairedHuge);
             Db->HugeKeeperID.Set(ctx.Register(hugeKeeper));
@@ -3225,6 +3610,9 @@ namespace NKikimr {
             hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
             hFunc(TEvNotifyChunksDeleted, Handle)
             HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
+            HFunc(NPDisk::TEvChunkCreditReserveResult, HandleFreshSpaceCreditReserveResult)
+            HFunc(NPDisk::TEvChunkCreditReleaseResult, HandleFreshSpaceCreditReleaseResult)
+            CFunc(TEvPrivate::EvFreshSpaceCreditRetry, HandleFreshSpaceCreditRetry)
             hFunc(TEvGetSkeletonState, Handle)
         )
 
@@ -3288,6 +3676,9 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvFreshCompactionStarted, HandleFreshCompactionStarted)
             CFunc(TEvPrivate::EvProcessLocalSyncDataQueue, HandleProcessLocalSyncDataQueue)
             CFunc(TEvPrivate::EvProcessLocalSyncDataQueueWakeup, HandleProcessLocalSyncDataQueueWakeup)
+            HFunc(NPDisk::TEvChunkCreditReserveResult, HandleFreshSpaceCreditReserveResult)
+            HFunc(NPDisk::TEvChunkCreditReleaseResult, HandleFreshSpaceCreditReleaseResult)
+            CFunc(TEvPrivate::EvFreshSpaceCreditRetry, HandleFreshSpaceCreditRetry)
         )
 
         COUNTED_STRICT_STFUNC(StateNormal,
@@ -3367,6 +3758,9 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvFreshCompactionStarted, HandleFreshCompactionStarted)
             CFunc(TEvPrivate::EvProcessLocalSyncDataQueue, HandleProcessLocalSyncDataQueue)
             CFunc(TEvPrivate::EvProcessLocalSyncDataQueueWakeup, HandleProcessLocalSyncDataQueueWakeup)
+            HFunc(NPDisk::TEvChunkCreditReserveResult, HandleFreshSpaceCreditReserveResult)
+            HFunc(NPDisk::TEvChunkCreditReleaseResult, HandleFreshSpaceCreditReleaseResult)
+            CFunc(TEvPrivate::EvFreshSpaceCreditRetry, HandleFreshSpaceCreditRetry)
         )
 
         COUNTED_STRICT_STFUNC(StateDatabaseError,
@@ -3402,6 +3796,9 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvFreshCompactionStarted, HandleFreshCompactionStarted)
             CFunc(TEvPrivate::EvProcessLocalSyncDataQueue, HandleProcessLocalSyncDataQueue)
             CFunc(TEvPrivate::EvProcessLocalSyncDataQueueWakeup, HandleProcessLocalSyncDataQueueWakeup)
+            IgnoreFunc(NPDisk::TEvChunkCreditReserveResult)
+            IgnoreFunc(NPDisk::TEvChunkCreditReleaseResult)
+            CFunc(TEvPrivate::EvFreshSpaceCreditRetry, Ignore)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
@@ -3512,7 +3909,16 @@ namespace NKikimr {
 
         TEvBlobStorage::TEvLocalRecoveryDone::TPtr LocalRecoveryDoneEvent;
 
+        bool FreshSpaceCreditRetryScheduled = false;
+        TDuration FreshSpaceCreditRetryDelay = TDuration::MilliSeconds(100);
+        ui64 FreshSpaceCreditRetrySequence = 1;
+
         std::queue<TEvLocalSyncData::TPtr> LocalSyncDataQueue;
+        ui64 LocalSyncDataQueueBytes = 0;
+        std::deque<TMaintenanceQueueItem> FreshMaintenanceQueue;
+        ui64 FreshMaintenanceQueueBytes = 0;
+        std::deque<TFreshCreditWaitItem> FreshCreditWaitQueue;
+        ui64 FreshCreditWaitQueueBytes = 0;
         bool ProcessLocalSyncDataQueueScheduled = false;
         bool ProcessLocalSyncDataQueueWakeupScheduled = false;
     };

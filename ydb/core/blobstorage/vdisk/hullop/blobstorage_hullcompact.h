@@ -90,6 +90,7 @@ namespace NKikimr {
 
         bool IsAborting = false;
         ui32 PendingResponses = 0;
+        ui64 FreshCreditsConsumed = 0;
 
         //  Compaction throttler
         TEventsQuoter::TPtr Throttler;
@@ -146,7 +147,9 @@ namespace NKikimr {
             MsgsForYard.clear();
             // send slots to allocate to huge keeper, if any
             if (slotsToAllocate) {
-                ctx.Send(HugeKeeperId, new TEvHugeAllocateSlots(std::move(*slotsToAllocate)));
+                ctx.Send(HugeKeeperId, new TEvHugeAllocateSlots(std::move(*slotsToAllocate),
+                    Worker.PendingSlotAllocationConsumesCredit()));
+                ++PendingResponses;
             }
             // when done, continue with other state
             if (done) {
@@ -185,29 +188,26 @@ namespace NKikimr {
             if (ev->Get()->Status != NKikimrProto::CORRUPTED) {
                 CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             }
+            std::unique_ptr<TEvRestoreCorruptedBlob> msg(Worker.Apply(ev->Get(), ctx.Now()));
             if (FinalizeIfAborting(ctx)) {
                 return;
             }
-            TEvRestoreCorruptedBlob *msg = Worker.Apply(ev->Get(), ctx.Now());
             MainCycle(ctx);
             if (msg) {
-                ctx.Send(SkeletonId, msg);
+                ctx.Send(SkeletonId, msg.release());
                 ++PendingResponses;
             }
         }
 
         void Handle(TEvRestoreCorruptedBlobResult::TPtr& ev, const TActorContext& ctx) {
             --PendingResponses;
-            if (FinalizeIfAborting(ctx)) {
-                return;
-            }
-            TEvRestoreCorruptedBlob *msg = Worker.Apply(ev->Get(), &IsAborting, ctx.Now());
+            std::unique_ptr<TEvRestoreCorruptedBlob> msg(Worker.Apply(ev->Get(), &IsAborting, ctx.Now()));
             if (FinalizeIfAborting(ctx)) {
                 return;
             }
             MainCycle(ctx);
             if (msg) {
-                ctx.Send(SkeletonId, msg);
+                ctx.Send(SkeletonId, msg.release());
                 ++PendingResponses;
             }
         }
@@ -218,10 +218,10 @@ namespace NKikimr {
                 HullCtx->VCtx->CostTracker->CountPDiskResponse();
             }
             CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
+            Worker.Apply(ev->Get());
             if (FinalizeIfAborting(ctx)) {
                 return;
             }
-            Worker.Apply(ev->Get());
             MainCycle(ctx);
         }
 
@@ -234,18 +234,38 @@ namespace NKikimr {
                 return;
             }
             CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
-            if (FinalizeIfAborting(ctx)) {
-                return;
+
+            if (FreshSegment && HullCtx->FreshSpaceTracker->IsEnabled()) {
+                Y_VERIFY_S(ev->Get()->ConsumedCreditChunks == ev->Get()->ChunkIds.size(),
+                    HullCtx->VCtx->VDiskLogPrefix);
+                FreshCreditsConsumed += ev->Get()->ConsumedCreditChunks;
+                Y_VERIFY_S(FreshCreditsConsumed <= FreshSegment->GetSpaceDebtChunks(),
+                    HullCtx->VCtx->VDiskLogPrefix << " consumed# " << FreshCreditsConsumed
+                    << " segmentDebt# " << FreshSegment->GetSpaceDebtChunks());
+                HullCtx->FreshSpaceTracker->ConsumeCredits(ev->Get()->ConsumedCreditChunks);
             }
 
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "comp reserve ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data()));
 
             Worker.Apply(ev->Get());
+            if (FinalizeIfAborting(ctx)) {
+                return;
+            }
             MainCycle(ctx);
         }
 
         void Handle(TEvHugeAllocateSlotsResult::TPtr ev, const TActorContext& ctx) {
+            --PendingResponses;
+            if (!ev->Get()->Success) {
+                IsAborting = true;
+                const bool flag = FinalizeIfAborting(ctx);
+                Y_ABORT_UNLESS(flag);
+                return;
+            }
             Worker.Apply(ev->Get());
+            if (FinalizeIfAborting(ctx)) {
+                return;
+            }
             MainCycle(ctx);
         }
 
@@ -308,7 +328,7 @@ namespace NKikimr {
                 HullCtx->VCtx->VDiskLogPrefix); // both empty or not
 
             msg->SegVec = IsAborting ? nullptr : std::move(Result);
-            msg->FreshSegment = IsAborting ? nullptr : FreshSegment;
+            msg->FreshSegment = FreshSegment;
             msg->Aborted = IsAborting;
             msg->FreshCompaction = static_cast<bool>(FreshSegment);
 

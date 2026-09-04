@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "skeleton_vmultiput_actor.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/fresh_space_tracker.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
@@ -40,8 +41,19 @@ namespace NKikimr {
         // a method that replays changes that has been written to the recovery log
         virtual void Replay(THull &hull, const TActorContext &ctx) = 0;
 
+        void SetFreshSpaceAdmission(TFreshSpaceAdmission admission) {
+            FreshSpaceAdmission = std::move(admission);
+        }
+
+        const TFreshSpaceAdmission& GetFreshSpaceAdmission() const {
+            return FreshSpaceAdmission;
+        }
+
         const TLsnSeg Seg;
         const bool ConfirmSyncLogAlso;
+
+    private:
+        TFreshSpaceAdmission FreshSpaceAdmission;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -240,4 +252,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

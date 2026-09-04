@@ -109,6 +109,10 @@ namespace NKikimr {
     {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
         bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
+        if (compact && hullDs->HullCtx->FreshSpaceTracker->IsEnabled()) {
+            const ui64 segmentChunks = rtCtx->LevelIndex->GetNextFreshCompactionSegmentDebtChunks();
+            compact = hullDs->HullCtx->FreshSpaceTracker->GetGrantedChunks() >= segmentChunks;
+        }
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "CompactFreshSegmentIfRequired",
             {"required", compact},
             {"yardFreeUpToLsn", yardFreeUpToLsn},

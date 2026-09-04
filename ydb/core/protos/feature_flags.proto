@@ -380,5 +380,8 @@ message TFeatureFlags {
     optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
     // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
     // size-class slots. Reads of the stripe format work even when this flag is off.
-    optional bool EnableVDiskHeapAllocator = 324 [default = false];
+    optional bool EnableVDiskHeapAllocator = 324 [default = false, (RequireRestart) = true];
+    // Precharges PDisk chunks for the worst-case SST representation of all
+    // records admitted to VDisk Fresh.
+    optional bool EnableVDiskFreshSpaceCredits = 325 [default = false, (RequireRestart) = true];
 }

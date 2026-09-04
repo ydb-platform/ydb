@@ -33,6 +33,7 @@ struct TPDiskMockState::TImpl {
         ui64 LastLsn = 0;
         ui32 Weight = 0;
         ui32 GroupSizeInUnits = 0;
+        ui32 CreditChunks = 0;
     };
 
     const ui32 NodeId;
@@ -47,6 +48,7 @@ struct TPDiskMockState::TImpl {
     std::map<ui8, TOwner> Owners;
     std::set<ui32> FreeChunks;
     ui32 NextFreeChunk = 1;
+    ui32 CreditChunks = 0;
     std::unordered_map<TString, ui32> Blocks;
     TIntervalSet<ui64> Corrupted;
     NPDisk::TStatusFlags StatusFlags;
@@ -110,6 +112,11 @@ struct TPDiskMockState::TImpl {
         return FreeChunks.size() + TotalChunks - NextFreeChunk;
     }
 
+    ui32 GetNumAllocatableChunks() const {
+        const ui32 free = GetNumFreeChunks();
+        return free > CreditChunks ? free - CreditChunks : 0;
+    }
+
     void AdjustFreeChunks() {
         for (auto it = FreeChunks.end(); it != FreeChunks.begin() && *--it == NextFreeChunk - 1; it = FreeChunks.erase(it)) {
             --NextFreeChunk;
@@ -120,7 +127,7 @@ struct TPDiskMockState::TImpl {
         switch (SpaceColorPolicy) {
             case ESpaceColorPolicy::SharedQuota: {
                 i64 before = ChunkSharedQuota->GetFree();
-                i64 now = GetNumFreeChunks();
+                i64 now = GetNumAllocatableChunks();
                 if (before < now) {
                     ChunkSharedQuota->Release(now - before);
                 } else if (before > now) {
@@ -153,6 +160,12 @@ struct TPDiskMockState::TImpl {
         Y_ABORT_UNLESS(chunkIdx != TotalChunks);
 
         return chunkIdx;
+    }
+
+    void ReleaseCredits(TOwner& owner) {
+        Y_VERIFY(owner.CreditChunks <= CreditChunks);
+        CreditChunks -= owner.CreditChunks;
+        owner.CreditChunks = 0;
     }
 
     void AdjustRefs() {
@@ -453,7 +466,9 @@ public:
         , Impl(*State->Impl)
         , Prefix(TStringBuilder() << "PDiskMock[" << Impl.NodeId << ":" << Impl.PDiskId << "] ")
     {
+        Impl.CreditChunks = 0;
         for (auto& [ownerId, owner] : Impl.Owners) { // reset runtime parameters to default values
+            owner.CreditChunks = 0;
             owner.OwnerRound = 0;
             owner.CutLogId = TActorId();
             Impl.ResetOwnerReservedChunks(owner); // return reserved, but not committed chunks to free pool
@@ -518,6 +533,7 @@ public:
         std::tie(ownerId, owner) = Impl.FindOrCreateOwner(msg->VDisk, msg->SlotId, &created);
         std::unique_ptr<NPDisk::TEvYardInitResult> res;
         if (ev->Get()->OwnerRound > owner->OwnerRound) {
+            Impl.ReleaseCredits(*owner);
             // fill in runtime owner parameters
             owner->OwnerRound = ev->Get()->OwnerRound;
             owner->CutLogId = ev->Get()->CutLogID;
@@ -605,6 +621,7 @@ public:
                 found = true;
                 break;
             } else {
+                Impl.ReleaseCredits(owner);
                 owner.Slain = true;
                 Impl.FreeChunks.merge(owner.ReservedChunks);
                 Impl.FreeChunks.merge(owner.CommittedChunks);
@@ -812,7 +829,11 @@ public:
         Y_VERIFY(!Impl.CheckIsReadOnlyOwner(msg));
         auto res = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, GetStatusFlags());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
-            if (Impl.GetNumFreeChunks() < msg->SizeChunks) {
+            const bool consumeCredit = msg->Mode == NPDisk::TEvChunkReserve::EMode::ConsumeCredit;
+            const bool insufficient = consumeCredit
+                ? owner->CreditChunks < msg->SizeChunks || Impl.GetNumFreeChunks() < msg->SizeChunks
+                : Impl.GetNumAllocatableChunks() < msg->SizeChunks;
+            if (insufficient) {
                 YDB_LOG_PDISK_MOCK(PRI_NOTICE, "Received TEvChunkReserve",
                     {"marker", "PDM09"},
                     {"msg", msg->ToString()},
@@ -828,13 +849,72 @@ public:
                 for (ui32 i = 0; i < msg->SizeChunks; ++i) {
                     res->ChunkIds.push_back(Impl.AllocateChunk(*owner));
                 }
+                if (consumeCredit) {
+                    owner->CreditChunks -= msg->SizeChunks;
+                    Impl.CreditChunks -= msg->SizeChunks;
+                    res->ConsumedCreditChunks = msg->SizeChunks;
+                }
                 res->StatusFlags = GetStatusFlags();
                 YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Sending TEvChunkReserveResult",
                     {"marker", "PDM10"},
                     {"msg", res->ToString()});
             }
+            res->OwnerCreditChunks = owner->CreditChunks;
+            res->TotalCreditChunks = Impl.CreditChunks;
         }
         Send(ev->Sender, res.release());
+    }
+
+    void Handle(NPDisk::TEvChunkCreditReserve::TPtr ev) {
+        auto* msg = ev->Get();
+        auto res = std::make_unique<NPDisk::TEvChunkCreditReserveResult>(NKikimrProto::OK,
+            0, 0, Impl.CreditChunks, GetStatusFlags());
+        if (TImpl::TOwner* owner = Impl.FindOwner(msg, res)) {
+            ui32 left = 0;
+            ui32 right = Min(msg->SizeChunks, Impl.GetNumAllocatableChunks());
+            if (Impl.SpaceColorPolicy == TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
+                while (left < right) {
+                    const ui32 middle = left + (right - left + 1) / 2;
+                    double occupancy = 0;
+                    if (Impl.ChunkSharedQuota->EstimateSpaceColor(middle, &occupancy)
+                            < NKikimrBlobStorage::TPDiskSpaceColor::BLACK) {
+                        left = middle;
+                    } else {
+                        right = middle - 1;
+                    }
+                }
+            } else {
+                left = right;
+            }
+
+            owner->CreditChunks += left;
+            Impl.CreditChunks += left;
+            res->GrantedChunks = left;
+            res->OwnerCreditChunks = owner->CreditChunks;
+            res->TotalCreditChunks = Impl.CreditChunks;
+            res->StatusFlags = GetStatusFlags();
+            if (!left && msg->SizeChunks) {
+                res->ErrorReason = "chunk credit would enter BLACK or exceed physical free space";
+            }
+        }
+        Send(ev->Sender, res.release(), 0, ev->Cookie);
+    }
+
+    void Handle(NPDisk::TEvChunkCreditRelease::TPtr ev) {
+        auto* msg = ev->Get();
+        auto res = std::make_unique<NPDisk::TEvChunkCreditReleaseResult>(NKikimrProto::OK,
+            0, 0, Impl.CreditChunks, GetStatusFlags());
+        if (TImpl::TOwner* owner = Impl.FindOwner(msg, res)) {
+            Y_VERIFY_S(msg->SizeChunks <= owner->CreditChunks, "release# " << msg->SizeChunks
+                << " credits# " << owner->CreditChunks);
+            owner->CreditChunks -= msg->SizeChunks;
+            Impl.CreditChunks -= msg->SizeChunks;
+            res->ReleasedChunks = msg->SizeChunks;
+            res->OwnerCreditChunks = owner->CreditChunks;
+            res->TotalCreditChunks = Impl.CreditChunks;
+            res->StatusFlags = GetStatusFlags();
+        }
+        Send(ev->Sender, res.release(), 0, ev->Cookie);
     }
 
     void Handle(NPDisk::TEvChunkRead::TPtr ev) {
@@ -916,7 +996,7 @@ public:
                 {"msg", msg->ToString()},
                 {"VDiskId", owner->VDiskId});
             if (!msg->ChunkIdx) { // allocate chunk
-                if (!Impl.GetNumFreeChunks()) {
+                if (!Impl.GetNumAllocatableChunks()) {
                     res->Status = NKikimrProto::OUT_OF_SPACE;
                     res->StatusFlags = GetStatusFlags() | ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
                     res->ErrorReason = "no free chunks";
@@ -1094,9 +1174,11 @@ public:
         if (it == Impl.Owners.end()) {
             res->Status = NKikimrProto::ALREADY;
             res->ErrorReason = "not found";
+            Send(ev->Sender, res.release());
+            return;
         }
 
-        auto owner = it->second;
+        auto& owner = it->second;
 
         if (owner.Slain) {
             res->Status = NKikimrProto::ALREADY; // already slain or not found
@@ -1106,6 +1188,7 @@ public:
             res->ErrorReason = TStringBuilder() << "Message OwnerRound# " << msg->OwnerRound << " actual OwnerRound# "
                 << owner.OwnerRound << " race detected";
         } else {
+            Impl.ReleaseCredits(owner);
             owner.Slain = true;
             Impl.FreeChunks.merge(owner.ReservedChunks);
             Impl.FreeChunks.merge(owner.CommittedChunks);
@@ -1310,6 +1393,16 @@ public:
         Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
     }
 
+    void ErrorHandle(NPDisk::TEvChunkCreditReserve::TPtr& ev) {
+        Send(ev->Sender, new NPDisk::TEvChunkCreditReserveResult(NKikimrProto::CORRUPTED,
+            0, 0, 0, 0, State->GetStateErrorReason()), 0, ev->Cookie);
+    }
+
+    void ErrorHandle(NPDisk::TEvChunkCreditRelease::TPtr& ev) {
+        Send(ev->Sender, new NPDisk::TEvChunkCreditReleaseResult(NKikimrProto::CORRUPTED,
+            0, 0, 0, 0, State->GetStateErrorReason()), 0, ev->Cookie);
+    }
+
     void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
         Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
     }
@@ -1379,6 +1472,8 @@ public:
         cFunc(EvResume, HandleLogQ);
         hFunc(NPDisk::TEvReadLog, Handle);
         hFunc(NPDisk::TEvChunkReserve, Handle);
+        hFunc(NPDisk::TEvChunkCreditReserve, Handle);
+        hFunc(NPDisk::TEvChunkCreditRelease, Handle);
         hFunc(NPDisk::TEvChunkRead, Handle);
         hFunc(NPDisk::TEvChunkWrite, Handle);
         hFunc(NPDisk::TEvChunkReadRaw, Handle);
@@ -1418,6 +1513,8 @@ public:
         hFunc(NPDisk::TEvHarakiri, ErrorHandle);
         hFunc(NPDisk::TEvSlay, ErrorHandle);
         hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
+        hFunc(NPDisk::TEvChunkCreditReserve, ErrorHandle);
+        hFunc(NPDisk::TEvChunkCreditRelease, ErrorHandle);
         hFunc(NPDisk::TEvChunkForget, ErrorHandle);
         hFunc(NPDisk::TEvReadMetadata, ErrorHandle);
         hFunc(NPDisk::TEvWriteMetadata, ErrorHandle);

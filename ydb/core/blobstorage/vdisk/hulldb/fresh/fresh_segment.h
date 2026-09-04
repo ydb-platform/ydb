@@ -212,7 +212,8 @@ namespace NKikimr {
         };
 
         TFreshSegment(THullCtxPtr hullCtx, ui64 compThreshold, TInstant startTime, std::shared_ptr<TRopeArena> arena)
-            : CompThreshold(Max<ui64>(hullCtx->ChunkSize, compThreshold))
+            : HullCtx(hullCtx)
+            , CompThreshold(Max<ui64>(hullCtx->ChunkSize, compThreshold))
             , ChunkSize(hullCtx->ChunkSize)
             , StartTime(startTime)
             , IndexAndData(MakeIntrusive<TFreshIndexAndData>(hullCtx, std::move(arena)))
@@ -223,6 +224,19 @@ namespace NKikimr {
         ui64 GetLastLsn() const { return Max(IndexAndData->GetLastLsn(), AppendixTree.GetLastLsn()); }
         bool Empty() const { return IndexAndData->Empty(); }
         ui64 ElementsInserted() const { return IndexAndData->ElementsInserted() + AppendixTree.ElementsInserted(); }
+        ui64 GetSpaceDebtChunks() const {
+            constexpr EFreshDb db = [] {
+                if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                    return EFreshDb::LogoBlobs;
+                } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
+                    return EFreshDb::Blocks;
+                } else {
+                    static_assert(std::is_same_v<TKey, TKeyBarrier>);
+                    return EFreshDb::Barriers;
+                }
+            }();
+            return HullCtx->FreshSpaceTracker->CalculateSegmentChunks(db, ElementsInserted());
+        }
         ui64 GetFirstLsnToKeep() const { return GetFirstLsn(); }
         bool NeedsCompactionByYard(ui64 yardFreeUpToLsn) const { return yardFreeUpToLsn > GetFirstLsn(); }
         ui64 InPlaceSizeApproximation() const {
@@ -275,6 +289,7 @@ namespace NKikimr {
         }
 
     private:
+        THullCtxPtr HullCtx;
         const ui64 CompThreshold;
         const ui64 ChunkSize;
         TInstant StartTime;
@@ -315,4 +330,3 @@ namespace NKikimr {
     extern template class TFreshSegment<TKeyBlock, TMemRecBlock>;
 
  } // NKikimr
-

@@ -380,6 +380,18 @@ namespace NKikimr {
             PassAway();
         }
 
+        void HandleDetectedPhantomBlobCommitted(TEvDetectedPhantomBlobCommitted::TPtr& ev) {
+            if (ev->Get()->Status == NKikimrProto::OK) {
+                HandleDetectedPhantomBlobCommitted();
+            } else if (ev->Get()->Status == NKikimrProto::TRYLATER) {
+                Send(ReplCtx->SkeletonId,
+                    new TEvDetectedPhantomBlob(std::move(ev->Get()->Phantoms)));
+            } else {
+                Schedule(OOSRecoveryRetryDelay, new TEvDetectedPhantomBlobCommitted(
+                    NKikimrProto::TRYLATER, std::move(ev->Get()->Phantoms)));
+            }
+        }
+
         void Bootstrap() {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Bootstrap"),
                 {"marker", "BSVR02"});
@@ -1045,7 +1057,7 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvGetResult, Handle)
             hFunc(TEvAddBulkSstResult, Handle)
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
-            cFunc(TEvBlobStorage::EvDetectedPhantomBlobCommitted, HandleDetectedPhantomBlobCommitted)
+            hFunc(TEvDetectedPhantomBlobCommitted, HandleDetectedPhantomBlobCommitted)
             cFunc(TEvents::TSystem::Poison, PassAway)
             hFunc(TEvReplInvoke, Handle)
             hFunc(NPDisk::TEvCheckSpaceResult, Handle)

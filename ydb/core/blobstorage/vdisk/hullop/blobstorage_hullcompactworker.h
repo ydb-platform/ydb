@@ -554,18 +554,20 @@ namespace NKikimr {
         void Apply(TEvHugeAllocateSlotsResult *msg) {
             Y_DEBUG_ABORT_UNLESS(State == EState::WaitForSlotAllocation);
             State = EState::TryProcessItem;
-            const bool stripeAlloc = UseStripeAllocator();
+            Y_VERIFY_S(msg->Locations.size() == msg->IsStripe.size(), HullCtx->VCtx->VDiskLogPrefix);
             if constexpr (LogoBlobs) {
-                for (const TDiskPart& p : msg->Locations) {
-                    if (stripeAlloc) {
-                        AllocatedStripeBlobs.PushBack(p);
+                for (size_t i = 0; i < msg->Locations.size(); ++i) {
+                    if (msg->IsStripe[i]) {
+                        AllocatedStripeBlobs.PushBack(msg->Locations[i]);
                     } else {
-                        AllocatedHugeBlobs.PushBack(p);
+                        AllocatedHugeBlobs.PushBack(msg->Locations[i]);
                     }
                 }
                 IndexMerger.GetDataMerger().ApplyAllocatedSlots(msg->Locations);
             } else {
                 Y_VERIFY_S(msg->Locations.size() == 1, HullCtx->VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(msg->IsStripe.front(), HullCtx->VCtx->VDiskLogPrefix
+                    << " Blocks/Barriers SST requested a stripe, but the huge keeper allocated a slot");
                 StripeSstLocation = msg->Locations.front();
                 AllocatedStripeBlobs.PushBack(StripeSstLocation);
             }
@@ -578,6 +580,14 @@ namespace NKikimr {
         const TDiskPartVec& GetAllocatedStripeBlobs() const { return AllocatedStripeBlobs; }
         const TDeque<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
         const TDeque<TChunkIdx>& GetAllocatedChunks() const { return AllocatedChunks; }
+
+        // Fresh Blocks/Barriers SSTs go to the stripe heap. A new PDisk chunk
+        // for that SST must consume a prepaid credit; huge-blob slot
+        // allocation (LogoBlobs) must not.
+        bool PendingSlotAllocationConsumesCredit() const {
+            return IsFresh && HullCtx->FreshSpaceTracker->IsEnabled() && !LogoBlobs
+                && State == EState::WaitForSlotAllocation;
+        }
 
     private:
         void CollectRemovedHugeBlobs(const std::vector<TDiskPart>& hugeBlobs) {
@@ -845,7 +855,11 @@ namespace NKikimr {
             }
             const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;
-            return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num);
+            const auto mode = IsFresh && HullCtx->FreshSpaceTracker->IsEnabled()
+                ? NPDisk::TEvChunkReserve::EMode::ConsumeCredit
+                : NPDisk::TEvChunkReserve::EMode::Normal;
+            return std::make_unique<NPDisk::TEvChunkReserve>(
+                PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num, mode);
         }
 
         ui32 GetMaxInFlightWrites() {

@@ -198,6 +198,7 @@ namespace NKikimr {
         bool CompactionScheduled = false;
         TMonotonic NextCompactionWakeup;
         bool AllowGarbageCollection = false;
+        bool FreshCompactionAbortCleanupPending = false;
         THugeBlobCtxPtr HugeBlobCtx;
         ui32 MinHugeBlobInBytes;
 
@@ -307,8 +308,9 @@ namespace NKikimr {
 
         bool ScheduleCompaction(const TActorContext &ctx, bool level = true) {
             // schedule fresh if required
-            const bool res = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx, MinHugeBlobInBytes, RTCtx,
-                ctx, !RTCtx->LevelIndex->IsWrittenToSstBeforeLsn(ForceFreshCompactLsn), AllowGarbageCollection);
+            const bool res = !FreshCompactionAbortCleanupPending
+                && CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx, MinHugeBlobInBytes, RTCtx,
+                    ctx, !RTCtx->LevelIndex->IsWrittenToSstBeforeLsn(ForceFreshCompactLsn), AllowGarbageCollection);
             if (level && !Config->BaseInfo.ReadOnly && !RunLevelCompactionSelector(ctx)) {
                 ScheduleCompactionWakeup(ctx);
             }
@@ -694,6 +696,22 @@ namespace NKikimr {
             }
         }
 
+        void FinishFreshCompactionAbortCleanup(const TActorContext& ctx) {
+            FreshCompactionAbortCleanupPending = false;
+
+            // The failed conversion consumed ephemeral credits. PDisk has now
+            // returned their chunks to the free pool, so ask Skeleton to
+            // replenish the credits before retrying the retained Fresh segment.
+            ctx.Send(RTCtx->SkeletonId, new TEvCompactionFinished());
+            ScheduleCompaction(ctx);
+        }
+
+        void Handle(NPDisk::TEvChunkForgetResult::TPtr& ev, const TActorContext& ctx) {
+            Y_VERIFY_S(FreshCompactionAbortCleanupPending, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+            CHECK_PDISK_RESPONSE(HullDs->HullCtx->VCtx, ev, ctx);
+            FinishFreshCompactionAbortCleanup(ctx);
+        }
+
         void Handle(typename THullChange::TPtr &ev, const TActorContext &ctx, ui64 wId = 0) {
             if (!wId) {
                 ActiveActors.Erase(ev->Sender);
@@ -723,7 +741,24 @@ namespace NKikimr {
             // handle commit msg differently
             if (msg->FreshCompaction) {
                 if (msg->Aborted) {
+                    Y_VERIFY_S(msg->FreshSegment, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(!msg->SegVec, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(msg->CommitChunks.empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(msg->FreedHugeBlobs.Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(msg->AllocatedHugeBlobs.Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(!FreshCompactionAbortCleanupPending,
+                        HullDs->HullCtx->VCtx->VDiskLogPrefix);
 
+                    RTCtx->LevelIndex->FreshCompactionAborted(std::move(msg->FreshSegment));
+                    if (msg->ReservedChunks.empty()) {
+                        FinishFreshCompactionAbortCleanup(ctx);
+                    } else {
+                        FreshCompactionAbortCleanupPending = true;
+                        auto committer = std::make_unique<TAsyncFreshAbortCommitter>(HullLogCtx,
+                            HullDbCommitterCtx, ctx.SelfID, std::move(msg->ReservedChunks));
+                        const TActorId actorId = ctx.RegisterWithSameMailbox(committer.release());
+                        ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+                    }
                 } else {
                     TStringStream dbg;
                     dbg << "{commiter# fresh"
@@ -878,6 +913,16 @@ namespace NKikimr {
                     break;
                 case THullCommitFinished::CommitSyncSst:
                     break;
+                case THullCommitFinished::CommitFreshAbort:
+                    Y_VERIFY_S(FreshCompactionAbortCleanupPending,
+                        HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(!ev->Get()->ChunksToForget.empty(),
+                        HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    ctx.Send(RTCtx->PDiskCtx->PDiskId, new NPDisk::TEvChunkForget(
+                        RTCtx->PDiskCtx->Dsk->Owner, RTCtx->PDiskCtx->Dsk->OwnerRound,
+                        std::move(ev->Get()->ChunksToForget)));
+                    ctx.Send(RTCtx->GetLogNotifierActorId(), new TEvents::TEvCompleted());
+                    return;
                 default:
                     Y_ABORT("Unexpected case");
             }
@@ -1008,7 +1053,10 @@ namespace NKikimr {
             HFunc(TEvMinHugeBlobSizeUpdate, Handle)
             HFunc(TEvCompactionTokenResult, Handle)
             HFunc(TEvents::TEvUndelivered, HandleBrokerUndelivered)
+            HFunc(NPDisk::TEvChunkForgetResult, Handle)
         )
+
+        PDISK_TERMINATE_STATE_FUNC_DEF;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

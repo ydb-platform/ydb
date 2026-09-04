@@ -616,7 +616,9 @@ namespace NKikimr {
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
                         Config->HullCompLevel0MaxSstsAtOnce,
-                        Config->HullCompSortedPartsNum);
+                        Config->HullCompSortedPartsNum,
+                        AppData(ctx)->FeatureFlags.GetEnableVDiskFreshSpaceCredits()
+                            && Config->FreshCompaction && !Config->BaseInfo.ReadOnly);
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);

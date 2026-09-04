@@ -355,6 +355,76 @@ namespace NKikimr {
     };
 
     ////////////////////////////////////////////////////////////////////////////
+    // TAsyncFreshAbortCommitter
+    ////////////////////////////////////////////////////////////////////////////
+    class TAsyncFreshAbortCommitter : public TActorBootstrapped<TAsyncFreshAbortCommitter> {
+        friend class TActorBootstrapped<TAsyncFreshAbortCommitter>;
+
+        std::shared_ptr<THullLogCtx> HullLogCtx;
+        THullDbCommitterCtxPtr Ctx;
+        const TActorId NotifyID;
+        TVector<ui32> ChunksToForget;
+        TLsnSeg LsnSeg;
+        std::unique_ptr<NPDisk::TEvLog> CommitMsg;
+
+        void Bootstrap(const TActorContext& ctx) {
+            Become(&TThis::StateFunc);
+            ctx.Send(Ctx->LoggerId, CommitMsg.release());
+        }
+
+        void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) {
+            CHECK_PDISK_RESPONSE(Ctx->HullCtx->VCtx, ev, ctx);
+            Y_VERIFY_S(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == LsnSeg.Last,
+                HullLogCtx->VCtx->VDiskLogPrefix);
+
+            ctx.Send(Ctx->SkeletonId, new TEvNotifyChunksDeleted(LsnSeg.Last, ChunksToForget));
+            ctx.Send(NotifyID, new THullCommitFinished(THullCommitFinished::CommitFreshAbort,
+                std::move(ChunksToForget)));
+            TThis::Die(ctx);
+        }
+
+        void HandlePoison(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+            TThis::Die(ctx);
+        }
+
+        STRICT_STFUNC(StateFunc,
+            HFunc(NPDisk::TEvLogResult, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
+
+        PDISK_TERMINATE_STATE_FUNC_DEF;
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_ASYNC_FRESH_COMMITTER;
+        }
+
+        TAsyncFreshAbortCommitter(std::shared_ptr<THullLogCtx> hullLogCtx,
+                THullDbCommitterCtxPtr ctx, const TActorId& notifyID,
+                TVector<ui32>&& chunksToForget)
+            : HullLogCtx(std::move(hullLogCtx))
+            , Ctx(std::move(ctx))
+            , NotifyID(notifyID)
+            , ChunksToForget(std::move(chunksToForget))
+        {
+            Y_VERIFY_S(!ChunksToForget.empty(), HullLogCtx->VCtx->VDiskLogPrefix);
+            LsnSeg = Ctx->LsnMngr->AllocLsnForLocalUse();
+
+            NPDisk::TCommitRecord commitRecord;
+            commitRecord.DeleteChunks = ChunksToForget;
+            commitRecord.DeleteToDecommitted = true;
+            // This record must not become a Hull starting point: the Fresh
+            // segment retained after an abort may contain older LSNs which
+            // still have to be replayed after a crash.
+            commitRecord.IsStartingPoint = false;
+            CommitMsg = std::make_unique<NPDisk::TEvLog>(Ctx->PDiskCtx->Dsk->Owner,
+                Ctx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHullCutLog,
+                commitRecord, TRcBuf(), LsnSeg, nullptr, TWriteSource::HullDbCommit,
+                NPDisk::TEvLog::TCallback());
+        }
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
     // TAsyncFreshCommitter
     ////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>

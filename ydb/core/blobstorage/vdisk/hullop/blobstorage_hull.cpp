@@ -99,6 +99,12 @@ namespace NKikimr {
 
     THull::~THull() = default;
 
+    ui64 THull::GetFreshSpaceDebtChunks() const {
+        return HullDs->LogoBlobs->GetFreshSpaceDebtChunks()
+            + HullDs->Blocks->GetFreshSpaceDebtChunks()
+            + HullDs->Barriers->GetFreshSpaceDebtChunks();
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Private
     ////////////////////////////////////////////////////////////////////////////
@@ -757,6 +763,14 @@ namespace NKikimr {
     void THull::CompactFreshLogoBlobsIfRequired(const TActorContext& ctx) {
         CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->HugeBlobCtx,
             Fields->MinHugeBlobInBytes, Fields->LogoBlobsRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+    }
+
+    void THull::CompactFreshIfRequired(const TActorContext& ctx) {
+        CompactFreshLogoBlobsIfRequired(ctx);
+        CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
+        CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx, ctx,
+            false, Fields->AllowGarbageCollection);
     }
 
 } // NKikimr

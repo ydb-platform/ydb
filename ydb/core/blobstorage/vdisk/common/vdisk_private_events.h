@@ -17,12 +17,15 @@ namespace NKikimr {
             CommitAdvanceLsn,
             CommitReplSst,
             CommitSyncSst,
+            CommitFreshAbort,
         };
 
         EType Type;
+        TVector<ui32> ChunksToForget;
 
-        THullCommitFinished(EType type)
+        THullCommitFinished(EType type, TVector<ui32> chunksToForget = {})
             : Type(type)
+            , ChunksToForget(std::move(chunksToForget))
         {}
 
         static const char* TypeToString(EType type) {
@@ -32,6 +35,7 @@ namespace NKikimr {
                 case CommitAdvanceLsn: return "CommitAdvanceLsn";
                 case CommitReplSst:    return "CommitReplSst";
                 case CommitSyncSst:    return "CommitSyncSst";
+                case CommitFreshAbort: return "CommitFreshAbort";
                 default:               return "<invalid>";
             }
         }
@@ -54,6 +58,10 @@ namespace NKikimr {
             , Ingress(ingress)
             , OrderId(orderId)
         {}
+
+        size_t ByteSize() const {
+            return sizeof(*this);
+        }
     };
 
     struct TEvDelLogoBlobDataSyncLogResult
@@ -62,6 +70,7 @@ namespace NKikimr {
     {
         const TLogoBlobID Id;
         const ui64 OrderId;
+        const NKikimrProto::EReplyStatus Status;
 
         TEvDelLogoBlobDataSyncLogResult(const TLogoBlobID &id, ui64 orderId, const TInstant &now,
                 ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr, NVDiskMon::TLtcHistoPtr histoPtr)
@@ -69,6 +78,15 @@ namespace NKikimr {
                 histoPtr)
             , Id(id)
             , OrderId(orderId)
+            , Status(NKikimrProto::OK)
+        {}
+
+        TEvDelLogoBlobDataSyncLogResult(const TLogoBlobID &id, ui64 orderId, NKikimrProto::EReplyStatus status,
+                const TInstant &now)
+            : TEvVResultBase(now, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, nullptr, nullptr)
+            , Id(id)
+            , OrderId(orderId)
+            , Status(status)
         {}
     };
 

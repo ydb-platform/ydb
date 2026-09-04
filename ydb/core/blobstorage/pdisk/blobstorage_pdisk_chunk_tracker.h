@@ -311,6 +311,12 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     TAtomic StaticReserveFreeTotal = 0;
     TStackVec<TOwner, 8> StaticOwners; // Can be accessed only from the main thread
 
+    // Ephemeral space promises made to VDisks. A credit is charged to the
+    // regular owner/shared quota, but has not acquired a physical chunk yet.
+    // All access is serialized by TPDisk::StateMutex.
+    std::array<ui32, 256> CreditChunksByOwner = {};
+    ui32 TotalCreditChunks = 0;
+
     TColor::E ColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
     double ColorBorderOccupancy = 0;
 
@@ -408,6 +414,8 @@ public:
         }
         AtomicSet(StaticReserveFreeTotal, 0);
         StaticOwners.clear();
+        CreditChunksByOwner.fill(0);
+        TotalCreditChunks = 0;
 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             i64 chunks = ownerInfo.ChunksOwned;
@@ -463,6 +471,7 @@ public:
 
     void RemoveOwner(TOwner owner) {
         Y_VERIFY(IsOwnerUser(owner));
+        ReleaseAllCredit(owner);
         for (ui64 idx = 0; idx < StaticOwners.size(); ++idx) {
             if (StaticOwners[idx] == owner) {
                 StaticOwners[idx] = StaticOwners.back();
@@ -513,6 +522,74 @@ public:
 
     i64 GetOwnerUsed(TOwner owner) const {
         return OwnerQuota->GetUsed(owner);
+    }
+
+    ui32 GetOwnerCreditChunks(TOwner owner) const {
+        Y_VERIFY(IsOwnerUser(owner));
+        return CreditChunksByOwner[owner];
+    }
+
+    ui32 GetTotalCreditChunks() const {
+        return TotalCreditChunks;
+    }
+
+    // Reserve as much as possible while keeping the post-reservation status
+    // below BLACK. Fresh compaction must be able to proceed in RED: that is
+    // the only way to turn unrecovered Fresh into SSTs and free the log.
+    // maxPhysicalChunks is supplied by TKeeper and protects the actual free
+    // lists from being over-promised.
+    ui32 ReserveCredit(TOwner owner, ui32 requestedChunks, ui32 maxPhysicalChunks,
+            TString& outErrorReason) {
+        Y_VERIFY(IsOwnerUser(owner));
+        ui32 left = 0;
+        ui32 right = Min(requestedChunks, maxPhysicalChunks);
+        while (left < right) {
+            const ui32 middle = left + (right - left + 1) / 2;
+            double occupancy = 0;
+            if (EstimateSpaceColor(owner, middle, &occupancy) < TColor::BLACK) {
+                left = middle;
+            } else {
+                right = middle - 1;
+            }
+        }
+
+        if (!left) {
+            outErrorReason = "Chunk credit would enter BLACK or exceed physical free space";
+            return 0;
+        }
+
+        const bool allocated = TryAllocate(owner, left, outErrorReason);
+        Y_VERIFY_S(allocated, outErrorReason);
+        Y_VERIFY(TotalCreditChunks <= Max<ui32>() - left);
+        Y_VERIFY(CreditChunksByOwner[owner] <= Max<ui32>() - left);
+        CreditChunksByOwner[owner] += left;
+        TotalCreditChunks += left;
+        return left;
+    }
+
+    void ReleaseCredit(TOwner owner, ui32 chunks) {
+        Y_VERIFY(IsOwnerUser(owner));
+        Y_VERIFY_S(chunks <= CreditChunksByOwner[owner], "owner# " << ui32(owner)
+            << " release# " << chunks << " credits# " << CreditChunksByOwner[owner]);
+        if (chunks) {
+            CreditChunksByOwner[owner] -= chunks;
+            TotalCreditChunks -= chunks;
+            Release(owner, chunks);
+        }
+    }
+
+    void ReleaseAllCredit(TOwner owner) {
+        ReleaseCredit(owner, CreditChunksByOwner[owner]);
+    }
+
+    // Convert already charged credit to physical allocation. The existing
+    // quota charge deliberately remains in place.
+    void ConsumeCredit(TOwner owner, ui32 chunks) {
+        Y_VERIFY(IsOwnerUser(owner));
+        Y_VERIFY_S(chunks <= CreditChunksByOwner[owner], "owner# " << ui32(owner)
+            << " consume# " << chunks << " credits# " << CreditChunksByOwner[owner]);
+        CreditChunksByOwner[owner] -= chunks;
+        TotalCreditChunks -= chunks;
     }
 
     // Number of chunks of the shared quota kept free for a static group owner, 0 for all the other owners
@@ -725,6 +802,7 @@ public:
         GlobalQuota->PrintHTML(str, nullptr, nullptr, nullptr);
         str << "<h4>OwnerQuota</h4>";
         OwnerQuota->PrintHTML(str, SharedQuota.Get(), &ColorBorder, &ColorBorderOccupancy);
+        str << "<pre>TotalCreditChunks# " << TotalCreditChunks << "</pre>";
         if (!StaticOwners.empty()) {
             str << "<h4>StaticReserve</h4>";
             str << "<pre>";

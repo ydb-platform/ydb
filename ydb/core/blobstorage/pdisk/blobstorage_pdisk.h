@@ -853,14 +853,21 @@ struct TEvChunkUnlockResult : TEventLocal<TEvChunkUnlockResult, TEvBlobStorage::
 // CHUNK RESERVATION
 ////////////////////////////////////////////////////////////////////////////
 struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkReserve> {
+    enum class EMode : ui8 {
+        Normal,
+        ConsumeCredit,
+    };
+
     TOwner Owner;
     TOwnerRound OwnerRound;
     ui32 SizeChunks;
+    EMode Mode;
 
-    TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks)
+    TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, EMode mode = EMode::Normal)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , SizeChunks(sizeChunks)
+        , Mode(mode)
     {}
 
     TString ToString() const {
@@ -872,6 +879,7 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
         str << "{EvChunkReserve ownerId# " << (ui32)record.Owner;
         str << " ownerRound# " << record.OwnerRound;
         str << " SizeChunks# " << record.SizeChunks;
+        str << " Mode# " << (record.Mode == EMode::Normal ? "Normal" : "ConsumeCredit");
         str << "}";
         return str.Str();
     }
@@ -882,6 +890,9 @@ struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage
     TVector<TChunkIdx> ChunkIds;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    ui32 ConsumedCreditChunks = 0;
+    ui32 OwnerCreditChunks = 0;
+    ui32 TotalCreditChunks = 0;
 
     TEvChunkReserveResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags)
         : Status(status)
@@ -903,8 +914,112 @@ struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage
         str << "{EvChunkReserveResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << " ConsumedCreditChunks# " << record.ConsumedCreditChunks;
+        str << " OwnerCreditChunks# " << record.OwnerCreditChunks;
+        str << " TotalCreditChunks# " << record.TotalCreditChunks;
         str << "}";
         return str.Str();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////
+// EPHEMERAL CHUNK CREDITS
+////////////////////////////////////////////////////////////////////////////
+struct TEvChunkCreditReserve
+    : TEventLocal<TEvChunkCreditReserve, TEvBlobStorage::EvChunkCreditReserve>
+{
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    ui32 SizeChunks;
+
+    TEvChunkCreditReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , SizeChunks(sizeChunks)
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "{EvChunkCreditReserve ownerId# " << ui32(Owner)
+            << " ownerRound# " << OwnerRound << " SizeChunks# " << SizeChunks << "}";
+    }
+};
+
+struct TEvChunkCreditReserveResult
+    : TEventLocal<TEvChunkCreditReserveResult, TEvBlobStorage::EvChunkCreditReserveResult>
+{
+    NKikimrProto::EReplyStatus Status;
+    ui32 GrantedChunks;
+    ui32 OwnerCreditChunks;
+    ui32 TotalCreditChunks;
+    TStatusFlags StatusFlags;
+    TString ErrorReason;
+
+    TEvChunkCreditReserveResult(NKikimrProto::EReplyStatus status, ui32 grantedChunks,
+            ui32 ownerCreditChunks, ui32 totalCreditChunks, TStatusFlags statusFlags,
+            TString errorReason = {})
+        : Status(status)
+        , GrantedChunks(grantedChunks)
+        , OwnerCreditChunks(ownerCreditChunks)
+        , TotalCreditChunks(totalCreditChunks)
+        , StatusFlags(statusFlags)
+        , ErrorReason(std::move(errorReason))
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "{EvChunkCreditReserveResult Status# "
+            << NKikimrProto::EReplyStatus_Name(Status) << " GrantedChunks# " << GrantedChunks
+            << " OwnerCreditChunks# " << OwnerCreditChunks << " TotalCreditChunks# " << TotalCreditChunks
+            << " StatusFlags# " << StatusFlagsToString(StatusFlags)
+            << " ErrorReason# \"" << ErrorReason << "\"}";
+    }
+};
+
+struct TEvChunkCreditRelease
+    : TEventLocal<TEvChunkCreditRelease, TEvBlobStorage::EvChunkCreditRelease>
+{
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    ui32 SizeChunks;
+
+    TEvChunkCreditRelease(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , SizeChunks(sizeChunks)
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "{EvChunkCreditRelease ownerId# " << ui32(Owner)
+            << " ownerRound# " << OwnerRound << " SizeChunks# " << SizeChunks << "}";
+    }
+};
+
+struct TEvChunkCreditReleaseResult
+    : TEventLocal<TEvChunkCreditReleaseResult, TEvBlobStorage::EvChunkCreditReleaseResult>
+{
+    NKikimrProto::EReplyStatus Status;
+    ui32 ReleasedChunks;
+    ui32 OwnerCreditChunks;
+    ui32 TotalCreditChunks;
+    TStatusFlags StatusFlags;
+    TString ErrorReason;
+
+    TEvChunkCreditReleaseResult(NKikimrProto::EReplyStatus status, ui32 releasedChunks,
+            ui32 ownerCreditChunks, ui32 totalCreditChunks, TStatusFlags statusFlags,
+            TString errorReason = {})
+        : Status(status)
+        , ReleasedChunks(releasedChunks)
+        , OwnerCreditChunks(ownerCreditChunks)
+        , TotalCreditChunks(totalCreditChunks)
+        , StatusFlags(statusFlags)
+        , ErrorReason(std::move(errorReason))
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "{EvChunkCreditReleaseResult Status# "
+            << NKikimrProto::EReplyStatus_Name(Status) << " ReleasedChunks# " << ReleasedChunks
+            << " OwnerCreditChunks# " << OwnerCreditChunks << " TotalCreditChunks# " << TotalCreditChunks
+            << " StatusFlags# " << StatusFlagsToString(StatusFlags)
+            << " ErrorReason# \"" << ErrorReason << "\"}";
     }
 };
 

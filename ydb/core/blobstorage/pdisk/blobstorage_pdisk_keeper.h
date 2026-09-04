@@ -86,6 +86,31 @@ public:
         return TrimmedFreeChunks.Size();
     }
 
+    ui32 GetOwnerCreditChunks(TOwner owner) const {
+        return ChunkTracker.GetOwnerCreditChunks(owner);
+    }
+
+    ui32 GetTotalCreditChunks() const {
+        return ChunkTracker.GetTotalCreditChunks();
+    }
+
+    ui32 ReserveOwnerCredit(TOwner owner, ui32 requestedChunks, TString& outErrorReason) {
+        // Preserve the same one-chunk physical safety margin used by ordinary
+        // data reservation.
+        const ui32 free = GetFreeChunkCount();
+        const ui32 credited = GetTotalCreditChunks();
+        const ui32 physicallyAvailable = free > credited + 1 ? free - credited - 1 : 0;
+        return ChunkTracker.ReserveCredit(owner, requestedChunks, physicallyAvailable, outErrorReason);
+    }
+
+    void ReleaseOwnerCredit(TOwner owner, ui32 chunks) {
+        ChunkTracker.ReleaseCredit(owner, chunks);
+    }
+
+    void ReleaseAllOwnerCredit(TOwner owner) {
+        ChunkTracker.ReleaseAllCredit(owner);
+    }
+
     i64 GetOwnerHardLimit(TOwner owner) const {
         return ChunkTracker.GetOwnerHardLimit(owner);
     }
@@ -142,6 +167,29 @@ public:
                 chunks[i] = idx;
             }
         }
+        return chunks;
+    }
+
+    TVector<TChunkIdx> PopOwnerFreeChunksFromCredit(TOwner owner, ui32 chunkCount, TString& outErrorReason) {
+        if (chunkCount > GetOwnerCreditChunks(owner)) {
+            outErrorReason = TStringBuilder() << "Not enough chunk credit, requested# " << chunkCount
+                << " available# " << GetOwnerCreditChunks(owner);
+            return {};
+        }
+
+        TVector<TChunkIdx> chunks;
+        chunks.reserve(chunkCount);
+        for (ui32 i = 0; i < chunkCount; ++i) {
+            const TChunkIdx idx = PopFreeUnprotected(outErrorReason);
+            if (!idx) {
+                for (TChunkIdx rollback : chunks) {
+                    UntrimmedFreeChunks.Push(rollback);
+                }
+                return {};
+            }
+            chunks.push_back(idx);
+        }
+        ChunkTracker.ConsumeCredit(owner, chunkCount);
         return chunks;
     }
 
@@ -243,6 +291,17 @@ protected:
     // Internals
     //
     TChunkIdx PopFree(TString &outErrorReason) {
+        const ui32 free = GetFreeChunkCount();
+        const ui32 credited = GetTotalCreditChunks();
+        if (free <= credited || (credited && free - credited <= 1)) {
+            outErrorReason = TStringBuilder() << "Physical free chunks are covered by outstanding credits, free# "
+                << free << " credits# " << credited << " Marker# BPK11";
+            return 0;
+        }
+        return PopFreeUnprotected(outErrorReason);
+    }
+
+    TChunkIdx PopFreeUnprotected(TString &outErrorReason) {
         TChunkIdx chunkIdx = TrimmedFreeChunks.Pop();
         if (!chunkIdx) {
             chunkIdx = UntrimmedFreeChunks.Pop();

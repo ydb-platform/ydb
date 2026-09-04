@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_hullstorageratio.h"
+#include "fresh_space_tracker.h"
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
@@ -134,6 +135,7 @@ namespace NKikimr {
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
+        const std::shared_ptr<TFreshSpaceTracker> FreshSpaceTracker;
 
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
@@ -157,7 +159,8 @@ namespace NKikimr {
                 TDuration hullCompStorageRatioCalcPeriod,
                 TDuration hullCompStorageRatioMaxCalcDuration,
                 ui32 hullCompLevel0MaxSstsAtOnce,
-                ui32 hullCompSortedPartsNum
+                ui32 hullCompSortedPartsNum,
+                bool enableFreshSpaceCredits = false
         );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);

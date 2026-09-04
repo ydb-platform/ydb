@@ -144,6 +144,8 @@ enum class ERequestType {
     RequestHarakiri,
     RequestYardSlay,
     RequestChunkReserve,
+    RequestChunkCreditReserve,
+    RequestChunkCreditRelease,
     RequestChunkLock,
     RequestChunkUnlock,
     RequestYardControl,

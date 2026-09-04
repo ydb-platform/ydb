@@ -29,6 +29,7 @@ namespace NKikimr {
         ui64 BlackZonePeriods = 0;
         ui64 TotalChunks = 0;
         ui64 FreeChunks = 0;
+        ui64 SpaceObservationGeneration = 0;
 
         friend class TActorBootstrapped<TDskSpaceTrackerActor>;
 
@@ -66,6 +67,7 @@ namespace NKikimr {
                 {"marker", "BSVSOOST01"});
             // send message to PDisk
             Become(&TThis::AskFunc);
+            SpaceObservationGeneration = VCtx->OutOfSpaceState.GetLocalSpaceObservationGeneration();
             ctx.Send(PDiskCtx->PDiskId,
                     new NPDisk::TEvCheckSpace(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound));
         }
@@ -93,8 +95,8 @@ namespace NKikimr {
 
             TotalChunks = msg->TotalChunks;
             FreeChunks = msg->FreeChunks;
-            VCtx->OutOfSpaceState.UpdateLocalChunk(msg->StatusFlags);
-            VCtx->OutOfSpaceState.UpdateLocalLog(msg->LogStatusFlags);
+            VCtx->OutOfSpaceState.UpdateLocalChunk(msg->StatusFlags, SpaceObservationGeneration);
+            VCtx->OutOfSpaceState.UpdateLocalLog(msg->LogStatusFlags, SpaceObservationGeneration);
             VCtx->OutOfSpaceState.UpdateLocalFreeSpaceShare(ui64(1 << 24) * (1.0 - msg->NormalizedOccupancy));
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
             VCtx->OutOfSpaceState.UpdateLocalTotalChunks(msg->TotalChunks);

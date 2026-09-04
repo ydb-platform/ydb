@@ -188,6 +188,25 @@ namespace NKikimr {
             SimpleBackwardMiddle<TDatasetSimple2Times>(DsSimple2Times);
         }
 
+        Y_UNIT_TEST(CompactionAbortRetainsSegmentForRetry) {
+            auto fresh = std::make_shared<TFreshData>(GetLevelIndexSetting(), CreateDefaultTimeProvider(), Arena);
+            const TLogoBlobID id(0, 1, 1, 0, sizeof(Data), 0, 1);
+            fresh->PutLogoBlobWithData(1, TKeyLogoBlob(id), id.PartId(), TIngress(), TRope(Data), std::nullopt);
+
+            auto segment = fresh->FindSegmentForCompaction();
+            UNIT_ASSERT(segment);
+            const auto* expected = segment.Get();
+            UNIT_ASSERT(fresh->CompactionInProgress());
+
+            fresh->CompactionAborted(std::move(segment));
+            UNIT_ASSERT(!fresh->CompactionInProgress());
+            UNIT_ASSERT(fresh->NeedsCompaction(0, false));
+
+            auto retry = fresh->FindSegmentForCompaction();
+            UNIT_ASSERT_VALUES_EQUAL(retry.Get(), expected);
+            UNIT_ASSERT(fresh->CompactionInProgress());
+        }
+
         Y_UNIT_TEST(SolomonStandCrash) {
             TFreshDataPtr fresh(new TFreshData(GetLevelIndexSetting(),
                 CreateDefaultTimeProvider(), Arena));

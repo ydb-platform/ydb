@@ -15,6 +15,8 @@ namespace NKikimr {
 namespace NBalancing {
 
 namespace {
+    static constexpr ui64 DELETE_RETRY_TAG_MASK = ui64(1) << 63;
+
     struct TPartOnMain {
         TLogoBlobID Key;
         bool HasOnMain;
@@ -122,8 +124,22 @@ namespace {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         ui32 OrderId = 0;
 
+        struct TPendingDelete {
+            TLogoBlobID Id;
+            TIngress Ingress;
+        };
+        THashMap<ui64, TPendingDelete> PendingDeletes;
+
         ui32 RequestsSent = 0;
         ui32 Responses = 0;
+
+        void SendDelete(TActorId selfId, ui64 orderId) {
+            const auto it = PendingDeletes.find(orderId);
+            Y_ABORT_UNLESS(it != PendingDeletes.end());
+            TlsActivationContext->Send(new IEventHandle(Ctx->SkeletonId, selfId,
+                new TEvDelLogoBlobDataSyncLog(it->second.Id, it->second.Ingress, orderId)));
+        }
+
     public:
         TPartsDeleter(std::shared_ptr<TBalancingCtx> ctx, TIntrusivePtr<TBlobStorageGroupInfo> gInfo)
             : Ctx(ctx)
@@ -143,27 +159,47 @@ namespace {
 
             TIngress ingress;
             ingress.DeleteHandoff(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
+            const ui64 orderId = OrderId++;
 
             YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Deleting local"),
                 {"marker", "BSVB20"},
                 {"logoBlobID", key},
                 {"ingress", ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)});
 
-            TlsActivationContext->Send(
-                new IEventHandle(Ctx->SkeletonId, selfId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++)));
+            const bool inserted = PendingDeletes.emplace(orderId,
+                TPendingDelete{keyWithoutPartId, std::move(ingress)}).second;
+            Y_ABORT_UNLESS(inserted);
+            SendDelete(selfId, orderId);
 
             ++Ctx->MonGroup.MarkedReadyToDelete();
             Ctx->MonGroup.MarkedReadyToDeleteBytes() += GInfo->GetTopology().GType.PartSize(key);
             ++RequestsSent;
         }
 
-        void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
+        std::optional<ui64> Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
+            const auto it = PendingDeletes.find(ev->Get()->OrderId);
+            Y_ABORT_UNLESS(it != PendingDeletes.end());
+            if (ev->Get()->Status != NKikimrProto::OK) {
+                YDB_LOG_WARN(VDISKP(Ctx->VCtx, "Local deletion was not admitted"),
+                    {"marker", "BSVB32"},
+                    {"logoBlobID", ev->Get()->Id},
+                    {"status", ev->Get()->Status});
+                return ev->Get()->OrderId;
+            }
             ++Responses;
             ++Ctx->MonGroup.MarkedReadyToDeleteResponse();
             Ctx->MonGroup.MarkedReadyToDeleteWithResponseBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Deleted local"),
                 {"marker", "BSVB21"},
                 {"logoBlobID", ev->Get()->Id});
+            PendingDeletes.erase(it);
+            return std::nullopt;
+        }
+
+        void Retry(TActorId selfId, ui64 orderId) {
+            if (PendingDeletes.contains(orderId)) {
+                SendDelete(selfId, orderId);
+            }
         }
 
         bool IsDone() const {
@@ -271,7 +307,11 @@ namespace {
         }
 
         void HandleDelLogoBlobResult(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
-            PartsDeleter.Handle(ev);
+            if (const auto retryOrderId = PartsDeleter.Handle(ev)) {
+                Schedule(TDuration::MilliSeconds(100),
+                    new NActors::TEvents::TEvWakeup(DELETE_RETRY_TAG_MASK | *retryOrderId));
+                return;
+            }
             if (PartsDeleter.IsDone()) {
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "DeleteLocalParts done"),
                     {"marker", "BSVB27"});
@@ -280,7 +320,12 @@ namespace {
         }
 
         void TimeoutDelete(NActors::TEvents::TEvWakeup::TPtr ev) {
-            if (ev->Get()->Tag != DELETE_TIMEOUT_TAG) {
+            const ui64 tag = ev->Get()->Tag;
+            if (tag & DELETE_RETRY_TAG_MASK) {
+                PartsDeleter.Retry(SelfId(), tag & ~DELETE_RETRY_TAG_MASK);
+                return;
+            }
+            if (tag != DELETE_TIMEOUT_TAG) {
                 return;
             }
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "MarkReadyBatchTimeout"),

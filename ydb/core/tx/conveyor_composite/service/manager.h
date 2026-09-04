@@ -55,6 +55,9 @@ public:
         if (--queryIt->second.RegistrationsCount != 0) {
             return false;
         }
+        for (const auto& pool : BuildWorkerPools()) {
+            pool->RemovePendingSchedulableWork(identity);
+        }
         WorkloadManagerQueries.erase(queryIt);
         return true;
     }
@@ -96,8 +99,11 @@ public:
 
     [[nodiscard]] bool DrainTasks() {
         bool result = false;
+        const TSchedulerContextGetter schedulerContextGetter = [&](const TWorkloadManagerQueryIdentity& identity) {
+            return GetWorkloadManagerQueryContext(identity);
+        };
         for (const auto& pool : BuildWorkerPools()) {
-            if (pool->DrainTasks()) {
+            if (pool->DrainTasks(schedulerContextGetter)) {
                 result = true;
             }
         }

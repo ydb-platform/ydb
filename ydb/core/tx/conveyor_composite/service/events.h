@@ -18,14 +18,17 @@ private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
     YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
     YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY_DEF(std::optional<TWorkloadManagerQueryIdentity>, WorkloadManagerQueryIdentity);
 
 public:
     TWorkerTaskContext(
-        const TDuration prediction, const ESpecialTaskCategory category, const std::shared_ptr<TProcessScope>& scope, const ui64 processId)
+        const TDuration prediction, const ESpecialTaskCategory category, const std::shared_ptr<TProcessScope>& scope, const ui64 processId,
+        std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity)
         : PredictedDuration(prediction)
         , Category(category)
         , Scope(scope)
-        , ProcessId(processId) {
+        , ProcessId(processId)
+        , WorkloadManagerQueryIdentity(std::move(workloadManagerQueryIdentity)) {
     }
 };
 
@@ -58,8 +61,9 @@ public:
     }
 
     TWorkerTask(const ITask::TPtr& task, const TDuration prediction, const ESpecialTaskCategory category,
-        const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId)
-        : TBase(prediction, category, scope, processId)
+        const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId,
+        std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity = std::nullopt)
+        : TBase(prediction, category, scope, processId, std::move(workloadManagerQueryIdentity))
         , Task(task)
         , TaskSignals(taskSignals) {
         Y_ABORT_UNLESS(task);
@@ -85,8 +89,9 @@ public:
     }
 
     TWorkerTaskPrepare(ITask::TPtr&& task, const TDuration prediction, const ESpecialTaskCategory category,
-        const std::shared_ptr<TProcessScope>& scope, const ui64 processId)
-        : TBase(prediction, category, scope, processId)
+        const std::shared_ptr<TProcessScope>& scope, const ui64 processId,
+        std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity = std::nullopt)
+        : TBase(prediction, category, scope, processId, std::move(workloadManagerQueryIdentity))
         , Task(std::move(task)) {
         AFL_VERIFY(Task);
     }

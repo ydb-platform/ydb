@@ -28,11 +28,13 @@ struct TEvExecution {
         YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
         YDB_READONLY(ui64, InternalProcessId, 0);
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
+        YDB_READONLY_DEF(std::optional<TWorkloadManagerQueryIdentity>, WorkloadManagerQueryIdentity);
 
     public:
         TEvNewTask() = default;
 
-        explicit TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 processId);
+        explicit TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 processId,
+            std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity = std::nullopt);
     };
 
     class TEvRegisterProcess: public NActors::TEventLocal<TEvRegisterProcess, EvRegisterProcess> {

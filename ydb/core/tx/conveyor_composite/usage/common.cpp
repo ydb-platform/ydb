@@ -7,11 +7,13 @@
 
 namespace NKikimr::NConveyorComposite {
 
-bool TProcessGuard::SendTaskToExecute(const std::shared_ptr<ITask>& task) const {
+bool TProcessGuard::SendTaskToExecute(const std::shared_ptr<ITask>& task,
+    const std::optional<TWorkloadManagerQueryIdentity>& workloadManagerQueryIdentity) const {
     AFL_VERIFY(!Finished);
     if (ServiceActorId && NActors::TlsActivationContext) {
         auto& context = NActors::TActorContext::AsActorContext();
-        context.Send(*ServiceActorId, new TEvExecution::TEvNewTask(task, Category, InternalProcessId));
+        context.Send(*ServiceActorId,
+            new TEvExecution::TEvNewTask(task, Category, InternalProcessId, workloadManagerQueryIdentity));
         return true;
     } else {
         task->Execute(nullptr, task);

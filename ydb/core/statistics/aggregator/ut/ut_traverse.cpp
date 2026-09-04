@@ -18,17 +18,18 @@ namespace {
 
 TTestEnv CreateTestEnv() {
     return TTestEnv(1, 1, false, [](Tests::TServerSettings& settings) {
-        settings.AppConfig->MutableStatisticsConfig()
-            ->SetEnableBackgroundColumnStatsCollection(true);
+        auto* stats = settings.AppConfig->MutableStatisticsConfig();
+        stats->SetEnableBackgroundColumnStatsCollection(true);
+        stats->SetBaseStatsSendInitialDelaySeconds(3);
     });
 }
 
 TTestEnv CreateTestEnv(ui32 changeRatioThresholdPercent) {
     return TTestEnv(1, 1, false, [changeRatioThresholdPercent](Tests::TServerSettings& settings) {
-        settings.AppConfig->MutableStatisticsConfig()
-            ->SetEnableBackgroundColumnStatsCollection(true);
-        settings.AppConfig->MutableStatisticsConfig()
-            ->SetBackgroundAnalyzeChangeRatioThresholdPercent(changeRatioThresholdPercent);
+        auto* stats = settings.AppConfig->MutableStatisticsConfig();
+        stats->SetEnableBackgroundColumnStatsCollection(true);
+        stats->SetBackgroundAnalyzeChangeRatioThresholdPercent(changeRatioThresholdPercent);
+        stats->SetBaseStatsSendInitialDelaySeconds(3);
     });
 }
 
@@ -313,6 +314,7 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
             auto* stats = settings.AppConfig->MutableStatisticsConfig();
             stats->SetEnableBackgroundColumnStatsCollection(true);
             stats->SetBaseStatsSendIntervalSecondsDedicated(1);
+            stats->SetBaseStatsSendInitialDelaySeconds(3);
         });
         auto& runtime = *env.GetServer().GetRuntime();
 
@@ -465,14 +467,10 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
     // re-trigger ANALYZE. A later above-threshold change still must.
     Y_UNIT_TEST_TWIN(SchemeShardRestartWithoutPersistentStats, ColumnShard) {
         TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
-            settings.AppConfig->MutableStatisticsConfig()
-                ->SetEnableBackgroundColumnStatsCollection(true);
-            settings.AppConfig->MutableStatisticsConfig()
-                ->SetBackgroundAnalyzeChangeRatioThresholdPercent(20);
-            // After reboot SS waits 30s before the first SendBaseStatsToSA; keep
-            // the subsequent interval short so recovery is observable quickly.
-            settings.AppConfig->MutableStatisticsConfig()
-                ->SetBaseStatsSendIntervalSecondsDedicated(3);
+            auto* stats = settings.AppConfig->MutableStatisticsConfig();
+            stats->SetEnableBackgroundColumnStatsCollection(true);
+            stats->SetBackgroundAnalyzeChangeRatioThresholdPercent(20);
+            stats->SetBaseStatsSendInitialDelaySeconds(3);
             settings.FeatureFlags.SetEnablePersistentPartitionStats(false);
         });
         auto& runtime = *env.GetServer().GetRuntime();

@@ -18,6 +18,7 @@ SRCS(
     backpressure.cpp
     block_race.cpp
     blob_checker.cpp
+    blob_checker_e2e.cpp
     bsc_cache.cpp
     cancellation.cpp
     counting_events.cpp

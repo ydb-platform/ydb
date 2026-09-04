@@ -1,17 +1,19 @@
-YQL_UDF_CONTRIB(dsv_udf)
+IF (NOT EXPORT_CMAKE)
+    YQL_UDF_CONTRIB(dsv_udf)
 
-YQL_ABI_VERSION(
-    2
-    28
-    0
-)
+    YQL_ABI_VERSION(
+        2
+        28
+        0
+    )
 
-PEERDIR(
-    library/cpp/deprecated/split
-)
+    PEERDIR(
+        library/cpp/deprecated/split
+    )
 
-SRCS(
-    dsv_udf.cpp
-)
+    SRCS(
+        dsv_udf.cpp
+    )
 
-END()
+    END()
+ENDIF()

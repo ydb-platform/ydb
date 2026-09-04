@@ -5541,16 +5541,10 @@ public:
         }
         if (TxManager->ConsumeCommitResult(shardId)) {
             if (FlushDeferredLocksBrokenIfPending()) return;
-<<<<<<< HEAD
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
-=======
             if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                 AFL_ENSURE(CommitTimestamp.has_value());
             }
-            YDB_LOG_DEBUG("Committed",
-                {"logPrefix", this->LogPrefix},
-                {"txId", TxId.value_or(0)});
->>>>>>> 7efc3fbf402 (StrictSerializableRW: PRAGMA + tests (#52098))
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
                 BuildStats(),

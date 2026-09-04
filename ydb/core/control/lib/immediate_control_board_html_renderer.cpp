@@ -7,7 +7,11 @@ TControlBoardTableHtmlRenderer::TControlBoardTableHtmlRenderer()
     Table.ConstructInPlace(*Html, "table table-sortable");
 }
 
-void TControlBoardTableHtmlRenderer::AddNewTable(const TString& caption) {
+void TControlBoardTableHtmlRenderer::AddNewTable(
+    const TString& caption,
+    EControlBoardType controlBoardType)
+{
+    ControlBoardType = controlBoardType;
     if (TableBody) {
         TableBody.Clear(); //Closing existing table
         Table.Clear();
@@ -33,32 +37,46 @@ void TControlBoardTableHtmlRenderer::AddNewTable(const TString& caption) {
 
 void TControlBoardTableHtmlRenderer::AddTableItem(const TString& name, TIntrusivePtr<TControl> control) {
     Y_ENSURE(!!TableBody);
+    const TControlState state = control->GetState();
     auto& __stream = *Html;
     TABLER() {
         TABLED() { HtmlStrm << name; }
         TABLED() { HtmlStrm << control->RangeAsString(); }
         TABLED() {
-            if (control->IsDefault()) {
-                HtmlStrm << "<p>" << control->Get() << "</p>";
+            if (!state.Overridden) {
+                HtmlStrm << "<p>" << state.Value << "</p>";
             } else {
-                HtmlStrm << "<p style='color:red;'><b>" << control->Get() << " </b></p>";
+                HtmlStrm << "<p style='color:red;'><b>" << state.Value
+                    << " </b><span>override</span></p>";
             }
         }
         TABLED() {
-            if (control->IsDefault()) {
-                HtmlStrm << "<p>" << control->GetDefault() << "</p>";
+            if (!state.Overridden) {
+                HtmlStrm << "<p>" << state.Default << "</p>";
             } else {
-                HtmlStrm << "<p style='color:red;'><b>" << control->GetDefault() << " </b></p>";
+                HtmlStrm << "<p style='color:red;'><b>" << state.Default << " </b></p>";
             }
         }
         TABLED() {
             HtmlStrm << "<form class='form_horizontal' method='post'>";
             HtmlStrm << "<input name='" << name << "' type='text' value='"
-                << control->Get() << "'/>";
+                << state.Value << "'/>";
             HtmlStrm  << "<button type='submit' style='color:red;'><b>Change</b></button>";
             HtmlStrm  << "</form>";
+            if (state.Overridden) {
+                HtmlStrm << "<form class='form_horizontal' method='post'>";
+                HtmlStrm << "<input type='hidden' name='__icb_action' value='resetOverride'/>";
+                HtmlStrm << "<input type='hidden' name='__icb_board' value='"
+                    << (ControlBoardType == EControlBoardType::Static ? "static" : "dynamic")
+                    << "'/>";
+                HtmlStrm << "<input type='hidden' name='__icb_control' value='"
+                    << name << "'/>";
+                HtmlStrm << "<button type='submit' style='color:green;'>"
+                    << "<b>Reset override</b></button>";
+                HtmlStrm << "</form>";
+            }
         }
-        TABLED() { HtmlStrm << !control->IsDefault(); }
+        TABLED() { HtmlStrm << state.Overridden; }
     }
 }
 

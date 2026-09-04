@@ -13,6 +13,12 @@ namespace NKikimr {
 
 using namespace NActors;
 
+namespace {
+
+const TDuration CountersUpdateInterval = TDuration::Seconds(1);
+
+}
+
 class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor> {
     struct TLogRecord {
         TInstant Timestamp;
@@ -61,6 +67,7 @@ public:
 
 
     void Bootstrap(const TActorContext &ctx) {
+        UpdateChangedCounters();
         auto mon = AppData(ctx)->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -68,35 +75,71 @@ public:
                     ctx.ActorSystem(), ctx.SelfID);
         }
         Become(&TThis::StateFunc);
+        ctx.Schedule(CountersUpdateInterval, new TEvents::TEvWakeup());
     }
 
 private:
+    void UpdateChangedCounters() {
+        const ui64 count = Icb->GetOverriddenCount() + Dcb->GetOverriddenCount();
+        *ChangedCount = count;
+        *HasChanged = count > 0;
+    }
+
     void HandlePostParams(const TCgiParameters &cgi) {
+        if (cgi.Get("__icb_action") == "resetOverride") {
+            const TString& controlName = cgi.Get("__icb_control");
+            const TString& controlBoard = cgi.Get("__icb_board");
+            TControlMutation mutation;
+            bool controlExists = false;
+            if (controlBoard == "static") {
+                if (auto control = Icb->GetControlByName(controlName)) {
+                    mutation = control->ClearOverride();
+                    controlExists = true;
+                }
+            } else if (controlBoard == "dynamic") {
+                controlExists = Dcb->ClearOverride(controlName, mutation);
+            }
+            if (controlExists && (
+                    mutation.Before.Value != mutation.After.Value ||
+                    mutation.Before.Default != mutation.After.Default ||
+                    mutation.Before.Overridden != mutation.After.Overridden))
+            {
+                HistoryLog.emplace_back(
+                    TInstant::Now(),
+                    controlName,
+                    mutation.Before.Value,
+                    mutation.After.Value);
+            }
+            return;
+        }
         if (cgi.Has("restoreDefaults")) {
             Icb->RestoreDefaults();
             Dcb->RestoreDefaults();
             HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
-            *HasChanged = 0;
-            *ChangedCount = 0;
         }
         for (const auto& [paramName, paramValue] : cgi) {
-            TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
-            TAtomicBase prevValue = newValue;
-            bool isDefault = false;
-            if (auto control = Icb->GetControlByName(paramName)) {
-                prevValue = control->SetFromHtmlRequest(newValue);
-                isDefault = control->IsDefault();
-            } else {
-                isDefault = Dcb->SetValue(paramName, newValue, prevValue);
+            if (paramName == "restoreDefaults") {
+                continue;
             }
-            if (prevValue != newValue) {
-                HistoryLog.emplace_back(TInstant::Now(), paramName, prevValue, newValue);
-                if (isDefault) {
-                    ChangedCount->Dec();
-                } else {
-                    ChangedCount->Inc();
-                }
-                *HasChanged = (ui64)ChangedCount->Val() > 0;
+            TControlMutation mutation;
+            bool controlExists = false;
+            const TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
+            if (auto control = Icb->GetControlByName(paramName)) {
+                mutation = control->SetFromHtmlRequestWithState(newValue);
+                controlExists = true;
+            } else {
+                controlExists = Dcb->SetValue(paramName, newValue, mutation);
+            }
+            if (controlExists && (
+                    mutation.Before.Value != mutation.After.Value ||
+                    mutation.Before.Default != mutation.After.Default ||
+                    mutation.Before.Overridden != mutation.After.Overridden))
+            {
+                HistoryLog.emplace_back(
+                    TInstant::Now(),
+                    paramName,
+                    mutation.Before.Value,
+                    mutation.After.Value);
             }
         }
     }
@@ -106,12 +149,13 @@ private:
         if (method == HTTP_METHOD_POST) {
             HandlePostParams(ev->Get()->Request.GetPostParams());
         }
+        UpdateChangedCounters();
         TStringStream str;
 
         TControlBoardTableHtmlRenderer renderer;
-        renderer.AddNewTable("Static Controls");
+        renderer.AddNewTable("Static Controls", EControlBoardType::Static);
         Icb->RenderAsHtml(renderer);
-        renderer.AddNewTable("Dynamic Controls");
+        renderer.AddNewTable("Dynamic Controls", EControlBoardType::Dynamic);
         Dcb->RenderAsHtml(renderer);
 
         str << renderer.GetHtml();
@@ -141,9 +185,15 @@ private:
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 
+    void Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+        UpdateChangedCounters();
+        ctx.Schedule(CountersUpdateInterval, new TEvents::TEvWakeup());
+    }
+
     STFUNC(StateFunc) {
         switch(ev->GetTypeRewrite()) {
             HFunc(NMon::TEvHttpInfo, Handle);
+            HFunc(TEvents::TEvWakeup, Handle);
         }
     }
 };

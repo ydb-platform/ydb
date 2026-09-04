@@ -30,6 +30,18 @@ public:
         return Control->GetDefault();
     }
 
+    TControlState GetState() const {
+        return Control->GetState();
+    }
+
+    std::optional<TAtomicBase> GetOverride() const {
+        return Control->GetOverride();
+    }
+
+    void UpdateDefault(TAtomicBase newDefault) {
+        Control->UpdateDefault(newDefault);
+    }
+
     i64 operator=(i64 value) {
         Control->Set(value);
         return value;

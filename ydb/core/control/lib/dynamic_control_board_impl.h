@@ -21,6 +21,10 @@ public:
     void RestoreDefault(TString name);
 
     bool SetValue(TString name, TAtomic value, TAtomic &outPrevValue);
+    bool SetValue(TString name, TAtomic value, TControlMutation& outMutation);
+    bool ClearOverride(TString name, TControlMutation& outMutation);
+
+    ui64 GetOverriddenCount() const;
 
     // Only for tests
     void GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const;

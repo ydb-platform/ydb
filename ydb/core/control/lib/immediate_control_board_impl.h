@@ -12,9 +12,6 @@ class TImmediateControlActor;
 class TControlBoardTableHtmlRenderer;
 
 class TControlBoard: public TControlBoardBase {
-    friend class TImmediateControlActor;
-private:
-    TIntrusivePtr<TControl> GetControlByName(const TString& name) const;
 public:
     void RestoreDefaults();
     void RenderAsHtml(TControlBoardTableHtmlRenderer& renderer) const;
@@ -22,6 +19,12 @@ public:
     static void RegisterSharedControl(TControlWrapper& control, THotSwap<TControl>& icbControl);
     static void RegisterLocalControl(TControlWrapper control, THotSwap<TControl>& icbControl);
     static void SetValue(TAtomicBase value, THotSwap<TControl>& icbControl);
+
+private:
+    friend class TImmediateControlActor;
+
+    TIntrusivePtr<TControl> GetControlByName(const TString& name) const;
+    ui64 GetOverriddenCount() const;
 };
 
 }

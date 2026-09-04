@@ -3008,6 +3008,16 @@ namespace NTypeAnnImpl {
             return status;
         }
 
+        if (IsAvailable(NFeature::DecimalIntegralArithmetic, ctx.Types) &&
+            ((IsDataTypeDecimal(dataType[0]->GetSlot()) && IsDataTypeIntegral(dataType[1]->GetSlot())) ||
+             (IsDataTypeIntegral(dataType[0]->GetSlot()) && IsDataTypeDecimal(dataType[1]->GetSlot())))) {
+            output = ctx.Expr.RenameNode(*input, "DecimalIntegralAdd");
+            if (!IsDataTypeDecimal(dataType[0]->GetSlot())) {
+                output->ChildRef(0).Swap(output->ChildRef(1));
+            }
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         auto isAddAllowed = IsAddAllowedYqlTypes(input->ChildPtr(0)->GetTypeAnn(), input->ChildPtr(1)->GetTypeAnn(), ctx.Expr);
         if (!isAddAllowed.has_value()) {
             ctx.Expr.AddError(TIssue(
@@ -3084,6 +3094,12 @@ namespace NTypeAnnImpl {
             return status;
         }
 
+        if (IsAvailable(NFeature::DecimalIntegralArithmetic, ctx.Types) &&
+            IsDataTypeDecimal(dataType[0]->GetSlot()) && IsDataTypeIntegral(dataType[1]->GetSlot())) {
+            output = ctx.Expr.RenameNode(*input, "DecimalIntegralSub");
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         const bool isLeftNumeric = IsDataTypeNumeric(dataType[0]->GetSlot());
         const bool isRightNumeric = IsDataTypeNumeric(dataType[1]->GetSlot());
         // bool isOk = false;
@@ -3113,7 +3129,7 @@ namespace NTypeAnnImpl {
             if (!(*dataTypeOne == *dataTypeTwo)) {
                 ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Cannot substract different decimals."
+                    TStringBuilder() << "Cannot subtract different decimals."
                 ));
 
                 return IGraphTransformer::TStatus::Error;
@@ -3404,7 +3420,18 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus DecimalBinaryWrapperBase(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx, bool blocks) {
+    enum class EDecimalRightOperand {
+        Integral,
+        DecimalOrIntegral,
+    };
+
+    IGraphTransformer::TStatus DecimalBinaryWrapperBaseImpl(
+        const TExprNode::TPtr& input,
+        TExprNode::TPtr& output,
+        TContext& ctx,
+        bool blocks,
+        EDecimalRightOperand rightOperand)
+    {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -3445,6 +3472,12 @@ namespace NTypeAnnImpl {
 
         if (IsDataTypeDecimal(dataType[0]->GetSlot())) {
             if (IsDataTypeDecimal(dataType[1]->GetSlot())) {
+                if (rightOperand == EDecimalRightOperand::Integral) {
+                    ctx.Expr.AddError(TIssue(
+                        ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Expected integral right operand, but got: " << *input->Tail().GetTypeAnn()));
+                    return IGraphTransformer::TStatus::Error;
+                }
                 const auto dataTypeOne = static_cast<const TDataExprParamsType*>(dataType[0]);
                 const auto dataTypeTwo = static_cast<const TDataExprParamsType*>(dataType[1]);
 
@@ -3492,6 +3525,21 @@ namespace NTypeAnnImpl {
             input->SetTypeAnn(resultType);
         }
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus DecimalBinaryWrapperBase(
+        const TExprNode::TPtr& input,
+        TExprNode::TPtr& output,
+        TContext& ctx,
+        bool blocks)
+    {
+        return DecimalBinaryWrapperBaseImpl(
+            input, output, ctx, blocks, EDecimalRightOperand::DecimalOrIntegral);
+    }
+
+    IGraphTransformer::TStatus DecimalIntegralAdditiveWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return DecimalBinaryWrapperBaseImpl(
+            input, output, ctx, /*blocks=*/false, EDecimalRightOperand::Integral);
     }
 
     IGraphTransformer::TStatus DecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -16841,6 +16889,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PruneAdjacentKeys"] = &PruneKeysWrapper;
         Functions["PruneKeys"] = &PruneKeysWrapper;
 
+        Functions["DecimalIntegralAdd"] = &DecimalIntegralAdditiveWrapper;
+        Functions["DecimalIntegralSub"] = &DecimalIntegralAdditiveWrapper;
         Functions["DecimalDiv"] = &DecimalBinaryWrapper;
         Functions["DecimalMod"] = &DecimalBinaryWrapper;
         Functions["DecimalMul"] = &DecimalBinaryWrapper;

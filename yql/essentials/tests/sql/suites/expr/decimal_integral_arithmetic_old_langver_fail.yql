@@ -1,0 +1,5 @@
+/* custom error: Cannot add type Decimal(6,2) and Int8 */
+/* custom error: Cannot substract type Decimal(6,2) and Int8 */
+SELECT
+    Decimal("12.34", 6, 2) + Int8("1") AS add_value,
+    Decimal("12.34", 6, 2) - Int8("1") AS sub_value;

@@ -3,7 +3,10 @@
 #include "workers_pool.h"
 
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/tx/conveyor_composite/usage/common.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
+
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
 #include <algorithm>
 #include <ranges>
@@ -11,9 +14,15 @@
 namespace NKikimr::NConveyorComposite {
 class TTasksManager {
 private:
+    struct TWorkloadManagerQuery {
+        ui64 RegistrationsCount = 0;
+        NYql::NDq::IDqSchedulerContextPtr SchedulerContext;
+    };
+
     std::vector<std::shared_ptr<TWorkersPool>> WorkerPools;
     THashMap<TString, ui64> WorkerPoolNameToIndex;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
+    THashMap<TWorkloadManagerQueryIdentity, TWorkloadManagerQuery, TWorkloadManagerQueryIdentity::THash> WorkloadManagerQueries;
     NConfig::TConfig Config;
 
     auto BuildWorkerPools() const {
@@ -49,6 +58,39 @@ private:
     }
 
 public:
+    bool RegisterWorkloadManagerQuery(const TWorkloadManagerQueryIdentity& identity) {
+        auto [it, inserted] = WorkloadManagerQueries.emplace(identity, TWorkloadManagerQuery());
+        ++it->second.RegistrationsCount;
+        return inserted;
+    }
+
+    bool SetWorkloadManagerQueryContext(
+        const TWorkloadManagerQueryIdentity& identity, NYql::NDq::IDqSchedulerContextPtr schedulerContext) {
+        auto queryIt = WorkloadManagerQueries.find(identity);
+        if (queryIt == WorkloadManagerQueries.end()) {
+            return false;
+        }
+        queryIt->second.SchedulerContext = std::move(schedulerContext);
+        return true;
+    }
+
+    bool UnregisterWorkloadManagerQuery(const TWorkloadManagerQueryIdentity& identity) {
+        auto queryIt = WorkloadManagerQueries.find(identity);
+        Y_ENSURE(queryIt != WorkloadManagerQueries.end(), "unknown workload manager query " << identity.GetQueryId());
+        Y_ENSURE(queryIt->second.RegistrationsCount > 0);
+        if (--queryIt->second.RegistrationsCount != 0) {
+            return false;
+        }
+        WorkloadManagerQueries.erase(queryIt);
+        return true;
+    }
+
+    NYql::NDq::IDqSchedulerContextPtr GetWorkloadManagerQueryContext(
+        const TWorkloadManagerQueryIdentity& identity) const {
+        const auto it = WorkloadManagerQueries.find(identity);
+        return it == WorkloadManagerQueries.end() ? nullptr : it->second.SchedulerContext;
+    }
+
     TString DebugString() const {
         TStringBuilder sb;
         sb << "{";
@@ -56,6 +98,7 @@ public:
             sb << pool->GetMaxWorkerThreads() << ",";
         }
         sb << ";";
+        sb << "queries=" << WorkloadManagerQueries.size() << ";";
         sb << "}";
         return sb;
     }

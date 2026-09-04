@@ -40,4 +40,23 @@ TProcessGuard::TProcessGuard(const ESpecialTaskCategory category, const TString&
     }
 }
 
+void TWorkloadManagerQueryGuard::Finish() {
+    AFL_VERIFY(!Finished);
+    Finished = true;
+    if (ServiceActorId && NActors::TlsActivationContext) {
+        NActors::TActorContext::AsActorContext().Send(
+            *ServiceActorId, new TEvExecution::TEvUnregisterWorkloadManagerQuery(Identity));
+    }
+}
+
+TWorkloadManagerQueryGuard::TWorkloadManagerQueryGuard(
+    TWorkloadManagerQueryIdentity identity, const std::optional<NActors::TActorId>& actorId)
+    : Identity(std::move(identity))
+    , ServiceActorId(actorId) {
+    if (ServiceActorId) {
+        NActors::TActorContext::AsActorContext().Send(
+            *ServiceActorId, new TEvExecution::TEvRegisterWorkloadManagerQuery(Identity));
+    }
+}
+
 }   // namespace NKikimr::NConveyorComposite

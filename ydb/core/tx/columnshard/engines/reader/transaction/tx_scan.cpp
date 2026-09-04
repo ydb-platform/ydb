@@ -78,6 +78,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
     NConveyorComposite::TCPULimitsConfig cpuLimits;
     cpuLimits.DeserializeFromProto(request).Validate();
+    std::optional<NConveyorComposite::TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity;
+    if (request.HasDatabaseId() && request.HasPoolId()) {
+        workloadManagerQueryIdentity.emplace(request.GetDatabaseId(), request.GetPoolId(), txId);
+    }
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
@@ -249,7 +253,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
         ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
                          Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
                          scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat,
-                         Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId), TMailboxType::HTSwap, scanPoolId);
+                         Self->Counters.GetScanCounters(), cpuLimits, std::move(workloadManagerQueryIdentity), std::move(orbit), rawPathId),
+        TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     YDB_LOG_DEBUG("",

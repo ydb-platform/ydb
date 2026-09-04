@@ -2,6 +2,7 @@
 #include "service.h"
 
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/tx/conveyor_composite/tracing/probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -160,6 +161,49 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
         CompleteConfigUpdate();
     }
     Y_UNUSED(Manager->DrainTasks());
+}
+
+void TDistributor::HandleMain(TEvExecution::TEvRegisterWorkloadManagerQuery::TPtr& ev) {
+    const auto& identity = ev->Get()->GetIdentity();
+    if (!Manager->RegisterWorkloadManagerQuery(identity)) {
+        return;
+    }
+
+    const auto schedulerServiceId = NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId());
+    Send(schedulerServiceId, new NKqp::NScheduler::TEvAddDatabase(identity.GetDatabaseId()));
+    Send(schedulerServiceId, new NKqp::NScheduler::TEvAddPool(identity.GetDatabaseId(), identity.GetPoolId()));
+
+    auto addQuery = MakeHolder<NKqp::NScheduler::TEvAddQuery>();
+    addQuery->DatabaseId = identity.GetDatabaseId();
+    addQuery->PoolId = identity.GetPoolId();
+    addQuery->QueryId = identity.GetQueryId();
+    Send(schedulerServiceId, addQuery.Release(), 0, identity.GetQueryId());
+}
+
+void TDistributor::HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev) {
+    const auto& query = ev->Get()->Query;
+    if (!query) {
+        return;
+    }
+
+    const auto* pool = query->GetParent();
+    const auto* database = pool->GetParent();
+    const auto& poolId = std::get<NKqp::NScheduler::NHdrf::TPoolId>(pool->GetId());
+    TWorkloadManagerQueryIdentity identity(
+        std::get<NKqp::NScheduler::NHdrf::TDatabaseId>(database->GetId()), poolId, ev->Cookie);
+    auto context = std::make_shared<NKqp::NScheduler::TDqSchedulerContext>(query, poolId != NResourcePool::DEFAULT_POOL_ID);
+    Manager->SetWorkloadManagerQueryContext(identity, std::move(context));
+}
+
+void TDistributor::HandleMain(TEvExecution::TEvUnregisterWorkloadManagerQuery::TPtr& ev) {
+    const auto& identity = ev->Get()->GetIdentity();
+    if (!Manager->UnregisterWorkloadManagerQuery(identity)) {
+        return;
+    }
+
+    auto removeQuery = MakeHolder<NKqp::NScheduler::TEvRemoveQuery>();
+    removeQuery->QueryId = identity.GetQueryId();
+    Send(NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQuery.Release());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {

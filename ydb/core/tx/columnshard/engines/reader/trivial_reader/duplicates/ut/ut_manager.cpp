@@ -289,7 +289,7 @@ std::shared_ptr<TReadContext> MakeTestReadContext(const TSnapshot& requestSnapsh
     NColumnShard::TConcreteScanCounters scanCounters(NColumnShard::TScanCounters(), nullptr);
 
     return std::make_shared<TReadContext>(TTestStoragesManager::GetInstance(), dataAccessorsManager, columnDataManager, scanCounters,
-        readMetadata, scanActorId, scanActorId, TComputeShardingPolicy(), 0, NConveyorComposite::TCPULimitsConfig(), nullptr);
+        readMetadata, scanActorId, scanActorId, TComputeShardingPolicy(), 0, NConveyorComposite::TCPULimitsConfig(), std::nullopt, nullptr);
 }
 
 struct TManagerSetupResult {

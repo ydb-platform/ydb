@@ -15,6 +15,8 @@ struct TEvExecution {
         EvNewTask = EventSpaceBegin(TKikimrEvents::ES_CONVEYOR_COMPOSITE),
         EvRegisterProcess,
         EvUnregisterProcess,
+        EvRegisterWorkloadManagerQuery,
+        EvUnregisterWorkloadManagerQuery,
         EvEnd
     };
 
@@ -59,6 +61,28 @@ struct TEvExecution {
         explicit TEvUnregisterProcess(const ESpecialTaskCategory category, const ui64 internalProcessId)
             : Category(category)
             , InternalProcessId(internalProcessId) {
+        }
+    };
+
+    class TEvRegisterWorkloadManagerQuery:
+        public NActors::TEventLocal<TEvRegisterWorkloadManagerQuery, EvRegisterWorkloadManagerQuery> {
+    private:
+        YDB_READONLY_DEF(TWorkloadManagerQueryIdentity, Identity);
+
+    public:
+        explicit TEvRegisterWorkloadManagerQuery(TWorkloadManagerQueryIdentity identity)
+            : Identity(std::move(identity)) {
+        }
+    };
+
+    class TEvUnregisterWorkloadManagerQuery:
+        public NActors::TEventLocal<TEvUnregisterWorkloadManagerQuery, EvUnregisterWorkloadManagerQuery> {
+    private:
+        YDB_READONLY_DEF(TWorkloadManagerQueryIdentity, Identity);
+
+    public:
+        explicit TEvUnregisterWorkloadManagerQuery(TWorkloadManagerQueryIdentity identity)
+            : Identity(std::move(identity)) {
         }
     };
 };

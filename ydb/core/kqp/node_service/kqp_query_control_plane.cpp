@@ -445,7 +445,7 @@ public:
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
                     CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits,
-                    msg.GetUseBatchPool()));
+                    query ? databaseId : TString(), query ? poolId : TString(), msg.GetUseBatchPool()));
             }
         }
 

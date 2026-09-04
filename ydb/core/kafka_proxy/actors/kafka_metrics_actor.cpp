@@ -24,8 +24,10 @@ namespace NKafka {
             TBase::Become(&TKafkaMetricsActor::StateWork);
         }
 
-        TStringBuilder LogPrefix() const {
-            return {};
+        NStructuredLog::TStructuredMessage LogPrefix() const {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"actorClassName", "KafkaMetricsActor"},
+                {"selfId", SelfId()});
         }
 
     private:

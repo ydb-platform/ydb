@@ -54,8 +54,11 @@ public:
 void Bootstrap(const NActors::TActorContext& ctx);
 
 
-TStringBuilder LogPrefix() const {
-    return TStringBuilder() << "KafkaDescribeGroupsActor{DatabasePath=" << DatabasePath << "}: ";
+NStructuredLog::TStructuredMessage LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "KafkaDescribeGroupsActor"},
+        {"selfId", SelfId()},
+        {"databasePath", DatabasePath});
 }
 
 struct TDescribeGroupsKqpQuery {

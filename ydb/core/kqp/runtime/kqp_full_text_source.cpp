@@ -82,6 +82,8 @@
 
 #include <cmath>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -2024,7 +2026,10 @@ public:
             }
         }
 
-        CA_LOG_D("Sending ack for read #" << readId << " seqno = " << readInfo.LastSeqNo);
+        YDB_LOG_DEBUG("Sending read ack for sequence number",
+            {"logPrefix", this->LogPrefix},
+            {"readId", readId},
+            {"lastSeqNo", readInfo.LastSeqNo});
 
         bool newPipe = PipesCreated.insert(shardId).second;
         TlsActivationContext->Send(new NActors::IEventHandle(
@@ -2043,11 +2048,14 @@ public:
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
-            << ", readId = " << record.GetReadId()
-            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
-            << ", lockTxId=" << record.GetLockTxId()
-            << ", lockNodeId=" << record.GetLockNodeId());
+        YDB_LOG_DEBUG("Sending EvRead request from full text source",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"readId", record.GetReadId()},
+            {"snapshotTxId", record.GetSnapshot().GetTxId()},
+            {"step", record.GetSnapshot().GetStep()},
+            {"lockTxId", record.GetLockTxId()},
+            {"lockNodeId", record.GetLockNodeId()});
 
         TlsActivationContext->Send(new NActors::IEventHandle(
             NKikimr::MakePipePerNodeCacheID(false),
@@ -3131,7 +3139,9 @@ public:
     // Handle broken pipe to a datashard tablet.
     // Resets pipe tracking and schedules a retry for all reads on that shard.
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_E("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        YDB_LOG_ERROR("Received TEvDeliveryProblem from datashard",
+            {"logPrefix", this->LogPrefix},
+            {"tablet", ev->Get()->TabletId});
 
         ui64 shardId = ev->Get()->TabletId;
         ReadsState.UntrackPipe(shardId);
@@ -3146,12 +3156,16 @@ public:
     //   - If relevance mode: read stats, then proceed to StartWordReads.
     //   - If plain mode: go directly to StartWordReads.
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        CA_LOG_D("TEvResolveKeySetResult was received for table.");
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult",
+            {"logPrefix", this->LogPrefix});
         ResolveInProgress = false;
 
         if (ev->Get()->Request->ErrorCount > 0) {
             for(const auto& entry : ev->Get()->Request->ResultSet) {
-                CA_LOG_E("Table " << entry.KeyDescription->TableId << " error status: " << entry.Status);
+                YDB_LOG_ERROR("Table resolve error",
+                    {"logPrefix", this->LogPrefix},
+                    {"tableId", entry.KeyDescription->TableId},
+                    {"status", entry.Status});
             }
 
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table. ";
@@ -3527,12 +3541,14 @@ public:
         NYql::IssuesFromMessage(record.GetStatus().GetIssues(), shardIssues);
         const TString tablePath = GetReadTablePath(static_cast<EReadKind>(readInfo.ReadKind));
 
-        CA_LOG_W("Read result error, ReadId=" << readId
-            << ", ShardId=" << shardId
-            << ", ReadKind=" << ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))
-            << ", Table=" << tablePath
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(statusCode)
-            << ", Issues=[" << shardIssues.ToOneLineString() << "]");
+        YDB_LOG_WARN("Read result returned an error",
+            {"logPrefix", this->LogPrefix},
+            {"readId", readId},
+            {"shardId", shardId},
+            {"readKind", ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))},
+            {"table", tablePath},
+            {"status", Ydb::StatusIds::StatusCode_Name(statusCode)},
+            {"issues", shardIssues.ToOneLineString()});
 
         switch (statusCode) {
             case Ydb::StatusIds::OVERLOADED: {
@@ -3576,30 +3592,29 @@ public:
 
         auto& readInfo = *it;
 
-        CA_LOG_D("Recv TEvReadResult (full text source)"
-            << ", Cookie=" << readInfo.Cookie
-            << ", ReadKind=" << (ui32)readInfo.ReadKind
-            << ", ShardId=" << readInfo.ShardId
-            << ", ReadId=" << record.GetReadId()
-            << ", SeqNo=" << record.GetSeqNo()
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", ResultFormat=" << NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())
-            << ", TxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+
+        TStringBuilder borkenTxlocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            borkenTxlocks << lock.ShortDebugString();
+        }
+
+        YDB_LOG_DEBUG("Received TEvReadResult from full text source",
+            {"logPrefix", this->LogPrefix},
+            {"cookie", readInfo.Cookie},
+            {"readKind", (ui32)readInfo.ReadKind},
+            {"shardId", readInfo.ShardId},
+            {"readId", record.GetReadId()},
+            {"seqNo", record.GetSeqNo()},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"resultFormat", NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())},
+            {"txLocks", txLocks},
+            {"brokenTxLocks", borkenTxlocks});
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             HandleReadResultError(readId, readInfo, record);

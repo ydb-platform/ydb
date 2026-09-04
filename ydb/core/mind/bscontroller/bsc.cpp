@@ -40,6 +40,27 @@ IActor* CreateFlatBsController(const TActorId &tablet, TTabletStorageInfo *info)
 
 namespace NBsController {
 
+bool TBlobStorageController::IsBlobCheckerGroupEligible(TGroupId groupId) const {
+    if (const auto it = GroupLookup.find(groupId); it != GroupLookup.end()) {
+        return !it->second->BridgeGroupInfo;
+    }
+    if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
+        return it->second.Info && !it->second.Info->IsBridged();
+    }
+    return false;
+}
+
+ui32 TBlobStorageController::TotalGroupCount() const {
+    ui32 count = 0;
+    for (const auto& [_, group] : GroupLookup) {
+        count += !group->BridgeGroupInfo;
+    }
+    for (const auto& [_, group] : StaticGroups) {
+        count += group.Info && !group.Info->IsBridged();
+    }
+    return count;
+}
+
 TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdisk, TGroupId groupId,
         Table::GroupGeneration::Type groupPrevGeneration, Table::GroupGeneration::Type groupGeneration,
         Table::Category::Type kind, Table::RingIdx::Type ringIdx, Table::FailDomainIdx::Type failDomainIdx,
@@ -316,6 +337,9 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto prevStaticGroups = std::exchange(StaticGroups, {});
     StaticVDiskMap.clear();
 
+    std::unordered_map<TGroupId, TString> newGroupsBlobCheckerStatus;
+    std::vector<TGroupId> deletedBlobCheckerGroups;
+
     const TMonotonic mono = TActivationContext::Monotonic();
 
     if (StorageConfig->HasBlobStorageConfig()) {
@@ -344,8 +368,69 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 StaticGroups.try_emplace(groupId, group, prevStaticGroups);
                 SysViewChangedGroups.insert(groupId);
             }
+
+            for (auto& [_, group] : StaticGroups) {
+                group.UpdateStatus(mono, this);
+            }
+
+            // The first static configuration arrives before the controller DB is loaded. TxLoadEverything will
+            // reconcile BlobChecker records after the table has been created.
+            if (BlobCheckerPlanner) {
+                const auto isEligible = [](const TStaticGroupInfo& group) {
+                    return group.Info && !group.Info->IsBridged();
+                };
+                const auto removeGroup = [&](TGroupId groupId) {
+                    BlobCheckerGroupRecords.erase(groupId);
+                    deletedBlobCheckerGroups.push_back(groupId);
+                    DeleteBlobCheckerGroup(groupId);
+                    PersistBlobCheckerGroupStatus(groupId);
+                };
+
+                TStaticGroupInfo::TStaticGroupFinder staticFinder = [this](TGroupId groupId) -> TStaticGroupInfo* {
+                    const auto it = StaticGroups.find(groupId);
+                    return it != StaticGroups.end() ? &it->second : nullptr;
+                };
+                for (const auto& [groupId, group] : StaticGroups) {
+                    const auto prevIt = prevStaticGroups.find(groupId);
+                    const bool wasEligible = prevIt != prevStaticGroups.end() && isEligible(prevIt->second);
+                    if (!isEligible(group)) {
+                        if (wasEligible || BlobCheckerGroupRecords.contains(groupId)) {
+                            removeGroup(groupId);
+                        }
+                        continue;
+                    }
+
+                    if (!BlobCheckerGroupRecords.contains(groupId)) {
+                        TString serialized = TBlobCheckerGroupStatus::CreateInitialSerialized(TInstant::Zero());
+                        newGroupsBlobCheckerStatus[groupId] = serialized;
+                        BlobCheckerGroupRecords[groupId] = serialized;
+                        PersistBlobCheckerGroupStatus(groupId);
+                    }
+
+                    const auto status = group.GetStatus(staticFinder, BridgeInfo.get());
+                    if (status.OperatingStatus != NKikimrBlobStorage::TGroupStatus::FULL) {
+                        DequeueCheckForGroup(groupId, /*notifyOrchestrator=*/true);
+                    }
+                }
+
+                for (const auto& [groupId, group] : prevStaticGroups) {
+                    if (!StaticGroups.contains(groupId) &&
+                            (isEligible(group) || BlobCheckerGroupRecords.contains(groupId))) {
+                        removeGroup(groupId);
+                    }
+                }
+            }
         } else {
             Y_FAIL("no storage configuration provided");
+        }
+
+        if (BlobCheckerOrchestratorId &&
+                (!newGroupsBlobCheckerStatus.empty() || !deletedBlobCheckerGroups.empty())) {
+            Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateGroupSet(
+                    std::move(newGroupsBlobCheckerStatus), std::move(deletedBlobCheckerGroups)));
+        }
+        if (BlobCheckerPlanner) {
+            BlobCheckerPlanner->SetGroupCount(TotalGroupCount());
         }
     }
 
@@ -1042,6 +1127,8 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoGetTablet, Handle);
+        fFunc(TEvBlobCheckerPlanCheck::EventType, EnqueueIncomingEvent);
+        fFunc(TEvBlobCheckerUpdateGroupStatus::EventType, EnqueueIncomingEvent);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_ERROR("StateWork unexpected event",
@@ -1068,7 +1155,8 @@ void TBlobStorageController::PassAway() {
         ResponsivenessPinger->Detach(TActivationContext::ActorContextFor(ResponsivenessActorID));
         ResponsivenessPinger = nullptr;
     }
-    for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId}) {
+    for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId,
+            &BlobCheckerOrchestratorId}) {
         if (const TActorId actorId = std::exchange(*ptr, {})) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
@@ -1138,6 +1226,10 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         // timers and different observation (also includes RO transactions in TConfigRequest)
         case TEvPrivate::EvScrub:                                      return 5;
         case TEvPrivate::EvVSlotReadyUpdate:                           return 5;
+
+        // BlobChecker <-> BSC interface, low-priority background activity
+        case TEvBlobStorage::EvBlobCheckerUpdateGroupStatus:           return 7;
+        case TEvBlobStorage::EvBlobCheckerPlanCheck:                   return 7;
 
         // external observation and non-latency-bound activities
         case TEvPrivate::EvUpdateSystemViews:                          return 10;

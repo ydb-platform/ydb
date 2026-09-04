@@ -618,6 +618,50 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            // Update group set for BlobCheckerOrchestrator actor if needed
+            {
+                std::unordered_map<TGroupId, TString> newGroups;
+                std::vector<TGroupId> deletedGroups;
+                for (auto&& [base, overlay] : state.Groups.Diff()) {
+                    const TGroupId groupId = overlay->first;
+                    const bool wasEligible = base && !base->second->BridgeGroupInfo;
+                    const bool isEligible = overlay->second && !overlay->second->BridgeGroupInfo;
+
+                    if (!isEligible) {
+                        const bool hadRecord = BlobCheckerGroupRecords.erase(groupId);
+                        if (!wasEligible && !hadRecord) {
+                            continue;
+                        }
+                        db.Table<Schema::BlobCheckerGroupStatus>().Key(groupId.GetRawId()).Delete();
+                        deletedGroups.push_back(groupId);
+                    } else if (!wasEligible || !BlobCheckerGroupRecords.contains(groupId)) {
+                        TString serialized = TBlobCheckerGroupStatus::CreateInitialSerialized(
+                                TActivationContext::Now());
+                        db.Table<Schema::BlobCheckerGroupStatus>().Key(groupId.GetRawId())
+                                .Update<Schema::BlobCheckerGroupStatus::SerializedStatus>(serialized);
+                        BlobCheckerGroupRecords[groupId] = serialized;
+                        newGroups[groupId] = serialized;
+                    }
+                }
+
+                if (!newGroups.empty() || !deletedGroups.empty()) {
+                    state.Callbacks.push_back([this, newGroups = std::move(newGroups),
+                            deletedGroups = std::move(deletedGroups)]() mutable {
+                        for (TGroupId groupId : deletedGroups) {
+                            DeleteBlobCheckerGroup(groupId);
+                        }
+                        if (BlobCheckerOrchestratorId) {
+                            Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateGroupSet(
+                                    std::move(newGroups), std::move(deletedGroups)));
+                        }
+                        if (BlobCheckerPlanner) {
+                            BlobCheckerPlanner->SetGroupCount(TotalGroupCount());
+                        }
+                    });
+                }
+
+            }
+
             // remove unused vdisk metrics for either deleted vslots or with changed generation
             for (auto&& [base, overlay] : state.VSlots.Diff()) {
                 if (!overlay->second || (base && overlay->second->GroupGeneration != base->second->GroupGeneration)) {
@@ -649,6 +693,7 @@ namespace NKikimr::NBsController {
             CommitShredUpdates(state);
             CommitSyncerUpdates(state, txc);
 
+            std::vector<TGroupId> groupsWithErrorDisks;
             // add updated and remove deleted vslots from VSlotReadyTimestampQ
             const TMonotonic now = TActivationContext::Monotonic();
             for (auto&& [base, overlay] : state.VSlots.Diff()) {
@@ -656,6 +701,8 @@ namespace NKikimr::NBsController {
                     (overlay->second ? overlay->second : base->second)->DropFromVSlotReadyTimestampQ();
                     NotReadyVSlotIds.erase(overlay->first);
                 } else if (overlay->second->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
+                    // at least one VDisk switched to ERROR state in this group
+                    groupsWithErrorDisks.push_back(overlay->second->GroupId);
                     overlay->second->DropFromVSlotReadyTimestampQ();
                 } else if (!base || base->second->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
                     overlay->second->PutInVSlotReadyTimestampQ(now);
@@ -694,6 +741,14 @@ namespace NKikimr::NBsController {
                 if (base) {
                     groupIds.emplace(overlay->first);
                 }
+            }
+
+            if (!groupsWithErrorDisks.empty()) {
+                state.Callbacks.push_back([this, groups = std::move(groupsWithErrorDisks)] {
+                    for (TGroupId groupId : groups) {
+                        DequeueCheckForGroup(groupId, /*notifyOrchestrator=*/true);
+                    }
+                });
             }
 
             TNodeWardenUpdateNotifier(this, state).Execute();
@@ -1414,6 +1469,7 @@ namespace NKikimr::NBsController {
             settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
             settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
             settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+            settings->AddBlobCheckerPeriodicitySeconds(BlobCheckerPeriodicity.Seconds());
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

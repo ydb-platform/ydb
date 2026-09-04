@@ -634,6 +634,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     const TInstant now = TActivationContext::Now();
     const TMonotonic mono = TActivationContext::Monotonic();
     std::vector<TVDiskAvailabilityTiming> timingQ;
+    THashSet<TGroupId> groupsToDequeueFromBlobChecker;
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
         it->second->UpdateOperational(false);
         SysViewChangedPDisks.insert(it->first);
@@ -642,6 +643,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
     for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
         if (it->second->Group) {
+            groupsToDequeueFromBlobChecker.insert(it->second->GroupId);
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }
@@ -659,6 +661,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     }
     for (auto it = StaticVSlots.lower_bound(startingId); it != StaticVSlots.end() && it->first.NodeId == nodeId; ++it) {
         auto& slot = it->second;
+        groupsToDequeueFromBlobChecker.insert(slot.VDiskId.GroupID);
         slot.ReadySince = TMonotonic::Max();
         slot.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
         slot.OnlyPhantomsRemain = false;
@@ -669,6 +672,12 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
             .VDiskStatus = slot.VDiskStatus,
         });
         SysViewChangedVSlots.insert(it->first);
+    }
+    for (TGroupId groupId : groupsToDequeueFromBlobChecker) {
+        if (auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
+            it->second.UpdateStatus(mono, this);
+        }
+        DequeueCheckForGroup(groupId, /*notifyOrchestrator=*/true);
     }
     if (!updates.empty()) {
         Send(SelfHealId, new TEvControllerUpdateSelfHealInfo(std::move(updates)));

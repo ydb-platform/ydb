@@ -52,6 +52,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin+UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin-UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.BlockHashCrossJoin
 ydb/core/kqp/ut/rbo KqpRboYql.BlockHashJoinCrossWithJoinFilters+UseBlockHashJoin+UseBlockHashJoinForCross
+ydb/core/kqp/ut/rbo KqpRboYql.BlockHashJoinCrossWithJoinFilters-UseBlockHashJoin+UseBlockHashJoinForCross
 ydb/core/kqp/ut/rbo KqpRboYql.ClickBench_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore

@@ -1010,26 +1010,13 @@ public:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
-<<<<<<< HEAD
             CA_LOG_E("Got SCHEME CHANGED for table `"
                     << TablePath << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            if (InconsistentTx) {
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
-                RetryResolve();
-            } else {
-=======
-            YDB_LOG_ERROR("Received EvWriteResult with scheme changed status.",
-                {"logPrefix", this->LogPrefix},
-                {"tablePath", TablePath},
-                {"shardID", ev->Get()->Record.GetOrigin()},
-                {"sink", this->SelfId()},
-                {"issues", getIssues().ToOneLineString()});
             // Resolve does not refresh the baked-in schema version: fail to recompile instead of retrying forever.
             if (!InconsistentTx) {
->>>>>>> 8acb21c1c98 (kqp: fix infinite SCHEME_CHANGED retry loop in InconsistentTx write actor (#52115))
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
             }

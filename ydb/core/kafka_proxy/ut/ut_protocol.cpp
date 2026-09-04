@@ -1157,14 +1157,17 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            // Check empty topic (no records)
+            // Check empty topic (no records).
+            // Empty Fetch must return zero-length records bytes, not null:
+            // librdkafka fails on MessageSetSize=-1 (LOGBROKER-10644).
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
             auto msg = client.Fetch(topics);
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), false);
+            UNIT_ASSERT(msg->Responses[0].Partitions[0].Records.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->size(), 0);
         }
 
         {
@@ -1355,7 +1358,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<std::pair<TString, std::vector<i32>>> topics {{feedPath, {0}}};
             auto msg = client.Fetch(topics);
 
-            if (msg->Responses.empty() || msg->Responses[0].Partitions.empty() || !msg->Responses[0].Partitions[0].Records.has_value()) {
+            if (msg->Responses.empty() || msg->Responses[0].Partitions.empty()
+                    || !msg->Responses[0].Partitions[0].Records.has_value()
+                    || msg->Responses[0].Partitions[0].Records->empty()) {
                 UNIT_ASSERT_C(i, "Timeout");
                 Sleep(TDuration::Seconds(1));
                 continue;
@@ -1478,15 +1483,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         client.PlainAuthenticateToKafka();
 
         {
-            // Check FETCH
+            // Check FETCH on an empty topic: records must be zero-length bytes,
+            // not null. librdkafka rejects MessageSetSize=-1 (LOGBROKER-10644);
+            // Java clients also normalize null records to MemoryRecords.EMPTY.
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
             auto msg = client.Fetch(topics);
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
-            // To protect the clients from failing due to null records,
-            // Java SDK always convert null records to MemoryRecords.EMPTY
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), false);
+            UNIT_ASSERT(msg->Responses[0].Partitions[0].Records.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->size(), 0);
         }
     } // Y_UNIT_TEST(FetchEmptyTopicScenario)
 
@@ -5223,7 +5229,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         // validate data is still not assessible in target topic
         auto fetchResponse1 = kafkaClient.Fetch({{outputTopicName, {0}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT(!fetchResponse1->Responses[0].Partitions[0].Records.has_value());
+        UNIT_ASSERT(fetchResponse1->Responses[0].Partitions[0].Records.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[0].Records->size(), 0);
     }
 
     Y_UNIT_TEST(AbortTransactionScenario) {
@@ -5318,7 +5325,65 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         // end txn
         auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+<<<<<<< HEAD
         UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::BROKER_NOT_AVAILABLE);
+=======
+        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
+
+        // The same producer epoch must be able to commit a real transaction afterwards.
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+        auto addPartsResponse2 = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse2->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto produceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"0", "after-empty"}}, 0, producerInstanceId, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto endTxnResponse2 = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse2->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto fetchResponse = kafkaClient.Fetch({{outputTopicName, {0}}});
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        auto recordsBatch = ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TString(recordsBatch.Records[0].Value.value().data(), recordsBatch.Records[0].Value.value().size()), "after-empty");
+    }
+
+    Y_UNIT_TEST(TransactionShouldCommitIfSomeAddedPartitionsReceivedNoWrites) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        CreateTopic(pqClient, outputTopicName, 3, {consumerName});
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+        std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0, 1};
+        auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[1].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto produceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"0", "only-part-0"}}, 0, producerInstanceId, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto fetchResponse = kafkaClient.Fetch({{outputTopicName, {0, 1}}});
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        auto recordsBatch0 = ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch0.Records.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TString(recordsBatch0.Records[0].Value.value().data(), recordsBatch0.Records[0].Value.value().size()), "only-part-0");
+        UNIT_ASSERT(fetchResponse->Responses[0].Partitions[1].Records.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions[1].Records->size(), 0);
+>>>>>>> d4a8083f02f (Fix Kafka empty Fetch encoding records as null (-1). (#52234))
     }
 
     Y_UNIT_TEST(ProducerFencedInTransactionScenario) {

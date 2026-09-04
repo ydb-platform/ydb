@@ -538,7 +538,7 @@ struct TTestEnvFullChunkObsoleteRefs : TTetsEnvBase {
             const TActorId& edge = Env.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
             Env.Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVPut(
                 TLogoBlobID(id, 1), TRope(Data), vdiskId, false, nullptr, TInstant::Max(),
-                NKikimrBlobStorage::EPutHandleClass::TabletLog)), queueId.NodeId());
+                NKikimrBlobStorage::EPutHandleClass::TabletLog, false)), queueId.NodeId());
             auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
         });

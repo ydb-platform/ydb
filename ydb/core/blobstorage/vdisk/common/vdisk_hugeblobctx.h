@@ -1,5 +1,8 @@
 #pragma once
+
 #include "defs.h"
+
+#include "blob_header_mode.h"
 
 namespace NKikimr {
 
@@ -63,16 +66,17 @@ namespace NKikimr {
     class THugeBlobCtx {
     public:
         const std::shared_ptr<const THugeSlotsMap> HugeSlotsMap;
-        const bool AddHeader;
+        const EBlobHeaderMode BlobHeaderMode;
 
         // check whether this NEW blob is huge one; userPartSize doesn't include any metadata stored along with blob
         bool IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, ui32 minHugeBlobInBytes) const;
 
-        THugeBlobCtx(const std::shared_ptr<const THugeSlotsMap> &hugeSlotsMap, bool addHeader)
+        THugeBlobCtx(
+                const std::shared_ptr<const THugeSlotsMap> &hugeSlotsMap,
+                EBlobHeaderMode blobHeaderMode)
             : HugeSlotsMap(hugeSlotsMap)
-            , AddHeader(addHeader)
-        {
-        }
+            , BlobHeaderMode(blobHeaderMode)
+        {}
     };
 
     using THugeBlobCtxPtr = std::shared_ptr<THugeBlobCtx>;

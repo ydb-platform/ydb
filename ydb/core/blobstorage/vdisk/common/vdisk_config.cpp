@@ -47,7 +47,7 @@ namespace NKikimr {
         DefragThrottlerBytesRate = 0;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
-        AddHeader = true;
+        BlobHeaderMode = EBlobHeaderMode::OLD_HEADER;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);

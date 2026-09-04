@@ -842,7 +842,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
                 for (ui32 i = 0; i < batch; ++i) {
                     const TLogoBlobID blobId(TLogoBlobID(tabletId, 1, nextStep++, 0, data.size(), nextCookie++), 1);
-                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
+                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId(), false);
                 }
 
                 runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
@@ -1134,7 +1134,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
                 for (ui32 i = 0; i < batch; ++i) {
                     const TLogoBlobID blobId(TLogoBlobID(tabletId, 1, nextStep++, 0, data.size(), nextCookie++), 1);
-                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
+                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId(), false);
                 }
 
                 runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
@@ -1521,7 +1521,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
                 for (ui32 i = 0; i < batch; ++i) {
                     const TLogoBlobID blobId(TLogoBlobID(tabletId, 1, nextStep++, 0, data.size(), nextCookie++), 1);
-                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
+                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId(), false);
                 }
 
                 runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);

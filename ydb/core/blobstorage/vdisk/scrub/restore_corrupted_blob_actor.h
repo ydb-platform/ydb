@@ -50,6 +50,6 @@ namespace NKikimr {
 
     IActor *CreateRestoreCorruptedBlobActor(TActorId skeletonId, TEvRestoreCorruptedBlob::TPtr& ev,
         TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TVDiskContext> vctx,
-        TPDiskCtxPtr pdiskCtx);
+        TPDiskCtxPtr pdiskCtx, TIntrusivePtr<TVDiskConfig> vcfg);
 
 } // NKikimr

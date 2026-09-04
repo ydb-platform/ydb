@@ -74,7 +74,7 @@ namespace NKikimr {
             , HullDs(std::move(hullDs))
             , State(EState::STOPPED)
             , MinReservedChunksCount(ReplCtx->VDiskCfg->HullSstSizeInChunksFresh)
-            , Merger(ReplCtx->VCtx->Top->GType, ReplCtx->GetAddHeader())
+            , Merger(ReplCtx->VCtx->Top->GType, ReplCtx->VDiskCfg->BlobHeaderMode)
             , Arena(&TRopeArenaBackend::Allocate)
         {}
 
@@ -159,7 +159,7 @@ namespace NKikimr {
             Writer = std::make_unique<TWriter>(ReplCtx->VCtx, EWriterDataType::Replication, 1, ReplCtx->PDiskCtx->Dsk->Owner,
                 ReplCtx->PDiskCtx->Dsk->OwnerRound, ReplCtx->PDiskCtx->Dsk->ChunkSize,
                 ReplCtx->PDiskCtx->Dsk->AppendBlockSize, ReplCtx->PDiskCtx->Dsk->BulkWriteBlockSize,
-                HullDs->LogoBlobs->AllocSstId(), true, ReservedChunks, Arena, ReplCtx->GetAddHeader());
+                HullDs->LogoBlobs->AllocSstId(), true, ReservedChunks, Arena, ReplCtx->VDiskCfg->BlobHeaderMode);
 
             // start collecting blobs
             State = EState::COLLECT;

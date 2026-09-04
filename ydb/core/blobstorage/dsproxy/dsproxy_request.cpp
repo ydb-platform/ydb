@@ -110,6 +110,7 @@ namespace NKikimr {
                             .ExecutionRelay = ev->Get()->ExecutionRelay,
                             .LogAccEnabled = ev->Get()->IsVerboseNoDataEnabled || ev->Get()->CollectDebugInfo,
                             .LatencyQueueKind = kind,
+                            .EnableChecksumCalcAndValidationOnDsProxy = static_cast<bool>(Controls.EnableChecksumCalcAndValidationOnDsProxy.Update(TActivationContext::Now())),
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
                         .AccelerationParams = GetAccelerationParams(),
@@ -241,9 +242,10 @@ namespace NKikimr {
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
-                        .Event = ev->Get(),
-                        .ExecutionRelay = ev->Get()->ExecutionRelay,
-                        .LatencyQueueKind = kind
+                            .Event = ev->Get(),
+                            .ExecutionRelay = ev->Get()->ExecutionRelay,
+                        .LatencyQueueKind = kind,
+                        .EnableChecksumCalcAndValidationOnDsProxy = static_cast<bool>(Controls.EnableChecksumCalcAndValidationOnDsProxy.Update(now)),
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStats,
@@ -565,6 +567,7 @@ namespace NKikimr {
                                 .Event = ev->Get(),
                                 .ExecutionRelay = ev->Get()->ExecutionRelay,
                                 .LatencyQueueKind = kind,
+                                .EnableChecksumCalcAndValidationOnDsProxy = static_cast<bool>(Controls.EnableChecksumCalcAndValidationOnDsProxy.Update(TActivationContext::Now())),
                             },
                             .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                             .Stats = PerDiskStats,
@@ -585,6 +588,7 @@ namespace NKikimr {
                                 .StoragePoolCounters = StoragePoolCounters,
                                 .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batchedPuts.Queue),
                                 .LatencyQueueKind = kind,
+                                .EnableChecksumCalcAndValidationOnDsProxy = static_cast<bool>(Controls.EnableChecksumCalcAndValidationOnDsProxy.Update(TActivationContext::Now())),
                             },
                             .Events = batchedPuts.Queue,
                             .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
@@ -972,12 +976,24 @@ namespace NKikimr {
 
         TVDiskID vdiskId;
         NKikimrBlobStorage::EVDiskQueueId queueId;
+        bool userChecksumming = false;
 
         auto preprocess = [&](auto& ev) {
             Y_DEBUG_ABORT_UNLESS(ev.Record.HasVDiskID());
             vdiskId = VDiskIDFromVDiskID(ev.Record.GetVDiskID());
 
             using T = std::decay_t<decltype(ev)>;
+
+            if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVPut>) {
+                userChecksumming = ev.Record.HasChecksum();
+            }
+
+            if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
+                userChecksumming = !!ev.Record.ItemsSize();
+                for (const auto& item : ev.Record.GetItems()) {
+                    userChecksumming &= item.HasChecksum();
+                }
+            }
 
             if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVGetBlock> &&
                     !std::is_same_v<T, TEvBlobStorage::TEvVBlock> &&
@@ -1033,7 +1049,8 @@ namespace NKikimr {
             default: Y_ABORT_S("unexpected VDisk request Type# " << Sprintf("0x%08" PRIx32, type));
         }
 
-        GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(), vdiskId, queueId);
+        GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, userChecksumming, Span.GetTraceId(),
+            vdiskId, queueId);
         ++RequestsInFlight;
     }
 

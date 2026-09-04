@@ -62,6 +62,8 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxInProgressLocalRecoveryCount(0, 0, 10000)
     , MaxInProgressLocalRecoveryPerPDiskCount(0, 0, 10000)
     , MaxInProgressSyncCount(0, 0, 1000)
+    , EnableChecksumReadValidationOnVDisk(0, 0, 1)
+    , EnableChecksumWriteValidationOnVDisk(0, 0, 1)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
     , MaxActiveCompactionsPerPDisk(0, 0, 1'000'000)
@@ -83,6 +85,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerBucketSize(1, 1, 100'000)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
+    , EnableChecksumCalcAndValidationOnDsProxy(0, 0, 1)
     , EnableDeepScrubbing(false, false, true)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
@@ -413,6 +416,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ThrottlingMaxLogChunkCount, "VDiskControls.ThrottlingMaxLogChunkCount");
 
         icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
+        icb->RegisterSharedControl(EnableChecksumReadValidationOnVDisk, "VDiskControls.EnableChecksumReadValidationOnVDisk");
+        icb->RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, "VDiskControls.EnableChecksumWriteValidationOnVDisk");
 
         icb->RegisterSharedControl(MaxInProgressStartupDataSyncCount, "VDiskControls.MaxInProgressStartupDataSyncCount");
         icb->RegisterSharedControl(MaxInProgressStartupDataSyncPerPDiskCount, "VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount");
@@ -453,6 +458,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
         icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
 
+        icb->RegisterSharedControl(EnableChecksumCalcAndValidationOnDsProxy,
+            "DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy");
         icb->RegisterSharedControl(EnableDeepScrubbing, "VDiskControls.EnableDeepScrubbing");
     }
 

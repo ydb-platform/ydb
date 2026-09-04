@@ -395,6 +395,30 @@ private:
     THashMap<TSchemeShardLocalPathId, TInternalPathId> LivePathIds;
     THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> AllPathIds;
 
+
+
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;   // Paths that are being truncated
+    THashSet<ui32> SchemaPresetsIds;
+    THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
+    std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
+    TSet<NOlap::TSnapshot> ReadOnlyTablesSnapshots;
+    TTtlVersions Ttl;
+    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
+    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
+    std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
+    YDB_READONLY_DEF(NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache>, SchemaObjectsCache);
+    std::shared_ptr<TPortionIndexStats> PortionsStats;
+    ui64 TabletId = 0;
+    bool GenerateInternalPathId;
+    std::optional<TUnifiedPathId> TabletPathId;
+    TInternalPathId MaxInternalPathId;
+
+    void RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& version);
+    void RebuildReadOnlyTablesSnapshots();
+
     void SetLivePathId(TSchemeShardLocalPathId ss, TInternalPathId id, bool isDropped) {
         if (isDropped) {
             // Only insert if there is no live mapping yet (recovery ordering guard).
@@ -461,29 +485,8 @@ private:
         const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId,
         const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const;
 
-    THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
-    THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
-    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;   // Paths that are being truncated
-    THashSet<ui32> SchemaPresetsIds;
-    THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
-    std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
-    TSet<NOlap::TSnapshot> ReadOnlyTablesSnapshots;
-    TTtlVersions Ttl;
-    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
-    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
-    NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
-    std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
-    YDB_READONLY_DEF(NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache>, SchemaObjectsCache);
-    std::shared_ptr<TPortionIndexStats> PortionsStats;
-    ui64 TabletId = 0;
-    bool GenerateInternalPathId;
-    std::optional<TUnifiedPathId> TabletPathId;
-    TInternalPathId MaxInternalPathId;
-
-    void RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& version);
-    void RebuildReadOnlyTablesSnapshots();
-
     TInternalPathId GenerateNextInternalPathId();
+    NKikimrTxColumnShard::TTableVersionInfo LoadLastTableVersionInfo(const TInternalPathId pathId, NIceDb::TNiceDb& db) const;
 
     friend class TTxInit;
 
@@ -497,20 +500,6 @@ public:   //IPathIdTranslator
     virtual std::vector<NOlap::TSnapshot> GetReadOnlyTablesSnapshots() const override;
 
 public:
-    /// Resolves the correct InternalPathId for a given SchemeShard path at a specific read snapshot.
-    ///
-    /// Unlike ResolveInternalPathId (which returns only the current live generation), this method
-    /// consults the generation history (AllPathIds) to find the generation that was active at the
-    /// time of the read snapshot. This is required for MVCC time-travel reads: after TRUNCATE, the
-    /// live generation changes, but readers with an older snapshot must still see the old generation.
-    ///
-    /// The parameter is named `readSnapshot` (not just `snapshot`) to emphasize that it represents
-    /// the reader's snapshot — i.e., the point-in-time at which the reader wants to observe the
-    /// table state. This contrasts with write/commit snapshots (e.g., drop version, copy version)
-    /// which are metadata timestamps stored per-path. The readSnapshot is the external query
-    /// parameter that determines which historical generation to resolve to.
-    ///
-    /// Algorithm:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
@@ -612,7 +601,6 @@ public:
         return Ttl.GetTableTtl(pathId, snapshot);
     }
 
-
     const std::map<NOlap::TSnapshot, THashSet<TInternalPathId>>& GetPathsToDrop() const {
         return PathsToDrop;
     }
@@ -652,10 +640,6 @@ public:
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
 
     void TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
-    std::optional<TInternalPathId> GetTruncatingInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const;
-    /// Executes the plan phase of TRUNCATE. Resolves the old generation (fence → live), validates,
-    /// loads last version info, performs the generation swap, and registers the new table version.
-    /// Returns true if the truncate was executed, false if skipped (table dropped, read-only, etc.).
     bool TruncateTableProgress(const TSchemeShardLocalPathId schemeShardLocalPathId,
         const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
 
@@ -738,7 +722,6 @@ public:
         return GenerateInternalPathId;
     }
 
-    std::optional<NKikimrTxColumnShard::TTableVersionInfo> LoadLastTableVersionInfo(const TInternalPathId pathId, NIceDb::TNiceDb& db) const;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> ResolveInternalPathIds(
         const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const;
     bool HasTable(const TInternalPathId pathId, const bool withDeleted = false,

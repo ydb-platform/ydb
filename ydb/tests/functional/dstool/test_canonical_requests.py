@@ -225,8 +225,7 @@ class TestBase:
                 grpc_calls.append(text_format.MessageToString(canonical_param, as_one_line=False))
 
             if func in unimplemented_grpc_methods:
-                if with_response:
-                    grpc_calls.extend(['--- Error ---', 'UNIMPLEMENTED'])
+                grpc_calls.extend(['--- Error ---', 'UNIMPLEMENTED'])
                 raise common.DistributedStorageUnavailable(
                     'gRPC method %s is unavailable (mocked UNIMPLEMENTED)' % func)
 
@@ -382,6 +381,19 @@ class Test(TestBase):
         retry_assertions(self.check_vdisks_state_ok)
         return self._trace('group', 'list', '-AH', endpoint=self.http_endpoint, allow_http_fetch=True,
                            expected_storage_api='blob_storage_config')
+
+    def test_group_list_fallback_to_legacy_api(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+        return self._trace(
+            'group',
+            'list',
+            '-AH',
+            with_grpc_calls=True,
+            unimplemented_grpc_methods={'StreamStorageState'},
+            expected_grpc_methods=['StreamStorageState', 'BlobStorageConfig'],
+            expected_exit_status=0,
+        )
 
     def test_pdisk_set_status_inactive(self):
         return [
@@ -665,40 +677,20 @@ class Test(TestBase):
         return self._run_pdisk_check_leaked_slots(self.http_endpoint, 'blob_storage_config')
 
     def test_vdisk_evict_fallback_to_legacy_api(self):
-        base_config = (
-            BaseConfigBuilder()
-            .add_node(node_id=1)
-            .add_pdisk(node_id=1, pdisk_id=1001)
-            .add_pdisk(node_id=1, pdisk_id=1002)
-            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
-            .add_vslot(
-                node_id=1,
-                pdisk_id=1001,
-                vslot_id=1000,
-                group_id=0x80000001,
-                group_generation=1,
-            )
-            .build()
-        )
-        fake_grpc_handler = FakeReassignGroupDiskHandler(
-            pending_reassigns={0x80000001: (1, 1002, 1000)},
-            base_config=base_config,
-        )
-
-        self._trace(
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+        return self._trace(
             'vdisk',
             'evict',
-            '--vdisk-ids',
-            '[80000001:1:0:0:0]',
             '--ignore-degraded-group-check',
             '--ignore-failure-model-group-check',
-            mock_base_config=base_config,
-            fake_grpc_handler=fake_grpc_handler,
+            '--vdisk-ids',
+            '[82000000:_:0:0:0]',
+            with_grpc_calls=True,
             unimplemented_grpc_methods={'StreamStorageState'},
-            expected_grpc_methods=['StreamStorageState', 'BlobStorageConfig'],
+            expected_grpc_methods=['StreamStorageState', 'BlobStorageConfig', 'BlobStorageConfig'],
             expected_exit_status=0,
         )
-        assert not fake_grpc_handler.pending_reassigns
 
     def test_pool_estimated_usage(self):
         builder = (

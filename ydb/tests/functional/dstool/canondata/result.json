@@ -120,6 +120,9 @@
             "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.2"
         }
     ],
+    "test_canonical_requests.Test.test_group_list_fallback_to_legacy_api": {
+        "uri": "file://test_canonical_requests.Test.test_group_list_fallback_to_legacy_api/results.txt"
+    },
     "test_canonical_requests.Test.test_group_list_legacy_api": {
         "uri": "file://test_canonical_requests.Test.test_group_list_legacy_api/results.txt"
     },
@@ -218,5 +221,8 @@
         {
             "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt.1"
         }
-    ]
+    ],
+    "test_canonical_requests.Test.test_vdisk_evict_fallback_to_legacy_api": {
+        "uri": "file://test_canonical_requests.Test.test_vdisk_evict_fallback_to_legacy_api/results.txt"
+    }
 }

@@ -157,6 +157,9 @@ private:
                     return TStatus::Error;
                 }
             }
+            if (!itemType) {
+                return TStatus::Error;
+            }
 
             if (!pending.Meta.RowSpec) {
                 pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);

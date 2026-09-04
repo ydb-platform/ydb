@@ -158,6 +158,11 @@ struct TConfig
     bool ForceIpV6;
     bool UseHosts;
 
+    /// @brief Use https if no schema was provided in proxy url.
+    bool PreferHttps;
+
+    bool UseTLS;
+
     TDuration HostListUpdateInterval;
 
     TNode Spec;

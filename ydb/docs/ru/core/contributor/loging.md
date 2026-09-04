@@ -19,14 +19,12 @@
 Логирование предполагает, что {{ydb-short-name}} состоит из большого количества компонент, для каждого из которых может быть
 [настроен](../reference/configuration/log_config#объекты-entry-entry-objects) уровень логирования.
 
-{% note %}
+{% endnote %}
 
 Пример:
 
 ```cpp
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATESTORAGE
-
 ```
 
 {% note warning %}
@@ -34,9 +32,7 @@
 В процедуре сборки может использоваться `JOIN_SRC`, поэтому настоятельно рекомендуется в конце файла отменять определение макроса:
 
 ```cpp
-
 #undef YDB_LOG_THIS_FILE_COMPONENT
-
 ```
 
 В противном случае, определение макроса `YDB_LOG_THIS_FILE_COMPONENT` может распространиться на несколько файлов исходного кода.
@@ -139,6 +135,7 @@ YDB_LOG_CTX_COMP(ctx, prio, comp, message, ...values...)
 
 ```cpp
 YDB_LOG_CTX_COMP(ctx, PRI_INFO, EXAMPLE_COMP_CODE, "Module started");
+```
 
 2. Сообщение с параметрами:
 
@@ -148,7 +145,7 @@ YDB_LOG_CTX_COMP(env, PRI_ERROR, EXAMPLE_COMP_CODE, "Unable to open file",
     {"errorCode", err});
 ```
 
-В данном примере происходит запись сообщения с текстом `Unable to open file` и двумя параметрами: `path` (значение берётся из переменной `filename`) и `errorCode`(значение берётся из переменной `err`). Для передачи сообщения актору логирования используется контекст исполнения `env`, а в качестве кода компонента передаётся `EXAMPLE_COMP_CODE`.
+В данном примере происходит запись сообщения с текстом `Unable to open file` и двумя параметрами: `sourceFilePath` (значение берётся из переменной `filename`) и `errorCode`(значение берётся из переменной `err`). Для передачи сообщения актору логирования используется контекст исполнения `env`, а в качестве кода компонента передаётся `EXAMPLE_COMP_CODE`.
 
 {% endcut %}
 
@@ -243,9 +240,7 @@ YDB_LOG_ERROR_COMP(EXAMPLE_COMP_CODE, "Unable to open file",
 В процедуре сборки может использоваться `JOIN_SRC`, поэтому настоятельно рекомендуется в конце файла отменять определение макроса:
 
 ```cpp
-
 #undef YDB_LOG_THIS_FILE_COMPONENT
-
 ```
 
 {% endnote %}
@@ -426,7 +421,7 @@ void MyFunction() {
 }
 ```
 
-Параметр `path` будет прикрепляться ко всем сообщениям, логируемым в данном потоке исполнения в функции `MyFunction` и вызываемых ею вложенных функциях вплоть до выхода из функции `MyFunction`.
+Параметр `sourceFilePath` будет прикрепляться ко всем сообщениям, логируемым в данном потоке исполнения в функции `MyFunction` и вызываемых ею вложенных функциях вплоть до выхода из функции `MyFunction`.
 
 {% endcut %}
 

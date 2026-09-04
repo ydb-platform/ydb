@@ -45,6 +45,7 @@ public:
     TMutex MetadataMutex;
     TString CapturedXUserIP;
     TString CapturedUserAgent;
+    TString CapturedAuthenticateService;
 
     template <class TResponseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
@@ -61,15 +62,16 @@ public:
         const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request,
         yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override
     {
+        TString key;
         with_lock (MetadataMutex) {
             CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
-        }
-
-        TString key;
-        if (request->has_signature()) {
-            key = request->signature().v4_parameters().service();
-        } else {
-            key = request->iam_token();
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+                key = CapturedAuthenticateService;
+            } else {
+                key = request->iam_token();
+            }
         }
 
         auto it = AuthenticateData.find(key);
@@ -124,6 +126,7 @@ public:
     TMutex MetadataMutex;
     TString CapturedXUserIP;
     TString CapturedUserAgent;
+    TString CapturedAuthenticateService;
 
     template <class TResponseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
@@ -140,15 +143,16 @@ public:
         const yandex::cloud::priv::accessservice::v2::AuthenticateRequest* request,
         yandex::cloud::priv::accessservice::v2::AuthenticateResponse* response) override
     {
+        TString key;
         with_lock (MetadataMutex) {
             CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
-        }
-
-        TString key;
-        if (request->has_signature()) {
-            key = request->signature().v4_parameters().service();
-        } else {
-            key = request->iam_token();
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+                key = CapturedAuthenticateService;
+            } else {
+                key = request->iam_token();
+            }
         }
 
         auto it = AuthenticateData.find(key);
@@ -195,6 +199,10 @@ public:
         with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
             CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+            }
         }
 
         for (const auto& action : request->actions().items()) {

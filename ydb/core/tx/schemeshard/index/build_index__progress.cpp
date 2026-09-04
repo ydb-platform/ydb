@@ -2909,6 +2909,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 auto ev = AlterIndexPartitioningPropose(Self, buildInfo);
                 if (ev) {
+                    buildInfo.ApplyTxStatus = NKikimrScheme::StatusAccepted;
                     Send(Self->SelfId(), std::move(ev), 0, ui64(BuildId));
                     break;
                 }
@@ -4437,10 +4438,26 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::AlterIndexTable: {
-            // Failure to pre-shard the final index table is non-critical, we just proceed as is
             Y_ENSURE(txId == buildInfo.ApplyTxId, state);
 
-            buildInfo.ApplyTxDone = true;
+            if (record.GetStatus() == NKikimrScheme::StatusInvalidParameter ||
+                record.GetStatus() == NKikimrScheme::StatusMultipleModifications ||
+                record.GetStatus() == NKikimrScheme::StatusNotAvailable) {
+                // Failure to pre-shard the final index table is non-critical, we just proceed as is
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusAccepted;
+                buildInfo.ApplyTxDone = true;
+            } else if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
+                buildInfo.ApplyTxId = {};
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                    << "At " << state << " state got unsuccess propose result"
+                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
+                    << ", reason: " << record.GetReason());
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+            } else {
+                buildInfo.ApplyTxStatus = record.GetStatus();
+            }
             Self->PersistBuildIndexApplyTx(db, buildInfo);
             break;
         }

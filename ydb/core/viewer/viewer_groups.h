@@ -2,6 +2,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
@@ -2130,16 +2131,7 @@ public:
                     }
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.SetCategory(info.GetCategory());
-                    float usage = pDisk.TotalSize ? 100.0 * (pDisk.TotalSize - pDisk.AvailableSize) / pDisk.TotalSize : 0;
-                    if (usage >= 95) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Red;
-                    } else if (usage >= 90) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Orange;
-                    } else if (usage >= 85) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Yellow;
-                    } else {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Green;
-                    }
+                    pDisk.DiskSpace = GetViewerFlag(TOutOfSpaceState::ToWhiteboardFlag(info.GetPDiskCapacityAlert()));
                 }
             }
         }

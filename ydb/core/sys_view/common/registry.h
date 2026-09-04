@@ -929,6 +929,15 @@ struct Schema : NIceDb::Schema {
         struct SuspendedUntil       : Column<11, NScheme::NTypeIds::Timestamp> {};
         struct LastExecutionId      : Column<12, NScheme::NTypeIds::Utf8> {};
         struct PreviousExecutionIds : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct CreatedBy            : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct ModifiedBy           : Column<15, NScheme::NTypeIds::Utf8> {};
+        struct StartedBy            : Column<16, NScheme::NTypeIds::Utf8> {};
+        struct StoppedBy            : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct CreatedAt            : Column<18, NScheme::NTypeIds::Timestamp> {};
+        struct ModifiedAt           : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct SubmittedAt          : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct StartedAt            : Column<21, NScheme::NTypeIds::Timestamp> {};
+        struct FinishedAt           : Column<22, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<
@@ -944,7 +953,16 @@ struct Schema : NIceDb::Schema {
             LastFailAt,
             SuspendedUntil,
             LastExecutionId,
-            PreviousExecutionIds>;
+            PreviousExecutionIds,
+            CreatedBy,
+            ModifiedBy,
+            StartedBy,
+            StoppedBy,
+            CreatedAt,
+            ModifiedAt,
+            SubmittedAt,
+            StartedAt,
+            FinishedAt>;
     };
 
     struct UdfModules : Table<27> {

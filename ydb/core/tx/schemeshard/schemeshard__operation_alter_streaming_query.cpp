@@ -138,7 +138,7 @@ class TAlterStreamingQuery : public TSubOperation {
         return true;
     }
 
-    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TOperationContext& context) const {
+    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TString& owner, const TOperationContext& context) const {
         const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldStreamingQueryInfo);
         auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
@@ -146,10 +146,45 @@ class TAlterStreamingQuery : public TSubOperation {
             .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
         });
 
+        auto& properties = *streamingQueryInfo->Properties.MutableProperties();
+
         if (!Transaction.GetReplaceIfExists()) {
-            auto& properties = *streamingQueryInfo->Properties.MutableProperties();
             for (const auto& [property, value] : oldStreamingQueryInfo->Properties.GetProperties()) {
                 properties.emplace(property, value);
+            }
+        }
+
+        // Always preserve the original creator and track who last modified the query
+        const auto& oldProperties = oldStreamingQueryInfo->Properties.GetProperties();
+        if (const auto it = oldProperties.find("__created_by"); it != oldProperties.end()) {
+            properties["__created_by"] = it->second;
+        }
+        properties["__modified_by"] = owner;
+
+        // Preserve original creation time; always update modification time
+        if (const auto it = oldProperties.find("__created_at"); it != oldProperties.end()) {
+            properties["__created_at"] = it->second;
+        }
+        properties["__modified_at"] = ToString(TInstant::Now().MicroSeconds());
+
+        // Detect run → stop and stop → run transitions to track who started/stopped
+        const auto oldRunIt = oldProperties.find("run");
+        const bool oldRun = oldRunIt != oldProperties.end() && oldRunIt->second == "true";
+        const auto newRunIt = properties.find("run");
+        const bool newRun = newRunIt != properties.end() && newRunIt->second == "true";
+
+        if (!oldRun && newRun) {
+            // Query is being started
+            properties["__started_by"] = owner;
+        } else if (oldRun && !newRun) {
+            // Query is being stopped
+            properties["__stopped_by"] = owner;
+        } else {
+            // Preserve existing started_by/stopped_by
+            for (const char* key : {"__started_by", "__stopped_by"}) {
+                if (const auto it = oldProperties.find(key); it != oldProperties.end()) {
+                    properties.emplace(key, it->second);
+                }
             }
         }
 
@@ -209,8 +244,6 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-        Y_UNUSED(owner);
-
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& streamingQueryDescription = Transaction.GetCreateStreamingQuery();
         const TString& name = streamingQueryDescription.GetName();
@@ -226,7 +259,7 @@ public:
         const TPath& dstPath = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
-        const auto queryInfo = GetAlteredQueryInfo(dstPath, context);
+        const auto queryInfo = GetAlteredQueryInfo(dstPath, owner, context);
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, queryInfo));
 
         // Compute delta for COUNTER_RUNNING_STREAMING_QUERY_COUNT before persisting the alter

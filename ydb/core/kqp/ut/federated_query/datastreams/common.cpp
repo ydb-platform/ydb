@@ -1247,6 +1247,19 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
 
             result.PreviousExecutionIds.emplace_back(executionId->GetString());
         }
+
+        if (!row.CreatedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("CreatedBy").GetOptionalUtf8(), row.CreatedBy);
+        }
+        if (!row.ModifiedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("ModifiedBy").GetOptionalUtf8(), row.ModifiedBy);
+        }
+        if (!row.StartedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("StartedBy").GetOptionalUtf8(), row.StartedBy);
+        }
+        if (!row.StoppedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("StoppedBy").GetOptionalUtf8(), row.StoppedBy);
+        }
     });
 
     return results;

@@ -23,7 +23,6 @@ namespace NKqp {
 namespace {
 
 constexpr i64 DataShardMaxOperationBytes = 8_MB;
-constexpr i64 ColumnShardMaxOperationBytes = 64_MB;
 
 constexpr size_t InitialBatchPoolSize = 64_KB;
 
@@ -445,10 +444,13 @@ public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const i64 maxOperationBytes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) // key columns then value columns
             : Columns(BuildColumns(inputColumns))
             , WriteColumnIds(BuildWriteColumnIds(inputColumns))
+            , MaxOperationBytes(maxOperationBytes)
             , Alloc(std::move(alloc)) {
+        AFL_ENSURE(MaxOperationBytes > 0);
         AFL_ENSURE(Alloc);
         AFL_ENSURE(schemeEntry.ColumnTableInfo);
         const auto& description = schemeEntry.ColumnTableInfo->Description;
@@ -508,7 +510,7 @@ public:
     }
 
     void FlushUnpreparedBatch(const ui64 shardId, TUnpreparedBatch& unpreparedBatch, bool force) {
-        while (!unpreparedBatch.Batches.empty() && (unpreparedBatch.TotalDataSize >= ColumnShardMaxOperationBytes || force)) {
+        while (!unpreparedBatch.Batches.empty() && (unpreparedBatch.TotalDataSize >= static_cast<ui64>(MaxOperationBytes) || force)) {
             std::vector<TRecordBatchPtr> toPrepare;
             i64 toPrepareSize = 0;
             while (!unpreparedBatch.Batches.empty()) {
@@ -530,7 +532,7 @@ public:
                 for (i64 index = 0; index < batch->num_rows(); ++index) {
                     i64 nextRowSize = rowCalculator.GetRowBytesSize(index);
 
-                    if (toPrepareSize + nextRowSize >= (i64)ColumnShardMaxOperationBytes) {
+                    if (toPrepareSize + nextRowSize >= MaxOperationBytes) {
                         toPrepare.push_back(batch->Slice(0, index));
                         unpreparedBatch.Batches.push_front(batch->Slice(index, batch->num_rows() - index));
                         UnpreparedBatchedCount++;
@@ -639,6 +641,7 @@ private:
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteColumnIds;
+    const i64 MaxOperationBytes;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
@@ -1030,9 +1033,10 @@ private:
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const i64 maxOperationBytes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TColumnShardPayloadSerializer>(
-        schemeEntry, inputColumns, std::move(alloc));
+        schemeEntry, inputColumns, maxOperationBytes, std::move(alloc));
 }
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
@@ -1812,6 +1816,7 @@ public:
             writeInfo.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
                 writeInfo.Metadata.InputColumnsMetadata,
+                Settings.ColumnShardMaxOperationBytes,
                 Alloc);
         }
         AfterPartitioningChanged();
@@ -1902,6 +1907,7 @@ public:
             iter->second.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
                 iter->second.Metadata.InputColumnsMetadata,
+                Settings.ColumnShardMaxOperationBytes,
                 Alloc);
         }
     }

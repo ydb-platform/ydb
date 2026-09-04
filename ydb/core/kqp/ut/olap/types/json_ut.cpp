@@ -1873,6 +1873,30 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonNativeScalars) {
         )" << NativeValueTypeCheck(EValueType::String);
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }
+
+    Y_UNIT_TEST(DictionaryCompaction) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+                    `OTHERS_ALLOWED_FRACTION`=`0`, `ENABLE_NATIVE_COLUMNS`=`true`, `DICTIONARY_UNIQUE_FRACTION`=`1`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a":"x"}')), (2u, JsonDocument('{"a":"y"}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"a":"x"}')), (4u, JsonDocument('{"a":"y"}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT JSON_VALUE(Col2, "$.a") FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[["x"]];[["y"]];[["x"]];[["y"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::String) << R"(
+        ------
+        )"
+            << NSubColumnsScenarios::AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
 }
 
 }   // namespace NKikimr::NKqp

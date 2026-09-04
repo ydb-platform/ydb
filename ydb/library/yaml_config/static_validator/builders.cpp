@@ -3,6 +3,7 @@
 #include <ydb/library/yaml_config/validator/validator_checks.h>
 #include <ydb/library/yaml_config/validator/configurators.h>
 
+#include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 
 #include <limits>
@@ -255,6 +256,11 @@ TMapBuilder ActorSystemConfigBuilder() {
         });
       });
     })
+    .Array("blob_storage_executor", [](auto& blobStorageExecutor){
+      blobStorageExecutor
+      .Optional()
+      .Int64Item(nonNegative());
+    })
     .Int64("sys_executor", [](auto& sysExecutor){
       sysExecutor
       .Optional()
@@ -274,6 +280,11 @@ TMapBuilder ActorSystemConfigBuilder() {
       batchExecutor
       .Optional()
       .Range(0, MaxExecutorPoolId);
+    })
+    .Array("interconnect_session_executor", [](auto& interconnectSessionExecutor){
+      interconnectSessionExecutor
+      .Optional()
+      .Int64Item(nonNegative());
     })
     .Array("service_executor", [](auto& serviceExecutor){
       serviceExecutor
@@ -296,6 +307,11 @@ TMapBuilder ActorSystemConfigBuilder() {
     .AddCheck("Executor references", [](auto& actorSystemContext){
       auto node = actorSystemContext.Node();
       if (!node["executor"].Exists()) {
+        for (const TString& field : {TString("blob_storage_executor"), TString("interconnect_session_executor")}) {
+          if (node[field].Exists()) {
+            actorSystemContext.Expect(false, field + " requires executor");
+          }
+        }
         return;
       }
 
@@ -323,6 +339,24 @@ TMapBuilder ActorSystemConfigBuilder() {
             ::TStringBuilder() << "service_executor[" << i << "].executor_id");
         }
       }
+
+      auto validateReferenceList = [&](const TString& field) {
+        if (!node[field].Exists()) {
+          return;
+        }
+
+        auto executorIds = node[field].Array();
+        THashSet<i64> seenExecutorIds;
+        for (int i = 0; i < executorIds.Length(); ++i) {
+          const i64 executorId = executorIds[i].Int64();
+          validateReference(executorIds[i], ::TStringBuilder() << field << "[" << i << "]");
+          actorSystemContext.Expect(seenExecutorIds.insert(executorId).second,
+            field + " contains duplicate executor ids");
+        }
+      };
+
+      validateReferenceList("blob_storage_executor");
+      validateReferenceList("interconnect_session_executor");
     })
     .AddCheck("Must either be auto config or manual config", [](auto& actorSystemContext){
       bool autoConfig = false;
@@ -331,19 +365,21 @@ TMapBuilder ActorSystemConfigBuilder() {
         autoConfig = true;
       }
       if (autoConfig) {
-        actorSystemContext.Expect(node["node_type"].Exists(), "node_type must exist when using auto congfig");
-        actorSystemContext.Expect(node["cpu_count"].Exists(), "cpu_count must exist when using auto congfig");
+        actorSystemContext.Expect(node["node_type"].Exists(), "node_type must exist when using auto config");
+        actorSystemContext.Expect(node["cpu_count"].Exists(), "cpu_count must exist when using auto config");
 
-        actorSystemContext.Expect(!node["executor"].Exists(), "executor must not exist when using auto congfig");
-        actorSystemContext.Expect(!node["scheduler"].Exists(), "scheduler must not exist when using auto congfig");
+        actorSystemContext.Expect(!node["executor"].Exists(), "executor must not exist when using auto config");
+        actorSystemContext.Expect(!node["blob_storage_executor"].Exists(), "blob_storage_executor must not exist when using auto config");
+        actorSystemContext.Expect(!node["interconnect_session_executor"].Exists(), "interconnect_session_executor must not exist when using auto config");
+        actorSystemContext.Expect(!node["scheduler"].Exists(), "scheduler must not exist when using auto config");
       } else {
-        actorSystemContext.Expect(node["executor"].Exists(), "executor must exist when not using auto congfig");
-        actorSystemContext.Expect(node["scheduler"].Exists(), "scheduler must exist when not using auto congfig");
+        actorSystemContext.Expect(node["executor"].Exists(), "executor must exist when not using auto config");
+        actorSystemContext.Expect(node["scheduler"].Exists(), "scheduler must exist when not using auto config");
 
-        actorSystemContext.Expect(!node["use_shared_threads"].Exists(),
-          "use_shared_threads must not exist when not using auto config");
-        actorSystemContext.Expect(!node["node_type"].Exists(), "node_type must not exist when not using auto congfig");
-        actorSystemContext.Expect(!node["cpu_count"].Exists(), "cpu_count must not exist when not using auto congfig");
+        actorSystemContext.Expect(!node["use_shared_threads"].Exists() || !node["use_shared_threads"].Bool(),
+          "use_shared_threads must not be enabled when not using auto config");
+        actorSystemContext.Expect(!node["node_type"].Exists(), "node_type must not exist when not using auto config");
+        actorSystemContext.Expect(!node["cpu_count"].Exists(), "cpu_count must not exist when not using auto config");
       }
     });
   });

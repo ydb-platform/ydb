@@ -41,6 +41,7 @@ struct TKqpBufferLockSettings {
     IKqpBufferTableLookupCallbacks* Callbacks = nullptr;
     TTableId TableId;
     TString TablePath;
+    TString Database;
 
     ui64 LockTxId;
     ui64 LockNodeId;

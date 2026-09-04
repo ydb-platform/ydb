@@ -210,7 +210,7 @@ public:
 
     // Streaming queries
 
-    void WaitCheckpointUpdate(const TString& checkpointId);
+    void WaitCheckpointUpdate(const TString& checkpointId, std::optional<std::pair<ui64, ui64>> initialBound = std::nullopt);
 
     ui64 GetLastCheckpointSeqNo(const TString& checkpointId);
 

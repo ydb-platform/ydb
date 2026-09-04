@@ -771,6 +771,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         if (analyzers.has_use_filter_snowball()) {
             Stream << ", use_filter_snowball=" << (analyzers.use_filter_snowball() ? "true" : "false");
         }
+        if (analyzers.has_use_filter_superlemmer()) {
+            Stream << ", use_filter_superlemmer=" << (analyzers.use_filter_superlemmer() ? "true" : "false");
+        }
 
         Stream << ")";
     }
@@ -833,6 +836,9 @@ void TCreateTableFormatter::Format(const Ydb::Table::TableMultiColumnStatistics&
                 case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
                     Stream << "COUNT_MIN_SKETCH";
                     break;
+                case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+                    Stream << "EQ_HEIGHT_HISTOGRAM";
+                    break;
                 default:
                     ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::TableMultiColumnStatistics statistic type");
             }
@@ -864,6 +870,9 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TMultiColumnStatistics
             switch (statistics.GetTypes(i)) {
                 case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                     Stream << "COUNT_MIN_SKETCH";
+                    break;
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                    Stream << "EQ_HEIGHT_HISTOGRAM";
                     break;
                 default:
                     ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected NKikimrSchemeOp::TMultiColumnStatisticsDescription statistic type");

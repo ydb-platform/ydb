@@ -26,7 +26,10 @@ import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.whiteboard_disk_states_pb2 as whiteboard_disk_states
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
+import ydb.public.api.protos.ydb_bridge_common_pb2 as ydb_bridge_common
+import ydb.public.api.protos.draft.ydb_distributed_storage_pb2 as ydb_distributed_storage
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
+from ydb.public.api.grpc.draft import ydb_distributed_storage_v1_pb2_grpc as distributed_storage_grpc_server
 from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
@@ -79,7 +82,8 @@ class EndpointInfo:
 
     @property
     def host_with_grpc_port(self):
-        return f'{self.host}:{self.grpc_port}'
+        host = '[%s]' % self.host if ':' in self.host and not self.host.startswith('[') else self.host
+        return f'{host}:{self.grpc_port}'
 
     @property
     def host_with_mon_port(self):
@@ -275,6 +279,10 @@ class ConnectionParams:
 connection_params = ConnectionParams()
 
 
+def has_explicit_grpc_endpoints():
+    return bool(connection_params.grpc_endpoints)
+
+
 def set_connection_params_type(connection_params_type: type):
     global connection_params
     connection_params = connection_params_type()
@@ -366,6 +374,10 @@ class ConnectionError(Exception):
     pass
 
 
+class DistributedStorageUnavailable(Exception):
+    pass
+
+
 class QueryError(Exception):
     pass
 
@@ -392,7 +404,14 @@ def get_random_endpoints_for_query(request_type=None, items_count=1, filter=None
     return endpoints[:items_count]
 
 
-def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_retries=5):
+def _raise_retry_error(errors):
+    if errors and all(isinstance(error, DistributedStorageUnavailable) for error in errors):
+        raise errors[-1]
+    raise ConnectionError("Can't connect to specified addresses")
+
+
+def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_retries=5, errors=None):
+    errors = [] if errors is None else errors
     try_index = 0
     result = None
     for endpoint in endpoints:
@@ -400,15 +419,21 @@ def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_r
             result = query(endpoint)
             break
         except Exception as e:
+            errors.append(e)
             try_index += 1
-            if isinstance(e, urllib.error.URLError):
-                bad_hosts.add(endpoint.host_with_port)
-            if not connection_params.quiet:
-                print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e} ({type(e).__module__}.{type(e).__name__})', file=sys.stderr)
-                if request_type == 'http' and try_index == max_retries:
-                    print('HINT: consider trying different protocol for endpoints when experiencing massive fetch failures from different hosts', file=sys.stderr)
+            if isinstance(e, DistributedStorageUnavailable):
+                print_if_verbose(connection_params.args,
+                                 'INFO: distributed storage service is unavailable at %s: %s'
+                                 % (endpoint.host_with_port, e), file=sys.stderr)
+            else:
+                if isinstance(e, urllib.error.URLError):
+                    bad_hosts.add(endpoint.host_with_port)
+                if not connection_params.quiet:
+                    print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e} ({type(e).__module__}.{type(e).__name__})', file=sys.stderr)
+                    if request_type == 'http' and try_index == max_retries:
+                        print('HINT: consider trying different protocol for endpoints when experiencing massive fetch failures from different hosts', file=sys.stderr)
             if try_index == max_retries:
-                raise ConnectionError("Can't connect to specified addresses")
+                _raise_retry_error(errors)
     return try_index, result
 
 
@@ -440,13 +465,18 @@ def query_random_host_with_retry(retries=5, request_type=None):
 
             try_index = 0
             result = None
+            errors = []
             if explicit_endpoint:
-                try_index, result = retry_query_with_endpoints(send_query, [explicit_endpoint] * retries, request_type, func.__name__, retries)
+                try_index, result = retry_query_with_endpoints(send_query, [explicit_endpoint] * retries,
+                                                               request_type, func.__name__, retries, errors)
                 return result
 
             if endpoints:
-                try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries)
-                return result
+                try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__,
+                                                               retries, errors)
+                if result is not None:
+                    return result
+                _raise_retry_error(errors)
 
             if result is not None:
                 return result
@@ -454,7 +484,8 @@ def query_random_host_with_retry(retries=5, request_type=None):
             print_if_verbose(connection_params.args, 'INFO: using random hosts', file=sys.stderr)
 
             endpoints = get_random_endpoints_for_query(request_type=request_type, items_count=retries - try_index, filter=filter_good_endpoints)
-            sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries - try_index)
+            sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__,
+                                                               retries - try_index, errors)
             try_index += sub_try_index
 
             if result is not None:
@@ -470,7 +501,8 @@ def query_random_host_with_retry(retries=5, request_type=None):
                     connection_params.printed_warning_about_not_assigned_http_protocol = True
                 print_if_verbose(connection_params.args, 'INFO: failed with http endpoints, try to use grpc endpoints', file=sys.stderr)
                 endpoints = get_random_endpoints_for_query(request_type='grpc', items_count=retries - try_index, filter=filter_good_endpoints)
-                sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries - try_index)
+                sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type,
+                                                                   func.__name__, retries - try_index, errors)
                 try_index += sub_try_index
 
             if request_type == 'grpc' and connection_params.http_endpoints:
@@ -483,7 +515,8 @@ def query_random_host_with_retry(retries=5, request_type=None):
                     connection_params.printed_warning_about_not_assigned_grpc_protocol = True
                 print_if_verbose(connection_params.args, 'INFO: failed with grpc endpoints, try to use http endpoints', file=sys.stderr)
                 endpoints = get_random_endpoints_for_query(request_type='http', items_count=retries - try_index, filter=filter_good_endpoints)
-                sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries - try_index)
+                sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type,
+                                                                   func.__name__, retries - try_index, errors)
                 try_index += sub_try_index
 
             if result is not None:
@@ -493,7 +526,11 @@ def query_random_host_with_retry(retries=5, request_type=None):
 
             endpoints = get_random_endpoints_for_query(request_type=None, items_count=retries - try_index, filter=None)
             endpoints = list(islice(cycle(endpoints), retries - try_index))
-            sub_try_index, result = retry_query_with_endpoints(lambda endpoint: func(*args, **kwargs, endpoint=endpoint), endpoints, request_type, func.__name__, retries - try_index)
+            sub_try_index, result = retry_query_with_endpoints(
+                lambda endpoint: func(*args, **kwargs, endpoint=endpoint), endpoints, request_type,
+                func.__name__, retries - try_index, errors)
+            if result is None:
+                _raise_retry_error(errors)
             return result
 
         return wrapped
@@ -535,7 +572,17 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
 
 
 @query_random_host_with_retry(request_type='grpc')
-def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=kikimr_grpc.TGRpcServerStub, endpoints=None):
+def invoke_grpc(
+    func,
+    *params,
+    explicit_host=None,
+    endpoint=None,
+    stub_factory=kikimr_grpc.TGRpcServerStub,
+    endpoints=None,
+    metadata=None,
+    result_handler=None,
+    report_unimplemented=False,
+):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
@@ -547,10 +594,23 @@ def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=k
     def work(channel):
         try:
             stub = stub_factory(channel)
-            res = getattr(stub, func)(*params)
-            if connection_params.debug:
+            if metadata is None:
+                res = getattr(stub, func)(*params)
+            else:
+                res = getattr(stub, func)(*params, metadata=metadata)
+            if result_handler is not None:
+                res = result_handler(res)
+            elif connection_params.debug:
                 print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
             return res
+        except grpc.RpcError as e:
+            if report_unimplemented and e.code() == grpc.StatusCode.UNIMPLEMENTED:
+                raise DistributedStorageUnavailable(
+                    'gRPC method %s is unavailable at %s: %s'
+                    % (func, endpoint.host_with_grpc_port, e.details())) from e
+            if connection_params.debug:
+                print('ERROR: exception %s' % e, file=sys.stderr)
+            raise ConnectionError("Can't connect to specified addresses by gRPC protocol")
         except Exception as e:
             if connection_params.debug:
                 print('ERROR: exception %s' % e, file=sys.stderr)
@@ -566,6 +626,52 @@ def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=k
         with grpc.insecure_channel(hostport, options) as channel:
             retval = work(channel)
     return retval
+
+
+def invoke_distributed_storage_request(request_type, request, result_handler=None):
+    return invoke_grpc(
+        request_type,
+        request,
+        stub_factory=distributed_storage_grpc_server.DistributedStorageServiceStub,
+        metadata=_auth_metadata(),
+        result_handler=result_handler,
+        report_unimplemented=True,
+    )
+
+
+def fetch_storage_state(storage_pools=False, groups=False, vdisks=False, pdisks=False, nodes=False,
+                        devices=False, settings=False):
+    request = ydb_distributed_storage.StorageStateRequest(
+        include_storage_pools=storage_pools,
+        include_groups=groups,
+        include_vdisks=vdisks,
+        include_pdisks=pdisks,
+        include_nodes=nodes,
+        include_devices=devices,
+        include_settings=settings,
+    )
+
+    def consume(responses):
+        result = ydb_distributed_storage.StorageStateResult()
+        error_response = None
+        for response in responses:
+            if connection_params.debug:
+                print('INFO: result <<< %s >>>' % text_format.MessageToString(response, as_one_line=True),
+                      file=sys.stderr)
+            if response.status != StatusIds.SUCCESS:
+                error_response = response
+            elif response.HasField('result'):
+                result.MergeFrom(response.result)
+        return result, error_response
+
+    result, error_response = invoke_distributed_storage_request('StreamStorageState', request,
+                                                                result_handler=consume)
+    if error_response is not None:
+        request_s = text_format.MessageToString(request, as_one_line=True)
+        response_s = text_format.MessageToString(error_response, as_one_line=True)
+        raise QueryError('Failed to fetch distributed storage state; request: %s; response: %s'
+                         % (request_s, response_s))
+    return result
 
 
 def invoke_grpc_bsc_request(request, endpoint=None):
@@ -600,19 +706,20 @@ def invoke_bsc_request(request, explicit_host=None, endpoint=None):
         return invoke_grpc_bsc_request(request, endpoint=endpoint)
 
 
-def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
+def cms_permission_request(user, host, reason, duration_usec, availability_mode, action_type, services=(), devices=()):
     cms_request = kikimr_msgbus.TCmsRequest()
     if connection_params.token is not None:
         cms_request.SecurityToken = connection_params.token
     cms_request.PermissionRequest.User = user
     action = cms_request.PermissionRequest.Actions.add()
-    action.Type = kikimr_cms.TAction.EType.RESTART_SERVICES
+    action.Type = action_type
     action.Host = host
-    action.Services.append('storage')
+    action.Services.extend(services)
+    action.Devices.extend(devices)
     action.Duration = duration_usec
     cms_request.PermissionRequest.Reason = reason
     cms_request.PermissionRequest.Duration = duration_usec
-    cms_request.PermissionRequest.AvailabilityMode = kikimr_cms.EAvailabilityMode.MODE_MAX_AVAILABILITY if max_avail else kikimr_cms.EAvailabilityMode.MODE_KEEP_AVAILABLE
+    cms_request.PermissionRequest.AvailabilityMode = availability_mode
     response = invoke_grpc('CmsRequest', cms_request)
     if response.Status.Code == kikimr_cms.TStatus.ECode.ALLOW:
         return None
@@ -620,71 +727,123 @@ def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
         return '%s: %s' % (kikimr_cms.TStatus.ECode.Name(response.Status.Code), response.Status.Reason)
 
 
+def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
+    availability_mode = (
+        kikimr_cms.EAvailabilityMode.MODE_MAX_AVAILABILITY
+        if max_avail
+        else kikimr_cms.EAvailabilityMode.MODE_KEEP_AVAILABLE
+    )
+    return cms_permission_request(
+        user,
+        host,
+        reason,
+        duration_usec,
+        availability_mode,
+        kikimr_cms.TAction.EType.RESTART_SERVICES,
+        services=('storage',),
+    )
+
+
+def _auth_metadata():
+    if connection_params.token is None:
+        return None
+    return (('x-ydb-auth-ticket', connection_params.token),)
+
+
 def get_piles_info():
     request = ydb_bridge.GetClusterStateRequest()
-    response = invoke_grpc('GetClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    response = invoke_grpc(
+        'GetClusterState',
+        request,
+        stub_factory=bridge_grpc_server.BridgeServiceStub,
+        metadata=_auth_metadata(),
+    )
+    if response.operation.status != StatusIds.SUCCESS:
+        raise QueryError('GetClusterState failed with status %s' % response.operation.status)
     result = ydb_bridge.GetClusterStateResult()
-    response.operation.result.Unpack(result)
+    if not response.operation.result.Unpack(result):
+        raise QueryError('GetClusterState returned an unexpected result type')
     return result
 
 
-def promote_pile(pile_id):
+def update_pile_states(updates, quorum_piles=(), endpoints=None):
     request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.PROMOTED
-    ))
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    request.updates.extend(updates)
+    request.quorum_piles.extend(quorum_piles)
+    response = invoke_grpc(
+        'UpdateClusterState',
+        request,
+        stub_factory=bridge_grpc_server.BridgeServiceStub,
+        endpoints=endpoints,
+        metadata=_auth_metadata(),
+    )
+    if response.operation.status != StatusIds.SUCCESS:
+        raise QueryError('UpdateClusterState failed with status %s' % response.operation.status)
 
 
-def set_primary_pile(primary_pile_id, synchronized_piles):
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=primary_pile_id,
-        state=ydb_bridge.PileState.PRIMARY
-    ))
-    for pile_id in synchronized_piles:
-        request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-            pile_id=pile_id,
-            state=ydb_bridge.PileState.SYNCHRONIZED
+def promote_pile(pile_name):
+    update_pile_states((ydb_bridge_common.PileState(
+        pile_name=pile_name,
+        state=ydb_bridge_common.PileState.PROMOTED,
+    ),))
+
+
+def set_primary_pile(primary_pile_name, synchronized_piles):
+    updates = [ydb_bridge_common.PileState(
+        pile_name=primary_pile_name,
+        state=ydb_bridge_common.PileState.PRIMARY,
+    )]
+    updates.extend(
+        ydb_bridge_common.PileState(
+            pile_name=pile_name,
+            state=ydb_bridge_common.PileState.SYNCHRONIZED,
+        )
+        for pile_name in synchronized_piles
+    )
+    update_pile_states(updates)
+
+
+def disconnect_pile(pile_name, new_primary_pile_name=None):
+    updates = []
+    if new_primary_pile_name is not None:
+        updates.append(ydb_bridge_common.PileState(
+            pile_name=new_primary_pile_name,
+            state=ydb_bridge_common.PileState.PRIMARY,
         ))
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    updates.append(ydb_bridge_common.PileState(
+        pile_name=pile_name,
+        state=ydb_bridge_common.PileState.DISCONNECTED,
+    ))
+    update_pile_states(updates)
 
 
-def disconnect_pile(pile_id, pile_to_endpoints):
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.DISCONNECTED
-    ))
-    request.specific_pile_ids.append(pile_id)
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
-    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.DISCONNECTED,
-    ))
-    request.specific_pile_ids.extend(other_pile_ids)
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+def connect_pile(pile_name, primary_pile_name, pile_to_endpoints):
+    update = ydb_bridge_common.PileState(
+        pile_name=pile_name,
+        state=ydb_bridge_common.PileState.NOT_SYNCHRONIZED,
+    )
+    if primary_pile_name is None or primary_pile_name == pile_name:
+        raise QueryError('Cannot reconnect a pile without a connected primary pile')
 
-
-def connect_pile(pile_id, pile_to_endpoints):
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
-    ))
-    request.specific_pile_ids.append(pile_id)
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
-    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
-    ))
-    request.specific_pile_ids.extend(other_pile_ids)
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+    # A disconnected pile shuts down its gRPC servers. Both requests therefore
+    # enter through the connected primary; quorum_piles selects the witnesses
+    # for each update and does not select the RPC endpoint.
+    primary_endpoints = pile_to_endpoints.get(primary_pile_name)
+    if not primary_endpoints:
+        raise QueryError(
+            'No gRPC endpoints found for primary bridge pile %s'
+            % primary_pile_name
+        )
+    update_pile_states(
+        (update,),
+        quorum_piles=(primary_pile_name,),
+        endpoints=primary_endpoints,
+    )
+    update_pile_states(
+        (update,),
+        quorum_piles=(pile_name,),
+        endpoints=primary_endpoints,
+    )
 
 
 def create_bsc_request(args):
@@ -1212,32 +1371,66 @@ def fetch_node_mon_map(nodes=None):
 def fetch_node_to_endpoint_map(nodes=None):
     res = {}
     for node_id, sysinfo in fetch_json_info('sysinfo', nodes).items():
+        grpc_protocol = None
+        grpc_host = sysinfo.get('Host')
         grpc_port = None
         mon_port = None
         for ep in sysinfo.get('Endpoints', []):
-            if ep['Name'] == 'grpc':
-                grpc_port = int(ep['Address'][1:])
+            if ep['Name'] in ('grpc', 'grpcs') and (grpc_protocol is None or ep['Name'] == 'grpc'):
+                address_host, separator, address_port = ep['Address'].rpartition(':')
+                if separator and address_port.isdigit():
+                    grpc_protocol = ep['Name']
+                    advertised_host = address_host.strip('[]')
+                    grpc_host = (
+                        sysinfo.get('Host')
+                        if advertised_host in ('', '0.0.0.0', '::')
+                        else advertised_host
+                    )
+                    grpc_port = int(address_port)
             elif ep['Name'] == 'http-mon':
-                mon_port = int(ep['Address'][1:])
-        res[node_id] = EndpointInfo('grpc', sysinfo['Host'], grpc_port, mon_port)
+                _, separator, address_port = ep['Address'].rpartition(':')
+                if separator and address_port.isdigit():
+                    mon_port = int(address_port)
+        if grpc_protocol is not None and grpc_host:
+            res[node_id] = EndpointInfo(grpc_protocol, grpc_host, grpc_port, mon_port)
+    return res
+
+
+def _vdisk_id_strings(group_id, group_generation, fail_realm_idx, fail_domain_idx, vdisk_idx):
+    return (
+        '[%08x:_:%u:%u:%u]' % (group_id, fail_realm_idx, fail_domain_idx, vdisk_idx),
+        '[%08x:%u:%u:%u:%u]' % (group_id, group_generation, fail_realm_idx, fail_domain_idx, vdisk_idx),
+        '(%d-%u-%u-%u-%u)' % (group_id, group_generation, fail_realm_idx, fail_domain_idx, vdisk_idx),
+    )
+
+
+def _get_items_by_vdisk_ids(items_by_id, vdisk_ids):
+    res = []
+    for string in vdisk_ids:
+        for vdisk_id in string.split():
+            if vdisk_id not in items_by_id:
+                raise Exception('VDisk with id %s not found' % vdisk_id)
+            res.append(items_by_id[vdisk_id])
     return res
 
 
 def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
     vdisk_vslot_map = {}
-    for v in base_config.VSlot:
-        vdisk_vslot_map['[%08x:_:%u:%u:%u]' % (v.GroupId, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
-        vdisk_vslot_map['[%08x:%u:%u:%u:%u]' % (v.GroupId, v.GroupGeneration, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
-        vdisk_vslot_map['(%d-%u-%u-%u-%u)' % (v.GroupId, v.GroupGeneration, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
+    for vslot in base_config.VSlot:
+        for vdisk_id in _vdisk_id_strings(*get_vdisk_id(vslot)):
+            vdisk_vslot_map[vdisk_id] = vslot
+    return _get_items_by_vdisk_ids(vdisk_vslot_map, vdisk_ids)
 
-    res = []
-    for string in vdisk_ids:
-        for vdisk_id in string.split():
-            if vdisk_id not in vdisk_vslot_map:
-                raise Exception('VDisk with id %s not found' % vdisk_id)
-            vslot = vdisk_vslot_map[vdisk_id]
-            res.append(vslot)
-    return res
+
+def get_vdisks_by_vdisk_ids(vdisks, vdisk_ids):
+    vdisk_map = {}
+    for vdisk in vdisks:
+        identifier = vdisk.id
+        for vdisk_id in _vdisk_id_strings(identifier.group_id, identifier.group_generation,
+                                          identifier.fail_realm_idx, identifier.fail_domain_idx,
+                                          identifier.vdisk_idx):
+            vdisk_map[vdisk_id] = vdisk
+    return _get_items_by_vdisk_ids(vdisk_map, vdisk_ids)
 
 
 def vdisk_is_ok(vslot):

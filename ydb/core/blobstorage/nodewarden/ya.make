@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    blobstorage_executor_pool_mapping.cpp
+    blobstorage_executor_pool_mapping.h
     group_stat_aggregator.cpp
     group_stat_aggregator.h
     distconf.cpp

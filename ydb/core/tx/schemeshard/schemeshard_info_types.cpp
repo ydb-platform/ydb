@@ -1,5 +1,6 @@
 #include "schemeshard_info_types.h"
 
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
 #include "schemeshard_import_helpers.h"  // for ValidateImportDstPath
@@ -16,6 +17,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/util/pb.h>
@@ -911,6 +913,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 desc->AddColumnNames(colName);
                 desc->AddColumnIds(it->second);
             }
+            bool hasEqHeightHistogram = false;
             for (const auto rawType : add.GetTypes()) {
                 const auto type = static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(rawType);
                 switch (type) {
@@ -919,11 +922,37 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                         return nullptr;
                     case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                         break;
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                        hasEqHeightHistogram = true;
+                        break;
                     default:
                         errStr = TStringBuilder() << "Unknown statistic type: " << rawType;
                         return nullptr;
                 }
                 desc->AddTypes(type);
+            }
+            if (hasEqHeightHistogram) {
+                for (const auto& colName : add.GetColumnNames()) {
+                    const ui32 colId = colName2Id.at(colName);
+                    const TColumn* column = nullptr;
+                    if (auto it = alterData->Columns.find(colId); it != alterData->Columns.end()) {
+                        column = &it->second;
+                    } else if (source) {
+                        if (auto it = source->Columns.find(colId); it != source->Columns.end()) {
+                            column = &it->second;
+                        }
+                    }
+                    if (!column || column->IsDropped()) {
+                        errStr = TStringBuilder() << "Undefined column: " << colName;
+                        return nullptr;
+                    }
+                    if (!NScheme::NTypeIds::IsPresortEncodable(column->PType.GetTypeId())) {
+                        errStr = TStringBuilder()
+                            << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << colName
+                            << "' of type " << NScheme::TypeName(column->PType, column->PTypeMod);
+                        return nullptr;
+                    }
+                }
             }
         }
     }
@@ -1120,6 +1149,11 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
         for (auto& c : Columns) {
             const TColumn& column = c.second;
             if (column.IsDropped()) {
+                continue;
+            }
+            // A VIRTUAL generated column is computed at read time by KQP: the datashards
+            // must never learn about it
+            if (IsVirtualGeneratedColumn(column)) {
                 continue;
             }
             auto colDescr = TableDescription.AddColumns();

@@ -1,4 +1,12 @@
 {
+    "test.test[Crash-Results]": [
+        "<tmp_path>/program.sql:<main>: Error: Bridge: worker process died unexpectedly (module: SimpleUdf)"
+    ],
+    "test.test[Exception-Results]": [
+        {
+            "uri": "file://test.test_Exception-Results_/extracted"
+        }
+    ],
     "test.test[SecureParam-Results]": [
         {
             "uri": "file://test.test_SecureParam-Results_/results.txt"

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
@@ -47,6 +48,10 @@ private:
         ui64 ReadsInflight = 0;
         ui64 LookupColumnsCount = 0;
         std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+
+        bool ResolvePending = false;
+        bool IsUniqueCheck = false;
+        bool FailOnUniqueCheck = false;
 
         bool IsAllReadsFinished() const {
             return ReadsInflight == 0;
@@ -127,6 +132,7 @@ public:
     STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
                 hFunc(TEvDataShard::TEvReadResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvPrivate::TEvRetryRead, Handle);
@@ -268,8 +274,16 @@ public:
         AFL_ENSURE(state.ReadsInflight == 0);
         AFL_ENSURE(state.Worker->AllRowsProcessed());
 
+        state.IsUniqueCheck = isUnique;
+        state.FailOnUniqueCheck = immediateFail;
+
         for (const auto& key : keys) {
             worker->AddInputRow(key);
+        }
+
+        if (!Partitioning) {
+            state.ResolvePending = !state.Worker->AllRowsProcessed();
+            return;
         }
 
         StartLookupTask(cookie, state, isUnique, immediateFail);
@@ -292,12 +306,12 @@ public:
 
     bool HasResult(ui64 cookie) override {
         const auto& state = CookieToLookupState.at(cookie);
-        return state.ReadsInflight == 0 && !state.Worker->AllRowsProcessed();
+        return !state.ResolvePending && state.ReadsInflight == 0 && !state.Worker->AllRowsProcessed();
     }
 
     bool IsEmpty(ui64 cookie) override {
         const auto& state = CookieToLookupState.at(cookie);
-        return state.ReadsInflight == 0 && state.Worker->AllRowsProcessed();
+        return !state.ResolvePending && state.ReadsInflight == 0 && state.Worker->AllRowsProcessed();
     }
 
     void ExtractResult(ui64 cookie, std::function<void(TConstArrayRef<TCell>)>&& callback) override {
@@ -490,12 +504,19 @@ public:
                 break;
             case Ydb::StatusIds::NOT_FOUND:
             {
-                return RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder() << "Table: `"
-                        << lookupState.Worker->GetTablePath() << "` not found.",
-                    getIssues());
+                YDB_LOG_DEBUG("Received NOT_FOUND status from datashard",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablet", shardId},
+                    {"issues", getIssues().ToOneLineString()});
+                if (!RetryTableRead(record.GetReadId(), false)) {
+                    return RuntimeError(
+                        NYql::NDqProto::StatusIds::UNAVAILABLE,
+                        NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                        TStringBuilder() << "Table: `"
+                            << lookupState.Worker->GetTablePath() << "` not found.",
+                        getIssues());
+                }
+                return;
             }
             case Ydb::StatusIds::OVERLOADED: {
                 YDB_LOG_DEBUG("Received OVERLOADED status from datashard",
@@ -620,13 +641,10 @@ public:
 
         for (const auto& readId : toRetry) {
             if (!RetryTableRead(readId, true)) {
-                const auto& failedRead = ReadIdToState.at(readId);
-                const auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
                 return RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder() << "Table: `"
-                        << lookupState.Worker->GetTablePath() << "` retry limit exceeded.",
+                    TStringBuilder() << "Table: `" << Settings.TablePath << "` retry limit exceeded.",
                     {});
             }
         }
@@ -663,7 +681,12 @@ public:
         TDuration delay;
         if (!throttleDelay) {
             if (failedRead.RetryAttempts >= MaxShardRetries()) {
-                return false;
+                YDB_LOG_DEBUG("Retry limit exceeded, resolving table shards",
+                    {"logPrefix", this->LogPrefix},
+                    {"table", lookupState.Worker->GetTablePath()},
+                    {"failedReadId", failedReadId},
+                    {"shardId", failedRead.ShardId});
+                return HandleReadRetryExceeded(failedReadId, lookupState);
             }
             ++failedRead.RetryAttempts;
             delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
@@ -699,6 +722,89 @@ public:
             ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts;
         }
         ReadIdToState.erase(failedReadId);
+    }
+
+    bool HandleReadRetryExceeded(ui64 failedReadId, TLookupState& lookupState) {
+        --lookupState.ReadsInflight;
+        const auto guard = Settings.TypeEnv.BindAllocator();
+        lookupState.Worker->ResetRowsProcessing(failedReadId);
+        ReadIdToState.erase(failedReadId);
+        lookupState.ResolvePending = true;
+        return ResolveTableShards();
+    }
+
+    bool ResolveTableShards() {
+        if (ResolveShardsInProgress) {
+            return true;
+        }
+
+        if (++TotalResolveShardsAttempts > MaxShardResolves()) {
+            return false;
+        }
+
+        YDB_LOG_DEBUG("Resolve table shards",
+            {"logPrefix", this->LogPrefix},
+            {"table", Settings.TablePath});
+        ResolveShardsInProgress = true;
+
+        Partitioning.reset();
+
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Settings.Database;
+
+        TVector<TCell> minusInf(KeyColumnTypes.size());
+        TVector<TCell> plusInf;
+        TTableRange range(minusInf, true, plusInf, true, false);
+
+        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(Settings.TableId, range, TKeyDesc::ERowOperation::Read,
+            KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
+
+        Settings.Counters->IteratorsShardResolve->Inc();
+
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        return true;
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult",
+            {"logPrefix", this->LogPrefix},
+            {"table", Settings.TablePath});
+        if (!ResolveShardsInProgress) {
+            return;
+        }
+        ResolveShardsInProgress = false;
+        if (ev->Get()->Request->ErrorCount > 0) {
+            TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: " << Settings.TablePath;
+            return RuntimeError(
+                NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                errorMsg);
+        }
+
+        auto& resultSet = ev->Get()->Request->ResultSet;
+        YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
+        Partitioning = resultSet[0].KeyDescription->Partitioning;
+
+        ProcessResolveResult();
+    }
+
+    void ProcessResolveResult() {
+        for (auto& [cookie, state] : CookieToLookupState) {
+            if (state.ResolvePending) {
+                state.ResolvePending = false;
+                const auto guard = Settings.TypeEnv.BindAllocator();
+                StartLookupTask(cookie, state, state.IsUniqueCheck, state.FailOnUniqueCheck);
+
+                if (state.ReadsInflight == 0) {
+                    RuntimeError(
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                        TStringBuilder() << "Table: `" << Settings.TablePath
+                            << "` re-resolve dispatched no read requests.");
+                    return;
+                }
+            }
+        }
     }
 
     void RuntimeError(
@@ -768,6 +874,9 @@ private:
     THashMap<ui64, TReadState> ReadIdToState;
 
     ui64 ReadId = 0;
+
+    ui64 TotalResolveShardsAttempts = 0;
+    bool ResolveShardsInProgress = false;
 
     // stats
     ui64 ReadRowsCount = 0;

@@ -955,9 +955,10 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-        if (!Serializer->Buffer->IsFinished()) {
-            Serializer->Push(std::move(checkpoint));
-        }
+        Serializer->Buffer->IsFinished(); // Finish check must be called to notify channel consumers
+
+        // Checkpoints may be sent after channel finish
+        Serializer->Push(std::move(checkpoint));
     }
 
     void Finish() override {

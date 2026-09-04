@@ -336,11 +336,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphBasic, TStreamingTestFixture) {
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph";
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphBasic, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopic";
+        const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -387,9 +388,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphGroupByHop, TStreamingTestFixture) {
-        constexpr char sourceTopicName[] = "restoreScriptGroupByHopTopicSource";
-        constexpr char sinkTopicName[] = "restoreScriptGroupByHopTopicSink";
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphGroupByHop, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto sourceTopicName = TStringBuilder() << Name_ << "TopicSource";
+        const auto sinkTopicName = TStringBuilder() << Name_ << "TopicSink";
         CreateTopic(sourceTopicName);
         CreateTopic(sinkTopicName);
 
@@ -445,13 +447,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetry, TStreamingTestFixture) {
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphOnRetry, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph_on_retry";
+        const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopicOnRetry";
+        const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -1484,6 +1487,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
         constexpr char cloudId[] =  "testcloud4";
+        constexpr char cloudIdAlt[] =  "testcloud5";
 
         constexpr char sourceName[] = "sourceName";
         constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
@@ -1616,6 +1620,53 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "pq_source"_a = sourceName
         ));
 
+        // Check successful EDS creation with overridden RESOURCE_ID
+        ExecQuery(fmt::format(
+                R"(
+                CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "{pq_location}",
+                    DATABASE_NAME = "{pq_database_name}",
+                    AUTH_METHOD = "IAM",
+                    INITIAL_TOKEN_SECRET_PATH = "{secret}",
+                    RESOURCE_ID = "{cloud_id}",
+                    SERVICE_ACCOUNT_ID = "{service_account_id}"
+                );)",
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = badSecretPath,
+                "cloud_id"_a = cloudIdAlt,
+                "service_account_id"_a = serviceAccountId
+        ));
+
+        // Verify EDS description
+        {
+            const auto externalDataSourceDesc = Navigate(
+                    GetRuntime(),
+                    GetRuntime().AllocateEdgeActor(),
+                    TStringBuilder() << "/Root/" << sourceName,
+                    NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+            UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+            UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
+            auto& info = *externalDataSource.ExternalDataSourceInfo;
+            auto& description = info.Description;
+            UNIT_ASSERT_VALUES_EQUAL(description.GetSourceType(), "Ydb");
+            auto& auth = description.GetAuth();
+            UNIT_ASSERT(auth.HasIam());
+            auto& iam = auth.GetIam();
+            UNIT_ASSERT(iam.HasServiceAccountId());
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetServiceAccountId(), serviceAccountId);
+            UNIT_ASSERT(iam.HasResourceId());
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudIdAlt);
+        }
+
+        ExecQuery(fmt::format(
+                "DROP EXTERNAL DATA SOURCE {pq_source}",
+                "pq_source"_a = sourceName
+        ));
+
         // Check successful EDS creation with sa returning invalid tokens
         ExecQuery(fmt::format(
                 createExternalDataSourceTemplate,
@@ -1659,6 +1710,70 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             ),
             EStatus::GENERIC_ERROR,
             TStringBuilder() << "Too busy to respond forever");
+
+        // Check solomon cloud auth
+        constexpr char solomonSourceName[] = "solokeitsu";
+
+        const TSolomonLocation soLocation = {
+            .ProjectId = "cloudId1",
+            .FolderId = "folderId1",
+            .Service = "custom",
+            .IsCloud = true,
+        };
+
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
+                    SOURCE_TYPE = "Monium.Metrics",
+                    LOCATION = "localhost:{solomon_port}",
+                    AUTH_METHOD = "IAM",
+                    INITIAL_TOKEN_SECRET_PATH = "{secret}",
+                    RESOURCE_ID = "{cloud_id}",
+                    SERVICE_ACCOUNT_ID = "{service_account_id}",
+                    PROJECT = "{project}",
+                    CLUSTER = "{cluster}",
+                    USE_TLS = "false"
+                );
+            )sql",
+            "secret"_a = secretPath,
+            "cloud_id"_a = cloudId,
+            "project"_a = soLocation.ProjectId,
+            "cluster"_a = soLocation.FolderId,
+            "service_account_id"_a = serviceAccountId,
+            "solomon_source"_a = solomonSourceName,
+            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
+        ));
+
+        CleanupSolomon(soLocation);
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{solomon_sink}`.`{solomon_service}`
+            SELECT
+                13333 AS value,
+                "test-insert" AS sensor,
+                Timestamp("2025-03-12T14:40:39Z") AS ts;
+            )",
+            "solomon_sink"_a = solomonSourceName,
+            "solomon_service"_a = soLocation.Service
+            ));
+
+        std::string expectedMetrics = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert"
+      ]
+    ],
+    "ts": "2025-03-12T14:40:39.000000Z",
+    "value": 13333
+  }
+])";
+        auto results = GetSolomonMetrics(soLocation);
+        UNIT_ASSERT_VALUES_EQUAL(results, expectedMetrics);
 
         constexpr char pqBadSourceName[] = "sourceNameCloudBad";
         constexpr char serviceAccountBadId[] = "bad-sa";
@@ -2457,6 +2572,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
             ExecQuery(query, EStatus::GENERIC_ERROR);
         }
+    }
+
+    Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
+        const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(outputTopic);
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT String::JoinFromList(ListReplicate("X", 600000), "-");)",
+            "pq_source"_a = pqSourceName,
+            "output_topic"_a = outputTopic
+        ), EStatus::EXTERNAL_ERROR, "Max message size for YDS is 1048576 bytes but received message with size of");
     }
 }
 

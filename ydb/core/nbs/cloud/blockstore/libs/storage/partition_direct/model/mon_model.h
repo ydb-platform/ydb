@@ -8,6 +8,10 @@
 #include "host_state.h"
 #include "time_predictor.h"
 
+#include <util/generic/map.h>
+
+#include <compare>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,25 +40,34 @@ struct THostSnapshot
     TLatencyByOperation LatencyByOperation;
 };
 
-struct TChaosNodeConfig
+// Configures per-node failure injection independently for each DBG.
+struct TChaosConfig
 {
-    enum class EChaosMode
+    // Identifies one node in one DBG.
+    struct TDbgAndNodeId
     {
-        Disabled,
-        Enabled,
-        Partial,
+        ui32 NodeId = 0;
+        ui32 DbgIndex = 0;
+
+        auto operator<=>(const TDbgAndNodeId&) const = default;
     };
 
-    ui32 NodeId = 0;
+    // Describes configured node behavior.
+    struct TChaosNodeConfig
+    {
+        enum class EChaosMode
+        {
+            Disabled,   // Requests to the node are disabled.
+            Enabled,    // Requests to the node are enabled.
+            Partial,    // Only some requests to the node are disabled.
+        };
 
-    EChaosMode Mode = EChaosMode::Disabled;
-    double LostProbability = 0.0;
-    double FailProbability = 0.0;
-};
+        EChaosMode Mode = EChaosMode::Enabled;
+        double LostProbability = 0.0;
+        double FailProbability = 0.0;
+    };
 
-struct TChaosSnapshot
-{
-    TVector<TChaosNodeConfig> NodeConfigs;
+    TMap<TDbgAndNodeId, TChaosNodeConfig> NodeConfigs;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

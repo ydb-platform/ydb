@@ -677,6 +677,10 @@ private:
     }
 
     std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
+        if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
+            return {false, std::nullopt};
+        }
+
         if (SkipCheckConnectRights_) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user",
                 {"database", CheckedDatabaseName_},
@@ -684,7 +688,6 @@ private:
                 {"ip", GrpcRequestBaseCtx_->GetPeerName()});
             return {false, std::nullopt};
         }
-
 
         // An empty token at this point means that anonymous access is allowed by the system configuration,
         // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
@@ -720,6 +723,18 @@ private:
             return {false, std::nullopt};
         }
 
+        // The user-level connect right cannot limit node registration: registration is a
+        // cluster-wide system action (via the discovery service), not a per-database/tenant
+        // one. Requiring here the root database as a cluster alias would add no value and
+        // introduce technical issues.
+        if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, user is a special subject for node registration",
+                {"database", CheckedDatabaseName_},
+                {"user", TBase::GetUserSID()},
+                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
+            return {false, std::nullopt};
+        }
+
         const ui32 access = NACLib::ConnectDatabase;
         if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
             return {false, std::nullopt};
@@ -727,9 +742,6 @@ private:
 
         Counters_->IncDatabaseAccessDenyCounter();
 
-        if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
-            return {false, std::nullopt};
-        }
 
         const TString error = "No permission to connect to the database";
         YDB_LOG_INFO_COMP(NKikimrServices::GRPC_SERVER, error,

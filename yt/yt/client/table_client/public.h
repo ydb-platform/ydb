@@ -136,6 +136,8 @@ extern const std::string TimestampColumnPrefix;
 extern const std::string CumulativeDataWeightColumnName;
 extern const std::string EmptyValueColumnName;
 extern const std::string SequenceNumberColumnName;
+extern const std::string ShuffleProducerIdColumnName;
+extern const std::string ShuffleRowIdColumnName;
 
 constexpr int TypicalHunkColumnCount = 8;
 

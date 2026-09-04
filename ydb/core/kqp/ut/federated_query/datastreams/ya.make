@@ -27,6 +27,7 @@ SRCS(
 PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/threading/local_executor
+    ydb/core/base
     ydb/core/cms/console
     ydb/core/kqp
     ydb/core/kqp/ut/common

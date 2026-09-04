@@ -1146,6 +1146,17 @@ class TDataShard
             using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, ResponseType, FinalProgressRecord>;
         };
 
+        // Per-writer uncommitted write seq num.
+        struct LockWriteSeqNums : Table<40> {
+            struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct WriterIndex : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct WriteSeqNum : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct WriteResult : Column<4, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<LockId, WriterIndex>;
+            using TColumns = TableColumns<LockId, WriterIndex, WriteSeqNum, WriteResult>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -1154,7 +1165,8 @@ class TDataShard
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
-            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans>;
+            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans,
+            LockWriteSeqNums>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user

@@ -1,6 +1,7 @@
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/data_extractor.h>
@@ -87,8 +88,8 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
     }
 
     void CheckBinaryArrayRoundTrip(const arrow::BinaryArray& array, const std::shared_ptr<arrow::util::Codec>& codec) {
-        const TString blob = SerializeBinaryArray(array, codec);
-        auto restored = DeserializeBinaryArray(blob, array.length(), codec);
+        const TString blob = SerializeBinaryLikeArray(array, codec);
+        auto restored = DeserializeBinaryLikeArray(blob, array.length(), arrow::binary(), codec);
         UNIT_ASSERT_VALUES_EQUAL(restored->length(), array.length());
         for (i64 i = 0; i < array.length(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(restored->IsNull(i), array.IsNull(i));
@@ -121,6 +122,18 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
             CheckStringArrayRoundTrip(withNulls, codec);
             CheckStringArrayRoundTrip(dense, codec);
             CheckStringArrayRoundTrip({}, codec);
+        }
+    }
+
+    Y_UNIT_TEST(Utf8RoundTrip) {
+        const auto array = MakeBinary({ "alpha", std::nullopt, "omega" });
+        for (const auto& codec : { ZstdCodec(), RawCodec() }) {
+            const auto restored = DeserializeBinaryLikeArray(SerializeBinaryLikeArray(*array, codec), array->length(), arrow::utf8(), codec);
+            UNIT_ASSERT(restored->type_id() == arrow::Type::STRING);
+            const auto& strings = static_cast<const arrow::StringArray&>(*restored);
+            UNIT_ASSERT_VALUES_EQUAL(strings.GetString(0), "alpha");
+            UNIT_ASSERT(strings.IsNull(1));
+            UNIT_ASSERT_VALUES_EQUAL(strings.GetString(2), "omega");
         }
     }
 
@@ -165,6 +178,56 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
             constructor.DeserializeFromString(blobAndMeta.Blob, constructionData.WithAdditionalAccessorData(blobAndMeta.Meta)).DetachResult());
         UNIT_ASSERT(restored->GetDictionary()->Equals(*dictionary));
         UNIT_ASSERT(restored->GetPositions()->Equals(*positions));
+    }
+
+    // Dictionary has one value but UInt16 positions; dense encoding narrows them to UInt8.
+    Y_UNIT_TEST(DictionaryWithWidePositionsRoundTrips) {
+        const auto dictionary = MakeBinary({ "alpha" });
+        arrow::UInt16Builder positionsBuilder;
+        UNIT_ASSERT(positionsBuilder.Append(0).ok());
+        // Exercise null preservation while converting wide positions.
+        UNIT_ASSERT(positionsBuilder.AppendNull().ok());
+        UNIT_ASSERT(positionsBuilder.Append(0).ok());
+        std::shared_ptr<arrow::UInt16Array> positions;
+        UNIT_ASSERT(positionsBuilder.Finish(&positions).ok());
+        const auto array = std::make_shared<NAccessor::TDictionaryArray>(dictionary, positions);
+        const auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        const NAccessor::TChunkConstructionData constructionData(array->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const TDictionaryDenseConstructor constructor;
+
+        const auto blobAndMeta = constructor.SerializeToBlobAndMeta(array, constructionData);
+        const auto restored = std::static_pointer_cast<NAccessor::TDictionaryArray>(
+            constructor.DeserializeFromString(blobAndMeta.Blob, constructionData.WithAdditionalAccessorData(blobAndMeta.Meta)).DetachResult());
+        UNIT_ASSERT(restored->GetChunkedArray()->Equals(*array->GetChunkedArray()));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(restored->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
+    }
+
+    // A 256-value dictionary uses UInt16 positions; the slice has one value and uses UInt8.
+    Y_UNIT_TEST(DictionarySliceWithWidePositionsRoundTrips) {
+        auto builder = NAccessor::TTrivialArray::MakeBuilderBinary(257, 1024);
+        // Exercise null preservation while remapping slice positions.
+        builder.AddNull(0);
+        for (ui32 i = 1; i <= 256; ++i) {
+            builder.AddRecord(i, ToString(i));
+        }
+        const auto source = builder.Finish(257);
+        const auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        const NAccessor::TChunkConstructionData sourceData(source->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const auto dictionary = std::static_pointer_cast<NAccessor::TDictionaryArray>(
+            NAccessor::NDictionary::TConstructor().Construct(source, sourceData).DetachResult());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(dictionary->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT16));
+
+        const auto slice = std::static_pointer_cast<NAccessor::TDictionaryArray>(dictionary->ISlice(0, 2));
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->length(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(slice->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
+
+        const NAccessor::TChunkConstructionData sliceData(slice->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const TDictionaryDenseConstructor constructor;
+        const auto blobAndMeta = constructor.SerializeToBlobAndMeta(slice, sliceData);
+        const auto restored = std::static_pointer_cast<NAccessor::TDictionaryArray>(
+            constructor.DeserializeFromString(blobAndMeta.Blob, sliceData.WithAdditionalAccessorData(blobAndMeta.Meta)).DetachResult());
+        UNIT_ASSERT(restored->GetChunkedArray()->Equals(*slice->GetChunkedArray()));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(restored->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
     }
 
 }

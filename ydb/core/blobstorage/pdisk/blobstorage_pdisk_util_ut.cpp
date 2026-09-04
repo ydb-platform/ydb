@@ -8,6 +8,7 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
 #include "blobstorage_pdisk_state.h"
+#include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
@@ -26,6 +27,45 @@
 namespace NKikimr { namespace NPDisk {
 
 Y_UNIT_TEST_SUITE(TPDiskUtil) {
+
+    Y_UNIT_TEST(NativeThreadAppliesConfiguredAffinity) {
+#if defined(_linux_)
+        // The thread must set its own affinity; the creator's affinity must never change.
+        TAffinity originalAffinity;
+        originalAffinity.Current();
+        const TCpuMask originalMask = originalAffinity;
+        UNIT_ASSERT(!originalMask.IsEmpty());
+
+        TCpuId selectedCpu = 0;
+        while (!originalMask.IsSet(selectedCpu)) {
+            ++selectedCpu;
+        }
+        const TCpuMask selectedMask(selectedCpu);
+
+        TCpuMask childMask;
+        TPDiskFunctionThread thread(
+            [] (void* cookie) -> void* {
+                TAffinity affinity;
+                affinity.Current();
+                *static_cast<TCpuMask*>(cookie) = affinity;
+                return nullptr;
+            },
+            &childMask,
+            selectedMask);
+
+        thread.Start();
+        thread.Join();
+
+        UNIT_ASSERT((childMask - selectedMask).IsEmpty());
+        UNIT_ASSERT((selectedMask - childMask).IsEmpty());
+
+        TAffinity restoredAffinity;
+        restoredAffinity.Current();
+        const TCpuMask restoredMask = restoredAffinity;
+        UNIT_ASSERT((restoredMask - originalMask).IsEmpty());
+        UNIT_ASSERT((originalMask - restoredMask).IsEmpty());
+#endif
+    }
 
     Y_UNIT_TEST(FreeChunksSortingCanBeToggled) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;

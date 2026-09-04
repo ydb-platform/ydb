@@ -272,7 +272,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         input->Props.StageId = *lookup->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
     } else {
-        Y_ENSURE(false, "Unknown operator encountered");
+        Y_ENSURE(false, TStringBuilder() << "Unknown operator encountered: " << input->GetExplainName());
     }
 
     return true;

@@ -7,7 +7,7 @@
 #ifndef BOOST_GRAPH_BANDWIDTH_HPP
 #define BOOST_GRAPH_BANDWIDTH_HPP
 
-#include <algorithm> // for std::min and std::max
+#include <algorithm> // for std::max
 #include <boost/config.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/properties.hpp>
@@ -22,17 +22,14 @@ typename graph_traits< Graph >::vertices_size_type ith_bandwidth(
     VertexIndexMap index)
 {
     BOOST_USING_STD_MAX();
-    using std::abs;
-    typedef
-        typename graph_traits< Graph >::vertices_size_type vertices_size_type;
+    using vertices_size_type = typename graph_traits< Graph >::vertices_size_type;
     vertices_size_type b = 0;
     typename graph_traits< Graph >::out_edge_iterator e, end;
     for (boost::tie(e, end) = out_edges(i, g); e != end; ++e)
     {
-        int f_i = get(index, i);
-        int f_j = get(index, target(*e, g));
-        b = max BOOST_PREVENT_MACRO_SUBSTITUTION(
-            b, vertices_size_type(abs(f_i - f_j)));
+        vertices_size_type f_i = get(index, i);
+        vertices_size_type f_j = get(index, target(*e, g));
+        b = max BOOST_PREVENT_MACRO_SUBSTITUTION( b, f_i < f_j ? f_j - f_i : f_i - f_j );
     }
     return b;
 }
@@ -49,17 +46,14 @@ typename graph_traits< Graph >::vertices_size_type bandwidth(
     const Graph& g, VertexIndexMap index)
 {
     BOOST_USING_STD_MAX();
-    using std::abs;
-    typedef
-        typename graph_traits< Graph >::vertices_size_type vertices_size_type;
+    using vertices_size_type = typename graph_traits< Graph >::vertices_size_type;
     vertices_size_type b = 0;
     typename graph_traits< Graph >::edge_iterator i, end;
     for (boost::tie(i, end) = edges(g); i != end; ++i)
     {
-        int f_i = get(index, source(*i, g));
-        int f_j = get(index, target(*i, g));
-        b = max BOOST_PREVENT_MACRO_SUBSTITUTION(
-            b, vertices_size_type(abs(f_i - f_j)));
+        vertices_size_type f_i = get(index, source(*i, g));
+        vertices_size_type f_j = get(index, target(*i, g));
+        b = max BOOST_PREVENT_MACRO_SUBSTITUTION( b, f_i < f_j ? f_j - f_i : f_i - f_j );
     }
     return b;
 }

@@ -72,6 +72,9 @@ DDisk and Persistent Buffer checksums are enabled by default. Pass
 actors and checksum handling in DDisk. For client/server DDisk tests, pass the
 option to both processes so the client and server use the same mode.
 
+Pass `--force-ddisk-pdisk-fallback` to route DDisk direct I/O through the PDisk
+actor instead of io_uring.
+
 #### Parameters for `DDiskLoad`
 - `Tag` - a unique numeric identifier for the load source.
 - `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.
@@ -86,7 +89,6 @@ option to both processes so the client and server use the same mode.
 - `IsReadLoad` - if `true`, run read load; if `false`, run write load.
 - `BackgroundWriteRatio` - unmeasured background writes per measured read during read load; `0` disables them and `1.0` issues one write per read. Background writes share `InFlight` and interval pacing with measured reads.
 - `BackgroundWriteSizeKiB` - background write size in KiB (default `4`); must be a power of two and at least 4. When background writes are enabled, `ExpectedChunkSize` and each `AreaSize` must be divisible by this size.
-- `SQPoll` / `IOPoll` - enable io_uring SQPOLL / IOPOLL for direct I/O.
 
 ### Parameters for `InterconnectTestList`
 These describe network load generated through the actors library interconnect

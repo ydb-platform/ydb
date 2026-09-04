@@ -591,3 +591,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

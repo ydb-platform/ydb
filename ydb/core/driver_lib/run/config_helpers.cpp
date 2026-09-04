@@ -7,6 +7,8 @@
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/cpu_topology.h>
 
+#include <util/generic/hash_set.h>
+
 #include <optional>
 #include <utility>
 
@@ -215,6 +217,36 @@ void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager,
         NMonitoring::TDynamicCounterPtr counters,
         const TCpuTopology& cpuTopology) {
     AddExecutorPoolsImpl(cpuManager, systemConfig, counters, &cpuTopology);
+}
+
+TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    const auto& poolIds = systemConfig.GetBlobStorageExecutor();
+    if (poolIds.empty()) {
+        return {};
+    }
+
+    // Protobuf-delivered configs bypass the yaml static validator, so a contradictory or
+    // broken list must fail loudly here instead of being silently ignored or aborting
+    // deep inside TActorSystem::Register with no hint at the config field.
+    Y_ABORT_UNLESS(!systemConfig.GetUseSharedThreads(),
+        "ActorSystemConfig.BlobStorageExecutor cannot be combined with UseSharedThreads");
+
+    THashSet<ui32> seen;
+    for (const ui32 poolId : poolIds) {
+        Y_ABORT_UNLESS(poolId < static_cast<ui32>(systemConfig.ExecutorSize()),
+            "ActorSystemConfig.BlobStorageExecutor references executor pool id %u, "
+            "but only %d executor pools are configured", poolId, systemConfig.ExecutorSize());
+        Y_ABORT_UNLESS(seen.insert(poolId).second,
+            "ActorSystemConfig.BlobStorageExecutor contains duplicate executor pool id %u", poolId);
+    }
+
+    return TVector<ui32>(poolIds.begin(), poolIds.end());
+}
+
+TVector<ui32> GetInterconnectSessionExecutorPoolIds(
+        const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    const auto& poolIds = systemConfig.GetInterconnectSessionExecutor();
+    return TVector<ui32>(poolIds.begin(), poolIds.end());
 }
 
 NActors::TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler& config) {

@@ -2,10 +2,12 @@
 #include <ydb/library/plan2svg/metrics.h>
 #include <ydb/library/plan2svg/parse.h>
 #include <ydb/library/plan2svg/plan2svg.h>
+#include <ydb/library/plan2svg/svg.h>
 #include <ydb/library/plan2svg/visualizer.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/xml/document/xml-document.h>
 
 #include <util/folder/path.h>
 #include <util/stream/file.h>
@@ -33,6 +35,17 @@ TString RenderPlan(const TString& name, bool simplified) {
     TPlanVisualizer viz;
     viz.LoadPlans(ReadPlan(name), simplified);
     return viz.PrintSvg();
+}
+
+// A browser parses an SVG as XML and refuses to render a document that is not well-formed,
+// so plan text reaching the output unescaped breaks the whole picture, not one label.
+void AssertWellFormed(const TString& svg, const TString& what) {
+    try {
+        NXml::TDocument document(svg, NXml::TDocument::String);
+        Y_UNUSED(document);
+    } catch (const std::exception& e) {
+        UNIT_FAIL(what + " is not well-formed XML: " + e.what());
+    }
 }
 
 // Reports the first difference with some context, otherwise a 300 KB blob lands in the log.
@@ -64,6 +77,7 @@ void CheckGolden(const TString& name, bool simplified = false) {
 
     UNIT_ASSERT_C(svg.StartsWith("<svg"), "unexpected SVG prologue: " + svg.substr(0, 64));
     UNIT_ASSERT_C(svg.EndsWith("</svg>\n") || svg.EndsWith("</svg>"), "unexpected SVG epilogue");
+    AssertWellFormed(svg, name);
 
     auto goldenName = simplified ? (name + ".simplified.svg") : (name + ".svg");
     auto golden = DataDir() / goldenName;
@@ -170,6 +184,61 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
         UNIT_ASSERT(simplified.Config.Simplified);
     }
 
+    // A plan node the loader does not understand is rejected rather than drawn wrong.
+    static TString UnsupportedPlan() {
+        return R"({"Plan":{"Plans":[{"Node Type":"R","Plans":[
+            {"Node Type":"S","PlanNodeType":"<Weird & Type>"}
+        ]}]}})";
+    }
+
+    Y_UNIT_TEST(LoadPlansThrowsOnUnsupportedPlan) {
+        TVisualizer viz;
+        UNIT_ASSERT_EXCEPTION(viz.LoadPlans(UnsupportedPlan()), yexception);
+    }
+
+    // The safe pair never throws at the caller; the failure comes back as a picture.
+    Y_UNIT_TEST(LoadPlansSafeReportsErrorThroughPrintSvgSafe) {
+        TVisualizer viz;
+        viz.LoadPlansSafe(UnsupportedPlan());
+        UNIT_ASSERT(viz.LoadError);
+
+        auto svg = viz.PrintSvgSafe();
+        AssertWellFormed(svg, "error svg");
+        UNIT_ASSERT_C(svg.Contains("&lt;Weird &amp; Type&gt;"), svg);
+
+        // The half-loaded plans behind the failure are not rendered instead.
+        UNIT_ASSERT_EXCEPTION(viz.PrintSvg(), yexception);
+    }
+
+    // A failed load is rolled back and the error is not sticky, so a reused
+    // visualizer behaves as if the failed call never happened.
+    Y_UNIT_TEST(LoadPlansSafeRollsBackAFailedLoad) {
+        TVisualizer viz;
+        viz.LoadPlansSafe(UnsupportedPlan());
+        UNIT_ASSERT(viz.LoadError);
+        UNIT_ASSERT(viz.Plans.empty());
+
+        viz.LoadPlansSafe(ReadPlan("cte_subplan"));
+        UNIT_ASSERT_C(!viz.LoadError, viz.LoadError);
+        UNIT_ASSERT(!viz.Plans.empty());
+        UNIT_ASSERT_VALUES_EQUAL(viz.PrintSvgSafe(), RenderPlan("cte_subplan", false));
+    }
+
+    Y_UNIT_TEST(LoadPlansSafeRendersAGoodPlanNormally) {
+        TPlanVisualizer safe;
+        safe.LoadPlansSafe(ReadPlan("cte_subplan"));
+        UNIT_ASSERT_C(!safe.GetLoadError(), safe.GetLoadError());
+        UNIT_ASSERT_VALUES_EQUAL(safe.PrintSvgSafe(), RenderPlan("cte_subplan", false));
+    }
+
+    // The facade exposes the recorded failure for callers that report it through
+    // their own channel (an issue, a log line) rather than as a picture.
+    Y_UNIT_TEST(GetLoadErrorCarriesTheFailure) {
+        TPlanVisualizer viz;
+        viz.LoadPlansSafe(UnsupportedPlan());
+        UNIT_ASSERT(viz.GetLoadError().Contains("Unexpected plan node type"));
+    }
+
     Y_UNIT_TEST(PrintSvgSafeOnEmptyPlan) {
         TPlanVisualizer viz;
         auto svg = viz.PrintSvgSafe();
@@ -191,8 +260,51 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
             auto svg = viz.PrintSvgSafe();
             UNIT_ASSERT_C(svg.StartsWith("<svg"), child.GetName());
             UNIT_ASSERT_C(svg.size() > 1024, child.GetName() + " rendered only " + ToString(svg.size()) + " bytes");
+            AssertWellFormed(svg, child.GetName());
         }
         UNIT_ASSERT_C(seen > 0, "no sample plans found in " + DataDir().GetPath());
+    }
+}
+
+Y_UNIT_TEST_SUITE(TPlan2SvgEscape) {
+
+    Y_UNIT_TEST(PlainTextIsUnchanged) {
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape(""), "");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("Stage 5: Filter"), "Stage 5: Filter");
+        // Quotes only matter inside attributes, and no plan text is written into one.
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("a'b\"c"), "a'b\"c");
+    }
+
+    Y_UNIT_TEST(XmlSpecialsAreEscaped) {
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("a & b"), "a &amp; b");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("x := <expr>"), "x := &lt;expr&gt;");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("<&>"), "&lt;&amp;&gt;");
+        // Already escaped text is escaped again: nothing in the pipeline pre-escapes.
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("&lt;"), "&amp;lt;");
+    }
+
+    // Control characters other than \t \n \r cannot appear in XML 1.0 at all,
+    // even as entities; a query over a binary string literal puts them into
+    // operator info via JSON \u escapes.
+    Y_UNIT_TEST(ControlCharactersAreReplaced) {
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape(TStringBuf("a\001b", 3)), "a?b");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape(TStringBuf("\000\037", 2)), "??");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("a\tb\nc\rd"), "a\tb\nc\rd");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape(TStringBuf("<\001>", 3)), "&lt;?&gt;");
+    }
+
+    // Operator descriptions routinely contain markup-looking text ("_col := <expr>",
+    // "a <- b", "x && y"), which used to reach the output verbatim. The \u0001 is
+    // decoded by the JSON reader into a raw control byte XML cannot carry.
+    Y_UNIT_TEST(PlanTextWithMarkupStaysWellFormed) {
+        TPlanVisualizer viz;
+        viz.LoadPlans(TString(R"({"Plan":{"Plans":[{"Node Type":"ResultSet <&>","Plans":[
+            {"Node Type":"Stage","Operators":[{"Name":"Filter","Predicate":"item.a < 1 && item.b > \u0001"}]}
+        ]}]}})"));
+        auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "plan with markup in operator info");
+        UNIT_ASSERT(svg.Contains("&amp;&amp;"));
+        UNIT_ASSERT(svg.Contains("&lt;"));
     }
 }
 
@@ -407,6 +519,46 @@ Y_UNIT_TEST_SUITE(TPlan2SvgMetricHistory) {
             UNIT_ASSERT_GE(v.first, 2000);
             UNIT_ASSERT_LE(v.first, 3000);
         }
+        // The derivative covers only the in-window increment (20 -> 30). The
+        // sample at 4000 lies entirely past the window: its interval starts at
+        // 3000, so it contributes nothing, not its full out-of-window delta.
+        ui64 total = 0;
+        for (const auto& d : history.Deriv) {
+            total += d.second;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(total, 10);
+        UNIT_ASSERT_VALUES_EQUAL(history.Deriv.back().second, 0);
+    }
+
+    // An interval straddling the window end is split by time, like every other
+    // bucket-crossing interval: the last bucket gets the inside share.
+    Y_UNIT_TEST(TailBeyondWindowIsSplitProportionally) {
+        TMetricHistory history;
+        // 1000 grows over [2999, 3099]; 1 of those 100ms is inside the window.
+        history.Load(Json("[1000, 0, 2999, 0, 3099, 1000]"), 0, 3000);
+        UNIT_ASSERT_VALUES_EQUAL(history.Deriv.back().second, 10);
+        UNIT_ASSERT_VALUES_EQUAL(history.MaxDeriv, 10);
+    }
+
+    // The explicit-vector entry point gets time arrays straight from the JSON,
+    // with no parser in between to drop a non-monotonic tail. A series that
+    // comes back to a repeated timestamp used to divide by zero.
+    Y_UNIT_TEST(NonMonotonicExplicitTimesAreTruncated) {
+        TMetricHistory history;
+        std::vector<ui64> times = {0, 100, 50, 50, 200};
+        history.Load(times, Json("[1, 2, 3, 4, 5]"), 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(history.MaxTime, 100);
+        UNIT_ASSERT_VALUES_EQUAL(history.Values.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(history.Values.back().second, 2);
+    }
+
+    Y_UNIT_TEST(InvertedExplicitWindowLoadsNothing) {
+        TMetricHistory history;
+        std::vector<ui64> times = {1000, 2000};
+        std::vector<ui64> values = {10, 20};
+        history.Load(times, values, 3000, 1500);
+        UNIT_ASSERT(history.Values.empty());
+        UNIT_ASSERT(history.Deriv.empty());
     }
 
     Y_UNIT_TEST(LoadValuesOnlyIsPaddedToTimes) {

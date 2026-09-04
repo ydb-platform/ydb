@@ -22,6 +22,15 @@ THostConnection MakeConnection(ui32 nodeId)
     };
 }
 
+TDDiskId MakePersistentBufferId(ui32 nodeId)
+{
+    TDDiskId id;
+    id.SetNodeId(nodeId);
+    id.SetPDiskId(1);
+    id.SetDDiskSlotId(1);
+    return id;
+}
+
 void AssertUndelivered(const auto& result)
 {
     UNIT_ASSERT(result.GetStatus() == TReplyStatus::ERROR);
@@ -92,6 +101,53 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
             nullptr);
 
         UNIT_ASSERT(result.GetValueSync().GetStatus() == TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(ShouldReplaceRepliesFromDisabledPersistentBufferNodes)
+    {
+        auto underlying = std::make_shared<TStorageTransportMock>();
+        auto injector = CreateTransportChaosInjector(underlying);
+        injector->DisableNode(43);
+
+        const TVector<TDDiskId> persistentBufferIds = {
+            MakePersistentBufferId(42),
+            MakePersistentBufferId(43),
+            MakePersistentBufferId(44),
+        };
+
+        ui32 callbackCount = 0;
+        IStorageTransport::TEvWriteToManyPersistentBuffersResult response;
+        injector->WriteToManyPBuffers(
+            MakeConnection(42),
+            {},
+            1,
+            NKikimr::NDDisk::TWriteInstruction(0),
+            persistentBufferIds,
+            TDuration::Seconds(1),
+            {},
+            nullptr,
+            [&callbackCount, &response](const auto& result, auto)
+            {
+                ++callbackCount;
+                response = result;
+            });
+
+        UNIT_ASSERT_VALUES_EQUAL(1, callbackCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            persistentBufferIds.size(),
+            underlying->LastWriteToManyPBuffersDiskIds.size());
+        for (size_t i = 0; i < persistentBufferIds.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                persistentBufferIds[i].GetNodeId(),
+                underlying->LastWriteToManyPBuffersDiskIds[i].GetNodeId());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(3, response.ResultSize());
+        UNIT_ASSERT(
+            response.GetResult(0).GetResult().GetStatus() == TReplyStatus::OK);
+        AssertUndelivered(response.GetResult(1).GetResult());
+        UNIT_ASSERT(
+            response.GetResult(2).GetResult().GetStatus() == TReplyStatus::OK);
     }
 }
 

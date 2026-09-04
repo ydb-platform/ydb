@@ -4,7 +4,6 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 
 #include <ydb/library/http_proxy/error/error.h>

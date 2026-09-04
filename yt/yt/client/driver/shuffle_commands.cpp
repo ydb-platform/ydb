@@ -46,6 +46,8 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
             return command->Options.UsePushBasedShuffle;
         })
         .Default(false);
+    registrar.Parameter("config", &TThis::Config)
+        .Default();
     registrar.ParameterWithUniversalAccessor<TTableSchemaPtr>(
         "schema",
         [] (TThis* command) -> auto& {
@@ -56,6 +58,10 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)
 {
+    if (Config) {
+        Options.Config = ConvertToYsonString(Config);
+    }
+
     auto client = context->GetClient();
     auto asyncResult = client->StartShuffle(Account, PartitionCount, ParentTransactionId, Options);
     auto signedShuffleHandle = WaitFor(asyncResult).ValueOrThrow();

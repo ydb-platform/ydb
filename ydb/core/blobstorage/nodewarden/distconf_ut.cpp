@@ -15,11 +15,345 @@
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/scope.h>
 
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/core/blobstorage/nodewarden/distconf_quorum.h>
 
 namespace NKikimr {
 namespace NBlobStorageNodeWardenTest{
+
+namespace {
+
+    void AddStorageConfigNodes(NKikimrBlobStorage::TStorageConfig& config, ui32 nodeCount) {
+        for (ui32 nodeId = 1; nodeId <= nodeCount; ++nodeId) {
+            auto *node = config.AddAllNodes();
+            node->SetNodeId(nodeId);
+            node->SetHost("node-" + std::to_string(nodeId));
+            node->SetPort(19000 + nodeId);
+            node->MutableLocation()->SetDataCenter("dc-" + std::to_string(nodeId));
+        }
+    }
+
+    void AddMultiVDiskGroup(NKikimrBlobStorage::TStorageConfig& config,
+                            const std::vector<ui32>& nodeIds,
+                            i32 erasureSpecies) {
+        auto *serviceSet = config.MutableBlobStorageConfig()->MutableServiceSet();
+        auto *group = serviceSet->AddGroups();
+        group->SetGroupID(0);
+        group->SetGroupGeneration(1);
+        group->SetErasureSpecies(erasureSpecies);
+        auto *ring = group->AddRings();
+
+        for (ui32 domainIdx = 0; domainIdx < nodeIds.size(); ++domainIdx) {
+            const ui32 nodeId = nodeIds[domainIdx];
+            const ui32 pdiskId = 1;
+            const ui64 pdiskGuid = nodeId * 1000 + pdiskId;
+
+            auto *pdisk = serviceSet->AddPDisks();
+            pdisk->SetNodeID(nodeId);
+            pdisk->SetPDiskID(pdiskId);
+            pdisk->SetPath("/dev/disk" + std::to_string(nodeId) + "_" + std::to_string(pdiskId));
+            pdisk->SetPDiskGuid(pdiskGuid);
+            pdisk->SetPDiskCategory(0);
+
+            auto *vdisk = serviceSet->AddVDisks();
+            auto *vdiskId = vdisk->MutableVDiskID();
+            vdiskId->SetGroupID(0);
+            vdiskId->SetGroupGeneration(1);
+            vdiskId->SetRing(0);
+            vdiskId->SetDomain(domainIdx);
+            vdiskId->SetVDisk(0);
+            auto *vdiskLocation = vdisk->MutableVDiskLocation();
+            vdiskLocation->SetNodeID(nodeId);
+            vdiskLocation->SetPDiskID(pdiskId);
+            vdiskLocation->SetVDiskSlotID(0);
+            vdiskLocation->SetPDiskGuid(pdiskGuid);
+
+            auto *failDomain = ring->AddFailDomains();
+            auto *groupLocation = failDomain->AddVDiskLocations();
+            groupLocation->SetNodeID(nodeId);
+            groupLocation->SetPDiskID(pdiskId);
+            groupLocation->SetVDiskSlotID(0);
+            groupLocation->SetPDiskGuid(pdiskGuid);
+        }
+    }
+
+    TIntrusivePtr<TNodeWardenConfig> MakeNodeWardenConfig(const NKikimrBlobStorage::TStorageConfig& storageConfig) {
+        auto config = MakeIntrusive<TNodeWardenConfig>(TIntrusivePtr<IPDiskServiceFactory>());
+        config->NameserviceConfig = std::make_unique<NKikimrConfig::TStaticNameserviceConfig>();
+        for (const auto& node : storageConfig.GetAllNodes()) {
+            auto *nsNode = config->NameserviceConfig->AddNode();
+            nsNode->SetNodeId(node.GetNodeId());
+            nsNode->SetHost(node.GetHost());
+            nsNode->SetInterconnectHost(node.GetHost());
+            nsNode->SetPort(node.GetPort());
+            nsNode->MutableLocation()->CopyFrom(node.GetLocation());
+        }
+        return config;
+    }
+
+    class TIgnoreActor : public TActor<TIgnoreActor> {
+    public:
+        TIgnoreActor()
+            : TActor(&TThis::StateFunc)
+        {}
+
+        void StateFunc(TAutoPtr<IEventHandle>&) {}
+    };
+
+    struct TBindingObservation {
+        THashSet<ui32> MobileNodes;
+        bool SawCompleteMobileBinding = false;
+        bool SawScatter = false;
+
+        TBindingObservation() = default;
+
+        explicit TBindingObservation(std::initializer_list<ui32> mobileNodes)
+            : MobileNodes(mobileNodes.begin(), mobileNodes.end())
+        {}
+
+        bool ShouldRejectBinding(ui32 senderNodeId, ui32 recipientNodeId,
+                                 const NKikimrBlobStorage::TEvNodeConfigPush& record) {
+            const bool senderIsMobile = MobileNodes.contains(senderNodeId);
+            const bool recipientIsMobile = MobileNodes.contains(recipientNodeId);
+            if (senderIsMobile == recipientIsMobile) {
+                return false;
+            }
+
+            if (!senderIsMobile) {
+                return true;
+            }
+
+            THashSet<ui32> boundNodeIds;
+            for (const auto& node : record.GetBoundNodes()) {
+                boundNodeIds.insert(node.GetNodeId().GetNodeId());
+            }
+            if (std::ranges::all_of(MobileNodes, [&](ui32 nodeId) { return boundNodeIds.contains(nodeId); })) {
+                SawCompleteMobileBinding = true;
+                return false;
+            }
+            return true;
+        }
+    };
+
+    class TNodeWardenProxyActor : public TActor<TNodeWardenProxyActor> {
+        const TActorId KeeperId;
+        TBindingObservation& Observation;
+
+        void RejectBinding(const IEventHandle& request) {
+            auto response = NStorage::TEvNodeConfigReversePush::MakeRejected();
+            auto handle = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(request.Sender.NodeId()), SelfId(),
+                                                         response.release(), 0, request.Cookie);
+            handle->Rewrite(TEvInterconnect::EvForward, request.InterconnectSession);
+            TActivationContext::Send(handle.release());
+        }
+
+    public:
+        TNodeWardenProxyActor(TActorId keeperId, TBindingObservation& observation)
+            : TActor(&TThis::StateFunc)
+            , KeeperId(keeperId)
+            , Observation(observation)
+        {}
+
+        void StateFunc(TAutoPtr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (!ev->InterconnectSession) {
+                if (type == NStorage::TEvNodeWardenReadMetadata::EventType) {
+                    Send(ev->Sender, new NStorage::TEvNodeWardenReadMetadataResult(
+                        std::nullopt, NPDisk::EPDiskMetadataOutcome::NO_METADATA, {}), 0, ev->Cookie);
+                }
+                return;
+            }
+
+            if (type == NStorage::TEvNodeConfigPush::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeConfigPush>();
+                if (msg->Record.GetInitial() && Observation.ShouldRejectBinding(ev->Sender.NodeId(), SelfId().NodeId(), msg->Record)) {
+                    RejectBinding(*ev);
+                    return;
+                }
+            } else if (type == NStorage::TEvNodeConfigScatter::EventType) {
+                Observation.SawScatter = true;
+            }
+
+            ev->Rewrite(type, KeeperId);
+            TActivationContext::Send(ev.Release());
+        }
+    };
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
+    NKikimrBlobStorage::TStorageConfig MakeStorageConfig(ui32 nodeCount, ui64 generation = 1,
+                                                         const std::vector<ui32>& groupNodes = {},
+                                                         i32 erasureSpecies = TBlobStorageGroupType::ErasureNone) {
+        NKikimrBlobStorage::TStorageConfig config;
+        config.SetGeneration(generation);
+        AddStorageConfigNodes(config, nodeCount);
+
+        auto *bsConfig = config.MutableBlobStorageConfig();
+        bsConfig->MutableServiceSet();
+        for (ui32 nodeId = 1; nodeId <= nodeCount; ++nodeId) {
+            auto *hostConfig = bsConfig->AddDefineHostConfig();
+            hostConfig->SetHostConfigId(nodeId);
+            auto *drive = hostConfig->AddDrive();
+            drive->SetPath("/dev/disk" + std::to_string(nodeId) + "_1");
+            drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+
+            auto *host = bsConfig->MutableDefineBox()->AddHost();
+            host->SetHostConfigId(nodeId);
+            host->SetEnforcedNodeId(nodeId);
+        }
+
+        if (!groupNodes.empty()) {
+            AddMultiVDiskGroup(config, groupNodes, erasureSpecies);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        return config;
+    }
+
+    NKikimrBlobStorage::TStorageConfig MakeInitialStorageConfig(ui32 nodeCount) {
+        NKikimrBlobStorage::TStorageConfig config;
+        AddStorageConfigNodes(config, nodeCount);
+        config.MutableBlobStorageConfig();
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        return config;
+    }
+
+    bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::initializer_list<ui32> nodeIds) {
+        std::vector<NStorage::TNodeIdentifier> successfulNodes;
+        successfulNodes.reserve(nodeIds.size());
+        for (ui32 nodeId : nodeIds) {
+            UNIT_ASSERT(1 <= nodeId && nodeId <= static_cast<ui32>(config.AllNodesSize()));
+            successfulNodes.emplace_back(config.GetAllNodes(nodeId - 1));
+        }
+
+        const auto nodeWardenConfig = MakeNodeWardenConfig(config);
+        const THashMap<TString, TBridgePileId> bridgePileNameMap;
+        return NStorage::HasNodeQuorum(config, successfulNodes, bridgePileNameMap, TBridgePileId(),
+                                       *nodeWardenConfig, nullptr, true);
+    }
+
+    TActorId RegisterKeeper(TTestActorSystem& runtime, const NKikimrBlobStorage::TStorageConfig& config, ui32 nodeId,
+                            TBindingObservation& observation) {
+        auto nodeWardenConfig = MakeNodeWardenConfig(config);
+        auto storageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
+        const TActorId keeperId = runtime.Register(
+            new NStorage::TDistributedConfigKeeper(std::move(nodeWardenConfig), storageConfig, true), nodeId);
+
+        const TActorId nodeWardenProxyId = runtime.Register(new TNodeWardenProxyActor(keeperId, observation), nodeId);
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), nodeWardenProxyId);
+
+        const TActorId nameserviceId = runtime.Register(new TIgnoreActor, nodeId);
+        runtime.RegisterService(GetNameserviceActorId(), nameserviceId);
+        return keeperId;
+    }
+
+    std::optional<ui32> FindConvergedRoot(TTestActorSystem& runtime, const std::vector<TActorId>& keeperIds) {
+        std::optional<ui32> rootNodeId;
+        for (const TActorId keeperId : keeperIds) {
+            ui32 reportedRootNodeId = 0;
+            bool partOfNodeQuorum = false;
+            const bool found = runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+                auto *keeper = dynamic_cast<NStorage::TDistributedConfigKeeper*>(actor);
+                UNIT_ASSERT(keeper);
+                reportedRootNodeId = keeper->GetRootNodeId();
+                partOfNodeQuorum = keeper->PartOfNodeQuorum();
+            });
+            UNIT_ASSERT(found);
+
+            if (!partOfNodeQuorum) {
+                return std::nullopt;
+            }
+            if (!rootNodeId) {
+                rootNodeId = reportedRootNodeId;
+            } else if (*rootNodeId != reportedRootNodeId) {
+                return std::nullopt;
+            }
+        }
+        return rootNodeId;
+    }
+
+    ui32 RunUntilConverged(const NKikimrBlobStorage::TStorageConfig& config, TBindingObservation& observation,
+                           TDuration timeout = TDuration::Seconds(30), bool waitForScatter = false) {
+        TTestActorSystem runtime(config.AllNodesSize());
+        runtime.Start();
+        Y_DEFER {
+            runtime.Stop();
+        };
+
+        std::vector<TActorId> keeperIds;
+        for (ui32 nodeId = 1; nodeId <= static_cast<ui32>(config.AllNodesSize()); ++nodeId) {
+            keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, observation));
+        }
+
+        const TInstant deadline = runtime.GetClock() + timeout;
+        runtime.Schedule(deadline, nullptr, new TFakeSchedulerCookie, 1);
+
+        std::optional<ui32> rootNodeId;
+        runtime.Sim([&] {
+            rootNodeId = FindConvergedRoot(runtime, keeperIds);
+            const bool done = rootNodeId && (!waitForScatter || observation.SawScatter);
+            return !done && runtime.GetClock() < deadline;
+        });
+        UNIT_ASSERT_C(rootNodeId && (!waitForScatter || observation.SawScatter),
+                      "binding tree did not converge before the deadline");
+        return *rootNodeId;
+    }
+
+    Y_UNIT_TEST(InitialConfigBootstrapUsesNodeMajority) {
+        const auto config = MakeInitialStorageConfig(3);
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            UNIT_ASSERT(!HasQuorum(config, {nodeId}));
+        }
+        UNIT_ASSERT(HasQuorum(config, {1, 2}));
+    }
+
+    Y_UNIT_TEST(InitialConfigConvergesToSingleRootThroughMailbox) {
+        const auto config = MakeInitialStorageConfig(3);
+        TBindingObservation observation;
+        const ui32 rootNodeId = RunUntilConverged(config, observation, TDuration::Seconds(30), true);
+        UNIT_ASSERT(observation.SawScatter);
+        UNIT_ASSERT(1 <= rootNodeId && rootNodeId <= 3);
+    }
+
+    Y_UNIT_TEST(StaticGroupQuorumOverridesNodeMajority) {
+        const auto config = MakeStorageConfig(3, 0, {1});
+        UNIT_ASSERT(HasQuorum(config, {1}));
+        UNIT_ASSERT(!HasQuorum(config, {2, 3}));
+    }
+
+    Y_UNIT_TEST(ConfigDriveQuorum) {
+        const auto config = MakeStorageConfig(3, 1);
+        UNIT_ASSERT(!HasQuorum(config, {1}));
+        UNIT_ASSERT(HasQuorum(config, {1, 2}));
+    }
+
+    Y_UNIT_TEST(ThreeNodeSplitConvergesThroughMailbox) {
+        const auto config = MakeStorageConfig(3, 0, {1});
+        TBindingObservation observation{2, 3};
+        const ui32 rootNodeId = RunUntilConverged(config, observation);
+        UNIT_ASSERT(observation.SawCompleteMobileBinding);
+        UNIT_ASSERT_VALUES_EQUAL(rootNodeId, 1u);
+    }
+
+    Y_UNIT_TEST(Block42QuorumOverridesNodeMajority) {
+        const auto config = MakeStorageConfig(17, 0, {1, 2, 3, 4, 5, 6, 7, 8},
+                                              TBlobStorageGroupType::Erasure4Plus2Block);
+        UNIT_ASSERT(HasQuorum(config, {1, 2, 3, 4, 5, 6, 7, 8}));
+        UNIT_ASSERT(!HasQuorum(config, {9, 10, 11, 12, 13, 14, 15, 16, 17}));
+    }
+
+    Y_UNIT_TEST(Block42SplitConvergesThroughMailbox) {
+        const auto config = MakeStorageConfig(17, 0, {1, 2, 3, 4, 5, 6, 7, 8},
+                                              TBlobStorageGroupType::Erasure4Plus2Block);
+        TBindingObservation observation{9, 10, 11, 12, 13, 14, 15, 16, 17};
+        const ui32 rootNodeId = RunUntilConverged(config, observation, TDuration::Minutes(10), true);
+        UNIT_ASSERT(observation.SawCompleteMobileBinding);
+        UNIT_ASSERT(observation.SawScatter);
+        UNIT_ASSERT(1 <= rootNodeId && rootNodeId <= 8);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
@@ -968,45 +1302,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         }
 
         void AddMultiVDiskGroupOn(const std::vector<ui32>& nodeIds, i32 erasureSpecies) {
-            auto *ss = Config.MutableBlobStorageConfig()->MutableServiceSet();
-
-            auto *group = ss->AddGroups();
-            group->SetGroupID(0);
-            group->SetGroupGeneration(1);
-            group->SetErasureSpecies(erasureSpecies);
-            auto *ring = group->AddRings();
-
-            for (ui32 domainIdx = 0; domainIdx < nodeIds.size(); ++domainIdx) {
-                const ui32 nodeId = nodeIds[domainIdx];
-                const ui32 pdiskId = 1;
-
-                auto *pdisk = ss->AddPDisks();
-                pdisk->SetNodeID(nodeId);
-                pdisk->SetPDiskID(pdiskId);
-                pdisk->SetPath("/dev/disk" + std::to_string(nodeId) + "_" + std::to_string(pdiskId));
-                pdisk->SetPDiskGuid(nodeId * 1000 + pdiskId);
-                pdisk->SetPDiskCategory(0);
-
-                auto *vdisk = ss->AddVDisks();
-                auto *vid = vdisk->MutableVDiskID();
-                vid->SetGroupID(0);
-                vid->SetGroupGeneration(1);
-                vid->SetRing(0);
-                vid->SetDomain(domainIdx);
-                vid->SetVDisk(0);
-                auto *loc = vdisk->MutableVDiskLocation();
-                loc->SetNodeID(nodeId);
-                loc->SetPDiskID(pdiskId);
-                loc->SetVDiskSlotID(0);
-                loc->SetPDiskGuid(nodeId * 1000 + pdiskId);
-
-                auto *fd = ring->AddFailDomains();
-                auto *gloc = fd->AddVDiskLocations();
-                gloc->SetNodeID(nodeId);
-                gloc->SetPDiskID(pdiskId);
-                gloc->SetVDiskSlotID(0);
-                gloc->SetPDiskGuid(nodeId * 1000 + pdiskId);
-            }
+            AddMultiVDiskGroup(Config, nodeIds, erasureSpecies);
         }
 
         std::vector<ui32> GetGroupDomainNodes() const {

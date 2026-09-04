@@ -432,8 +432,7 @@ namespace NKikimr::NStorage {
         if (change && NodeListObtained && StorageConfigLoaded) {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
-                UpdateQuorums();
-                IssueNextBindRequest();
+                ReconcileNodeRole();
             }
             processPendingEvents();
         }
@@ -518,9 +517,7 @@ namespace NKikimr::NStorage {
         }
 
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
-            UpdateQuorums();
-            IssueNextBindRequest();
-            CheckRootNodeStatus();
+            ReconcileNodeRole();
         }
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();

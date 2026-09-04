@@ -183,14 +183,6 @@ public:
         }
     }
 
-    const std::deque<TObject>& GetObjects() const {
-        if (AlreadySorted.size()) {
-            AFL_VERIFY(!HeapObjects.size());
-            return AlreadySorted;
-        }
-        return HeapObjects;
-    }
-
     TObject& MutableNextObject() {
         AFL_VERIFY(GetSize());
         if (AlreadySorted.empty()) {
@@ -323,6 +315,8 @@ private:
     // So we need to process them first before a limit can stop the scan.
     // Their index only has to be unique, since ISyncPoint::AddSource leaves them out of the ordered stream.
     std::deque<TConstructor> ConflictingConstructors;
+    // Counts down from the top so it can never meet NextObjectIdx, which counts up from zero. These indexes
+    // name nothing: no cursor stores them and nothing sorts by them.
     ui32 NextConflictingIdx = Max<ui32>();
 
     virtual TString DoDebugString() const override {
@@ -406,10 +400,6 @@ public:
     template <typename F>
     void ForEachConstructor(F&& f) const {
         Constructors.ForEachObject(std::forward<F>(f));
-    }
-
-    const std::deque<TConstructor>& GetConstructors() const {
-        return Constructors.GetObjects();
     }
 
     ui32 GetConstructorsCount() const {

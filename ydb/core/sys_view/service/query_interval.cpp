@@ -124,7 +124,7 @@ void TQueryInterval::Add(TQueryStatsPtr stats) {
     } else {
         auto cpu = stats->GetTotalCpuTimeUs();
 
-        if (ByCpu.size() == CountLimit) {
+        if (ByCpu.size() == NQueryMetricsLimits::NodeCandidateCount) {
             auto it = ByCpu.begin();
             if (it->first >= cpu) {
                 ++RejectedQueries;

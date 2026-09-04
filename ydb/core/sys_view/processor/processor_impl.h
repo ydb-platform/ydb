@@ -9,6 +9,7 @@
 #include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/db_counters.h>
+#include <ydb/core/sys_view/common/query_metrics_limits.h>
 #include <ydb/core/sys_view/service/query_interval.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -296,15 +297,6 @@ private:
     }
 
 private:
-    // limit on number of distinct queries when gathering summaries
-    static constexpr size_t DistinctQueriesLimit = 1024;
-    // limit on number of queries to fetch full metrics for
-    static constexpr size_t MetricsFetchLimit = 1024;
-    // public result limits
-    static constexpr size_t PublicMinuteLimit = 256;
-    static constexpr size_t PublicHourLimit = 1024;
-    // Serialized query text and metrics retained by the public hourly view.
-    static constexpr ui64 MetricsOneHourByteLimit = 256ull << 20;
     // limit on number of concurrent metrics requests from services
     static constexpr size_t MaxInFlightRequests = 16;
     // limit on scan batch size

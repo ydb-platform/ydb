@@ -1915,8 +1915,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::PathsInsideDomain(initialPathCount + 3),
         });
 
-        // Drop the table using DropTableRequest (ESchemeOpDropTable), which
-        auto* dropEv = DropTableRequest(txId, "/MyRoot", "Table");
+        // Drop the table using DropTableRequest (ESchemeOpDropTable)
+        auto* dropEv = DropTableRequest(++txId, "/MyRoot", "Table");
         AsyncSend(runtime, TTestTxConfig::SchemeShard, dropEv);
         TestModificationResults(runtime, txId, {{NKikimrScheme::StatusAccepted}});
         env.TestWaitNotification(runtime, txId);

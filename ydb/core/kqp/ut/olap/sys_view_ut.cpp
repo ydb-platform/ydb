@@ -465,7 +465,16 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             }
         }
 
-        // Confirm the correctness above was actually validated on the passthrough path, not the normal one.
+        // A full-PK ORDER BY drains the sync point one source at a time. PathId and TabletId are constant within a
+        // shard, so ordering by that prefix leaves the heap unable to drain and the cap is what bounds it.
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
+        auto prefixRows = ExecuteScanQuery(tableClient, Sprintf(R"(
+            SELECT PathId, TabletId
+            FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+            ORDER BY PathId, TabletId
+            LIMIT %u
+        )", limit));
+        UNIT_ASSERT_VALUES_EQUAL(prefixRows.size(), limit);
         UNIT_ASSERT_GT(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
     }
 
@@ -728,7 +737,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             }
         }
 
-        // confirm the correctness above actually ran on the passthrough path, not the normal drain path
+        // ordering by the constant PathId/TabletId prefix ties every source, so the heap cannot drain and the cap bounds it
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
+        ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT PathId, TabletId FROM `" << tablePath
+                                                      << "/.sys/primary_index_stats` ORDER BY PathId, TabletId LIMIT 3");
         UNIT_ASSERT_GT(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
     }
 

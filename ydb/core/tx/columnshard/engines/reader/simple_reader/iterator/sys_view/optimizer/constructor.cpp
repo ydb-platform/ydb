@@ -16,17 +16,15 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
         }
         AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
         if (unifiedPathId.HasInternalPathId()) {
-            constructors.emplace_back(unifiedPathId.GetSchemeShardLocalPathIdVerified(), TabletId, granuleMeta);
-            if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
-                    constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
+            constructors.emplace_back(unifiedPathId.GetSchemeShardLocalPathIdVerified(), TabletId, granuleMeta, sorting);
+            if (!constructors.back().IsUsedBy(*pkFilter)) {
                 constructors.pop_back();
             }
             continue;
         }
         for (const auto& schemeShardLocalPathId : translator.ResolveSchemeShardLocalPathIdsVerified(granuleMeta->GetPathId())) {
-            constructors.emplace_back(schemeShardLocalPathId, TabletId, granuleMeta);
-            if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
-                    constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
+            constructors.emplace_back(schemeShardLocalPathId, TabletId, granuleMeta, sorting);
+            if (!constructors.back().IsUsedBy(*pkFilter)) {
                 constructors.pop_back();
             }
         }

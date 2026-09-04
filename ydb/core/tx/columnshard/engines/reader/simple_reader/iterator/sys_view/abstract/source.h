@@ -72,20 +72,13 @@ private:
         return SysViewSchema;
     }
 
+    // Start/Finish already follow scan direction (the constructor swaps them for DESC)
     virtual NArrow::TSimpleRow GetFirstPK() const override {
-        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            return Finish.GetValue();
-        } else {
-            return Start.GetValue();
-        }
+        return Start.GetValue();
     }
 
     virtual NArrow::TSimpleRow GetLastPK() const override {
-        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            return Start.GetValue();
-        } else {
-            return Finish.GetValue();
-        }
+        return Finish.GetValue();
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
@@ -187,8 +180,8 @@ public:
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleSysInfo, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false, sourceIdx)
         , TabletId(tabletId)
-        , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
-        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted())
+        , Start(std::move(start), context->GetReadMetadata()->IsDescSorted())
+        , Finish(std::move(finish), context->GetReadMetadata()->IsDescSorted())
         , SysViewSchema(context->GetReadMetadata()->GetResultSchema())
     {
     }

@@ -12,6 +12,7 @@ class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
 protected:
     struct TPartitionInfo {
         std::optional<ui64> Offset;             // offset of next event.
+        bool ValidateOffsetAgainstEnd = false;  // offset comes from checkpoint or previously read data.
         std::optional<ui64> EndOffset;          // end offset in topic on start.
         TMaybe<TInstant> EndWriteTime;          // from predicate.
         TInstant LastMessageWriteTime;

@@ -2452,38 +2452,41 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT Data FROM $input;
             END DO;
         ''')
-        self.wait_completed_checkpoints(kikimr, query_name)
+        try:
+            self.wait_completed_checkpoints(kikimr, query_name)
 
-        expected_data = ["first", "second"]
-        self.write_stream(expected_data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
-        self.wait_completed_checkpoints(kikimr, query_name)
+            expected_data = ["first", "second"]
+            self.write_stream(expected_data, endpoint=endpoint)
+            assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+            self.wait_completed_checkpoints(kikimr, query_name)
 
-        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
-        time.sleep(0.5)
-        delete_stream(self.input_topic, default_endpoint=endpoint)
-        create_stream(self.input_topic, default_endpoint=endpoint)
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+            time.sleep(0.5)
+            delete_stream(self.input_topic, default_endpoint=endpoint)
+            create_stream(self.input_topic, default_endpoint=endpoint)
 
-        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
-        query_path = f"{kikimr.get_database_name()}/{query_name}"
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+            query_path = f"{kikimr.get_database_name()}/{query_name}"
 
-        def get_query_issues() -> str:
-            result_sets = kikimr.ydb_client.query(f'''
-                SELECT Issues
-                FROM `.sys/streaming_queries`
-                WHERE Path = "{query_path}"
-            ''')
-            assert len(result_sets) == 1
-            assert len(result_sets[0].rows) == 1
-            return result_sets[0].rows[0].Issues
+            def get_query_issues() -> str:
+                result_sets = kikimr.ydb_client.query(f'''
+                    SELECT Issues
+                    FROM `.sys/streaming_queries`
+                    WHERE Path = "{query_path}"
+                ''')
+                assert len(result_sets) == 1
+                assert len(result_sets[0].rows) == 1
+                return result_sets[0].rows[0].Issues
 
-        def has_missing_offsets_issue() -> bool:
-            issues = get_query_issues().lower()
-            return (
-                "offset" in issues
-                and "do not exist in the topic" in issues
-                and "recreat" in issues
-                and "streaming query" in issues
-            )
+            def has_missing_offsets_issue() -> bool:
+                issues = get_query_issues().lower()
+                return (
+                    "offset" in issues
+                    and "do not exist in the topic" in issues
+                    and "recreat" in issues
+                    and "streaming query" in issues
+                )
 
-        assert wait_for(has_missing_offsets_issue, timeout_seconds=60, step_seconds=1), get_query_issues()
+            assert wait_for(has_missing_offsets_issue, timeout_seconds=60, step_seconds=1), get_query_issues()
+        finally:
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

@@ -118,12 +118,14 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
 
         Partitions.reserve(Partitions.size() + stateProto.PartitionsSize());
         for (const auto& partitionProto : stateProto.GetPartitions()) {
-            auto& offset = Partitions[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}].Offset;
+            auto& partitionInfo = Partitions[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}];
+            auto& offset = partitionInfo.Offset;
             if (offset) {
                 offset = Min(*offset, partitionProto.GetOffset());
             } else {
                 offset = partitionProto.GetOffset();
             }
+            partitionInfo.ValidateOffsetAgainstEnd = true;
         }
 
         minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));

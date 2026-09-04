@@ -1534,12 +1534,13 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
                 .Table(Table)
                 .InconsistentWrite().Build("false")
                 .Mode().Build("insert")
-                .Priority().Build(0)
+                .Priority().Build("0")
                 .StreamWrite().Build("false")
                 .IsBatch().Build("false")
-                .IsIndexImplTable().Build()
+                .IsIndexImplTable().Build("false")
                 .DefaultColumns().Build()
                 .ReturningColumns().Build()
+                .Settings().Build()
                 .Done().Ptr();
     }
     Y_ENSURE(false, "Unsupported table effect");

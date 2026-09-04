@@ -8,6 +8,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/fq/libs/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
@@ -445,6 +446,7 @@ private:
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
+                hFunc(NFq::TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(NActors::NMon::TEvHttpInfo, HandleHttpInfo);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
@@ -474,6 +476,17 @@ private:
                 {"sender", ev->Sender},
                 {"traceId", TraceId()});
         }
+    }
+
+    void Handle(NFq::TEvStreamingQueryNodesManager::TEvAbortQuery::TPtr& ev) {
+        YDB_LOG_WARN("StreamingQueryNodesManager requested query abort",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"reason", ev->Get()->Reason},
+            {"traceId", TraceId()});
+        auto issue = YqlIssue({}, TIssuesIds::DEFAULT_ERROR, ev->Get()->Reason);
+        ReplyErrorAndDie(Ydb::StatusIds::CANCELLED, issue);
     }
 
     void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -1080,7 +1093,7 @@ private:
         if (GetUseFollowers()) {
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
-
+      
         TBase::PassAway();
     }
 
@@ -1288,6 +1301,19 @@ private:
             {"streamingDisposition", streamingDisposition.ShortDebugString()},
             {"hasQueryPhysicalGraph", Request.QueryPhysicalGraph != nullptr},
             {"enableWatermarks", Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()},
+            {"traceId", TraceId()});
+
+        StreamingQueryNodesManagerId = Register(
+            NFq::CreateStreamingQueryNodesManager(
+                SelfId(),
+                Database,
+                static_cast<ui64>(graphParams.GetTasks().size()),
+                ToString(TxId)));
+        YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId},
             {"traceId", TraceId()});
     }
 

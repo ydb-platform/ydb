@@ -47,7 +47,7 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
         TFetchingScriptCursor cursor(FetchingPlan, 0);
         const auto& commonContext = *GetContext()->GetCommonContext();
         auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        commonContext.SendTaskToExecute(task);
     }
 }
 

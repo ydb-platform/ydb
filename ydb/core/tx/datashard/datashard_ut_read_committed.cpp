@@ -414,6 +414,76 @@ Y_UNIT_TEST(ReadAfterSplit) {
     WaitTxNotification(server, sender, splitTxId);
 }
 
+Y_UNIT_TEST(LockRowsWithImmediateWritesAboveMediatorTime) {
+    // This is a regression test that checks behavior in case of rows written by immediate
+    // writes "into the future" (i.e. after the current mediator time).
+    // A transaction should be able to observe these rows immediately after successfully
+    // locking corresponding keys.
+
+    TTestEnv env;
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
+
+    TTransactionState tx1(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    TTransactionState tx2(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+
+    // tx1 locks key 1 and inserts a row with this key.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.LockRows(tableId, shards.at(0), {1}),
+        "OK");
+    UNIT_ASSERT_VALUES_EQUAL(tx1.Locks.size(), 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.Write(tableId, shards.at(0), TWriteOperation::Insert(1, 101)),
+        "OK");
+
+    // Establish snapshot for tx2. This will promote UnprotectedReadEdge
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.ReadKey(tableId, shards.at(0), 1),
+        "");
+
+    // Block mediator time updates to keep the window open:
+    // after tx1 commits, its reply is delayed and ImmediateWriteEdgeReplied stays stale.
+    TBlockEvents<TEvMediatorTimecast::TEvUpdate> blockUpdate(runtime);
+    TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranular(runtime);
+
+    // Try committing tx1. The shard will execute the commit, but will reply only after
+    // the next mediator update.
+    auto tx1CommitFut = tx1.SendWriteCommit(tableId, shards.at(0));
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1CommitFut.NextString(TDuration::Seconds(1)),
+        "<timeout>");
+
+    // tx2 locks key 1, but the reply should be delayed until the write by tx1
+    // becomes visible to reads.
+    auto tx2LockFut = tx2.SendLockRows(tableId, shards.at(0), {1});
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2LockFut.NextString(TDuration::Seconds(1)),
+        "<timeout>");
+
+    blockUpdate.Stop().Unblock();
+    blockGranular.Stop().Unblock();
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1CommitFut.NextString(),
+        "OK");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2LockFut.NextString(TDuration::Seconds(1)),
+        "OK");
+    UNIT_ASSERT_VALUES_EQUAL(tx2.Locks.size(), 1);
+
+    // Write by tx2 will fail with STATUS_CONSTRAINT_VIOLATION.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.Write(tableId, shards.at(0), TWriteOperation::Insert(1, 102)),
+        "ERROR: STATUS_CONSTRAINT_VIOLATION");
+
+    // We should now observe the commit by tx1.
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/table` ORDER BY key;
+        )"),
+        "{ items { uint32_value: 1 } items { int32_value: 101 } }");
+}
+
 } // Y_UNIT_TEST_SUITE(DataShardReadCommitted)
 
 } // namespace NKikimr

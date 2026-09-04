@@ -1,4 +1,5 @@
 #include "registry_helpers.h"
+#include "call_stack.h"
 #include "compile.h"
 
 #include <ydb/library/wasm/api/bytecode.h>
@@ -8,6 +9,7 @@
 #include <ydb/library/wasm/engine/wavm_private_imports.h>
 
 #include <util/generic/yexception.h>
+#include <util/string/builder.h>
 #include <util/string/printf.h>
 
 #include <bit>
@@ -18,10 +20,13 @@ namespace {
 // Bump allocator used when a UDF has empty required_libraries.
 // CreateEmptyImage alone has host intrinsics but no RuntimeLibraryInstance_
 // with wasm malloc/free; compartment->AllocateBytes needs those exports.
+//
+// Heap starts above a reserved low region so UDF data segments (e.g. at 1024)
+// are not clobbered by the first malloc used for argument/result marshalling.
 constexpr TStringBuf DefaultRegistrySdkWast = R"WAST(
 (module
     (import "env" "memory" (memory i64 8 2097152))
-    (global $heap (mut i64) (i64.const 1024))
+    (global $heap (mut i64) (i64.const 65536))
     (func $malloc (param $n i64) (result i64)
         (local $p i64)
         (local.set $p (global.get $heap))
@@ -227,10 +232,28 @@ void InvokeUdfExport(
             /*result*/ nullptr,
             TRange(wavmArgs.data(), totalArgs));
     } catch (WAVM::Runtime::Exception* exception) {
-        const auto message = WAVM::Runtime::describeException(exception);
+        // Type/args from WAVM, but only user wasm frames in the stack (like ThrowException).
+        std::string message = WAVM::Runtime::describeException(exception);
+        TString stack;
+        try {
+            stack = FormatUserWasmCallStack(WAVM::Runtime::getExceptionCallStack(exception));
+        } catch (const std::exception& ex) {
+            stack = TStringBuilder() << "<wasm call stack unavailable: " << ex.what() << ">\n";
+        } catch (...) {
+            stack = "<wasm call stack unavailable>\n";
+        }
         WAVM::Runtime::destroyException(exception);
-        ythrow yexception() << "WAVM runtime exception while calling \""
-            << functionNameForErrors << "\": " << message;
+
+        const auto stackPos = message.find("\nCall stack:");
+        if (stackPos != std::string::npos) {
+            message.resize(stackPos);
+        }
+
+        // Plain throw: do not prefix with registry_helpers.cpp:line for users.
+        throw yexception()
+            << "WAVM runtime exception while calling \""
+            << functionNameForErrors << "\": " << message
+            << "\n\n" << stack;
     }
 }
 

@@ -65,7 +65,8 @@ template<class R, class T, class E> int invoke_test( R& r, result<T, E> const& r
 
 template<class F, class... A,
     class R = decltype( std::invoke( std::declval<F>(), detail::invoke_unwrap( std::declval<A>() )... ) ),
-    class E = detail::get_error_type<std::remove_cvref_t<A>...>
+    class E = detail::get_error_type<std::remove_cvref_t<A>...>,
+    class En = typename std::enable_if< !std::is_void<R>::value >::type
 >
 auto unwrap_and_invoke( F&& f, A&&... a ) -> result<R, E>
 {
@@ -79,6 +80,28 @@ auto unwrap_and_invoke( F&& f, A&&... a ) -> result<R, E>
     }
 
     return std::invoke( std::forward<F>(f), detail::invoke_unwrap( std::forward<A>(a) )... );
+}
+
+template<class F, class... A,
+    class R = decltype( std::invoke( std::declval<F>(), detail::invoke_unwrap( std::declval<A>() )... ) ),
+    class E = detail::get_error_type<std::remove_cvref_t<A>...>,
+    class En1 = void,
+    class En2 = typename std::enable_if< std::is_void<R>::value >::type
+>
+auto unwrap_and_invoke( F&& f, A&&... a ) -> result<R, E>
+{
+    {
+        result<void, E> r;
+
+        using Q = int[];
+        (void)Q{ detail::invoke_test( r, a )... };
+
+        if( !r ) return r.error();
+    }
+
+    std::invoke( std::forward<F>(f), detail::invoke_unwrap( std::forward<A>(a) )... );
+
+    return {};
 }
 
 // unwrap_and_construct

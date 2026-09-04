@@ -22,7 +22,13 @@ Notes:
 * `SET NOT NULL` may take a long time: before setting the constraint, YDB checks the table for `NULL` values in the existing data of the specified column.
 * The SQL operation is performed synchronously and waits for completion. At the same time, a background operation is created for observability.
 * You can monitor the progress of operations using the [CLI command](../../../../reference/ydb-cli/operation-list.md) `ydb operation list setnotnull`. There are also commands to [get the status of a specific operation](../../../../reference/ydb-cli/operation-get.md), [cancel an operation](../../../../reference/ydb-cli/operation-cancel.md), or [delete the record of a completed operation](../../../../reference/ydb-cli/operation-forget.md).
-* After starting the `SET NOT NULL` operation and before its completion, you cannot write `NULL` values to the specified column. If you try to write such values, you will get an error like `` Can't set NULL or optional value to column: <column>. `SET NOT NULL` operation is currently in progress for this column ``.
+* After starting the `SET NOT NULL` operation and before its completion, you cannot write `NULL` values to the specified column. If you try to write such values, you will get an error like:
+
+  ```text
+  Can't set NULL or optional value to column: <column>.
+  SET NOT NULL operation is currently in progress for this column
+  ```
+
 * If validation fails, the `SET NOT NULL` operation will complete with error `Validation failed for SET NOT NULL on table ...: one or more columns contain NULL values`.
 
 ## Dropping `NOT NULL`

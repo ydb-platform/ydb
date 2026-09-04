@@ -677,7 +677,7 @@ private:
         auto* executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, /* tableIdsForSnapshot */ {}, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
-            llvmSettings, /* queryServiceConfig */ {}, 0, ChannelService, PreparedQuery->GetUseKqpTasksGraphV2());
+            llvmSettings, /* queryServiceConfig */ {}, ChannelService, PreparedQuery->GetUseKqpTasksGraphV2());
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;

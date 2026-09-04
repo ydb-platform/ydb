@@ -21,8 +21,9 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
 
     AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
     Source->SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
+    auto context = Source->GetContext()->GetCommonContext();
     auto task = std::make_shared<NReader::NCommon::TStepAction>(std::move(Source), std::move(Step), ScanActorId, false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, ConveyorProcessId);
+    context->SendTaskToExecute(task);
 }
 
 TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(
@@ -32,7 +33,6 @@ TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(
     , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard())
 {
     const auto& commonContext = *Source->GetContext()->GetCommonContext();
-    ConveyorProcessId = commonContext.GetConveyorProcessId();
     ScanActorId = commonContext.GetScanActorId();
 }
 

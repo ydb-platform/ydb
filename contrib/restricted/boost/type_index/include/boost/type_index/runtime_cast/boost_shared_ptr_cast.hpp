@@ -20,7 +20,9 @@
 #include <boost/type_index/runtime_cast/detail/runtime_cast_impl.hpp>
 
 #if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+#ifndef BOOST_TYPE_INDEX_USE_IMPORT_STD
 #include <type_traits>
+#endif
 #endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE

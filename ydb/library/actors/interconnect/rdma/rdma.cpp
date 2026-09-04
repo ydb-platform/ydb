@@ -441,6 +441,7 @@ ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr, size_t
         }
 
         wr[i]->AttachCb(std::move(WorkBuf[i].IoCb));
+        wr[i]->ResetTimer();
     };
 
     attach(0);
@@ -448,7 +449,6 @@ ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr, size_t
     for (size_t i = 1; i < WorkBuf.size(); i++) {
         WorkBuf[i - 1].Wr.next = &WorkBuf[i].Wr;
         attach(i);
-        wr[i]->ResetTimer();
     }
 
     return &WorkBuf[0].Wr;

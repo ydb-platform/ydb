@@ -41,8 +41,9 @@ typename graph_traits< Graph >::vertex_descriptor random_vertex(
 #if BOOST_WORKAROUND(BOOST_BORLANDC, BOOST_TESTED_AT(0x581))
         std::size_t n = std::random(num_vertices(g));
 #else
-        uniform_int<> distrib(0, num_vertices(g) - 1);
-        variate_generator< RandomNumGen&, uniform_int<> > rand_gen(
+        using vertices_size_type = typename graph_traits< Graph >::vertices_size_type;
+        uniform_int< vertices_size_type > distrib(0, num_vertices(g) - 1);
+        variate_generator< RandomNumGen&, uniform_int< vertices_size_type > > rand_gen(
             gen, distrib);
         std::size_t n = rand_gen();
 #endif
@@ -63,10 +64,11 @@ typename graph_traits< Graph >::edge_descriptor random_edge(
         typename graph_traits< Graph >::edges_size_type n
             = std::random(num_edges(g));
 #else
-        uniform_int<> distrib(0, num_edges(g) - 1);
-        variate_generator< RandomNumGen&, uniform_int<> > rand_gen(
+        using edges_size_type = typename graph_traits< Graph >::edges_size_type;
+        uniform_int< edges_size_type > distrib(0, num_edges(g) - 1);
+        variate_generator< RandomNumGen&, uniform_int< edges_size_type > > rand_gen(
             gen, distrib);
-        typename graph_traits< Graph >::edges_size_type n = rand_gen();
+        edges_size_type n = rand_gen();
 #endif
         typename graph_traits< Graph >::edge_iterator i = edges(g).first;
         return *(boost::next(i, n));

@@ -4,6 +4,8 @@
 #include <ydb/core/base/appdata_fwd.h>
 
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/string/builder.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NKqp::NSchemeHelpers {
@@ -23,7 +25,18 @@ bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result,
 bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
     TString& error, bool createDir);
 
-TVector<TString> CreateIndexTablePath(const TString& tableName, const NYql::TIndexDescription& index);
+// Inline: provider uses this helper but cannot PEERDIR this library
+// (this library already PEERDIRs provider), so a .cpp definition would
+// be missing from binaries that link provider without gateway/utils.
+inline TVector<TString> CreateIndexTablePath(const TString& tableName, const NYql::TIndexDescription& index) {
+    const auto implTables = index.GetImplTables();
+    TVector<TString> paths;
+    paths.reserve(implTables.size());
+    for (const auto& implTable : implTables) {
+        paths.emplace_back(TStringBuilder() << tableName << "/" << index.Name << "/" << implTable);
+    }
+    return paths;
+}
 
 TString GetDomainDatabase(const TAppData* appData);
 

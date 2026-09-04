@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/tx/tiering
     ydb/core/tx/columnshard/data_sharing/protos
     ydb/core/tx/columnshard/blobs_action/events
+    ydb/core/tx/columnshard/tracing
 )
 
 END()

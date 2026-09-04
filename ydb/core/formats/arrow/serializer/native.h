@@ -3,9 +3,6 @@
 #include "abstract.h"
 #include "parsing.h"
 
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/config.pb.h>
-
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 
@@ -57,26 +54,7 @@ protected:
 
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override;
 
-    static arrow::ipc::IpcOptions BuildDefaultOptions() {
-        arrow::ipc::IpcWriteOptions options;
-        options.use_threads = false;
-        if (HasAppData()) {
-            if (AppData()->ColumnShardConfig.HasDefaultCompression()) {
-                arrow::Compression::type codec = CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
-                if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
-                    options.codec = NArrow::TStatusValidator::GetValid(
-                        arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
-                } else {
-                    options.codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
-                }
-            } else {
-                options.codec = GetDefaultCodec();
-            }
-        } else {
-            options.codec = GetDefaultCodec();
-        }
-        return options;
-    }
+    static arrow::ipc::IpcOptions BuildDefaultOptions();
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& proto) override;
 
@@ -137,6 +115,13 @@ public:
             return Options.codec->compression_level();
         }
         return {};
+    }
+
+    virtual std::shared_ptr<arrow::util::Codec> GetCompressionCodec() const override {
+        if (!Options.codec || Options.codec->compression_type() == arrow::Compression::UNCOMPRESSED) {
+            return nullptr;
+        }
+        return Options.codec;
     }
 };
 

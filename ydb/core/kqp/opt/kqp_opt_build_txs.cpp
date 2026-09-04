@@ -876,7 +876,7 @@ private:
         }
 
         for (const auto& sinkEffect : externalEffects) {
-            // Two external writes can not be in single physical transaction if they use same sink of same stage.
+            // Two external writes cannot be in single physical transaction if they use same sink of same stage.
 
             auto it = std::find_if(
                 effectsInfos.begin(),

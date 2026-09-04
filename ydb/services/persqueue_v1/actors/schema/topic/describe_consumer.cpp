@@ -33,6 +33,7 @@ public:
                 .Error = TDescribeSchemaError{
                     .Status = Ydb::StatusIds::SCHEME_ERROR,
                     .Message = TStringBuilder() << "no consumer '" << RequestedConsumer << "' in topic",
+                    .RetryWithSync = true,
                 },
             };
         }

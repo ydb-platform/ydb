@@ -51,6 +51,15 @@ Y_UNIT_TEST_SUITE(TWasmCompartmentManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(filtered[0], "ModA");
     }
 
+    Y_UNIT_TEST(WasmUdfModulesTaskParamRoundtrip) {
+        const TVector<TString> modules = {"LocalUdf", "Trie", "Md5"};
+        const TString encoded = SerializeWasmUdfModulesTaskParam(modules);
+        UNIT_ASSERT_VALUES_EQUAL(encoded, "LocalUdf\nTrie\nMd5");
+        UNIT_ASSERT_VALUES_EQUAL(ParseWasmUdfModulesTaskParam(encoded), modules);
+        UNIT_ASSERT(ParseWasmUdfModulesTaskParam(SerializeWasmUdfModulesTaskParam({"Only"})).size() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(ParseWasmUdfModulesTaskParam(SerializeWasmUdfModulesTaskParam({"Only"}))[0], "Only");
+    }
+
     Y_UNIT_TEST(QueryCompartmentTlsGuard) {
         TQueryCompartmentHandle handle;
         {

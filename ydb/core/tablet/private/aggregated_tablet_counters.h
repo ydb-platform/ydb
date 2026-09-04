@@ -37,7 +37,10 @@ public:
      */
     bool IsInitialized;
 
-    explicit TAggregatedTabletCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
+    explicit TAggregatedTabletCounters(
+        ::NMonitoring::TDynamicCounterPtr counterGroup,
+        ::NMonitoring::TCountableBase::EVisibility visibility
+            = ::NMonitoring::TCountableBase::EVisibility::Public);
 
     /**
      * Create the aggregated counters for the counter set reported by the tablets.
@@ -45,7 +48,7 @@ public:
      * @note The layout of the counter set is a property of the tablet type,
      *       so it is defined once and for all by the very first reporting tablet.
      */
-    void Initialize(const TTabletCountersBase* counters);
+    void Initialize(const TTabletCountersBase* counters, const THashSet<TString>* nameFilter = nullptr);
 
     /**
      * Add the counters of a single tablet to the aggregate.
@@ -96,6 +99,7 @@ private:
     THashMap<ui64, TInstant> LastAggregateUpdateTime;
 
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TCountableBase::EVisibility Visibility;
 };
 
 } // namespace NKikimr::NPrivate

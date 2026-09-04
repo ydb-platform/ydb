@@ -653,20 +653,27 @@ namespace NActors {
                         j.UnsafeWritePair(formatted);
                     }
                 } else {
-                    TStringBuilder messageText;
-                    messageText << formatted;
                     if (structuredMessage.Defined()) {
-                        messageText << " (";
-                        StructuredTextWriter.Write(messageText, structuredMessage.GetRef());
-                        messageText << ")";
+                        if (Settings->EnableStructuredLogInJson) {
+                            j.WriteKey("message").WriteString(formatted);
+                            StructuredJsonWriter.Write(j, structuredMessage.GetRef(), true);
+                        } else {
+                            TStringBuilder messageText;
+                            messageText << formatted;
+                            messageText << " (";
+                            StructuredTextWriter.Write(messageText, structuredMessage.GetRef());
+                            messageText << ")";
+                            j.WriteKey("message").WriteString(messageText);
+                        }
+                    } else {
+                        j.WriteKey("message").WriteString(formatted);
                     }
-                    j.WriteKey("message").WriteString(messageText);
                 }
 
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), {}));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), Settings->EnableStructuredLogInJson ? metaFlags : TLogRecord::TMetaFlags{}));
             } break;
         }
 

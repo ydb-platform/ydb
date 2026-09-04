@@ -35,6 +35,7 @@ SRCS(
     kafka_connection.cpp
     kafka_connection.h
     kafka_constants.h
+    kafka_error_response.cpp
     kafka_listener.h
     kafka_messages.cpp
     kafka_messages.h
@@ -59,6 +60,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/public/sdk/cpp/src/library/kafka
     ydb/core/base
+    ydb/core/persqueue/common
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/fetcher
     ydb/core/persqueue/public/schema
@@ -68,6 +70,7 @@ PEERDIR(
     ydb/core/security/sasl
     ydb/services/persqueue_v1
     ydb/core/persqueue/public
+    ydb/core/util
 )
 
 END()

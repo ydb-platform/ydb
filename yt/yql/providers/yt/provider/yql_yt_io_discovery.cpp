@@ -384,6 +384,8 @@ public:
                     .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                     .LangVer(State_->Types->LangVer)
                     .RuntimeSettings(State_->Types->RuntimeSettings)
+                    .BridgeMode(State_->Types->BridgeMode)
+                    .BridgeBinaryPath(State_->Types->UdfBridgeBinaryPath)
                     .Pos(x.second.first)
             );
             allFutures.push_back(result.IgnoreResult());

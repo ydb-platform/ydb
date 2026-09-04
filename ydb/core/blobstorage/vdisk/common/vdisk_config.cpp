@@ -31,6 +31,7 @@ namespace NKikimr {
         MaxLogoBlobDataSize = MaxVDiskBlobSize;
         HullSstSizeInChunksFresh = 1;
         HullSstSizeInChunksLevel = 1;
+        HeapAllocatorMaxSstInBytes = 1u << 20u;
         HugeBlobsFreeChunkReservation = 1;
         SetupHugeBytes();
         HugeBlobOverhead = 8u;

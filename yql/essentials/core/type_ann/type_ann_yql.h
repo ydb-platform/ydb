@@ -6,7 +6,7 @@
 namespace NYql::NTypeAnnImpl {
 
 struct TYqlFromSettings {
-    bool IsCTE = false;
+    bool IsExplicitlyColumnOrdered = false;
 
     static TMaybe<TYqlFromSettings> Parse(const TExprNode::TPtr& settings, TExtContext& ctx);
 };

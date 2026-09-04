@@ -256,8 +256,10 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted2)
         callback,
         interval);
 
-    executor->Start();
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(400));
+    // Firings happen on epoch-aligned slots, so the event must be requested
+    // relative to an actual firing, not to a wall-clock sleep.
+    WaitFor(executor->StartAndGetFirstExecutedEvent())
+        .ThrowOnError();
     {
         auto future1 = executor->GetExecutedEvent();
         auto future2 = executor->GetExecutedEvent();

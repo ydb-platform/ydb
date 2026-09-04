@@ -1,6 +1,7 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -171,7 +172,7 @@ TConsumerActor::TConsumerActor(
     , Config(config)
     , RetentionPeriod(retentionPeriod)
     , PartitionEndOffset(partitionEndOffset)
-    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider(), StorageSettingsFromConfig(Config, GetPartitionConfig())))
+    , Storage(std::make_unique<TStorage>(TAppData::TimeProvider, StorageSettingsFromConfig(Config, GetPartitionConfig())))
     , DetailedMetricsRoot(detailedMetricsRoot) {
 }
 
@@ -549,9 +550,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
     InitializeDetailedMetrics();
     UpdateLockedGroupsIdInChildPartitions(false);
 
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
@@ -589,6 +588,21 @@ void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     Send(ev->Sender, std::move(response), 0, ev->Cookie);
 }
 
+void TConsumerActor::RetryChildPartitionSync(ui32 partitionId) {
+    if (ChildPartitionsOrderManager.SetSendFullStateByPartitionId(partitionId, TChildPartitionsOrderManager::ESendReasons::DeliveryProblem)) {
+        Schedule(ChildPartitionsOrderManager.UpdateChildPartitionsBackoff.Next(), new TEvents::TEvWakeup(EWakeUpTag::UpdateChildPartitions));
+    }
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"partitionId", ev->Get()->GetPartitionId()},
+        {"status", ev->Get()->GetStatus()},
+        {"error", ev->Get()->Record.GetErrorMessage()});
+    RetryChildPartitionSync(ev->Get()->GetPartitionId());
+}
+
 void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie == static_cast<int>(ESendCookie::SendToPQTablet)) {
         FirstPipeCacheRequest = true;
@@ -617,6 +631,8 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPersQueue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
@@ -646,8 +662,9 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
-        hFunc(TEvents::TEvWakeup, HandleOnWork);
+        hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             YDB_LOG_ERROR("Unexpected",
@@ -676,6 +693,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -696,8 +714,12 @@ void TConsumerActor::Restart(TString&& error) {
     PassAway();
 }
 
+bool TConsumerActor::InStateWork() const {
+    return CurrentStateFunc() == &TConsumerActor::StateWork;
+}
+
 void TConsumerActor::ScheduleProcessing() {
-    if (ProcessingScheduled) {
+    if (ProcessingScheduled || !InStateWork()) {
         return;
     }
 
@@ -1097,41 +1119,11 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         LastTimeWithMessages = TAppData::TimeProvider->Now();
         NotifyPQRB();
     }
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
     Restart(TStringBuilder() << "Received error: " << ev->Get()->Error);
-}
-
-void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
-    YDB_LOG_DEBUG("HandleOnWork TEvents::TEvWakeup",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"tag", ev->Get()->Tag});
-    switch (ev->Get()->Tag) {
-        case EWakeUpTag::Regular: {
-            FetchMessagesIfNeeded();
-            if (!ProcessingScheduled) {
-                ProcessEventQueue();
-            }
-            NotifyPQRB(true);
-            UpdateMetrics();
-            ScheduleProcessing();
-            Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
-            break;
-        }
-        case EWakeUpTag::Processing: {
-            ProcessingScheduled = false;
-            ProcessEventQueue();
-            break;
-        }
-        case EWakeUpTag::UpdateChildPartitions: {
-            UpdateLockedGroupsIdInChildPartitions(false);
-            break;
-        }
-    }
 }
 
 void TConsumerActor::MoveToDLQIfPossible() {
@@ -1140,12 +1132,11 @@ void TConsumerActor::MoveToDLQIfPossible() {
     }
 
     auto destinationTopic = [&]() -> TString {
-        auto databasePrefix = TStringBuilder() << Database << "/";
-        if (Config.GetDeadLetterQueue().StartsWith("sqs://") || Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
-            return Config.GetDeadLetterQueue();
-        } else {
-            return databasePrefix << Config.GetDeadLetterQueue();
+        const auto& dlq = Config.GetDeadLetterQueue();
+        if (dlq.empty() || dlq.StartsWith("sqs://")) {
+            return dlq;
         }
+        return NormalizePath(CanonizePath(Database), CanonizePath(dlq));
     };
 
     auto messages = Storage->GetDLQMessages();
@@ -1191,22 +1182,39 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
         AFL_ENSURE(result)("o", offset)("s", seqNo);
     }
 
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvents::TEvWakeup",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"tag", ev->Get()->Tag});
-    if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
-        UpdateLockedGroupsIdInChildPartitions(false);
-        return;
+    switch (ev->Get()->Tag) {
+        case EWakeUpTag::UpdateChildPartitions:
+            UpdateLockedGroupsIdInChildPartitions(false);
+            return;
+        case EWakeUpTag::Processing:
+            // The flag is reset in any state: the scheduled wakeup is consumed here, so
+            // ScheduleProcessing() must be able to schedule a new one for later requests.
+            ProcessingScheduled = false;
+            if (!InStateWork()) {
+                return;
+            }
+            ProcessEventQueue();
+            return;
+        case EWakeUpTag::Regular:
+            if (InStateWork()) {
+                FetchMessagesIfNeeded();
+                if (!ProcessingScheduled) {
+                    ProcessEventQueue();
+                }
+                ScheduleProcessing();
+            }
+            UpdateMetrics();
+            NotifyPQRB(true);
+            Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
+            return;
     }
-    UpdateMetrics();
-    NotifyPQRB(true);
-    Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 
 void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {

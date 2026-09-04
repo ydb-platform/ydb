@@ -304,13 +304,10 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
         blockShardStats.Unblock();
         blockShardStats.Stop();
-        // Give SchemeShard time to process shard stats updates
-        runtime.SimulateSleep(TDuration::Seconds(1));
 
-        // Check that after all shard updates reached SchemeShard,
-        // statistics service reports correct row count.
-        WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
-        WaitForStatsPropagate(runtime, nodeIdx);
+        // SendBaseStatsToSA may still emit a previously scheduled incomplete
+        // blob; wait until StatService actually has the full row count.
+        WaitForRowCount(runtime, nodeIdx, pathId, expectedRowCount);
 
         // Block updates from one of the shards again and reboot SchemeShard
         TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockShardStatsAgain(

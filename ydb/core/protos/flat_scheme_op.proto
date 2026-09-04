@@ -612,6 +612,7 @@ message TOlapIndexDescription {
 enum EMultiColumnStatisticsType {
     MULTI_COLUMN_STATISTICS_UNSPECIFIED = 0;
     COUNT_MIN_SKETCH = 1;
+    EQ_HEIGHT_HISTOGRAM = 2;
 }
 
 // Multi-column table statistics
@@ -1417,6 +1418,7 @@ message TIndexAlteringConfig {
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
+    repeated string DataColumnNames = 10;
 }
 
 message TIndexedTableCreationConfig {
@@ -1909,6 +1911,7 @@ message TUpgradeSubDomain {
 message TIndexBuildConfig {
     optional string Table = 1;
     optional TIndexCreationConfig Index = 2;
+    optional bool IsRebuild = 3 [ default = false ];
 }
 
 message TIndexBuildControl {

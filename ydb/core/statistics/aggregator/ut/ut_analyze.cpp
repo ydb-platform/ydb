@@ -6,11 +6,14 @@
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
+
+#include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -37,6 +40,324 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
         CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogram, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnTable(env, "Database", "Table", ColumnShard);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        // Auto-PK over Key. DataShard: exact (PARTITION_AT_KEYS). ColumnShard: within 2N/(f·B).
+        const bool optionalKey = !ColumnShard;
+        std::vector<TString> sourceKeys;
+        sourceKeys.reserve(ColumnTableRowsNumber);
+        for (ui64 i = 0; i < ColumnTableRowsNumber; ++i) {
+            sourceKeys.push_back(MakeUint64PresortKey(i, optionalKey));
+        }
+        std::vector<TEqHeightHistogramProbe> probes;
+        if (optionalKey) {
+            probes.push_back({MakeNullPresortKey(), 0});
+        }
+        probes.push_back({MakeUint64PresortKey(ColumnTableRowsNumber - 1, optionalKey), ColumnTableRowsNumber});
+        probes.push_back({MakeUint64PresortKey(ColumnTableRowsNumber, optionalKey), ColumnTableRowsNumber});
+        CheckEqHeightHistogram(runtime, tableInfo.PathId, {1},
+            ColumnTableRowsNumber,
+            /*expectedMinBuckets=*/4,
+            probes,
+            ColumnShard ? std::optional<bool>() : std::optional<bool>(true),
+            sourceKeys,
+            ColumnShard ? std::optional<ui64>(EqHeightDesignRankErrorBound()) : std::nullopt);
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeMultiColumnEqHeightHistogram, ColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnEqHeightTable(env, "Database", "Table", ColumnShard);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        std::vector<TString> sourceKeys;
+        sourceKeys.reserve(ColumnTableRowsNumber);
+        constexpr bool optionalValues = true; // Value1/Value2 are nullable on both table types.
+        for (ui64 i = 0; i < ColumnTableRowsNumber; ++i) {
+            sourceKeys.push_back(MakeStringTuplePresortKey(
+                {ToString(i % 10), ToString(i % 20)}, optionalValues));
+        }
+        std::vector<TEqHeightHistogramProbe> probes = {
+            {MakeNullStringTuplePresortKey(2), 0},
+            {MakeStringTuplePresortKey({"zz", "zz"}, optionalValues), ColumnTableRowsNumber},
+        };
+        CheckEqHeightHistogram(runtime, tableInfo.PathId, {2, 3},
+            ColumnTableRowsNumber,
+            /*expectedMinBuckets=*/1,
+            probes,
+            /*requireExact=*/std::nullopt,
+            sourceKeys,
+            EqHeightDesignRankErrorBound());
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogramDeclaredPkDedup, ColumnShard) {
+        // Declared WITH (EQ_HEIGHT_HISTOGRAM) on the PK plus the auto-PK config
+        // must produce exactly one stored histogram (the declared descriptor wins).
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareDeclaredPkEqHeightTable(env, "Database", "Table", ColumnShard);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        const bool optionalKey = !ColumnShard;
+        std::vector<TString> sourceKeys;
+        sourceKeys.reserve(ColumnTableRowsNumber);
+        for (ui64 i = 0; i < ColumnTableRowsNumber; ++i) {
+            sourceKeys.push_back(MakeUint64PresortKey(i, optionalKey));
+        }
+        CheckEqHeightHistogram(runtime, tableInfo.PathId, {1},
+            ColumnTableRowsNumber,
+            /*expectedMinBuckets=*/4,
+            std::nullopt,
+            ColumnShard ? std::optional<bool>() : std::optional<bool>(true),
+            sourceKeys,
+            ColumnShard ? std::optional<ui64>(EqHeightDesignRankErrorBound()) : std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CountStatisticsV2Rows(env, "Database", tableInfo.PathId, EStatType::EQ_HEIGHT_HISTOGRAM, "1"),
+            1);
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogramCompositePk, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareCompositePkTable(env, "Database", "Table", ColumnShard);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        const bool optionalKey = !ColumnShard;
+        std::vector<TString> sourceKeys;
+        sourceKeys.reserve(ColumnTableRowsNumber);
+        for (ui64 i = 0; i < ColumnTableRowsNumber; ++i) {
+            sourceKeys.push_back(MakeUint64StringPresortKey(i, ToString(i % 10), optionalKey));
+        }
+        CheckEqHeightHistogram(runtime, tableInfo.PathId, {1, 2},
+            ColumnTableRowsNumber,
+            /*expectedMinBuckets=*/4,
+            std::nullopt,
+            ColumnShard ? std::optional<bool>() : std::optional<bool>(true),
+            sourceKeys,
+            ColumnShard ? std::optional<ui64>(EqHeightDesignRankErrorBound()) : std::nullopt);
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogramJsonRejectedAtDdl, ColumnShard) {
+        // Declared EQ_HEIGHT_HISTOGRAM on Json must fail at CREATE, not at ANALYZE.
+        TTestEnv env(1, 1);
+        CreateDatabase(env, "Database");
+
+        const char* script = ColumnShard
+            ? R"(
+                CREATE TABLE `Root/Database/Table` (
+                    Key Uint64 NOT NULL,
+                    Js Json,
+                    PRIMARY KEY (Key),
+                    STATISTICS js_hist ON (Js) WITH (EQ_HEIGHT_HISTOGRAM)
+                )
+                PARTITION BY HASH(Key)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+            )"
+            : R"(
+                CREATE TABLE `Root/Database/Table` (
+                    Key Uint64,
+                    Js Json,
+                    PRIMARY KEY (Key),
+                    STATISTICS js_hist ON (Js) WITH (EQ_HEIGHT_HISTOGRAM)
+                )
+                WITH ( UNIFORM_PARTITIONS = 4 );
+            )";
+
+        auto status = ExecuteYqlScript(env, script, /*mustSucceed=*/false);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(status, Ydb::StatusIds::SUCCESS,
+            "EQ_HEIGHT_HISTOGRAM on Json must be rejected at DDL");
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogramJsonColumnOk, ColumnShard) {
+        // A Json column on the table must not prevent ANALYZE or a histogram
+        // over a different, encodable column.
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+
+        if constexpr (ColumnShard) {
+            ExecuteYqlScript(env, R"(
+                CREATE TABLE `Root/Database/Table` (
+                    Key Uint64 NOT NULL,
+                    Js Json,
+                    Value String,
+                    PRIMARY KEY (Key),
+                    STATISTICS val_hist ON (Value) WITH (EQ_HEIGHT_HISTOGRAM)
+                )
+                PARTITION BY HASH(Key)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+            )");
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        } else {
+            ExecuteYqlScript(env, R"(
+                CREATE TABLE `Root/Database/Table` (
+                    Key Uint64,
+                    Js Json,
+                    Value String,
+                    PRIMARY KEY (Key),
+                    STATISTICS val_hist ON (Value) WITH (EQ_HEIGHT_HISTOGRAM)
+                )
+                WITH ( UNIFORM_PARTITIONS = 4 );
+            )");
+        }
+
+        TTableInfo tableInfo;
+        tableInfo.Path = "/Root/Database/Table";
+        tableInfo.PathId = ResolvePathId(
+            runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+
+        InsertDataIntoTable(env, "Database", "Table", ColumnTableRowsNumber, {
+            {
+                .Name = "Js",
+                .TypeId = NScheme::NTypeIds::Json,
+                .AddValue = [](ui64 /*key*/, Ydb::Value& row) {
+                    row.add_items()->set_text_value("{}");
+                },
+            },
+            {
+                .Name = "Value",
+                .TypeId = NScheme::NTypeIds::String,
+                .AddValue = [](ui64 key, Ydb::Value& row) {
+                    row.add_items()->set_bytes_value(ToString(key % 10));
+                },
+            },
+        });
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        auto responses = GetStatisticsMultiColumn(
+            runtime, tableInfo.PathId, EStatType::EQ_HEIGHT_HISTOGRAM, {3});
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        UNIT_ASSERT(responses[0].Success);
+        UNIT_ASSERT(responses[0].EqHeightHistogram.Data);
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogramConfigOff, ColumnShard) {
+        // When AnalyzeCollectPrimaryKeyHistogram is false (the default),
+        // the auto-PK eq-height histogram must NOT be collected.
+        TTestEnv env(1, 1); // default: AnalyzeCollectPrimaryKeyHistogram = false
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnTable(env, "Database", "Table", ColumnShard);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        // The PK eq-height histogram should not be present.
+        // GetStatistics for EQ_HEIGHT_HISTOGRAM on the PK column (tag 1) should
+        // return an empty response (no histogram stored), which is indicated by
+        // Success = false (see CheckCountMinSketch for the same convention).
+        auto responses = GetStatisticsMultiColumn(runtime, tableInfo.PathId, EStatType::EQ_HEIGHT_HISTOGRAM, {1});
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        for (const auto& resp : responses) {
+            UNIT_ASSERT_C(!resp.Success,
+                          "EQ_HEIGHT_HISTOGRAM should not be collected when "
+                          "AnalyzeCollectPrimaryKeyHistogram is false");
+            UNIT_ASSERT_C(!resp.EqHeightHistogram.Data,
+                          "EQ_HEIGHT_HISTOGRAM should not be collected when "
+                          "AnalyzeCollectPrimaryKeyHistogram is false");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEmptyTableEqHeightHistogram, ColumnShard) {
+        // With AnalyzeCollectPrimaryKeyHistogram enabled, an empty table
+        // should produce no eq-height histogram: Finalize() returns nullopt
+        // when TotalCount == 0, so no histogram is stored.
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = CreateEmptyTable(env, "Database", "Table", ColumnShard);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        // No eq-height histogram should be stored for an empty table.
+        auto responses = GetStatisticsMultiColumn(runtime, tableInfo.PathId, EStatType::EQ_HEIGHT_HISTOGRAM, {1});
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        for (const auto& resp : responses) {
+            UNIT_ASSERT_C(!resp.Success,
+                          "EQ_HEIGHT_HISTOGRAM should not be collected for an empty table");
+            UNIT_ASSERT_C(!resp.EqHeightHistogram.Data,
+                          "EQ_HEIGHT_HISTOGRAM should not be collected for an empty table");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogramWithoutWith, ColumnShard) {
+        // STATISTICS without WITH: collect CMS and EQ_HEIGHT (auto-PK off).
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnAllTypesTable(env, "Database", "Table", ColumnShard);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
+
+        std::vector<TString> sourceKeys;
+        sourceKeys.reserve(ColumnTableRowsNumber);
+        constexpr bool optionalValues = true;
+        for (ui64 i = 0; i < ColumnTableRowsNumber; ++i) {
+            sourceKeys.push_back(MakeStringTuplePresortKey(
+                {ToString(i % 10), ToString(i % 20)}, optionalValues));
+        }
+        std::vector<TEqHeightHistogramProbe> probes = {
+            {MakeNullStringTuplePresortKey(2), 0},
+            {MakeStringTuplePresortKey({"zz", "zz"}, optionalValues), ColumnTableRowsNumber},
+        };
+        CheckEqHeightHistogram(runtime, tableInfo.PathId, {2, 3},
+            ColumnTableRowsNumber,
+            /*expectedMinBuckets=*/1,
+            probes,
+            /*requireExact=*/std::nullopt,
+            sourceKeys,
+            EqHeightDesignRankErrorBound());
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogramWithoutWithOnPk, ColumnShard) {
+        // STATISTICS on PK with no WITH, auto-PK off: still collect the PK histogram.
+        TTestEnv env(1, 1); // AnalyzeCollectPrimaryKeyHistogram = false
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareDeclaredPkAllTypesTable(env, "Database", "Table", ColumnShard);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        const bool optionalKey = !ColumnShard;
+        std::vector<TString> sourceKeys;
+        sourceKeys.reserve(ColumnTableRowsNumber);
+        for (ui64 i = 0; i < ColumnTableRowsNumber; ++i) {
+            sourceKeys.push_back(MakeUint64PresortKey(i, optionalKey));
+        }
+        CheckEqHeightHistogram(runtime, tableInfo.PathId, {1},
+            ColumnTableRowsNumber,
+            /*expectedMinBuckets=*/4,
+            std::nullopt,
+            ColumnShard ? std::optional<bool>() : std::optional<bool>(true),
+            sourceKeys,
+            ColumnShard ? std::optional<ui64>(EqHeightDesignRankErrorBound()) : std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CountStatisticsV2Rows(env, "Database", tableInfo.PathId, EStatType::EQ_HEIGHT_HISTOGRAM, "1"),
+            1);
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeTwoTables, ColumnShard) {
@@ -81,8 +402,39 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeUsesBatchPool, ColumnShard) {
-        TTestEnv env(1, 1);
+        TTestEnv env(1, 1, ColumnShard, [](Tests::TServerSettings& settings) {
+            if constexpr (ColumnShard) {
+                using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;
+                auto& actorSystemConfig = *settings.AppConfig->MutableActorSystemConfig();
+                actorSystemConfig.ClearExecutor();
+
+                const auto addPool = [&](const TString& name, const TExecutor::EType type) {
+                    auto& executor = *actorSystemConfig.AddExecutor();
+                    executor.SetType(type);
+                    executor.SetName(name);
+                    executor.SetThreads(1);
+                    if (type == TExecutor::BASIC) {
+                        executor.SetSpinThreshold(1);
+                    }
+                };
+
+                addPool("System", TExecutor::BASIC);
+                actorSystemConfig.SetSysExecutor(0);
+                addPool("User", TExecutor::BASIC);
+                actorSystemConfig.SetUserExecutor(1);
+                addPool("Batch", TExecutor::BASIC);
+                actorSystemConfig.SetBatchExecutor(2);
+                addPool("IO", TExecutor::IO);
+                actorSystemConfig.SetIoExecutor(3);
+            }
+        });
         auto& runtime = *env.GetServer().GetRuntime();
+        if (ColumnShard) {
+            for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+                UNIT_ASSERT_VALUES_UNEQUAL(
+                    runtime.GetAppData(nodeIndex).UserPoolId, runtime.GetAppData(nodeIndex).BatchPoolId);
+            }
+        }
         CreateDatabase(env, "Database");
         const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
@@ -97,10 +449,32 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             ++scans;
         });
 
+        const auto getReceivedConveyorTasks = [&](const ui32 poolId) {
+            ui64 result = 0;
+            for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+                auto counters = runtime.GetAppData(nodeIndex).Counters
+                    ->GetSubgroup("actor_system_pool_id", ::ToString(poolId))
+                    ->GetSubgroup("module_id", "COMPOSITE_CONVEYOR");
+                if (const auto histogram = counters->FindHistogram("Histogram/ReceiveTask/Duration/Us")) {
+                    const auto snapshot = histogram->Snapshot();
+                    for (size_t i = 0; i < snapshot->Count(); ++i) {
+                        result += snapshot->Value(i);
+                    }
+                }
+            }
+            return result;
+        };
+        const ui32 batchPoolId = runtime.GetAppData().BatchPoolId;
+        const ui64 batchTasksBeforeAnalyze = ColumnShard ? getReceivedConveyorTasks(batchPoolId) : 0;
+
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
-        UNIT_ASSERT_GT(taskRequests, 0);
-        UNIT_ASSERT_GT(scans, 0);
+        if (ColumnShard) {
+            UNIT_ASSERT_GT(getReceivedConveyorTasks(batchPoolId), batchTasksBeforeAnalyze);
+        } else {
+            UNIT_ASSERT_GT(taskRequests, 0);
+            UNIT_ASSERT_GT(scans, 0);
+        }
     }
 
     Y_UNIT_TEST_TWIN(QueryDoesNotUseBatchPool, ColumnShard) {
@@ -114,10 +488,49 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             UNIT_ASSERT(!ev->Get()->Record.GetUseBatchPool());
             ++scans;
         });
+        THashSet<TActorId> userConveyorServices;
+        THashSet<TActorId> batchConveyorServices;
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const auto nodeId = runtime.GetNodeId(nodeIndex);
+            userConveyorServices.emplace(NConveyorComposite::TServiceOperator::MakeServiceId(nodeId, false));
+            batchConveyorServices.emplace(NConveyorComposite::TServiceOperator::MakeServiceId(nodeId, true));
+        }
+        THashSet<ui64> userScanProcesses;
+        THashSet<ui64> batchScanProcesses;
+        auto conveyorProcessesObserver = runtime.AddObserver<NConveyorComposite::TEvExecution::TEvRegisterProcess>([&](auto& ev) {
+            if (ev->Get()->GetCategory() != NConveyorComposite::ESpecialTaskCategory::Scan) {
+                return;
+            }
+            if (userConveyorServices.contains(ev->Recipient)) {
+                userScanProcesses.emplace(ev->Get()->GetInternalProcessId());
+            } else if (batchConveyorServices.contains(ev->Recipient)) {
+                batchScanProcesses.emplace(ev->Get()->GetInternalProcessId());
+            }
+        });
+        size_t userScanTasks = 0;
+        size_t batchScanTasks = 0;
+        auto conveyorTasksObserver = runtime.AddObserver<NConveyorComposite::TEvExecution::TEvNewTask>([&](auto& ev) {
+            if (ev->Get()->GetCategory() != NConveyorComposite::ESpecialTaskCategory::Scan) {
+                return;
+            }
+            if (userScanProcesses.contains(ev->Get()->GetInternalProcessId())) {
+                UNIT_ASSERT(userConveyorServices.contains(ev->Recipient));
+                ++userScanTasks;
+            } else if (batchScanProcesses.contains(ev->Get()->GetInternalProcessId())) {
+                UNIT_ASSERT(batchConveyorServices.contains(ev->Recipient));
+                ++batchScanTasks;
+            }
+        });
 
         ExecuteYqlScript(env, "SELECT COUNT(*) FROM `Root/Database/Table`;");
 
         UNIT_ASSERT_GT(scans, 0);
+        if (ColumnShard) {
+            UNIT_ASSERT_GT(userScanProcesses.size(), 0);
+            UNIT_ASSERT_GT(userScanTasks, 0);
+            UNIT_ASSERT_VALUES_EQUAL(batchScanProcesses.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(batchScanTasks, 0);
+        }
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeSpecificColumns, ColumnShard) {

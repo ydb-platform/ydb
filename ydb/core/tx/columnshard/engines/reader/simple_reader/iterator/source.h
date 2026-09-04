@@ -275,7 +275,8 @@ private:
         const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const NArrow::NSSA::TProcessorContext& context, const TCheckHeaderContext& fetchContext) override;
-    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusionStatus DoAssembleAccessor(
+        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) override;
 
@@ -411,11 +412,14 @@ public:
 
     void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
         auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-        if (!context->IsActive()) {
+        const auto duplicatesManager = context->GetDuplicatesManager();
+        if (!duplicatesManager) {
+            // Scan abort raced with this step: UnregisterActors already dropped the manager.
+            AFL_VERIFY(!context->IsActive());
             return;
         }
         NActors::TActivationContext::AsActorContext().Send(
-            context->GetDuplicatesManagerVerified(), new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
+            duplicatesManager, new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 
     std::optional<ui64> GetPortionIdOptional() const override {
@@ -488,9 +492,10 @@ private:
         return TConclusionStatus::Fail("not implemented DoCheckHeader for TAggregationDataSource");
     }
 
-    virtual void DoAssembleAccessor(
+    virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
+        return TConclusionStatus::Fail("not implemented DoAssembleAccessor for TAggregationDataSource");
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(

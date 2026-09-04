@@ -2,6 +2,39 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+namespace {
+
+void AssertCommittedOffset(
+    std::shared_ptr<TTopicSdkTestSetup>& setup,
+    const std::string& topic,
+    const std::string& consumer,
+    ui32 partitionId,
+    ui64 expected,
+    TDuration timeout = TDuration::Seconds(10))
+{
+    ui64 actual = 0;
+    const auto deadline = TInstant::Now() + timeout;
+
+    do {
+        auto describe = setup->DescribeConsumer(topic, consumer);
+        actual = describe.GetPartitions()[partitionId].GetPartitionConsumerStats()->GetCommittedOffset();
+        if (actual == expected) {
+            return;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    } while (TInstant::Now() < deadline);
+
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        actual,
+        expected,
+        TStringBuilder() << "Committed offset did not reach expected value"
+            << ", topic=" << topic
+            << ", consumer=" << consumer
+            << ", partitionId=" << partitionId);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(TMLPChangerTests) {
 
 Y_UNIT_TEST(TopicNotExists) {
@@ -86,8 +119,7 @@ Y_UNIT_TEST(CommitTest) {
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
     UNIT_ASSERT(result->Messages[0].Status == EOperationResult::Success);
 
-    auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
-    UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+    AssertCommittedOffset(setup, "/Root/topic1", "mlp-consumer", 0, 1);
 }
 
 Y_UNIT_TEST(DoubleCommitTest) {
@@ -116,8 +148,7 @@ Y_UNIT_TEST(DoubleCommitTest) {
         UNIT_ASSERT(result->Messages[0].Status == (attempt == 0 ? EOperationResult::Success : EOperationResult::NotFound));
     }
 
-    auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
-    UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+    AssertCommittedOffset(setup, "/Root/topic1", "mlp-consumer", 0, 1);
 }
 
 Y_UNIT_TEST(ReadAndReleaseTest) {
@@ -294,9 +325,8 @@ Y_UNIT_TEST(CommitMultiPartition) {
         UNIT_ASSERT(msg.Status == EOperationResult::Success);
     }
 
-    auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
-    UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[1].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+    AssertCommittedOffset(setup, "/Root/topic1", "mlp-consumer", 0, 1);
+    AssertCommittedOffset(setup, "/Root/topic1", "mlp-consumer", 1, 1);
 }
 
 Y_UNIT_TEST(UnlockAfterRead) {
@@ -642,8 +672,7 @@ Y_UNIT_TEST(CommitAfterPQReboot) {
     UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
     UNIT_ASSERT(result->Messages[0].Status == EOperationResult::Success);
 
-    auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
-    UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+    AssertCommittedOffset(setup, "/Root/topic1", "mlp-consumer", 0, 1);
 }
 
 Y_UNIT_TEST(UnauthorizedCommitter) {

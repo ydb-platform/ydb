@@ -25,6 +25,7 @@ class TestYdbTopicWorkload(StressFixture):
         yield from self.setup_cluster(
             kafka_api_port=self.kafka_api_port,
             extra_feature_flags=extra_feature_flags,
+            kafka_auto_create_topics=True,
         )
 
     def get_kafka_api_ports(self):
@@ -56,7 +57,7 @@ class TestYdbTopicWorkload(StressFixture):
             "--target-path", f"target-topic{suffix}",
             "--consumer", "workload-consumer-0",
             "--num-workers", "2",
-            "--duration", "280"
+            "--duration", "120"
         ]
         if extra_args:
             cmd.extend(extra_args)

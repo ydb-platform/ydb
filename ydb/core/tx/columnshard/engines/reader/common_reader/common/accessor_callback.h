@@ -10,7 +10,6 @@ private:
     NReader::NCommon::TFetchingScriptCursor Step;
     std::shared_ptr<NCommon::IDataSource> Source;
     const NColumnShard::TCounterGuard Guard;
-    ui64 ConveyorProcessId;
     NActors::TActorId ScanActorId;
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override;
 

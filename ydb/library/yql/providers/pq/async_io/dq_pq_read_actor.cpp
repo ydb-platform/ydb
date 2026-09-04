@@ -566,7 +566,7 @@ private:
                             .Endpoint = federatedCluster.GetEndpoint(),
                             .Path = federatedCluster.GetDatabase(),
                         },
-                        TopicPartitionsCount
+                        federatedCluster.GetPartitionsCount()
                     );
                     if (cluster.PartitionsCount == 0) {
                         cluster.PartitionsCount = TopicPartitionsCount;
@@ -1188,8 +1188,8 @@ private:
             }
 
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset " << event.GetEndOffset() 
-                << "), confirm StartPartitionSession with start offset " << partitionInfo.Offset
-                << ", max offset " << maxOffset);
+                << "), confirm StartPartitionSession with start offset " << (partitionInfo.Offset ? ToString(*partitionInfo.Offset) : "<null>")
+                << ", max offset " << (maxOffset ? ToString(*maxOffset) : "<null>"));
             event.Confirm(partitionInfo.Offset, std::nullopt, maxOffset);
         }
 

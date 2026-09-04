@@ -46,6 +46,7 @@ SUBCOMMANDS = (
     "compdb", "analyze", "aggregate", "report", "all",
     "pilot", "doctor", "selfcheck", "selfcontain",
     "timetrace", "timing", "worklist", "bench", "buildbench",
+    "cost", "unity", "fanout",
 )
 
 
@@ -70,6 +71,13 @@ def _help() -> str:
         "  buildbench  - measure whole-build cost reproducibly: instructions retired\n"
         "                (load-independent) plus CPU time per TU; sweep parallelism\n"
         "                and diff two saved runs with noise-aware verdicts\n"
+        "  cost        - break a measured build down by component and estimate the\n"
+        "                fixed per-TU header tax from the frontend/backend split\n"
+        "  unity       - plan and apply JOIN_SRCS unity builds: rank libraries by\n"
+        "                estimated saving, census one-include TUs, rewrite a ya.make\n"
+        "  fanout      - rank headers by rebuild impact (how many TUs recompile\n"
+        "                when the header / proto changes); classify protobuf include\n"
+        "                sites as unused, forward-declarable, or keep\n"
         "  all         - run analyze -> aggregate -> report in order\n"
         "  pilot       - exercise the pipeline WITHOUT clang-include-cleaner using\n"
         "                synthesized verdicts; for tool development and CI smoke tests\n"
@@ -96,6 +104,9 @@ def run_selfcheck(rest: Sequence[str]) -> int:
         "analyze.cache",
         "aggregate.graph",
         "aggregate.run",
+        "analysis.cost",
+        "analysis.unity",
+        "analysis.fanout",
         "report.diff_preview",
         "report.formats",
         "report.run",
@@ -254,6 +265,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         "worklist": "report.worklist",
         "bench": "bench.run",
         "buildbench": "buildbench.run",
+        "cost": "analysis.cost",
+        "unity": "analysis.unity",
+        "fanout": "analysis.fanout",
         "pilot": "pilot",
         "doctor": "doctor",
     }

@@ -549,7 +549,6 @@ private:
         return res;
     }
 
-private:
     TVector<std::unique_ptr<IDataProcessor>> Stack_;
     TVector<ui32> Args_;
     TVector<bool> IsVariant_;

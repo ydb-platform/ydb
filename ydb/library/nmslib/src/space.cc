@@ -28,7 +28,7 @@ unique_ptr<DataFileInputState> Space<dist_t>::ReadDataset(ObjectVector& dataset,
   CHECK_MSG(MaxNumObjects >=0, "Bug: MaxNumObjects should be >= 0");
   unique_ptr<DataFileInputState> inpState(OpenReadFileHeader(inputFile));
   string line;
-  LabelType label;
+  LabelType label = EMPTY_LABEL;
   string externId;
   for (size_t id = 0; id < MaxNumObjects || !MaxNumObjects; ++id) {
     if (!ReadNextObjStr(*inpState, line, label, externId)) break;

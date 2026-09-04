@@ -51,6 +51,15 @@ enum class EHostState
     Offline,
 };
 
+enum class EHostHealth
+{
+    Online,
+    Sufferer,
+    TemporaryOffline,
+    Offline,
+    Broken,   // changes strictly outside of Oracle
+};
+
 // Determines where the data is located
 enum class EDataLocation
 {
@@ -84,6 +93,8 @@ IOutputStream& operator<<(IOutputStream& out, THostAndNodeId value);
 TString PrintHostIndex(THostIndex hostIndex);
 TString PrintNodeId(ui32 nodeId);
 TString PrintHostAndNodeId(THostIndex hostIndex, ui32 nodeId);
+TString PrintDbgId(ui32 dbgId);
+TString PrintVChunkId(ui32 vChunkId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

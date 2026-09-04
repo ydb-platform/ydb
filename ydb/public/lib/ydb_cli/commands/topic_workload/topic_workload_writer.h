@@ -47,6 +47,7 @@ namespace NYdb {
             TDuration BatchFlushInterval = TDuration::Seconds(1);
             std::optional<ui64> BatchFlushSizeBytes;
             ui32 BatchFlushMessageCount = 1;
+            bool SdkProducerAsyncExecutionMode = false;
         };
 
         struct TTopicWorkloadConfiguratorParams;

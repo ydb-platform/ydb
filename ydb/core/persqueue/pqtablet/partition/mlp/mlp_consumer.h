@@ -67,9 +67,11 @@ private:
     void Handle(TEvPersQueue::TEvResponse::TPtr&);
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+    void Handle(TEvPQ::TEvMLPErrorResponse::TPtr&);
+    void RetryChildPartitionSync(ui32 partitionId);
 
-    void HandleOnWork(TEvents::TEvWakeup::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
+    bool InStateWork() const;
 
     void Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr&);
 

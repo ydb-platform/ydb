@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
 
@@ -8168,6 +8169,11 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
 
     for (const auto& col : alterData->Columns) {
         const TTableInfo::TColumn& colInfo = col.second;
+        // A VIRTUAL generated column never reached the datashards, so neither its addition nor
+        // its drop may be sent there (the datashard verifies that a dropped column exists locally)
+        if (IsVirtualGeneratedColumn(colInfo)) {
+            continue;
+        }
         if (colInfo.IsDropped()) {
             auto descr = proto->AddDropColumns();
             descr->SetName(colInfo.Name);
@@ -9409,7 +9415,8 @@ void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     // Give table shards some time to report statistics. This is not required for correctness,
     // but if we tried to send the statistics right away, info for all paths would probably
     // be incomplete.
-    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
+    const auto initialDelay = AppData()->StatisticsConfig.GetBaseStatsSendInitialDelaySeconds();
+    ctx.Schedule(TDuration::Seconds(initialDelay), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::ResolveSA() {

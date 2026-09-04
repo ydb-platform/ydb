@@ -2583,7 +2583,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         ExecQuery(fmt::format(R"(
             INSERT INTO `{pq_source}`.`{output_topic}`
-            SELECT String::JoinFromList(ListReplicate("X", 10000000), "-");)",
+            SELECT String::JoinFromList(ListReplicate("X", 600000), "-");)",
             "pq_source"_a = pqSourceName,
             "output_topic"_a = outputTopic
         ), EStatus::EXTERNAL_ERROR, "Max message size for YDS is 1048576 bytes but received message with size of");

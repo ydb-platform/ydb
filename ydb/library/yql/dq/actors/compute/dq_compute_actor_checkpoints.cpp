@@ -459,10 +459,10 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
     RestoringTaskRunnerForCheckpoint = checkpoint;
     RestoringTaskRunnerForEvent = ev->Cookie;
     if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN) {
-        ComputeActor->LoadState(std::move(ev->Get()->States[0]));
+        ComputeActor->LoadState(std::move(ev->Get()->States[0]), checkpoint);
     } else if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
         TComputeActorState state = CombineForeignState(StateLoadPlan, ev->Get()->States, taskIds);
-        ComputeActor->LoadState(std::move(state));
+        ComputeActor->LoadState(std::move(state), checkpoint);
     } else {
         Y_ABORT("Unprocessed state type %s (%d)",
             NDqProto::NDqStateLoadPlan::EStateType_Name(StateLoadPlan.GetStateType()).c_str(),

@@ -1945,6 +1945,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         (*result->MutableTaskParams())[taskParam] = actorIdProto.SerializeAsString();
     }
 
+    if (const auto executionGeneration = GetMeta().UserRequestContext->CurrentExecutionGeneration) {
+        auto& params = *result->MutableTaskParams();
+        params["current_execution_generation"] = ToString(executionGeneration);
+        params["checkpoints_enabled"] = ToString(GetMeta().AllowCheckpoints);
+    }
+
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);

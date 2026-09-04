@@ -217,36 +217,10 @@ namespace NKikimr {
             Become(&TThis::StateLoadBulkFormedSegments);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadBulkFormedSegments;
 
-            // find all the huge blobs and track their slot size
-            {
-                TIntrusivePtr<TLogoBlobsDs>& logoBlobs = LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs;
-                TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>::TSstIterator iter(logoBlobs->CurSlice.Get(),
-                    logoBlobs->CurSlice->Level0CurSstsNum());
-
-                for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
-                    struct TMerger {
-                        TThis* const Self;
-
-                        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound,
-                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/, const void* /*sst*/) {
-                            if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
-                                TDiskDataExtractor extr;
-                                memRec.GetDiskData(&extr, outbound);
-                                for (const TDiskPart *location = extr.Begin; location != extr.End; ++location) {
-                                    if (location->ChunkIdx && location->Size) {
-                                        Self->LocRecCtx->RepairedHuge->RegisterBlob(*location);
-                                    }
-                                }
-                            }
-                        }
-                    } merger{this};
-
-                    TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator blobIter(iter.Get().SstPtr.Get());
-                    for (blobIter.SeekToFirst(); blobIter.Valid(); blobIter.Next()) {
-                        blobIter.PutToMerger(&merger);
-                    }
-                }
-            }
+            // NOTE: huge blobs are registered with the keeper only once the recovery log has been replayed. Telling a
+            // slot address from a stripe address means asking which heap owns the chunk, and a chunk that became a
+            // stripe chunk after the keeper's last entry point is only claimed back by replaying the log -- so at this
+            // point a stripe address would be misread as a slot one. See TRecoveryLogReplayer::RegisterHugeBlobs.
 
             // start loading bulk-formed segments that are already not in index, but still required to recover SyncLog
             auto aid = ctx.Register(LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->CurSlice->BulkFormedSegments.CreateLoaderActor(
@@ -574,7 +548,8 @@ namespace NKikimr {
                             logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(LocRecCtx->VCtx->VDiskLogPrefix,
-                LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode);
+                LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode,
+                LocRecCtx->PDiskCtx->Dsk->ChunkSize);
             HugeKeeperInitialized = true;
             return true;
         }

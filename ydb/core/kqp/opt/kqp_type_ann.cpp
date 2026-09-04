@@ -956,6 +956,10 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
     if (!upsertSettings.IsUpdate) {
         for (auto& [name, meta] : table.second->Metadata->Columns) {
+            if (meta.IsDefaultFromExpression() && !meta.DefaultExpression->Stored) {
+                continue;
+            }
+
             if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
                 if (meta.SetNotNullInProgress) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
@@ -1041,6 +1045,10 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     for (auto& [name, meta] : table.second->Metadata->Columns) {
+        if (meta.IsDefaultFromExpression() && !meta.DefaultExpression->Stored) {
+            continue;
+        }
+
         if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
             if (meta.SetNotNullInProgress) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()

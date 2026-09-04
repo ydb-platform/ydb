@@ -80,6 +80,8 @@ public:
     void Bootstrap() {
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Bootstrap",
             {"logPrefix", LogPrefix()},
+            {"executionId", Ctx->UserRequestContext->CurrentExecutionId},
+            {"streamingQueryPath", Ctx->UserRequestContext->StreamingQueryPath},
             {"streamingDisposition", (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null")},
             {"checkpointInterval", Ctx->UserRequestContext->CheckpointInterval ? ToString(*Ctx->UserRequestContext->CheckpointInterval) : "null"});
         Become(&TThis::StateFuncCreating);
@@ -147,18 +149,25 @@ private:
     void HandleCreatingFinished() {
         if (FinishInfo.IsFinished()) {
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved after failure, continue finishing",
-                {"logPrefix", LogPrefix()});
+                {"logPrefix", LogPrefix()},
+                {"executionId", Ctx->UserRequestContext->CurrentExecutionId},
+                {"streamingQueryPath", Ctx->UserRequestContext->StreamingQueryPath},
+                {"finishStatus", FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)});
             Finish(); // Continue finishing
             return;
         }
 
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved, creating new session",
-            {"logPrefix", LogPrefix()});
+            {"logPrefix", LogPrefix()},
+            {"executionId", Ctx->UserRequestContext->CurrentExecutionId},
+            {"streamingQueryPath", Ctx->UserRequestContext->StreamingQueryPath});
         Become(&TThis::StateFuncInitialize);
 
         ScriptLeaseWatcherActor.Id = RegisterWithSameMailbox(CreateScriptLeaseWatcherActor(Ctx));
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Started script lease watcher actor",
             {"logPrefix", LogPrefix()},
+            {"executionId", Ctx->UserRequestContext->CurrentExecutionId},
+            {"streamingQueryPath", Ctx->UserRequestContext->StreamingQueryPath},
             {"scriptLeaseWatcherActor", ScriptLeaseWatcherActor.Id});
 
         auto ev = std::make_unique<TEvKqp::TEvCreateSessionRequest>();

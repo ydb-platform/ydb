@@ -679,7 +679,8 @@ namespace Tests {
             .MonitorStuckActors = actorSystemConfig.GetMonitorStuckActors()
         }, TTestActorRuntime::TActorSystemPools{
             pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
-            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig)
+            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig),
+            NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(actorSystemConfig)
         });
     }
 

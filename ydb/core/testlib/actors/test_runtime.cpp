@@ -58,6 +58,10 @@ namespace NActors {
         ActorSystemPools = pools;
     }
 
+    const TVector<ui32>& TTestActorRuntime::GetBlobStorageExecutorPoolIds() const {
+        return ActorSystemPools.BlobStorageExecutorPoolIds;
+    }
+
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
         : TPortManager(false)
         , TTestActorRuntimeBase{d}

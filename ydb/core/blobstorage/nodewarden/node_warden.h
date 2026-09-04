@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <util/folder/path.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr {
     struct ICacheAccessor {
@@ -51,6 +52,7 @@ namespace NKikimr {
         bool UseActorSystemTimeInBSQueue = false;
         std::optional<ui32> ReplMaxQuantumBytes = std::nullopt;
         std::optional<ui32> ReplMaxDonorNotReadyCount = std::nullopt;
+        TVector<ui32> BlobStorageExecutorPoolIds;
 
         std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 

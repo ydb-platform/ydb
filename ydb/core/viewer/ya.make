@@ -63,6 +63,7 @@ SRCS(
     viewer_check_access.h
     viewer_cluster.h
     viewer_commit_offset.h
+    viewer_computation_graph.cpp
     viewer_computation_graph.h
     viewer_compute.h
     viewer_config.h

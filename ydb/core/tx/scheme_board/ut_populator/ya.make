@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/tx/tx_allocator
+    yql/essentials/sql/v1_dummy
 )
 
 SRCS(

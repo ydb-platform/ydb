@@ -25,6 +25,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

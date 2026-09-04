@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/testlib/default
     ydb/core/statistics/ut_common
+    yql/essentials/sql/v1
 )
 
 SRCS(
@@ -23,4 +24,3 @@ SRCS(
 )
 
 END()
-

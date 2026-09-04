@@ -10,8 +10,11 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util
+    yql/essentials/sql/pg_dummy
+    yql/essentials/sql/v1
     ydb/core/kqp/ut/common
-    ydb/core/testlib/default
+    ydb/core/testlib
     ydb/core/tx
     ydb/core/tx/datashard/ut_common
     ydb/public/sdk/cpp/src/client/types

@@ -7,6 +7,7 @@ PEERDIR(
     ydb/core/ymq/actor
     ydb/core/ymq/base
     ydb/core/ymq/http
+    yql/essentials/sql/v1
 )
 
 SRCS(

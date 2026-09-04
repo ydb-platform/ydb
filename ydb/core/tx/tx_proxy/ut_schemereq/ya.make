@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

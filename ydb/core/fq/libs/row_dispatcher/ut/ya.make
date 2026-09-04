@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     library/cpp/testing/unittest
     ydb/core/fq/libs/row_dispatcher/format_handler/ut/common
     ydb/core/fq/libs/row_dispatcher
@@ -17,6 +18,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/tests/fq/pq_async_io
     yql/essentials/sql/pg_dummy
+    yql/essentials/sql/v1
     ydb/library/yql/providers/pq/gateway/dummy
 )
 

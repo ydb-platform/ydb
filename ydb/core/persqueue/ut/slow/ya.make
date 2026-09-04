@@ -19,6 +19,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

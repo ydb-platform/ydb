@@ -1100,19 +1100,17 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            if (InconsistentTx) {
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
-                RetryResolve();
-            } else {
+            // Resolve does not refresh the baked-in schema version: fail to recompile instead of retrying forever.
+            if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
-                    NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-                    TStringBuilder() << "Scheme changed. Table: `"
-                        << TablePath << "`.",
-                    getIssues());
             }
+            RuntimeError(
+                NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                TStringBuilder() << "Scheme changed. Table: `"
+                    << TablePath << "`.",
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {

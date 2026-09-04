@@ -2026,7 +2026,8 @@ private:
     }
 
     void InitPqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))
+            && !AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations()) {
             return;
         }
 

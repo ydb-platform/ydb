@@ -97,6 +97,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             SectorMapFirstSectorWriteRate = TControlWrapper(diskModeParams->FirstSectorWriteRate, 0, 100000ull * 1024 * 1024);
             SectorMapLastSectorWriteRate = TControlWrapper(diskModeParams->LastSectorWriteRate, 0, 100000ull * 1024 * 1024);
             SectorMapSeekSleepMicroSeconds = TControlWrapper(diskModeParams->SeekSleepMicroSeconds, 0, 100ul * 1000 * 1000);
+            SectorMapSeekSleepJitterMicroSeconds = TControlWrapper(diskModeParams->SeekSleepJitterMicroSeconds, 0, 100ul * 1000 * 1000);
         }
         auto failureProbs = Cfg->SectorMap->GetFailureProbabilities();
         if (failureProbs) {
@@ -3144,6 +3145,7 @@ bool TPDisk::Initialize() {
                     REGISTER_LOCAL_CONTROL(SectorMapFirstSectorWriteRate);
                     REGISTER_LOCAL_CONTROL(SectorMapLastSectorWriteRate);
                     REGISTER_LOCAL_CONTROL(SectorMapSeekSleepMicroSeconds);
+                    REGISTER_LOCAL_CONTROL(SectorMapSeekSleepJitterMicroSeconds);
 
                     LastSectorReadRateControlName = TStringBuilder() << "PDisk_" << PCtx->PDiskId << "_SectorMapLastSectorReadRate";
                     LastSectorWriteRateControlName = TStringBuilder() << "PDisk_" << PCtx->PDiskId << "_SectorMapLastSectorWriteRate";
@@ -4399,6 +4401,7 @@ void TPDisk::Update() {
             }
 
             diskModeParams->SeekSleepMicroSeconds.store(SectorMapSeekSleepMicroSeconds);
+            diskModeParams->SeekSleepJitterMicroSeconds.store(SectorMapSeekSleepJitterMicroSeconds);
         }
         auto failureProbs = Cfg->SectorMap->GetFailureProbabilities();
         if (failureProbs) {

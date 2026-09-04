@@ -137,6 +137,7 @@ public:
     TControlWrapper SectorMapFirstSectorWriteRate;
     TControlWrapper SectorMapLastSectorWriteRate;
     TControlWrapper SectorMapSeekSleepMicroSeconds;
+    TControlWrapper SectorMapSeekSleepJitterMicroSeconds;
     // used to store valid value in ICB if SectorMapFirstSector*Rate < SectorMapLastSector*Rate
     TString LastSectorReadRateControlName;
     TString LastSectorWriteRateControlName;

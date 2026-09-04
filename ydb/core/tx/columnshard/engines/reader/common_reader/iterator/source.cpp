@@ -219,7 +219,7 @@ TBlobRange IDataSource::RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) 
     return TBlobRange();
 }
 
-IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,
     const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
     const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
     : Type(type)
@@ -231,6 +231,7 @@ IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shar
     , RecordsCountImpl(recordsCount)
     , ShardingVersionOptional(shardingVersion)
     , HasDeletions(hasDeletions)
+    , ConflictingFlag(isConflicting)
 {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));

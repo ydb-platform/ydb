@@ -167,9 +167,9 @@ private:
     std::optional<ui32> RecordsCountImpl;
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
-    // A conflicting source is scanned only so TConflictDetector can break the lock: it yields no
-    // rows and takes no part in the ordered stream.
-    bool ConflictingFlag = false;
+    // A conflicting source is scanned only so TConflictDetector can detect a conflict and break the lock: it yields no
+    // rows and takes no part in the ordered stream
+    const bool ConflictingFlag;
     std::optional<ui64> MemoryGroupId;
     TExecutionContext ExecutionContext;
     virtual bool DoAddTxConflict() = 0;
@@ -387,9 +387,9 @@ public:
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const TSnapshot& recordSnapshotMin,
-        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount, const std::optional<ui64> shardingVersion,
-        const bool hasDeletions, const ui64 deprecatedPortionId);
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,
+        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
 
     virtual ~IDataSource() = default;
 
@@ -403,10 +403,6 @@ public:
 
     bool IsConflicting() const {
         return ConflictingFlag;
-    }
-
-    void SetIsConflicting() {
-        ConflictingFlag = true;
     }
 
     bool IsSourceInMemory() const;

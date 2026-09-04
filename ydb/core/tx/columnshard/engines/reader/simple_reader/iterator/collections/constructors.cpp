@@ -36,11 +36,8 @@ std::vector<TPortionInfo::TConstPtr> TPortionsSources::GetConflictingPortions() 
 
 std::shared_ptr<TPortionDataSource> TSourceConstructor::Construct(
     const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const {
-    auto result = std::make_shared<TPortionDataSource>(GetSourceIdx(), Portion, context);
+    auto result = std::make_shared<TPortionDataSource>(GetSourceIdx(), Portion, context, IsConflicting());
     result->SetPortionAccessor(std::move(accessor));
-    if (IsConflicting()) {
-        result->SetIsConflicting();
-    }
     if (IsStartedByCursorFlag) {
         result->SetIsStartedByCursor();
     }

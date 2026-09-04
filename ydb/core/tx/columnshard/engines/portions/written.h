@@ -93,6 +93,8 @@ public:
         return CommitSnapshot.Has();
     }
 
+    virtual bool IsAborted() const override;
+
     const TSnapshot& GetCommitSnapshotVerified() const {
         AFL_VERIFY(HasCommitSnapshot());
         return CommitSnapshot.Get();

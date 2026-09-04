@@ -1,7 +1,6 @@
 #include "context.h"
 #include "source.h"
 
-#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
@@ -30,14 +29,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
 
     const auto* source = sourceExt->GetAs<IDataSource>();
 
-    NCommon::TPortionStateAtScanStart portionState =
-        NCommon::TPortionStateAtScanStart{ .Committed = true, .Conflicting = false, .MaxRecordSnapshot = source->GetRecordSnapshotMax() };
-    if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
-        const auto* portion = static_cast<const TPortionDataSource*>(source);
-        portionState = GetPortionStateAtScanStart(portion->GetPortionInfo());
-    }
-
-    const bool needConflictDetector = portionState.Conflicting;
+    const bool needConflictDetector = source->IsConflicting();
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -49,7 +41,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         }
     }
 
-    const bool preventDuplicates = NeedDuplicateFiltering() && !portionState.Conflicting;
+    const bool preventDuplicates = NeedDuplicateFiltering() && !source->IsConflicting();
     {
         auto& result = CacheFetchingScripts[needConflictDetector ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
                                            [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];

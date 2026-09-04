@@ -162,10 +162,10 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     std::optional<TSnapshot> ss;
     if (Portion->GetPortionType() == EPortionType::Written) {
         const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        auto state = GetContext()->GetPortionStateAtScanStart(*portion);
-        if (state.Committed) {
-            ss = state.MaxRecordSnapshot;
-        } else if (state.IsMyUncommitted()) {
+        if (portion->HasCommitSnapshot()) {
+            ss = portion->GetCommitSnapshotVerified();
+        } else if (!IsConflicting()) {
+            // if a portion is not committed, and not conflicting, it is a portion written by the current tx
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
         }
     }
@@ -192,16 +192,26 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
 }
 
 bool TPortionDataSource::DoAddTxConflict() {
-    auto state = GetContext()->GetPortionStateAtScanStart(this->GetPortionInfo());
-    if (state.Committed) {
+    if (!IsConflicting()) {
+        return false;
+    }
+    auto& info = GetPortionInfo();
+    if (info.IsCommitted()) {
+        // conflicting portion got aborted, so it doesn't conflict with us anymore
+        // but we return true here anyway because it is what the caller expects for a
+        // portion we don't want to read
+        if (info.IsAborted()) {
+            return true;
+        }
+        // conflicting portion is already committed, we don't have a chance to commit anymore
         GetContext()->GetReadMetadata()->SetBreakLockOnReadFinished();
         return true;
-    } else if (!state.IsMyUncommitted()) {
+    } else {
+        // conflicting portion is not committed yet, remember it
         const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
         GetContext()->GetReadMetadata()->SetWriteConflicting(wPortion->GetInsertWriteId());
         return true;
     }
-    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

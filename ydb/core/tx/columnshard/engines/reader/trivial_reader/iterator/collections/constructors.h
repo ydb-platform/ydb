@@ -36,9 +36,9 @@ public:
         return IsStartedByCursorFlag;
     }
 
-    TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isVisible, const NReader::ERequestSorting sorting)
+    TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isConflicting, const NReader::ERequestSorting sorting)
         : NCommon::TDataSourceConstructor(NCommon::TReplaceKeyAdapter::BuildStart(*portion, sorting),
-              NCommon::TReplaceKeyAdapter::BuildFinish(*portion, sorting), !isVisible)
+              NCommon::TReplaceKeyAdapter::BuildFinish(*portion, sorting), isConflicting)
         , Portion(std::move(portion))
         , RecordsCount(portion->GetRecordsCount())
     {

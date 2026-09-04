@@ -382,12 +382,11 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
 
     const NArrow::TColumnFilter& columnFilter =
         GetStageData().HasTable() ? GetStageData().GetTable().GetFilter() : context.GetResources().GetFilter();
-    const auto portionState = GetContext()->GetPortionStateAtScanStart(*Portion);
     const auto readContext = std::static_pointer_cast<TSpecialReadContext>(GetContext());
     const bool canUseDictionaryOnly = addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
                                       GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
                                           NArrow::NAccessor::IChunkedArray::EType::Dictionary &&
-                                      UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !portionState.Conflicting &&
+                                      UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !IsConflicting() &&
                                       readContext->GetDuplicateFilterPortionCount() <= 1 &&
                                       NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
     if (canUseDictionaryOnly) {
@@ -419,10 +418,10 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     std::optional<TSnapshot> ss;
     if (Portion->GetPortionType() == EPortionType::Written) {
         const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        auto state = GetContext()->GetPortionStateAtScanStart(*portion);
-        if (state.Committed) {
-            ss = state.MaxRecordSnapshot;
-        } else if (state.IsMyUncommitted()) {
+        if (portion->HasCommitSnapshot()) {
+            ss = portion->GetCommitSnapshotVerified();
+        } else if (!IsConflicting()) {
+            // if a portion is not committed, and not conflicting, it is a portion written by the current tx
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
         }
     }
@@ -450,9 +449,9 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
     return true;
 }
 
-TPortionDataSource::TPortionDataSource(
-    const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-    : TBase(EType::SimplePortion, sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
+TPortionDataSource::TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion,
+    const std::shared_ptr<NCommon::TSpecialReadContext>& context, const bool isConflicting)
+    : TBase(EType::SimplePortion, sourceIdx, context, isConflicting, portion->RecordSnapshotMin(TSnapshot::Zero()),
           portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
           portion->GetMeta().GetDeletionsCount(), portion->GetPortionId())
     , Portion(portion)
@@ -517,16 +516,23 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 }
 
 bool TPortionDataSource::DoAddTxConflict() {
-    auto state = GetContext()->GetPortionStateAtScanStart(this->GetPortionInfo());
-    if (state.Committed) {
+    auto& info = GetPortionInfo();
+    if (info.IsCommitted()) {
+        // conflicting portion got aborted, so it doesn't conflict with us anymore
+        // but we return true here anyway because it is what the caller expects for a
+        // portion we don't want to read
+        if (info.IsAborted()) {
+            return true;
+        }
+        // conflicting portion is already committed, we don't have a chance to commit anymore
         GetContext()->GetReadMetadata()->SetBreakLockOnReadFinished();
         return true;
-    } else if (!state.IsMyUncommitted()) {
+    } else {
+        // conflicting portion is not committed yet, remember it
         const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
         GetContext()->GetReadMetadata()->SetWriteConflicting(wPortion->GetInsertWriteId());
         return true;
     }
-    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

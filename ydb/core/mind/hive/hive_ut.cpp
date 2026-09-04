@@ -1373,11 +1373,17 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
         ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
+        bool sawConfirmedStorageVersion = false;
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                 event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                 MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
+            } else if (event->GetTypeRewrite() == TEvHive::TEvSeizeTabletsReply::EventType) {
+                for (const auto& tablet : event->Get<TEvHive::TEvSeizeTabletsReply>()->Record.GetTablets()) {
+                    UNIT_ASSERT(tablet.HasConfirmedStorageVersion());
+                    sawConfirmedStorageVersion = true;
+                }
             }
             return prevObserverFunc(event);
         });
@@ -1740,6 +1746,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(createTabletReply);
         UNIT_ASSERT(createTabletReply->Record.HasForwardRequest());
         UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
+        UNIT_ASSERT(sawConfirmedStorageVersion);
 
         runtime.SetObserverFunc(prevObserverFunc);
     }
@@ -7144,6 +7151,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestGetStorageInfoWaitsForStorageConfirmation) {
+        UNIT_ASSERT_VALUES_EQUAL(Schema::Tablet::ConfirmedStorageVersion::Default, Max<ui32>());
+
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID();

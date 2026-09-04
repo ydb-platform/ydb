@@ -232,10 +232,13 @@ namespace NFake {
                 } else {
                     version = msg->Generation;
                 }
-                return new TEvBlobStorage::TEvBlockResult(status);
+                return new TEvBlobStorage::TEvBlockResult(status, false, version);
             }
 
             auto result = std::make_unique<TEvBlobStorage::TEvBlockResult>(status);
+            if (const auto it = Blocks.find(msg->TabletId); it != Blocks.end()) {
+                result->ActualGeneration = it->second;
+            }
             if (msg->WriteSource != TWriteSource::SyncerMergeBlock) {
                 if (!msg->TabletId || msg->TabletId >> 63) {
                     result->Status = NKikimrProto::ERROR;
@@ -267,6 +270,7 @@ namespace NFake {
             }
 
             result->Status = status;
+            result->ActualGeneration = Blocks.at(msg->TabletId);
             return result.release();
         }
 

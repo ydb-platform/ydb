@@ -76,6 +76,7 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletBase::TEvBlockBlobStorageResult>(owner);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::NO_GROUP);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->ActualGeneration, 123);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->StorageVersion, info->Version);
     }
 
 } // Y_UNIT_TEST_SUITE(TBlockBlobStorageTest)

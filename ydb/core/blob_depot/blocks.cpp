@@ -86,6 +86,9 @@ namespace NKikimr::NBlobDepot {
                     NIceDb::TUpdate<Schema::Blocks::Version>(Version)
                 );
             }
+            if (!versionRecord) {
+                response.SetActualGeneration(block.BlockedGeneration);
+            }
             return true;
         }
 

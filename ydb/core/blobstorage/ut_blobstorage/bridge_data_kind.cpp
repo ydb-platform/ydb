@@ -51,6 +51,13 @@ Y_UNIT_TEST_SUITE(BridgeDataKind) {
         result = block(20, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
         UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        result = block(11, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(10, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ActualGeneration, 11);
     }
 
     Y_UNIT_TEST(EncryptionWorksWithInterpileTrafficOptimization) {

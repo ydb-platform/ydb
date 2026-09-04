@@ -110,7 +110,10 @@ public:
     }
 
     bool IsReadyToWork() const {
-        return !NeedToReleaseFromParent && State == ETabletState::ReadyToWork && !IsBootingSuppressed();
+        return !NeedToReleaseFromParent
+            && State == ETabletState::ReadyToWork
+            && !HasUnconfirmedStorage()
+            && !IsBootingSuppressed();
     }
 
     bool IsReadyToBlockStorage() const {

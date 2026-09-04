@@ -3,7 +3,8 @@ Exit Status: 0
 ===== stdout =====
 
 Start balancing iteration 1
-Skipping vdisks from unhealthy groups: {2147483649}
+Skipping vdisks from 1 unhealthy groups
+Unhealthy group ids: 2147483649
 Number of used slots -> number pdisks: 0=>1 2=>1
 Found 1 candidate vslots, 1 groups to reassign
 Checking to relocate vdisk from vslot (1, 1001, 1001) on pdisk (1, 1001) with slot usage 2, try_blocking=False

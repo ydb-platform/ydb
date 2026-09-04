@@ -136,17 +136,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
         const auto& msg = *ev->Get();
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle NHttp::TEvHttpProxy::TEvHttpIncomingResponse"
-            << ": self# " << this->SelfId()
-            << ", status# " << (msg.Response ? msg.Response->Status : "null")
-            << ", body# " << (msg.Response ? msg.Response->Body : "null"));
-
-        if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
-            EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << this->SelfId()
-                << ", error# " << msg.GetError());
-=======
         YDB_LOG_DEBUG("[Export] Handle NHttp::TEvHttpProxy::TEvHttpIncomingResponse",
             {"self", this->SelfId()},
             {"status", (msg.Response ? msg.Response->Status : "null")},
@@ -156,7 +145,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             YDB_LOG_ERROR("[Export] Error at 'StateResolveProxy'",
                 {"self", this->SelfId()},
                 {"error", msg.GetError()});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
+
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
@@ -172,16 +161,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         ProxyResolved = true;
 
         const auto& cfg = GetS3StorageConfig()->GetConfig();
-<<<<<<< HEAD
         EXPORT_LOG_N("Using proxy: "
             << (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")
             << cfg.proxyHost << ":" << cfg.proxyPort);
-=======
         YDB_LOG_NOTICE("[Export] Using proxy:",
             {"proxy", (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")},
             {"proxyHost", cfg.proxyHost},
             {"proxyPort", cfg.proxyPort});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         Restart();
     }

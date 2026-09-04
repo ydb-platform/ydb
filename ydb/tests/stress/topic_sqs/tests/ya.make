@@ -24,13 +24,9 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/library/stress
-<<<<<<< HEAD:ydb/tests/stress/topic_sqs/tests/ya.make
     ydb/tests/stress/topic_sqs/workload
-=======
-    ydb/tests/stress/sqs_topic/workload
     contrib/python/boto3
     contrib/python/botocore
->>>>>>> dc495ca5e5c (fixed mlp request queue stop (#52112)):ydb/tests/stress/sqs_topic/tests/ya.make
 )
 
 END()

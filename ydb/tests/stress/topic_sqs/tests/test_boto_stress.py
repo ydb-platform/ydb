@@ -8,7 +8,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.stress.fixtures import StressFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.stress.sqs_topic.workload.boto_stress import (
+from ydb.tests.stress.topic_sqs.workload.boto_stress import (
     BotoStressWorkload,
     DEFAULT_DURATION_SECONDS,
     DEFAULT_WORKERS,

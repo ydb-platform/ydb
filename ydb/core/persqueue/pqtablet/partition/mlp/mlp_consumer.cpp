@@ -1009,35 +1009,6 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
     Restart(TStringBuilder() << "Received error: " << ev->Get()->Error);
 }
 
-<<<<<<< HEAD
-void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
-    LOG_D("HandleOnWork TEvents::TEvWakeup " << ev->Get()->Tag);
-    switch (ev->Get()->Tag) {
-        case EWakeUpTag::Regular: {
-            FetchMessagesIfNeeded();
-            if (!ProcessingScheduled) {
-                ProcessEventQueue();
-            }
-            NotifyPQRB(true);
-            UpdateMetrics();
-            ScheduleProcessing();
-            Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
-            break;
-        }
-        case EWakeUpTag::Processing: {
-            ProcessingScheduled = false;
-            ProcessEventQueue();
-            break;
-        }
-        case EWakeUpTag::UpdateChildPartitions: {
-            UpdateLockedGroupsIdInChildPartitions(false);
-            break;
-        }
-    }
-}
-
-=======
->>>>>>> dc495ca5e5c (fixed mlp request queue stop (#52112))
 void TConsumerActor::MoveToDLQIfPossible() {
     if (DLQMoverActorId) {
         return;
@@ -1092,15 +1063,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
-<<<<<<< HEAD
     LOG_D("Handle TEvents::TEvWakeup " << ev->Get()->Tag);
-    if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
-        UpdateLockedGroupsIdInChildPartitions(false);
-        return;
-=======
-    YDB_LOG_DEBUG("Handle TEvents::TEvWakeup",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"tag", ev->Get()->Tag});
     switch (ev->Get()->Tag) {
         case EWakeUpTag::UpdateChildPartitions:
             UpdateLockedGroupsIdInChildPartitions(false);
@@ -1126,7 +1089,6 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
             NotifyPQRB(true);
             Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
             return;
->>>>>>> dc495ca5e5c (fixed mlp request queue stop (#52112))
     }
 }
 

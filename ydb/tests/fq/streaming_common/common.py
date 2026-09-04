@@ -1,11 +1,16 @@
 import copy
+import json
 import logging
 import os
-import pytest
+import tempfile
 import time
-from typing import Self
+from typing import Optional, Self
 import yatest.common
+import yaml
 import ydb
+import pytest
+import random
+import requests
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -64,6 +69,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
         "enable_external_data_source_auth_method_iam",
+        "allow_ydb_requests_without_database",
         "enable_updating_partitions_on_streaming_query_restart",
     }
     disabled_feature_flags = []
@@ -105,8 +111,18 @@ def get_ydb_config(request, enable_fq_connector=None):
     else:
         disabled_feature_flags.append("enable_external_data_sources")
 
+    replication_config = {
+        "iam_service_control": {
+            "endpoint": iam_emulator_endpoint,
+            "service_id": "ydb",
+            "microservice_id": "data-plane",
+            "resource_type": "resource-manager.cloud",
+            "enable_ssl": False,
+        },
+    }
+
     config = KikimrConfigGenerator(
-        erasure=Erasure.MIRROR_3_DC,
+        erasure=Erasure.NONE,
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
@@ -126,15 +142,7 @@ def get_ydb_config(request, enable_fq_connector=None):
                 "result_rows_limit": 20,
             },
         },
-        replication_config={
-            "iam_service_control": {
-                "endpoint": iam_emulator_endpoint,
-                "service_id": "ydb",
-                "microservice_id": "data-plane",
-                "resource_type": "resource-manager.cloud",
-                "enable_ssl": False,
-            },
-        },
+        replication_config=replication_config,
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
     )
@@ -163,7 +171,7 @@ def get_ydb_config(request, enable_fq_connector=None):
 
 
 def monitoring_endpoint(cluster: KiKiMR, node_id: int) -> str:
-    node = cluster.nodes[node_id]
+    node = cluster.slots[node_id]
     return f"http://localhost:{node.mon_port}"
 
 
@@ -177,7 +185,7 @@ def get_checkpoint_coordinator_metric(
 ) -> int:
     sensor_sum = 0
     found = False
-    for node_id in cluster.nodes:
+    for node_id in cluster.slots:
         sensor = get_sensors(cluster, node_id, "kqp").find_sensor(
             {"path": path, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
         )
@@ -248,13 +256,16 @@ class YdbClient:
         if self.owns_driver:
             self.driver.stop()
 
-    def query(self, statement: str, fail_fast: bool = False):
+    def query(self, statement: str, fail_fast: bool = False, timeout: Optional[float] = None):
         retry_settings = copy.copy(self.retry_settings)
         if fail_fast:
             retry_settings.on_ydb_error_callback = lambda e: self.__fail_retry_callback(e)
-        return self.session_pool.execute_with_retries(statement, retry_settings=retry_settings)
+        settings = None
+        if timeout is not None:
+            settings = ydb.BaseRequestSettings().with_timeout(timeout)
+        return self.session_pool.execute_with_retries(statement, settings=settings, retry_settings=retry_settings)
 
-    def query_async(self, statement: str, timeout: float | None = None):
+    def query_async(self, statement: str, timeout: Optional[float] = None):
         settings = None
         if timeout is not None:
             settings = ydb.BaseRequestSettings().with_timeout(timeout)
@@ -343,16 +354,115 @@ class YdbClient:
             return result
 
 
+_SECTIONS_FOR_CMS = [
+    "table_service_config",
+    "federated_query_config",
+    "log_config",
+]
+
+
+def _replace_config_via_cms(cluster, full_yaml_config):
+    """Wrap *full_yaml_config* in the MainConfig envelope and upload via CMS."""
+    wrapped = {
+        "metadata": {
+            "kind": "MainConfig",
+            "version": 0,
+            "cluster": "",
+        },
+        "config": full_yaml_config,
+    }
+    logger.info("Config to be uploaded to CMS:\n%s", yaml.safe_dump(wrapped, default_flow_style=False))
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
+        yaml.safe_dump(wrapped, tmp)
+        tmp_path = tmp.name
+    try:
+        logger.info("Uploading full config to CMS: %s", tmp_path)
+        cluster.replace_config(tmp_path)
+        logger.info("Full config uploaded to CMS successfully")
+    finally:
+        os.unlink(tmp_path)
+
+
+def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 30) -> None:
+    expected_sections = {section: full_yaml_config[section] for section in _SECTIONS_FOR_CMS}
+    deadline = time.monotonic() + timeout
+    attempt = 0
+
+    while time.monotonic() < deadline:
+        attempt += 1
+        try:
+            for node in cluster.slots.values():
+                node_endpoint = f"http://{node.host}:{node.mon_port}/actors/configs_dispatcher"
+                response = requests.get(
+                    node_endpoint,
+                    headers={
+                        "Authorization": "root@builtin",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=5,
+                )
+                response.raise_for_status()
+                applied_config = yaml.safe_load(json.loads(response.text)["yaml_config"])["config"]
+                mismatched_sections = [
+                    section for section, value in expected_sections.items() if applied_config.get(section) != value
+                ]
+                if mismatched_sections:
+                    logger.info(
+                        "CMS config has not been applied to node %s yet (attempt %d): mismatched sections: %s",
+                        node.host,
+                        attempt,
+                        ", ".join(mismatched_sections),
+                    )
+                    break
+            else:
+                logger.info("CMS config was applied to all dynamic nodes after %d attempts", attempt)
+                return
+        except (KeyError, TypeError, ValueError, requests.RequestException, yaml.YAMLError) as error:
+            logger.info("Failed to check CMS config application (attempt %d): %s", attempt, error)
+
+        time.sleep(0.5)
+
+    logger.error("CMS configuration was not applied to all dynamic nodes within %d seconds", timeout)
+    raise AssertionError("CMS configuration was not applied to all dynamic nodes")
+
+
 class Kikimr:
-    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240, enable_discovery: bool = True):
+    def __init__(
+        self,
+        config: KikimrConfigGenerator,
+        timeout_seconds: int = 240,
+        enable_discovery: bool = True,
+        tenant_database: str = "/Root/my_tenant",
+    ):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+
+        full_yaml_config = copy.deepcopy(config.yaml_config)
+
+        for section in _SECTIONS_FOR_CMS:
+            config.yaml_config.pop(section, None)
 
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 
-        self.first_node = list(self.cluster.nodes.values())[0]
-        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
+        token = config.default_clusteradmin
+        logger.info("Sleep")
+        time.sleep(10)
+        logger.info(f"Creating tenant {tenant_database} with token={token!r}")
+        self.cluster.create_database(
+            tenant_database,
+            storage_pool_units_count={"hdd": 1},
+            token=token,
+        )
+        self.cluster.register_and_start_slots(database=tenant_database, count=2)
+        self.cluster.wait_tenant_up(tenant_database, token=token)
+
+        _replace_config_via_cms(self.cluster, full_yaml_config)
+        _wait_cms_config_applied(self.cluster, full_yaml_config)
+
+        self.first_node = random.choice(list(self.cluster.slots.values()))
+        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", tenant_database)
+        logger.info(f"Creating ydb client to {self.endpoint}, database={self.endpoint.database}")
         self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery)
 
         if os.getenv("YDB_ENDPOINT") is None or os.getenv("YDB_DATABASE") is None:
@@ -362,12 +472,16 @@ class Kikimr:
             self.external_endpoint = Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
             self.external_ydb_client = self._setup_ydb_client(self.external_endpoint, enable_discovery)
 
+    def recreate_driver(self):
+        self.ydb_client.stop()
+        self.ydb_client = YdbClient(
+            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
+        )
+
     @staticmethod
     def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
         return YdbClient.from_driver_config(
-            database=endpoint.database,
-            endpoint=f"grpc://{endpoint.endpoint}",
-            enable_discovery=enable_discovery,
+            database=endpoint.database, endpoint=f"grpc://{endpoint.endpoint}", enable_discovery=enable_discovery
         )
 
     def stop(self) -> None:
@@ -375,6 +489,9 @@ class Kikimr:
             self.external_ydb_client.stop()
         self.ydb_client.stop()
         self.cluster.stop()
+
+    def get_database_name(self) -> str:
+        return self.endpoint.database
 
 
 class StreamingTestBase(TestYdsBase):
@@ -390,8 +507,14 @@ class StreamingTestBase(TestYdsBase):
         kikimr.ydb_client.create_external_data_source(source_name, endpoint.endpoint, endpoint.database, shared)
 
     def wait_completed_checkpoints(
-        self, kikimr: Kikimr, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2
+        self,
+        kikimr: Kikimr,
+        query_name: str,
+        timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
+        checkpoints_count=2,
     ) -> None:
+        path = f"{kikimr.get_database_name()}/{query_name}"
+        print(f"wait_completed_checkpoints {path}")
         wait_completed_checkpoints(
             kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
         )
@@ -403,11 +526,12 @@ class StreamingTestBase(TestYdsBase):
         return result if result is not None else 0
 
     def get_streaming_query_metric(
-        self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False
+        self, kikimr: Kikimr, query_name: str, metric_name: str, expect_counters_exist: bool = False
     ) -> int:
+        path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         sum = 0
         found = False
-        for node_id in kikimr.cluster.nodes:
+        for node_id in kikimr.cluster.slots:
             sensor = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
                 {"path": path, "subsystem": "streaming_queries", "sensor": metric_name}
             )
@@ -419,7 +543,7 @@ class StreamingTestBase(TestYdsBase):
 
     def get_schemeshard_counter(self, kikimr: Kikimr, counter_name: str) -> int:
         total = 0
-        for node_id in kikimr.cluster.nodes:
+        for node_id in kikimr.cluster.slots:
             sensor = get_sensors(kikimr.cluster, node_id, "tablets").find_sensor(
                 {"type": "SchemeShard", "category": "app", "sensor": counter_name}
             )
@@ -447,14 +571,14 @@ class StreamingTestBase(TestYdsBase):
     def wait_streaming_query_metric(
         self,
         kikimr: Kikimr,
-        path: str,
+        query_name: str,
         metric_name: str,
         timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
         expected_value: int = 1,
     ) -> None:
         deadline = time.time() + timeout
         while True:
-            value = self.get_streaming_query_metric(kikimr, path, metric_name)
+            value = self.get_streaming_query_metric(kikimr, query_name, metric_name)
             if value >= expected_value:
                 break
             assert time.time() < deadline, "Wait streaming query metric failed, actual value: " + str(value)
@@ -520,7 +644,7 @@ class StreamingTestBase(TestYdsBase):
         return endpoint, refs[0], paths[0]
 
     def roll(self, kikimr):
-        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.nodes.items()] + [
+        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.slots.items()] + [
             (id, n, "slot") for id, n in kikimr.cluster.slots.items()
         ]
 

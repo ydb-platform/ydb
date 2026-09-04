@@ -163,6 +163,49 @@ private:
     TManualEvent* const Sent;
 };
 
+class TRepeatedSignalActor : public NActors::TActorBootstrapped<TRepeatedSignalActor> {
+public:
+    TRepeatedSignalActor(
+            TManualEvent* ready,
+            TManualEvent* done,
+            std::atomic<ui32>* executionOwnerPoolIds,
+            size_t eventCount)
+        : Ready(ready)
+        , Done(done)
+        , ExecutionOwnerPoolIds(executionOwnerPoolIds)
+        , EventCount(eventCount)
+    {}
+
+    void Bootstrap() {
+        Become(&TRepeatedSignalActor::StateFunc);
+        Ready->Signal();
+    }
+
+    STFUNC(StateFunc) {
+        Y_VERIFY_S(
+            ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType,
+            "unexpected event type# " << ev->GetTypeRewrite());
+        Y_VERIFY_S(ProcessedEvents < EventCount,
+            "processed events# " << ProcessedEvents << " event count# " << EventCount);
+
+        const size_t eventIndex = ProcessedEvents++;
+        ExecutionOwnerPoolIds[eventIndex].store(
+            NActors::TlsThreadContext->OwnerPoolId(),
+            std::memory_order_release);
+        Done[eventIndex].Signal();
+        if (ProcessedEvents == EventCount) {
+            PassAway();
+        }
+    }
+
+private:
+    TManualEvent* const Ready;
+    TManualEvent* const Done;
+    std::atomic<ui32>* const ExecutionOwnerPoolIds;
+    const size_t EventCount;
+    size_t ProcessedEvents = 0;
+};
+
 THolder<NActors::TActorSystemSetup> CreateActorSystemSetup(
         const NKikimrConfig::TActorSystemConfig& config)
 {
@@ -771,6 +814,156 @@ Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAfterIdleOnActorSend) {
 Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAfterIdleOnRegistration) {
     TestAutoConfiguredAdjacentPoolActivationAfterIdle(
         EAdjacentActivationSource::Registration);
+}
+
+Y_UNIT_TEST(UnitedPoolFallsBackToForeignThreadWithoutAdjacentOwner) {
+    static constexpr ui32 TargetPoolId = 0;
+    static constexpr ui32 WorkerPoolId = 1;
+
+    auto setup = MakeHolder<NActors::TActorSystemSetup>();
+    setup->NodeId = 1;
+    setup->CpuManager.Shared.United = true;
+    setup->CpuManager.Basic.emplace_back(NActors::TBasicExecutorPoolConfig{
+        .PoolId = TargetPoolId,
+        .PoolName = "TargetPool",
+        .Threads = 0,
+        .SpinThreshold = 0,
+        .MinThreadCount = 0,
+        .MaxThreadCount = 0,
+        .DefaultThreadCount = 0,
+        .Priority = 20,
+        .AllThreadsAreShared = true,
+        .ForcedForeignSlotCount = 1,
+    });
+    setup->CpuManager.Basic.emplace_back(NActors::TBasicExecutorPoolConfig{
+        .PoolId = WorkerPoolId,
+        .PoolName = "WorkerPool",
+        .Threads = 1,
+        .SpinThreshold = 0,
+        .MinThreadCount = 1,
+        .MaxThreadCount = 1,
+        .DefaultThreadCount = 1,
+        .Priority = 10,
+        .HasSharedThread = true,
+        .AllThreadsAreShared = true,
+    });
+    setup->Scheduler = NActors::CreateSchedulerThread(NActors::TSchedulerConfig());
+
+    NActors::TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    const bool workerIsParked = WaitForSharedThreadToPark(
+        actorSystem,
+        WorkerPoolId,
+        TDuration::Seconds(5));
+
+    TManualEvent done;
+    std::atomic<ui32> executionOwnerPoolId = Max<ui32>();
+    if (workerIsParked) {
+        actorSystem.Register(
+            new TRecordOwnerOnBootstrapActor(&done, &executionOwnerPoolId),
+            NActors::TMailboxType::HTSwap,
+            TargetPoolId);
+    }
+    const bool completed = workerIsParked
+        && done.WaitT(TDuration::Seconds(5));
+
+    actorSystem.Stop();
+    UNIT_ASSERT_C(workerIsParked,
+        "unrelated united-pool worker did not become idle");
+    UNIT_ASSERT_C(completed,
+        "pool without an adjacent owner did not wake an eligible foreign thread");
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        executionOwnerPoolId.load(std::memory_order_acquire),
+        WorkerPoolId,
+        "activation without an adjacent owner was not executed by the foreign worker");
+}
+
+Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAcrossRepeatedIdleCycles) {
+    static constexpr size_t WakeupCount = 5;
+
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetCpuCount(2);
+    config.SetUseSharedThreads(true);
+    config.SetUseUnitedPool(true);
+
+    ApplyAutoConfig(&config, false, false);
+
+    const ui32 ownerPoolId = config.GetSysExecutor();
+    const ui32 adjacentPoolId = config.GetBatchExecutor();
+    auto setup = CreateActorSystemSetup(config);
+
+    const auto& ownerPool = FindBasicPool(setup->CpuManager, ownerPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(ownerPool.DefaultThreadCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(
+        ownerPool.AdjacentPools,
+        (std::vector<i16>{static_cast<i16>(adjacentPoolId)}));
+
+    const auto& adjacentPool = FindBasicPool(setup->CpuManager, adjacentPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(adjacentPool.DefaultThreadCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(adjacentPool.ForcedForeignSlotCount, 0);
+
+    NActors::TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    TManualEvent ready;
+    std::array<TManualEvent, WakeupCount> done;
+    std::array<std::atomic<ui32>, WakeupCount> executionOwnerPoolIds;
+    std::array<bool, WakeupCount> ownerWasParked = {};
+    std::array<bool, WakeupCount> eventWasSent = {};
+    std::array<bool, WakeupCount> completed = {};
+    for (auto& executionOwnerPoolId : executionOwnerPoolIds) {
+        executionOwnerPoolId.store(Max<ui32>(), std::memory_order_relaxed);
+    }
+
+    const NActors::TActorId adjacentActorId = actorSystem.Register(
+        new TRepeatedSignalActor(
+            &ready,
+            done.data(),
+            executionOwnerPoolIds.data(),
+            WakeupCount),
+        NActors::TMailboxType::HTSwap,
+        adjacentPoolId);
+    const bool actorIsReady = ready.WaitT(TDuration::Seconds(5));
+
+    if (actorIsReady) {
+        for (size_t i = 0; i < WakeupCount; ++i) {
+            ownerWasParked[i] = WaitForSharedThreadToPark(
+                actorSystem,
+                ownerPoolId,
+                TDuration::Seconds(5));
+            if (!ownerWasParked[i]) {
+                break;
+            }
+
+            eventWasSent[i] = actorSystem.Send(
+                adjacentActorId,
+                new NActors::TEvents::TEvWakeup());
+            if (!eventWasSent[i]) {
+                break;
+            }
+
+            completed[i] = done[i].WaitT(TDuration::Seconds(5));
+            if (!completed[i]) {
+                break;
+            }
+        }
+    }
+
+    actorSystem.Stop();
+    UNIT_ASSERT_C(actorIsReady, "repeated-wakeup Batch actor did not initialize");
+    for (size_t i = 0; i < WakeupCount; ++i) {
+        UNIT_ASSERT_C(ownerWasParked[i],
+            "adjacent User owner did not become idle before wakeup " << i);
+        UNIT_ASSERT_C(eventWasSent[i],
+            "failed to send adjacent Batch wakeup " << i);
+        UNIT_ASSERT_C(completed[i],
+            "adjacent Batch wakeup " << i << " did not execute");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            executionOwnerPoolIds[i].load(std::memory_order_acquire),
+            ownerPoolId,
+            "adjacent Batch wakeup " << i << " was not executed by its User owner");
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(AutoConfig)

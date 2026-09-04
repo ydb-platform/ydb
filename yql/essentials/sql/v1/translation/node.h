@@ -1577,44 +1577,6 @@ struct TDropTopicParameters {
     bool MissingOk;
 };
 
-struct TCreateBackupCollectionParameters {
-    std::map<TString, TDeferredAtom> Settings;
-
-    bool Database;
-    TVector<TDeferredAtom> Tables;
-
-    bool ExistingOk;
-};
-
-struct TAlterBackupCollectionParameters {
-    enum class EDatabase {
-        Unchanged,
-        Add,
-        Drop,
-    };
-
-    std::map<TString, TDeferredAtom> Settings;
-    std::set<TString> SettingsToReset;
-
-    EDatabase Database = EDatabase::Unchanged;
-    TVector<TDeferredAtom> TablesToAdd;
-    TVector<TDeferredAtom> TablesToDrop;
-
-    bool MissingOk;
-};
-
-struct TDropBackupCollectionParameters {
-    bool MissingOk;
-};
-
-struct TBackupParameters {
-    bool Incremental = false;
-};
-
-struct TRestoreParameters {
-    TString At;
-};
-
 struct TStreamingQuerySettings {
     inline static constexpr char RESERVED_FEATURE_PREFIX[] = "__";
     inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
@@ -1781,38 +1743,6 @@ TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicPa
                          TScopedStatePtr scoped);
 TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
                         TScopedStatePtr scoped);
-
-TNodePtr BuildCreateBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TCreateBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildAlterBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TAlterBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildDropBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TDropBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-
-TNodePtr BuildBackup(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TBackupParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildRestore(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TRestoreParameters& params,
-    const TObjectOperatorContext& context);
 
 TNodePtr BuildCreateSecret(
     TPosition pos,

@@ -472,7 +472,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     IUrlListerManagerPtr UrlListerManager;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     NUdf::EBridgeMode BridgeMode = NUdf::EBridgeMode::None;
-    TString BridgeBinaryPath;
+    TString UdfBridgeBinaryPath;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
     NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;

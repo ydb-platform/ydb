@@ -772,7 +772,7 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
     */
 
     // Checking only CurrentWaitInputTimeUs may lead to false-positive detection due to missing:
-    // - Output producing with active input reading (returns `Yield` + produce some data)
+    // - Output producing with active input reading (returns `Yield` + produces some data)
     // - Long spilling in MKQL node
     // - Reading sources / channels without producing data (e. g. GROUP BY HOP with long window)
     if (CurrentWaitInputTimeUs.MinValue < deadline || InputStages.empty() || IsFinished()) {
@@ -793,7 +793,7 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
             //
             // N.B. call !stat->IsDeadlocked() lead to exponential complexity of IsDeadlocked function on graphs with diamond-shaped dependencies
             // (possible with spilling)
-            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline /*?*/ && !stat->IsDeadlocked(deadline)) {
+            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline && !stat->IsDeadlocked(deadline)) {
                 return false;
             }
         }

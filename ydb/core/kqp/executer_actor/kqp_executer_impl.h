@@ -901,7 +901,7 @@ protected:
                 ui64 cycleCount = GetCycleCountFast();
 
                 if (Stats->DeadlockedStageId &&
-                    CheckpointCoordinatorId // If graph has checkpoint coordinator, deadlock will be automatically detected due to checkpoint propagation logic
+                    !CheckpointCoordinatorId // If graph has checkpoint coordinator, deadlock will be automatically detected due to checkpoint propagation logic
                 ) {
                     NYql::TIssues issues;
                     issues.AddIssue(TStringBuilder() << "Deadlock detected: stage " << *Stats->DeadlockedStageId << " waits for input while peer(s) wait for output");

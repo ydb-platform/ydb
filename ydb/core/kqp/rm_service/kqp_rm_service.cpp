@@ -978,26 +978,32 @@ private:
                  }
             } // PRE()
 
+            struct TPoolRow { TString Database; TString Pool; ui64 Limit; ui64 Used; ui64 DeniedRequests; };
+            TVector<TPoolRow> poolSnapshot;
             with_lock (ResourceManager->Lock) {
-                if (!ResourceManager->MemoryNamedPools.empty()) {
-                    str << "<h3>Memory Pools</h3>";
-                    str << "<table border='1' cellpadding='4'>";
-                    str << "<tr>"
-                        << "<th>Database</th><th>Pool</th>"
-                        << "<th>Limit</th><th>Allocated</th>"
-                        << "<th>DeniedRequests</th>"
-                        << "</tr>";
-                    for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
-                        str << "<tr>"
-                            << "<td>" << EncodeHtmlPcdata(key.first) << "</td>"
-                            << "<td>" << EncodeHtmlPcdata(key.second) << "</td>"
-                            << "<td>" << pool->GetLimit() << "</td>"
-                            << "<td>" << pool->GetUsed() << "</td>"
-                            << "<td>" << pool->GetDeniedRequests() << "</td>"
-                            << "</tr>";
-                    }
-                    str << "</table>";
+                poolSnapshot.reserve(ResourceManager->MemoryNamedPools.size());
+                for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
+                    poolSnapshot.push_back({key.first, key.second, pool->GetLimit(), pool->GetUsed(), pool->GetDeniedRequests()});
                 }
+            }
+            if (!poolSnapshot.empty()) {
+                str << "<h3>Memory Pools</h3>";
+                str << "<table border='1' cellpadding='4'>";
+                str << "<tr>"
+                    << "<th>Database</th><th>Pool</th>"
+                    << "<th>Limit</th><th>Allocated</th>"
+                    << "<th>DeniedRequests</th>"
+                    << "</tr>";
+                for (const auto& row : poolSnapshot) {
+                    str << "<tr>"
+                        << "<td>" << EncodeHtmlPcdata(row.Database) << "</td>"
+                        << "<td>" << EncodeHtmlPcdata(row.Pool) << "</td>"
+                        << "<td>" << row.Limit << "</td>"
+                        << "<td>" << row.Used << "</td>"
+                        << "<td>" << row.DeniedRequests << "</td>"
+                        << "</tr>";
+                }
+                str << "</table>";
             }
         }
 

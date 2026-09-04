@@ -146,7 +146,7 @@ message TFeatureFlags {
     optional bool ExtendedVDiskCounters = 120 [default = true, (RequireRestart) = true];
     optional bool ExtendedPDiskSensors = 121 [default = true, (RequireRestart) = true];
     optional bool EnableStableNodeNames = 122 [default = false];
-    optional bool EnableBackupService = 123 [default = false];
+    optional bool EnableBackupService = 123 [default = true];
     optional bool EnableVolatileTransactionArbiters = 124 [default = true];
     optional bool EnableGraphShard = 125 [default = false];
     optional bool EnableExternalSourceSchemaInference = 126 [default = true];

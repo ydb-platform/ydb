@@ -194,7 +194,9 @@ namespace NKikimr::NHttpProxy {
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_ID_HEADER)) {
                 sourceReqId = header.second;
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_FORWARDED_FOR)) {
-                SourceAddress = header.second;
+                if (TString sourceAddress = NKikimr::NNet::ExtractFirstForwardedForAddress(header.second)) {
+                    SourceAddress = std::move(sourceAddress);
+                }
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_TARGET_HEADER)) {
                 TString requestTarget = TString(header.second);
                 TVector<TString> parts = SplitString(requestTarget, ".");

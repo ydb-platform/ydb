@@ -168,8 +168,10 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 return NKqpProto::ISOLATION_LEVEL_READ_STALE;
             } else if (mode == "ReadCommittedRW") {
                 return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
+            } else if (mode == "StrictSerializableRW") {
+                return NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
             } else {
-                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
+                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO, ReadCommittedRW, StrictSerializableRW]";
             }
         });
     REGISTER_SETTING(*this, UseKqpTasksGraphV2);

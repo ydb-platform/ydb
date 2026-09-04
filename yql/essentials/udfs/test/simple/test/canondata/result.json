@@ -1,6 +1,6 @@
 {
     "test.test[Crash-Results]": [
-        "<tmp_path>/program.sql:<main>: Error: Bridge: worker process died unexpectedly"
+        "<tmp_path>/program.sql:<main>: Error: Bridge: worker process died unexpectedly (module: SimpleUdf)"
     ],
     "test.test[Exception-Results]": [
         {

@@ -439,11 +439,13 @@ TPersistResultFuture TFastPathService::UpdateDirtyMapState(
     return result;
 }
 
-void TFastPathService::QueryAddHost(size_t directBlockGroupId, ui64 generation)
+void TFastPathService::QueryAddHost(
+    size_t directBlockGroupId,
+    ui32 connectionConfigGeneration)
 {
     auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
         directBlockGroupId,
-        generation);
+        connectionConfigGeneration);
     ActorSystem->Send(PartitionActorId, event.release());
 }
 

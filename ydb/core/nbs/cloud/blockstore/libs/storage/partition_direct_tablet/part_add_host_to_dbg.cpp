@@ -67,7 +67,8 @@ NProto::TError AddConnection(
     auto* connection = dbgConnections->AddConnections();
     connection->MutableDDiskId()->CopyFrom(newDDiskId);
     connection->MutablePersistentBufferDDiskId()->CopyFrom(newPBufferId);
-    dbgConnections->SetGeneration(dbgConnections->GetGeneration() + 1);
+    dbgConnections->SetConnectionConfigGeneration(
+        dbgConnections->GetConnectionConfigGeneration() + 1);
     return {};
 }
 
@@ -99,7 +100,7 @@ void TPartitionActor::ExecuteStartAddHost(
     TTxPartition::TAddHostInProgress proto;
     proto.SetDirectBlockGroupId(args.DirectBlockGroupId);
     proto.SetNewHostIndex(args.NewHostIndex);
-    proto.SetGeneration(args.Generation);
+    proto.SetConnectionConfigGeneration(args.ConnectionConfigGeneration);
     db.StoreAddHostInProgress(proto);
 }
 
@@ -178,7 +179,8 @@ void TPartitionActor::CompleteAddHostToDBG(
     executor->ExecuteSimple(
         [dbgPtr,
          newHostIndex = args.NewHostIndex,
-         generation = dbgConnections.GetGeneration(),
+         connectionConfigGeneration =
+             dbgConnections.GetConnectionConfigGeneration(),
          newDDiskId = newConnection.GetDDiskId(),
          newPBufferId = newConnection.GetPersistentBufferDDiskId()]() mutable
         {
@@ -186,7 +188,7 @@ void TPartitionActor::CompleteAddHostToDBG(
                 newHostIndex,
                 std::move(newDDiskId),
                 std::move(newPBufferId),
-                generation);
+                connectionConfigGeneration);
         });
 
     AddHostInFlight.reset();
@@ -254,15 +256,15 @@ void TPartitionActor::HandleAddHostToDBG(
 
     const auto* msg = ev->Get();
     const size_t dbgId = msg->DirectBlockGroupId;
-    const ui64 generation = msg->Generation;
+    const ui32 connectionConfigGeneration = msg->ConnectionConfigGeneration;
 
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle AddHost to dbgId=%lu, generation %lu",
+        "%s Handle AddHost to dbgId=%lu, connection config generation %u",
         LogTitle.GetWithTime().c_str(),
         dbgId,
-        generation);
+        connectionConfigGeneration);
 
     // The request always carries a DBG's own index so an out-of-range dbgId is
     // a bug, not a bad request.
@@ -274,7 +276,7 @@ void TPartitionActor::HandleAddHostToDBG(
         dbgId,
         dbgCount);
 
-    if (!ValidateAddHostToDBGRequest(ctx, dbgId, generation)) {
+    if (!ValidateAddHostToDBGRequest(ctx, dbgId, connectionConfigGeneration)) {
         return;
     }
 
@@ -292,16 +294,21 @@ void TPartitionActor::HandleAddHostToDBG(
     AddHostInFlight = TAddHostInFlight{
         .DirectBlockGroupId = dbgId,
         .NewHostIndex = newHostIndex,
-        .Generation = generation,
+        .ConnectionConfigGeneration = connectionConfigGeneration,
     };
 
-    ExecuteTx(ctx, CreateTx<TStartAddHost>(dbgId, newHostIndex, generation));
+    ExecuteTx(
+        ctx,
+        CreateTx<TStartAddHost>(
+            dbgId,
+            newHostIndex,
+            connectionConfigGeneration));
 }
 
 bool TPartitionActor::ValidateAddHostToDBGRequest(
     const TActorContext& ctx,
     size_t dbgId,
-    ui64 generation)
+    ui32 connectionConfigGeneration)
 {
     if (AddHostInFlight.has_value()) {
         RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
@@ -328,13 +335,14 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         return false;
     }
 
-    if (generation != dbgConn.GetGeneration()) {
+    if (connectionConfigGeneration != dbgConn.GetConnectionConfigGeneration()) {
         RejectAddHost(
             ctx,
             dbgId,
             TStringBuilder()
-                << "AddHost was decided on generation " << generation
-                << ", the group is at " << dbgConn.GetGeneration());
+                << "AddHost was decided on connection config generation "
+                << connectionConfigGeneration << ", the group is at "
+                << dbgConn.GetConnectionConfigGeneration());
         return false;
     }
 

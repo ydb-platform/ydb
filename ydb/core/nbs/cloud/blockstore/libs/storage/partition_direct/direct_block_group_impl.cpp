@@ -205,7 +205,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
-    ui64 connectionsGeneration,
+    ui32 connectionConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
@@ -222,7 +222,7 @@ TDirectBlockGroup::TDirectBlockGroup(
               .TabletId = diskDescription.TabletId,
               .Generation = diskDescription.Generation,
               .DBGIndex = DirectBlockGroupIndex})
-    , ConnectionsGeneration(connectionsGeneration)
+    , ConnectionConfigGeneration(connectionConfigGeneration)
     , Oracle(StorageConfig, this)
     , Counters(std::move(counters))
 {
@@ -1318,7 +1318,7 @@ void TDirectBlockGroup::OnAddHostSucceeded(
     THostIndex newHostIndex,
     NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
     NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
-    ui64 generation)
+    ui32 connectionConfigGeneration)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1335,15 +1335,15 @@ void TDirectBlockGroup::OnAddHostSucceeded(
         newHostIndex,
         NBsController::TDDiskId(ddiskId),
         NBsController::TDDiskId(pbufferId));
-    ConnectionsGeneration = generation;
+    ConnectionConfigGeneration = connectionConfigGeneration;
 
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s AddHost %s request OK, generation %lu",
+        "%s AddHost %s request OK, connection config generation %u",
         LogTitle.GetWithTime().c_str(),
         PrintHostAndNode(newHostIndex).c_str(),
-        ConnectionsGeneration);
+        ConnectionConfigGeneration);
 
     DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
@@ -1460,11 +1460,11 @@ void TDirectBlockGroup::QueryAddHost()
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s QueryAddHost, generation %lu",
+        "%s QueryAddHost, connection config generation %u",
         LogTitle.GetWithTime().c_str(),
-        ConnectionsGeneration);
+        ConnectionConfigGeneration);
 
-    Service->QueryAddHost(DirectBlockGroupIndex, ConnectionsGeneration);
+    Service->QueryAddHost(DirectBlockGroupIndex, ConnectionConfigGeneration);
 }
 
 TCountAndSize TDirectBlockGroup::GetPBuffersUsage(THostIndex hostIndex) const

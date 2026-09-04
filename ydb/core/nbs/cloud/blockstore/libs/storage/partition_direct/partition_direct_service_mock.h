@@ -18,7 +18,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     struct TAddHostRequest
     {
         size_t DirectBlockGroupId = 0;
-        ui64 Generation = 0;
+        ui32 ConnectionConfigGeneration = 0;
     };
 
     struct TUpdateConfigRequest
@@ -87,11 +87,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
     }
 
-    void QueryAddHost(size_t directBlockGroupId, ui64 generation) override
+    void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 connectionConfigGeneration) override
     {
         AddHostRequests.push_back(TAddHostRequest{
             .DirectBlockGroupId = directBlockGroupId,
-            .Generation = generation});
+            .ConnectionConfigGeneration = connectionConfigGeneration});
     }
 
     ui64 GenerateLsn() override

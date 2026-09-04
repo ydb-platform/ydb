@@ -640,6 +640,12 @@ TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanP
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpTableEffect> tableEffect, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(props);
+    tableEffect->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TResourceExprType>(KqpEffectTag));
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props) {
     if (MatchOperator<TOpEmptySource>(op)) {
         return ComputeTypes(CastOperator<TOpEmptySource>(op), ctx);
@@ -682,6 +688,8 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
     else if (MatchOperator<TOpCBOTree>(op)) {
         return ComputeTypes(CastOperator<TOpCBOTree>(op), ctx, props);
+    } else if (MatchOperator<TOpTableEffect>(op)) {
+        return ComputeTypes(CastOperator<TOpTableEffect>(op), ctx, props);
     }
     else {
         Y_ENSURE(false, "Invalid operator type in RBO type inference");

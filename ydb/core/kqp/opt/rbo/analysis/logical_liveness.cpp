@@ -362,6 +362,12 @@ void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
     }
 }
 
+void TOpTableEffect::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive;
+    AddInfoUnits(inputLive, UsedIUs);
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
 void ComputePlanLiveness(TOpRoot& root) {
     TLogicalLiveness(root.PlanProps).Run(root);
 }

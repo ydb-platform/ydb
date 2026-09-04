@@ -314,6 +314,10 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         result = ConvertTKqpOpAggregate(node);
     } else if (NYql::NNodes::TKqpOpReplaceAlias::Match(node.Get())) {
         result = ConvertTKqpOpReplaceAlias(node);
+    } else if (NYql::NNodes::TKqpOpReplaceColumns::Match(node.Get())) {
+        result = ConvertTKqpOpReplaceColumns(node);
+    } else if (NYql::NNodes::TKqpOpTableEffect::Match(node.Get())){
+        result = ConvertTKqpOpTableEffect(node);
     } else {
         YQL_ENSURE(false, "Unknown operator node");
     }
@@ -665,6 +669,101 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPt
     }
 
     return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements);
+}
+
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceColumns(TExprNode::TPtr node) {
+    const auto input = ExprNodeToOperator(TKqpOpReplaceColumns(node).Input().Ptr());
+    const auto inputIUs = input->GetOutputIUs();
+    const auto outputColumns = node->ChildPtr(TKqpOpReplaceColumns::idx_Columns);
+
+    TVector<TMapElement> mapElements;
+
+    for (size_t i=0; i<inputIUs.size(); i++) {
+        auto inputIU = inputIUs[i];
+        auto outputColumn = TInfoUnit(TString(outputColumns->ChildPtr(i)->Content()));
+        mapElements.emplace_back(outputColumn, inputIU, node->Pos(), &Ctx, &PlanProps);
+    }
+
+    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements, true);
+}
+
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr node) {
+    const auto opTableEffect = TKqpOpTableEffect(node);
+    const auto input = ExprNodeToOperator(opTableEffect.Input().Ptr());
+
+    PlanProps.WithEffects = true;
+    
+    EEffectType type = EEffectType::InsertRows;
+    TEffectOptions options;
+
+    auto effectType = opTableEffect.EffectType().StringValue();
+
+    auto processColumns = [](const TCoAtomList& atomList) {
+        TVector<TString> result;
+        for (auto a : atomList) {
+            result.push_back(a.StringValue());
+        }
+        return result;
+    };
+
+    auto processSettings = [](const TCoNameValueTupleList& settingsList) {
+        TVector<TExprNode::TPtr> result;
+        for (auto s : settingsList) {
+            result.push_back(s.Ptr());
+        }
+        return result;
+    };
+
+    auto columns = opTableEffect.Columns().Maybe<TCoAtomList>();
+    auto onConflict = opTableEffect.OnConflict().Maybe<TCoAtom>();
+    auto returningColumns = opTableEffect.ReturningColumns().Maybe<TCoAtomList>();
+    auto settings = opTableEffect.Settings().Maybe<TCoNameValueTupleList>();
+    auto isBatch = opTableEffect.IsBatch().Maybe<TCoAtom>();
+
+    if (effectType == "TKqlInsertRows") {
+        type = EEffectType::InsertRows;
+
+        options.Columns = processColumns(columns.Cast());
+        options.OnConflict = onConflict.Cast().StringValue();
+        options.ReturningColumns = processColumns(returningColumns.Cast());
+        options.Settings = processSettings(settings.Cast());
+    } else if (effectType == "TKqlInsertRowsIndex") {
+        type = EEffectType::InsertRowsIndex;
+
+        options.Columns = processColumns(columns.Cast());
+        options.OnConflict = onConflict.Cast().StringValue();
+        options.ReturningColumns = processColumns(returningColumns.Cast());
+        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.Settings = processSettings(settings.Cast());
+    } else if (effectType == "TKqlUpdateRows") {
+        type = EEffectType::UpdateRows;
+
+        options.Columns = processColumns(columns.Cast());
+        options.ReturningColumns = processColumns(returningColumns.Cast());
+    } else if (effectType == "TKqpUpdateRowsIndex") {
+        type = EEffectType::UpdateRowsIndex;
+
+        options.Columns = processColumns(columns.Cast());
+        options.ReturningColumns = processColumns(returningColumns.Cast());
+        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.Settings = processSettings(settings.Cast());
+    } else if (effectType == "TKqlDeleteRows") {
+        type = EEffectType::DeleteRows;
+
+        options.ReturningColumns = processColumns(returningColumns.Cast());
+        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.Settings = processSettings(settings.Cast());
+    } else if (effectType == "TKqlDeleteRowsIndex") {
+        type = EEffectType::DeleteRowsIndex;
+
+        options.ReturningColumns = processColumns(returningColumns.Cast());
+        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.Settings = processSettings(settings.Cast());
+    } else {
+        Y_ENSURE(false, "Unexpected table effects operation");
+    }
+
+    return MakeIntrusive<TOpTableEffect>(input, node->Pos(), opTableEffect.Table().Ptr(), type, options);
 }
 
 } // namespace NKikimr::Nkqp

@@ -41,14 +41,15 @@ bool IsSystemTablet(TTabletTypes::EType type) {
     case TTabletTypes::StatisticsAggregator:
     case TTabletTypes::GraphShard:
     case TTabletTypes::BackupController:
+    case TTabletTypes::DbsController:
         return true;
     // New tablet types are introduced by renaming one of these reserved
     // values. Keep them explicit so that such a change fails to compile here
     // until the new type is classified.
-    case TTabletTypes::Reserved46:
     case TTabletTypes::Reserved47:
     case TTabletTypes::Reserved48:
     case TTabletTypes::Reserved49:
+    case TTabletTypes::Reserved50:
         return false;
     default:
         return false;

@@ -10,6 +10,7 @@ SRCS(
     describe_operation_ut.cpp
     dlq_acl_ut.cpp
     schema_ops_ut.cpp
+    schema_operation_ut.cpp
     validation_ut.cpp
 )
 

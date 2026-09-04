@@ -381,4 +381,5 @@ message TFeatureFlags {
     // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
     // size-class slots. Reads of the stripe format work even when this flag is off.
     optional bool EnableVDiskHeapAllocator = 324 [default = false];
+    optional bool EnableCheckpointsCompression = 325 [default = false];
 }

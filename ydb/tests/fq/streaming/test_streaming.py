@@ -2083,17 +2083,25 @@ FROM `{table_name}`"""
 
         self.wait_completed_checkpoints(kikimr, query_name)
 
-        def validate_table(expected):
+        def validate_table(expected, allow_extra_rows=False):
             result_sets = kikimr.ydb_client.query(f"""
                 SELECT * FROM `{output_table}`
                 ORDER BY Value || ":" || CAST(Key AS String);
             """)
-            assert len(result_sets[0].rows) == len(expected)
-
-            for row, expected_value in zip(result_sets[0].rows, sorted(expected)):
-                value, key = expected_value.split(":")
-                assert value.startswith(row["Value"].decode("utf-8")), row["Value"].decode("utf-8") + " vs " + value
-                assert row["Key"] == int(key)
+            rows = result_sets[0].rows
+            if not allow_extra_rows:
+                assert len(rows) == len(expected)
+                for row, expected_value in zip(rows, sorted(expected)):
+                    value, key = expected_value.split(":")
+                    assert value.startswith(row["Value"].decode("utf-8")), row["Value"].decode("utf-8") + " vs " + value
+                    assert row["Key"] == int(key)
+            else:
+                for expected_value in sorted(expected):
+                    value, key = expected_value.split(":")
+                    assert any(
+                        value.startswith(row["Value"].decode("utf-8")) and row["Key"] == int(key)
+                        for row in rows
+                    ), f"expected {expected_value} in {rows}"
 
             result_sets = kikimr.ydb_client.query(f"""
                 DELETE FROM `{output_table}`;
@@ -2120,7 +2128,9 @@ FROM `{table_name}`"""
 
         assert sorted(self.read_stream(len(expected_data2), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data2)
         self.wait_completed_checkpoints(kikimr, query_name)
-        validate_table(expected_data2)
+        # After restart, records written before the query was stopped can be
+        # persisted while the expected delayed records are being validated.
+        validate_table(expected_data2, allow_extra_rows=True)
 
     @link_test_case("#47257")
     @pytest.mark.parametrize("local_topics", [True, False])

@@ -111,6 +111,11 @@ namespace NKikimr {
         }
 
         auto prevInfo = std::exchange(Info, std::move(info));
+        IsBlobDepotProxy = IsBlobDepotProxy || (Info && Info->BlobDepotId);
+        if (IsBlobDepotProxy && IsDormant) {
+            SetDormant(false);
+            ScheduleDeadlineCheck();
+        }
         if (Info) {
             if (Topology) {
                 Y_DEBUG_ABORT_UNLESS(Topology->EqualityCheck(Info->GetTopology()));
@@ -290,6 +295,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::Bootstrap() {
+        LastRequestActivity = TActivationContext::Monotonic();
         if (IsEjected) {
             YDB_LOG_NOTICE("Bootstrap -> StateEjected",
                 {"group", GroupId},
@@ -308,7 +314,7 @@ namespace NKikimr {
             StopGetBatchingEvent = static_cast<TEventHandle<TEvStopBatchingGetRequests>*>(
                     new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
             ApplyGroupInfo(std::exchange(Info, {}), std::exchange(NodeLayoutInfo, {}), std::exchange(StoragePoolCounters, {}));
-            CheckDeadlines();
+            ScheduleDeadlineCheck();
         }
     }
 
@@ -372,9 +378,11 @@ namespace NKikimr {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> overviewGroup = GetServiceCounters(
                     AppData()->Counters, "dsproxy_overview");
 
-            Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited));
+            Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited,
+                    IsDormant));
             BSProxyCtx.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
-            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId()));
+            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId(),
+                    IsDormant));
         }
     }
 
@@ -382,7 +390,7 @@ namespace NKikimr {
         YDB_LOG_DEBUG("RequestProxySessionsState",
             {"group", GroupId},
             {"marker", "DSP59"});
-        Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
+        Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr, IsDormant));
     }
 
 #define SELECT_CONTROL_BY_DEVICE_TYPE(prefix, info) \

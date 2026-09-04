@@ -144,9 +144,16 @@ public:
     TIntrusivePtr<TDsProxyNodeMon> NodeMon;
 
 protected:
+    static constexpr size_t PercentileTrackerFrameCount = 3;
+    using TResponseTimeTracker = NMonitoring::TPercentileTrackerLg<3, 4, PercentileTrackerFrameCount>;
+
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PercentileCounters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> ResponseGroup;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> StateGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IsDormant;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IsActive;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DormancyTransitions;
     ui64 GroupIdGen = Max<ui64>(); // group id:group gen
     std::atomic<bool> IsLimitedMon = ATOMIC_VAR_INIT(true);
 
@@ -160,23 +167,23 @@ protected:
 
 
     // log response time
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutResponseTime; // Used by whiteboard
+    TResponseTimeTracker PutResponseTime; // Used by whiteboard
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime256;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime512;
+    TResponseTimeTracker PutTabletLogResponseTime;
+    TResponseTimeTracker PutTabletLogResponseTime256;
+    TResponseTimeTracker PutTabletLogResponseTime512;
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutAsyncBlobResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutUserDataResponseTime;
+    TResponseTimeTracker PutAsyncBlobResponseTime;
+    TResponseTimeTracker PutUserDataResponseTime;
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> GetResponseTime; // Used by witheboard
+    TResponseTimeTracker GetResponseTime; // Used by witheboard
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> BlockResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> GetBlockResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> DiscoverResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime;
+    TResponseTimeTracker BlockResponseTime;
+    TResponseTimeTracker GetBlockResponseTime;
+    TResponseTimeTracker DiscoverResponseTime;
+    TResponseTimeTracker IndexRestoreGetResponseTime;
+    TResponseTimeTracker RangeResponseTime;
+    TResponseTimeTracker PatchResponseTime;
 
     // event counters
     TIntrusivePtr<::NMonitoring::TDynamicCounters> EventGroup;
@@ -298,7 +305,8 @@ public:
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& overviewCounters,
             const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            bool isLimitedMon);
+            bool isLimitedMon,
+            bool isDormant = false);
 
     bool GetGroupIdGen(ui32 *groupId, ui32 *groupGen) const;
 
@@ -393,6 +401,9 @@ public:
 
     void Update();
     void ThroughputUpdate();
+    void PrepareForDormancy();
+    void ResetThroughput();
+    void SetDormant(bool isDormant);
 };
 
 } // NKikimr

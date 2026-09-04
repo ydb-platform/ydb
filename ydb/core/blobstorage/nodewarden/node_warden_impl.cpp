@@ -412,6 +412,7 @@ void TNodeWarden::PassAway() {
     StopInvalidGroupProxy();
     TerminateBlobDepotS3Routers();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
+    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyInFlightLatencyAggregator, {}, nullptr, 0));
     return TActorBootstrapped::PassAway();
 }
 
@@ -446,6 +447,7 @@ void TNodeWarden::Bootstrap() {
     DsProxyNodeMon = new TDsProxyNodeMon(AppData()->Counters, true);
     DsProxyNodeMonActor = Register(CreateDsProxyNodeMon(DsProxyNodeMon));
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
+    DsProxyInFlightLatencyAggregator = Register(CreateDsProxyInFlightLatencyAggregator());
 
     CacheFileWriteError = GetServiceCounters(AppData()->Counters, "config")->GetCounter("CacheFileWriteError");
     CacheFileWriteError->Set(0);

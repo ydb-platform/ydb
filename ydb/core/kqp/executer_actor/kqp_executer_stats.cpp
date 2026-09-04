@@ -749,7 +749,7 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
         2. Stage does not produce any output, finish status and does not schedule continuation events from MKQL for a long time
         3. All stage sources has no any data extraction attempts for a long time
         4. Stage have input channels sets and for each channels set stage does not extract any data from it for a long time
-           (1, 2, 3, 4 => for correct program, at least one input channel set permanently empty and does not receive any ata)
+           (1, 2, 3, 4 => for correct program, at least one input channel set permanently empty and does not receive any data)
         5. All input stages for each input channels set are one of:
            - Finished for a long time
            - Waiting for sending data (has overflow buffer) for all output channels sets and sinks for a long time
@@ -772,7 +772,7 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
     */
 
     // Checking only CurrentWaitInputTimeUs may lead to false-positive detection due to missing:
-    // - Output producing with active input reading (retruns `Yield` + produce some data)
+    // - Output producing with active input reading (returns `Yield` + produce some data)
     // - Long spilling in MKQL node
     // - Reading sources / channels without producing data (e. g. GROUP BY HOP with long window)
     if (CurrentWaitInputTimeUs.MinValue < deadline || InputStages.empty() || IsFinished()) {

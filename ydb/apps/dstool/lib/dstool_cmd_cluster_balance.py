@@ -308,8 +308,8 @@ class BalancingStrategy(IBalancingStrategy):
             if pdisk_usage_w_donors[pdisk_to] + weight_to > pdisk_map[pdisk_to].ExpectedSlotCount:
                 common.print_if_not_quiet(
                     self.args,
-                    'NOTICE: Attempted to reassign vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usage %d and slot limit %d on latter',
-                    *pdisk_from, *pdisk_to, pdisk_usage_w_donors[pdisk_to], pdisk_map[pdisk_to].ExpectedSlotCount)
+                    'NOTICE: Attempted to reassign vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usage %d and slot limit %d on latter' %
+                    (*pdisk_from, *pdisk_to, pdisk_usage_w_donors[pdisk_to], pdisk_map[pdisk_to].ExpectedSlotCount), file=sys.stdout)
                 return False
 
             if not try_blocking:
@@ -685,7 +685,8 @@ def do(args):
             break
         common.print_if_not_quiet(args, f"\nStart balancing iteration {iteration_number}", file=sys.stdout)
         if groups_info.unhealthy_groups:
-            common.print_if_verbose(args, f'Skipping vdisks from unhealthy groups: {groups_info.unhealthy_groups}', file=sys.stdout)
+            common.print_if_not_quiet(args, f'Skipping vdisks from {len(groups_info.unhealthy_groups)} unhealthy groups', file=sys.stdout)
+            common.print_if_verbose(args, f'Unhealthy group ids: {", ".join(str(group_id) for group_id in sorted(groups_info.unhealthy_groups))}', file=sys.stdout)
 
         strategy = strategy_factory(args, cluster_info, groups_info)
         balancing_result = balance_iteration(args, strategy, iteration_number)

@@ -480,10 +480,9 @@ YDB_LOG_ERROR_CTX(env, "Unable to open file",
 
 Формируемое описание события выглядит так (параметры сообщения перечисляются в алфавитном порядке):
 
-```
-Unable to open file (sourceFileName = ..., errorCode = ...)
-```
-
+``
+Unable to open file (errorCode = ..., sourceFileName = ...)
+``
 
 {% endcut %}
 

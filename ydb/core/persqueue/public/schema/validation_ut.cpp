@@ -1,5 +1,6 @@
 #include "common.h"
 #include "check_dlq_topics.h"
+#include "schema_ut_helpers.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -12,6 +13,37 @@
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NPQ::NSchema {
+
+namespace {
+
+class TRunFnActor: public NActors::TActorBootstrapped<TRunFnActor> {
+public:
+    TRunFnActor(TActorId edge, std::function<void()> fn)
+        : Edge(edge)
+        , Fn(std::move(fn))
+    {
+    }
+
+    void Bootstrap() {
+        Fn();
+        Send(Edge, new NActors::TEvents::TEvWakeup());
+        PassAway();
+    }
+
+private:
+    const TActorId Edge;
+    std::function<void()> Fn;
+};
+
+template <typename TFn>
+void RunInActor(NActors::TTestActorRuntime& runtime, TFn&& fn) {
+    const auto edge = runtime.AllocateEdgeActor();
+    runtime.Register(new TRunFnActor(edge, std::function<void()>(std::forward<TFn>(fn))));
+    auto ev = runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(ev);
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(SchemaValidation) {
 
@@ -400,37 +432,37 @@ Y_UNIT_TEST(ValidateConfigWriteSpeedAndBurst) {
         return config;
     };
 
-    UNIT_ASSERT(ValidateConfig(makeBase(), EOperation::Create));
+    RunInActor(runtime, [&] {
+        UNIT_ASSERT(ValidateConfig(makeBase(), EOperation::Create));
 
-    {
-        auto config = makeBase();
-        config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(2_KB);
-        auto r = ValidateConfig(config, EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "write_speed");
-    }
-    {
-        auto config = makeBase();
-        // burst > max(speed*2, 1MB)
-        config.MutablePartitionConfig()->SetBurstSize(3_MB);
-        auto r = ValidateConfig(config, EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Invalid write burst");
-    }
-    {
-        auto config = makeBase();
-        config.MutablePartitionConfig()->SetLifetimeSeconds(60); // below retention window
-        auto r = ValidateConfig(config, EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "retention hours");
-    }
-    {
-        // Empty ValidWriteSpeedLimits means any speed is accepted (inserted into valid set).
-        pq.ClearValidWriteSpeedLimitsKbPerSec();
-        auto config = makeBase();
-        config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(12345);
-        UNIT_ASSERT(ValidateConfig(config, EOperation::Create));
-    }
+        {
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(2_KB);
+            auto r = ValidateConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "write_speed");
+        }
+        {
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetBurstSize(3_MB);
+            auto r = ValidateConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Invalid write burst");
+        }
+        {
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetLifetimeSeconds(60);
+            auto r = ValidateConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "retention hours");
+        }
+        {
+            pq.ClearValidWriteSpeedLimitsKbPerSec();
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(12345);
+            UNIT_ASSERT(ValidateConfig(config, EOperation::Create));
+        }
+    });
 }
 
 Y_UNIT_TEST(ValidateConfigMlpAndStorageIncompatible) {
@@ -440,18 +472,20 @@ Y_UNIT_TEST(ValidateConfigMlpAndStorageIncompatible) {
     pq.ClearValidWriteSpeedLimitsKbPerSec();
     pq.ClearValidRetentionLimits();
 
-    NKikimrPQ::TPQTabletConfig config;
-    config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(1_MB);
-    config.MutablePartitionConfig()->SetBurstSize(1_MB);
-    config.MutablePartitionConfig()->SetLifetimeSeconds(3600);
-    config.MutablePartitionConfig()->SetStorageLimitBytes(10_MB);
-    auto* consumer = config.AddConsumers();
-    consumer->SetName("shared");
-    consumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+    RunInActor(runtime, [&] {
+        NKikimrPQ::TPQTabletConfig config;
+        config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(1_MB);
+        config.MutablePartitionConfig()->SetBurstSize(1_MB);
+        config.MutablePartitionConfig()->SetLifetimeSeconds(3600);
+        config.MutablePartitionConfig()->SetStorageLimitBytes(10_MB);
+        auto* consumer = config.AddConsumers();
+        consumer->SetName("shared");
+        consumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 
-    auto r = ValidateConfig(config, EOperation::Create);
-    UNIT_ASSERT(!r);
-    UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "shared consumers");
+        auto r = ValidateConfig(config, EOperation::Create);
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "shared consumers");
+    });
 }
 
 Y_UNIT_TEST(ValidateConsumersDuplicatesAndLimits) {
@@ -462,111 +496,115 @@ Y_UNIT_TEST(ValidateConsumersDuplicatesAndLimits) {
     pq.MutableDefaultClientServiceType()->SetMaxReadRulesCountPerTopic(1);
     pq.ClearClientServiceType();
 
-    {
-        NKikimrPQ::TPQTabletConfig config;
-        auto* a = config.AddConsumers();
-        a->SetName("c1");
-        a->SetServiceType("data-streams");
-        auto* b = config.AddConsumers();
-        b->SetName("c1");
-        b->SetServiceType("data-streams");
-        auto r = ValidateConsumersConfig(config, EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Duplicate consumer");
-    }
-    {
-        NKikimrPQ::TPQTabletConfig config;
-        auto* a = config.AddConsumers();
-        a->SetName("c1");
-        a->SetServiceType("data-streams");
-        auto* b = config.AddConsumers();
-        b->SetName("c1");
-        b->SetServiceType("data-streams");
-        auto r = ValidateConsumersConfig(config, EOperation::Alter);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::ALREADY_EXISTS);
-    }
-    {
-        NKikimrPQ::TPQTabletConfig config;
-        auto* a = config.AddConsumers();
-        a->SetName("c1");
-        a->SetServiceType("data-streams");
-        a->SetImportant(true);
-        a->SetAvailabilityPeriodMs(1000);
-        auto r = ValidateConsumersConfig(config, EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "mutually exclusive");
-    }
-    {
-        NKikimrPQ::TPQTabletConfig config;
-        auto* a = config.AddConsumers();
-        a->SetName("c1");
-        a->SetServiceType("data-streams");
-        auto* b = config.AddConsumers();
-        b->SetName("c2");
-        b->SetServiceType("data-streams");
-        auto r = ValidateConsumersConfig(config, EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "service type");
-    }
-    {
-        NKikimrPQ::TPQTabletConfig config;
-        config.MutableCodecs()->AddIds(0); // RAW
-        auto* a = config.AddConsumers();
-        a->SetName("c1");
-        a->SetServiceType("data-streams");
-        a->MutableCodec()->AddIds(1); // GZIP only — missing topic RAW
-        auto r = ValidateConsumersConfig(config, EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "unsupported codec");
-    }
+    RunInActor(runtime, [&] {
+        {
+            NKikimrPQ::TPQTabletConfig config;
+            auto* a = config.AddConsumers();
+            a->SetName("c1");
+            a->SetServiceType("data-streams");
+            auto* b = config.AddConsumers();
+            b->SetName("c1");
+            b->SetServiceType("data-streams");
+            auto r = ValidateConsumersConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Duplicate consumer");
+        }
+        {
+            NKikimrPQ::TPQTabletConfig config;
+            auto* a = config.AddConsumers();
+            a->SetName("c1");
+            a->SetServiceType("data-streams");
+            auto* b = config.AddConsumers();
+            b->SetName("c1");
+            b->SetServiceType("data-streams");
+            auto r = ValidateConsumersConfig(config, EOperation::Alter);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::ALREADY_EXISTS);
+        }
+        {
+            NKikimrPQ::TPQTabletConfig config;
+            auto* a = config.AddConsumers();
+            a->SetName("c1");
+            a->SetServiceType("data-streams");
+            a->SetImportant(true);
+            a->SetAvailabilityPeriodMs(1000);
+            auto r = ValidateConsumersConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "mutually exclusive");
+        }
+        {
+            NKikimrPQ::TPQTabletConfig config;
+            auto* a = config.AddConsumers();
+            a->SetName("c1");
+            a->SetServiceType("data-streams");
+            auto* b = config.AddConsumers();
+            b->SetName("c2");
+            b->SetServiceType("data-streams");
+            auto r = ValidateConsumersConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "service type");
+        }
+        {
+            NKikimrPQ::TPQTabletConfig config;
+            config.MutableCodecs()->AddIds(0);
+            auto* a = config.AddConsumers();
+            a->SetName("c1");
+            a->SetServiceType("data-streams");
+            a->MutableCodec()->AddIds(1);
+            auto r = ValidateConsumersConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "unsupported codec");
+        }
+    });
 }
 
 Y_UNIT_TEST(FillMeteringModeBranches) {
     NActors::TTestBasicRuntime runtime(1, false);
     runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
-    {
-        runtime.GetAppData().PQConfig.MutableBillingMeteringConfig()->SetEnabled(true);
-        NKikimrPQ::TPQTabletConfig config;
-        UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_UNSPECIFIED, EOperation::Create));
-        UNIT_ASSERT_VALUES_EQUAL(
-            NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(config.GetMeteringMode()),
-            NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(
-                NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS));
+    RunInActor(runtime, [&] {
+        {
+            runtime.GetAppData().PQConfig.MutableBillingMeteringConfig()->SetEnabled(true);
+            NKikimrPQ::TPQTabletConfig config;
+            UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_UNSPECIFIED, EOperation::Create));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(config.GetMeteringMode()),
+                NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(
+                    NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS));
 
-        config.ClearMeteringMode();
-        UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_UNSPECIFIED, EOperation::Alter));
-        UNIT_ASSERT(!config.HasMeteringMode());
+            config.ClearMeteringMode();
+            UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_UNSPECIFIED, EOperation::Alter));
+            UNIT_ASSERT(!config.HasMeteringMode());
 
-        UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_REQUEST_UNITS, EOperation::Alter));
-        UNIT_ASSERT_VALUES_EQUAL(
-            NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(config.GetMeteringMode()),
-            NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(
-                NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS));
+            UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_REQUEST_UNITS, EOperation::Alter));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(config.GetMeteringMode()),
+                NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(
+                    NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS));
 
-        UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_RESERVED_CAPACITY, EOperation::Alter));
-        UNIT_ASSERT_VALUES_EQUAL(
-            NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(config.GetMeteringMode()),
-            NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(
-                NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY));
+            UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_RESERVED_CAPACITY, EOperation::Alter));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(config.GetMeteringMode()),
+                NKikimrPQ::TPQTabletConfig::EMeteringMode_Name(
+                    NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY));
 
-        auto r = FillMeteringMode(
-            config,
-            static_cast<Ydb::Topic::MeteringMode>(999),
-            EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Unknown metering mode");
-    }
-    {
-        runtime.GetAppData().PQConfig.MutableBillingMeteringConfig()->SetEnabled(false);
-        NKikimrPQ::TPQTabletConfig config;
-        UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_UNSPECIFIED, EOperation::Create));
-        auto r = FillMeteringMode(config, Ydb::Topic::METERING_MODE_REQUEST_UNITS, EOperation::Create);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
-    }
+            auto r = FillMeteringMode(
+                config,
+                static_cast<Ydb::Topic::MeteringMode>(999),
+                EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Unknown metering mode");
+        }
+        {
+            runtime.GetAppData().PQConfig.MutableBillingMeteringConfig()->SetEnabled(false);
+            NKikimrPQ::TPQTabletConfig config;
+            UNIT_ASSERT(FillMeteringMode(config, Ydb::Topic::METERING_MODE_UNSPECIFIED, EOperation::Create));
+            auto r = FillMeteringMode(config, Ydb::Topic::METERING_MODE_REQUEST_UNITS, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        }
+    });
 }
 
 Y_UNIT_TEST(ProcessTopicAttributesAdvancedMonitoringAndId) {
@@ -574,55 +612,55 @@ Y_UNIT_TEST(ProcessTopicAttributesAdvancedMonitoringAndId) {
     runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
     runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
 
-    NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings monitoring;
+    RunInActor(runtime, [&] {
+        NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings monitoring;
 
-    {
-        // First-class citizen rejects _advanced_monitoring.
-        google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
-        attrs["_advanced_monitoring"] = "{}";
-        NKikimrSchemeOp::TPersQueueGroupDescription config;
-        auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/true, monitoring);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "not supported in non-federation");
-    }
-    {
-        google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
-        attrs["_advanced_monitoring"] = "not-json";
-        NKikimrSchemeOp::TPersQueueGroupDescription config;
-        auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/false, monitoring);
-        UNIT_ASSERT(!r);
-    }
-    {
-        google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
-        attrs["_id"] = "abc";
-        NKikimrSchemeOp::TPersQueueGroupDescription config;
-        auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/false, monitoring);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "not a valid positive integer");
-    }
-    {
-        google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
-        attrs["_id"] = "0";
-        NKikimrSchemeOp::TPersQueueGroupDescription config;
-        auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/false, monitoring);
-        UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "greater than 0");
-    }
-    {
-        google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
-        attrs["_id"] = "123";
-        NKikimrSchemeOp::TPersQueueGroupDescription config;
-        UNIT_ASSERT(ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/false, monitoring));
-        UNIT_ASSERT_VALUES_EQUAL(config.GetPQTabletConfig().GetId().GetId(), 123u);
-    }
-    {
-        // FCC ignores _id even with feature flag.
-        google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
-        attrs["_id"] = "123";
-        NKikimrSchemeOp::TPersQueueGroupDescription config;
-        UNIT_ASSERT(ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/true, monitoring));
-        UNIT_ASSERT(!config.GetPQTabletConfig().HasId());
-    }
+        {
+            google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
+            attrs["_advanced_monitoring"] = "{}";
+            NKikimrSchemeOp::TPersQueueGroupDescription config;
+            auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/true, monitoring);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "not supported in non-federation");
+        }
+        {
+            google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
+            attrs["_advanced_monitoring"] = "not-json";
+            NKikimrSchemeOp::TPersQueueGroupDescription config;
+            auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/false, monitoring);
+            UNIT_ASSERT(!r);
+        }
+        {
+            google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
+            attrs["_id"] = "abc";
+            NKikimrSchemeOp::TPersQueueGroupDescription config;
+            auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/false, monitoring);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "not a valid positive integer");
+        }
+        {
+            google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
+            attrs["_id"] = "0";
+            NKikimrSchemeOp::TPersQueueGroupDescription config;
+            auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/false, monitoring);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "greater than 0");
+        }
+        {
+            google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
+            attrs["_id"] = "123";
+            NKikimrSchemeOp::TPersQueueGroupDescription config;
+            UNIT_ASSERT(ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/false, monitoring));
+            UNIT_ASSERT_VALUES_EQUAL(config.GetPQTabletConfig().GetId().GetId(), 123u);
+        }
+        {
+            google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
+            attrs["_id"] = "123";
+            NKikimrSchemeOp::TPersQueueGroupDescription config;
+            UNIT_ASSERT(ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/true, monitoring));
+            UNIT_ASSERT(!config.GetPQTabletConfig().HasId());
+        }
+    });
 }
 
 Y_UNIT_TEST(AddConsumerServiceTypeAndCodecs) {
@@ -639,6 +677,7 @@ Y_UNIT_TEST(AddConsumerServiceTypeAndCodecs) {
     st->SetMaxReadRulesCountPerTopic(2);
     st->AddPasswordHashes("5f4dcc3b5aa765d61d8327deb882cf99"); // md5("password")
 
+    RunInActor(runtime, [&] {
     auto types = GetSupportedClientServiceTypes();
     UNIT_ASSERT(types.contains("data-streams"));
     UNIT_ASSERT(types.contains("secure"));
@@ -754,6 +793,99 @@ Y_UNIT_TEST(AddConsumerServiceTypeAndCodecs) {
         UNIT_ASSERT(!r);
         UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "can't be negative");
     }
+    });
+}
+
+Y_UNIT_TEST(ProcessTopicAttributesInvalidValues) {
+    NActors::TTestBasicRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+    RunInActor(runtime, [&] {
+        auto expectBad = [&](const TString& key, const TString& value, const TString& needle) {
+            NKikimrSchemeOp::TPersQueueGroupDescription config;
+            config.MutablePQTabletConfig()->MutablePartitionConfig();
+            google::protobuf::Map<TProtoStringType, TProtoStringType> attrs;
+            attrs[key] = value;
+            NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings monitoring;
+            auto r = ProcessTopicAttributes(attrs, &config, EOperation::Create, /*fcc=*/true, monitoring);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), needle);
+        };
+
+        expectBad("_allow_unauthenticated_read", "not-bool", "not bool");
+        expectBad("_allow_unauthenticated_write", "xx", "not bool");
+        expectBad("_abc_id", "NaN", "not integer");
+        expectBad("_max_partition_storage_size", "-5", "can't be negative");
+        expectBad("_max_partition_storage_size", "oops", "not ui64");
+        expectBad("_message_group_seqno_retention_period_ms", "-1", "can't be negative");
+        expectBad(
+            "_message_group_seqno_retention_period_ms",
+            ToString(DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS + 1),
+            "must be less than default limit");
+        expectBad("_message_group_seqno_retention_period_ms", "bad", "not ui64");
+        expectBad("_max_partition_message_groups_seqno_stored", "-3", "can't be negative");
+        expectBad("_max_partition_message_groups_seqno_stored", "x", "not ui64");
+        expectBad("_timestamp_type", "WeirdTime", "incorrect value");
+        expectBad("_advanced_monitoring", "{}", "not supported in non-federation");
+    });
+}
+
+Y_UNIT_TEST(ValidateLocalClusterBranches) {
+    NActors::TTestBasicRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+    RunInActor(runtime, [&] {
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+
+        auto clusters = MakeIntrusive<NPQ::NClusterTracker::TClustersList>();
+        clusters->Clusters.push_back({.Name = "dc1", .IsLocal = true});
+        clusters->LocalCluster = &clusters->Clusters.front();
+
+        {
+            NKikimrPQ::TPQTabletConfig config;
+            config.SetLocalDC(true);
+            config.SetDC("dc2");
+            auto r = ValidateLocalCluster(clusters, config);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Local cluster is not correct");
+        }
+        {
+            NKikimrPQ::TPQTabletConfig config;
+            config.SetLocalDC(false);
+            config.SetDC("unknown");
+            auto r = ValidateLocalCluster(clusters, config);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Unknown cluster");
+        }
+        {
+            NKikimrPQ::TPQTabletConfig config;
+            config.SetLocalDC(true);
+            config.SetDC("dc1");
+            UNIT_ASSERT(ValidateLocalCluster(clusters, config));
+        }
+
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+        NKikimrPQ::TPQTabletConfig config;
+        config.SetDC("whatever");
+        UNIT_ASSERT(ValidateLocalCluster(clusters, config));
+    });
+}
+
+Y_UNIT_TEST(ValidateConsumersTooMany) {
+    NActors::TTestBasicRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+    RunInActor(runtime, [&] {
+        NKikimrPQ::TPQTabletConfig config;
+        for (int i = 0; i < MAX_READ_RULES_COUNT + 1; ++i) {
+            auto* c = config.AddConsumers();
+            c->SetName(TStringBuilder() << "c" << i);
+            c->SetServiceType("data-streams");
+        }
+        auto r = ValidateConsumersConfig(config, EOperation::Create);
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "read rules count cannot be more than");
+    });
 }
 
 } // Y_UNIT_TEST_SUITE(SchemaValidation)

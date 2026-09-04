@@ -817,11 +817,13 @@ Y_UNIT_TEST(AlterAutoPartitioningScaleUpAndDisable) {
     }
 
     {
+        // SchemeShard rejects flipping an active strategy to DISABLED via alter;
+        // PAUSED is the supported "stop scaling" path.
         Ydb::Topic::AlterTopicRequest request;
         request.set_path(path);
         auto* alterAuto = request.mutable_alter_partitioning_settings()
             ->mutable_alter_auto_partitioning_settings();
-        alterAuto->set_set_strategy(Ydb::Topic::AUTO_PARTITIONING_STRATEGY_DISABLED);
+        alterAuto->set_set_strategy(Ydb::Topic::AUTO_PARTITIONING_STRATEGY_PAUSED);
         AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
     }
 
@@ -886,6 +888,203 @@ Y_UNIT_TEST(DropIfExistsSucceedsForMissing) {
     auto setup = CreateSetup("CoreDropIfExists");
     auto& runtime = setup->GetRuntime();
     AssertStatus(DoDrop(runtime, "/Root/missing_drop_if", "/Root", /*ifExists=*/true), Ydb::StatusIds::SUCCESS);
+}
+
+Y_UNIT_TEST(AlterRejectsNegativeSpeedsAndHugePartitions) {
+    auto setup = CreateSetup("CoreAlterNegSpeeds");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_alter_neg_speeds";
+    CreateTopic(runtime, path);
+
+    auto expectBad = [&](auto&& mutate, const TString& needle) {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        mutate(request);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, needle);
+    };
+
+    expectBad([](auto& r) {
+        r.mutable_alter_partitioning_settings()->set_set_min_active_partitions(
+            static_cast<i64>(Max<ui32>()));
+    }, "less than");
+
+    expectBad([](auto& r) {
+        r.set_set_partition_total_read_speed_bytes_per_second(-1);
+    }, "partition_total_read_speed_bytes");
+
+    expectBad([](auto& r) {
+        r.set_set_partition_total_read_speed_messages_per_second(-1);
+    }, "partition_total_read_speed_messages");
+
+    expectBad([](auto& r) {
+        r.set_set_partition_read_without_consumer_speed_bytes_per_second(-1);
+    }, "partition_read_without_consumer_speed_bytes");
+
+    expectBad([](auto& r) {
+        r.set_set_partition_read_without_consumer_speed_messages_per_second(-1);
+    }, "partition_read_without_consumer_speed_messages");
+
+    expectBad([](auto& r) {
+        r.set_set_partition_write_speed_messages_per_second(
+            static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND) + 1);
+    }, "greater than");
+
+    expectBad([](auto& r) {
+        r.set_set_partition_write_burst_messages(
+            static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND) + 1);
+    }, "greater than");
+
+    expectBad([](auto& r) {
+        r.mutable_set_supported_codecs()->add_codecs(static_cast<Ydb::Topic::Codec>(0));
+    }, "Unknown codec");
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.set_set_content_based_deduplication(true);
+        request.set_set_partition_total_read_speed_bytes_per_second(1111);
+        request.set_set_partition_total_read_speed_messages_per_second(22);
+        request.set_set_partition_read_without_consumer_speed_bytes_per_second(333);
+        request.set_set_partition_read_without_consumer_speed_messages_per_second(4);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT(config.GetContentBasedDeduplication());
+        auto part = config.GetPartitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(part.GetReadSpeedInBytesPerSecond(), 1111u);
+        UNIT_ASSERT(NPQ::GetReadQuota(config, NPQ::CLIENTID_WITHOUT_CONSUMER));
+    }
+}
+
+Y_UNIT_TEST(AlterDlqMoveActionRequiresExistingMove) {
+    auto setup = CreateSetup("CoreAlterDlqMoveReq");
+    auto& runtime = setup->GetRuntime();
+    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest("/Root/dlq_move_req")), Ydb::StatusIds::SUCCESS);
+    const TString path = "/Root/topic_dlq_move_req";
+
+    {
+        auto request = MakeCreateTopicRequest(path);
+        request.clear_consumers();
+        auto* consumer = request.add_consumers();
+        consumer->set_name("shared_c");
+        auto* type = consumer->mutable_shared_consumer_type();
+        type->mutable_dead_letter_policy()->set_enabled(true);
+        type->mutable_dead_letter_policy()->mutable_delete_action();
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alter = request.add_alter_consumers();
+        alter->set_name("shared_c");
+        auto* policy = alter->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
+        policy->mutable_alter_move_action()->set_set_dead_letter_queue("dlq_move_req");
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, "Cannot alter move action");
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alter = request.add_alter_consumers();
+        alter->set_name("shared_c");
+        auto* policy = alter->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
+        policy->mutable_set_move_action()->set_dead_letter_queue("dlq_move_req");
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alter = request.add_alter_consumers();
+        alter->set_name("shared_c");
+        auto* policy = alter->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
+        policy->mutable_alter_move_action()->set_set_dead_letter_queue("");
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, "cannot be empty");
+    }
+}
+
+Y_UNIT_TEST(AlterEnableAutopartitioningAndServiceConsumerGuards) {
+    auto setup = CreateSetup("CoreAlterEnableAuto");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_enable_auto";
+
+    {
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_cleanup_policy"] = "compact";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alterAuto = request.mutable_alter_partitioning_settings()
+            ->mutable_alter_auto_partitioning_settings();
+        alterAuto->set_set_strategy(Ydb::Topic::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(4);
+        alterAuto->mutable_set_partition_write_speed()->set_set_up_utilization_percent(70);
+        alterAuto->mutable_set_partition_write_speed()->set_set_down_utilization_percent(20);
+        alterAuto->mutable_set_partition_write_speed()->mutable_set_stabilization_window()->set_seconds(30);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(-1);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, "non-negative");
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alterAuto = request.mutable_alter_partitioning_settings()
+            ->mutable_alter_auto_partitioning_settings();
+        alterAuto->set_set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(999));
+        auto result = DoAlter(runtime, request);
+        UNIT_ASSERT(result);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.add_drop_consumers(TString{NPQ::CLIENTID_COMPACTION_CONSUMER});
+        AssertStatus(
+            DoAlter(runtime, request),
+            Ydb::StatusIds::BAD_REQUEST,
+            "Cannot drop service consumer");
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alter = request.add_alter_consumers();
+        alter->set_name(TString{NPQ::CLIENTID_COMPACTION_CONSUMER});
+        alter->set_set_important(true);
+        AssertStatus(
+            DoAlter(runtime, request),
+            Ydb::StatusIds::BAD_REQUEST,
+            "Cannot alter service consumer");
+    }
+}
+
+Y_UNIT_TEST(AlterIfExistsMissingIsSuccess) {
+    auto setup = CreateSetup("CoreAlterIfExists");
+    auto& runtime = setup->GetRuntime();
+    Ydb::Topic::AlterTopicRequest request;
+    request.set_path("/Root/missing_alter_if_exists");
+    request.set_set_retention_storage_mb(1);
+    AssertStatus(
+        DoAlter(runtime, request, "/Root", /*prepareOnly=*/false, /*ifExists=*/true),
+        Ydb::StatusIds::SUCCESS);
+}
+
+Y_UNIT_TEST(AlterMissingWithoutIfExistsIsSchemeError) {
+    auto setup = CreateSetup("CoreAlterMissing");
+    auto& runtime = setup->GetRuntime();
+    Ydb::Topic::AlterTopicRequest request;
+    request.set_path("/Root/missing_alter_strict");
+    request.set_set_retention_storage_mb(1);
+    AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SCHEME_ERROR);
 }
 
 } // Y_UNIT_TEST_SUITE(SchemaOps)

@@ -218,6 +218,23 @@ Y_UNIT_TEST(ExecInProgressDeliveryProblemExhaustsRetries) {
     UNIT_ASSERT_GT(env.PipeStats.DeliveryProblems, 10u);
 }
 
+Y_UNIT_TEST(ProxyShardNotAvailableRetriesThenSucceeds) {
+    TSchemaOpEnv env;
+    const size_t proposesBefore = env.ProposeCount;
+    env.SendStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);
+
+    NActors::TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return env.ProposeCount > proposesBefore;
+    };
+    env.Runtime.DispatchEvents(options, TDuration::Seconds(5));
+    UNIT_ASSERT_GT(env.ProposeCount, proposesBefore);
+
+    env.SendStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+    auto response = env.GrabResponse();
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SUCCESS);
+}
+
 } // Y_UNIT_TEST_SUITE(SchemaOperationActor)
 
 } // namespace NKikimr::NPQ::NSchema

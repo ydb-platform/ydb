@@ -621,6 +621,13 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return false;
                 }
                 buildCursor = 0;
+            } else if constexpr (SemiOrOnlyJoin(Join.Kind) && !PreservedRowsInBuildTable()) {
+                found = table.LookupAny(probeRow, [&](TSingleTuple tableMatch) {
+                    if constexpr (HasFilter) {
+                        return filter->PairPasses(tableMatch);
+                    }
+                    return true;
+                });
             } else {
                 table.Lookup(probeRow, onMatch);
             }

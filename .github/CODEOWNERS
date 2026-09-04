@@ -1,4 +1,4 @@
-* @ydb-platform/ReleaseApprovers
+* @ydb-platform/NbsReleaseApprovers
 /.github @ydb-platform/ci
 /.github/workflows/docs_* @ydb-platform/docs
 /.github/workflows/ydbdoc-* @ydb-platform/docs     

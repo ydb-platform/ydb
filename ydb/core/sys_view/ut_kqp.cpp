@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/query_metrics_limits.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
@@ -2653,13 +2654,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
         UNIT_ASSERT_GE(count, 2);
     }
 
-    Y_UNIT_TEST(QueryMetricsOneHourCandidateBeyondMinuteTop) {
+    Y_UNIT_TEST(QueryMetricsOneHourRespectsCollectedCount) {
         TTestEnv env(1, 2, {.EnableSVP = true});
         CreateTenant(env, "Tenant1", true, /* nodesCount */ 1);
 
         const TString database = "/Root/Tenant1";
         const ui32 nodeIdx = env.GetTenants().List(database).front();
-        constexpr ui64 candidateCount = 257;
+        constexpr ui64 candidateCount = NQueryMetricsLimits::CollectedCount + 1;
+        constexpr ui64 excludedHash = candidateCount;
         constexpr ui64 cpuTimeUs = 1'000'000'000;
 
         for (ui64 hash = 1; hash <= candidateCount; ++hash) {
@@ -2673,25 +2675,33 @@ Y_UNIT_TEST_SUITE(SystemView) {
             .SetDatabase(database));
         NQuery::TQueryClient client(driver);
 
-        WaitFor(TDuration::Minutes(1), "rank 257 in hour metrics", [&](TString& error) {
+        WaitFor(TDuration::Minutes(1), "first collected query in hour metrics", [&](TString& error) {
             const ui64 rows = ReadUint64(client, R"(
                 SELECT COUNT(*)
                 FROM `.sys/query_metrics_one_hour`
-                WHERE QueryText = 'synthetic-rank-257';
+                WHERE QueryText = 'synthetic-rank-1';
             )");
-            error = TStringBuilder() << "hour rows for rank 257 = " << rows;
+            error = TStringBuilder() << "hour rows for rank 1 = " << rows;
             return rows == 1;
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, R"(
-            SELECT COUNT(*)
-            FROM `.sys/query_metrics_one_minute`
-            WHERE QueryText = 'synthetic-rank-257';
-        )"), 0);
+        const TString excludedText = TStringBuilder() << "synthetic-rank-" << excludedHash;
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, Sprintf(R"(
+                SELECT COUNT(*)
+                FROM `.sys/query_metrics_one_minute`
+                WHERE QueryText = '%s';
+            )", excludedText.c_str())), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUint64(client, Sprintf(R"(
+                SELECT COUNT(*)
+                FROM `.sys/query_metrics_one_hour`
+                WHERE QueryText = '%s';
+            )", excludedText.c_str())), 0);
         UNIT_ASSERT_LE(ReadUint64(client,
-            "SELECT COUNT(*) FROM `.sys/query_metrics_one_minute`;"), 256);
+            "SELECT COUNT(*) FROM `.sys/query_metrics_one_minute`;"),
+            NQueryMetricsLimits::OneMinuteResultCount);
         UNIT_ASSERT_LE(ReadUint64(client,
-            "SELECT COUNT(*) FROM `.sys/query_metrics_one_hour`;"), 1024);
+            "SELECT COUNT(*) FROM `.sys/query_metrics_one_hour`;"),
+            NQueryMetricsLimits::OneHourResultCount);
     }
 
     Y_UNIT_TEST(QueryMetricsOneHourAggregate) {

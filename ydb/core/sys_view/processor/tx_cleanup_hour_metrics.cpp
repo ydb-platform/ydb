@@ -5,8 +5,6 @@ namespace NKikimr {
 namespace NSysView {
 
 struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
-    static constexpr size_t BatchSize = 512;
-
     bool More = false;
     size_t Deleted = 0;
     ui64 SizeEvictedBuckets = 0;
@@ -42,7 +40,7 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
                 rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
             db.Table<Schema::IntervalMetricsOneHour>().Key(hourEndUs, queryHash).Delete();
 
-            if (++Deleted == BatchSize) {
+            if (++Deleted == NQueryMetricsLimits::OneHourCleanupBatchSize) {
                 More = true;
                 break;
             }
@@ -52,12 +50,14 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
             }
         }
 
-        if (Deleted < BatchSize && NewEvictBeforeHourEndUs) {
+        if (Deleted < NQueryMetricsLimits::OneHourCleanupBatchSize
+            && NewEvictBeforeHourEndUs)
+        {
             TQueryMetricsOneHourCleanupResult cleanup;
             if (!CleanupQueryMetricsOneHour(
                     db,
                     NewEvictBeforeHourEndUs,
-                    BatchSize - Deleted,
+                    NQueryMetricsLimits::OneHourCleanupBatchSize - Deleted,
                     cleanup))
             {
                 return false;

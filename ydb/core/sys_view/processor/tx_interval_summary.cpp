@@ -39,7 +39,7 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
                 NIceDb::TUpdate<Schema::IntervalSummaries::NodeId>(nodeId));
 
         } else {
-            if (Self->ByCpu.size() == DistinctQueriesLimit) {
+            if (Self->ByCpu.size() == NQueryMetricsLimits::ProcessorCandidateCount) {
                 auto it = Self->ByCpu.begin();
                 if (it->first >= cpu) {
                     return;

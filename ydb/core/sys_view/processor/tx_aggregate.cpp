@@ -21,9 +21,10 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
         std::sort(candidates.begin(), candidates.end(), Self->QueryMetricsRankCompare);
 
         THashVector selectedHashes;
-        selectedHashes.reserve(std::min(candidates.size(), Self->MetricsFetchLimit));
+        selectedHashes.reserve(std::min(
+            candidates.size(), NQueryMetricsLimits::MetricsFetchCount));
         for (const auto& [_, queryHash] : candidates) {
-            if (selectedHashes.size() == Self->MetricsFetchLimit) {
+            if (selectedHashes.size() == NQueryMetricsLimits::MetricsFetchCount) {
                 break;
             }
             selectedHashes.emplace_back(queryHash);
@@ -38,7 +39,10 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
             selectedHashes.begin(), selectedHashes.end());
 
         std::unordered_set<TQueryHash> result;
-        for (size_t i = 0; i < selectedHashes.size() && i < Self->PublicMinuteLimit; ++i) {
+        for (size_t i = 0;
+            i < selectedHashes.size() && i < NQueryMetricsLimits::OneMinuteResultCount;
+            ++i)
+        {
             result.insert(selectedHashes[i]);
         }
 
@@ -69,7 +73,10 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
             ++persisted;
         }
 
-        for (size_t i = 0; i < prospectiveHourTop.size() && i < Self->PublicHourLimit; ++i) {
+        for (size_t i = 0;
+            i < prospectiveHourTop.size() && i < NQueryMetricsLimits::OneHourResultCount;
+            ++i)
+        {
             const auto queryHash = prospectiveHourTop[i].second;
             if (selectedSet.contains(queryHash) && !knownHourTexts.contains(queryHash)) {
                 result.insert(queryHash);

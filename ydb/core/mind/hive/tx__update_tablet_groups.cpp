@@ -195,6 +195,11 @@ public:
             }
 
             if (!changed) {
+                if (tablet->ConfirmedStorageVersion == Max<ui32>()) {
+                    tablet->ConfirmedStorageVersion = tabletStorageInfo->Version;
+                    db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ConfirmedStorageVersion>(
+                        tablet->ConfirmedStorageVersion);
+                }
                 ++tabletStorageInfo->Version;
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::TabletStorageVersion>(tabletStorageInfo->Version);
             }
@@ -307,6 +312,11 @@ public:
 
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
         tablet->State = newTabletState;
+        if (changed && newTabletState == ETabletState::ReadyToWork) {
+            tablet->ConfirmedStorageVersion = tabletStorageInfo->Version;
+            db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ConfirmedStorageVersion>(
+                tablet->ConfirmedStorageVersion);
+        }
 
         if (!tabletBootState.empty()) {
             tablet->BootState = tabletBootState;
@@ -315,7 +325,9 @@ public:
         }
 
         if (changed) {
-            tablet->NotifyStorageInfo(SideEffects);
+            if (!tablet->HasUnconfirmedStorage()) {
+                tablet->NotifyStorageInfo(SideEffects);
+            }
             if (tablet->IsReadyToBlockStorage()) {
                 if (!tablet->InitiateBlockStorage(SideEffects)) {
                     YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute failed to initiate storage block",

@@ -75,6 +75,7 @@ public:
     bool WasAliveSinceCutHistory = true;
     NKikimrHive::TEvReassignTablet::EHiveReassignReason ChannelProfileReassignReason;
     ui32 KnownGeneration;
+    ui32 ConfirmedStorageVersion;
     TTabletCategoryInfo* Category;
     TList<TFollowerGroup> FollowerGroups;
     TList<TFollowerTabletInfo> Followers;
@@ -98,6 +99,7 @@ public:
         , ObjectId(0, 0)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)
+        , ConfirmedStorageVersion(Max<ui32>())
         , Category(nullptr)
         , BootMode(NKikimrHive::TABLET_BOOT_MODE_DEFAULT)
         , PendingUnlockSeqNo(0)
@@ -113,6 +115,13 @@ public:
 
     bool IsReadyToBlockStorage() const {
         return State == ETabletState::BlockStorage;
+    }
+
+    bool HasUnconfirmedStorage() const {
+        return State == ETabletState::BlockStorage
+            || (ConfirmedStorageVersion != Max<ui32>()
+                && TabletStorageInfo
+                && ConfirmedStorageVersion < TabletStorageInfo->Version);
     }
 
     bool IsDeleting() const {

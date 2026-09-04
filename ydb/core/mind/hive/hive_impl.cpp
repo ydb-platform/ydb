@@ -1167,6 +1167,15 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
         return;
     }
 
+    if (tablet->HasUnconfirmedStorage()) {
+        Send(
+            ev->Sender,
+            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::TRYLATER,
+                "Tablet storage info is not confirmed"),
+            0, ev->Cookie);
+        return;
+    }
+
     switch (tablet->State) {
     case ETabletState::Unknown:
     case ETabletState::StoppingInGroupAssignment:

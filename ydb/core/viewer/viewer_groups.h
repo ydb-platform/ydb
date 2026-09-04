@@ -2132,6 +2132,7 @@ public:
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.SetCategory(info.GetCategory());
                     pDisk.DiskSpace = GetViewerFlag(TOutOfSpaceState::ToWhiteboardFlag(info.GetPDiskCapacityAlert()));
+                    // DecommitStatus and MaintenanceStatus are absent in Whiteboard because it's BSC-level info only
                 }
             }
         }

@@ -1,9 +1,12 @@
 #pragma once
 
 #include "schemeshard__operation_part.h"
+#include "schemeshard_operation_plan.h"
 #include "schemeshard_tx_infly.h"
 
 #include <util/generic/set.h>
+
+#include <optional>
 
 namespace NKikimr::NSchemeShard {
 
@@ -13,6 +16,12 @@ struct TOperation: TSimpleRefCount<TOperation> {
     const TTxId TxId;
     ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
+
+    // The sealed plan of this operation, when its type is planned. Built before any part is
+    // constructed or proposed. One immutable object for the whole operation; the plan groups
+    // its transactions itself. In memory only: an operation restored after a reboot has none,
+    // and its parts derive their paths as they always did.
+    std::shared_ptr<const TSealedOperationPlan> Plan;
 
     THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;
@@ -83,6 +92,12 @@ struct TOperation: TSimpleRefCount<TOperation> {
 
     ISubOperation::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState, TOperationContext& context) const;
     TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context) const;
+
+    // Builds every part of a planned operation from its blueprints, in blueprint order, and
+    // binds each to the plan. Parts[i] is built from the blueprint with PartIdx i.
+    TVector<ISubOperation::TPtr> ConstructPlannedParts(TOperationContext& context) const;
+
+    void SetPlan(std::shared_ptr<const TSealedOperationPlan> plan);
     void AddPart(ISubOperation::TPtr part);
 
     bool AddPublishingPath(TPathId pathId, ui64 version);

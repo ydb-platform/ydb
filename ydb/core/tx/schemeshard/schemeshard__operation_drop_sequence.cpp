@@ -240,6 +240,10 @@ class TDropSequence: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    std::optional<EPlannedPartKind> PlannedPartKind() const override {
+        return EPlannedPartKind::DropSequence;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -257,9 +261,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = TargetPath(context);
 
         {
             TPath::TChecker checks = path.Check();
@@ -283,7 +285,7 @@ public:
             }
         }
 
-        TPath parent = path.Parent();
+        TPath parent = ContainerPath(context);
         {
             TPath::TChecker checks = parent.Check();
             checks

@@ -31,6 +31,14 @@ public:
         return fake;
     }
 
+    void BindToPlan(std::shared_ptr<const TSealedOperationPlan>, const TPartBlueprint&) override {
+        Y_ABORT("%s cannot be bound to an operation plan", "TTxCancelTx");
+    }
+
+    bool IsPlanned() const override {
+        return false;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Execute cancel tx"
             << ": opId# " << OperationId

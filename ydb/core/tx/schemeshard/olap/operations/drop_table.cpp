@@ -383,6 +383,10 @@ class TDropColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    std::optional<EPlannedPartKind> PlannedPartKind() const override {
+        return EPlannedPartKind::DropColumnTable;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -401,9 +405,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(opTxId), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = TargetPath(context);
 
         {
             TPath::TChecker checks = path.Check();
@@ -427,7 +429,7 @@ public:
             }
         }
 
-        TPath parent = path.Parent();
+        TPath parent = ContainerPath(context);
         {
             TPath::TChecker checks = parent.Check();
             checks

@@ -35,6 +35,14 @@ public:
         return fake;
     }
 
+    void BindToPlan(std::shared_ptr<const TSealedOperationPlan>, const TPartBlueprint&) override {
+        Y_ABORT("%s cannot be bound to an operation plan", "TReject");
+    }
+
+    bool IsPlanned() const override {
+        return false;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         Y_ABORT_UNLESS(Response);
 
@@ -74,6 +82,26 @@ ISubOperation::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> resp
 
 ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message) {
     return new TReject(id, status, message);
+}
+
+
+void ApplyRejection(TProposeResponse& response, const TRejectedOperation& rejected) {
+    response.SetError(rejected.Status, rejected.Reason);
+    if (rejected.PathId) {
+        response.SetPathId(rejected.PathId->LocalPathId);
+    }
+    if (rejected.PathCreateTxId) {
+        response.SetPathCreateTxId(ui64(*rejected.PathCreateTxId));
+    }
+    if (rejected.PathDropTxId) {
+        response.SetPathDropTxId(ui64(*rejected.PathDropTxId));
+    }
+}
+
+ISubOperation::TPtr CreateReject(TOperationId id, const TRejectedOperation& rejected) {
+    auto response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, 0, 0);
+    ApplyRejection(*response, rejected);
+    return CreateReject(id, std::move(response));
 }
 
 }

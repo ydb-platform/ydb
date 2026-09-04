@@ -103,12 +103,16 @@ class TMkDir: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    std::optional<EPlannedPartKind> PlannedPartKind() const override {
+        return EPlannedPartKind::MkDir;
+    }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = Transaction.GetMkDir().GetName();
+        const TString name = TargetLeafName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TMkDir Propose"
@@ -131,7 +135,7 @@ public:
             return result;
         }
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        NSchemeShard::TPath parentPath = ContainerPath(context);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks

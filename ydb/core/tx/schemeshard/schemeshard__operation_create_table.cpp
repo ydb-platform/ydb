@@ -423,6 +423,10 @@ class TCreateTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    std::optional<EPlannedPartKind> PlannedPartKind() const override {
+        return EPlannedPartKind::CreateTable;
+    }
+
     void SetAllowShadowDataForBuildIndex() {
         AllowShadowData = true;
     }
@@ -442,7 +446,10 @@ public:
         auto schema = Transaction.GetCreateTable();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = schema.GetName();
+        // The part composes its target from the plan: the leaf the target effect holds, beneath
+        // the container the plan bound it to. The transaction's own fields are the same values,
+        // but they are not what the part is licensed by.
+        const TString name = TargetLeafName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateTable Propose"
@@ -465,7 +472,7 @@ public:
             return result;
         }
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        NSchemeShard::TPath parentPath = ContainerPath(context);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks

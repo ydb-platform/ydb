@@ -3,6 +3,7 @@
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_side_effects.h"
+#include "schemeshard_operation_plan.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
@@ -232,12 +233,78 @@ public:
     // getters
     virtual const TOperationId& GetOperationId() const = 0;
     virtual const TTxTransaction& GetTransaction() const = 0;
+
+    // Attaches the sealed plan of the operation and this part's typed bindings into it.
+    // Called once, before the part is first proposed: where parts are built from blueprints,
+    // or by ProcessOperationParts for a part its operation did not plan. A part that cannot
+    // be planned aborts here rather than being silently left unbound.
+    virtual void BindToPlan(std::shared_ptr<const TSealedOperationPlan> plan, const TPartBlueprint& blueprint) = 0;
+    virtual bool IsPlanned() const = 0;
+
+    // What this part is, for the single-part planner that binds it when its operation was not
+    // planned as a whole. Nullopt for a part that reads no bindings.
+    virtual std::optional<EPlannedPartKind> PlannedPartKind() const {
+        return std::nullopt;
+    }
 };
 
 class TSubOperationBase: public ISubOperation {
 protected:
     const TOperationId OperationId;
     const TTxTransaction Transaction;
+
+    // The sealed plan of the operation this part belongs to and this part's typed bindings
+    // into it. Both are set together, once, where parts are built from blueprints. A part of
+    // an operation that is not planned -- or one restored after a reboot -- has neither, and
+    // derives its paths itself as it always did.
+    std::shared_ptr<const TSealedOperationPlan> Plan;
+    std::optional<TPartBindings> Bindings;
+
+public:
+    void BindToPlan(std::shared_ptr<const TSealedOperationPlan> plan, const TPartBlueprint& blueprint) override final {
+        Y_ABORT_UNLESS(plan);
+        Plan = std::move(plan);
+        Bindings = blueprint.Bindings;
+    }
+
+    bool IsPlanned() const override final {
+        return Plan != nullptr;
+    }
+
+    const TSealedOperationPlan& GetPlan() const {
+        Y_ABORT_UNLESS(Plan, "part is not planned");
+        return *Plan;
+    }
+
+    // The bindings of this part, of the kind the part expects. A part bound with bindings of
+    // another kind is a planning bug and aborts.
+    template <class TBindingsKind>
+    const TBindingsKind& BindingsAs() const {
+        Y_ABORT_UNLESS(Bindings, "part is not planned");
+        const auto* bindings = std::get_if<TBindingsKind>(&*Bindings);
+        Y_ABORT_UNLESS(bindings, "part is bound with bindings of another kind");
+        return *bindings;
+    }
+
+protected:
+    // The path a logical effect or a physical write of the plan describes. By id when the
+    // object exists; by the plan's own path string otherwise, since the plan carries it.
+    TPath PlannedPath(TPlanEffectId effect, TOperationContext& context) const;
+    TPath PlannedWritePath(TPhysicalWriteId write, TOperationContext& context) const;
+
+    // The paths this part is bound to, by shape. Every binding kind names a target and its
+    // container; the copy kinds add a source. Propose reads nothing else: a part is always
+    // bound by the time it is proposed, by its operation's plan or by the single-part planner.
+    TPath TargetPath(TOperationContext& context) const;
+    TPath ContainerPath(TOperationContext& context) const;
+    TPath SourcePath(TOperationContext& context) const;
+    TString TargetLeafName() const;
+
+private:
+    TPlannedPathView BoundTarget() const;
+    TPlannedPathView BoundContainer() const;
+    TPlannedPathView BoundSource() const;   // aborts for bindings without a source
+    TPath ResolveBound(const TPlannedPathView& view, TOperationContext& context) const;
 
 public:
     explicit TSubOperationBase(const TOperationId& id)
@@ -356,6 +423,10 @@ ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState 
 
 ISubOperation::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response);
 ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message);
+ISubOperation::TPtr CreateReject(TOperationId id, const TRejectedOperation& rejected);
+
+// Writes what the planner refused into the response the client gets.
+void ApplyRejection(TProposeResponse& response, const TRejectedOperation& rejected);
 
 ISubOperation::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateMkDir(TOperationId id, TTxState::ETxState state);
@@ -399,7 +470,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId id, const TTxTransacti
 TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath);
+ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath, TOperationContext& context);
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state);
 
@@ -717,7 +788,13 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state, TOperationContext& context);
 
 // returns Reject in case of error, nullptr otherwise
-ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
+ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table, TOperationContext& context);
+
+// Builds and binds the parts of a plan for an operation that is not planned as a whole, with
+// ids counted from nextId. The plan must hold no generated directories: the request was split
+// by SplitIntoTransactions already.
+TVector<ISubOperation::TPtr> ConstructPartsFromPlan(TOperationId nextId, std::shared_ptr<const TSealedOperationPlan> plan,
+    TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);

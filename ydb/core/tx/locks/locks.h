@@ -305,6 +305,17 @@ inline ELockRangeFlags& operator&=(ELockRangeFlags& a, ELockRangeFlags b) { retu
 inline ELockRangeFlags operator~(ELockRangeFlags c) { return ELockRangeFlags(~ELockRangeFlagsRaw(c)); }
 inline bool operator!(ELockRangeFlags c) { return ELockRangeFlagsRaw(c) == 0; }
 
+// Info about an ancestor shard that originally held a persistent lock whose uncommitted
+// writes were transferred to this shard during split/merge.
+struct TAncestorLock {
+    ui64 TabletId = 0;      // ancestor shard
+    ui32 LockNodeId = 0;    // node hosting the lock transaction
+    ui32 Generation = 0;
+    ui64 Counter = 0;
+    TInstant CreationTime;
+    ELockFlags Flags = ELockFlags::None;
+};
+
 // Tags for various intrusive lists
 struct TLockInfoBreakListTag {};
 struct TLockInfoEraseListTag {};
@@ -502,6 +513,9 @@ public:
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
+    const THashMap<ui64, TAncestorLock>& GetAncestorLocks() const { return AncestorLocks; }
+    void AddAncestorLock(TAncestorLock lock);
+
 private:
     void MakeShardLock();
     bool AddShardLock(const TPathId& pathId);
@@ -548,6 +562,7 @@ private:
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
     THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates;
+    THashMap<ui64, TAncestorLock> AncestorLocks;  // TabletId -> TAncestorLock
 
 public:
     TAsyncEvent OnBrokenEvent;
@@ -914,6 +929,10 @@ public:
         return result;
     }
 
+    void AddPendingSubscribeLock(ui64 lockId, ui32 lockNodeId) {
+        PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
+    }
+
     void RemoveSubscribedLock(ui64 lockId, ILocksDb* db);
 
     ui32 Generation() const { return Self->Generation(); }
@@ -1255,6 +1274,17 @@ public:
     void UpdateCounters(ui64 counter);
 
     bool Load(ILocksDb& db);
+
+    // Creates a persistent TLockInfo from the given row and adds it to the in-memory state.
+    // Used when restoring ancestor locks transferred during split/merge.
+    // The caller must have already persisted the lock to Schema::Locks via ILocksDb::PersistAddLock.
+    // Returns the new TLockInfo pointer, or the existing one if the lock already exists.
+    TLockInfo* AddPersistentLockFromRow(const ILocksDb::TLockRow& row) {
+        if (auto* existing = Locker.FindLockPtr(row.LockId)) {
+            return existing;
+        }
+        return Locker.AddLock(row).Get();
+    }
 
     /**
      * Restores in-memory lock state migrated from previous generations

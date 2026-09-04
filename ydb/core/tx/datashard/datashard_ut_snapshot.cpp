@@ -2925,14 +2925,21 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         shards = GetTableShards(server, sender, "/Root/table-1");
 
-        // Check new shards don't have any open transactions
+        // Qualifying persistent write-only locks are now transferred to dst shards (not erased).
+        // The dst shard covering the write key (key=2, split at key=3 → shard 0) should have
+        // the open tx from the ancestor lock. Other dst shards have no open txs.
         {
             auto checkSender = runtime.AllocateEdgeActor();
+            TVector<ui64> shardsWithOpenTxs;
             for (auto shardId : shards) {
                 runtime.SendToPipe(shardId, checkSender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
                 auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
-                UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shardId);
+                if (!ev->Get()->OpenTxs.empty()) {
+                    shardsWithOpenTxs.push_back(shardId);
+                }
             }
+            // Exactly one dst shard (the one covering key=2) should have the transferred open tx
+            UNIT_ASSERT_VALUES_EQUAL(shardsWithOpenTxs.size(), 1u);
         }
     }
 

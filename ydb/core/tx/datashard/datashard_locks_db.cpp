@@ -29,6 +29,13 @@ void TDataShardLocksDb::PersistRemoveLock(ui64 lockId) {
     db.Table<typename Schema::Locks>().Key(lockId).Delete();
     HasChanges_ = true;
 
+    // Clean up any ancestor shard records for this lock
+    if (auto lockPtr = Self.SysLocks.GetRawLock(lockId)) {
+        for (const auto& [tabletId, _] : lockPtr->GetAncestorLocks()) {
+            db.Table<typename Schema::AncestorShardsLocks>().Key(lockId, tabletId).Delete();
+        }
+    }
+
     Self.GetMultiTxIdManager().OnLockRemoved(db, lockId);
 
     if (!isVolatile) {

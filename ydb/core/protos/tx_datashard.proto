@@ -919,6 +919,16 @@ message TPersistentSnapshot {
     optional uint64 TimeoutMs = 7;
 }
 
+message TAncestorLock {
+    optional uint64 TabletId        = 1;  // ancestor shard
+    optional uint64 LockId          = 2;
+    optional uint32 LockNodeId      = 3;
+    optional uint32 Generation      = 4;
+    optional uint64 Counter         = 5;
+    optional uint64 CreateTimestamp = 6;
+    optional uint64 Flags           = 7;
+}
+
 // Src datashard -> Dst datashard
 message TEvSplitTransferSnapshot {
     optional uint64 OperationCookie = 1;
@@ -945,6 +955,7 @@ message TEvSplitTransferSnapshot {
     optional uint64 MvccImmediateWriteEdgeStep = 17;
     optional uint64 MvccImmediateWriteEdgeTxId = 18;
     optional bool MvccPerformedUnprotectedReads = 19;
+    repeated TAncestorLock AncestorLocks = 20;
 }
 
 message TEvSplitTransferSnapshotAck {

@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -249,6 +250,59 @@ public:
             }
         }
 
+        // Restore ancestor locks transferred from the src shard.
+        // These represent persistent write-only locks whose uncommitted writes are in the borrowed snapshot.
+        if (record.AncestorLocksSize() > 0) {
+            TDataShardLocksDb locksDb(*Self, txc);
+            THashSet<ui64> processedLockIds;
+            for (const auto& protoLock : record.GetAncestorLocks()) {
+                const ui64 lockId = protoLock.GetLockId();
+
+                // Persist ancestor shard info to AncestorShardsLocks table
+                db.Table<Schema::AncestorShardsLocks>()
+                    .Key(lockId, protoLock.GetTabletId())
+                    .Update(
+                        NIceDb::TUpdate<Schema::AncestorShardsLocks::LockNodeId>(protoLock.GetLockNodeId()),
+                        NIceDb::TUpdate<Schema::AncestorShardsLocks::Generation>(protoLock.GetGeneration()),
+                        NIceDb::TUpdate<Schema::AncestorShardsLocks::Counter>(protoLock.GetCounter()),
+                        NIceDb::TUpdate<Schema::AncestorShardsLocks::CreateTimestamp>(protoLock.GetCreateTimestamp()),
+                        NIceDb::TUpdate<Schema::AncestorShardsLocks::Flags>(protoLock.GetFlags())
+                    );
+
+                if (processedLockIds.insert(lockId).second) {
+                    // First time we see this lockId in this snapshot: create TLockInfo if needed
+                    if (!Self->SysLocksTable().GetRawLock(lockId)) {
+                        // Persist lock entry to Schema::Locks so it survives restarts
+                        locksDb.PersistAddLock(lockId, protoLock.GetLockNodeId(),
+                            protoLock.GetGeneration(), protoLock.GetCounter(),
+                            protoLock.GetCreateTimestamp(), /*flags=*/0);
+
+                        // Create in-memory TLockInfo
+                        ILocksDb::TLockRow row;
+                        row.LockId = lockId;
+                        row.LockNodeId = protoLock.GetLockNodeId();
+                        row.Generation = protoLock.GetGeneration();
+                        row.Counter = protoLock.GetCounter();
+                        row.CreateTs = protoLock.GetCreateTimestamp();
+                        row.Flags = ui64(ELockFlags::Persistent);
+                        Self->SysLocksTable().AddPersistentLockFromRow(row);
+                    }
+                }
+
+                // Add ancestor metadata to the in-memory TLockInfo
+                auto lockPtr = Self->SysLocksTable().GetRawLock(lockId);
+                Y_ENSURE(lockPtr, "Expected TLockInfo to exist after creation");
+                TAncestorLock ancestorLock;
+                ancestorLock.TabletId = protoLock.GetTabletId();
+                ancestorLock.LockNodeId = protoLock.GetLockNodeId();
+                ancestorLock.Generation = protoLock.GetGeneration();
+                ancestorLock.Counter = protoLock.GetCounter();
+                ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
+                ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
+                lockPtr->AddAncestorLock(std::move(ancestorLock));
+            }
+        }
+
         // Persist the fact that the snapshot has been received, so that duplicate event can be ignored
         db.Table<Schema::SplitDstReceivedSnapshots>().Key(srcTabletId).Update();
         Self->ReceiveSnapshotsFrom.erase(srcTabletId);
@@ -341,6 +395,9 @@ public:
 
                 // We are already in StateWork, but we need to repeat many steps now that we are Ready
                 Self->SwitchToWork(ctx);
+
+                // Subscribe to any ancestor locks transferred during split/merge
+                Self->SubscribeNewLocks(ctx);
 
                 // We can send the registration request now that we are ready
                 Self->SendRegistrationRequestTimeCast(ctx);

@@ -149,30 +149,79 @@ public:
 
         Self->SplitStarted = true;
 
-        // We need to remove all locks first, making sure persistent uncommitted
-        // changes are not borrowed by new shards. Otherwise those will become
-        // unaccounted for.
+        // We need to remove all non-qualifying locks first, making sure their uncommitted
+        // changes are not borrowed by new shards. Qualifying locks (persistent, write-only)
+        // are spared and transferred to dst shards as ancestor locks.
         if (!Self->SysLocksTable().GetLocks().empty()) {
-            auto countBefore = Self->SysLocksTable().GetLocks().size();
-            TDataShardLocksDb locksDb(*Self, txc);
-            TSetupSysLocks guardLocks(*Self, &locksDb);
-            for (auto& pr : Self->SysLocksTable().GetLocks()) {
-                Self->SysLocksTable().EraseLock(pr.first);
-                if (pr.second->IsPersistent()) {
-                    // Don't erase more than one persistent lock at a time
+            // Check whether there are any non-qualifying locks remaining
+            bool hasNonQualifying = false;
+            for (const auto& pr : Self->SysLocksTable().GetLocks()) {
+                if (!pr.second->IsPersistent() || !pr.second->GetReadTables().empty()) {
+                    hasNonQualifying = true;
                     break;
                 }
             }
-            auto [_, locksBrokenBySplit] = Self->SysLocksTable().ApplyLocks();
-            if (!locksBrokenBySplit.empty()) {
-                auto victimQuerySpanIds = Self->SysLocksTable().ExtractVictimQuerySpanIds(locksBrokenBySplit);
-                NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Tablet split operation invalidated locks", locksBrokenBySplit,
-                                               Nothing(), victimQuerySpanIds);
+
+            if (hasNonQualifying) {
+                auto countBefore = Self->SysLocksTable().GetLocks().size();
+                TDataShardLocksDb locksDb(*Self, txc);
+                TSetupSysLocks guardLocks(*Self, &locksDb);
+                for (auto& pr : Self->SysLocksTable().GetLocks()) {
+                    if (pr.second->IsPersistent() && pr.second->GetReadTables().empty()) {
+                        continue;  // spare qualifying persistent write-only locks for transfer
+                    }
+                    Self->SysLocksTable().EraseLock(pr.first);
+                    if (pr.second->IsPersistent()) {
+                        // Don't erase more than one persistent lock at a time
+                        break;
+                    }
+                }
+                auto [_, locksBrokenBySplit] = Self->SysLocksTable().ApplyLocks();
+                if (!locksBrokenBySplit.empty()) {
+                    auto victimQuerySpanIds = Self->SysLocksTable().ExtractVictimQuerySpanIds(locksBrokenBySplit);
+                    NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Tablet split operation invalidated locks", locksBrokenBySplit,
+                                                   Nothing(), victimQuerySpanIds);
+                }
+                auto countAfter = Self->SysLocksTable().GetLocks().size();
+                Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
+                Self->Execute(Self->CreateTxStartSplit(), ctx);
+                return true;
             }
-            auto countAfter = Self->SysLocksTable().GetLocks().size();
-            Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
-            Self->Execute(Self->CreateTxStartSplit(), ctx);
-            return true;
+
+            // All remaining locks are qualifying persistent write-only locks.
+            // Collect them for transfer to dst shards as ancestor locks.
+            Self->SrcLocksToTransfer.clear();
+            for (const auto& pr : Self->SysLocksTable().GetLocks()) {
+                const TLockInfo& lock = *pr.second;
+                Y_ENSURE(lock.IsPersistent() && lock.GetReadTables().empty(),
+                    "Expected only qualifying persistent write-only locks");
+
+                // Add this shard as an ancestor entry for this lock
+                {
+                    auto& proto = Self->SrcLocksToTransfer.emplace_back();
+                    proto.SetTabletId(Self->TabletID());
+                    proto.SetLockId(lock.GetLockId());
+                    proto.SetLockNodeId(lock.GetLockNodeId());
+                    proto.SetGeneration(lock.GetGeneration());
+                    proto.SetCounter(lock.GetRawCounter());
+                    proto.SetCreateTimestamp(lock.GetCreationTime().MicroSeconds());
+                    proto.SetFlags(ui64(lock.GetFlags()));
+                }
+
+                // Also forward any existing ancestor locks (multi-hop split/merge)
+                for (const auto& [tabletId, ancestorLock] : lock.GetAncestorLocks()) {
+                    auto& proto = Self->SrcLocksToTransfer.emplace_back();
+                    proto.SetTabletId(tabletId);
+                    proto.SetLockId(lock.GetLockId());
+                    proto.SetLockNodeId(ancestorLock.LockNodeId);
+                    proto.SetGeneration(ancestorLock.Generation);
+                    proto.SetCounter(ancestorLock.Counter);
+                    proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());
+                    proto.SetFlags(ui64(ancestorLock.Flags));
+                }
+            }
+            // Fall through: qualifying locks remain and the snapshot will include their
+            // uncommitted writes. Dst shards will track them via AncestorShardsLocks.
         }
 
         ui64 opId = Self->SrcSplitOpId;
@@ -412,6 +461,11 @@ public:
 
                 if (sourceOffsetsBytes > 0) {
                     snapshot->SetReplicationSourceOffsetsBytes(sourceOffsetsBytes);
+                }
+
+                // Attach qualifying persistent write-only locks as ancestor locks for dst
+                for (const auto& ancestorLock : Self->SrcLocksToTransfer) {
+                    *snapshot->AddAncestorLocks() = ancestorLock;
                 }
 
                 // Persist snapshot data so that it can be sent if this datashard restarts

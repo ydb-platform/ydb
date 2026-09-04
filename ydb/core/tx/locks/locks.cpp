@@ -149,6 +149,11 @@ TLockInfo::~TLockInfo() {
     }
 }
 
+void TLockInfo::AddAncestorLock(TAncestorLock lock) {
+    ui64 tabletId = lock.TabletId;
+    AncestorLocks[tabletId] = std::move(lock);
+}
+
 void TLockInfo::MakeShardLock() {
     Flags |= ELockFlags::WholeShard;
     Points.clear();

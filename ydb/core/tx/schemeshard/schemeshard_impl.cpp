@@ -5770,6 +5770,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = appData->FeatureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = appData->FeatureFlags.GetEnableExternalSourceSchemaInference();
+    EnableExternalDataSourceAuthMethodIamForSolomon = appData->FeatureFlags.GetEnableExternalDataSourceAuthMethodIamForSolomon();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -8798,6 +8799,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();
+    EnableExternalDataSourceAuthMethodIamForSolomon = featureFlags.GetEnableExternalDataSourceAuthMethodIamForSolomon();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -9063,7 +9065,8 @@ void TSchemeShard::ConfigureExternalSources(
         EnableExternalSourceSchemaInference,
         config.GetS3().GetAllowLocalFiles(),
         config.GetAllExternalDataSourcesAreAvailable(),
-        std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
+        std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()),
+        EnableExternalDataSourceAuthMethodIamForSolomon
     );
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

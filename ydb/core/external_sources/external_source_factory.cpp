@@ -136,8 +136,13 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          bool enableInfer,
                                                          bool allowLocalFiles,
                                                          bool allExternalDataSourcesAreAvailable,
-                                                         const std::set<TString>& availableExternalDataSources) {
+                                                         const std::set<TString>& availableExternalDataSources,
+                                                         bool allowAuthIamForSolomon) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
+    TVector<TString> authMethodsForSolomon {"NONE", "TOKEN", "SERVICE_ACCOUNT"};
+    if (allowAuthIamForSolomon) {
+        authMethodsForSolomon.push_back("IAM");
+    }
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
             ToString(NYql::EDatabaseType::ObjectStorage),
@@ -181,7 +186,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Solomon),
-            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT", "IAM"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, authMethodsForSolomon, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::Iceberg),

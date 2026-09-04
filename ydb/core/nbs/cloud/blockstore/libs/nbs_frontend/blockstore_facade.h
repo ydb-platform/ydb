@@ -2,20 +2,12 @@
 
 #include <ydb/core/nbs/cloud/blockstore/compat/libs/service/public.h>
 
-namespace NKikimrConfig {
-class TNbsConfig;
-}
-
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void CreateNbsService(const NKikimrConfig::TNbsConfig& config);
-void StartNbsService();
-void StopNbsService();
-
-// Returns NBS2 frontend facade.
-NCloud::NBlockStore::IBlockStorePtr GetNbsFrontendBlockStore();
+// Creates the classic-compatible block store facade
+NCloud::NBlockStore::IBlockStorePtr CreateNbsFrontendBlockStore();
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -3422,9 +3422,14 @@ message TClusterDiagnosticsConfig {
     optional uint64 CountersMaxInflight = 2 [default = 100];
 }
 
+message TNbsFrontendConfig {
+    optional bool Enabled = 1 [default = false];
+}
+
 message TNbsConfig {
     optional bool Enabled = 1;
     optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
+    optional TNbsFrontendConfig NbsFrontendConfig = 3;
 }
 
 message TTliConfig {

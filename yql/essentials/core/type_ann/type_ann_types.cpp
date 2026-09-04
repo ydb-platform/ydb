@@ -2248,6 +2248,7 @@ namespace NYql::NTypeAnnImpl {
             }
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AsStruct")
                 .List(0)
@@ -2278,6 +2279,7 @@ namespace NYql::NTypeAnnImpl {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }

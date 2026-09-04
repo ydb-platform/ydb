@@ -41,6 +41,7 @@ bool IsCastRequired(ui32 fromTypeId, ui32 toTypeId) {
 }
 
 TExprNodePtr WrapWithPgCast(TExprNodePtr node, ui32 targetTypeId, TExprContext& ctx) {
+    // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("PgCast")
             .Add(0, std::move(node))
@@ -49,6 +50,7 @@ TExprNodePtr WrapWithPgCast(TExprNodePtr node, ui32 targetTypeId, TExprContext& 
                 .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TPgCallResolutionResult ResolvePgCall(

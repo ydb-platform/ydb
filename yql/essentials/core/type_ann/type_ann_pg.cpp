@@ -1727,6 +1727,7 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
 
     TExprNode::TListType args;
     for (const auto& mod : mods) {
+        // clang-format off
         args.push_back(ctx.Expr.Builder(input->Pos())
             .Callable("PgConst")
                 .Atom(0, mod)
@@ -1735,9 +1736,11 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
                 .Seal()
             .Seal()
             .Build());
+        // clang-format on
     }
 
     auto arr = ctx.Expr.NewCallable(input->Pos(), "PgArray", std::move(args));
+    // clang-format off
     output = ctx.Expr.Builder(input->Pos())
         .Callable("PgCall")
             .Atom(0, NPg::LookupProc(funcId, { 0 }).Name)
@@ -1746,6 +1749,7 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
             .Add(2, arr)
         .Seal()
         .Build();
+    // clang-format on
 
     return IGraphTransformer::TStatus::Repeat;
 }
@@ -1812,6 +1816,7 @@ TExprNodePtr BuildUniTypePgIn(TExprNodeList&& args, TContext& ctx) {
     std::swap(args[0], args.back());
     args.pop_back();
 
+    // clang-format off
     return ctx.Expr.Builder(lhs->Pos())
         .Callable("SqlIn")
             .List(0)
@@ -1825,6 +1830,7 @@ TExprNodePtr BuildUniTypePgIn(TExprNodeList&& args, TContext& ctx) {
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -1854,22 +1860,26 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
             if (convertionRequired) {
                 hasConvertions = true;
 
+                // clang-format off
                 auto convertedChild = ctx.Expr.Builder(child->Pos())
                     .Callable("ToPg")
                         .Add(0, child)
                     .Seal()
                     .Build();
+                // clang-format on
                 convertedChildren.push_back(std::move(convertedChild));
             } else {
                 convertedChildren.emplace_back(child);
             }
         }
         if (hasConvertions) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("PgIn")
                     .Add(std::move(convertedChildren))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -1919,11 +1929,13 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
             auto& conversion = elemsOfType.second;
             orClausesOfIn.push_back(BuildUniTypePgIn(std::move(conversion.Items), ctx));
         }
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Or")
                 .Add(std::move(orClausesOfIn))
             .Seal()
             .Build();
+        // clang-format on
     } else {
         TExprNodeList items;
 
@@ -1937,11 +1949,13 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
         }
         output = BuildUniTypePgIn(std::move((castRequired) ? items : input->ChildrenList()), ctx);
     }
+    // clang-format off
     output = ctx.Expr.Builder(input->Pos())
         .Callable("ToPg")
             .Add(0, output)
         .Seal()
         .Build();
+    // clang-format on
     return IGraphTransformer::TStatus::Repeat;
 }
 
@@ -1995,6 +2009,7 @@ IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprN
     switch (elemType) {
         case 0:
         case NPg::UnknownOid:
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")
                     .Callable(0, "PgType")
@@ -2002,6 +2017,7 @@ IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprN
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
             break;
         default:
             if (!elemTypeAnn->IsComparable()) {

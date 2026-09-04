@@ -6,9 +6,9 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <google/protobuf/empty.pb.h>
+
+#include <util/system/yassert.h>
 
 namespace NKikimr::Tests::NGrpc {
 
@@ -21,7 +21,7 @@ struct TResultHolder {
 
     TRes AsResult() const {
         auto* r = dynamic_cast<const TRes*>(Response.get());
-        UNIT_ASSERT(r);
+        Y_ABORT_UNLESS(r);
 
         return *r;
     }

@@ -116,7 +116,8 @@
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
@@ -868,8 +869,8 @@ namespace Tests {
         {
             TAutoPtr<IEventHandle> handle;
             auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), tid);
-            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+            Y_ABORT_UNLESS((event->Record.GetSchemeshardId()) == (tid));
+            Y_ABORT_UNLESS((event->Record.GetStatus()) == (NKikimrScheme::EStatus::StatusAccepted));
         }
 
         auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(1);
@@ -878,7 +879,7 @@ namespace Tests {
         {
             TAutoPtr<IEventHandle> handle;
             auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
+            Y_ABORT_UNLESS((event->Record.GetTxId()) == (1));
         }
     }
 
@@ -929,20 +930,19 @@ namespace Tests {
             Runtime->SendToPipe(hive, senderB, ev.Release(), 0, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
             auto createTabletReply = Runtime->GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
-            UNIT_ASSERT(createTabletReply);
+            Y_ABORT_UNLESS(createTabletReply);
             auto expectedStatus = NKikimrProto::OK;
-            UNIT_ASSERT_EQUAL_C(createTabletReply->Record.GetStatus(), expectedStatus,
-                                (ui32)createTabletReply->Record.GetStatus() << " != " << (ui32)expectedStatus);
-            UNIT_ASSERT_EQUAL_C(createTabletReply->Record.GetOwner(), tabletId,
-                                createTabletReply->Record.GetOwner() << " != " << tabletId);
+            Y_ABORT_UNLESS((createTabletReply->Record.GetStatus()) == (expectedStatus), "%s", (TStringBuilder() << (ui32)createTabletReply->Record.GetStatus() << " != " << (ui32)expectedStatus).c_str());
+            Y_ABORT_UNLESS((createTabletReply->Record.GetOwner()) == (tabletId), "%s", (TStringBuilder() << createTabletReply->Record.GetOwner() << " != " << tabletId).c_str());
             ui64 id = createTabletReply->Record.GetTabletID();
             while (wait) {
                 auto tabletCreationResult =
                     Runtime->GrabEdgeEventRethrow<TEvHive::TEvTabletCreationResult>(handle);
-                UNIT_ASSERT(tabletCreationResult);
+                Y_ABORT_UNLESS(tabletCreationResult);
                 if (id == tabletCreationResult->Record.GetTabletID()) {
-                    UNIT_ASSERT_EQUAL_C(tabletCreationResult->Record.GetStatus(), NKikimrProto::OK,
-                        (ui32)tabletCreationResult->Record.GetStatus() << " != " << (ui32)NKikimrProto::OK);
+                    Y_ABORT_UNLESS(
+                        (tabletCreationResult->Record.GetStatus()) == (NKikimrProto::OK),
+                        "%s", (TStringBuilder() << (ui32)tabletCreationResult->Record.GetStatus() << " != " << (ui32)NKikimrProto::OK).c_str());
                     break;
                 }
             }
@@ -1007,8 +1007,8 @@ namespace Tests {
             if (!response.GetSuccess()) {
                 Cerr << "\n\n descResponse is #" << descResponse->Record.DebugString() << "\n\n";
             }
-            UNIT_ASSERT(descResponse->Record.GetResponse().GetSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 3);
+            Y_ABORT_UNLESS(descResponse->Record.GetResponse().GetSuccess());
+            Y_ABORT_UNLESS((response.StatusSize()) == (3));
 
             for (const auto& boxInfo : response.GetStatus(0).GetBox()) {
                 if (boxInfo.GetBoxId() == Settings->BOX_ID) {
@@ -1027,7 +1027,7 @@ namespace Tests {
             const auto& poolsInfo = response.GetStatus(2).GetStoragePool();
             poolsConfigGenerations.reserve(poolsInfo.size());
             for (const auto& storagePool : poolsInfo) {
-                UNIT_ASSERT(poolsConfigGenerations.emplace(storagePool.GetName(), storagePool.GetItemConfigGeneration()).second);
+                Y_ABORT_UNLESS(poolsConfigGenerations.emplace(storagePool.GetName(), storagePool.GetItemConfigGeneration()).second);
             }
         }
 
@@ -1072,7 +1072,7 @@ namespace Tests {
         if (!configureResponse->Record.GetResponse().GetSuccess()) {
             Cerr << "\n\n configResponse is #" << configureResponse->Record.DebugString() << "\n\n";
         }
-        UNIT_ASSERT(configureResponse->Record.GetResponse().GetSuccess());
+        Y_ABORT_UNLESS(configureResponse->Record.GetResponse().GetSuccess());
     }
 
     void TServer::SetupDefaultProfiles() {
@@ -1124,9 +1124,9 @@ namespace Tests {
         }
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = client.SyncCall(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         auto resp = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
-        UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        Y_ABORT_UNLESS((resp.GetStatus().GetCode()) == (Ydb::StatusIds::SUCCESS));
     }
 
     void TServer::SetupDomainLocalService(ui32 nodeIdx) {
@@ -2013,15 +2013,15 @@ namespace Tests {
         }
 
         TAutoPtr<NBus::TBusMessage> reply;
-        UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((SyncCall(request, reply)) == (NBus::MESSAGE_OK));
         const NKikimrClient::TTypeMetadataResponse &response = static_cast<NMsgBusProxy::TBusTypesResponse*>(reply.Get())->Record;
-        UNIT_ASSERT_VALUES_EQUAL((ui32)NMsgBusProxy::MSTATUS_OK, response.GetStatus());
+        Y_ABORT_UNLESS(((ui32)NMsgBusProxy::MSTATUS_OK) == (response.GetStatus()));
         if (!response.HasETag()) {
-            UNIT_ASSERT(TypesEtag.Defined());
+            Y_ABORT_UNLESS(TypesEtag.Defined());
             return false;
         }
 
-        UNIT_ASSERT(response.HasTypeMetadata() && response.HasFunctionMetadata());
+        Y_ABORT_UNLESS(response.HasTypeMetadata() && response.HasFunctionMetadata());
         DeserializeMetadata(response.GetTypeMetadata(), &LoadedTypeMetadataRegistry);
         DeserializeMetadata(response.GetFunctionMetadata(), *LoadedFunctionRegistry->GetBuiltins());
         TypesEtag = response.GetETag();
@@ -2069,7 +2069,7 @@ namespace Tests {
             }
 
             TAutoPtr<NMsgBusProxy::TBusResponse> resp = Ls(root);
-            UNIT_ASSERT(resp);
+            Y_ABORT_UNLESS(resp);
 
             if (resp->Record.GetStatus() == NMsgBusProxy::MSTATUS_OK && resp->Record.GetSchemeStatus() == NKikimrScheme::StatusSuccess) {
                 if (Verbose) {
@@ -2112,8 +2112,8 @@ namespace Tests {
     void TClient::InitRootScheme(const TString& root) {
         TAutoPtr<NBus::TBusMessage> reply = InitRootSchemeWithReply(root);
         auto resp = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
-        UNIT_ASSERT(resp);
-        UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        Y_ABORT_UNLESS(resp);
+        Y_ABORT_UNLESS((resp->Record.GetStatus()) == (NMsgBusProxy::MSTATUS_OK));
     }
 
 
@@ -2192,13 +2192,13 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
     void TClient::TestMkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
         auto status = MkDir(parent, name, applyIf);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
@@ -2211,18 +2211,18 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
     void TClient::TestRmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
         auto status = RmDir(parent, name, applyIf);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateSubdomain(const TString &parent, const TString &description) {
         NKikimrSubDomains::TSubDomainSettings subdomain;
-        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
+        Y_ABORT_UNLESS(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
         return CreateSubdomain(parent, subdomain);
     }
 
@@ -2235,14 +2235,14 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateExtSubdomain(const TString &parent, const TString &description) {
         NKikimrSubDomains::TSubDomainSettings subdomain;
-        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
+        Y_ABORT_UNLESS(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
         return CreateExtSubdomain(parent, subdomain);
     }
 
@@ -2255,7 +2255,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2282,14 +2282,14 @@ namespace Tests {
         SetApplyIf(*op, applyIf);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
     NMsgBusProxy::EResponseStatus TClient::AlterSubdomain(const TString &parent, const TString &description, TDuration timeout) {
         NKikimrSubDomains::TSubDomainSettings subdomain;
-        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
+        Y_ABORT_UNLESS(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
         return AlterSubdomain(parent, subdomain, timeout);
     }
 
@@ -2302,7 +2302,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2316,7 +2316,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2330,7 +2330,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2344,7 +2344,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2358,7 +2358,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2377,13 +2377,13 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
     void TClient::TestCreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken) {
         auto status = CreateUser(parent, options, userToken);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
@@ -2391,7 +2391,7 @@ namespace Tests {
     }
     void TClient::TestCreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
         auto status = CreateUser(parent, user, password, userToken);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
@@ -2415,13 +2415,13 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
     void TClient::TestModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
         auto status = ModifyUser(parent, options, userToken);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateGroup(const TString& parent, const TString& group) {
@@ -2435,13 +2435,13 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
     void TClient::TestCreateGroup(const TString& parent, const TString& group) {
         auto status = CreateGroup(parent, group);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::AddGroupMembership(const TString& parent, const TString& group, const TString& member) {
@@ -2456,13 +2456,13 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
     void TClient::TestAddGroupMembership(const TString& parent, const TString& group, const TString& member) {
         auto status = AddGroupMembership(parent, group, member);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime,
@@ -2482,7 +2482,7 @@ namespace Tests {
         ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
-        UNIT_ASSERT(event);
+        Y_ABORT_UNLESS(event);
         return event->Record;
     }
 
@@ -2499,7 +2499,7 @@ namespace Tests {
         ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
-        UNIT_ASSERT(event);
+        Y_ABORT_UNLESS(event);
         return event->Record;
     }
 
@@ -2514,7 +2514,7 @@ namespace Tests {
         op->MutableCreateTable()->CopyFrom(table);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2547,7 +2547,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2563,7 +2563,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2590,7 +2590,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2598,7 +2598,7 @@ namespace Tests {
     NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout, const TString& userToken) {
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
-        UNIT_ASSERT(parseOk);
+        Y_ABORT_UNLESS(parseOk);
         return CreateTable(parent, table, timeout, userToken);
     }
 
@@ -2610,7 +2610,7 @@ namespace Tests {
         tx->MutableKesus()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2623,7 +2623,7 @@ namespace Tests {
         tx->MutableDrop()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2631,7 +2631,7 @@ namespace Tests {
     NMsgBusProxy::EResponseStatus TClient::CreateOlapStore(const TString& parent, const TString& scheme) {
         NKikimrSchemeOp::TColumnStoreDescription store;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &store);
-        UNIT_ASSERT(parseOk);
+        Y_ABORT_UNLESS(parseOk);
         return CreateOlapStore(parent, store);
     }
 
@@ -2644,7 +2644,7 @@ namespace Tests {
         op->MutableCreateColumnStore()->CopyFrom(store);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2652,7 +2652,7 @@ namespace Tests {
     NMsgBusProxy::EResponseStatus TClient::CreateColumnTable(const TString& parent, const TString& scheme) {
         NKikimrSchemeOp::TColumnTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
-        UNIT_ASSERT(parseOk);
+        Y_ABORT_UNLESS(parseOk);
         return CreateColumnTable(parent, table);
     }
 
@@ -2665,7 +2665,7 @@ namespace Tests {
         op->MutableCreateColumnTable()->CopyFrom(table);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2679,7 +2679,7 @@ namespace Tests {
         op->MutableCreatePersQueueGroup()->CopyFrom(topic);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2694,7 +2694,7 @@ namespace Tests {
         tx->MutableCreateSolomonVolume()->SetChannelProfileId(channelProfile);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2710,7 +2710,7 @@ namespace Tests {
             request->Record.SetSecurityToken(userToken);
         }
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         return dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Release());
     }
 
@@ -2728,14 +2728,14 @@ namespace Tests {
             request->Record.SetSecurityToken(userToken);
         }
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         return dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Release());
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const TString& alter, const TString& userToken) {
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);
-        UNIT_ASSERT(parseOk);
+        Y_ABORT_UNLESS(parseOk);
         return AlterTable(parent, table, userToken);
     }
 
@@ -2748,7 +2748,7 @@ namespace Tests {
     NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const TString& alter) {
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);
-        UNIT_ASSERT(parseOk);
+        Y_ABORT_UNLESS(parseOk);
         return AlterTable(parent, table);
     }
 
@@ -2760,7 +2760,7 @@ namespace Tests {
         op->MutableBackup()->CopyFrom(task);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2773,7 +2773,7 @@ namespace Tests {
         op->MutableDrop()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2786,7 +2786,7 @@ namespace Tests {
         op->MutableDrop()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2799,9 +2799,9 @@ namespace Tests {
         op->MutableDrop()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SyncCall(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         NMsgBusProxy::TBusResponse* res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
-        UNIT_ASSERT(res);
+        Y_ABORT_UNLESS(res);
         return res;
     }
 
@@ -2817,12 +2817,12 @@ namespace Tests {
         auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
         //Cerr << record.DebugString() << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+        Y_ABORT_UNLESS((record.GetStatus()) == (NKikimrScheme::StatusSuccess));
         auto& descr = record.GetPathDescription().GetSelf();
         TAutoPtr<NBus::TBusMessage> reply;
         auto msgStatus = WaitCompletion(descr.GetCreateTxId(), descr.GetSchemeshardId(), descr.GetPathId(), reply, timeout);
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
@@ -2837,7 +2837,7 @@ namespace Tests {
         request->Record.MutableOptions()->SetShowPrivateTable(true);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
 
         if (Verbose) {
             Cerr << "TClient::Ls response: " << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
@@ -2851,29 +2851,29 @@ namespace Tests {
     }
 
     TClient::TPathVersion TClient::ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe) {
-        UNIT_ASSERT(describe.Get());
+        Y_ABORT_UNLESS(describe.Get());
         auto& record = describe->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        UNIT_ASSERT_VALUES_EQUAL(record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+        Y_ABORT_UNLESS((record.GetStatus()) == (NMsgBusProxy::MSTATUS_OK));
+        Y_ABORT_UNLESS((record.GetSchemeStatus()) == (NKikimrScheme::StatusSuccess));
 
-        UNIT_ASSERT(record.HasPathDescription());
+        Y_ABORT_UNLESS(record.HasPathDescription());
         auto& descr = record.GetPathDescription();
 
-        UNIT_ASSERT(descr.HasSelf());
+        Y_ABORT_UNLESS(descr.HasSelf());
         auto& self = descr.GetSelf();
 
         return TPathVersion{self.GetSchemeshardId(), self.GetPathId(), self.GetPathVersion()};
     }
 
     TVector<ui64> TClient::ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe) {
-        UNIT_ASSERT(describe.Get());
+        Y_ABORT_UNLESS(describe.Get());
         NKikimrClient::TResponse& record = describe->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        UNIT_ASSERT_VALUES_EQUAL(record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+        Y_ABORT_UNLESS((record.GetStatus()) == (NMsgBusProxy::MSTATUS_OK));
+        Y_ABORT_UNLESS((record.GetSchemeStatus()) == (NKikimrScheme::StatusSuccess));
 
-        UNIT_ASSERT(record.HasPathDescription());
+        Y_ABORT_UNLESS(record.HasPathDescription());
         auto& descr = record.GetPathDescription();
-        UNIT_ASSERT(descr.TablePartitionsSize() > 0);
+        Y_ABORT_UNLESS(descr.TablePartitionsSize() > 0);
         auto& parts = descr.GetTablePartitions();
 
         TVector<ui64> shards;
@@ -2910,13 +2910,13 @@ namespace Tests {
         op->MutableModifyACL()->SetNewOwner(owner);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
     void TClient::TestModifyOwner(const TString& parent, const TString& name, const TString& owner) {
         auto status = ModifyOwner(parent, name, owner);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl, const TString& userToken) {
@@ -2931,13 +2931,13 @@ namespace Tests {
         op->MutableModifyACL()->SetDiffACL(acl);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
     void TClient::TestModifyACL(const TString& parent, const TString& name, const TString& acl) {
         auto status = ModifyACL(parent, name, acl);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
@@ -2947,7 +2947,7 @@ namespace Tests {
     }
     void TClient::TestGrant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
         auto status = Grant(parent, name, subject, rights);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     NMsgBusProxy::EResponseStatus TClient::GrantConnect(const TString& subject) {
@@ -2955,7 +2955,7 @@ namespace Tests {
     }
     void TClient::TestGrantConnect(const TString& subject) {
         auto status = GrantConnect(subject);
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        Y_ABORT_UNLESS((status) == (NMsgBusProxy::EResponseStatus::MSTATUS_OK));
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
@@ -2981,7 +2981,7 @@ namespace Tests {
                 *cmdCreate->AddBindedChannels() = binding;
             }
         } else {
-            UNIT_ASSERT(!StoragePoolTypes.empty());
+            Y_ABORT_UNLESS(!StoragePoolTypes.empty());
             TString storagePool = StoragePoolTypes.begin()->second.GetName();
             cmdCreate->AddBindedChannels()->SetStoragePoolName(storagePool); // 0
             cmdCreate->AddBindedChannels()->SetStoragePoolName(storagePool); // 1
@@ -2989,9 +2989,9 @@ namespace Tests {
         }
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SyncCall(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((status) == (NBus::MESSAGE_OK));
         NMsgBusProxy::TBusResponse* res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
-        UNIT_ASSERT(res);
+        Y_ABORT_UNLESS(res);
         return res;
     }
 
@@ -3035,10 +3035,10 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
 
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         Y_ABORT_UNLESS(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess());
-        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)response.GetStatus());
+        Y_ABORT_UNLESS((NMsgBusProxy::EResponseStatus)response.GetStatus());
 
         return poolName;
     }
@@ -3054,17 +3054,17 @@ namespace Tests {
         NBus::EMessageStatus msgStatus = SendWhenReady(readRequest, reply);
 
         Cerr << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        UNIT_ASSERT(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess());
-        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)response.GetStatus());
-        UNIT_ASSERT(response.GetBlobStorageConfigResponse().StatusSize() > 0);
+        Y_ABORT_UNLESS(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess());
+        Y_ABORT_UNLESS((NMsgBusProxy::EResponseStatus)response.GetStatus());
+        Y_ABORT_UNLESS(response.GetBlobStorageConfigResponse().StatusSize() > 0);
         auto status = response.GetBlobStorageConfigResponse().GetStatus(0);
-        UNIT_ASSERT(status.StoragePoolSize() > 0);
+        Y_ABORT_UNLESS(status.StoragePoolSize() > 0);
 
         auto storagePool = status.GetStoragePool(0);
-        UNIT_ASSERT(name == storagePool.GetName());
-        UNIT_ASSERT(TServerSettings::BOX_ID == storagePool.GetBoxId());
+        Y_ABORT_UNLESS(name == storagePool.GetName());
+        Y_ABORT_UNLESS(TServerSettings::BOX_ID == storagePool.GetBoxId());
 
         return storagePool;
     }
@@ -3083,10 +3083,10 @@ namespace Tests {
         NBus::EMessageStatus msgStatus = SendWhenReady(deleteRequest, replyDelete);
 
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(replyDelete.Get()) << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
         const NKikimrClient::TResponse &responseDelete = dynamic_cast<NMsgBusProxy::TBusResponse *>(replyDelete.Get())->Record;
-        UNIT_ASSERT(responseDelete.HasBlobStorageConfigResponse() && responseDelete.GetBlobStorageConfigResponse().GetSuccess());
-        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)responseDelete.GetStatus());
+        Y_ABORT_UNLESS(responseDelete.HasBlobStorageConfigResponse() && responseDelete.GetBlobStorageConfigResponse().GetSuccess());
+        Y_ABORT_UNLESS((NMsgBusProxy::EResponseStatus)responseDelete.GetStatus());
     }
 
     bool TClient::Compile(const TString &mkql, TString &compiled) {
@@ -3098,7 +3098,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SyncCall(request, reply);
-        UNIT_ASSERT_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS((msgStatus) == (NBus::MESSAGE_OK));
 
         const NKikimrClient::TResponse &response = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         if (!response.HasMiniKQLCompileResults())
@@ -3150,7 +3150,7 @@ namespace Tests {
             break;
         }
 
-        UNIT_ASSERT(retryCnt > 0);
+        Y_ABORT_UNLESS(retryCnt > 0);
         return response.GetStatus();
     }
 
@@ -3182,7 +3182,7 @@ namespace Tests {
             if (response.GetProxyErrorCode() != TEvTxUserProxy::TResultStatus::ExecComplete)
                 Cerr << "proxy error code: " << static_cast<TEvTxUserProxy::TResultStatus::EStatus>(response.GetProxyErrorCode()) << Endl;
             if (expectedResponse.HasProxyErrorCode()) {
-                UNIT_ASSERT_VALUES_EQUAL(response.GetProxyErrorCode(), expectedResponse.GetProxyErrorCode());
+                Y_ABORT_UNLESS((response.GetProxyErrorCode()) == (expectedResponse.GetProxyErrorCode()));
             }
         }
         if (response.HasProxyErrors()) {
@@ -3215,13 +3215,13 @@ namespace Tests {
         }
 
         if (expectedResponse.HasStatus()) {
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), expectedResponse.GetStatus());
+            Y_ABORT_UNLESS((response.GetStatus()) == (expectedResponse.GetStatus()));
         }
         if (expectedResponse.GetStatus() != NMsgBusProxy::MSTATUS_OK)
             return false;
 
-        UNIT_ASSERT(response.HasTxId());
-        UNIT_ASSERT(response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete)
+        Y_ABORT_UNLESS(response.HasTxId());
+        Y_ABORT_UNLESS(response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete)
             || response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Aborted));
 
         if (response.HasExecutionEngineEvaluatedResponse()) {
@@ -3274,7 +3274,7 @@ namespace Tests {
                 return res;
 
         }
-        UNIT_ASSERT_C(false, "Failed to mark node in hive");
+        Y_ABORT("Failed to mark node in hive");
         return TString();
     }
 
@@ -3438,7 +3438,7 @@ namespace Tests {
 
     ui64 TClient::GetKesusTabletId(const TString& kesusPath) {
         auto describeResult = Ls(kesusPath);
-        UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasKesus(), describeResult->Record);
+        Y_ABORT_UNLESS(describeResult->Record.GetPathDescription().HasKesus(), "%s", (TStringBuilder() << describeResult->Record).c_str());
         return describeResult->Record.GetPathDescription().GetKesus().GetKesusTabletId();
     }
 

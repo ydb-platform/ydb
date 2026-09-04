@@ -1,7 +1,9 @@
 #include "audit_helper.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/map.h>
+#include <util/string/builder.h>
 #include <util/system/thread.h>
+#include <util/system/yassert.h>
 
 #include <algorithm>
 
@@ -53,7 +55,7 @@ std::string FindAuditLine(const std::vector<std::string>& auditLines, const std:
         Cerr << "    " << i << Endl;
     }
     auto found = std::find_if(auditLines.rbegin(), auditLines.rend(), [&](auto i) { return i.contains(substr); });
-    UNIT_ASSERT_C(found != auditLines.rend(), "No audit record with substring: '" + substr + "'");
+    Y_ABORT_UNLESS(found != auditLines.rend(), "%s", (TStringBuilder() << "No audit record with substring: '" + substr + "'").c_str());
     auto line = *found;
     Cerr << "AUDIT LOG checked line:" << Endl << "    " << line << Endl;
     return line;

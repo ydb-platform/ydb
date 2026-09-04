@@ -61,8 +61,7 @@ namespace NActors {
     }
 
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{d}
+        : TTestActorRuntimeBase{d}
     {
         /* How it is possible to do initilization without these components? */
         NKikimr::TAppData::RandomProvider = RandomProvider;
@@ -72,30 +71,26 @@ namespace NActors {
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, bool useRdmaAllocator)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads, useRdmaAllocator}
+        : TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads, useRdmaAllocator}
     {
         Initialize();
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
+        : TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
         , AuditLogBackends(std::move(auditLogBackends))
     {
         Initialize();
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount}
+        : TTestActorRuntimeBase{nodeCount, dataCenterCount}
     {
         Initialize();
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, bool useRealThreads)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, useRealThreads}
+        : TTestActorRuntimeBase{nodeCount, useRealThreads}
     {
         Initialize();
     }

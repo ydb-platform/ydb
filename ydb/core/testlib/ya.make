@@ -23,6 +23,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/restricted/googletest/googlemock
     ydb/apps/version
     ydb/core/audit/audit_config
     ydb/library/actors/core
@@ -31,8 +32,6 @@ PEERDIR(
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
     library/cpp/regex/pcre
-    library/cpp/testing/gmock_in_unittest
-    library/cpp/testing/unittest
     ydb/core/driver_lib/run
     ydb/core/base
     ydb/core/blobstorage/base
@@ -133,6 +132,11 @@ PEERDIR(
     ydb/services/ydb
 
     ydb/core/http_proxy
+)
+
+CHECK_DEPENDENT_DIRS(
+    DENY library/cpp/testing/gmock_in_unittest
+    DENY library/cpp/testing/unittest
 )
 
 YQL_LAST_ABI_VERSION()

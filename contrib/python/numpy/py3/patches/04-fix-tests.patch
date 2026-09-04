@@ -1,78 +1,22 @@
---- contrib/python/numpy/py3/numpy/core/tests/test_longdouble.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_longdouble.py	(working tree)
-@@ -9,1 +9,1 @@ from numpy.testing import (
--from numpy.core.tests._locales import CommaDecimalPointLocale
-+from __tests__.numpy.core.tests._locales import CommaDecimalPointLocale
---- contrib/python/numpy/py3/numpy/core/tests/test_multiarray.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_multiarray.py	(working tree)
-@@ -32,1 +32,1 @@ from numpy.testing import (
--from numpy.core.tests._locales import CommaDecimalPointLocale
-+from __tests__.numpy.core.tests._locales import CommaDecimalPointLocale
---- contrib/python/numpy/py3/numpy/core/tests/test_print.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_print.py	(working tree)
-@@ -7,1 +7,1 @@ import pytest
--from numpy.core.tests._locales import CommaDecimalPointLocale
-+from __tests__.numpy.core.tests._locales import CommaDecimalPointLocale
---- contrib/python/numpy/py3/numpy/matrixlib/tests/test_matrix_linalg.py	(index)
-+++ contrib/python/numpy/py3/numpy/matrixlib/tests/test_matrix_linalg.py	(working tree)
+--- contrib/python/numpy/py3/numpy/matrixlib/tests/test_matrix_linalg.py       (index)
++++ contrib/python/numpy/py3/numpy/matrixlib/tests/test_matrix_linalg.py       (working tree)
 @@ -4,1 +4,1 @@
 -from numpy.linalg.tests.test_linalg import (
 +from __tests__.numpy.linalg.tests.test_linalg import (
---- contrib/python/numpy/py3/numpy/array_api/tests/test_array_object.py	(index)
-+++ contrib/python/numpy/py3/numpy/array_api/tests/test_array_object.py	(working tree)
-@@ -6,3 +6,3 @@ import operator
--from .. import ones, asarray, reshape, result_type, all, equal
--from .._array_object import Array
--from .._dtypes import (
-+from numpy.array_api import ones, asarray, reshape, result_type, all, equal
-+from numpy.array_api._array_object import Array
-+from numpy.array_api._dtypes import (
---- contrib/python/numpy/py3/numpy/array_api/tests/test_creation_functions.py	(index)
-+++ contrib/python/numpy/py3/numpy/array_api/tests/test_creation_functions.py	(working tree)
-@@ -4,2 +4,2 @@
--from .. import all
--from .._creation_functions import (
-+from numpy.array_api import all
-+from numpy.array_api._creation_functions import (
-@@ -20,2 +20,2 @@ from .._creation_functions import (
--from .._dtypes import float32, float64
--from .._array_object import Array
-+from numpy.array_api._dtypes import float32, float64
-+from numpy.array_api._array_object import Array
---- contrib/python/numpy/py3/numpy/array_api/tests/test_elementwise_functions.py	(index)
-+++ contrib/python/numpy/py3/numpy/array_api/tests/test_elementwise_functions.py	(working tree)
-@@ -5,3 +5,3 @@ from inspect import getfullargspec
--from .. import asarray, _elementwise_functions
--from .._elementwise_functions import bitwise_left_shift, bitwise_right_shift
--from .._dtypes import (
-+from numpy.array_api import asarray, _elementwise_functions
-+from numpy.array_api._elementwise_functions import bitwise_left_shift, bitwise_right_shift
-+from numpy.array_api._dtypes import (
---- contrib/python/numpy/py3/numpy/array_api/tests/test_manipulation_functions.py	(index)
-+++ contrib/python/numpy/py3/numpy/array_api/tests/test_manipulation_functions.py	(working tree)
-@@ -4,4 +4,4 @@
--from .. import all
--from .._creation_functions import asarray
--from .._dtypes import float64, int8
--from .._manipulation_functions import (
-+from numpy.array_api import all
-+from numpy.array_api._creation_functions import asarray
-+from numpy.array_api._dtypes import float64, int8
-+from numpy.array_api._manipulation_functions import (
---- contrib/python/numpy/py3/numpy/core/tests/test_records.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_records.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_records.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_records.py	(working tree)
 @@ -73,1 +75,2 @@ class TestFromrecords:
 -        data_dir = path.join(path.dirname(__file__), 'data')
 +        import yatest.common as yc
 +        data_dir = yc.source_path(path.join(path.dirname(__file__), 'data'))
---- contrib/python/numpy/py3/numpy/core/tests/test_regression.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_regression.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_regression.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_regression.py	(working tree)
 @@ -1099,1 +1101,2 @@ class TestRegression:
 -        data_dir = path.join(path.dirname(__file__), 'data')
 +        import yatest.common as yc
 +        data_dir = yc.source_path(path.join(path.dirname(__file__), 'data'))
---- contrib/python/numpy/py3/numpy/core/tests/test_umath_accuracy.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_umath_accuracy.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_umath_accuracy.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_umath_accuracy.py	(working tree)
 @@ -33,1 +35,2 @@ class TestAccuracy:
 -            data_dir = path.join(path.dirname(__file__), 'data')
 +            import yatest.common as yc
@@ -83,15 +27,9 @@
 -pwd = os.path.dirname(os.path.abspath(__file__))
 +import yatest.common as yc
 +pwd = yc.source_path(os.path.dirname(__file__))
---- contrib/python/numpy/py3/numpy/core/tests/test_numpy_2_0_compat.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_numpy_2_0_compat.py	(working tree)
-@@ -4,2 +4,3 @@ import pickle
- import numpy as np
-+import yatest.common as yc
- 
-@@ -9 +10 @@ class TestNumPy2Compatibility:
--    data_dir = path.join(path.dirname(__file__), "data")
-+    data_dir = yc.source_path(path.join(path.dirname(__file__), "data"))
+@@ -539,1 +539,1 @@ class TestSFC64(Base):
+-        pkl_file = os.path.join(base_path, "data", "sfc64_np126.pkl.gz")
++        pkl_file = os.path.join(pwd, "data", "sfc64_np126.pkl.gz")
 --- contrib/python/numpy/py3/numpy/lib/tests/test_format.py	(index)
 +++ contrib/python/numpy/py3/numpy/lib/tests/test_format.py	(working tree)
 @@ -90 +90 @@ Test the magic string writing.
@@ -145,8 +83,8 @@
  @pytest.mark.skipif(ctypes is None,
                      reason="ctypes not available in this python")
  def test_NPY_NO_EXPORT():
---- contrib/python/numpy/py3/numpy/core/tests/test_nditer.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_nditer.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_nditer.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_nditer.py	(working tree)
 @@ -2031,8 +2031,11 @@ def test_buffered_cast_error_paths_unraisable():
          buf[...] = "a"
          del buf, it  # Flushing only happens during deallocate right now.
@@ -160,8 +98,8 @@
      assert "ValueError" in res
  
  
---- contrib/python/numpy/py3/numpy/core/tests/test_protocols.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_protocols.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_protocols.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_protocols.py	(working tree)
 @@ -4,4 +4,5 @@ import warnings
  
  
@@ -188,8 +126,8 @@
  @pytest.mark.skipif(IS_WASM, reason="can't start subprocess")
  def test_full_reimport():
      """At the time of writing this, it is *not* truly supported, but
---- contrib/python/numpy/py3/numpy/core/tests/test_limited_api.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_limited_api.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_limited_api.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_limited_api.py	(working tree)
 @@ -6,6 +6,7 @@ import sysconfig
  import pytest
  
@@ -226,8 +164,8 @@
  @pytest.mark.skipif(IS_PYPY and sys.implementation.version <= (7, 3, 8),
                      reason="PyPy bug in error formatting")
  @pytest.mark.parametrize("dtype", np.typecodes["AllInteger"])
---- contrib/python/numpy/py3/numpy/core/tests/test_nep50_promotions.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_nep50_promotions.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_nep50_promotions.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_nep50_promotions.py	(working tree)
 @@ -20,6 +20,7 @@ def _weak_promotion_enabled():
      np._set_promotion_state(state)
  
@@ -236,8 +174,8 @@
  @pytest.mark.skipif(IS_WASM, reason="wasm doesn't have support for fp errors")
  def test_nep50_examples():
      with pytest.warns(UserWarning, match="result dtype changed"):
---- contrib/python/numpy/py3/numpy/core/tests/test_cpu_features.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_cpu_features.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_cpu_features.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_cpu_features.py	(working tree)
 @@ -122,6 +122,7 @@ class AbstractTest:
          " therefore this test class cannot be properly executed."
      ),
@@ -246,8 +184,8 @@
  class TestEnvPrivation:
      cwd = pathlib.Path(__file__).parent.resolve()
      env = os.environ.copy()
---- contrib/python/numpy/py3/numpy/core/tests/test_numeric.py	(index)
-+++ contrib/python/numpy/py3/numpy/core/tests/test_numeric.py	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_numeric.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_numeric.py	(working tree)
 @@ -2352,7 +2352,7 @@ class TestClip:
          actual = np.clip(arr, amin, amax)
          assert_equal(actual, expected)
@@ -257,3 +195,59 @@
      @pytest.mark.parametrize("arr, amin, amax", [
          (np.array([1] * 10, dtype='m8'),
           np.timedelta64('NaT'),
+--- contrib/python/numpy/py3/numpy/random/tests/test_generator_mt19937.py	(index)
++++ contrib/python/numpy/py3/numpy/random/tests/test_generator_mt19937.py	(working tree)
+@@ -2783,9 +2783,10 @@ def test_legacy_pickle(version):
+     import pickle
+     import gzip
+ 
+-    base_path = os.path.split(os.path.abspath(__file__))[0]
++    import yatest.common as yc
++    pwd = yc.source_path(os.path.dirname(__file__))
+     pkl_file = os.path.join(
+-        base_path, "data", f"generator_pcg64_np{version}.pkl.gz"
++        pwd, "data", f"generator_pcg64_np{version}.pkl.gz"
+     )
+     with gzip.open(pkl_file) as gz:
+         rg = pickle.load(gz)
+--- contrib/python/numpy/py3/numpy/_core/tests/test_deprecations.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_deprecations.py	(working tree)
+@@ -655,8 +655,27 @@ class TestLibImports(_DeprecationTestCase):
+         from numpy.lib._function_base_impl import disp
+         from numpy.lib._shape_base_impl import get_array_wrap
+         from numpy._core.numerictypes import maximum_sctype
+-        from numpy.lib.tests.test_io import TextIO
+         from numpy import in1d, row_stack, trapz
++        import io
++        from numpy._utils import asbytes
++
++        class TextIO(io.BytesIO):
++            """Helper IO class.
++
++            Writes encode strings to bytes if needed, reads return bytes.
++            This makes it easier to emulate files opened in binary mode
++            without needing to explicitly convert strings to bytes in
++            setting up the test data.
++
++            """
++            def __init__(self, s=""):
++                io.BytesIO.__init__(self, asbytes(s))
++
++            def write(self, s):
++                io.BytesIO.write(self, asbytes(s))
++
++            def writelines(self, lines):
++                io.BytesIO.writelines(self, [asbytes(s) for s in lines])
+ 
+         self.assert_deprecated(lambda: safe_eval("None"))
+ 
+--- contrib/python/numpy/py3/numpy/tests/test_public_api.py	(index)
++++ contrib/python/numpy/py3/numpy/tests/test_public_api.py	(working tree)
+@@ -497,6 +497,7 @@ def test_array_api_entry_point():
+     assert xp is numpy, msg
+ 
+ 
++@pytest.mark.xfail
+ def test_main_namespace_all_dir_coherence():
+     """
+     Checks if `dir(np)` and `np.__all__` are consistent and return

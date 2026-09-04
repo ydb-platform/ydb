@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -66,7 +65,7 @@ TComputationNodeFactory GetFetchAfterFinishFactory() {
 TRuntimeNode WrapWithFetchAfterFinish(TProgramBuilder& pb, TRuntimeNode stream) {
     TCallableBuilder b(pb.GetTypeEnvironment(), "FetchAfterFinish", stream.GetStaticType());
     b.Add(stream);
-    return TRuntimeNode(b.Build(), false);
+    return TRuntimeNode(b.Build(), /*isImmediate=*/false);
 }
 
 template <bool UseLLVM>
@@ -79,13 +78,13 @@ TRuntimeNode MakeStream(TSetup<UseLLVM>& setup, ui64 count = 9U) {
 
     callableBuilder.Add(pb.NewDataLiteral(count));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 template <bool UseLLVM>
 TRuntimeNode MakeFlow(TSetup<UseLLVM>& setup, ui64 count = 9U) {
     TProgramBuilder& pb = *setup.PgmBuilder;
-    return pb.ToFlow(MakeStream<UseLLVM>(setup, count));
+    return pb.ToFlow(MakeStream<UseLLVM>(setup, count), {});
 }
 
 template <bool UseLLVM>
@@ -132,7 +131,7 @@ TRuntimeNode GroupGetKeysFirst(TSetup<UseLLVM>& setup, TRuntimeNode stream, cons
                                                   [&](TRuntimeNode item) { return pb.ToString(item); },
                                                   [&](TRuntimeNode, TRuntimeNode) { return pb.NewDataLiteral<bool>(false); },
                                                   [&](TRuntimeNode item, TRuntimeNode state) { return pb.Concat(state, pb.ToString(item)); })))));
-        return isFlow ? pb.ToFlow(list) : pb.Iterator(list, {});
+        return isFlow ? pb.ToFlow(list, {}) : pb.Iterator(list, {});
     });
 }
 
@@ -551,5 +550,4 @@ Y_UNIT_TEST_LLVM(TestGroupingWithYieldAndCutSubStreams) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLChopperFlowTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

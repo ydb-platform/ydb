@@ -2,7 +2,7 @@ from ymake import macro, Unit
 
 
 @macro
-def SUPPRESSIONS(unit: Unit, *args: tuple[str, ...]):
+def SUPPRESSIONS(unit: Unit, *args: str):
     """
     SUPPRESSIONS() - allows to specify files with suppression notation which will be used by
     address, leak or thread sanitizer runtime by default.

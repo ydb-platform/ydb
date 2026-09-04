@@ -24,11 +24,6 @@
 #include "liburing.h"
 #include "helpers.h"
 
-/* Compatibility with slightly older kernel headers */
-#ifndef SOCKET_URING_OP_TX_TIMESTAMP
-#define SOCKET_URING_OP_TX_TIMESTAMP 4
-#endif
-
 /*
  * Create a socket whose error queue contains both timestamp information and
  * actual errors.

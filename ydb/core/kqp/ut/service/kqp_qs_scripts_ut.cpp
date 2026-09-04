@@ -98,38 +98,31 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteScriptWithWorkloadManager) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableResourcePools(true);
-
-        auto kikimr = TKikimrRunner(TKikimrSettings(config)
-            .SetEnableResourcePools(true)
-            .SetEnableScriptExecutionOperations(true));
+    Y_UNIT_TEST(SyntaxV0ReturnsBadRequestWithPerStatementExecution) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetQueryClient();
 
-        TExecuteScriptSettings settings;
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            --!syntax_v0
+            SELECT 42;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            scriptExecutionOperation.Status().GetStatus(),
+            EStatus::SUCCESS,
+            scriptExecutionOperation.Status().GetIssues().ToString());
 
-        {  // Existing pool
-            settings.ResourcePool("default");
-
-            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
-            CheckScriptResults(scripOp, WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver()), db);
-        }
-
-        {  // Not existing pool (check workload manager enabled)
-            settings.ResourcePool("another_pool_id");
-
-            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
-
-            auto readyOp = WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver());
-            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToOneLineString());
-            UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::NOT_FOUND, readyOp.Status().GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Resource pool another_pool_id not found");
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Failed to resolve pool id another_pool");
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
-        }
+        auto readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readyOp.Status().GetStatus(),
+            EStatus::BAD_REQUEST,
+            readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            readyOp.Status().GetIssues().ToString(),
+            "V0 syntax is disabled",
+            readyOp.Status().GetIssues().ToString());
     }
 
     void ValidatePlan(const std::optional<std::string>& plan) {
@@ -204,40 +197,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::BAD_REQUEST, scriptExecutionOperation.Status().GetStatus());
         UNIT_ASSERT(scriptExecutionOperation.Status().GetIssues().Size() == 1);
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetIssues().back().GetMessage(), "Query mode is not specified", scriptExecutionOperation.Status().GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST(ExecuteScriptPg) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
-
-        auto settings = TExecuteScriptSettings()
-            .Syntax(ESyntax::Pg);
-
-        auto scriptExecutionOperation = db.ExecuteScript(R"(
-            SELECT * FROM (VALUES
-                (1::int8, 'one'),
-                (2::int8, 'two'),
-                (3::int8, 'three')
-            ) AS t;
-        )", settings).ExtractValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
-
-        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
-        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Execute);
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ScriptContent.Syntax, ESyntax::Pg);
-
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
-        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-
-        CompareYson(R"([
-            ["1";"one"];
-            ["2";"two"];
-            ["3";"three"]
-        ])", FormatResultSetYson(results.GetResultSet()));
     }
 
     Y_UNIT_TEST(ExecuteScriptWithParameters) {
@@ -357,6 +316,15 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
         UNIT_ASSERT_VALUES_EQUAL(listed, ScriptExecutionsCount);
         UNIT_ASSERT_EQUAL(ops, listedOps);
+    }
+
+    Y_UNIT_TEST(ListScriptExecutionsInvalidPageToken) {
+        auto kikimr = DefaultKikimrRunner();
+
+        NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
+        auto list = client.List<NYdb::NQuery::TScriptExecutionOperation>(42, "invalid-page-token").ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(list.GetStatus(), EStatus::BAD_REQUEST, list.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ForgetScriptExecution) {

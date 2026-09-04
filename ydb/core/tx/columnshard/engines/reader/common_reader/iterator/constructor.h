@@ -60,7 +60,7 @@ private:
     using TBase = NArrow::NSSA::IFetchLogic;
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) = 0;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) = 0;
-    virtual void DoOnDataCollected(TFetchingResultContext& context) = 0;
+    virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) = 0;
 
 protected:
     const std::shared_ptr<IStoragesManager> StoragesManager;
@@ -83,8 +83,8 @@ public:
         DoOnDataReceived(nextRead, blobs);
     }
 
-    void OnDataCollected(TFetchingResultContext& context) {
-        DoOnDataCollected(context);
+    TConclusionStatus OnDataCollected(TFetchingResultContext& context) {
+        return DoOnDataCollected(context);
     }
 };
 
@@ -99,9 +99,12 @@ private:
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
 
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
-            "scan_actor_id", Source->GetContext()->GetCommonContext()->GetScanActorId())("status", status.GetErrorMessage())(
-            "status_code", status.GetStatus())("storage_id", storageId);
+        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"errorOnBlobReading", range},
+            {"scanActorId", Source->GetContext()->GetCommonContext()->GetScanActorId()},
+            {"status", status.GetErrorMessage()},
+            {"statusCode", status.GetStatus()},
+            {"storageId", storageId});
         NActors::TActorContext::AsActorContext().Send(Source->GetContext()->GetCommonContext()->GetScanActorId(),
             std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
                 TConclusionStatus::Fail(

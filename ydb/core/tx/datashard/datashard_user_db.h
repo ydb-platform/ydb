@@ -204,13 +204,6 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
-    void InsertFulltext(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops,
-            TIntrusivePtr<NACLib::TUserContext> userCtx,
-            bool withRelevance);
-
     void CommitChanges(
             const TTableId& tableId,
             ui64 lockId) override;
@@ -293,6 +286,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, LockTxId);
     YDB_ACCESSOR_DEF(ui32, LockNodeId);
     YDB_ACCESSOR(ELockMode, LockMode, ELockMode::Optimistic);
+    YDB_ACCESSOR_DEF(bool, CollectAffectedRows);
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);
     YDB_ACCESSOR_DEF(bool, IsImmediateTx);
     YDB_ACCESSOR_DEF(bool, IsWriteTx);

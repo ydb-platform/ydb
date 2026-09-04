@@ -5,6 +5,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
 class IDBModifier {
@@ -25,8 +27,11 @@ private:
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v0")("path_id", PortionAddress.GetPathId())(
-                "portion_id", PortionAddress.GetPortionId())("chunk", i.GetAddress().DebugString());
+            YDB_LOG_CRIT("",
+                {"event", "remove_portion_v0"},
+                {"pathId", PortionAddress.GetPathId()},
+                {"portionId", PortionAddress.GetPortionId()},
+                {"chunk", i.GetAddress().DebugString()});
             db.Table<NColumnShard::Schema::IndexColumns>()
                 .Key(0, 0, i.GetAddress().GetColumnId(), i.GetMinSnapshotDeprecated().GetPlanStep(), i.GetMinSnapshotDeprecated().GetTxId(),
                     PortionAddress.GetPortionId(), i.GetAddress().GetChunkIdx())
@@ -53,8 +58,11 @@ private:
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v1")("path_id", PortionAddress.GetPathId())(
-                "portion_id", PortionAddress.GetPortionId())("chunk", i.DebugString());
+            YDB_LOG_CRIT("",
+                {"event", "remove_portion_v1"},
+                {"pathId", PortionAddress.GetPathId()},
+                {"portionId", PortionAddress.GetPortionId()},
+                {"chunk", i.DebugString()});
             db.Table<NColumnShard::Schema::IndexColumnsV1>()
                 .Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId(), i.GetColumnId(), i.GetChunkIdx())
                 .Delete();
@@ -79,8 +87,10 @@ private:
     }
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v2")("path_id", PortionAddress.GetPathId())(
-            "portion_id", PortionAddress.GetPortionId());
+        YDB_LOG_CRIT("",
+            {"event", "remove_portion_v2"},
+            {"pathId", PortionAddress.GetPathId()},
+            {"portionId", PortionAddress.GetPortionId()});
         db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId()).Delete();
     }
 
@@ -102,8 +112,10 @@ private:
     }
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion")("path_id", PortionAddress.GetPathId())(
-            "portion_id", PortionAddress.GetPortionId());
+        YDB_LOG_CRIT("",
+            {"event", "remove_portion"},
+            {"pathId", PortionAddress.GetPathId()},
+            {"portionId", PortionAddress.GetPortionId()});
         db.Table<NColumnShard::Schema::IndexPortions>().Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId()).Delete();
     }
 
@@ -330,7 +342,9 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
             countPortionsForRemove += modificationsPack.size();
             result.emplace_back(std::move(modificationsPack));
         }
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("tasks_for_remove", countPortionsForRemove)("distribution", sb);
+        YDB_LOG_CRIT("",
+            {"tasksForRemove", countPortionsForRemove},
+            {"distribution", sb});
     }
     return result;
 }
@@ -348,7 +362,9 @@ public:
         for (const auto& m : Modifications) {
             m->Apply(db);
         }
-        ACFL_WARN("normalizer", "TCleanEmptyPortionsNormalizer")("message", TStringBuilder() << GetSize() << " portions deleted");
+        YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TCleanEmptyPortionsNormalizer"},
+            {"message", TStringBuilder() << GetSize() << " portions deleted"});
         return true;
     }
 

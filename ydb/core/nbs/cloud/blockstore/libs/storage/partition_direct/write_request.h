@@ -58,17 +58,18 @@ private:
     void Reply(NProto::TError error);
     void NotifyBelated(THostMask completedOnCurrentResponse);
 
-    void ScheduleHedging();
+    void ScheduleHedging(TDuration hedgingDelay);
     void ScheduleRequestTimeout();
     void OnHedgingTimeout();
     void OnRequestTimeout();
 
-    [[nodiscard]] bool ShouldReplyOk() const;
+    [[nodiscard]] bool IsQuorumReached() const;
     [[nodiscard]] bool IsQuorumReachable() const;
     [[nodiscard]] size_t GetQuorumDeficit() const;
     [[nodiscard]] THostMask GetRunningDirectWrites() const;
 
     TString ExtendedDebugState() const;
+    TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem* ActorSystem;
     const EWriteMode WriteMode;
@@ -76,10 +77,10 @@ private:
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TWriteRequestBundlePtr Bundle;
-    const TDuration HedgingDelay;
     const TDuration RequestTimeout;
     const TDuration IndirectWriteReplyTimeout;
 
+    TInstant StartAt;
     THostMask IndirectCoordinator;
     THostMask RequestedIndirectWrites;
     THostMask RequestedDirectWrites;

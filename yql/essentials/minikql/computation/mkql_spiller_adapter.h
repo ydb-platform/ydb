@@ -14,11 +14,11 @@ namespace NKikimr::NMiniKQL {
 /// When interaction with ISpiller is required, Write and Read operations return a Future
 class TWideUnboxedValuesSpillerAdapter {
 public:
-    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TMultiType* type, size_t sizeLimit, ui64 minMemorySizeToReport = 10_KB)
+    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TMultiType* type, size_t sizeLimit, NYql::EDatumValidationMode datumValidationMode, ui64 minMemorySizeToReport = 10_KB)
         : Spiller_(std::move(spiller))
         , ItemType_(type)
         , SizeLimit_(sizeLimit)
-        , Packer_(type, EValuePackerVersion::V1)
+        , Packer_(type, EValuePackerVersion::V1, datumValidationMode)
         , MinMemorySizeToReport_(minMemorySizeToReport)
     {
     }

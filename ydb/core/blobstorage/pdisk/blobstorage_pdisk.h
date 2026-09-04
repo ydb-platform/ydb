@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/pdisk_io/device_io_sample.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
 #include <util/system/file.h>
@@ -328,10 +329,12 @@ struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::Ev
 struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvBlobStorage::EvChangeExpectedSlotCount> {
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
-    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits)
+    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits, ui64 expectedSlotSize = 0)
         : ExpectedSlotCount(expectedSlotCount)
         , SlotSizeInUnits(slotSizeInUnits)
+        , ExpectedSlotSize(expectedSlotSize)
     {}
 
     TString ToString() const {
@@ -344,6 +347,7 @@ struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvB
         str << "EvChangeExpectedSlotCount ";
         str << " ExpectedSlotCount# " << record.ExpectedSlotCount;
         str << " SlotSizeInUnits# " << record.SlotSizeInUnits;
+        str << " ExpectedSlotSize# " << record.ExpectedSlotSize;
         str << "}";
         return str.Str();
     }
@@ -1531,6 +1535,28 @@ struct TEvCheckSpace : TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> 
     }
 };
 
+////////////////////////////////////////////////////////////////////////////
+// Device overestimation sample transport: sent by a DDisk / PersistentBuffer
+// actor (an IO_URING source) to the PDisk actor that owns the same physical
+// device, so PDisk can merge these raw samples with its own block-device
+// samples into one completion-ordered stream. See
+// blobstorage_pdisk_device_overestimation.h for the aggregation model.
+////////////////////////////////////////////////////////////////////////////
+struct TEvDeviceOverestimationSamples
+    : TEventLocal<TEvDeviceOverestimationSamples, TEvBlobStorage::EvDeviceOverestimationSamples> {
+    TVector<NPDisk::TDeviceIoSample> Samples;
+
+    explicit TEvDeviceOverestimationSamples(TVector<NPDisk::TDeviceIoSample> samples)
+        : Samples(std::move(samples))
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{TEvDeviceOverestimationSamples SamplesCount# " << Samples.size() << "}";
+        return str.Str();
+    }
+};
+
 struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::EvCheckSpaceResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
@@ -1769,7 +1795,7 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
     {}
 
     TEvReadMetadataResult(TRcBuf&& metadata, std::optional<ui64> pdiskGuid)
-        : Outcome(EPDiskMetadataOutcome::OK)
+        : Outcome(metadata.size() ? EPDiskMetadataOutcome::OK : EPDiskMetadataOutcome::NO_METADATA)
         , Metadata(std::move(metadata))
         , PDiskGuid(pdiskGuid)
     {}
@@ -1778,6 +1804,7 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
 struct TEvWriteMetadata : TEventLocal<TEvWriteMetadata, TEvBlobStorage::EvWriteMetadata> {
     TRcBuf Metadata;
 
+    // An empty payload clears metadata; subsequent reads return NO_METADATA.
     TEvWriteMetadata(TRcBuf&& metadata)
         : Metadata(std::move(metadata))
     {}
@@ -1959,17 +1986,10 @@ struct TPDiskCtx {
     {}
 };
 
-#define P_LOG(LEVEL, MARKER, ...) \
+#define YDB_LOG_P_LOG(LEVEL, MARKER, ...) \
     do { \
         if (PCtx && PCtx->ActorSystem) { \
-            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
-        } \
-    } while (false)
-
-#define S_LOG(LEVEL, MARKER, ...) \
-    do { \
-        if (PCtx && PCtx->ActorSystem) { \
-            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK_SHRED, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
+            YDB_LOG_CTX_COMP(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, {"PDiskId", PCtx->PDiskId}); \
         } \
     } while (false)
 

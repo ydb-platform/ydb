@@ -120,8 +120,9 @@ public:
             case NKikimrProto::OK:
                 // request has been successfully processed and we should put items into queue
                 if (record.GetIsRangeOverflow() && !record.ResultSize()) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PROXY_DISCOVER,
-                            "Don't know how to process RangeOverflow with ResultSize# 0. Marker# DSPDM10");
+                    YDB_LOG_CRIT_COMP(NKikimrServices::BS_PROXY_DISCOVER, "Don't know how to process RangeOverflow",
+                        {"ResultSize", 0},
+                        {"marker", "DSPDM10"});
                     Finished = true;
                     Erroneous = true;
                 } else {

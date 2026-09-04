@@ -17,6 +17,8 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_PROXY
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -62,9 +64,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
-                   "TCreateTableRPC: cannot deliver config request to Configs Dispatcher"
-                   " (empty default profile is available only)");
+        YDB_LOG_CRIT_CTX(ctx, "TCreateTableRPC: cannot deliver config request to Configs Dispatcher (empty default profile is available only)");
         SendProposeRequest(ctx);
         Become(&TCreateTableRPC::StateWork);
     }
@@ -80,7 +80,7 @@ private:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
             case WakeupTagGetConfig: {
-                LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TCreateTableRPC: cannot get table profiles (timeout)");
+                YDB_LOG_CRIT_CTX(ctx, "TCreateTableRPC: cannot get table profiles (timeout)");
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue("Tables profiles config not available."));
                 return Reply(StatusIds::UNAVAILABLE, issues, ctx);
@@ -279,14 +279,14 @@ private:
                 }
                 case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
                     if (!AppData()->FeatureFlags.GetEnableLocalMinMaxIndex()) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
+                        YDB_LOG_ERROR(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
                         issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
                         code = StatusIds::BAD_REQUEST;
                         return false;
-                    } 
+                    }
 
                     if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage);
+                        YDB_LOG_ERROR(NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage);
                         issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage));
                         code = StatusIds::BAD_REQUEST;
                         return false;
@@ -295,22 +295,36 @@ private:
                     olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                     auto* min_max = olapIndex->MutableMinMaxIndex();
                     if (index.index_columns().size() != 1) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
+                        YDB_LOG_ERROR(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
                         issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns())));
                         code = StatusIds::BAD_REQUEST;
                         return false;
                     }
-                    
-                    if (auto it = colNameToId.find(index.index_columns(0)); it == colNameToId.end()) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0)));
-                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0))));
+                    const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+
+                    for (auto& column: schema->GetColumns()) {
+                        if (column.GetName() == index.index_columns(0)){
+                            columnDesc = &column;
+                            break;
+                        }
+                    }
+
+                    if (!columnDesc) {
+                        TVector<TString> tableColumnNames;
+                        for (const auto& col: schema->GetColumns()) {
+                            tableColumnNames.push_back(col.GetName());
+                        }
+                        YDB_LOG_ERROR(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames));
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)));
                         code = StatusIds::BAD_REQUEST;
                         return false;
-                    } else {
-                        min_max->SetColumnId(it->second);
                     }
+
+                    auto it = colNameToId.find(index.index_columns(0));
+                    min_max->SetColumnId(it->second);
+                    NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*olapIndex, columnDesc->GetType());
                     break;
-                }                
+                }
                 case Ydb::Table::TableIndex::TYPE_NOT_SET:
                 case Ydb::Table::TableIndex::kGlobalIndex:
                 case Ydb::Table::TableIndex::kGlobalAsyncIndex:
@@ -323,6 +337,10 @@ private:
                     code = StatusIds::BAD_REQUEST;
                     return false;
             }
+        }
+
+        for (const auto& stat : req.statistics()) {
+            FillMultiColumnStatistics(*tableDesc->AddMultiColumnStatistics(), stat);
         }
 
         return true;
@@ -407,10 +425,14 @@ private:
 
         tableDesc->MutableKeyColumnNames()->CopyFrom(req->primary_key());
 
-        if (!FillIndexDescription(*modifyScheme->MutableCreateIndexedTable(), *req, code, error)) {
+        if (!FillIndexDescription(*modifyScheme->MutableCreateIndexedTable(), *req, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
+        }
+
+        for (const auto& stat : req->statistics()) {
+            FillMultiColumnStatistics(*tableDesc->AddMultiColumnStatistics(), stat);
         }
 
         bool tableProfileSet = false;

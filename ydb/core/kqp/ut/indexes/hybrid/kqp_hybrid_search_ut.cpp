@@ -28,6 +28,17 @@ TKikimrRunner MakeRunner(bool enableHybridSearch = true) {
     return TKikimrRunner(settings);
 }
 
+TKikimrRunner MakeRunnerWithCompact(bool compact) {
+    NSchemeShard::gVectorIndexSeed = 1337;
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(true);
+    return TKikimrRunner(settings);
+}
+
 void ExecOk(TQueryClient& db, const TString& sql) {
     auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -178,8 +189,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
     //   doc2:             + vec 1/(60+1) = 0.0164
     //   doc4:             + vec 1/(60+3) = 0.0159
     // i.e. exactly [1, 3, 2, 4].
-    Y_UNIT_TEST(FusesBothBranches) {
-        auto kikimr = MakeRunner();
+    Y_UNIT_TEST_TWIN(FusesBothBranches, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
         auto db = kikimr.GetQueryClient();
         SetupDocs(db);
 
@@ -189,6 +200,117 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
+    }
+
+    Y_UNIT_TEST(FulltextFloatNamedOptionsAreApplied) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats love dogs",
+                    "or" AS DefaultOperator,
+                    "2" AS MinimumShouldMatch,
+                    1.2f AS K1,
+                    0.75f AS B),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+
+        const auto keys = RunKeys(db, query);
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u}),
+            TStringBuilder() << "unexpected keys; result count: " << keys.size());
+
+        auto explainSettings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx(), explainSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        auto planOpt = result.GetStats()->GetPlan();
+        UNIT_ASSERT(planOpt.has_value());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*planOpt, &plan, true);
+        const auto read = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+        UNIT_ASSERT_C(read.IsDefined(), TStringBuilder() << "ReadFullTextIndex operator not found in plan:\n" << *planOpt);
+        UNIT_ASSERT(FindPlanNodeByKv(read, "DefaultOperator", "\"or\"").IsDefined());
+        UNIT_ASSERT(FindPlanNodeByKv(read, "MinimumShouldMatch", "\"2\"").IsDefined());
+        UNIT_ASSERT(FindPlanNodeByKv(read, "K1Factor", "\"1.2\"").IsDefined());
+        UNIT_ASSERT(FindPlanNodeByKv(read, "BFactor", "\"0.75\"").IsDefined());
+    }
+
+    Y_UNIT_TEST(FulltextNamedOptionParametersAreApplied) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDeclWith(R"sql(
+            DECLARE $defaultOperator AS String;
+            DECLARE $minimumShouldMatch AS String;
+            DECLARE $k1 AS Double;
+            DECLARE $b AS Double;
+        )sql") + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats love dogs",
+                    $defaultOperator AS DefaultOperator,
+                    $minimumShouldMatch AS MinimumShouldMatch,
+                    $k1 AS K1,
+                    $b AS B),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto params = TParamsBuilder()
+            .AddParam("$defaultOperator").String("or").Build()
+            .AddParam("$minimumShouldMatch").String("2").Build()
+            .AddParam("$k1").Double(1.2).Build()
+            .AddParam("$b").Double(0.75).Build()
+            .Build();
+
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        std::vector<ui64> keys;
+        TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        UNIT_ASSERT((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u}));
+    }
+
+    Y_UNIT_TEST(RejectsUnsupportedFulltextNamedOption) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats", 1 AS Unknown),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "unsupported FullTextScore named argument 'Unknown'");
+
+        const TString badTypeQuery = TargetDeclWith(R"sql(
+            DECLARE $k1 AS Utf8;
+        )sql") + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats", $k1 AS K1),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        const auto params = TParamsBuilder().AddParam("$k1").Utf8("not a number").Build().Build();
+        result = db.ExecuteQuery(badTypeQuery, TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FullTextScore named argument 'K1'");
     }
 
     // Regression guard: the final RRF fusion stage must keep its sort, so the result rows come back
@@ -504,8 +626,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u, "a text-relevant doc must rank first");
     }
 
-    Y_UNIT_TEST(NamedIndexesDisambiguate) {
-        auto kikimr = MakeRunner();
+    Y_UNIT_TEST_TWIN(NamedIndexesDisambiguate, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
         auto db = kikimr.GetQueryClient();
         CreateDocs(db);
         UpsertDocs(db);
@@ -667,6 +789,237 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         }
         UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
             "explicit Limits allow a parameterised LIMIT and still fuse both branches");
+    }
+
+    // A custom `... AS RankLambda` lambda receives the document's per-branch ranks as $ranks (branch index
+    // -> 1-based rank; a branch the document is absent from has no entry, so $ranks[i] is NULL). Spelling RRF
+    // out by hand -- equal weights, k=60, a large penalty for the absent branch via COALESCE -- must
+    // reproduce the built-in rrf order [1, 3, 2, 4] from FusesBothBranches.
+    Y_UNIT_TEST(RankLambdaReproducesRrf) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),                 -- branch 0
+                Knn::CosineDistance(Embedding, $target),     -- branch 1
+                ($ranks) -> {
+                    RETURN 1.0 / (60 + COALESCE($ranks[0], 100000))
+                         + 1.0 / (60 + COALESCE($ranks[1], 100000));
+                } AS RankLambda)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
+    }
+
+    // The lambda can weight branches asymmetrically: heavily favouring the vector branch overrides the
+    // text signal and recovers the pure vector order (doc2 exact < doc1 near < doc4 mid < doc3 opposite),
+    // i.e. [2, 1, 4, 3] -- a different order from the balanced RRF [1, 3, 2, 4].
+    Y_UNIT_TEST(RankLambdaCustomWeightsReorder) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),
+                Knn::CosineDistance(Embedding, $target),
+                ($ranks) -> {
+                    RETURN   1.0 / (60 + COALESCE($ranks[0], 100000))
+                         + 100.0 / (60 + COALESCE($ranks[1], 100000));
+                } AS RankLambda)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u, 1u, 4u, 3u}), keys);
+    }
+
+    // Three branches fuse through one lambda that indexes $ranks[0..2]. Zeroing the third (cosine
+    // similarity) term reduces to the two-branch RRF and recovers [1, 3, 2, 4], while still exercising the
+    // full three-slot rank-vector assembly (a third rank column grouped by pk).
+    Y_UNIT_TEST(RankLambdaThreeBranches) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),                 -- branch 0
+                Knn::CosineDistance(Embedding, $target),     -- branch 1
+                Knn::CosineSimilarity(Embedding, $target),   -- branch 2
+                ($ranks) -> {
+                    RETURN 1.0 / (60 + COALESCE($ranks[0], 100000))
+                         + 1.0 / (60 + COALESCE($ranks[1], 100000))
+                         + 0.0 / (60 + COALESCE($ranks[2], 100000));
+                } AS RankLambda)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
+    }
+
+    // A genuine three-branch fusion where the *third* slot drives the outcome: heavily weighting the cosine
+    // similarity branch ($ranks[2]) overrides the text signal and recovers the pure vector order
+    // [2, 1, 4, 3] (doc2 exact < doc1 near < doc4 mid < doc3 opposite). Unlike RankLambdaThreeBranches,
+    // which zeroes the third term, here the third branch's rank changes the result -- so the test fails if
+    // the third rank column is dropped, mis-indexed, or shifted. Over the cosine index CosineSimilarity
+    // ranks the same as CosineDistance, so branches 1 and 2 carry identical per-doc ranks; the 100x weight
+    // on branch 2 therefore dominates the balanced text+vector contribution of branches 0 and 1.
+    //   doc2: 1/(60+inf) + 1/(60+1) + 100/(60+1) = 1.6557   (best; exact vector match, weight on vector)
+    //   doc1: 1/(60+1)   + 1/(60+2) + 100/(60+2) = 1.6454
+    //   doc4: 1/(60+inf) + 1/(60+3) + 100/(60+3) = 1.6032
+    //   doc3: 1/(60+2)   + 1/(60+4) + 100/(60+4) = 1.5943
+    Y_UNIT_TEST(RankLambdaThreeBranchesThirdSlotDrives) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),                 -- branch 0
+                Knn::CosineDistance(Embedding, $target),     -- branch 1
+                Knn::CosineSimilarity(Embedding, $target),   -- branch 2
+                ($ranks) -> {
+                    RETURN   1.0 / (60 + COALESCE($ranks[0], 100000))
+                         +   1.0 / (60 + COALESCE($ranks[1], 100000))
+                         + 100.0 / (60 + COALESCE($ranks[2], 100000));
+                } AS RankLambda)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u, 1u, 4u, 3u}), keys);
+    }
+
+    // ScoreLambda fuses the *raw* per-branch scores instead of the ranks: $scores[i] is the branch's score
+    // value as a Double (the fulltext relevance, or the vector distance/similarity), NULL if the document is
+    // absent from that branch. Negating the cosine *distance* (smaller is closer) makes it a larger-is-better
+    // score, so ignoring text and ranking by -distance recovers the pure vector order [2, 1, 4, 3]
+    // (doc2 exact < doc1 near < doc4 mid < doc3 opposite). This depends only on the fixed relative ordering
+    // of the distances -- not their exact magnitudes -- so it is deterministic.
+    Y_UNIT_TEST(ScoreLambdaRanksByRawVectorScore) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),                 -- branch 0 (unused by the lambda)
+                Knn::CosineDistance(Embedding, $target),     -- branch 1
+                ($scores) -> {
+                    RETURN -COALESCE($scores[1], 1000000.0);
+                } AS ScoreLambda)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u, 1u, 4u, 3u}), keys);
+    }
+
+    // ScoreLambda over the fulltext relevance score: ranking by the raw BM25 alone puts the highest-relevance
+    // doc 1 ("cats" x3) first, then doc 3 ("cats" x1); docs 2 and 4 have no text match, so $scores[0] is NULL
+    // and the COALESCE sentinel sends them to the bottom. We assert the deterministic top (doc 1 leads, and
+    // {1,3} take the two text-relevant slots) without pinning the exact BM25 magnitudes.
+    Y_UNIT_TEST(ScoreLambdaRanksByRawTextScore) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),                 -- branch 0
+                Knn::CosineDistance(Embedding, $target),     -- branch 1 (unused by the lambda)
+                ($scores) -> {
+                    RETURN COALESCE($scores[0], -1.0);
+                } AS ScoreLambda)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(keys[0], 1u, "raw BM25 ranking puts the highest-relevance doc 1 first");
+        UNIT_ASSERT_C((std::set<ui64>{keys[0], keys[1]} == std::set<ui64>{1u, 3u}),
+            "the two text-relevant docs take the top positions under raw text-score fusion");
+    }
+
+    // A custom fusion lambda replaces the built-in fusion, so combining it with the built-in fusion knobs
+    // (Mode / Weights / K / Normalize) is rejected with a clear message. The message names the lambda kind.
+    Y_UNIT_TEST(CustomLambdaRejectsConflictingOptions) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        for (const TString& opt : {TString("\"rrf\" AS Mode"), TString("(1, 2) AS Weights"),
+                                   TString("60.0 AS K"), TString("true AS Normalize")}) {
+            auto issues = RunFailIssues(db, TargetDecl + Sprintf(R"sql(
+                SELECT Key FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                    %s,
+                    ($ranks) -> { RETURN 1.0 / (60 + COALESCE($ranks[0], 100000)); } AS RankLambda)
+                LIMIT 4;
+            )sql", opt.c_str()));
+            UNIT_ASSERT_STRING_CONTAINS_C(issues, "cannot be combined with a custom RankLambda",
+                TStringBuilder() << "option " << opt << " should conflict with RankLambda");
+        }
+
+        // The conflict message names ScoreLambda when that is the lambda kind in play.
+        UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                "rrf" AS Mode,
+                ($scores) -> { RETURN COALESCE($scores[0], 0.0); } AS ScoreLambda)
+            LIMIT 4;
+        )sql"), "cannot be combined with a custom ScoreLambda");
+    }
+
+    // At most one fusion lambda may be given: RankLambda and ScoreLambda together is rejected by the SQL
+    // frontend before type checking.
+    Y_UNIT_TEST(CustomLambdaRejectsBothKinds) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                ($ranks)  -> { RETURN 1.0 / (60 + COALESCE($ranks[0], 100000)); } AS RankLambda,
+                ($scores) -> { RETURN COALESCE($scores[0], 0.0); } AS ScoreLambda)
+            LIMIT 4;
+        )sql"), "at most one of RankLambda or ScoreLambda");
+    }
+
+    // A fusion lambda must be a lambda that returns a numeric score; a non-lambda value and a non-numeric
+    // result are both rejected up front during type annotation. A non-lambda is caught by ConvertToLambda
+    // ("Expected lambda"); a non-numeric return is reported with the lambda-kind name.
+    Y_UNIT_TEST(CustomLambdaRejectsBadLambda) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        // A non-lambda AS RankLambda.
+        UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                5 AS RankLambda)
+            LIMIT 4;
+        )sql"), "Expected lambda");
+
+        // A non-lambda AS ScoreLambda.
+        UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                5 AS ScoreLambda)
+            LIMIT 4;
+        )sql"), "Expected lambda");
+
+        // A RankLambda that returns a non-numeric value.
+        UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                ($ranks) -> { RETURN "not a number"; } AS RankLambda)
+            LIMIT 4;
+        )sql"), "must return a numeric score");
     }
 
     // Note: the composite-primary-key guard in the optimizer is defensive only. A fulltext-relevance

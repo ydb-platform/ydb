@@ -12,12 +12,16 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/transactions/operators/backup.h>
+#include <ydb/core/tx/columnshard/transactions/operators/restore.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 #include <ydb/core/tx/tx_processing.h>
+
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -144,6 +148,11 @@ TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TS
 }
 
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
+    PlanSchemaTxStepOnly(runtime, sender, snap);
+    WaitSchemaTxCompletion(runtime, sender, snap.GetTxId());
+}
+
+void PlanSchemaTxStepOnly(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
     auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(snap.GetTxId());
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
 
@@ -154,8 +163,11 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSn
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
     UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
+}
+
+void WaitSchemaTxCompletion(TTestBasicRuntime& runtime, const TActorId& sender, ui64 txId) {
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
-    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), snap.GetTxId());
+    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), txId);
 }
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
@@ -188,12 +200,18 @@ ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>
 }
 
 bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 tableId, const ui64 writeId, const TString& data,
-    const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId) {
+    const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId,
+    const std::optional<TDuration>& timeout = std::nullopt) {
     const TString dedupId = ToString(writeId);
 
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     if (lockId) {
         write->SetLockId(lockId, 1);
+    }
+    if (timeout) {
+        // When the shard throttles the write (e.g. small-blobs/compaction overload), it holds the request in its
+        // queue until this timeout elapses and then rejects it with OVERLOADED; set it so a blocked write fails fast.
+        write->Record.SetTimeoutSeconds(timeout->Seconds());
     }
     auto& operation = write->AddOperation(TEnumOperator<NEvWrite::EModificationType>::SerializeToWriteProto(mType), TTableId(0, tableId, 1), {},
         0, NKikimrDataEvents::FORMAT_ARROW);
@@ -211,8 +229,8 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType,
-    const ui64 lockId) {
-    return WriteDataImpl(runtime, sender, shardId, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId);
+    const ui64 lockId, const std::optional<TDuration>& timeout) {
+    return WriteDataImpl(runtime, sender, shardId, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId, timeout);
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
@@ -387,8 +405,8 @@ std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value
     return cells;
 }
 
-TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns, const TTestBlobOptions& options,
-    const std::set<std::string>& notNullColumns) {
+TString MakeTestBlobValues(const std::vector<ui64>& values, const std::vector<NArrow::NTest::TTestColumn>& columns,
+    const TTestBlobOptions& options, const std::set<std::string>& notNullColumns) {
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME, notNullColumns);
     const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(columns));
     UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
@@ -404,20 +422,8 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTes
 
     std::vector<TString> mem;
     std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
-    // insert, not ordered
-    for (size_t i = range.first; i < range.second; i += 2) {
-        std::vector<TCell> cells = MakeTestCells(types, i, mem);
-        for (auto& pos : nullPositions) {
-            cells[pos] = TCell();
-        }
-        for (auto& pos : samePositions) {
-            cells[pos] = MakeTestCell(types[pos], options.SameValue, mem);
-        }
-        NKikimr::TDbTupleRef unused;
-        batchBuilder.AddRow(unused, NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
-    }
-    for (size_t i = range.first + 1; i < range.second; i += 2) {
-        std::vector<TCell> cells = MakeTestCells(types, i, mem);
+    for (ui64 value : values) {
+        std::vector<TCell> cells = MakeTestCells(types, value, mem);
         for (auto& pos : nullPositions) {
             cells[pos] = TCell();
         }
@@ -436,6 +442,19 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTes
     TString blob = batchBuilder.Finish();
     UNIT_ASSERT(!blob.empty());
     return blob;
+}
+
+TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns, const TTestBlobOptions& options,
+    const std::set<std::string>& notNullColumns) {
+    std::vector<ui64> values;
+    values.reserve(range.second > range.first ? range.second - range.first : 0);
+    for (ui64 i = range.first; i < range.second; i += 2) {
+        values.push_back(i);
+    }
+    for (ui64 i = range.first + 1; i < range.second; i += 2) {
+        values.push_back(i);
+    }
+    return MakeTestBlobValues(values, columns, options, notNullColumns);
 }
 
 TSerializedTableRange MakeTestRange(
@@ -502,6 +521,80 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     }
 }
 
+namespace {
+
+NKikimrMiniKQL::TResult LocalMiniKQL(TTestBasicRuntime& runtime, ui64 tabletId, const TString& query) {
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    auto evTx = new TEvTablet::TEvLocalMKQL;
+    evTx->Record.MutableProgram()->MutableProgram()->SetText(query);
+    ForwardToTablet(runtime, tabletId, sender, evTx);
+
+    auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), NKikimrProto::OK, event->Get()->Record.GetMiniKQLErrors());
+    return event->Get()->Record.GetExecutionEngineEvaluatedResponse();
+}
+
+}   // namespace
+
+ui64 CountLocalDbTableRows(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let range %s)
+            (let fields %s)
+            (return (AsList
+                (SetResult 'Result (SelectRange '%s range fields '()))
+            ))
+        )
+    )", rangeSpec.c_str(), fieldsSpec.c_str(), tableName.c_str());
+    const auto result = LocalMiniKQL(runtime, tabletId, query);
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('TxId (Null) (Void))
+            ))
+            (let fields '('TxId))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'TxInfo range fields '()))
+            ))
+        )
+    )");
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+ui64 CountBackgroundSessionsRows(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('ClassName (Null) (Void))
+                '('Identifier (Null) (Void))
+            ))
+            (let fields '('ClassName))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'BackgroundSessions range fields '()))
+            ))
+        )
+    )");
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+void VerifyNoBackupOrRestoreArtifacts(TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId) {
+    UNIT_ASSERT(csController);
+    UNIT_ASSERT_VALUES_EQUAL(NColumnShard::TBackupTransactionOperator::GetCounter().Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(NColumnShard::TRestoreTransactionOperator::GetCounter().Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(csController->GetBackgroundSessionsCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(csController->GetTxOperatorsCount(), 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime, tabletId), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(CountBackgroundSessionsRows(runtime, tabletId), 0u);
+}
+
 }   // namespace NKikimr::NTxUT
 
 namespace NKikimr::NColumnShard {
@@ -546,16 +639,16 @@ NTxUT::TPlanStep SetupSchema(
     using namespace NTxUT;
     TString txBody;
     auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
-    if (table.InStore) {
-        txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
-    } else {
+    if (table.Standalone) {
         txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
+    } else {
+        txBody = TTestSchema::CreateInitShardTxBody(pathId, false, table.Schema, table.Pk, specials);
     }
     return SetupSchema(runtime, sender, txBody, txId);
 }
 
-NTxUT::TPlanStep PrepareTablet(
-    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
+NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema,
+    const ui32 keySize, const bool standalone) {
     using namespace NTxUT;
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -563,7 +656,7 @@ NTxUT::TPlanStep PrepareTablet(
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    TestTableDescription tableDescription;
+    TestTableDescription tableDescription{ .Standalone = standalone };
     tableDescription.Schema = schema;
     tableDescription.Pk = {};
     for (ui64 i = 0; i < keySize; ++i) {
@@ -572,18 +665,6 @@ NTxUT::TPlanStep PrepareTablet(
     }
     TActorId sender = runtime.AllocateEdgeActor();
     return SetupSchema(runtime, sender, tableId, tableDescription);
-}
-
-NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody) {
-    using namespace NTxUT;
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    return SetupSchema(runtime, sender, schemaTxBody, 100);
 }
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(

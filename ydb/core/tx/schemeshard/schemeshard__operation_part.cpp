@@ -13,6 +13,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/tx_processing.h>
 
 namespace NKikimr::NSchemeShard {
@@ -170,12 +171,15 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
                 , "unexpected name %s", implName.c_str());
 
             TPath implPath = child.Child(implName);
+            if (implPath.IsDeleted()) {
+                continue;
+            }
+
             {
                 TPath::TChecker checks = implPath.Check();
                 checks
                     .NotEmpty()
                     .IsResolved()
-                    .NotDeleted()
                     .NotUnderDeleting()
                     .NotUnderOperation();
 

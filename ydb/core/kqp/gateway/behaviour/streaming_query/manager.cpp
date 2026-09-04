@@ -8,6 +8,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/services/metadata/service.h>
 
+#include <yql/essentials/core/sql_types/hopping.h>
+
 #include <library/cpp/protobuf/interop/cast.h>
 
 namespace NKikimr::NKqp {
@@ -80,7 +82,12 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is not a valid ISO 8601 duration: '" << *timeAgo << "'");
         }
 
-        *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(duration.Get<ui64>()));
+        const i64 signedDuration = duration.Get<i64>();
+        if (signedDuration < 0) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is negative: '" << *timeAgo << "'");
+        }
+
+        *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(signedDuration));
     }
 
     if (!streamingDispositionExtractor.IsFinished()) {
@@ -90,6 +97,24 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
     Y_VALIDATE(result.GetDispositionCase() != NYql::NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET, "Failed to parse streaming disposition");
 
     return result;
+}
+
+TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFeaturesExtractor& featuresExtractor) {
+    const auto& value = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::WatermarkLateEventsPolicy);
+    if (!value) {
+        return std::nullopt;
+    }
+
+    const auto policy = to_lower(*value);
+
+    if (!TryFromString<NYql::NHoppingWindow::EPolicy>(policy)) {
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            TStringBuilder() << "Invalid value for watermark_late_events_policy: '" << *value << "'"
+        );
+    }
+
+    return std::optional<TString>(policy);
 }
 
 [[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings, TActorSystem* actorSystem) {
@@ -104,6 +129,7 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
         TStreamingQueryConfig::TProperties::Run,
         TStreamingQueryConfig::TProperties::ResourcePool,
         TStreamingQueryConfig::TProperties::Force,
+        TStreamingQueryConfig::TProperties::CheckpointInterval,
     }) {
         if (const auto& value = featuresExtractor.Extract(property)) {
             if (!properties.emplace(property, *value).second) {
@@ -125,6 +151,14 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
         }
         properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, streamingDisposition->SerializeAsString());
+    }
+
+    auto watermarkLateEventsPolicyStatus = ParseWatermarkLateEventsPolicy(featuresExtractor);
+    if (watermarkLateEventsPolicyStatus.IsFail()) {
+        return watermarkLateEventsPolicyStatus;
+    }
+    if (const auto watermarkLateEventsPolicy = watermarkLateEventsPolicyStatus.DetachResult()) {
+        properties.emplace(TStreamingQueryConfig::TProperties::WatermarkLateEventsPolicy, *watermarkLateEventsPolicy);
     }
 
     if (!featuresExtractor.IsFinished()) {
@@ -217,7 +251,7 @@ TAsyncStatus TStreamingQueryManager::DoModify(const NYql::TObjectSettingsImpl& s
 }
 
 TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
-    Y_UNUSED(manager);    
+    Y_UNUSED(manager);
 
     try {
         switch (context.GetActivityType()) {
@@ -239,7 +273,7 @@ TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOper
 
 TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
     if (settings.GetExistingOk() && settings.GetReplaceIfExists()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' can not be used together for STREAMING_QUERY objects");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' cannot be used together for STREAMING_QUERY objects");
     }
 
     const auto& externalContext = context.GetExternalData();

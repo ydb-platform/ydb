@@ -22,4 +22,6 @@ EXCLUDE(
     contrib/java/com/google/protobuf/protobuf-javalite
 )
 
+ORIGINAL_SOURCE(https://github.com/grpc/grpc-java)
+
 END()

@@ -68,6 +68,7 @@ message TAlterRecord {
     optional bool IsSensitive = 28 [default = false];
     reserved 29; // deprecated -> ByKeyFilterPrefixes
     repeated NKikimrSchemeOp.TByKeyFilterPrefix ByKeyFilterPrefixes = 30; // Bloom filters on PK prefixes
+    optional uint32 SpecialTableType = 32;
 
     optional uint64 ExecutorCacheSize = 100;
     optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 101;

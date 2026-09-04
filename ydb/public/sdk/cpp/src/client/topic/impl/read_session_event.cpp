@@ -26,10 +26,10 @@ using TPartitionSessionClosedEvent = TReadSessionEvent::TPartitionSessionClosedE
 std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TDataReceivedEvent& dataReceivedEvent, uint64_t index) {
     if (dataReceivedEvent.HasCompressedMessages()) {
         const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
-        return {msg.GetOffset(), msg.GetOffset() + 1};
+        return {msg.GetOffset(), msg.GetOffset() + msg.GetLogicalMessageCount()};
     }
     const auto& msg = dataReceivedEvent.GetMessages()[index];
-    return {msg.GetOffset(), msg.GetOffset() + 1};
+    return {msg.GetOffset(), msg.GetOffset() + msg.GetLogicalMessageCount()};
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -44,7 +44,8 @@ TMessageInformation::TMessageInformation(
     TWriteSessionMeta::TPtr meta,
     TMessageMeta::TPtr messageMeta,
     uint64_t uncompressedSize,
-    std::string messageGroupId
+    std::string messageGroupId,
+    uint64_t logicalMessageCount
 )
     : Offset(offset)
     , ProducerId(producerId)
@@ -55,6 +56,7 @@ TMessageInformation::TMessageInformation(
     , MessageMeta(messageMeta)
     , UncompressedSize(uncompressedSize)
     , MessageGroupId(std::move(messageGroupId))
+    , LogicalMessageCount(logicalMessageCount)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -94,6 +96,10 @@ const std::string& TMessageBase::GetBrokenData() const {
 
 uint64_t TMessageBase::GetOffset() const {
     return Information.Offset;
+}
+
+uint64_t TMessageBase::GetLogicalMessageCount() const {
+    return Information.LogicalMessageCount;
 }
 
 const std::string& TMessageBase::GetProducerId() const {
@@ -139,6 +145,7 @@ void TPrintable<TMessageBase>::DebugString(TStringBuilder& ret, bool printData) 
     }
     ret << " Information: {"
         << " Offset: " << self->GetOffset()
+        << " LogicalMessageCount: " << self->GetLogicalMessageCount()
         << " ProducerId: \"" << self->GetProducerId() << "\""
         << " SeqNo: " << self->GetSeqNo()
         << " CreateTime: " << self->GetCreateTime()
@@ -192,7 +199,7 @@ bool TMessage::HasException() const {
 
 void TMessage::Commit() {
     static_cast<TPartitionSessionControl*>(PartitionSession.Get())
-        ->Commit(Information.Offset, Information.Offset + 1);
+        ->Commit(Information.Offset, Information.Offset + Information.LogicalMessageCount);
 }
 
 template<>
@@ -226,7 +233,7 @@ uint64_t TCompressedMessage::GetUncompressedSize() const {
 
 void TCompressedMessage::Commit() {
     static_cast<TPartitionSessionControl*>(PartitionSession.Get())
-        ->Commit(Information.Offset, Information.Offset + 1);
+        ->Commit(Information.Offset, Information.Offset + Information.LogicalMessageCount);
 }
 
 template<>

@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
     config.cpp
+    GLOBAL configure_solomon_registry.cpp
     cube.cpp
     encoder.cpp
     exporter.cpp

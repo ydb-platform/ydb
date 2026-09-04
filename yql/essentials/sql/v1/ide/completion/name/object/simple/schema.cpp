@@ -25,7 +25,7 @@ private:
         // NOLINTNEXTLINE(bugprone-exception-escape)
         return [filter](auto f) mutable {
             TVector<TFolderEntry> entries = f.ExtractValue();
-            EraseIf(entries, [filter = std::move(filter)](const TFolderEntry& entry) {
+            EraseIf(entries, [filter = filter](const TFolderEntry& entry) {
                 const bool isKnownType = TFolderEntry::KnownTypes.contains(entry.Type);
                 return (
                     (isKnownType &&

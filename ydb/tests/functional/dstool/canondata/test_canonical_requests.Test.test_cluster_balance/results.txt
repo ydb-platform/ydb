@@ -10,9 +10,6 @@ success
 
 ===== grpc_calls =====
 
-===== http_calls =====
-GET viewer/json/vdiskinfo?... (mocked)
-
 ===== mock_base_config =====
 
 TBaseConfig {
@@ -59,8 +56,11 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+    State: OK
+    Replicated: true
   }
   Status: "READY"
+  Ready: true
 }
 VSlot {
   VSlotId {
@@ -73,8 +73,11 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+    State: OK
+    Replicated: true
   }
   Status: "READY"
+  Ready: true
 }
 Group {
   GroupId: 2147483649

@@ -13,6 +13,7 @@ ENDIF()
 
 IF (OS_LINUX)
     ALLOCATOR(TCMALLOC_256K)
+    LINKER_SCRIPT(strip_debug.ld)
 ENDIF()
 
 IF (OS_DARWIN)
@@ -50,6 +51,7 @@ PEERDIR(
     ydb/library/keys
     ydb/library/pdisk_io
     ydb/library/security
+    ydb/library/superlemmer_stub
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/udfs/common/hybrid_search
     ydb/library/yql/udfs/common/knn

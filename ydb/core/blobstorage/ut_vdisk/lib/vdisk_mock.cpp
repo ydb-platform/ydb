@@ -4,6 +4,8 @@
 #include <util/generic/hash_set.h>
 #include <util/system/guard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 namespace NKikimr {
 
 using namespace NActors;
@@ -94,7 +96,8 @@ public:
                 VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
         TLogoBlobID id{LogoBlobIDFromLogoBlobID(record.GetBlobID())};
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVPut# %s", ev->Get()->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump event",
+            {"event", ev->Get()->ToString().data()});
 
         auto sendResponse = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
             ui64 cookie = record.GetCookie();
@@ -134,7 +137,8 @@ public:
                 "record.VDiskId# %s VDiskId# %s",
                 VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut# %s", ev->Get()->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump event",
+            {"event", ev->Get()->ToString().data()});
 
         ui64 cookie = record.GetCookie();
         auto response = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK,
@@ -143,8 +147,9 @@ public:
                 &record, nullptr, nullptr, nullptr, 0, 0, TString());
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut %s -> %s", ev->Get()->ToString().data(),
-                    response->ToString().data());
+            YDB_LOG_DEBUG_CTX(ctx, "TEvVMultiPut ->",
+                {"event", ev->Get()->ToString().data()},
+                {"response", response->ToString().data()});
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
             return;
         }
@@ -182,7 +187,9 @@ public:
 
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data());
+            YDB_LOG_DEBUG_CTX(ctx, "->",
+                {"event", ev->Get()->ToString().data()},
+                {"response", response->ToString().data()});
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
             return;
         }
@@ -322,7 +329,9 @@ public:
         }
 
         // send final response
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "->",
+            {"event", ev->Get()->ToString().data()},
+            {"response", response->ToString().data()});
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 
@@ -330,12 +339,42 @@ public:
         auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId);
 
-        ui32& gen = Blocks[record.GetTabletId()];
-        gen = Max(gen, record.GetGeneration());
-        TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(record.GetTabletId(), record.GetGeneration());
-        auto response = std::make_unique<TEvBlobStorage::TEvVBlockResult>(NKikimrProto::OK, &actual,
+        const ui64 tabletId = record.GetTabletId();
+        const auto writeSource = WriteSourceFromProto(record.GetWriteSourceOp());
+        const bool raw = writeSource == TWriteSource::SyncerMergeBlock
+            || writeSource == TWriteSource::SkeletonForceBlock;
+        NKikimrProto::EReplyStatus status = NKikimrProto::OK;
+        bool obsoleteVersion = false;
+        if (!raw) {
+            if (!tabletId || tabletId >> 63) {
+                status = NKikimrProto::ERROR;
+            } else {
+                const auto versionIt = Blocks.find(~tabletId);
+                const ui32 version = versionIt != Blocks.end() ? versionIt->second : 0;
+                if (record.GetVersion() < version) {
+                    status = NKikimrProto::ERROR;
+                    obsoleteVersion = true;
+                } else if (const auto it = Blocks.find(tabletId); record.GetVersion() > version
+                        && it != Blocks.end() && it->second >= record.GetGeneration()) {
+                    status = NKikimrProto::ERROR;
+                } else if (record.GetVersion() > version) {
+                    Blocks[~tabletId] = record.GetVersion();
+                }
+            }
+        }
+        if (status == NKikimrProto::OK) {
+            ui32& gen = Blocks[tabletId];
+            gen = Max(gen, record.GetGeneration());
+        }
+        const auto it = Blocks.find(tabletId);
+        TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(tabletId,
+            it != Blocks.end() ? it->second : record.GetGeneration());
+        auto response = std::make_unique<TEvBlobStorage::TEvVBlockResult>(status, &actual,
                 VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
                 (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, 0);
+        if (obsoleteVersion) {
+            response->Record.SetIsTabletStorageInfoVersionObsolete(true);
+        }
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 

@@ -7,6 +7,8 @@ import ydb
 from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.common.wait_for import retry_assertions
+from ydb.core.protos import msgbus_pb2
 import requests
 from urllib.parse import urlencode
 import time
@@ -14,6 +16,27 @@ import re
 
 
 class TestViewer(object):
+    BSC_STORAGE_STATS_VALUE_FIELDS = {
+        'AvailableGroupsToCreate',
+        'AvailableSizeToCreate',
+        'CurrentAllocatedSize',
+        'CurrentAvailableSize',
+        'CurrentGroupsCreated',
+        'ImmediateGroupsToCreate',
+        'ImmediateSizeToCreate',
+    }
+    # Pool-derived rows depend on the async BSC snapshot; keep only
+    # calculator-prefilled rows in canonical /viewer/cluster output.
+    BSC_STORAGE_STATS_STABLE_KEYS = (
+        ('mirror-3-dc', 'Type:ROT'),
+        ('mirror-3-dc', 'Type:SSD'),
+        ('block-4-2', 'Type:ROT'),
+        ('block-4-2', 'Type:SSD'),
+    )
+    BSC_STORAGE_STATS_STABLE_KEY_ORDER = {
+        key: index for index, key in enumerate(BSC_STORAGE_STATS_STABLE_KEYS)
+    }
+
     @pytest.fixture(autouse=True, scope='class')
     @classmethod
     def cluster_fixture(cls):
@@ -24,8 +47,15 @@ class TestViewer(object):
             'enable_local_bloom_filter_index': True,
             'enable_local_index_as_scheme_object': True,
             'enable_extra_sids_control_for_http_viewer': True,
+            'enable_column_statistics': True,
             },
             enable_static_auth=True)
+        config.yaml_config['blob_storage_config']['infer_pdisk_slot_count_settings'] = {
+            'rot': {
+                'unit_size': 4 * 1024**3,
+                'max_slots': 16,
+            },
+        }
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
         config.yaml_config['domains_config']['security_config']['enforce_user_token_check_requirement'] = True
         config.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database']
@@ -67,6 +97,7 @@ class TestViewer(object):
             'X-CSRF-Token': cls.csrf_token,
         }
         cls.wait_for_cluster_ready()
+        cls.setup_group_size_in_units()
         yield
         cls.cluster.stop()
 
@@ -370,6 +401,34 @@ class TestViewer(object):
         return {}
 
     @classmethod
+    def setup_group_size_in_units(cls, pool_name='dynamic_storage_pool:1', size_in_units=1):
+        "Changes group_size_in_units for all groups in pool"
+        cls.cluster.client.set_auth_token(cls.root_token)
+        storage_pool = next(p for p in cls.cluster.client.read_storage_pools() if p.Name == pool_name)
+
+        request = msgbus_pb2.TBlobStorageConfigRequest(Domain=1)
+        command = request.Request.Command.add().ChangeGroupSizeInUnits
+        command.BoxId = storage_pool.BoxId
+        command.StoragePoolId = storage_pool.StoragePoolId
+        command.ItemConfigGeneration = storage_pool.ItemConfigGeneration
+        command.SizeInUnits = size_in_units
+
+        response = cls.cluster.client._send_blob_storage_config_request(request)
+        assert response.Success, response.ErrorDescription
+        assert all(status.Success for status in response.Status), response
+
+        def get_updated_groups():
+            result = cls.get_viewer_normalized("/viewer/groups", {
+                'fields_required': 'GroupSizeInUnits,PoolName',
+                'filter_group_by': 'PoolName',
+                'filter_group': pool_name
+            })
+            assert result.get('StorageGroups'), result
+            assert all(g.get('GroupSizeInUnits') == size_in_units for g in result['StorageGroups']), result
+
+        return retry_assertions(get_updated_groups)
+
+    @classmethod
     def test_whoami_root(cls):
         return cls.get_viewer_normalized("/viewer/whoami")
 
@@ -583,7 +642,6 @@ class TestViewer(object):
                                     'CreateTxId',
                                     'PathId',
                                     'PublicKeys',
-                                    'OriginalUserToken',
                                     'HashesInitParams',
                                     })
 
@@ -668,6 +726,31 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def normalize_result_database_stats(cls, result):
+        if 'status_code' in result:
+            return result
+        return {
+            'DatabaseNodes': result.get('DatabaseNodes'),
+            'StorageGroups': result.get('StorageGroups'),
+            'StorageNodes': result.get('StorageNodes'),
+            'Problems': sorted(result.get('Problems') or []),
+        }
+
+    @classmethod
+    def get_viewer_database_stats_ready(cls, database):
+        tries = 15
+        last = {}
+        while tries > 0:
+            last = cls.get_viewer("/viewer/database_stats", {'database': database})
+            if 'status_code' not in last and last.get('StorageGroups', 0) > 0:
+                return last
+            tries -= 1
+            time.sleep(1)
+        assert last.get('StorageGroups', 0) > 0, \
+            "StorageGroups was not populated in /viewer/database_stats response after 15 retries: %s" % last
+        return last
+
+    @classmethod
     def normalize_result_transfer_describe(cls, result):
         cls.delete_keys_recursively(result, ['stats'])
         return result
@@ -679,6 +762,33 @@ class TestViewer(object):
     @classmethod
     def get_viewer_db_normalized(cls, url, params=None):
         return cls.normalize_result(cls.get_viewer_db(url, params))
+
+    @classmethod
+    def has_calculated_bsc_storage_stats(cls, result):
+        for entry in result.get('StorageStats', []):
+            for key in cls.BSC_STORAGE_STATS_VALUE_FIELDS:
+                value = entry.get(key)
+                if value is None:
+                    continue
+                try:
+                    if int(value) != 0:
+                        return True
+                except (TypeError, ValueError):
+                    continue
+        return False
+
+    @classmethod
+    def get_viewer_cluster_with_calculated_storage_stats(cls):
+        result = {}
+        tries = 15
+        while tries > 0:
+            result = cls.get_viewer("/viewer/cluster")
+            if cls.has_calculated_bsc_storage_stats(result):
+                return result
+            tries -= 1
+            time.sleep(1)
+        assert cls.has_calculated_bsc_storage_stats(result), \
+            "BSC storage stats were not calculated in /viewer/cluster response: %s" % result.get('StorageStats', [])
 
     @classmethod
     def test_viewer_nodelist(cls):
@@ -743,9 +853,107 @@ class TestViewer(object):
 
     @classmethod
     def test_storage_groups(cls):
-        return cls.normalize_result(cls.get_viewer("/viewer/groups", {
+        result = cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'
         }))
+
+        group_size_only = cls.get_viewer_normalized("/viewer/groups", {
+            'fields_required': 'GroupSizeInUnits',
+        })
+        group_size_only_groups = group_size_only.get('StorageGroups', [])
+        assert group_size_only_groups, group_size_only
+        assert all('GroupSizeInUnits' in group for group in group_size_only_groups), group_size_only
+        assert all('VDisks' not in group for group in group_size_only_groups), group_size_only
+
+        whiteboard_only = cls.get_viewer_normalized("/viewer/groups", {
+            'whiteboard_only': 'true',
+            'filter_group_by': 'PoolName',
+            'filter_group': 'dynamic_storage_pool:1',
+        })
+        whiteboard_only_groups = whiteboard_only.get('StorageGroups', [])
+        assert whiteboard_only_groups, whiteboard_only
+        assert all(
+            group.get('GroupSizeInUnits', 0) > 0
+            for group in whiteboard_only_groups
+        ), whiteboard_only
+        for group in whiteboard_only_groups:
+            vdisks = group.get('VDisks', [])
+            assert vdisks, group
+            assert all(
+                vdisk.get('Whiteboard', {}).get('GroupSizeInUnits') == group['GroupSizeInUnits']
+                for vdisk in vdisks
+            ), group
+
+        result['GroupSizeInUnitsChecks'] = {
+            'GroupSizeOnly': {
+                'AllGroupsHaveField': True,
+                'HasNestedDiskData': False,
+            },
+            'WhiteboardOnly': {
+                'AllGroupsHaveNonZeroSize': True,
+                'AllGroupsMatchVDisks': True,
+            },
+        }
+        return result
+
+    # A strict database user is allowed to filter groups by group_id/node_id/pdisk_id, and every such
+    # filter is validated against the storage of the database, so the handler has to fetch GroupId,
+    # NodeId and PDiskId from BS controller. GroupId is a part of the response anyway, but the disks
+    # behind a group are cluster-level data, so they must not be rendered for such a user - unlike
+    # the response of a viewer+ user.
+    @classmethod
+    def test_storage_groups_pdisk_fields_hidden_for_database_user(cls):
+        def disks_of_groups(response):
+            if 'status_code' in response:
+                return response
+
+            def vdisk_disks(vdisk):
+                disks = {key: vdisk[key] for key in ('VDiskId', 'NodeId') if key in vdisk}
+                if 'PDisk' in vdisk:
+                    disks['PDisk'] = {'PDiskId': (vdisk['PDisk'] or {}).get('PDiskId')}
+                return disks
+
+            return {
+                'StorageGroups': [
+                    {
+                        'GroupId': group.get('GroupId'),
+                        'VDisks': [vdisk_disks(vdisk) for vdisk in group.get('VDisks') or []],
+                    }
+                    for group in response.get('StorageGroups') or []
+                ],
+            }
+
+        base_params = {
+            'database': cls.dedicated_db,
+            'fields_required': 'VDisk,PDisk,NodeId,PDiskId',
+        }
+        # The ids to filter by are taken from the actual response of the database, so they end up
+        # canonized together with the request of every case below.
+        probe = cls.get_viewer("/storage/groups", base_params)
+        probe_group = next(iter(probe.get('StorageGroups') or []), {})
+        probe_vdisk = next(iter(probe_group.get('VDisks') or []), {})
+        # PDiskId is reported as "<node_id>-<pdisk_id>", but the filter takes the local id only
+        pdisk_id = str((probe_vdisk.get('PDisk') or {}).get('PDiskId') or '').rsplit('-', 1)[-1]
+
+        cases = [
+            base_params,
+            {**base_params, 'group_id': str(probe_group.get('GroupId'))},
+            {**base_params, 'node_id': str(probe_vdisk.get('NodeId'))},
+            {**base_params, 'pdisk_id': pdisk_id},
+        ]
+        users = {
+            'database': cls.make_cookie_headers(cls.database_session_id),
+            'root': cls.default_headers,
+        }
+        return [
+            {
+                'request': "/storage/groups?" + urlencode(params, safe='/,'),
+                'user': user,
+                'response': disks_of_groups(cls.get_viewer("/storage/groups", params, headers=headers)),
+            }
+            for params in cases
+            for user, headers in users.items()
+        ]
 
     @classmethod
     def test_viewer_groups_group_by_pool_name(cls):
@@ -872,6 +1080,24 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_tabletinfo_path_with_foreign_node_id(cls):
+        """node_id outside the database leaves the whiteboard node filter empty, so the handler
+        replies right away and never builds the request - it must not use it afterwards."""
+        database_nodes = {node['Id'] for node in cls.get_viewer("/viewer/nodelist", {
+            'database': cls.dedicated_db,
+        })}
+        cluster_nodes = {node['Id'] for node in cls.get_viewer("/viewer/nodelist")}
+        foreign_nodes = cluster_nodes - database_nodes
+        assert foreign_nodes, 'no node outside %s: %s' % (cls.dedicated_db, cluster_nodes)
+
+        result = cls.get_viewer("/viewer/tabletinfo", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db,
+            'node_id': min(foreign_nodes),
+        })
+        assert 'status_code' not in result, result
+
+    @classmethod
     def test_viewer_describe(cls):
         result = {}
         for name in cls.databases:
@@ -883,11 +1109,42 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_cluster(cls):
-        return cls.get_viewer_normalized("/viewer/cluster")
+        result = cls.get_viewer_cluster_with_calculated_storage_stats()
+        result = cls.normalize_result(result)
+        cls.delete_keys_recursively(result, cls.BSC_STORAGE_STATS_VALUE_FIELDS)
+        if 'StorageStats' in result:
+            stable_key_order = cls.BSC_STORAGE_STATS_STABLE_KEY_ORDER
+
+            def get_storage_stats_key(entry):
+                return (entry.get('ErasureSpecies'), entry.get('PDiskFilter'))
+
+            result['StorageStats'] = sorted(
+                (
+                    entry for entry in result['StorageStats']
+                    if get_storage_stats_key(entry) in stable_key_order
+                ),
+                key=lambda entry: stable_key_order[get_storage_stats_key(entry)],
+            )
+        return result
 
     @classmethod
     def test_viewer_tenantinfo(cls):
-        result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        result = {}
+        tries = 15
+        all_ready = False
+        while tries > 0:
+            result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+            all_ready = True
+            for name in cls.databases_and_no_database:
+                tenant_info = result[name].get('TenantInfo', [{}])
+                if tenant_info and 'CoresUsed' not in tenant_info[0]:
+                    all_ready = False
+                    break
+            if all_ready:
+                break
+            tries -= 1
+            time.sleep(1)
+        assert all_ready, "CoresUsed was not populated in /viewer/tenantinfo response after %d retries" % 15
         for name in cls.databases_and_no_database:
             result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
         return result
@@ -899,13 +1156,26 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_database_stats(cls):
+        result = {
+            'no-database': cls.normalize_result_database_stats(
+                cls.call_viewer("/viewer/database_stats"),
+            ),
+        }
+        for name in (cls.dedicated_db, cls.shared_db, cls.serverless_db):
+            result[name] = cls.normalize_result_database_stats(
+                cls.get_viewer_database_stats_ready(name),
+            )
+        return result
+
+    @classmethod
     def test_viewer_acl(cls):
         db = cls.cluster.domain_name
         return cls.get_viewer_db("/viewer/acl", {'path': db})
 
     @classmethod
     def test_viewer_acl_write(cls):
-        return [
+        result = [
             cls.post_viewer("/viewer/acl", {
                 'database': cls.dedicated_db,
                 'path': cls.dedicated_db
@@ -944,6 +1214,41 @@ class TestViewer(object):
                 'database': cls.dedicated_db,
                 'path': cls.dedicated_db
             })]
+
+        # An explicit InheritanceType posted to /viewer/acl must be reconstructed
+        # exactly, so a AddAccess -> RemoveAccess round trip removes the original ACE.
+        for inheritance_type in ['None', 'Object', 'Container', 'Only', 'Inherit']:
+            result.append(cls.post_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }, {
+                'AddAccess': [{
+                    'Subject': 'user1',
+                    'AccessRights': ['Read'],
+                    'InheritanceType': [inheritance_type]
+                }]
+            }))
+            result.append(cls.get_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }))
+            result.append(cls.post_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }, {
+                'RemoveAccess': [{
+                    'Subject': 'user1',
+                    'AccessRights': ['Read'],
+                    'InheritanceType': [inheritance_type]
+                }]
+            }))
+
+        result.append(cls.get_viewer("/viewer/acl", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db
+        }))
+
+        return result
 
     @classmethod
     def test_viewer_acl_write_invalid(cls):

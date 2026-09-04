@@ -67,8 +67,8 @@ android {{
 
     {keystore}
 
-    compileSdkVersion 35
-    buildToolsVersion "35.0.0"
+    compileSdkVersion 36
+    buildToolsVersion "36.0.0"
 
     compileOptions {{
         sourceCompatibility JavaVersion.VERSION_21
@@ -77,7 +77,7 @@ android {{
 
     defaultConfig {{
         minSdkVersion 26
-        targetSdkVersion 35
+        targetSdkVersion 36
         applicationId "{app_id}"
     }}
 

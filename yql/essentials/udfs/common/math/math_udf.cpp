@@ -1,6 +1,7 @@
 #include "math_ir.h"
 
 #include <util/system/byteorder.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 
@@ -122,7 +123,7 @@ public:
 
         builder.SimpleSignature<TUserType(TAutoMap<TUserType>)>()
             .IsStrict()
-            .SetMinLangVer(NYql::MakeLangVersion(2025, 3));
+            .SetMinLangVer(NYql::NFeature::SwapBytes.MinLangVer);
         if (!typesOnly) {
             builder.Implementation(new TSwapBytesFunc<TUserType>(builder.GetSourcePosition()));
         }

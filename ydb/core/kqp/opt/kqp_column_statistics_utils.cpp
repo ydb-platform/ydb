@@ -14,6 +14,7 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
     struct TTableMeta {
         TString TableName;
         THashMap<ui32, TString> ColumnNameByTag;
+        THashMap<ui32, TString> ColumnTypeByTag;
     };
 
     THashMap<TPathId, TTableMeta> tableMetaByPathId;
@@ -41,12 +42,14 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
             }
 
             NKikimr::NStat::TRequest req;
-            req.ColumnTag = columnsMeta[column].Id;
+            const ui32 columnTag = columnsMeta[column].Id;
+            req.ColumnTags = columnTag;
             req.PathId = pathId;
             statRequests.push_back(req);
 
             tableMetaByPathId[pathId].TableName = table;
-            tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
+            tableMetaByPathId[pathId].ColumnNameByTag[columnTag] = column;
+            tableMetaByPathId[pathId].ColumnTypeByTag[columnTag] = columnsMeta[column].Type;
         }
     }
 
@@ -70,8 +73,12 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
 
         for (auto&& stat : response.StatResponses) {
             auto meta = tableMetaByPathId[stat.Req.PathId];
-            auto columnName = meta.ColumnNameByTag[stat.Req.ColumnTag.value()];
+            const auto singleTag = stat.Req.ColumnTags.AsSingle();
+            Y_ENSURE(singleTag, "Expected single-column stat response");
+            const ui32 columnTag = *singleTag;
+            auto columnName = meta.ColumnNameByTag[columnTag];
             auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
+            columnStatistics.Type = meta.ColumnTypeByTag[columnTag];
             if (stat.CountMinSketch.CountMin) {
                 columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
             }

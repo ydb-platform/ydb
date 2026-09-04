@@ -580,6 +580,119 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         }
 
+        // Verify the ConnectDatabase right handling in TEffectiveACL::Update
+        {
+            auto aclHasRight = [](const TString& serialized, NACLib::EAccessRights right) {
+                NACLib::TACL acl(serialized);
+                for (const auto& ace : acl.GetACE()) {
+                    if (ace.GetAccessRight() == (ui32)right) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            auto aclHasConnect = [&](const TString& serialized) {
+                return aclHasRight(serialized, NACLib::ConnectDatabase);
+            };
+            auto aclHasRead = [&](const TString& serialized) {
+                return aclHasRight(serialized, NACLib::GenericRead);
+            };
+
+            TEffectiveACL parentACL;
+            {
+                NACLib::TDiffACL diff;
+                diff.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "user1@staff",
+                    NACLib::DefaultInheritanceType);
+
+                NACLib::TACL input;
+                input.ApplyDiff(diff);
+
+                parentACL.Init(input.SerializeAsString());
+            }
+
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForSelf()));
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForChildren(/*isContainer*/ true)));
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForChildren(/*isContainer*/ false)));
+
+            const TString ownACL = [] {
+                NACLib::TDiffACL diff;
+                diff.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "user1@staff",
+                    NACLib::DefaultInheritanceType);
+
+                NACLib::TACL input;
+                input.ApplyDiff(diff);
+                return input.SerializeAsString();
+            }();
+            const TString emptyOwnACL;
+
+            for (bool isContainer : {true, false}) {
+                // Case 1: tenant root, empty self acl (InheritFrom branch).
+                // connect right stays in ForSelf but is stripped from children.
+                {
+                    TEffectiveACL tenantRootACL;
+                    tenantRootACL.Update(parentACL, emptyOwnACL, isContainer, /*isTenantRoot*/ true);
+
+                    UNIT_ASSERT_C(aclHasConnect(tenantRootACL.GetForSelf()),
+                        "connect right must be present in tenant root ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must be stripped from tenant root ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must be stripped from tenant root ForObjects, isContainer=" << isContainer);
+                }
+
+                // Case 2: tenant root, non-empty self acl (MergeWithParent branch).
+                // connect right stays in ForSelf and is stripped from children, but the tenant's own
+                // ordinary read right keeps propagating to children.
+                {
+                    TEffectiveACL tenantRootACL;
+                    tenantRootACL.Update(parentACL, ownACL, isContainer, /*isTenantRoot*/ true);
+
+                    UNIT_ASSERT_C(aclHasConnect(tenantRootACL.GetForSelf()),
+                        "connect right must be present in tenant root ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must be stripped from tenant root ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must be stripped from tenant root ForObjects, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "read right must survive in ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "read right must survive in ForObjects, isContainer=" << isContainer);
+                }
+
+                // Case 3: in-domain path (not tenant root), empty self acl (InheritFrom branch).
+                // connect right keeps propagating down to children.
+                {
+                    TEffectiveACL childACL;
+                    childACL.Update(parentACL, emptyOwnACL, isContainer, /*isTenantRoot*/ false);
+
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForSelf()),
+                        "connect right must be present in ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must keep propagating to containers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must keep propagating to objects, isContainer=" << isContainer);
+                }
+
+                // Case 4: in-domain path (not tenant root), non-empty self acl (MergeWithParent branch).
+                // connect right keeps propagating down and the own ordinary read right propagates too.
+                {
+                    TEffectiveACL childACL;
+                    childACL.Update(parentACL, ownACL, isContainer, /*isTenantRoot*/ false);
+
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForSelf()),
+                        "connect right must be present in ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must keep propagating to containers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must keep propagating to objects, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(childACL.GetForChildren(/*isContainer*/ true)),
+                        "ordinary read right must survive in ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(childACL.GetForChildren(/*isContainer*/ false)),
+                        "ordinary read right must survive in ForObjects, isContainer=" << isContainer);
+                }
+            }
+        }
+
     }
 
     Y_UNIT_TEST(ModifyACL) {
@@ -4744,6 +4857,195 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
     }
 
+    Y_UNIT_TEST(MultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [](const TSet<TString>& expectedNames) {
+            return [expectedNames](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetTable();
+                TSet<TString> names;
+                for (const auto& stat : table.GetMultiColumnStatistics()) {
+                    names.insert(stat.GetName());
+                    // column names must be resolved to ids on persist
+                    UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                    UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                    UNIT_ASSERT(stat.TypesSize() > 0);
+                    for (const auto type : stat.GetTypes()) {
+                        UNIT_ASSERT_EQUAL(
+                            static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                            NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+            };
+        };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "a"   Type: "Uint64" }
+            Columns { Name: "b"   Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" ColumnNames: "b" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // MultiColumnStatistics must survive a SchemeShard restart (persist -> load round-trip).
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // ADD STATISTICS
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "s2" ColumnNames: "a" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1", "s2"})});
+
+        // DROP STATISTICS
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            DropMultiColumnStatistics: "s2"
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics({"s1"})});
+
+        // Validation: referencing an unknown column must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // Validation: duplicate statistics name must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // Validation: dropping a non-existent statistics must fail.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTable"
+            DropMultiColumnStatistics: "nope"
+        )", {NKikimrScheme::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [](const TString& expectedName) {
+            return [expectedName](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetTable();
+                UNIT_ASSERT_VALUES_EQUAL(table.MultiColumnStatisticsSize(), 1);
+                const auto& stat = table.GetMultiColumnStatistics(0);
+                UNIT_ASSERT_VALUES_EQUAL(stat.GetName(), expectedName);
+                UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), 0);
+            };
+        };
+
+        // CREATE TABLE: MultiColumnStatistics entry with no Types.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "a"   Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "a" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTableNoTypes"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics("s1")});
+
+        // ALTER TABLE ADD STATISTICS: also with no Types.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            DropMultiColumnStatistics: "s1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "StatsTableNoTypes"
+            MultiColumnStatistics { Name: "s2" ColumnNames: "a" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTableNoTypes"),
+            {NLs::PathExist, NLs::Finished, checkMultiColumnStatistics("s2")});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogram) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "a"   Type: "Uint64" }
+            Columns { Name: "b"   Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "h1" ColumnNames: "a" ColumnNames: "b" Types: EQ_HEIGHT_HISTOGRAM }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/EqHeightTable"),
+            {NLs::PathExist, NLs::Finished,
+             NLs::CheckMultiColumnStatistics("h1", {"a", "b"},
+                 {NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM})});
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/EqHeightTable"),
+            {NLs::PathExist, NLs::Finished,
+             NLs::CheckMultiColumnStatistics("h1", {"a", "b"},
+                 {NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM})});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightTable"
+            MultiColumnStatistics { Name: "h2" ColumnNames: "a" Types: EQ_HEIGHT_HISTOGRAM }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/EqHeightTable"),
+            {NLs::PathExist, NLs::Finished,
+             NLs::CheckMultiColumnStatistics("h1", {"a", "b"},
+                 {NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM}),
+             NLs::CheckMultiColumnStatistics("h2", {"a"},
+                 {NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM})});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogramRejectsJson) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "js"  Type: "Json" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "js"  Type: "Json" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonTable"
+            MultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusInvalidParameter});
+    }
+
     Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -6940,6 +7242,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;
         TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
 
         auto getTable = [&]() {
@@ -7789,6 +8092,184 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
                     UNIT_ASSERT(!config.HasMeteringMode());
+                }
+            }
+        );
+    }
+
+    Y_UNIT_TEST(TopicSourceIdMappingById) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        UNIT_ASSERT(runtime.GetAppData().PQConfig.GetTopicsAreFirstClassCitizen());
+        ui64 txId = 100;
+
+        // On create the topic gets a server-generated unique Id (its LocalPathId)
+        // with the sentinel IdTxStep == 0 ("filled at create": no name-keyed fallback
+        // for writers).
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 topicId = 0;
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic1"), {
+                NLs::PathExist,
+                NLs::Finished, [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT(config.HasId());
+                    UNIT_ASSERT(config.GetId().GetId() != 0);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetOwnerId(), TTestTxConfig::SchemeShard);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetTxStep(), 0);
+                    topicId = config.GetId().GetId();
+                }
+            }
+        );
+
+        // Alter must preserve the existing Id and its IdTxStep.
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 20 }
+                Id { Id: 987654321 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic1"), {
+                NLs::PathExist,
+                NLs::Finished, [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), topicId);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetOwnerId(), TTestTxConfig::SchemeShard);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetTxStep(), 0);
+                }
+            }
+        );
+
+        // With the feature flag off no Id is generated.
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(false);
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic2"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic2"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT(!config.HasId());
+                }
+            }
+        );
+
+        // Back-fill with Id is only allowed for federation topics, not FirstClassCitizen topics.
+        // For FirstClassCitizen topics, the Id in the alter request is ignored and cleared.
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic2"
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                Id { Id: 987654321 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic2"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    // Id must be cleared for FirstClassCitizen topics; back-fill is only for federation.
+                    UNIT_ASSERT(!config.HasId());
+                }
+            }
+        );
+
+        // Federation back-fill: switch to federation mode and create a topic without an Id.
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(false);
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic3"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                DC: "dc1"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic3"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT(!config.HasId());
+                }
+            }
+        );
+
+        // Back-fill: an alter that fills an empty Id for a federation topic captures the alter's plan step
+        // (non-zero) so writers keep the name-keyed fallback during the window.
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic3"
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                DC: "dc1"
+                Id { Id: 987654321, OwnerId: 123456, TxStep: 654321 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 txStep = 0;
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic3"), {
+                NLs::PathExist,
+                NLs::Finished, [&txStep] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), 987654321u);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetOwnerId(), 123456);
+                    UNIT_ASSERT(config.GetId().HasTxStep());
+                    UNIT_ASSERT(config.GetId().GetTxStep() > 0);
+                    UNIT_ASSERT(config.GetId().GetTxStep() != 654321); // ignore provided in alter
+                    txStep = config.GetId().GetTxStep();
+                }
+            }
+        );
+
+        // A subsequent alter must not change the back-filled Id or its step.
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic3"
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 30 }
+                DC: "dc1"
+                Id { Id: 111222333, TxStep: 654321 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic3"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), 987654321u);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetTxStep(), txStep);
                 }
             }
         );

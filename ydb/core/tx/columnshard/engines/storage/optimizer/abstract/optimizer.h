@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
@@ -136,6 +137,30 @@ public:
 
 using TPortionInfoForCompaction = NPortion::TPortionInfoForCompaction;
 
+class TOptimizerRuntimeSettings {
+private:
+    std::optional<ui64> NodePortionsCountLimit;
+
+public:
+    void SetNodePortionsCountLimit(const std::optional<ui64>& nodePortionsCountLimit) {
+        NodePortionsCountLimit = nodePortionsCountLimit;
+    }
+
+    const std::optional<ui64>& GetNodePortionsCountLimit() const {
+        return NodePortionsCountLimit;
+    }
+
+    void LoadFromAppData();
+    void ApplyFromConfig(const NKikimrConfig::TColumnShardConfig& config);
+    void RefreshNodePortionsCountLimitCounter() const;
+
+    static std::shared_ptr<TOptimizerRuntimeSettings> MakeDefault() {
+        auto settings = std::make_shared<TOptimizerRuntimeSettings>();
+        settings->LoadFromAppData();
+        return settings;
+    }
+};
+
 class IOptimizerPlanner {
 private:
     friend class IOptimizerPlannerConstructor;
@@ -150,6 +175,8 @@ private:
     double WeightKff = 1;
     static inline TAtomicCounter NodePortionsCounter = 0;
     static inline std::atomic<ui64> DynamicPortionsCountLimit = 1000000;
+    // Local tablet runtime settings (from ColumnShardConfig CMS snapshot), not process-global.
+    std::shared_ptr<TOptimizerRuntimeSettings> RuntimeSettings;
     TPositiveControlInteger LocalPortionsCount;
     std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
 
@@ -186,6 +213,14 @@ protected:
         return TConclusionStatus::Success();
     }
 
+    // Forced-compaction support: reports whether all portions have settled into the regular last
+    // level with no remaining intersections. Fail() means the optimizer does not support forced
+    // compaction (i.e. it is not tiling++); Success(true) means there are no intersections left,
+    // Success(false) means compaction is still in progress. Only tiling++ overrides this.
+    virtual TConclusion<bool> DoCheckNoIntersections() const {
+        return TConclusionStatus::Fail("forced compaction is not supported by this optimizer");
+    }
+
 public:
     static ui64 GetNodePortionsConsumption() {
         return NodePortionsCounter.Val() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
@@ -199,6 +234,20 @@ public:
         return DynamicPortionsCountLimit.load() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
     }
 
+    static ui64 GetDefaultNodePortionsCountLimit() {
+        return DynamicPortionsCountLimit.load();
+    }
+
+    void SetRuntimeSettings(const std::shared_ptr<TOptimizerRuntimeSettings>& runtimeSettings) {
+        RuntimeSettings = runtimeSettings;
+        Counters->NodePortionsCountLimit->Set(GetNodePortionsCountLimit());
+        Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
+    }
+
+    const std::shared_ptr<TOptimizerRuntimeSettings>& GetRuntimeSettings() const {
+        return RuntimeSettings;
+    }
+
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& /*info*/) const {
         return baseLevel;
     }
@@ -207,7 +256,7 @@ public:
         : PathId(pathId)
         , NodePortionsCountLimit(nodePortionsCountLimit)
     {
-        Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
+        Counters->NodePortionsCountLimit->Set(GetNodePortionsCountLimit());
         Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
     }
 
@@ -217,14 +266,18 @@ public:
         }
 
         if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-            ("error", "overload: bad portions")("value", badPortions->Val())("limit", GetBadPortionsLimit());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: bad portions"},
+                {"value", badPortions->Val()},
+                {"limit", GetBadPortionsLimit()});
             return true;
         }
 
         if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-            ("error", "overload: node portions count limit")("value", NodePortionsCounter.Val())("limit", GetNodePortionsCountLimit());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: node portions count limit"},
+                {"value", NodePortionsCounter.Val()},
+                {"limit", GetNodePortionsCountLimit()});
             return true;
         }
 
@@ -233,20 +286,13 @@ public:
 
     ui64 GetBadPortionsLimit() const;
 
-    ui64 GetNodePortionsCountLimit() const {
-        return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
-    }
+    ui64 GetNodePortionsCountLimit() const;
 
     bool IsHighPriority() const {
         if (!AppDataVerified().FeatureFlags.GetEnableCompactionOverloadDetection()) {
             return false;
         }
-        if (NodePortionsCountLimit) {
-            if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * *NodePortionsCountLimit), ui64(1)), NodePortionsCounter.Val())) {
-                return true;
-            }
-        } else if (std::cmp_less_equal(
-                       std::max(static_cast<ui64>(0.7 * DynamicPortionsCountLimit.load()), ui64(1)), NodePortionsCounter.Val())) {
+        if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * GetNodePortionsCountLimit()), ui64(1)), NodePortionsCounter.Val())) {
             return true;
         }
         return DoIsOverloaded();
@@ -254,6 +300,10 @@ public:
 
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
+    }
+
+    TConclusion<bool> CheckNoIntersections() const {
+        return DoCheckNoIntersections();
     }
 
     std::vector<TTaskDescription> GetTasksDescription() const {
@@ -300,7 +350,8 @@ public:
     }
 
     void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
-        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"pathId", PathId});
         LocalPortionsCount.Add(add.size());
         LocalPortionsCount.Sub(remove.size());
         NodePortionsCounter.Add(add.size());
@@ -349,14 +400,16 @@ public:
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
         YDB_READONLY_DEF(EOptimizerStrategy, DefaultStrategy);
+        YDB_READONLY_DEF(std::shared_ptr<TOptimizerRuntimeSettings>, RuntimeSettings);
 
     public:
-        TBuildContext(
-            const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages,
+            const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<TOptimizerRuntimeSettings>& runtimeSettings = nullptr)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema)
             , DefaultStrategy(EOptimizerStrategy::Default)
+            , RuntimeSettings(runtimeSettings)
         {   //TODO configure me via DDL
         }
     };
@@ -420,6 +473,7 @@ public:
             return result;
         }
         (*result)->WeightKff = WeightKff;
+        (*result)->SetRuntimeSettings(context.GetRuntimeSettings());
         return result;
     }
 

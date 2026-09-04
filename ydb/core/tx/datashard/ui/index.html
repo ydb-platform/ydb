@@ -334,6 +334,37 @@
             <tbody id="ds-rs-pipes-body">
             </tbody>
           </table>
+          <table id="ds-send-rs-table">
+            <caption class="ds-info">
+              Send Read Set
+              <div id="ds-send-rs-error" class="error"></div>
+            </caption>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>TxId</th>
+                <th>SrcTabletId</th>
+                <th>SeqNo</th>
+                <th>Decision</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ds-send-rs-body">
+              <tr>
+                <td><input type="text" name="step" value="" style="width: 100%" /></td>
+                <td><input type="text" name="txId" value="" style="width: 100%" /></td>
+                <td><input type="text" name="srcTabletId" value="" style="width: 100%" /></td>
+                <td><input type="text" name="seqNo" value="0" style="width: 100%" /></td>
+                <td>
+                  <select name="commit" style="width: 100%">
+                    <option value="1">commit</option>
+                    <option value="0">abort</option>
+                  </select>
+                </td>
+                <td><button type="button" id="ds-op-send-rs" class="btn btn-primary">Send</button></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
         <div id="ds-hist" class="tab-pane fade">
           <div id="ds-hist-error" class="error"></div>

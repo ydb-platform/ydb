@@ -98,7 +98,8 @@ public:
         AFL_VERIFY(IndexConstructed);
         NKikimrSchemeOp::TColumnTableSharding proto;
         SerializeToProto(proto);
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("proto", proto.DebugString());
+        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"proto", proto.DebugString()});
         if (PartsCount % summaryShardsCount) {
             return false;
         }

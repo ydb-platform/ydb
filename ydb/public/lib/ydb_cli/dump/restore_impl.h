@@ -188,6 +188,11 @@ struct TFsBackupEntry {
     }
 };
 
+struct TPendingConsumersRestore {
+    TString TopicPath;
+    std::vector<NTopic::TConsumer> Consumers;
+};
+
 } // NPrivate
 
 class TRestoreClient {
@@ -212,6 +217,8 @@ class TRestoreClient {
     TRestoreResult RestoreChangefeeds(const TFsPath& path, const TString& dbPath);
     TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting, bool isSystemObject);
     TRestoreResult RestoreConsumers(const TString& topicPath, const std::vector<NTopic::TConsumer>& consumers);
+    void ScheduleConsumersRestore(const TString& topicPath, std::vector<NTopic::TConsumer> consumers);
+    TRestoreResult RestorePendingConsumers();
 
     TRestoreResult FindClusterRootPath();
     TRestoreResult ReplaceClusterRoot(TString& outPath);
@@ -266,6 +273,7 @@ private:
     TDriverConfig DriverConfig;
     TString ClusterRootPath;
     NPrivate::TDelayedRestoreManager DelayedRestoreManager;
+    TVector<NPrivate::TPendingConsumersRestore> PendingConsumersRestores;
     THashMap<TString, NScheme::ESchemeEntryType> ExistingEntries;
 
     friend class NPrivate::TDelayedRestoreManager;

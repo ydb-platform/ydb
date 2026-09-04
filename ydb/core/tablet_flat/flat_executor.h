@@ -370,6 +370,7 @@ class TExecutor
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
     NFlatExecutorSetup::ITablet * Owner;
     const TActorId OwnerActorId;
+    const NActors::TActorActivityType OwnerActivityType;
     TAutoPtr<NUtil::ILogger> Logger;
 
     ui32 FollowerId = 0;
@@ -492,6 +493,7 @@ class TExecutor
     mutable bool HadRejectProbabilityByOverload = false;
 
     THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;
+    THashMap<ui32, TIntrusivePtr<TBarrier>> DirectWriteBarriers;
     TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
     THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers;
 
@@ -515,6 +517,7 @@ class TExecutor
     TControlWrapper MaxTxInFly;
 
     THashSet<TActorId> MoveDataSubscribers;
+    bool MoveDataVacuumInProgress = false;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -565,7 +568,8 @@ class TExecutor
     void StartNewBackup();
     void FailBackup(const TString& error);
     void ScheduleRetryBackup();
-    TStringBuilder BackupLogPrefix() const;
+
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const;
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
@@ -709,10 +713,13 @@ public:
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
-    void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
+    THolder<TDirectPartWriter> BeginWritePart(ui32 tableId) override;
+    void ReleaseWritePart(ui32 step) override;
 
     void StartVacuum(TVacuumTag tag) override;
     void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) override;
+    void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
+    void StartMoveDataVacuumFromOwner() override;
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

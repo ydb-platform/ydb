@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <ydb/core/tx/locks/sys_tables.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -109,6 +111,22 @@ public:
             if (lock.Proto.GetHasWrites()) {
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
+            // Merge per writer so an echo from a later write can't drop another writer's entry.
+            for (const auto& writeSeqNum : lock.Proto.GetWriteSeqNums()) {
+                auto* existing = FindIfPtr(*lockPtr->Lock.Proto.MutableWriteSeqNums(),
+                    [&](const auto& entry) { return entry.GetWriterIndex() == writeSeqNum.GetWriterIndex(); });
+                if (existing) {
+                    // Results of one writer are deduplicated and arrive in order
+                    AFL_ENSURE(existing->GetWriteSeqNum() < writeSeqNum.GetWriteSeqNum())
+                        ("shard", shardId)
+                        ("writer", writeSeqNum.GetWriterIndex())
+                        ("known", existing->GetWriteSeqNum())
+                        ("got", writeSeqNum.GetWriteSeqNum());
+                    existing->SetWriteSeqNum(writeSeqNum.GetWriteSeqNum());
+                } else {
+                    *lockPtr->Lock.Proto.AddWriteSeqNums() = writeSeqNum;
+                }
+            }
 
             lockPtr->LocksAcquireFailure |= isLocksAcquireFailure;
             if (!lockPtr->LocksAcquireFailure) {
@@ -160,6 +178,11 @@ public:
         }
 
         return true;
+    }
+
+    ui64 NextWriteSeqNum(ui64 writerIndex, ui64 shardId) override {
+        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        return ++ShardsInfo.at(shardId).WriteSeqNums[writerIndex];
     }
 
     void BreakLock(ui64 shardId) override {
@@ -282,6 +305,9 @@ public:
 
     bool IsTxPrepared() const override {
         for (const auto& [_, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                continue;
+            }
             if (shardInfo.State != EShardState::PREPARED) {
                 return false;
             }
@@ -291,6 +317,9 @@ public:
 
     bool IsTxFinished() const override {
         for (const auto& [_, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                continue;
+            }
             if (shardInfo.State != EShardState::FINISHED) {
                 return false;
             }
@@ -303,7 +332,7 @@ public:
     }
 
     bool IsSingleShard() const override {
-        return GetShardsCount() == 1;
+        return GetParticipatingShardsCount() == 1;
     }
 
     bool HasOlapTable() const override {
@@ -311,7 +340,7 @@ public:
     }
 
     bool IsEmpty() const override {
-        return GetShardsCount() == 0;
+        return GetParticipatingShardsCount() == 0;
     }
 
     bool HasLocks() const override {
@@ -339,6 +368,20 @@ public:
 
     void SetHasSnapshot(bool hasSnapshot) override {
         ValidSnapshot = hasSnapshot;
+    }
+
+    void SetIsolationLevel(NKqpProto::EIsolationLevel level) override {
+        IsolationLevel = level;
+    }
+
+    NKqpProto::EIsolationLevel GetIsolationLevel() const override {
+        return IsolationLevel;
+    }
+
+    bool CanUseImmediateCommit() const override {
+        return IsSingleShard() && !HasOlapTable()
+            && GetTopicOperations().GetSize() <= 1
+            && IsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
     }
 
     bool BrokenLocks() const override {
@@ -429,6 +472,7 @@ public:
 
     bool NeedCommit() const override {
         AFL_ENSURE(ActionsCount != 1 || IsSingleShard()); // ActionsCount == 1 then IsSingleShard()
+        AFL_ENSURE(HasSnapshot() || IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         const bool dontNeedCommit = IsEmpty() || (IsReadOnly() && ((ActionsCount == 1) || HasSnapshot()));
         return !dontNeedCommit;
     }
@@ -447,6 +491,12 @@ public:
         THashSet<ui64> receivingColumnShardsSet;
 
         for (auto& [shardId, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                // Phantom shard holds no reads/writes/locks and does not take
+                // part in the distributed commit; it stays in PROCESSING.
+                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+                continue;
+            }
             if ((shardInfo.Flags & EAction::WRITE)) {
                 ReceivingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
@@ -499,7 +549,7 @@ public:
             ReceivingShards.insert(*ArbiterColumnShard);
         }
 
-        ShardsToWait = ShardsIds;
+        ShardsToWait = GetParticipatingShards();
 
         MinStep = std::numeric_limits<ui64>::min();
         MaxStep = std::numeric_limits<ui64>::max();
@@ -552,15 +602,19 @@ public:
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+                continue;
+            }
             AFL_ENSURE(shardInfo.State == EShardState::PREPARED
                 || (shardInfo.State == EShardState::PROCESSING
                     && IsSingleShard()));
             shardInfo.State = EShardState::EXECUTING;
         }
 
-        ShardsToWait = ShardsIds;
+        ShardsToWait = GetParticipatingShards();
 
-        AFL_ENSURE(ReceivingShards.empty() || HasTopics() || !IsSingleShard() || HasOlapTable());
+        AFL_ENSURE(ReceivingShards.empty() || !CanUseImmediateCommit());
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -571,9 +625,19 @@ public:
         result.Coordinator = Coordinator;
 
         for (auto& [shardId, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+                continue;
+            }
+
+            const ui32 affectedFlags = (shardInfo.Flags != 0)
+                ? shardInfo.Flags
+                : static_cast<ui32>(EAction::READ);
+            AFL_ENSURE(affectedFlags != 0);
+
             result.ShardsInfo.push_back(TCommitShardInfo{
                 .ShardId = shardId,
-                .AffectedFlags = shardInfo.Flags,
+                .AffectedFlags = affectedFlags,
             });
 
             AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
@@ -644,12 +708,40 @@ private:
         // All QuerySpanIds of queries that wrote to this shard in insertion order.
         TVector<ui64> BreakerQuerySpanIds;
         THashSet<ui64> BreakerQuerySpanIdsSet;
+
+        // Last uncommitted write seq num sent to this shard, per writer (absent = none)
+        std::map<ui64, ui64> WriteSeqNums;
     };
 
     static void AddBreakerQuerySpanId(TShardInfo& shardInfo, ui64 querySpanId) {
         if (querySpanId != 0 && shardInfo.BreakerQuerySpanIdsSet.emplace(querySpanId).second) {
             shardInfo.BreakerQuerySpanIds.push_back(querySpanId);
         }
+    }
+
+    static bool ParticipatesInCommit(const TShardInfo& shardInfo) {
+        // Only shards with reads/writes/locks.
+        return shardInfo.Flags != 0 || !shardInfo.Locks.empty();
+    }
+
+    THashSet<ui64> GetParticipatingShards() const {
+        THashSet<ui64> result;
+        for (const auto& [shardId, shardInfo] : ShardsInfo) {
+            if (ParticipatesInCommit(shardInfo)) {
+                result.insert(shardId);
+            }
+        }
+        return result;
+    }
+
+    ui64 GetParticipatingShardsCount() const {
+        ui64 count = 0;
+        for (const auto& [_, shardInfo] : ShardsInfo) {
+            if (ParticipatesInCommit(shardInfo)) {
+                ++count;
+            }
+        }
+        return count;
     }
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
@@ -685,6 +777,7 @@ private:
     bool ReadOnly = true;
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
+    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
     std::optional<NYql::TIssue> LocksIssue;
     std::optional<ui64> VictimQuerySpanId_;
 

@@ -98,7 +98,7 @@ void TChannelCredentialsConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TChannelConfigTemplate::Register(TRegistrar registrar)
+void TChannelFactoryConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("credentials", &TThis::Credentials)
         .Optional();

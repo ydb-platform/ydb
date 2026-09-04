@@ -27,7 +27,10 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
     // initializing fmr file metadata and upload services
     TString coordinatorUrl = fmrConfiguration.GetCoordinatorUrl();
     if (!fmrConfiguration.HasFileRemoteCacheName()) {
-        return TFmrInitializationOptions{coordinatorUrl, nullptr, nullptr, TFmrDistributedCacheSettings(), tvmSettings};
+        return TFmrInitializationOptions{
+            .FmrCoordinatorUrl = coordinatorUrl,
+            .FmrTvmSettings = tvmSettings,
+        };
     }
     TString fmrRemoteCacheName = fmrConfiguration.GetFileRemoteCacheName();
 
@@ -119,9 +122,10 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
 
     IFmrCoordinator::TPtr coordinator;
 
-    if (fmrServices->PeerTracker) {
-        coordinator = MakeVanillaFmrCoordinatorClient(*fmrServices->PeerTracker, fmrServices->VanillaCoordinatorClientSettings);
-        YQL_CLOG(INFO, FastMapReduce) << "Created client to connect to coordinator server to vanilla operation " << fmrServices->PeerTracker->GetOperationId();
+    if (fmrServices->VanillaCoordinatorClientSettings.Defined()) {
+        coordinator = MakeVanillaFmrCoordinatorClient(*fmrServices->VanillaCoordinatorClientSettings);
+        YQL_CLOG(INFO, FastMapReduce) << "Created vanilla FMR coordinator client for operation "
+            << fmrServices->VanillaCoordinatorClientSettings->OperationId;
     } else if (!coordinatorServerUrl.empty()) {
         TFmrCoordinatorClientSettings coordinatorClientSettings;
         THttpURL parsedUrl;

@@ -16,6 +16,8 @@
 #include <util/system/tempfile.h>
 #include <util/thread/pool.h>
 #include <util/system/file_lock.h>
+#include <util/datetime/base.h>
+#include <util/system/fs.h>
 
 using namespace NYql;
 using namespace NThreading;
@@ -557,5 +559,35 @@ Y_UNIT_TEST(SocketTimeout) {
 
     auto url = server->GetUrl();
     UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl(url, {}), std::exception, "can not read from socket input stream");
+}
+
+Y_UNIT_TEST(PutFileStrippedWithBandwidthLimit) {
+    TTempFileHandle testFile;
+    NFs::Copy("/proc/self/exe", testFile.GetName());
+
+    TFileStorageConfig paramsNoLimit;
+    TFileStoragePtr fsNoLimit = CreateFileStorage(paramsNoLimit);
+    auto linkNoLimit = fsNoLimit->PutFileStripped(testFile.GetName());
+
+    UNIT_ASSERT(linkNoLimit);
+    UNIT_ASSERT(!linkNoLimit->GetStorageFileName().empty());
+
+    const ui64 strippedSize = linkNoLimit->GetSize();
+    UNIT_ASSERT_GT(strippedSize, 0);
+
+    const TString bandwidthLimitStr = TStringBuilder() << strippedSize;
+    const TDuration expectedTransferDuration = TDuration::Seconds(1);
+
+    TFileStorageConfig paramsWithLimit;
+    paramsWithLimit.SetStripBandwidthLimit(bandwidthLimitStr);
+    TFileStoragePtr fsWithLimit = CreateFileStorage(paramsWithLimit);
+    TInstant startWithLimit = TInstant::Now();
+    auto linkWithLimit = fsWithLimit->PutFileStripped(testFile.GetName());
+    TDuration timeWithLimit = TInstant::Now() - startWithLimit;
+
+    UNIT_ASSERT(linkWithLimit);
+    UNIT_ASSERT(!linkWithLimit->GetStorageFileName().empty());
+    UNIT_ASSERT_EQUAL(linkNoLimit->GetMd5(), linkWithLimit->GetMd5());
+    UNIT_ASSERT_GT(timeWithLimit, expectedTransferDuration * 0.8);
 }
 } // Y_UNIT_TEST_SUITE(TFileStorageTests)

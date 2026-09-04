@@ -205,6 +205,39 @@ Y_UNIT_TEST_SUITE(Path) {
         UNIT_ASSERT_EQUAL(PathPartBrokenAt(pathPart), std::find(pathPart.begin(), pathPart.end(), ' '));
         UNIT_ASSERT_EQUAL(PathPartBrokenAt(pathPart, " "), pathPart.end());
     }
+
+    Y_UNIT_TEST(NormalizePath_AlreadyUnderDatabase) {
+        const TString database = "/Root/Db";
+        const TString path = "/Root/Db/account/topic";
+        const TString result = NormalizePath(database, path);
+        UNIT_ASSERT_VALUES_EQUAL(result, path);
+        UNIT_ASSERT_VALUES_EQUAL((void*)path.data(), (void*)result.data());
+    }
+
+    Y_UNIT_TEST(NormalizePath_EqualToDatabase) {
+        const TString database = "/Root/Db";
+        const TString result = NormalizePath(database, database);
+        UNIT_ASSERT_VALUES_EQUAL(result, database);
+        UNIT_ASSERT_VALUES_EQUAL((void*)database.data(), (void*)result.data());
+    }
+
+    Y_UNIT_TEST(NormalizePath_JoinRelative) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizePath(TString{"/Root/Db"}, TString{"account/topic"}),
+            "/Root/Db/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizePath(TString{"/Root/Db"}, TString{"/account/topic"}),
+            "/Root/Db/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizePath(TStringBuf("/Root/Db"), TStringBuf("account/topic")),
+            "/Root/Db/account/topic");
+    }
+
+    Y_UNIT_TEST(NormalizePath_CollapsesSlashes) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizePath(TString{"/Root/Db"}, TString{"account//topic"}),
+            "/Root/Db/account/topic");
+    }
 }
 
 }

@@ -6,7 +6,7 @@ Below are code examples for enabling tracing in Jaeger in different {{ ydb-short
 
 - C++
 
-  This functionality is not currently supported.
+  This feature is not currently supported.
 
 - Go
 
@@ -162,6 +162,8 @@ Below are code examples for enabling tracing in Jaeger in different {{ ydb-short
 - Rust
 
   {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+
+  For distributed tracing, use [`tracing`](https://docs.rs/tracing) and export via OpenTelemetry ([#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)).
 
 - PHP
 

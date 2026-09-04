@@ -134,8 +134,8 @@ void TCommandBridgeUpdate::Parse(TConfig& config) {
 }
 
 int TCommandBridgeUpdate::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<std::string> quorumPiles;
     for (const auto& s : QuorumPiles) {
@@ -174,8 +174,8 @@ void TCommandBridgeList::Parse(TConfig& config) {
 }
 
 int TCommandBridgeList::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     // TODO(mregrock): support detailed
     auto result = client.GetClusterState().GetValueSync();
@@ -239,8 +239,8 @@ void TCommandBridgeSwitchover::Parse(TConfig& config) {
 }
 
 int TCommandBridgeSwitchover::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED});
@@ -274,8 +274,8 @@ void TCommandBridgeFailover::Parse(TConfig& config) {
 }
 
 int TCommandBridgeFailover::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({DownPile, NYdb::NBridge::EPileState::DISCONNECTED});
@@ -312,8 +312,8 @@ void TCommandBridgeTakedown::Parse(TConfig& config) {
 }
 
 int TCommandBridgeTakedown::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({DownPile, NYdb::NBridge::EPileState::SUSPENDED});
@@ -348,8 +348,8 @@ void TCommandBridgeRejoin::Parse(TConfig& config) {
 }
 
 int TCommandBridgeRejoin::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({Pile, NYdb::NBridge::EPileState::NOT_SYNCHRONIZED});

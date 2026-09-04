@@ -37,7 +37,7 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Tls");
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Tls");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -63,8 +63,8 @@ TError GetLastSslError(std::string message)
         return 1;
     }, &errorBuilder);
     return TError(NRpc::EErrorCode::SslError, std::move(message), TError::DisableFormat)
-        << TErrorAttribute("ssl_last_error_code", lastSslError)
-        << TErrorAttribute("ssl_error", errorBuilder.Flush());
+        .With("ssl_last_error_code", lastSslError)
+        .With("ssl_error", errorBuilder.Flush());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -120,13 +120,13 @@ TX509Ptr ReadCertFromPemBlob(const TPemBlobConfigPtr& pem)
     TBioPtr bio(BIO_new_mem_buf(blob.c_str(), blob.size()));
     if (!bio) {
         THROW_ERROR_EXCEPTION("Failed to load PEM blob into BIO")
-            << TErrorAttribute("openssl_error_code", ERR_get_error());
+            .With("openssl_error_code", ERR_get_error());
     }
 
     TX509Ptr cert(PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
     if (!cert) {
         THROW_ERROR_EXCEPTION("Failed to read certificate from BIO")
-            << TErrorAttribute("openssl_error_code", ERR_get_error());
+            .With("openssl_error_code", ERR_get_error());
     }
 
     return cert;
@@ -141,7 +141,7 @@ double GetCertTimeToExpiry(const TX509Ptr& cert)
     const auto* notAfter = X509_get0_notAfter(cert.get());
     if (!notAfter) {
         THROW_ERROR_EXCEPTION("Failed to get not-after time from certificate")
-            << TErrorAttribute("openssl_error_code", ERR_get_error());
+            .With("openssl_error_code", ERR_get_error());
     }
 
     time_t currentTime = time(nullptr);
@@ -163,7 +163,7 @@ double GetCertTimeToExpiry(const TX509Ptr& cert)
     int seconds = 0;
     if (!ASN1_TIME_diff(&days, &seconds, asn1Current.get(), notAfter)) {
         THROW_ERROR_EXCEPTION("Failed to calculate certificate time difference")
-            << TErrorAttribute("openssl_error_code", ERR_get_error());
+            .With("openssl_error_code", ERR_get_error());
     }
 
     constexpr int SecondsInDay = 86400;
@@ -310,7 +310,7 @@ public:
 
     void StartClient(bool insecureSkipVerify)
     {
-        YT_LOG_WARNING_IF(insecureSkipVerify, "Started insecure TLS client connection");
+        YT_TLOG_WARNING_IF(insecureSkipVerify, "Started insecure TLS client connection");
         if (!insecureSkipVerify) {
             // Require and verify server certificate.
             SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
@@ -544,13 +544,12 @@ private:
     void HandleUnderlyingIOResult(TFuture<T> future, TCallback<void(const TErrorOr<T>&)> handler)
     {
         future.Subscribe(BIND([handler = std::move(handler), invoker = Invoker_] (const TErrorOr<T>& result) {
-            GuardedInvoke(
-                std::move(invoker),
+            invoker->Invoke(MakeGuardedCallback(
                 BIND(handler, result),
                 BIND([=] {
                     TError error("Poller terminated");
                     handler(error);
-                }));
+                })));
         }));
     }
 
@@ -629,7 +628,8 @@ private:
                     MaybeStartUnderlyingIO(true);
                 } else {
                     Error_ = GetLastSslError("SSL_do_handshake failed");
-                    YT_LOG_DEBUG(Error_, "TLS handshake failed");
+                    YT_TLOG_DEBUG("TLS handshake failed")
+                        .With(Error_);
                     CheckError();
                     return;
                 }
@@ -647,7 +647,8 @@ private:
 
                 if (count < 0) {
                     Error_ = GetLastSslError("SSL_write failed");
-                    YT_LOG_DEBUG(Error_, "TLS write failed");
+                    YT_TLOG_DEBUG("TLS write failed")
+                        .With(Error_);
                     CheckError();
                     return;
                 }
@@ -678,7 +679,8 @@ private:
                     MaybeStartUnderlyingIO(true);
                 } else {
                     Error_ = GetLastSslError("SSL_read failed");
-                    YT_LOG_DEBUG(Error_, "TLS read failed");
+                    YT_TLOG_DEBUG("TLS read failed")
+                        .With(Error_);
                     CheckError();
                     return;
                 }
@@ -800,6 +802,7 @@ TInstant TSslContext::GetCommitTime() const
 void TSslContext::ApplyConfig(const TSslContextConfigPtr& config, TCertificatePathResolver pathResolver)
 {
     if (!config) {
+        UseDefaultOpenSslX509Store();
         return;
     }
 
@@ -822,7 +825,7 @@ void TSslContext::ApplyConfig(const TSslContextConfigPtr& config, TCertificatePa
         for (const auto& command: commands) {
             if (SSL_CONF_cmd(configContext.get(), command->Name.c_str(), command->Value.c_str()) <= 0) {
                 THROW_ERROR GetLastSslError("SSL_CONF_cmd failed")
-                    << TErrorAttribute("ssl_config_command_name", command->Name);
+                    .With("ssl_config_command_name", command->Name);
             }
         }
 
@@ -837,16 +840,16 @@ void TSslContext::ApplyConfig(const TSslContextConfigPtr& config, TCertificatePa
     Impl_->SetInsecureSkipVerify(config->InsecureSkipVerify);
 }
 
-void TSslContext::UseBuiltinOpenSslX509Store()
+void TSslContext::UseDefaultOpenSslX509Store()
 {
-    SSL_CTX_set_cert_store(Impl_->GetContext(), GetBuiltinOpenSslX509Store().Release());
+    SSL_CTX_set_cert_store(Impl_->GetContext(), GetDefaultOpenSslX509Store().Release());
 }
 
 void TSslContext::SetCipherList(const std::string& list)
 {
     if (SSL_CTX_set_cipher_list(Impl_->GetContext(), list.data()) == 0) {
         THROW_ERROR GetLastSslError("SSL_CTX_set_cipher_list failed")
-            << TErrorAttribute("cipher_list", list);
+            .With("cipher_list", list);
     }
 }
 
@@ -854,7 +857,7 @@ void TSslContext::AddCertificateAuthorityFromFile(const std::string& path)
 {
     if (SSL_CTX_load_verify_locations(Impl_->GetContext(), path.c_str(), nullptr) != 1) {
         THROW_ERROR GetLastSslError("SSL_CTX_load_verify_locations failed")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 }
 
@@ -862,7 +865,7 @@ void TSslContext::AddCertificateFromFile(const std::string& path)
 {
     if (SSL_CTX_use_certificate_file(Impl_->GetContext(), path.c_str(), SSL_FILETYPE_PEM) != 1) {
         THROW_ERROR GetLastSslError("SSL_CTX_use_certificate_file failed")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 }
 
@@ -870,7 +873,7 @@ void TSslContext::AddCertificateChainFromFile(const std::string& path)
 {
     if (SSL_CTX_use_certificate_chain_file(Impl_->GetContext(), path.c_str()) != 1) {
         THROW_ERROR GetLastSslError("SSL_CTX_use_certificate_chain_file failed")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 }
 
@@ -878,7 +881,7 @@ void TSslContext::AddPrivateKeyFromFile(const std::string& path)
 {
     if (SSL_CTX_use_PrivateKey_file(Impl_->GetContext(), path.c_str(), SSL_FILETYPE_PEM) != 1) {
         THROW_ERROR GetLastSslError("SSL_CTX_use_PrivateKey_file failed")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 }
 
@@ -976,6 +979,8 @@ void TSslContext::AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertifi
 {
     if (pem) {
         AddCertificateAuthority(pem->LoadBlob(resolver));
+    } else {
+        UseDefaultOpenSslX509Store();
     }
 }
 

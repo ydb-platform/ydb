@@ -1,4 +1,6 @@
 #include "logical_type.h"
+
+#include "private.h"
 #include "schema.h"
 #include "helpers.h"
 
@@ -83,6 +85,9 @@ void WalkImpl(
         case ELogicalMetatype::Tagged:
             WalkImpl(walkContext, descriptor.TaggedElement(), onElement);
             return;
+        case ELogicalMetatype::AggregateState:
+            WalkImpl(walkContext, descriptor.AggregateStateElement(), onElement);
+            return;
     }
     YT_ABORT();
 }
@@ -103,6 +108,64 @@ const T& VerifiedCast(const F& from)
     const T* to = dynamic_cast<const T*>(&from);
     YT_VERIFY(to != nullptr);
     return *to;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TLogicalTypePtr GetAggregateStateSumType(const TSimpleLogicalType& argumentType)
+{
+    switch (argumentType.GetElement()) {
+        case ESimpleLogicalValueType::Int8:
+        case ESimpleLogicalValueType::Int16:
+        case ESimpleLogicalValueType::Int32:
+        case ESimpleLogicalValueType::Int64:
+            return SimpleLogicalType(ESimpleLogicalValueType::Int64);
+
+        case ESimpleLogicalValueType::Uint8:
+        case ESimpleLogicalValueType::Uint16:
+        case ESimpleLogicalValueType::Uint32:
+        case ESimpleLogicalValueType::Uint64:
+            return SimpleLogicalType(ESimpleLogicalValueType::Uint64);
+
+        case ESimpleLogicalValueType::Float:
+        case ESimpleLogicalValueType::Double:
+            return SimpleLogicalType(ESimpleLogicalValueType::Double);
+
+        default:
+            // Placeholder for unsupported argument type.
+            return NullLogicalType();
+    }
+}
+
+TLogicalTypePtr InferAggregateStateElementType(EAggregateFunction function, TLogicalTypePtr argumentType)
+{
+    if (argumentType->GetMetatype() != ELogicalMetatype::Simple) {
+        // Placeholder for unsupported argument type.
+        return NullLogicalType();
+    }
+
+    const auto& argumentSimpleType = argumentType->AsSimpleTypeRef();
+    switch (function) {
+        case EAggregateFunction::Sum:
+            return GetAggregateStateSumType(argumentSimpleType);
+        case EAggregateFunction::Min:
+        case EAggregateFunction::Max:
+            return OptionalLogicalType(argumentType);
+        case EAggregateFunction::Avg:
+            return StructLogicalType({
+                TStructField{.Name = "sum", .StableName = "sum", .Type = GetAggregateStateSumType(argumentSimpleType)},
+                TStructField{.Name = "count", .StableName = "count", .Type = SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+            }, {});
+    }
+    YT_ABORT();
+}
+
+TLogicalTypePtr InferAggregateStateTypeIfNull(EAggregateFunction function, TLogicalTypePtr argumentType, TLogicalTypePtr elementType)
+{
+    if (elementType) {
+        return elementType;
+    }
+    return InferAggregateStateElementType(function, std::move(argumentType));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -163,6 +226,11 @@ const TTaggedLogicalType& TLogicalType::AsTaggedTypeRef() const
     return VerifiedCast<TTaggedLogicalType>(*this);
 }
 
+const TAggregateStateLogicalType& TLogicalType::AsAggregateStateTypeRef() const
+{
+    return VerifiedCast<TAggregateStateLogicalType>(*this);
+}
+
 const TLogicalTypePtr& TLogicalType::GetElement() const
 {
     switch (Metatype_) {
@@ -172,6 +240,8 @@ const TLogicalTypePtr& TLogicalType::GetElement() const
             return AsListTypeRef().GetElement();
         case ELogicalMetatype::Tagged:
             return AsTaggedTypeRef().GetElement();
+        case ELogicalMetatype::AggregateState:
+            return AsAggregateStateTypeRef().GetElement();
         default:
             YT_ABORT();
     }
@@ -371,6 +441,22 @@ private:
                     break;
                 }
 
+                case ELogicalMetatype::AggregateState: {
+                    ConsumeCharacterOrThrow('<');
+
+                    ConsumeIdentifier();
+                    auto function = ParseEnum<EAggregateFunction>(Identifier_);
+
+                    ConsumeCharacterOrThrow(',');
+
+                    auto argumentType = ParseType();
+
+                    ConsumeCharacterOrThrow('>');
+
+                    type = AggregateStateLogicalType(function, std::move(argumentType));
+                    break;
+                }
+
                 case ELogicalMetatype::VariantTuple:
                 case ELogicalMetatype::VariantStruct:
                 case ELogicalMetatype::Simple:
@@ -412,7 +498,7 @@ private:
         } else if (CurrentCharacter() == '\'') {
             if (!allowQuotedIdentifier) {
                 THROW_ERROR_EXCEPTION("Unexpected literal string")
-                    << TErrorAttribute("type_string", Str_);
+                    .With("type_string", Str_);
             }
             // Skip '.
             Step();
@@ -440,7 +526,7 @@ private:
 
             if (!identifierClosed) {
                 THROW_ERROR_EXCEPTION("Encountered invalid enclosure %Qv", Str_.SubStr(start, Index_ - start))
-                    << TErrorAttribute("type_string", Str_);
+                    .With("type_string", Str_);
             }
 
             UnescapedIdentifierHolder_ = UnescapeC(Str_.SubStr(start, Index_ - start));
@@ -451,7 +537,7 @@ private:
 
         if (Identifier_.empty()) {
             THROW_ERROR_EXCEPTION("Unexpected character %qv, expected '_' or alphanumeric", CurrentCharacter())
-                << TErrorAttribute("type_string", Str_);
+                .With("type_string", Str_);
         }
 
         ConsumeWhitespaces();
@@ -565,7 +651,7 @@ TLogicalTypePtr ParseType(TStringBuf typeString)
 
 //////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TLogicalType& logicalType)
+std::string ToString(const TLogicalType& logicalType)
 {
     auto formatTypes = [] (TRange<TLogicalTypePtr> types, TString* destination) {
         bool first = true;
@@ -575,7 +661,7 @@ TString ToString(const TLogicalType& logicalType)
             } else {
                 destination->append(',');
             }
-            destination->append(ToString(*type));
+            destination->append(TStringBuf(ToString(*type)));
         }
     };
 
@@ -593,7 +679,7 @@ TString ToString(const TLogicalType& logicalType)
                 .append(escapedName)
                 .append('\'')
                 .append(':')
-                .append(ToString(*field.Type));
+                .append(TStringBuf(ToString(*field.Type)));
         }
     };
 
@@ -656,10 +742,17 @@ TString ToString(const TLogicalType& logicalType)
             const auto& taggedType = logicalType.AsTaggedTypeRef();
             auto escapedTag = EscapeCAndSingleQuotes(taggedType.GetTag());
             return TString("Tagged<")
-                .append(ToString(*taggedType.GetElement()))
+                .append(TStringBuf(ToString(*taggedType.GetElement())))
                 .append(",'")
                 .append(escapedTag)
                 .append("'>");
+        }
+
+        case ELogicalMetatype::AggregateState: {
+            const auto& aggregateStateType = logicalType.AsAggregateStateTypeRef();
+            return Format("AggregateState<%v,%v>",
+                aggregateStateType.GetFunction(),
+                *aggregateStateType.GetArgumentType());
         }
     }
 
@@ -969,6 +1062,11 @@ TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::TaggedElement() const
     return TComplexTypeFieldDescriptor(Description_ + ".<tagged-element>", Type_->AsTaggedTypeRef().GetElement());
 }
 
+TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::AggregateStateElement() const
+{
+    return TComplexTypeFieldDescriptor(Description_ + ".<aggregate-state-element>", Type_->AsAggregateStateTypeRef().GetElement());
+}
+
 TComplexTypeFieldDescriptor TComplexTypeFieldDescriptor::Detag() const
 {
     return TComplexTypeFieldDescriptor(Description_, DetagLogicalType(Type_));
@@ -1104,6 +1202,9 @@ TLogicalTypePtr DetagLogicalType(const TLogicalTypePtr& type)
         }
         case ELogicalMetatype::Tagged:
             return DetagLogicalType(type->AsTaggedTypeRef().GetElement());
+        case ELogicalMetatype::AggregateState: {
+            return DetagLogicalType(type->AsAggregateStateTypeRef().GetElement());
+        }
     }
     YT_ABORT();
 }
@@ -1390,6 +1491,7 @@ void TDictLogicalType::ValidateNode(const TWalkContext& /*context*/) const
             case ELogicalMetatype::Dict:
             case ELogicalMetatype::Tagged:
             case ELogicalMetatype::Decimal:
+            case ELogicalMetatype::AggregateState:
                 return;
         }
         YT_ABORT();
@@ -1451,17 +1553,91 @@ bool TTaggedLogicalType::IsNullable() const
     return GetElement()->IsNullable();
 }
 
-namespace {
-
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTypeV3Info
+TAggregateStateLogicalType::TAggregateStateLogicalType(
+    EAggregateFunction function,
+    TLogicalTypePtr argumentType,
+    TLogicalTypePtr element)
+    : TLogicalType(ELogicalMetatype::AggregateState)
+    , Function_(function)
+    , ArgumentType_(std::move(argumentType))
+    , Element_(InferAggregateStateTypeIfNull(Function_, ArgumentType_, std::move(element)))
+{ }
+
+i64 TAggregateStateLogicalType::GetMemoryUsage() const
 {
-    ESimpleLogicalValueType V1Type;
-    EValueType WireType;
-    bool Required;
-    bool IsPureV1Type;
-};
+    return sizeof(*this) + GetArgumentType()->GetMemoryUsage() + GetElement()->GetMemoryUsage();
+}
+
+i64 TAggregateStateLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this));
+    if (usage >= threshold) {
+        return usage;
+    }
+    usage += GetArgumentType()->GetMemoryUsage(threshold - usage);
+    if (usage >= threshold) {
+        return usage;
+    }
+    usage += GetElement()->GetMemoryUsage(threshold - usage);
+    return usage;
+}
+
+int TAggregateStateLogicalType::GetTypeComplexity() const
+{
+    return 1 + GetElement()->GetTypeComplexity();
+}
+
+void TAggregateStateLogicalType::ValidateNode(const TWalkContext& /*context*/) const
+{
+    if (ArgumentType_->GetMetatype() != ELogicalMetatype::Simple) {
+        THROW_ERROR_EXCEPTION(
+            "AggregateState requires a simple argument type, but got %Qlv",
+            ArgumentType_->GetMetatype());
+    }
+
+    const auto simpleType = ArgumentType_->AsSimpleTypeRef().GetElement();
+    switch (Function_) {
+        case EAggregateFunction::Sum:
+        case EAggregateFunction::Avg:
+            if (!IsIntegralType(simpleType) && !IsFloatingPointType(simpleType)) {
+                THROW_ERROR_EXCEPTION(
+                    "Aggregate function %Qlv requires a simple numeric argument type (integer or floating-point type), "
+                    "but got %Qlv",
+                    Function_,
+                    simpleType);
+            }
+            break;
+        case EAggregateFunction::Min:
+        case EAggregateFunction::Max:
+            if (!IsComparable(ArgumentType_)) {
+                THROW_ERROR_EXCEPTION(
+                    "Aggregate function %Qlv requires a simple comparable argument type (integer, floating-point, or string type), "
+                    "but got %Qlv",
+                    Function_,
+                    simpleType);
+            }
+            break;
+    }
+
+    auto stateType = InferAggregateStateElementType(Function_, ArgumentType_);
+    if (*stateType != *Element_) {
+        THROW_ERROR_EXCEPTION(
+            "Provided AggregateState element type %Qv differs from the inferred one %Qv",
+            *Element_,
+            *stateType);
+    }
+}
+
+bool TAggregateStateLogicalType::IsNullable() const
+{
+    return GetElement()->IsNullable();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 TTypeV3Info GetTypeV3Info(const TLogicalTypePtr& logicalType)
 {
@@ -1484,6 +1660,8 @@ TTypeV3Info GetTypeV3Info(const TLogicalTypePtr& logicalType)
         }
         case ELogicalMetatype::Tagged:
             return GetTypeV3Info(logicalType->AsTaggedTypeRef().GetElement());
+        case ELogicalMetatype::AggregateState:
+            return GetTypeV3Info(logicalType->AsAggregateStateTypeRef().GetElement());
         case ELogicalMetatype::List:
         case ELogicalMetatype::Struct:
         case ELogicalMetatype::Tuple:
@@ -1494,10 +1672,6 @@ TTypeV3Info GetTypeV3Info(const TLogicalTypePtr& logicalType)
     }
     YT_ABORT();
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
 
 std::pair<ESimpleLogicalValueType, bool> CastToV1Type(const TLogicalTypePtr& logicalType)
 {
@@ -1586,6 +1760,9 @@ bool operator==(const TLogicalType& lhs, const TLogicalType& rhs)
         case ELogicalMetatype::Decimal:
             return lhs.AsDecimalTypeRef().GetPrecision() == rhs.AsDecimalTypeRef().GetPrecision() &&
                 lhs.AsDecimalTypeRef().GetScale() == rhs.AsDecimalTypeRef().GetScale();
+        case ELogicalMetatype::AggregateState:
+            return lhs.AsAggregateStateTypeRef().GetFunction() == rhs.AsAggregateStateTypeRef().GetFunction() &&
+                *lhs.AsAggregateStateTypeRef().GetArgumentType() == *rhs.AsAggregateStateTypeRef().GetArgumentType();
     }
     YT_ABORT();
 }
@@ -1600,12 +1777,12 @@ void ValidateLogicalType(
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("%Qv has bad type",
                 descriptor.GetDescription())
-                << ex;
+                .With(ex);
         }
         if (options.DepthLimit && std::ssize(context.Stack) > *options.DepthLimit) {
             THROW_ERROR_EXCEPTION("%Qv exceeds type depth limit",
                 descriptor.GetDescription())
-                << TErrorAttribute("limit", *options.DepthLimit);
+                .With("limit", *options.DepthLimit);
         }
     });
 }
@@ -1683,6 +1860,14 @@ void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logi
             const auto& taggedLogicalType = logicalType->AsTaggedTypeRef();
             protoTagged->set_tag(taggedLogicalType.GetTag());
             ToProto(protoTagged->mutable_element(), taggedLogicalType.GetElement());
+            return;
+        }
+        case ELogicalMetatype::AggregateState: {
+            auto* protoAggregateState = protoLogicalType->mutable_aggregate_state();
+            const auto& aggregateStateLogicalType = logicalType->AsAggregateStateTypeRef();
+            protoAggregateState->set_function(FormatEnum(aggregateStateLogicalType.GetFunction()));
+            ToProto(protoAggregateState->mutable_argument_type(), aggregateStateLogicalType.GetArgumentType());
+            ToProto(protoAggregateState->mutable_element(), aggregateStateLogicalType.GetElement());
             return;
         }
     }
@@ -1779,6 +1964,20 @@ void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLo
             TLogicalTypePtr element;
             FromProto(&element, protoLogicalType.tagged().element());
             *logicalType = TaggedLogicalType(FromProto<std::string>(protoLogicalType.tagged().tag()), std::move(element));
+            return;
+        }
+        case NProto::TLogicalType::TypeCase::kAggregateState: {
+            auto function = ParseEnum<EAggregateFunction>(protoLogicalType.aggregate_state().function());
+
+            TLogicalTypePtr argumentType;
+            FromProto(&argumentType, protoLogicalType.aggregate_state().argument_type());
+
+            TLogicalTypePtr elementType;
+            if (protoLogicalType.aggregate_state().has_element()) {
+                FromProto(&elementType, protoLogicalType.aggregate_state().element());
+            }
+
+            *logicalType = AggregateStateLogicalType(function, std::move(argumentType), std::move(elementType));
             return;
         }
         case NProto::TLogicalType::TypeCase::TYPE_NOT_SET:
@@ -1914,6 +2113,17 @@ void Serialize(const TLogicalTypePtr& logicalType, NYson::IYsonConsumer* consume
                 .EndMap();
             return;
         }
+        case ELogicalMetatype::AggregateState: {
+            const auto& aggregateStateType = logicalType->AsAggregateStateTypeRef();
+            NYTree::BuildYsonFluently(consumer)
+                .BeginMap()
+                    .Item("metatype").Value(metatype)
+                    .Item("function").Value(aggregateStateType.GetFunction())
+                    .Item("argument_type").Value(aggregateStateType.GetArgumentType())
+                    .Item("element").Value(aggregateStateType.GetElement())
+                .EndMap();
+            return;
+        }
     }
     YT_ABORT();
 }
@@ -2022,6 +2232,13 @@ void Deserialize(TLogicalTypePtr& logicalType, NYTree::INodePtr node)
             logicalType = TaggedLogicalType(std::move(tag), std::move(element));
             return;
         }
+        case ELogicalMetatype::AggregateState: {
+            auto function = mapNode->GetChildValueOrThrow<EAggregateFunction>("function");
+            auto argumentType = mapNode->GetChildValueOrThrow<TLogicalTypePtr>("argument_type");
+            auto elementType = mapNode->GetChildValueOrThrow<TLogicalTypePtr>("element");
+            logicalType = AggregateStateLogicalType(function, std::move(argumentType), std::move(elementType));
+            return;
+        }
     }
     YT_ABORT();
 }
@@ -2097,6 +2314,7 @@ bool IsComparable(const TLogicalTypePtr& type)
         case ELogicalMetatype::Struct:
         case ELogicalMetatype::VariantStruct:
         case ELogicalMetatype::Dict:
+        case ELogicalMetatype::AggregateState:
             return false;
     }
 }
@@ -2115,6 +2333,107 @@ bool IsTzType(const TLogicalTypePtr& logicalType)
         default:
             return false;
     }
+}
+
+bool HasAggregateStateType(const TLogicalTypePtr& logicalType)
+{
+    switch (logicalType->GetMetatype()) {
+        case ELogicalMetatype::Simple:
+        case ELogicalMetatype::Decimal:
+            return false;
+
+        case ELogicalMetatype::Optional:
+        case ELogicalMetatype::List:
+        case ELogicalMetatype::Tagged:
+            return HasAggregateStateType(logicalType->GetElement());
+
+        case ELogicalMetatype::Struct:
+        case ELogicalMetatype::VariantStruct:
+            for (const auto& field : logicalType->GetFields()) {
+                if (HasAggregateStateType(field.Type)) {
+                    return true;
+                }
+            }
+            return false;
+
+        case ELogicalMetatype::Tuple:
+        case ELogicalMetatype::VariantTuple:
+            for (const auto& element : logicalType->GetElements()) {
+                if (HasAggregateStateType(element)) {
+                    return true;
+                }
+            }
+            return false;
+
+        case ELogicalMetatype::Dict:
+            return HasAggregateStateType(logicalType->AsDictTypeRef().GetKey()) ||
+                HasAggregateStateType(logicalType->AsDictTypeRef().GetValue());
+
+        case ELogicalMetatype::AggregateState:
+            return true;
+    }
+
+    YT_ABORT();
+}
+
+bool HasAggregateStateType(const NProto::TLogicalType& logicalType)
+{
+    switch (logicalType.type_case()) {
+        case NProto::TLogicalType::TypeCase::kSimple:
+        case NProto::TLogicalType::TypeCase::kDecimal:
+        case NProto::TLogicalType::TypeCase::TYPE_NOT_SET:
+            return false;
+
+        case NProto::TLogicalType::TypeCase::kOptional:
+            return HasAggregateStateType(logicalType.optional());
+
+        case NProto::TLogicalType::TypeCase::kList:
+            return HasAggregateStateType(logicalType.list());
+
+        case NProto::TLogicalType::TypeCase::kStruct:
+            for (const auto& field : logicalType.struct_().fields()) {
+                if (HasAggregateStateType(field.type())) {
+                    return true;
+                }
+            }
+            return false;
+
+        case NProto::TLogicalType::TypeCase::kTuple:
+            for (const auto& element : logicalType.tuple().elements()) {
+                if (HasAggregateStateType(element)) {
+                    return true;
+                }
+            }
+            return false;
+
+        case NProto::TLogicalType::TypeCase::kVariantStruct:
+            for (const auto& field : logicalType.variant_struct().fields()) {
+                if (HasAggregateStateType(field.type())) {
+                    return true;
+                }
+            }
+            return false;
+
+        case NProto::TLogicalType::TypeCase::kVariantTuple:
+            for (const auto& element : logicalType.variant_tuple().elements()) {
+                if (HasAggregateStateType(element)) {
+                    return true;
+                }
+            }
+            return false;
+
+        case NProto::TLogicalType::TypeCase::kDict:
+            return HasAggregateStateType(logicalType.dict().key()) ||
+                HasAggregateStateType(logicalType.dict().value());
+
+        case NProto::TLogicalType::TypeCase::kTagged:
+            return HasAggregateStateType(logicalType.tagged().element());
+
+        case NProto::TLogicalType::TypeCase::kAggregateState:
+            return true;
+    }
+
+    YT_ABORT();
 }
 
 namespace {
@@ -2176,6 +2495,7 @@ constexpr auto V3LogicalMetatypeEncoding = std::to_array<TLogicalMetatypeEncodin
     {ELogicalMetatype::Dict, "dict"},
     {ELogicalMetatype::Tagged, "tagged"},
     {ELogicalMetatype::Decimal, "decimal"},
+    {ELogicalMetatype::AggregateState, "aggregate_state"},
 });
 
 // NB ELogicalMetatype::{Simple,VariantStruct,VariantTuple} are not encoded therefore we have `-3` in static_assert below.
@@ -2377,6 +2697,17 @@ void Serialize(const TTypeV3LogicalTypeWrapper& wrapper, NYson::IYsonConsumer* c
                 .EndMap();
             return;
         }
+        case ELogicalMetatype::AggregateState: {
+            const auto& aggregateStateType = wrapper.LogicalType->AsAggregateStateTypeRef();
+            NYTree::BuildYsonFluently(consumer)
+                .BeginMap()
+                    .Item("type_name").Value(ToTypeV3(metatype))
+                    .Item("function").Value(FormatEnum(aggregateStateType.GetFunction()))
+                    .Item("argument_type").Value(TWrapper{aggregateStateType.GetArgumentType()})
+                    .Item("item").Value(TWrapper{aggregateStateType.GetElement()})
+                .EndMap();
+            return;
+        }
     }
     YT_ABORT();
 }
@@ -2520,6 +2851,16 @@ void Deserialize(TTypeV3LogicalTypeWrapper& wrapper, NYTree::INodePtr node)
                     wrapper.LogicalType = TaggedLogicalType(std::move(tag), std::move(element.LogicalType));
                     return;
                 }
+                case ELogicalMetatype::AggregateState: {
+                    auto function = mapNode->GetChildValueOrThrow<EAggregateFunction>("function");
+                    auto argumentType = mapNode->GetChildValueOrThrow<TTypeV3LogicalTypeWrapper>("argument_type");
+                    TLogicalTypePtr elementType;
+                    if (auto element = mapNode->FindChildValue<TTypeV3LogicalTypeWrapper>("item")) {
+                        elementType = element->LogicalType;
+                    }
+                    wrapper.LogicalType = AggregateStateLogicalType(function, std::move(argumentType.LogicalType), std::move(elementType));
+                    return;
+                }
             }
             YT_ABORT();
         }
@@ -2531,7 +2872,7 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
     // Check depth early to avoid stack overflow.
     if (depth > MaxSchemaDepth) {
         THROW_ERROR_EXCEPTION("Logical type exceeds depth limit during parsing")
-            << TErrorAttribute("limit", MaxSchemaDepth);
+            .With("limit", MaxSchemaDepth);
     }
 
     if ((*cursor)->GetType() == EYsonItemType::StringValue) {
@@ -2559,9 +2900,10 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
     std::optional<std::vector<TStructField>> members;
     std::vector<std::string> removedMemberStableNames;
     std::optional<std::vector<TLogicalTypePtr>> elements;
-    TLogicalTypePtr item, keyType, valueType;
+    TLogicalTypePtr item, keyType, valueType, argumentType;
     std::optional<i64> precision, scale;
     std::optional<std::string> tag;
+    std::optional<EAggregateFunction> function;
 
     cursor->ParseMap([&] (TYsonPullParserCursor* cursor) {
         EnsureYsonToken("logical type attribute key", *cursor, EYsonItemType::StringValue);
@@ -2675,6 +3017,12 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
         } else if (key == "tag") {
             cursor->Next();
             tag = ExtractTo<std::string>(cursor);
+        } else if (key == "function") {
+            cursor->Next();
+            function = ExtractTo<EAggregateFunction>(cursor);
+        } else if (key == "argument_type") {
+            cursor->Next();
+            DeserializeV3Impl(argumentType, cursor, depth + 1);
         } else {
             cursor->Next();
             cursor->SkipComplexValue();
@@ -2756,6 +3104,11 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
                     ensureIsPresent("tag", tag);
                     ensureIsPresent("item", item);
                     return TaggedLogicalType(std::move(*tag), std::move(item));
+                }
+                case ELogicalMetatype::AggregateState: {
+                    ensureIsPresent("function", function);
+                    ensureIsPresent("argument_type", argumentType);
+                    return AggregateStateLogicalType(*function, std::move(argumentType), std::move(item));
                 }
             }
             YT_ABORT();
@@ -2902,6 +3255,11 @@ TLogicalTypePtr TaggedLogicalType(std::string tag, TLogicalTypePtr element)
     return New<TTaggedLogicalType>(std::move(tag), std::move(element));
 }
 
+TLogicalTypePtr AggregateStateLogicalType(EAggregateFunction function, TLogicalTypePtr argumentType, TLogicalTypePtr elementType)
+{
+    return New<TAggregateStateLogicalType>(function, std::move(argumentType), std::move(elementType));
+}
+
 TLogicalTypePtr NullLogicalType()
 {
     return Singleton<TSimpleTypeStore>()->GetSimpleType(ESimpleLogicalValueType::Null);
@@ -2987,6 +3345,10 @@ size_t THash<NYT::NTableClient::TLogicalType>::operator()(
                 return CombineHashes(
                     THash<std::string>()(logicalType.AsTaggedTypeRef().GetTag()),
                     (*this)(*logicalType.AsTaggedTypeRef().GetElement()));
+            case ELogicalMetatype::AggregateState:
+                return CombineHashes(
+                    THash<EAggregateFunction>()(logicalType.AsAggregateStateTypeRef().GetFunction()),
+                    (*this)(*logicalType.AsAggregateStateTypeRef().GetArgumentType()));
         }
         YT_ABORT();
     });

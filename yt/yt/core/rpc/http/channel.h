@@ -14,9 +14,12 @@ namespace NYT::NRpc::NHttp {
 NRpc::IChannelPtr CreateHttpChannel(
     const std::string& address,
     const NConcurrency::IPollerPtr& poller,
-    bool isHttps = true,
-    NHttps::TClientCredentialsConfigPtr credentials = nullptr
-);
+    bool secure = true,
+    NHttps::TClientCredentialsConfigPtr credentials = nullptr);
+
+//! Creates a factory for HTTP/HTTPs channels; all channels share a poller owned
+//! by the factory and sized per #config.
+NRpc::IChannelFactoryPtr CreateHttpChannelFactory(TClientConfigPtr config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

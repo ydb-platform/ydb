@@ -10,11 +10,11 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/heap.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <library/cpp/yt/containers/intrusive_linked_list.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/public.h>
 
@@ -35,7 +35,7 @@ const TFairShareThreadPoolTag DefaultExecutionTag = "default";
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
 
 DECLARE_REFCOUNTED_CLASS(TBucketMapping)
 DECLARE_REFCOUNTED_CLASS(TTwoLevelFairShareQueue)
@@ -341,13 +341,6 @@ public:
 
     ~TBucket();
 
-    void RunCallback(const TClosure& callback, TCpuInstant cpuInstant)
-    {
-        YT_LOG_TRACE("Executing callback (EnqueuedAt: %v)", cpuInstant);
-        TCurrentInvokerGuard currentInvokerGuard(this);
-        callback.Run();
-    }
-
     bool IsSerialized() const override
     {
         return false;
@@ -483,16 +476,19 @@ public:
                 RetainPoolQueue_.Remove(rawPool);
                 rawPool->LinkedListNode = {};
 
-                YT_LOG_TRACE("Restoring pool (PoolName: %v)", rawPool->PoolName);
+                YT_TLOG_TRACE("Restoring pool")
+                    .With("PoolName", rawPool->PoolName);
             }
 
-            YT_LOG_TRACE("Reusing pool (PoolName: %v)", rawPool->PoolName);
+            YT_TLOG_TRACE("Reusing pool")
+                .With("PoolName", rawPool->PoolName);
 
             // NB: Strong RC could be zero, see above.
             NYT::GetRefCounter(rawPool)->DangerousRef();
             return TExecutionPoolPtr(rawPool, /*addReference*/ false);
         } else {
-            YT_LOG_TRACE("Creating pool (PoolName: %v)", poolName);
+            YT_TLOG_TRACE("Creating pool")
+                .With("PoolName", poolName);
             auto pool = New<TExecutionPool>(poolName, GetPoolProfiler(poolName));
             mappingIt->second = pool.Get();
 
@@ -504,7 +500,8 @@ public:
     {
         YT_ASSERT_SPINLOCK_AFFINITY(MappingLock_);
 
-        YT_LOG_TRACE("Removing pool (PoolName: %v)", pool->PoolName);
+        YT_TLOG_TRACE("Removing pool")
+            .With("PoolName", pool->PoolName);
 
         auto currentInstant = GetCpuInstant();
         pool->LastUsageTime = currentInstant;
@@ -519,7 +516,8 @@ public:
     {
         YT_ASSERT_SPINLOCK_AFFINITY(MappingLock_);
 
-        YT_LOG_TRACE("ProceedRetainQueue (Size: %v)", RetainPoolQueue_.GetSize());
+        YT_TLOG_TRACE("ProceedRetainQueue")
+            .With("Size", RetainPoolQueue_.GetSize());
 
         TPoolQueue poolsToRemove;
 
@@ -531,7 +529,8 @@ public:
                 break;
             }
 
-            YT_LOG_TRACE("Destroing pool (PoolName: %v)", frontPool->PoolName);
+            YT_TLOG_TRACE("Destroing pool")
+                .With("PoolName", frontPool->PoolName);
 
             auto poolIt = PoolMapping_.find(frontPool->PoolName);
             YT_ASSERT(poolIt != PoolMapping_.end() && poolIt->second == frontPool);
@@ -698,14 +697,16 @@ public:
 
         auto cpuInstant = GetCpuInstant();
 
-        YT_LOG_TRACE("Invoking action (EnqueuedAt: %v, Invoker: %v)",
-            cpuInstant,
-            ThreadNamePrefix_);
+        YT_TLOG_TRACE("Invoking action")
+            .With("EnqueuedAt", cpuInstant)
+            .With("Invoker", ThreadNamePrefix_);
 
         TAction action;
         action.EnqueuedAt = cpuInstant;
-        // Callback keeps raw ptr to bucket to minimize bucket ref count.
-        action.Callback = BIND(&TBucket::RunCallback, Unretained(bucket), std::move(callback), cpuInstant);
+        // Store the callback as-is; the bucket is installed as the current invoker
+        // around execution (see DoOnExecute) instead of wrapping every callback in a
+        // freshly allocated closure. BucketHolder keeps the bucket alive meanwhile.
+        action.Callback = std::move(callback);
         action.BucketHolder = MakeStrong(bucket);
         action.EnqueuedThreadCookie = ThreadCookie();
 
@@ -758,6 +759,14 @@ public:
             }
 
             YT_VERIFY(fetchNext);
+
+            // Pairs with the seq_cst fence in Invoke: either the producer observes our
+            // ActiveThreads_ decrement and notifies, or we observe its enqueued action.
+            std::atomic_thread_fence(std::memory_order::seq_cst);
+            if (!InvokeQueue_.IsEmpty()) {
+                CancelWait();
+                continue;
+            }
 
             // NB: Hazard pointer reclamation is driven by Wait (the parking primitive).
             Wait(cookie, isStopping);
@@ -886,10 +895,9 @@ private:
                     // Use last pool excess time to schedule new pool
                     // after earlier scheduled pools (and not yet executed) in queue.
 
-                    YT_LOG_DEBUG_IF(VerboseLogging_, "Initial pool excess time (Name: %v, ExcessTime: %v -> %v)",
-                        pool->PoolName,
-                        pool->ExcessTime,
-                        LastPoolExcessTime_);
+                    YT_TLOG_DEBUG_IF(VerboseLogging_, "Initial pool excess time")
+                        .With("Name", pool->PoolName)
+                        .WithFormat("ExcessTime", "%v -> %v", pool->ExcessTime, LastPoolExcessTime_);
 
                     pool->ExcessTime = LastPoolExcessTime_;
                 }
@@ -917,10 +925,9 @@ private:
                     // Use last bucket excess time to schedule new bucket
                     // after earlier scheduled buckets (and not yet executed) in queue.
 
-                    YT_LOG_DEBUG_IF(VerboseLogging_, "Initial bucket excess time (Name: %v, ExcessTime: %v -> %v)",
-                        bucket->BucketName,
-                        bucket->ExcessTime,
-                        pool->LastBucketExcessTime);
+                    YT_TLOG_DEBUG_IF(VerboseLogging_, "Initial bucket excess time")
+                        .With("Name", bucket->BucketName)
+                        .WithFormat("ExcessTime", "%v -> %v", bucket->ExcessTime, pool->LastBucketExcessTime);
 
                     bucket->ExcessTime = pool->LastBucketExcessTime;
                 }
@@ -983,11 +990,10 @@ private:
             pool->InverseWeight = 1.0 / PoolWeightProvider_->GetWeight(pool->PoolName);
         }
 
-        YT_LOG_DEBUG_IF(VerboseLogging_, "Increment excess time (BucketName: %v, PoolName: %v, ExcessTime: %v -> %v)",
-            bucket->BucketName,
-            bucket->PoolName,
-            bucket->ExcessTime,
-            bucket->ExcessTime + duration);
+        YT_TLOG_DEBUG_IF(VerboseLogging_, "Increment excess time")
+            .With("BucketName", bucket->BucketName)
+            .With("PoolName", bucket->PoolName)
+            .WithFormat("ExcessTime", "%v -> %v", bucket->ExcessTime, bucket->ExcessTime + duration);
 
         pool->ExcessTime += duration * pool->InverseWeight;
         bucket->ExcessTime += duration;
@@ -1008,10 +1014,8 @@ private:
     {
         YT_ASSERT_SPINLOCK_AFFINITY(MainLock_);
 
-        YT_LOG_DEBUG_IF(
-            VerboseLogging_,
-            "Buckets: %v",
-            MakeFormattableView(
+        YT_TLOG_DEBUG_IF(VerboseLogging_, "Bucket state")
+            .With("Buckets", MakeFormattableView(
                 xrange(size_t(0), ActivePoolsHeap_.GetSize()),
                 [&] (auto* builder, auto index) {
                     auto& pool = ActivePoolsHeap_[index];
@@ -1076,7 +1080,7 @@ private:
         std::array<int, TThreadPoolBase::MaxThreadCount> threadIds;
         int requestCount = 0;
 
-        YT_LOG_TRACE("Updating excess time");
+        YT_TLOG_TRACE("Updating excess time");
 
         // Recalculate excess time for all currently evaluating or evaluated recently (end execute) buckets
         for (int threadIndex = 0; threadIndex < threadCount; ++threadIndex) {
@@ -1106,7 +1110,7 @@ private:
             }
         }
 
-        YT_LOG_TRACE("Consuming invoke queue");
+        YT_TLOG_TRACE("Consuming invoke queue");
 
         ConsumeInvokeQueue();
 
@@ -1177,17 +1181,17 @@ private:
             threadState.TimeFromEnqueue = timeFromEnqueue;
 
             if (timeFromStart > LogDurationThreshold) {
-                YT_LOG_DEBUG("Callback execution took too long (Wait: %v, Execution: %v, Total: %v)",
-                    waitTime,
-                    timeFromStart,
-                    timeFromEnqueue);
+                YT_TLOG_DEBUG("Callback execution took too long")
+                    .With("Wait", waitTime)
+                    .With("Execution", timeFromStart)
+                    .With("Total", timeFromEnqueue);
             }
 
             if (waitTime > LogDurationThreshold) {
-                YT_LOG_DEBUG("Callback wait took too long (Wait: %v, Execution: %v, Total: %v)",
-                    waitTime,
-                    timeFromStart,
-                    timeFromEnqueue);
+                YT_TLOG_DEBUG("Callback wait took too long")
+                    .With("Wait", waitTime)
+                    .With("Execution", timeFromStart)
+                    .With("Total", timeFromEnqueue);
             }
         }
 
@@ -1229,6 +1233,7 @@ private:
                 SpinLockPause();
 
                 if (request.load(std::memory_order::acquire) == ERequest::None) {
+                    SetCurrentInvoker(threadState.Action.BucketHolder.Get());
                     return std::move(threadState.Action.Callback);
                 } else if (!MainLock_.IsLocked() && MainLock_.TryAcquire()) {
                     break;
@@ -1238,7 +1243,7 @@ private:
 
         ResetMinEnqueuedAt();
 
-        YT_LOG_TRACE("Started serving requests");
+        YT_TLOG_TRACE("Started serving requests");
         auto [requests, fetchedActions] = ServeCombinedRequests(cpuInstant, index);
 
         // Evaluate notify condition here, but call NotifyAfterFetch outside lock.
@@ -1246,14 +1251,15 @@ private:
         MainLock_.Release();
 
         auto endInstant = GetCpuInstant();
-        YT_LOG_TRACE("Finished serving requests (Duration: %v, Requests: %v, FetchCount: %v, MinEnqueuedAt: %v)",
-            CpuDurationToDuration(endInstant - cpuInstant),
-            requests,
-            fetchedActions,
-            CpuInstantToInstant(newMinEnqueuedAt));
+        YT_TLOG_TRACE("Finished serving requests")
+            .With("Duration", CpuDurationToDuration(endInstant - cpuInstant))
+            .With("Requests", requests)
+            .With("FetchCount", fetchedActions)
+            .With("MinEnqueuedAt", CpuInstantToInstant(newMinEnqueuedAt));
 
         NotifyAfterFetch(endInstant, newMinEnqueuedAt);
 
+        SetCurrentInvoker(threadState.Action.BucketHolder.Get());
         return std::move(threadState.Action.Callback);
     }
 };
@@ -1297,6 +1303,11 @@ protected:
 
     TClosure OnExecute() override
     {
+        // Reset the invoker installed for the previously executed callback
+        // (mirrors TSchedulerThread::EndExecute); DoOnExecute installs the bucket
+        // as the current invoker for the next callback.
+        SetCurrentInvoker(nullptr);
+
         bool fetchNext = !TSchedulerThread::IsStopping() || TSchedulerThread::GracefulStop_;
 
         return Queue_->OnExecute(Index_, fetchNext, [&] {

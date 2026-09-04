@@ -42,6 +42,20 @@ namespace {
         return true;
     }
 
+    void FillPermissionsField(
+        const NACLib::TACL& acl,
+        google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions
+    ) {
+        Y_ENSURE(permissions);
+        for (const auto& ace : acl.GetACE()) {
+            auto entry = permissions->Add();
+            entry->set_subject(ace.GetSID());
+            for (const auto& name : ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight())) {
+                entry->add_permission_names(name);
+            }
+        }
+    }
+
 } // anonymous namespace
 
 template<typename TOut>
@@ -814,18 +828,36 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
     }
 }
 
-void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
-    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions) {
-    const auto& securityObject = TSecurityObject(owner, acl, isContainer);
-    for (const auto& ace : securityObject.GetACL().GetACE()) {
-        auto entry = permissions->Add();
-        entry->set_subject(ace.GetSID());
-        auto str = ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight());
-        for (auto n : str) {
-            entry->add_permission_names(n);
-        }
-    }
+void FillPermissionsFromAcl(
+    const NKikimrSchemeOp::TDirEntry& from,
+    const bool withEffectiveAcl,
+    Ydb::Scheme::Entry* to
+) {
+    Y_ENSURE(to);
+    const NACLib::TACL acl(from.GetACL());
+    FillPermissionsField(acl, to->mutable_permissions());
+    to->set_interrupt_permission_inheritance(acl.GetInterruptInheritance());
 
+    if (withEffectiveAcl) {
+        FillPermissionsField(NACLib::TACL(from.GetEffectiveACL()), to->mutable_effective_permissions());
+    }
+}
+
+void FillPermissionsFromAcl(
+    const NKikimrSchemeOp::TDirEntry& from,
+    const bool withEffectiveAcl,
+    Ydb::Scheme::ModifyPermissionsRequest* to
+) {
+    Y_ENSURE(!withEffectiveAcl);
+    const NACLib::TACL acl(from.GetACL());
+    NProtoBuf::RepeatedPtrField<Ydb::Scheme::Permissions> toGrant;
+    FillPermissionsField(acl, &toGrant);
+    for (const auto& permission : toGrant) {
+        *to->mutable_actions()->Add()->mutable_grant() = permission;
+    }
+    if (acl.GetInterruptInheritance()) {
+        to->set_interrupt_inheritance(true);
+    }
 }
 
 using namespace NACLib;
@@ -879,7 +911,7 @@ const TString& GetAclName(const TString& name) {
 } // namespace
 
 const THashMap<TString, TACLAttrs> AccessMap_  = {
-    { YDB_DATABASE_CONNECT, TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) },
+    { YDB_DATABASE_CONNECT, TACLAttrs(EAccessRights::ConnectDatabase) },
     { YDB_TABLES_MODIFY, TACLAttrs(EAccessRights(UpdateRow | EraseRow)) },
     { YDB_TABLES_READ, TACLAttrs(EAccessRights::SelectRow | EAccessRights::ReadAttributes) },
     { YDB_GENERIC_LIST, EAccessRights::GenericList},
@@ -1010,9 +1042,7 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
     timestamp.set_tx_id(from.GetCreateTxId());
 
     if (processAcl) {
-        const bool isDir = from.GetPathType() == NKikimrSchemeOp::EPathTypeDir;
-        ConvertAclToYdb(from.GetOwner(), from.GetEffectiveACL(), isDir, to->mutable_effective_permissions());
-        ConvertAclToYdb(from.GetOwner(), from.GetACL(), isDir, to->mutable_permissions());
+        FillPermissionsFromAcl(from, /* withEffectiveAcl */ true, to);
     }
 }
 

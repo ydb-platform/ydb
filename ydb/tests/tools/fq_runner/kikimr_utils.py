@@ -153,7 +153,6 @@ class YQv2Extension(ExtensionPoint):
         extra_feature_flags = [
             'enable_external_data_sources',
             'enable_script_execution_operations',
-            'enable_pg_syntax',
         ]
         disabled_feature_flags = []
         if self.enable_schema_inference:
@@ -403,6 +402,17 @@ class TokenAccessorExtension(ExtensionPoint):
         kikimr.compute_plane.fq_config['token_accessor']['enabled'] = True
         kikimr.compute_plane.fq_config['token_accessor']['endpoint'] = self.endpoint
         kikimr.compute_plane.fq_config['token_accessor']['use_ssl'] = self.use_ssl
+
+
+class SynchronizationServiceExtension(ExtensionPoint):
+    def is_applicable(self, request):
+        return True
+
+    def apply_to_kikimr(self, request, kikimr):
+        if 'compute' in kikimr.control_plane.fq_config:
+            kikimr.control_plane.fq_config['compute'].setdefault('ydb', {})['synchronization_service'] = {
+                'enable': True
+            }
 
 
 @contextmanager

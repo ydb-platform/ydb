@@ -199,9 +199,9 @@ def test_balinese_script():
     phrase = ("\u1B13"    # Category 'Lo', EAW 'N' -- BALINESE LETTER KA
               "\u1B28"    # Category 'Lo', EAW 'N' -- BALINESE LETTER PA KAPAL
               "\u1B2E"    # Category 'Lo', EAW 'N' -- BALINESE LETTER LA
-              "\u1B44")   # Category 'Mc', EAW 'N' -- BALINESE ADEG ADEG
+              "\u1B44")   # Category 'Mc', EAW 'N' -- BALINESE ADEG ADEG (virama)
     expect_length_each = (1, 1, 1, 0)
-    expect_length_phrase = 4
+    expect_length_phrase = 3
 
     # exercise,
     length_each = tuple(map(wcwidth.wcwidth, phrase))
@@ -308,7 +308,7 @@ def test_devanagari_script():
               "\u093F")   # MatraL, Category 'Mc', East Asian Width property 'N' -- DEVANAGARI VOWEL SIGN I
     # 23107-terminal-suppt.pdf suggests wcwidth.wcwidth should return (2, 0, 0, 1)
     expect_length_each = (1, 0, 1, 0)
-    # virama conjunct collapses KA+virama+SSA into one cell, Mc adds +1
+    # grapheme cluster capped at 2 cells (ghostty, foot, Windows Terminal)
     expect_length_phrase = 2
 
     # exercise,
@@ -330,7 +330,7 @@ def test_tamil_script():
     # 23107-terminal-suppt.pdf suggests wcwidth.wcwidth should return (3, 0, 0, 4)
     expect_length_each = (1, 0, 1, 0)
 
-    # virama conjunct collapses KA+virama+SSA into one cell, Mc adds +1
+    # grapheme cluster capped at 2 cells (ghostty, foot, Windows Terminal)
     expect_length_phrase = 2
 
     # exercise,
@@ -353,7 +353,7 @@ def test_kannada_script():
               "\u0cc8")   # MatraUR, Category 'Mc', East Asian Width property 'N' -- KANNADA VOWEL SIGN AI
     # 23107-terminal-suppt.pdf suggests should be (2, 0, 3, 1)
     expect_length_each = (1, 0, 1, 0)
-    # virama conjunct collapses RA+virama+JHA into one cell, Mc adds +1
+    # grapheme cluster capped at 2 cells (ghostty, foot, Windows Terminal)
     expect_length_phrase = 2
 
     # exercise,
@@ -454,9 +454,53 @@ def test_virama_conjunct(phrase, expected):
     assert wcwidth.width(phrase) == expected
 
 
+@pytest.mark.parametrize("phrase,expected", [
+    ("\u0995\u09CD\u09A4\u09BF", 2),       # Bengali C+V+C+Mc: ক্তি (capped at 2)
+    ("\u0915\u094D\u0924\u093F", 2),       # Devanagari C+V+C+Mc: क्ति (capped at 2)
+    ("\u0995\u09CD\u09A4", 2),             # C+V+C (no Mc), unchanged
+    ("\u0995\u09BF", 2),                   # C+Mc (no virama), unchanged
+])
+def test_virama_conjunct_mc_vowel(phrase, expected):
+    """Mc combines into base; cluster capped at 2."""
+    assert wcwidth.wcswidth(phrase) == expected
+    assert wcwidth.width(phrase) == expected
+    assert wcwidth.wcswidth(phrase) == expected
+    assert wcwidth.width(phrase) == expected
+
+
+@pytest.mark.parametrize("phrase,expected", [
+    ("\uA9A0\uA9C0\uA9B1\uA9C0\uA9AE", 2),  # Javanese C+V+C+V+C: TA+PANGKON+SA+PANGKON+WA
+    ("\uA9A0\uA9C0\uA9B1", 2),               # Javanese C+V+C: TA+PANGKON+SA
+    ("\u1B04\u1B44\u1B05", 2),               # Balinese C+V+C: A+ADEG ADEG+I
+    ("\U000111C0\U000111C0", 0),             # Sharada virama alone (zero-width)
+])
+def test_virama_mc_category_overlap(phrase, expected):
+    """Virama codepoints in Mc category check ISC before Mc."""
+    assert wcwidth.wcswidth(phrase) == expected
+    assert wcwidth.width(phrase) == expected
+
+
+@pytest.mark.parametrize("phrase,expected", [
+    ("\u1000\u1039\u1000", 2),             # Burmese KA+VIRAMA+KA
+    ("\u1000\u1039\u1000\u1039\u1002", 2),  # Burmese KA+V+KA+V+GA (capped)
+    ("\u1000\u1039\u200D\u1000", 2),       # Burmese KA+V+ZWJ+KA
+    ("\u1782\u17D2\u1782\u17C1", 2),       # Khmer KO+COENG+KO+VOWEL_E (capped)
+    ("\u1780\u17D2\u1780", 2),             # Khmer KA+COENG+KA
+])
+def test_virama_conjunct_invisible_stacker(phrase, expected):
+    assert wcwidth.wcswidth(phrase) == expected
+    assert wcwidth.width(phrase) == expected
+
+
 def test_zwj_at_end_of_string():
     """ZWJ at end of string (not after virama) is consumed with zero width."""
     assert wcwidth.wcswidth('a\u200D') == 1
+
+
+def test_wcswidth_n_exceeds_length():
+    """Verify wcswidth() with n > len(string) does not raise IndexError."""
+    assert wcwidth.wcswidth('hello', n=999) == 5
+    assert wcwidth.wcswidth('\u30B3\u30F3', n=999) == 4
 
 
 def test_soft_hyphen():
@@ -493,12 +537,11 @@ def test_prepended_concatenation_mark_width(codepoint, name):
 def test_legacy_module():
     """Verify legacy ``wcwidth.wcwidth`` module's public items are importable."""
     # pylint: disable=import-outside-toplevel
-    # std imports
-    import sys
-
-    # Access the legacy submodule via sys.modules (matching 0.6.0 where
-    # 'import wcwidth.wcwidth' returned the function, not the module).
-    _legacy = sys.modules['wcwidth.wcwidth']
+    # Save and restore wcwidth.wcwidth because importing the submodule
+    # rebinds the package attribute from the function to the module.
+    _wcwidth_func = wcwidth.wcwidth
+    _legacy = __import__('wcwidth.wcwidth', fromlist=['wcwidth'])
+    wcwidth.wcwidth = _wcwidth_func
 
     for name in _legacy.__all__:
         attr = getattr(_legacy, name)

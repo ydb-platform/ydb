@@ -197,9 +197,21 @@ NProto::TFillOperationParams FillOperationParamsToProto(const TFillOperationPara
 
 TFillOperationParams FillOperationParamsFromProto(const NProto::TFillOperationParams& protoFillOperationParams);
 
+NProto::TTouchOperationParams TouchOperationParamsToProto(const TTouchOperationParams& touchOperationParams);
+
+TTouchOperationParams TouchOperationParamsFromProto(const NProto::TTouchOperationParams& protoTouchOperationParams);
+
 NProto::TFillTaskParams FillTaskParamsToProto(const TFillTaskParams& fillTaskParams);
 
 TFillTaskParams FillTaskParamsFromProto(const NProto::TFillTaskParams& protoFillTaskParams);
+
+NProto::TMapReduceOperationParams MapReduceOperationParamsToProto(const TMapReduceOperationParams& mapReduceOperationParams);
+
+TMapReduceOperationParams MapReduceOperationParamsFromProto(const NProto::TMapReduceOperationParams& protoMapReduceOperationParams);
+
+NProto::TMapReduceMapTaskParams MapReduceMapTaskParamsToProto(const TMapReduceMapTaskParams& mapReduceMapTaskParams);
+
+TMapReduceMapTaskParams MapReduceMapTaskParamsFromProto(const NProto::TMapReduceMapTaskParams& protoMapReduceMapTaskParams);
 
 NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult);
 

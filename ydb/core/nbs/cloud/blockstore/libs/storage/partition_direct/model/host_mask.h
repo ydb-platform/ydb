@@ -34,9 +34,12 @@ public:
     static THostMask MakeEmpty();
     static THostMask MakeOne(THostIndex host);
     static THostMask MakeAll(size_t hostCount);
+    static THostMask MakeFromRoute(const THostRoute& route);
+    static THostMask MakeMask(std::initializer_list<THostIndex> hosts);
 
     void Set(THostIndex host);
     void Reset(THostIndex host);
+    void Update(THostIndex host, bool value);
     [[nodiscard]] bool Get(THostIndex host) const;
 
     [[nodiscard]] bool Empty() const;

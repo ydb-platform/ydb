@@ -7,6 +7,7 @@
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/public/udf/arrow/args_dechunker.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 
 #include <util/generic/singleton.h>
@@ -20,12 +21,8 @@ namespace {
 
 constexpr double RemoveMaskProbability = 0.5;
 constexpr double MakeImmutableProbability = 0.5;
+constexpr double MakeChunkedProbability = 0.5;
 constexpr int MaxOffsetShift = 64;
-
-std::shared_ptr<arrow::ArrayData> ValidateDatumAfterFuzzing(std::shared_ptr<arrow::ArrayData> input) {
-    ValidateDatum(arrow::Datum(input), Nothing(), nullptr, NYql::EDatumValidationMode::Cheap);
-    return input;
-}
 
 std::shared_ptr<arrow::ArrayData> SynchronizeArrayDataMeta(std::shared_ptr<arrow::ArrayData> result, const arrow::ArrayData& original, i64 extraShift) {
     if (!original.buffers[0]) {
@@ -66,19 +63,28 @@ ui64 CalculateRandomOffsetShift(IRandomProvider& randomProvider) {
 
 class IOffsetFuzzer {
 public:
+    explicit IOffsetFuzzer(NYql::EDatumValidationMode validationMode)
+        : ValidationMode_(validationMode)
+    {
+    }
+
     virtual ~IOffsetFuzzer() = default;
 
-    virtual std::shared_ptr<arrow::ArrayData> FuzzArray(const arrow::ArrayData& array,
-                                                        arrow::MemoryPool& memoryPool,
-                                                        IRandomProvider& randomProvider) const {
-        ValidateDatum(arrow::Datum(array.Copy()), Nothing(), nullptr, NYql::EDatumValidationMode::Cheap);
-        return ValidateDatumAfterFuzzing(DoFuzzArray(array, memoryPool, randomProvider));
+    std::shared_ptr<arrow::ArrayData> FuzzArray(const arrow::ArrayData& array,
+                                                arrow::MemoryPool& memoryPool,
+                                                IRandomProvider& randomProvider) const {
+        ValidateDatum(arrow::Datum(array.Copy()), Nothing(), /*type=*/nullptr, ValidationMode_);
+        auto result = DoFuzzArray(array, memoryPool, randomProvider);
+        ValidateDatum(arrow::Datum(result), Nothing(), /*type=*/nullptr, ValidationMode_);
+        return result;
     };
 
 private:
     virtual std::shared_ptr<arrow::ArrayData> DoFuzzArray(const arrow::ArrayData& array,
                                                           arrow::MemoryPool& memoryPool,
                                                           IRandomProvider& randomProvider) const = 0;
+
+    NYql::EDatumValidationMode ValidationMode_;
 };
 
 class TOffsetFuzzerBase: public IOffsetFuzzer {
@@ -88,8 +94,10 @@ public:
 
     explicit TOffsetFuzzerBase(const NYql::NUdf::TType* type,
                                bool isTypeOptional,
-                               const TTypeEnvironment& env)
-        : Type_(type)
+                               const TTypeEnvironment& env,
+                               NYql::EDatumValidationMode validationMode)
+        : IOffsetFuzzer(validationMode)
+        , Type_(type)
     {
         if (isTypeOptional) {
             Type_ = TOptionalType::Create(const_cast<NMiniKQL::TType*>(static_cast<const NMiniKQL::TType*>(Type_)), env);
@@ -114,8 +122,8 @@ private:
 template <bool IsOptional>
 class TLeafOffsetFuzzer: public TOffsetFuzzerBase {
 public:
-    TLeafOffsetFuzzer(const NYql::NUdf::TType* type, const TTypeEnvironment& env)
-        : TOffsetFuzzerBase(type, IsOptional, env)
+    TLeafOffsetFuzzer(const NYql::NUdf::TType* type, const TTypeEnvironment& env, NYql::EDatumValidationMode validationMode)
+        : TOffsetFuzzerBase(type, IsOptional, env, validationMode)
     {
     }
 
@@ -147,8 +155,9 @@ class TTupleOffsetFuzzer: public TOffsetFuzzerBase {
 public:
     TTupleOffsetFuzzer(TVector<TOffsetFuzzerBase::TPtr>&& children,
                        const NYql::NUdf::TType* type,
-                       const TTypeEnvironment& env)
-        : TOffsetFuzzerBase(type, IsOptional, env)
+                       const TTypeEnvironment& env,
+                       NYql::EDatumValidationMode validationMode)
+        : TOffsetFuzzerBase(type, IsOptional, env, validationMode)
         , Children_(std::move(children))
     {
     }
@@ -173,8 +182,8 @@ protected:
 
 class TExternalOptionalOffsetFuzzer: public TOffsetFuzzerBase {
 public:
-    TExternalOptionalOffsetFuzzer(TOffsetFuzzerBase::TPtr base, const NYql::NUdf::TType* type, const TTypeEnvironment& env)
-        : TOffsetFuzzerBase(type, /*isOptional=*/true, env)
+    TExternalOptionalOffsetFuzzer(TOffsetFuzzerBase::TPtr base, const NYql::NUdf::TType* type, const TTypeEnvironment& env, NYql::EDatumValidationMode validationMode)
+        : TOffsetFuzzerBase(type, /*isTypeOptional=*/true, env, validationMode)
         , Base_(std::move(base))
     {
     }
@@ -199,8 +208,9 @@ class TVariantOffsetFuzzer: public TOffsetFuzzerBase {
 public:
     TVariantOffsetFuzzer(TVector<TOffsetFuzzerBase::TPtr>&& children,
                          const NYql::NUdf::TType* type,
-                         const TTypeEnvironment& env)
-        : TOffsetFuzzerBase(type, /*isTypeOptional=*/false, env)
+                         const TTypeEnvironment& env,
+                         NYql::EDatumValidationMode validationMode)
+        : TOffsetFuzzerBase(type, /*isTypeOptional=*/false, env, validationMode)
         , Children_(std::move(children))
     {
     }
@@ -256,52 +266,62 @@ struct TFuzzerTraits {
     static std::unique_ptr<TResult> MakePg(const NYql::NUdf::TPgTypeDescription& desc,
                                            const NYql::NUdf::IPgBuilder* pgBuilder,
                                            const NYql::NUdf::TType* type,
-                                           const TTypeEnvironment& env) {
+                                           const TTypeEnvironment& env,
+                                           NYql::EDatumValidationMode validationMode) {
         Y_UNUSED(desc, pgBuilder);
-        return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env);
+        return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env, validationMode);
     }
 
     static std::unique_ptr<TResult> MakeResource(bool isOptional,
                                                  const NYql::NUdf::TType* type,
-                                                 const TTypeEnvironment& env) {
+                                                 const TTypeEnvironment& env,
+                                                 NYql::EDatumValidationMode validationMode) {
         if (isOptional) {
-            return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/true>>(type, env);
+            return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/true>>(type, env, validationMode);
         } else {
-            return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env);
+            return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env, validationMode);
         }
     }
 
     template <typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional,
                                                const NYql::NUdf::TType* type,
-                                               const TTypeEnvironment& env) {
+                                               const TTypeEnvironment& env,
+                                               NYql::EDatumValidationMode validationMode) {
         if (isOptional) {
-            return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/true>>(type, env);
+            return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/true>>(type, env, validationMode);
         } else {
-            return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env);
+            return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env, validationMode);
         }
     }
 
     template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const NYql::NUdf::TType* type,
-                                                 const TTypeEnvironment& env) {
+                                                 const TTypeEnvironment& env,
+                                                 NYql::EDatumValidationMode validationMode) {
         Y_UNUSED(IsNull);
-        return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env);
+        return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env, validationMode);
     }
 };
 
 std::unique_ptr<TFuzzerTraits::TResult> MakeBlockFuzzer(const TTypeInfoHelper& typeInfoHelper,
                                                         const NYql::NUdf::TType* type,
-                                                        const TTypeEnvironment& env) {
-    return DispatchByArrowTraits<TFuzzerTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr, env);
+                                                        const TTypeEnvironment& env,
+                                                        NYql::EDatumValidationMode validationMode) {
+    return DispatchByArrowTraits<TFuzzerTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr, env, validationMode);
 }
 
 class TFuzzerBase: public IFuzzer {
 public:
+    explicit TFuzzerBase(NYql::EDatumValidationMode validationMode)
+        : ValidationMode_(validationMode)
+    {
+    }
+
     arrow::Datum Fuzz(const arrow::ArrayData& input,
                       arrow::MemoryPool& memoryPool,
                       IRandomProvider& randomProvider) const final {
-        ValidateDatum(input, Nothing(), nullptr, NYql::EDatumValidationMode::Cheap);
+        ValidateDatum(input, Nothing(), /*type=*/nullptr, ValidationMode_);
         return DoFuzz(input, memoryPool, randomProvider);
     };
 
@@ -309,12 +329,17 @@ private:
     virtual arrow::Datum DoFuzz(const arrow::ArrayData& input,
                                 arrow::MemoryPool& memoryPool,
                                 IRandomProvider& randomProvider) const = 0;
+
+    NYql::EDatumValidationMode ValidationMode_;
 };
 
 // Implementation that removes masks when all elements are ones
 class TAllOnesRemoveMaskFuzzer: public TFuzzerBase {
 public:
-    explicit TAllOnesRemoveMaskFuzzer() = default;
+    explicit TAllOnesRemoveMaskFuzzer(NYql::EDatumValidationMode validationMode)
+        : TFuzzerBase(validationMode)
+    {
+    }
 
     arrow::Datum DoFuzz(const arrow::ArrayData& input,
                         arrow::MemoryPool& memoryPool,
@@ -335,6 +360,7 @@ private:
         }
 
         std::vector<std::shared_ptr<arrow::ArrayData>> children;
+        children.reserve(result->child_data.size());
         for (const auto& child : result->child_data) {
             children.push_back(FuzzArrayData(*child, randomProvider));
         }
@@ -345,8 +371,9 @@ private:
 
 class TOffsetShiftFuzzer: public TFuzzerBase {
 public:
-    explicit TOffsetShiftFuzzer(const TType* type, const TTypeEnvironment& env)
-        : OffsetFuzzer_(MakeBlockFuzzer(TTypeInfoHelper(), type, env))
+    explicit TOffsetShiftFuzzer(const TType* type, const TTypeEnvironment& env, NYql::EDatumValidationMode validationMode)
+        : TFuzzerBase(validationMode)
+        , OffsetFuzzer_(MakeBlockFuzzer(TTypeInfoHelper(), type, env, validationMode))
     {
     }
 
@@ -362,7 +389,10 @@ private:
 
 class TImmutableFuzzer: public TFuzzerBase {
 public:
-    explicit TImmutableFuzzer() = default;
+    explicit TImmutableFuzzer(NYql::EDatumValidationMode validationMode)
+        : TFuzzerBase(validationMode)
+    {
+    }
 
     arrow::Datum DoFuzz(const arrow::ArrayData& input,
                         arrow::MemoryPool& memoryPool,
@@ -389,6 +419,31 @@ private:
     }
 };
 
+class TChunkedFuzzer: public TFuzzerBase {
+public:
+    explicit TChunkedFuzzer(NYql::EDatumValidationMode validationMode)
+        : TFuzzerBase(validationMode)
+    {
+    }
+
+    arrow::Datum DoFuzz(const arrow::ArrayData& input,
+                        arrow::MemoryPool& memoryPool,
+                        IRandomProvider& randomProvider) const override {
+        Y_UNUSED(memoryPool);
+        if (input.length == 0 || randomProvider.GenRandReal2() >= MakeChunkedProbability) {
+            return arrow::Datum(input.Copy());
+        }
+
+        TVector<std::shared_ptr<arrow::ArrayData>> chunks;
+        auto remaining = input.Copy();
+        while (remaining->length > 0) {
+            const ui64 chunkLength = randomProvider.Uniform(ui64(1), ui64(remaining->length) + 1);
+            chunks.push_back(NYql::NUdf::Chop(remaining, chunkLength));
+        }
+        return NYql::NUdf::MakeArray(chunks);
+    }
+};
+
 } // namespace
 
 TFuzzerHolder::TFuzzerHolder() = default;
@@ -399,27 +454,24 @@ ui64 TFuzzerHolder::ReserveFuzzer() {
     return FuzzerIdx_++;
 }
 
-void TFuzzerHolder::CreateFuzzers(TFuzzOptions options, ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env) {
-    TFuzzerList result;
+void TFuzzerHolder::CreateFuzzers(ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env,
+                                  NYql::EDatumValidationMode validationMode, bool chunked) {
+    TFuzzerList fuzzers;
     MKQL_ENSURE(type->IsBlock(), "Expected block type for fuzzer.");
     type = AS_TYPE(TBlockType, type)->GetItemType();
     // NOTE: Order is important here, because some fuzzers can break changes made by other fuzzers.
-    if (options.FuzzOffsetShift) {
-        result.push_back(MakeHolder<TOffsetShiftFuzzer>(type, env));
+    fuzzers.push_back(MakeHolder<TOffsetShiftFuzzer>(type, env, validationMode));
+    fuzzers.push_back(MakeHolder<TAllOnesRemoveMaskFuzzer>(validationMode));
+    fuzzers.push_back(MakeHolder<TImmutableFuzzer>(validationMode));
+    if (chunked) {
+        fuzzers.push_back(MakeHolder<TChunkedFuzzer>(validationMode));
     }
-    if (options.FuzzZeroOptionalBitmaskRemove) {
-        result.push_back(MakeHolder<TAllOnesRemoveMaskFuzzer>());
-    }
-    if (options.FuzzImmutable) {
-        result.push_back(MakeHolder<TImmutableFuzzer>());
-    }
-    MKQL_ENSURE(!NodeToFuzzOptions_.contains(fuzzerIndex), "Fuzzer already created.");
-    NodeToFuzzOptions_[fuzzerIndex] = std::move(result);
-    return;
+    MKQL_ENSURE(!NodeToFuzzers_.contains(fuzzerIndex), "Fuzzer already created.");
+    NodeToFuzzers_[fuzzerIndex] = std::move(fuzzers);
 }
 
 void TFuzzerHolder::ClearFuzzers() {
-    NodeToFuzzOptions_.clear();
+    NodeToFuzzers_.clear();
 }
 
 NYql::NUdf::TUnboxedValue TFuzzerHolder::ApplyFuzzers(NYql::NUdf::TUnboxedValue input,
@@ -427,8 +479,8 @@ NYql::NUdf::TUnboxedValue TFuzzerHolder::ApplyFuzzers(NYql::NUdf::TUnboxedValue 
                                                       const THolderFactory& holderFactory,
                                                       arrow::MemoryPool& memoryPool,
                                                       IRandomProvider& randomProvider) const {
-    auto it = NodeToFuzzOptions_.find(fuzzIdx);
-    if (it == NodeToFuzzOptions_.end()) {
+    auto it = NodeToFuzzers_.find(fuzzIdx);
+    if (it == NodeToFuzzers_.end()) {
         MKQL_ENSURE(fuzzIdx == EmptyFuzzerId, "Fuzzer expected.");
         return input;
     }
@@ -440,19 +492,23 @@ NYql::NUdf::TUnboxedValue TFuzzerHolder::ApplyFuzzers(NYql::NUdf::TUnboxedValue 
         for (const auto& fuzzer : it->second) {
             fuzzedDatum = fuzzer->Fuzz(*fuzzedDatum.array(), memoryPool, randomProvider);
         }
-        return holderFactory.CreateArrowBlock(arrow::Datum(fuzzedDatum), NYql::DefaultDatumTestValidationMode);
+        // No validation required since fuzzer already validated it.
+        return holderFactory.CreateArrowBlock(arrow::Datum(fuzzedDatum), NYql::EDatumValidationMode::None);
     } else if (datum.is_arraylike()) {
         TVector<std::shared_ptr<arrow::ArrayData>> fuzzedChunks;
-        for (const auto& chunk : datum.chunked_array()->chunks()) {
-            auto chunkFuzzed = chunk->data()->Copy();
+        NYql::NUdf::TArgsDechunker dechunker(std::vector<arrow::Datum>{datum});
+        std::vector<arrow::Datum> chunk;
+        while (dechunker.Next(chunk)) {
+            arrow::Datum chunkFuzzed = chunk[0];
             for (const auto& fuzzer : it->second) {
-                auto fuzzedDatum = fuzzer->Fuzz(*chunkFuzzed, memoryPool, randomProvider);
-                MKQL_ENSURE(fuzzedDatum.is_array(), "Expected array from fuzzer for chunk");
-                chunkFuzzed = fuzzedDatum.array();
+                chunkFuzzed = fuzzer->Fuzz(*chunkFuzzed.array(), memoryPool, randomProvider);
             }
-            fuzzedChunks.push_back(chunkFuzzed);
+            NYql::NUdf::ForEachArrayData(chunkFuzzed, [&](const std::shared_ptr<arrow::ArrayData>& arrayData) {
+                fuzzedChunks.push_back(arrayData);
+            });
         }
-        return holderFactory.CreateArrowBlock(NYql::NUdf::MakeArray(fuzzedChunks), NYql::DefaultDatumTestValidationMode);
+        // No validation required since fuzzer already validated it.
+        return holderFactory.CreateArrowBlock(NYql::NUdf::MakeArray(fuzzedChunks), NYql::EDatumValidationMode::None);
     } else {
         MKQL_ENSURE(datum.is_scalar(), "Expected scalar");
     }

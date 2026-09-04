@@ -39,11 +39,11 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
             NRm::TKqpResourcesRequest{.Memory = extraSize});
 
         if (!result) {
-            AFL_WARN(NKikimrServices::KQP_COMPUTE)
-                ("problem", "cannot_allocate_memory")
-                ("tx_id", Tx->TxId)
-                ("task_id", TaskId)
-                ("memory", extraSize);
+            YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                {"problem", "cannot_allocate_memory"},
+                {"txId", Tx->TxId},
+                {"taskId", TaskId},
+                {"memory", extraSize});
 
             return false;
         }
@@ -108,11 +108,11 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
                 AvailableQuota.fetch_add(memoryRequired);
                 Limit.fetch_add(memoryRequired);
             } else {
-                AFL_WARN(NKikimrServices::KQP_COMPUTE)
-                    ("problem", "cannot_allocate_memory")
-                    ("tx_id", Tx->TxId)
-                    ("task_id", 0)
-                    ("memory", memoryRequired);
+                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                    {"problem", "cannot_allocate_memory"},
+                    {"txId", Tx->TxId},
+                    {"taskId", 0},
+                    {"memory", memoryRequired});
                 if (memoryRequired >= AllocationStep * 10) {
                     AvailableQuota.fetch_add(memorySize);
                     return false;
@@ -124,8 +124,10 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return true;
     }
 
+    // Node level memory pressure signal, see NRm::TTxState::IsReasonableToStartSpilling.
+    // Channels do not spill on it, but propagate it as back pressure, see TInputDescriptor::MemoryPressure
     bool IsReasonableToUseSpilling() const override {
-        return false;
+        return Tx->IsReasonableToStartSpilling();
     }
 
     void FreeQuota(ui64 memorySize) override {
@@ -178,12 +180,13 @@ class TKqpQueryManager : public NActors::TActor<TKqpQueryManager> {
 public:
     TKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
         std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
-        bool enableChannelMemoryTracking)
+        bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking)
         : TActor(&TThis::StateFunc)
         , Counters_(counters)
         , State_(state)
         , ResourceManager_(resourceManager)
         , CaFactory_(caFactory)
+        , EnableSmallComputeMemoryAllocations(enableSmallComputeMemoryAllocations)
         , EnableChannelMemoryTracking(enableChannelMemoryTracking)
     {
     }
@@ -235,13 +238,14 @@ public:
         ui32 lockNodeId = msg.GetLockNodeId();
         TMaybe<NKikimrDataEvents::ELockMode> lockMode = msg.HasLockMode() ? TMaybe<NKikimrDataEvents::ELockMode>(msg.GetLockMode()) : Nothing();
 
-        STLOG_D("HandleStartKqpTasksRequest",
-            (node_id, SelfId().NodeId()),
-            (tx_id, txId),
-            (requester, executerId),
-            (tasks_count, msg.GetTasks().size()),
-            (task_ids, TasksIdsStr(msg.GetTasks())),
-            (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_NODE, "HandleStartKqpTasksRequest",
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()},
+            {"txId", txId},
+            {"requester", executerId},
+            {"tasksCount", msg.GetTasks().size()},
+            {"taskIds", TasksIdsStr(msg.GetTasks())},
+            {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
 
         const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
@@ -289,12 +293,13 @@ public:
                 ev->Cookie, "Request was cancelled");
         }
 
-        STLOG_D(((tasks.size() == taskCount) ? "Created new request" : "Added tasks to existing request"),
-                (node_id, SelfId().NodeId()),
-                (tx_id, txId),
-                (tasks_count, tasks.size()),
-                (executer, executerId),
-                (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_NODE, ((tasks.size() == taskCount) ? "Created new request" : "Added tasks to existing request"),
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()},
+            {"txId", txId},
+            {"tasksCount", tasks.size()},
+            {"executer", executerId},
+            {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
 
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
@@ -310,16 +315,27 @@ public:
             rlPath.ConstructInPlace(runtimeSettings.GetRlPath());
         }
 
-        auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+        auto lightLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+        auto heavyLimit = CaFactory_->MkqlHeavyProgramMemoryLimit.load();
         const ui32 tasksCount = msg.GetTasks().size();
-        auto externalMemory = initialMemoryLimit * tasksCount;
-        auto channelMemory = 0;
+        ui64 externalMemory = 0;
+        if (EnableSmallComputeMemoryAllocations) {
+            externalMemory = tasksCount * lightLimit;
+        } else {
+            for (const auto& dqTask: msg.GetTasks()) {
+                auto& taskOpts = dqTask.GetProgram().GetSettings();
+                externalMemory += taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation() ? heavyLimit : lightLimit;
+            }
+        }
+        ui64 channelMemory = 0;
 
         if (!TxInfo) {
             // - for the very 1st start request we reserve the same amount of memory for channels as well
-            // - for following start requests (unlikely) we allocate no extra mempry for channels
-            channelMemory = externalMemory;
-            externalMemory += channelMemory;
+            // - for following start requests (unlikely) we allocate no extra memory for channels
+            if (EnableChannelMemoryTracking) {
+                channelMemory = tasksCount * lightLimit;
+                externalMemory += channelMemory;
+            }
             TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
                 poolId, msg.GetMemoryPoolPercent(),
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
@@ -334,9 +350,12 @@ public:
             State_->MarkRequestAsCancelled(executerId);
 
             if (auto tasksToAbort = State_->GetTasksByExecuterId(executerId); !tasksToAbort.empty()) {
-                STLOG_E("Node service unable to allocate " << tasksCount << " tasks, reason: " << rmResult.GetFailReason(),
-                    (node_id, SelfId().NodeId()),
-                    (tx_id, txId));
+                YDB_LOG_ERROR_COMP(NKikimrServices::KQP_NODE, "Node service unable to allocate tasks",
+                    {"marker", "KQPNS"},
+                    {"tasksCount", tasksCount},
+                    {"reason", rmResult.GetFailReason()},
+                    {"nodeId", SelfId().NodeId()},
+                    {"txId", txId});
                 for (const auto& [taskId, computeActorId]: tasksToAbort) {
                     auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, rmResult.GetFailReason());
                     Send(computeActorId, abortEv.release());
@@ -355,6 +374,9 @@ public:
         for (auto& dqTask: *msg.MutableTasks()) {
 
             const auto taskId = dqTask.GetId();
+
+            auto& taskOpts = dqTask.GetProgram().GetSettings();
+            auto initialMemoryLimit = !EnableSmallComputeMemoryAllocations && (taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation()) ? heavyLimit : lightLimit;
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = executerId,
@@ -382,6 +404,7 @@ public:
                 .State = State_, // pass state to later inform when task is finished
                 .Database = msg.GetDatabase(),
                 .Query = query,
+                .UseBatchPool = msg.GetUseBatchPool(),
                 // TODO: block tracking mode is not set!
             };
             if (msg.HasUserToken() && msg.GetUserToken()) {
@@ -393,19 +416,21 @@ public:
             startedTask->SetTaskId(taskId);
             ActorIdToProto(actorId, startedTask->MutableActorId());
             if (State_->OnTaskStarted(executerId, taskId, actorId)) {
-                STLOG_D("Executing task",
-                    (node_id, SelfId().NodeId()),
-                    (tx_id, txId),
-                    (task_id, taskId),
-                    (compute_actor_id, actorId),
-                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_NODE, "Executing task",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()},
+                    {"txId", txId},
+                    {"taskId", taskId},
+                    {"computeActorId", actorId},
+                    {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
             } else {
-                STLOG_D("Task finished in an instant",
-                    (node_id, SelfId().NodeId()),
-                    (tx_id, txId),
-                    (task_id, taskId),
-                    (compute_actor_id, actorId),
-                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_NODE, "Task finished in an instant",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()},
+                    {"txId", txId},
+                    {"taskId", taskId},
+                    {"computeActorId", actorId},
+                    {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
             }
         }
 
@@ -419,13 +444,14 @@ public:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
-                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits));
+                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits,
+                    msg.GetUseBatchPool()));
             }
         }
 
         if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_NONE) {
             StatsMode = runtimeSettings.GetStatsMode();
-            if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+            if (EnableChannelMemoryTracking && StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
                 StatsReportPeriod = reportStatsSettings.MinInterval;
 
                 auto channelCounters = Counters_->GetChannelCounters();
@@ -502,13 +528,14 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
     NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    const bool EnableSmallComputeMemoryAllocations;
     const bool EnableChannelMemoryTracking;
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
     std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
-    bool enableChannelMemoryTracking) {
-    return new TKqpQueryManager(counters, state, resourceManager, caFactory, enableChannelMemoryTracking);
+    bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking) {
+    return new TKqpQueryManager(counters, state, resourceManager, caFactory, enableSmallComputeMemoryAllocations, enableChannelMemoryTracking);
 }
 
 } // namespace NKikimr::NKqp

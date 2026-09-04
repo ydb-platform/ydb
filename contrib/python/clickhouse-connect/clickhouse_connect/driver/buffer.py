@@ -22,8 +22,11 @@ class ResponseBuffer(ByteSource):
         self.exception_tag = getattr(source, "exception_tag", None)
         if self.exception_tag:
             tag_bytes = self.exception_tag.encode()
-            self._open_marker = b"__exception__" + tag_bytes
-            self._close_marker = tag_bytes + b"__exception__"
+            # The server separates __exception__ from the tag with a CRLF on both markers, e.g.
+            # __exception__\r\n<tag> ... <tag>\r\n__exception__. Matching the exact wire bytes is what
+            # lets the scan fire; without the CRLF these markers never match and detection goes dead.
+            self._open_marker = b"__exception__\r\n" + tag_bytes
+            self._close_marker = tag_bytes + b"\r\n__exception__"
             self._carryover = b""
             self._exception_buf = None
 
@@ -114,11 +117,11 @@ class ResponseBuffer(ByteSource):
     def read_str_col(
         self,
         num_rows: int,
-        encoding: str,
+        encoding: str | None,
         nullable: bool = False,
         null_obj: Any = None,
     ) -> Iterable[str]:
-        column = []
+        column: list[Any] = []
         app = column.append
         null_map = self.read_bytes(num_rows) if nullable else None
         for ix in range(num_rows):
@@ -148,7 +151,7 @@ class ResponseBuffer(ByteSource):
 
     def read_fixed_str_col(self, sz: int, num_rows: int, encoding: str) -> Iterable[str]:
         source = self.read_bytes(sz * num_rows)
-        column = []
+        column: list[str] = []
         app = column.append
         for ix in range(0, sz * num_rows, sz):
             try:
@@ -167,7 +170,7 @@ class ResponseBuffer(ByteSource):
         return column
 
     @property
-    def last_message(self) -> bytes:
+    def last_message(self) -> bytes | None:  # type: ignore[override]  # overrides writable attr with property
         return self.buffer
 
     def close(self):

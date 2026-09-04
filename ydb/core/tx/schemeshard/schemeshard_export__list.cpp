@@ -21,7 +21,7 @@ struct TSchemeShard::TExport::TTxList: public TSchemeShard::TXxport::TTxList<
     static bool TryParseKind(const TString& str, TExportInfo::EKind& parsed) {
         if (str == "export/s3") {
             parsed = TExportInfo::EKind::S3;
-        } else if (str == "export/fs") {
+        } else if (str == "export/fs" || str == "export/nfs") {
             parsed = TExportInfo::EKind::FS;
         } else { // fallback to yt
             parsed = TExportInfo::EKind::YT;

@@ -1,5 +1,6 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
@@ -47,7 +48,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if (partitionCount == 0 || partitionCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+    if (partitionCount == 0) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
@@ -144,7 +145,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             }
         }
 
-        pqGroupInfo->PartitionsToAdd.emplace(i, i + 1, keyRange);
+        pqGroupInfo->PartitionsToAdd.emplace_back(i, i + 1, keyRange);
     }
 
     if (partsPerTablet == 0 || partsPerTablet > TSchemeShard::MaxPQTabletPartitionsCount) {
@@ -160,16 +161,10 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     pqGroupInfo->TotalPartitionCount = partitionCount;
     pqGroupInfo->ActivePartitionCount = partitionCount;
 
-    ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
-    if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Invalid tablet count specified: %u", tabletCount);
-        return nullptr;
-    }
-
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
     tabletConfig.ClearPartitionIds();
     tabletConfig.ClearPartitions();
+
 
     if (!CheckPersQueueConfig(tabletConfig, false, &errStr)) {
         status = NKikimrScheme::StatusSchemeError;
@@ -186,7 +181,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (auto it = attrs.find("database_id"); it != attrs.end()) {
         tabletConfig.SetYdbDatabaseId(it->second);
     }
-    if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+    if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
         tabletConfig.SetMonitoringProjectId(it->second);
     }
 
@@ -240,7 +235,9 @@ void ApplySharding(TTxId txId,
         partition->PqId = it->PartitionId;
         partition->GroupId = it->GroupId;
         partition->KeyRange = it->KeyRange;
-        partition->AlterVersion = 1;
+        // Must match pqGroup->AlterVersion: init counts partitions with
+        // partition->AlterVersion <= alterData->AlterVersion when rebuilding PQPartitionsInside.
+        partition->AlterVersion = pqGroup->AlterVersion;
         partition->CreateVersion = 1;
         partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
         partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());
@@ -468,6 +465,29 @@ public:
 
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+
+        // Assign topic Id for SourceId→Partition mapping. For FirstClass topics use
+        // the LocalPathId; for federation topics the Id should already be set from
+        // the _id attribute via ProcessTopicAttributes.
+        // Re-serialization follows the same pattern as schemeshard__operation_alter_pq.cpp:347
+        // and schemeshard__operation_common_pq.cpp:830.
+        if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
+            bool configChanged = false;
+            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !config.HasId()) {
+                config.MutableId()->SetId(dstPath.Base()->PathId.LocalPathId);
+                config.MutableId()->SetOwnerId(ui64(ssId));
+                configChanged = true;
+            }
+            if (config.HasId() && !config.GetId().HasTxStep()) {
+                // Sentinel: the id is filled at create, so writers must not use the
+                // name-keyed fallback (a brand-new topic has no legacy rows).
+                config.MutableId()->SetTxStep(0);
+                configChanged = true;
+            }
+            if (configChanged) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&pqGroup->TabletConfig);
+            }
+        }
 
         context.SS->TabletCounters->Simple()[COUNTER_PQ_GROUP_COUNT].Add(1);
 

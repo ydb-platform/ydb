@@ -1,0 +1,11 @@
+$tupleVariantType = Variant<Optional<Int32>, Optional<Int32>>;
+
+$optionalData = [
+    <|variantValue: Just(Variant(Just(1), "0", $tupleVariantType))|>,
+    <|variantValue: Just(Variant(Nothing(Int32?), "0", $tupleVariantType))|>,
+    <|variantValue: Nothing(OptionalType($tupleVariantType))|>,
+    <|variantValue: Just(Variant(Just(2), "1", $tupleVariantType))|>,
+    <|variantValue: Just(Variant(Nothing(Int32?), "1", $tupleVariantType))|>,
+];
+
+SELECT Yql::VariantItem(variantValue) AS item FROM as_table($optionalData);

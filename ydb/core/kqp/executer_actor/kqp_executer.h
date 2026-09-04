@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/executer_actor/kqp_partition_helper.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver_events.h>
@@ -32,6 +33,7 @@ struct TEvKqpExecuter {
 
         NLWTrace::TOrbit Orbit;
         IKqpGateway::TKqpSnapshot Snapshot;
+        std::optional<TCommitTimestamp> CommitTimestamp;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
         std::optional<ui64> BrokenLockShardId;
         std::optional<ui64> BrokenLockQuerySpanId;
@@ -122,6 +124,13 @@ struct TEvKqpExecuter {
         TDuration CpuTime;
     };
 
+    struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,
+        TKqpExecuterEvents::EvPqTopicResolveStatus>
+    {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
+
     struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,
         TKqpExecuterEvents::EvDelayedExecution>
     {
@@ -179,8 +188,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     TPartitionPrunerConfig partitionPrunerConfig, TVector<NKikimr::TTableId> tableIdsForSnapshot, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
-    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool shrinkTasksGraph);
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2);
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target,

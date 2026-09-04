@@ -5,10 +5,14 @@ INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 SRCS(
     atomic_ut.cpp
     atomic_intrusive_ptr_ut.cpp
+    blob_ut.cpp
+    chunked_input_stream_ut.cpp
     chunked_memory_pool_ut.cpp
     chunked_memory_pool_allocator_ut.cpp
     chunked_memory_pool_output_ut.cpp
+    chunked_output_stream_ut.cpp
     erased_storage_ut.cpp
+    exact_ref_counted_cast_ut.cpp
     free_list_ut.cpp
     function_view_ut.cpp
     intrusive_ptr_ut.cpp

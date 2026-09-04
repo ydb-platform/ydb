@@ -52,6 +52,7 @@ struct TAppData::TImpl {
     NKikimrPQ::TPQConfig PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
     NKikimrConfig::TKafkaProxyConfig KafkaProxyConfig;
+    NKikimrConfig::THttpProxyConfig HttpProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig SqsConfig;
@@ -62,6 +63,7 @@ struct TAppData::TImpl {
     NKikimrConfig::THiveConfig HiveConfig;
     NKikimrConfig::TDataShardConfig DataShardConfig;
     NKikimrConfig::TColumnShardConfig ColumnShardConfig;
+    NKikimrConfig::TSmallBlobsQuotaConfig SmallBlobsQuotaConfig;
     NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
     NKikimrConfig::TMeteringConfig MeteringConfig;
     NKikimr::NAudit::TAuditConfig AuditConfig;
@@ -122,6 +124,7 @@ TAppData::TAppData(
     , PQConfig(Impl->PQConfig)
     , PQClusterDiscoveryConfig(Impl->PQClusterDiscoveryConfig)
     , KafkaProxyConfig(Impl->KafkaProxyConfig)
+    , HttpProxyConfig(Impl->HttpProxyConfig)
     , NetClassifierConfig(Impl->NetClassifierConfig)
     , NetClassifierDistributableConfig(Impl->NetClassifierDistributableConfig)
     , SqsConfig(Impl->SqsConfig)
@@ -132,6 +135,7 @@ TAppData::TAppData(
     , HiveConfig(Impl->HiveConfig)
     , DataShardConfig(Impl->DataShardConfig)
     , ColumnShardConfig(Impl->ColumnShardConfig)
+    , SmallBlobsQuotaConfig(Impl->SmallBlobsQuotaConfig)
     , SchemeShardConfig(Impl->SchemeShardConfig)
     , MeteringConfig(Impl->MeteringConfig)
     , AuditConfig(Impl->AuditConfig)
@@ -161,6 +165,7 @@ TAppData::TAppData(
     , LongTxServiceConfig(Impl->LongTxServiceConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
+    , UserFacingTracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}
 
 TAppData::~TAppData()

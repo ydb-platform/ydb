@@ -28,23 +28,26 @@ bool IsConstMapLambda(TCoLambda lambda) {
 TExprNode::TPtr ExtractMemberFromLiteral(const TExprNode& lambda, const std::string_view& member) {
     if (lambda.IsLambda() && lambda.Tail().IsCallable("AsStruct")) {
         for (const auto& pair : lambda.Tail().ChildrenList()) {
-            if (pair->Head().IsAtom(member))
+            if (pair->Head().IsAtom(member)) {
                 return pair->TailPtr();
-            else if (!pair->Tail().IsCallable("Member") || &pair->Tail().Tail() != &pair->Head() || &pair->Tail().Head() != &lambda.Head().Head())
+            } else if (!pair->Tail().IsCallable("Member") || &pair->Tail().Tail() != &pair->Head() || &pair->Tail().Head() != &lambda.Head().Head()) {
                 break;
+            }
         }
     }
     return {};
 }
 
 bool IsPasstroughtFields(std::map<std::string_view, TExprNode::TPtr> fields, const TExprNode& lambda) {
-    if (&lambda.Tail() == &lambda.Head().Head() || &lambda.Tail() == &lambda.Head().Tail())
+    if (&lambda.Tail() == &lambda.Head().Head() || &lambda.Tail() == &lambda.Head().Tail()) {
         return true;
+    }
 
     if (lambda.Tail().IsCallable("AsStruct")) {
         lambda.Tail().ForEachChild([&](const TExprNode& field) {
-            if (field.Tail().IsCallable("Member") && &field.Tail().Tail() == &field.Head() && (&field.Tail().Head() == &lambda.Head().Head() || &field.Tail().Head() == &lambda.Head().Tail()))
+            if (field.Tail().IsCallable("Member") && &field.Tail().Tail() == &field.Head() && (&field.Tail().Head() == &lambda.Head().Head() || &field.Tail().Head() == &lambda.Head().Tail())) {
                 fields.erase(field.Head().Content());
+            }
         });
     }
 
@@ -1240,7 +1243,7 @@ TExprNode::TPtr PropagateConstPremapIntoCombineByKey(const TExprNode& node, TExp
         .Lambda()
             .Param("item")
             .Apply(*children[2])
-                .With(0, std::move(constItem))
+                .With(0, constItem)
             .Seal()
         .Seal()
         .Build();
@@ -1346,12 +1349,15 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
             TNodeSet atoms(variants);
             for (auto i = 2U; i < self.Input().Ref().ChildrenSize(); ++i) {
                 const auto& ids = *input.Child(i);
-                for (auto j = 0U; j < ids.ChildrenSize(); ++j)
-                    if (!atoms.emplace(ids.Child(j)).second)
+                for (auto j = 0U; j < ids.ChildrenSize(); ++j) {
+                    if (!atoms.emplace(ids.Child(j)).second) {
                         return node;
+                    }
+                }
 
-                if (input.Child(++i) != &input.Tail())
+                if (input.Child(++i) != &input.Tail()) {
                     return node;
+                }
             }
 
             if (variants != atoms.size()) {
@@ -1411,11 +1417,6 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
 bool IsOptimizerToFlowOverIteratorWithDependsAllowed(const TTypeAnnotationContext& types) {
     static const char Flag[] = "ToFlowOverIteratorWithDepends";
     return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
-}
-
-bool IsOptimizerToFlowOverCollectAllowed(const TTypeAnnotationContext& types) {
-    static const char Flag[] = "ToFlowOverCollect";
-    return !IsOptimizerDisabled<Flag>(types);
 }
 
 }
@@ -1740,14 +1741,14 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             if (const auto init = ExtractMemberFromLiteral(chain.InitHandler().Ref(), member), update = ExtractMemberFromLiteral(chain.UpdateHandler().Ref(), member);
                 init && update && init->IsCallable("Bool") && !FromString<bool>(init->Tail().Content())) {
                 if (std::map<std::string_view, TExprNode::TPtr> usedFields;
-                    HaveFieldsSubset(update, chain.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false) && !usedFields.empty()
+                    HaveFieldsSubset(update, chain.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, /*allowDependsOn=*/false) && !usedFields.empty()
                     && IsPasstroughtFields(usedFields, self.InitHandler().Ref()) && IsPasstroughtFields(usedFields, self.UpdateHandler().Ref())) {
                     YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " with " << node->Head().Content();
                     auto lambda = ctx.Builder(chain.Pos())
                         .Lambda()
                             .Param("item")
                             .Param("state")
-                            .ApplyPartial(chain.UpdateHandler().Args().Ptr(), std::move(update))
+                            .ApplyPartial(chain.UpdateHandler().Args().Ptr(), update)
                                 .With(0, "item")
                                 .With(1, "state")
                             .Seal()
@@ -1756,7 +1757,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                     return Build<TCoCondense1>(ctx, self.Pos())
                         .Input(chain.Input())
                         .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
-                        .SwitchHandler(std::move(lambda))
+                        .SwitchHandler(lambda)
                         .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
                         .Done().Ptr();
                 }
@@ -2100,13 +2101,11 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                 return ctx.ChangeChildren(*node, std::move(newChildren));
             }
         }
-        if (IsOptimizerToFlowOverCollectAllowed(*optCtx.Types)) {
-            const auto head = node->HeadPtr();
-            if (head->IsCallable("Collect") && optCtx.IsSingleUsage(*head) &&
-                head->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
-                YQL_CLOG(DEBUG, Core) << "Drop ToFlow over Collect";
-                return head->HeadPtr();
-            }
+        const auto head = node->HeadPtr();
+        if (head->IsCallable("Collect") && optCtx.IsSingleUsage(*head) &&
+            head->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+            YQL_CLOG(DEBUG, Core) << "Drop ToFlow over Collect";
+            return head->HeadPtr();
         }
         return node;
     };

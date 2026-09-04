@@ -17,13 +17,15 @@ from ydb.core.protos import config_pb2
 from ydb.tests.library.common.types import Erasure, FailDomainType
 
 from . import tls_tools
-from .kikimr_port_allocator import KikimrPortManagerPortAllocator
+from .kikimr_port_allocator import KikimrFixedNodePortAllocator, KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path, ydb_cli_path
 from .util import LogLevels
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+GRPC_TLS_DATA_FILES = ('ca.pem', 'cert.pem', 'key.pem')
 
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("KB"):
@@ -80,7 +82,6 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
         data = data.decode('utf-8')
     data = data.format(
         ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
-        ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
         ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
         ydb_default_log_level=ydb_default_log_level,
         ydb_domain_name=ydb_domain_name,
@@ -151,6 +152,7 @@ class KikimrConfigGenerator(object):
             enable_audit_log=False,
             audit_log_config=None,
             grpc_tls_data_path=None,
+            generate_grpc_tls_data=True,
             fq_config_path=None,
             public_http_config_path=None,
             public_http_config=None,
@@ -175,6 +177,8 @@ class KikimrConfigGenerator(object):
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             kafka_api_port=None,
+            kafka_listen_address=None,
+            kafka_auto_create_topics=False,
             metadata_section=None,
             column_shard_config=None,
             use_config_store=False,
@@ -209,6 +213,7 @@ class KikimrConfigGenerator(object):
             nbs_database_name="/Root/NBS",
             enable_topic_cloud_events=False,
             shutdown_config=None,
+            replication_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -247,15 +252,43 @@ class KikimrConfigGenerator(object):
         self.__grpc_tls_cert = None
         self._pdisks_info = []
         if self.__grpc_ssl_enable:
+            if not generate_grpc_tls_data and not grpc_tls_data_path:
+                raise ValueError('grpc_tls_data_path is required when generate_grpc_tls_data is False')
             self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
-            cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
-            self.__grpc_tls_ca = cert_pem
-            self.__grpc_tls_key = key_pem
-            self.__grpc_tls_cert = cert_pem
+            if generate_grpc_tls_data:
+                cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
+                for path, data in (
+                    (self.grpc_tls_ca_path, cert_pem),
+                    (self.grpc_tls_cert_path, cert_pem),
+                    (self.grpc_tls_key_path, key_pem),
+                ):
+                    with open(path, 'wb') as tls_file:
+                        tls_file.write(data)
+
+            paths = [
+                os.path.join(self.__grpc_tls_data_path, filename)
+                for filename in GRPC_TLS_DATA_FILES
+            ]
+            invalid_paths = [path for path in paths if not os.path.isfile(path)]
+            if invalid_paths:
+                raise ValueError(
+                    'gRPC TLS data requires regular files {}. Missing or invalid: {}'.format(
+                        ', '.join(GRPC_TLS_DATA_FILES),
+                        ', '.join(invalid_paths),
+                    )
+                )
+            tls_data = []
+            for path in paths:
+                with open(path, 'rb') as tls_file:
+                    tls_data.append(tls_file.read())
+            self.__grpc_tls_ca, self.__grpc_tls_cert, self.__grpc_tls_key = tls_data
 
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
         self.monitoring_tls_ca_path = None
+        self.monitoring_tls_admin_client_cert_path = None
+        self.monitoring_tls_admin_client_key_path = None
+        self._monitoring_tls_client_certificate_required = False
         self.enable_topic_cloud_events = enable_topic_cloud_events
 
         self.__binary_paths = binary_paths
@@ -282,11 +315,6 @@ class KikimrConfigGenerator(object):
 
         self.__additional_log_configs = {} if additional_log_configs is None else additional_log_configs
         self.__additional_log_configs.update(_get_additional_log_configs())
-        if pg_compatible_expirement:
-            self.__additional_log_configs.update({
-                'PGWIRE': LogLevels.from_string('DEBUG'),
-                'LOCAL_PGWIRE': LogLevels.from_string('DEBUG'),
-            })
 
         self.dynamic_pdisk_size = dynamic_pdisk_size
         self.dynamic_storage_pools = dynamic_storage_pools
@@ -347,10 +375,6 @@ class KikimrConfigGenerator(object):
         # nodes. These compute nodes are not properly tested and maintained on darwin platform.
         if sys.platform == "darwin":
             self.yaml_config["table_service_config"]["resource_manager"]["kqp_pattern_cache_compiled_capacity_bytes"] = 0
-
-        if os.getenv('PGWIRE_LISTENING_PORT', ''):
-            self.yaml_config["local_pg_wire_config"] = {}
-            self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
         # dirty hack for internal ydbd flavour
         if "cert" in self.get_binary_path(0):
@@ -473,6 +497,9 @@ class KikimrConfigGenerator(object):
         if query_service_config:
             self.yaml_config["query_service_config"] = query_service_config
 
+        if replication_config:
+            self.yaml_config["replication_config"] = replication_config
+
         if scan_grouped_memory_limiter_config:
             self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
         if comp_grouped_memory_limiter_config:
@@ -566,13 +593,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
-            self.yaml_config['feature_flags']['enable_pg_syntax'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
-            if "local_pg_wire_config" not in self.yaml_config:
-                self.yaml_config["local_pg_wire_config"] = {}
-
-            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(node_id).pgwire_port
-            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
 
             # https://github.com/ydb-platform/ydb/issues/5152
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
@@ -604,10 +625,15 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
 
+        self.__kafka_api_port = kafka_api_port
         if kafka_api_port is not None:
             kafka_proxy_config = dict()
             kafka_proxy_config['enable_kafka_proxy'] = True
-            kafka_proxy_config["listening_port"] = kafka_api_port
+            kafka_proxy_config["listening_port"] = self.get_kafka_api_port(node_id)
+            if kafka_listen_address is not None:
+                kafka_proxy_config["listening_address"] = kafka_listen_address
+            if kafka_auto_create_topics:
+                kafka_proxy_config["auto_create_topics_enable"] = True
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
@@ -682,6 +708,14 @@ class KikimrConfigGenerator(object):
 
         if self.system_tablets:
             self.yaml_config["system_tablets"] = self.system_tablets
+
+        if enable_nbs:
+            # Enable DbsController tablet
+            self.yaml_config.setdefault("system_tablets", {})["dbs_controller"] = [
+                {
+                    "info": {}
+                }
+            ]
 
         if system_tablet_backup_config:
             self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
@@ -835,6 +869,16 @@ class KikimrConfigGenerator(object):
     def kafka_proxy_enabled(self):
         return self.yaml_config.get('kafka_proxy_config', {}).get('enable_kafka_proxy', False)
 
+    def get_kafka_api_port(self, node_id):
+        # An explicitly requested port must be honored as-is, otherwise the node would
+        # still pick a dynamic port from the port manager (--kafka-port overrides the
+        # config's listening_port). The fixed-port allocator already applies the
+        # requested port together with its per-node offset, so keep using it there.
+        node_allocator = self.port_allocator.get_node_port_allocator(node_id)
+        if self.__kafka_api_port not in (None, 'auto') and not isinstance(node_allocator, KikimrFixedNodePortAllocator):
+            return self.__kafka_api_port
+        return node_allocator.kafka_api_port
+
     @property
     def working_dir(self):
         return self.__working_dir
@@ -857,17 +901,20 @@ class KikimrConfigGenerator(object):
     def set_binary_paths(self, binary_paths):
         self.__binary_paths = binary_paths
 
-    def write_tls_data(self):
-        if self.__grpc_ssl_enable:
-            for fpath, data in (
-                (self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert),
-                (self.grpc_tls_key_path, self.grpc_tls_key)
-            ):
-                with open(fpath, 'wb') as f:
-                    f.write(data)
+    @property
+    def monitoring_tls_client_certificate_required(self):
+        return self._monitoring_tls_client_certificate_required
+
+    @monitoring_tls_client_certificate_required.setter
+    def monitoring_tls_client_certificate_required(self, value):
+        self._monitoring_tls_client_certificate_required = bool(value)
+        monitoring_config = self.yaml_config.setdefault('monitoring_config', {})
+        if self._monitoring_tls_client_certificate_required:
+            monitoring_config['client_certificate_required'] = True
+        else:
+            monitoring_config.pop('client_certificate_required', None)
 
     def write_proto_configs(self, configs_path):
-        self.write_tls_data()
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
             writer.write(yaml.safe_dump(self.full_config))
 

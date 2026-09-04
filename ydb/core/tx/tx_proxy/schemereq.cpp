@@ -27,6 +27,8 @@
 
 #include <util/string/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
+
 namespace {
 
 const TVector<NLoginProto::EHashType::HashType> HASHES_TO_COMPUTE = {
@@ -67,6 +69,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
         bool RequireRedirect = true;
+
+        // Resolve the path only to check access on it if it exists, absence is not an error.
+        bool AllowNotExist = false;
 
         TPathToResolve(const NKikimrSchemeOp::TModifyScheme& modifyScheme)
             : ModifyScheme(modifyScheme)
@@ -113,17 +118,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.RetryPolicy = {.RetryLimitCount = 3};
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, shardToRequest, clientConfig));
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Send propose",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"to", shardToRequest},
+            {"ev", req->ToString()});
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     }
 
     THolder<TEvSchemeShardPropose> MakePropose(ui64 schemeshardIdToRequest) {
         auto request = MakeHolder<TEvSchemeShardPropose>(TxId, schemeshardIdToRequest);
 
-        if (UserToken) {
-            request->Record.SetOwner(UserToken->GetUserSID());
-        }
+        request->Record.SetOwner(ChooseAppropriateOwner(request->Record, AppData(), UserToken));
 
         request->Record.SetPeerName(GetRequestProto().GetPeerName());
         if (GetRequestEv().HasModifyScheme()) {
@@ -501,6 +507,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpTruncateTable:
             return *modifyScheme.MutableTruncateTable()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
+            return *modifyScheme.MutableCreateTestShardSet()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpDropTestShardSet:
+            return *modifyScheme.MutableDrop()->MutableName();
         }
         Y_UNREACHABLE();
     }
@@ -533,6 +545,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
         case NKikimrSchemeOp::ESchemeOpCreateSecret:
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
             return true;
         default:
             return false;
@@ -541,6 +554,22 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     static bool NeedAdjustPathNames(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
         return IsCreateRequest(modifyScheme);
+    }
+
+    // Schemeshard executes CREATE OR REPLACE over an existing object as an alter of it,
+    // so alter rights on the object are required too: create rights on the parent dir
+    // alone must not be enough to overwrite an object owned by somebody else.
+    // The object may not exist yet, then it is a plain create and the check is skipped.
+    void AddResolveForCreateOrReplace(NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const TVector<TString>& workingDir) {
+        if (!pbModifyScheme.GetReplaceIfExists()) {
+            return;
+        }
+
+        auto toResolve = TPathToResolve(pbModifyScheme);
+        toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+        toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema;
+        toResolve.AllowNotExist = true;
+        ResolveForACL.push_back(toResolve);
     }
 
     static TVector<TString> GetFullPath(NKikimrSchemeOp::TModifyScheme& scheme) {
@@ -649,11 +678,16 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             NYql::IssueToMessage(issue, result->Record.AddIssues());
         }
         if (result->Record.IssuesSize() > 0) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-                << ", issues: " << result->Record.GetIssues());
+            YDB_LOG_ERROR_CTX(ctx, "Error",
+                {"selfId", ctx.SelfID},
+                {"txId", TxId},
+                {"issues", result->Record.GetIssues()});
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " SEND to# " << Source.ToString() << " Source " << result->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Send status",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"to", Source},
+            {"ev", result->ToString()});
         ctx.Send(Source, result);
     }
 
@@ -668,21 +702,21 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         CheckAdministrator = AppData()->FeatureFlags.GetEnableStrictUserManagement();
         CheckDatabaseAdministrator = CheckAdministrator && AppData()->FeatureFlags.GetEnableDatabaseAdmin();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " Bootstrap,"
-            << " UserSID: " << GetUserSID(UserToken)
-            << " CheckAdministrator: " << CheckAdministrator
-            << " CheckDatabaseAdministrator: " << CheckDatabaseAdministrator
-        );
+        YDB_LOG_DEBUG_CTX(ctx, "Bootstrap",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"userSID", GetUserSID(UserToken)},
+            {"checkAdministrator", CheckAdministrator},
+            {"checkDatabaseAdministrator", CheckDatabaseAdministrator});
 
         // Resolve database to get its owner and be able to detect if user is the database admin
         if (UserToken) {
             IsClusterAdministrator = NKikimr::IsAdministrator(AppData(), &UserToken.value());
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-                << " Bootstrap,"
-                << " UserSID: " << GetUserSID(UserToken)
-                << " IsClusterAdministrator: " << IsClusterAdministrator
-            );
+            YDB_LOG_DEBUG_CTX(ctx, "Bootstrap",
+                {"selfId", ctx.SelfID},
+                {"txId", TxId},
+                {"userSID", GetUserSID(UserToken)},
+                {"isClusterAdministrator", IsClusterAdministrator});
 
             // Cluster admin trumps database admin, database owner check is needed only for database admin.
             if (!IsClusterAdministrator && CheckDatabaseAdministrator) {
@@ -740,9 +774,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             const auto &partition = desc.GetPartitionConfig();
             if (partition.HasPartitioningPolicy() && partition.GetPartitioningPolicy().GetSizeToSplit() > 0) {
                 if (PartitionConfigHasExternalBlobsEnabled(partition)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor#" << ctx.SelfID.ToString() << " txid# " << TxId
-                        << " must not use auto-split and external blobs simultaneously, path# " << path
-                    );
+                    YDB_LOG_ERROR_CTX(ctx, "Must not use auto-split and external blobs simultaneously",
+                        {"selfId", ctx.SelfID},
+                        {"txId", TxId},
+                        {"path", path});
                     return false;
                 }
             }
@@ -867,6 +902,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            AddResolveForCreateOrReplace(pbModifyScheme, workingDir);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpAlterTransfer:
@@ -926,6 +962,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
         case NKikimrSchemeOp::ESchemeOpDropSecret:
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpDropTestShardSet:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -989,11 +1026,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            AddResolveForCreateOrReplace(pbModifyScheme, workingDir);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateTransfer:
@@ -1269,17 +1308,58 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken)
             << " on path " << CanonizePath(JoinPath(path))
         ;
-        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << ", " << msg << ", " << part
-        );
+        YDB_LOG_ERROR_CTX(ctx, "Error",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"msg", msg},
+            {"part", part});
         return msg;
     }
     TString MakeAccessDeniedError(const TActorContext& ctx, const TString& part) {
         const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken);
-        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << ", " << msg << ", " << part
-        );
+        YDB_LOG_ERROR_CTX(ctx, "Error",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"msg", msg},
+            {"part", part});
         return msg;
+    }
+
+    // If the missing access includes GrantAccessRights and permissions are managed via IDM,
+    // the message returned to the user points the user to use IDM instead.
+    TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path, ui32 neededAccess) {
+        const TString msg = MakeAccessDeniedError(ctx, path, TStringBuilder()
+            << "with access " << NACLib::AccessRightsToString(neededAccess)
+        );
+
+        if ((neededAccess & NACLib::EAccessRights::GrantAccessRights) && AppData()->FeatureFlags.GetEnableIdmPermissionsManagement()) {
+            return "All access rights are managed via roles in IDM, please use IDM to change them";
+        } else {
+            return msg;
+        }
+    }
+
+    // The only tolerable resolve error is a missing AllowNotExist path.
+    bool HasOnlyTolerableResolveErrors(const NSchemeCache::TSchemeCacheNavigate* navigate) const {
+        if (navigate->ResultSet.size() != ResolveForACL.size()) {
+            return false;
+        }
+
+        for (size_t i = 0; i < navigate->ResultSet.size(); ++i) {
+            switch (navigate->ResultSet[i].Status) {
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                if (ResolveForACL[i].AllowNotExist) {
+                    break;
+                }
+                return false;
+            default:
+                return false;
+            }
+        }
+
+        return true;
     }
 
     void InterpretResolveError(const NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext &ctx) {
@@ -1322,8 +1402,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return;
         }
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Unexpected response from scheme cache"
-            << ": " << navigate->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_ERROR_CTX(ctx, "Unexpected response from scheme cache",
+            {"response", navigate->ToString(*AppData()->TypeRegistry)});
         Y_DEBUG_ABORT("Unreachable");
 
         TxProxyMon->ResolveKeySetFail->Inc();
@@ -1486,6 +1566,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         return false;
                     }
                 }
+
+                // Admins can always change ACLs
+                allowACLBypass = isAdmin;
             } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain) {
                 if (IsDB(entry) && !IsClusterAdministrator) {
                     const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
@@ -1513,9 +1596,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
 
             if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
-                    << "with access " << NACLib::AccessRightsToString(access)
-                );
+                const auto errString = MakeAccessDeniedError(ctx, entry.Path, access);
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                 return false;
@@ -1575,8 +1656,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " HANDLE EvClientConnected");
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvClientConnected",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId});
         Y_ABORT_UNLESS(msg->ClientId == PipeClient);
 
         if (msg->Status != NKikimrProto::OK) {
@@ -1586,8 +1668,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " HANDLE EvClientDestroyed");
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvClientDestroyed",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId});
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
         Y_ABORT_UNLESS(msg->ClientId == PipeClient);
 
@@ -1597,8 +1680,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrScheme::TEvModifySchemeTransactionResult &record = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " Status " << record.GetStatus() << " HANDLE "<< ev->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvModifySchemeTransactionResult",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"status", record.GetStatus()},
+            {"ev", ev->Get()->ToString()});
 
         TxProxyMon->SchemeRequestLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
@@ -1621,17 +1707,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request.Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " HandleResolveDatabase,"
-            << " ResultSet size: " << request.ResultSet.size()
-            << " ResultSet error count: " << request.ErrorCount
-        );
+        YDB_LOG_DEBUG_CTX(ctx, "HandleResolveDatabase",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"resultSize", request.ResultSet.size()},
+            {"errorCount", request.ErrorCount});
 
         if (request.ResultSet.empty()) {
             const TString msg = TStringBuilder() << "Error resolving database " << request.DatabaseName << ": no response";
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-                << ", " << msg
-            );
+            YDB_LOG_ERROR_CTX(ctx, "Error",
+                {"selfId", ctx.SelfID},
+                {"txId", TxId},
+                {"msg", msg});
 
             TxProxyMon->ResolveKeySetWrongRequest->Inc();
 
@@ -1652,15 +1739,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         IsDatabaseAdministrator = NKikimr::IsDatabaseAdministrator(&UserToken.value(), entry.Self->Info.GetOwner());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " HandleResolveDatabase,"
-            << " UserSID: " << GetUserSID(UserToken)
-            << " CheckAdministrator: " << CheckAdministrator
-            << " CheckDatabaseAdministrator: " << CheckDatabaseAdministrator
-            << " IsClusterAdministrator: " << IsClusterAdministrator
-            << " IsDatabaseAdministrator: " << IsDatabaseAdministrator
-            << " DatabaseOwner: " << DatabaseOwner
-        );
+        YDB_LOG_DEBUG_CTX(ctx, "HandleResolveDatabase",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"userSID", GetUserSID(UserToken)},
+            {"checkAdministrator", CheckAdministrator},
+            {"checkDatabaseAdministrator", CheckDatabaseAdministrator},
+            {"isClusterAdministrator", IsClusterAdministrator},
+            {"isDatabaseAdministrator", IsDatabaseAdministrator},
+            {"databaseOwner", DatabaseOwner});
 
         static_cast<TDerived*>(this)->Start(ctx);
     }
@@ -1678,7 +1765,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         Y_ABORT_UNLESS(!navigate->ResultSet.empty());
 
-        if (navigate->ErrorCount > 0) {
+        if (navigate->ErrorCount > 0 && !HasOnlyTolerableResolveErrors(navigate)) {
             InterpretResolveError(navigate, ctx);
             return Die(ctx);
         }
@@ -1702,14 +1789,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         SchemeshardIdToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                    "Actor# " << ctx.SelfID.ToString()
-                              << " HANDLE EvNavigateKeySetResult,"
-                              << " txid# " << TxId
-                              << " shardToRequest# " << SchemeshardIdToRequest
-                              << " DomainKey# " << navigate->ResultSet.begin()->DomainInfo->DomainKey
-                              << " DomainInfo.Params# " << navigate->ResultSet.begin()->DomainInfo->Params.ShortDebugString()
-                              << " RedirectRequired# " <<  (navigate->ResultSet.begin()->RedirectRequired ? "true" : "false"));
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvNavigateKeySetResult",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"shardToRequest", SchemeshardIdToRequest},
+            {"domainKey", navigate->ResultSet.begin()->DomainInfo->DomainKey},
+            {"domainInfoParams", navigate->ResultSet.begin()->DomainInfo->Params.ShortDebugString()},
+            {"redirectRequired", (navigate->ResultSet.begin()->RedirectRequired ? "true" : "false")});
 
         // TSchemeTransactionalReq can't contain AlterLogin operations since it's used only for RenameTables requests
         if (GetRequestEv().HasModifyScheme()
@@ -1720,19 +1806,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto& targetUser = *alterLogin.MutableCreateUser();
                 if (targetUser.GetHashedPassword()) {
-                    // to support compatibility between old and new hash formats
+                    // an old-format hash may come e.g. from a local backup restore;
                     // TODO: remove after the end of old format support in local backups
-                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
-                    if (hashes) {
-                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
-                        targetUser.SetIsHashedPassword(true);
-                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
-                    } else {
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                            "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
-                        return Die(ctx);
+                    if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
+                        targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;
@@ -1743,19 +1822,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto& targetUser = *alterLogin.MutableModifyUser();
                 if (targetUser.HasHashedPassword()) {
-                    // to support compatibility between old and new hash formats
+                    // an old-format hash may come e.g. from a local backup restore;
                     // TODO: remove after the end of old format support in local backups
-                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
-                    if (hashes) {
-                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
-                        targetUser.SetIsHashedPassword(true);
-                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
-                    } else {
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                            "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
-                        return Die(ctx);
+                    if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
+                        targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else if (targetUser.HasPassword()) {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;
@@ -1786,8 +1858,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto& targetUser = *alterLogin.MutableCreateUser();
             targetUser.SetUser(std::move(computedHashes->PreparedUsername));
-            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
-            targetUser.SetIsHashedPassword(true);
+            targetUser.ClearPassword();
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
             break;
         }
@@ -1795,8 +1866,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto& targetUser = *alterLogin.MutableModifyUser();
             targetUser.SetUser(std::move(computedHashes->PreparedUsername));
-            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
-            targetUser.SetIsHashedPassword(true);
+            targetUser.ClearPassword();
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
             break;
         }
@@ -1865,11 +1935,10 @@ struct TFlatSchemeReq : public TBaseSchemeReq<TFlatSchemeReq> {
 };
 
 void TFlatSchemeReq::Bootstrap(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                "Actor# " << ctx.SelfID.ToString()
-                          << " txid# " << TxId
-                          << " Bootstrap EvSchemeRequest"
-                          << " record: " << SecureDebugString(GetRequestProto()));
+    YDB_LOG_DEBUG_CTX(ctx, "Bootstrap EvSchemeRequest",
+        {"selfId", ctx.SelfID},
+        {"txId", TxId},
+        {"record", SecureDebugString(GetRequestProto())});
     Y_ABORT_UNLESS(GetRequestEv().HasModifyScheme());
     Y_ABORT_UNLESS(!GetRequestEv().HasTransactionalModification());
 
@@ -1924,17 +1993,19 @@ void TFlatSchemeReq::ProcessRequest(const TActorContext &ctx) {
         return Die(ctx);
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " TEvNavigateKeySet requested from SchemeCache");
+    YDB_LOG_DEBUG_CTX(ctx, "Send TEvNavigateKeySet",
+        {"selfId", ctx.SelfID},
+        {"txId", TxId});
     ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveRequest));
     Become(&TThis::StateWaitResolve);
     return;
 }
 
 void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                "Actor# " << ctx.SelfID.ToString()
-                          << " txid# " << TxId
-                          << " HANDLE EvNavigateKeySetResult TFlatSchemeReq marker# P6");
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvNavigateKeySetResult",
+        {"selfId", ctx.SelfID},
+        {"txId", TxId},
+        {"marker", "P6"});
     Y_ABORT_UNLESS(NeedAdjustPathNames(GetModifyScheme()));
 
     const auto& resultSet = ev->Get()->Request->ResultSet;
@@ -1955,9 +2026,10 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
         const auto errText = TStringBuilder()
             << "Cannot resolve working dir, lookup error"
             << " path# " << JoinPath(parts);
-        LOG_INFO_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << ", " << errText
-        );
+        YDB_LOG_INFO_CTX(ctx, "Lookup error",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"error", errText});
         TxProxyMon->ResolveKeySetFail->Inc();
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, nullptr, &issue, ctx);
@@ -1969,9 +2041,10 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
             << "Cannot resolve working dir"
             << " workingDir# " << (workingDir ? CanonizePath(JoinPath(*workingDir)) : "null")
             << " path# " << JoinPath(parts);
-        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << ", " << errText
-        );
+        YDB_LOG_ERROR_CTX(ctx, "Error",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"error", errText});
 
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errText);
@@ -2029,11 +2102,10 @@ struct TSchemeTransactionalReq : public TBaseSchemeReq<TSchemeTransactionalReq> 
 };
 
 void TSchemeTransactionalReq::Bootstrap(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                "Actor# " << ctx.SelfID.ToString()
-                          << " txid# " << TxId
-                          << " Bootstrap EvSchemeRequest"
-                          << " record: " << SecureDebugString(GetRequestProto()));
+    YDB_LOG_DEBUG_CTX(ctx, "Bootstrap EvSchemeRequest",
+        {"selfId", ctx.SelfID},
+        {"txId", TxId},
+        {"record", SecureDebugString(GetRequestProto())});
     Y_ABORT_UNLESS(!GetRequestEv().HasModifyScheme());
     Y_ABORT_UNLESS(GetRequestEv().HasTransactionalModification());
 
@@ -2066,7 +2138,9 @@ void TSchemeTransactionalReq::Start(const TActorContext &ctx) {
         return Die(ctx);
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " TEvNavigateKeySet requested from SchemeCache");
+    YDB_LOG_DEBUG_CTX(ctx, "Send TEvNavigateKeySet",
+        {"selfId", ctx.SelfID},
+        {"txId", TxId});
     ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveRequest));
 
     Become(&TThis::StateWaitResolve);

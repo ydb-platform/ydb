@@ -194,6 +194,8 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.DataSize = tableStats.GetDataSize();
     newStats.IndexSize = tableStats.GetIndexSize();
     newStats.ByKeyFilterSize = tableStats.GetByKeyFilterSize();
+    newStats.SmallBlobsVolumeBytes = tableStats.GetSmallBlobsVolumeBytes();
+    newStats.SmallBlobsCount = tableStats.GetSmallBlobsCount();
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
 
@@ -424,6 +426,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     TDiskSpaceUsageDelta diskSpaceUsageDelta;
+    i64 smallBlobsBytesDelta = 0;
+    i64 smallBlobsCountDelta = 0;
 
     if (isDataShard) {
         if (!Self->Tables.contains(pathId)) {
@@ -459,7 +463,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
         TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
+        const ui64 prevSmallBlobsBytes = olapStore->Stats.Aggregated.SmallBlobsVolumeBytes;
+        const ui64 prevSmallBlobsCount = olapStore->Stats.Aggregated.SmallBlobsCount;
         olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
+        smallBlobsBytesDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsVolumeBytes) - static_cast<i64>(prevSmallBlobsBytes);
+        smallBlobsCountDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
         const auto tables = rec.GetTables();
@@ -497,7 +505,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
         auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
+        const ui64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsVolumeBytes;
+        const ui64 prevSmallBlobsCount = columnTable->Stats.Aggregated.SmallBlobsCount;
         columnTable->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
+        smallBlobsBytesDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsVolumeBytes) - static_cast<i64>(prevSmallBlobsBytes);
+        smallBlobsCountDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -509,7 +521,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     if (updateSubdomainInfo) {
         subDomainInfo->AggrDiskSpaceUsage(Self, diskSpaceUsageDelta);
-        if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
+        subDomainInfo->AggrSmallBlobsUsage(Self, smallBlobsBytesDelta, smallBlobsCountDelta);
+        if (subDomainInfo->CheckQuotas(Self)) {
             auto subDomainId = Self->ResolvePathIdForDomain(pathElement);
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
             // Publish is done in a separate transaction, so we may call this directly
@@ -523,7 +536,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    if (table->IsTTLEnabled()) {
+    if (Self->TTLEnabledTables.contains(pathId)) {
         if (auto* p = table->GetPartitionStore().FindPtr(shardIdx)) {
             auto& lag = p->LastCondEraseLag;
 
@@ -731,8 +744,65 @@ void TTxStoreTableStats::ScheduleNextBatch(const TActorContext& ctx) {
     Self->ExecuteTableStatsBatch(ctx);
 }
 
+namespace {
+
+// Triggers the lazy deserialization of a raw TEvDataShard::TEvPeriodicTableStats on this actor's
+// thread (off the schemeshard's), then bounces the same handle back wrapped as
+// TEvPrivate::TEvPeriodicTableStatsParsed. TEventPBBase caches the parsed record after the first
+// Get()/Load() (event_pb.h), so the schemeshard's own Get() is a cache hit, not a second parse.
+class TStatsParserActor : public TActor<TStatsParserActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SCHEMESHARD_STATS_PARSER;
+    }
+
+    explicit TStatsParserActor(const TActorId& selfActorId)
+        : TActor(&TThis::StateWork)
+        , SelfActorId(selfActorId)
+    {}
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvDataShard::TEvPeriodicTableStats, Handle);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+private:
+    void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
+        ev->Get();
+        ctx.Send(SelfActorId, new TEvPrivate::TEvPeriodicTableStatsParsed(std::move(ev)));
+    }
+
+    const TActorId SelfActorId;
+};
+
+} // anonymous namespace
+
+IActor* CreateStatsParserActor(const TActorId& selfActorId) {
+    return new TStatsParserActor(selfActorId);
+}
+
 void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
-    const auto& rec = ev->Get()->Record;
+    const auto start = AppData()->MonotonicTimeProvider->Now();
+    if (AppData()->FeatureFlags.GetEnablePeriodicTableStatsParseOffload()) {
+        ctx.Send(ev->Forward(StatsParserActorId));
+    } else {
+        HandlePeriodicTableStats(ev, ctx);
+    }
+    const auto elapsed = AppData()->MonotonicTimeProvider->Now() - start;
+    TabletCounters->Cumulative()[COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS].Increment(elapsed.NanoSeconds());
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvPeriodicTableStatsParsed::TPtr& ev, const TActorContext& ctx) {
+    HandlePeriodicTableStats(ev->Get()->Ev, ctx);
+}
+
+void TSchemeShard::HandlePeriodicTableStats(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
+    auto* msg = ev->Get();
+    const auto& rec = msg->Record;
+
+    TabletCounters->Percentile()[COUNTER_PERIODIC_TABLE_STATS_ARENA_SPACE_USED].IncrementFor(msg->Arena->Get()->SpaceUsed());
 
     auto datashardId = TTabletId(rec.GetDatashardId());
     const ui32 followerId = rec.GetFollowerId();

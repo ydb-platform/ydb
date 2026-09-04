@@ -86,7 +86,7 @@ int TCommandYql::Run(TConfig& config) {
 }
 
 int TCommandYql::RunCommand(TConfig& config, const TString& script) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NScripting::TScriptingClient client(driver);
 
     NScripting::TExecuteYqlRequestSettings settings;

@@ -11,7 +11,19 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/string/cast.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr auto SlowRequestTime = TDuration::Seconds(1);
+
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,14 +38,15 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},
-           {"r", bundle->GetVChunkRange().Print()}}))
+           {"pBufferKey", bundle->GetPBufferKey().Print()},
+           {"r", bundle->GetRange().Print()},
+           {"rv", bundle->GetVChunkRange().Print()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Bundle(std::move(bundle))
-    , HedgingDelay(DirectBlockGroup->GetOracle()->GetWriteHedgingDelay())
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
     , IndirectWriteReplyTimeout(
-          DirectBlockGroup->GetOracle()->GetPBufferReplyTimeout())
+          DirectBlockGroup->GetOracle()->GetIndirectWriteReplyTimeout())
 {}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
@@ -52,6 +65,7 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 
 void TWriteRequestExecutor::Run()
 {
+    StartAt = TInstant::Now();
     Bundle->GetSpan().Event("Run");
 
     const auto hosts = VChunkConfig.GetDesiredPBuffers();
@@ -61,14 +75,16 @@ void TWriteRequestExecutor::Run()
     }
 
     ScheduleRequestTimeout();
-    ScheduleHedging();
+    ScheduleHedging(DirectBlockGroup->GetOracle()->GetWriteHedgingDelay(
+        hosts,
+        WriteMode == EWriteMode::IndirectWrite));
 
     switch (WriteMode) {
-        case EWriteMode::PBufferReplication: {
+        case EWriteMode::IndirectWrite: {
             SendIndirectWriteRequest(hosts);
             break;
         }
-        case EWriteMode::DirectPBuffersFilling: {
+        case EWriteMode::DirectWrite: {
             for (auto host: hosts) {
                 SendDirectWriteRequest(host);
             }
@@ -105,8 +121,8 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
     DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.GetVChunkIndex(),
         coordinator,
-        hosts.Hosts(),
-        Bundle->GetLsn(),
+        hosts,
+        Bundle->GetPBufferKey(),
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,
         Bundle->GetSgList(),
@@ -121,21 +137,6 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
 void TWriteRequestExecutor::OnIndirectWriteResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    if (HasError(response.OverallError)) {
-        FailedWrites = FailedWrites.Include(IndirectCoordinator);
-
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s OnIndirectWriteResponse: %s %s",
-            LogTitle.GetWithTime().c_str(),
-            ExtendedDebugState().c_str(),
-            FormatError(response.OverallError).c_str());
-
-        SendAdditionalDirectWrites();
-        return;
-    }
-
     THostMask completedWritesOfCurrentResponse;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
@@ -146,7 +147,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 NKikimrServices::NBS_PARTITION,
                 "%s OnIndirectWriteResponse %s OK",
                 LogTitle.GetWithTime().c_str(),
-                PrintHostIndex(host).c_str());
+                PrintHostAndNode(host).c_str());
 
             completedWritesOfCurrentResponse.Set(host);
         } else {
@@ -155,8 +156,8 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 NKikimrServices::NBS_PARTITION,
                 "%s OnIndirectWriteResponse %s %s",
                 LogTitle.GetWithTime().c_str(),
-                PrintHostIndex(host).c_str(),
-                FormatError(pbufferResponse.Error).c_str());
+                PrintHostAndNode(host).c_str(),
+                FormatError(pbufferResponse.Error).Quote().c_str());
 
             FailedWrites.Set(host);
             // The error will be set and replied below.
@@ -165,7 +166,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
 
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
-    if (ShouldReplyOk()) {
+    if (IsQuorumReached()) {
         ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
         return;
     }
@@ -179,7 +180,7 @@ void TWriteRequestExecutor::SendAdditionalDirectWrites()
         return;
     }
 
-    LOG_INFO(
+    LOG_TRACE(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s SendAdditionalDirectWrites %s",
@@ -249,6 +250,13 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
                            .Exclude(IndirectCoordinator);
 
     for (THostIndex host: hosts) {
+        LOG_TRACE(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s SendAdditionalDirectWrites %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str());
+
         SendDirectWriteRequest(host);
         if (--count == 0) {
             break;
@@ -267,7 +275,7 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
         NKikimrServices::NBS_PARTITION,
         "%s Send DirectWriteRequest to %s %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(host).c_str(),
+        PrintHostAndNode(host).c_str(),
         ExtendedDebugState().c_str());
 
     auto span = DirectBlockGroup->CreateChildSpan(
@@ -282,7 +290,7 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
     auto future = DirectBlockGroup->WriteBlocksToPBuffer(
         VChunkConfig.GetVChunkIndex(),
         host,
-        Bundle->GetLsn(),
+        Bundle->GetPBufferKey(),
         Bundle->GetVChunkRange(),
         Bundle->GetSgList(),
         span ? span->GetTraceId() : NWilson::TTraceId());
@@ -304,12 +312,12 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
         NKikimrServices::NBS_PARTITION,
         "%s OnDirectWriteResponse %s %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(host).c_str(),
-        FormatError(response.Error).c_str());
+        PrintHostAndNode(host).c_str(),
+        FormatError(response.Error).Quote().c_str());
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        if (ShouldReplyOk()) {
+        if (IsQuorumReached()) {
             ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;
@@ -329,7 +337,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             "%s It is impossible to reach a quorum. %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
         Reply(response.Error);
         return;
     }
@@ -348,7 +356,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             "%s All hand-offs attempts are over. %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
         return;
     }
 
@@ -371,20 +379,36 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
     Y_ABORT_IF(IsReplied, "TWriteRequestExecutor::Reply called twice");
     IsReplied = true;
 
+    const auto duration = TInstant::Now() - StartAt;
+    if (duration > SlowRequestTime) {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s [?] Slow request %s %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str(),
+            FormatDuration(duration).c_str());
+    }
+
     if (HasError(error)) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s Reply error %s %s",
+            "%s [!] Reply error %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
+
+        Y_ABORT_UNLESS(!IsQuorumReached());
     } else {
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s Reply OK.",
-            LogTitle.GetWithTime().c_str());
+            "%s Reply OK. %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str());
+
+        Y_ABORT_UNLESS(IsQuorumReached());
     }
 
     Bundle->Reply(
@@ -410,21 +434,22 @@ void TWriteRequestExecutor::NotifyBelated(THostMask completedOnCurrentResponse)
     Bundle->NotifyBelated(completedOnCurrentResponse);
 }
 
-void TWriteRequestExecutor::ScheduleHedging()
+void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
 {
-    if (!HedgingDelay) {
+    if (!hedgingDelay) {
         return;
     }
 
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Schedule OnHedgingTimeout() %s",
+        "%s Schedule OnHedgingTimeout %s %s",
         LogTitle.GetWithTime().c_str(),
-        FormatDuration(HedgingDelay).c_str());
+        ExtendedDebugState().c_str(),
+        FormatDuration(hedgingDelay).c_str());
 
     DirectBlockGroup->Schedule(
-        HedgingDelay,
+        hedgingDelay,
         [weakSelf = weak_from_this()]()
         {
             if (auto self = weakSelf.lock()) {
@@ -466,11 +491,11 @@ void TWriteRequestExecutor::OnHedgingTimeout()
         ExtendedDebugState().c_str());
 
     switch (WriteMode) {
-        case EWriteMode::PBufferReplication: {
+        case EWriteMode::IndirectWrite: {
             SendAdditionalDirectWrites();
             break;
         }
-        case EWriteMode::DirectPBuffersFilling: {
+        case EWriteMode::DirectWrite: {
             SendDirectWriteRequestsToHandoffs(GetQuorumDeficit());
             break;
         }
@@ -482,13 +507,14 @@ void TWriteRequestExecutor::OnRequestTimeout()
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Request timeout.",
-        LogTitle.GetWithTime().c_str());
+        "%s Request timeout. %s",
+        LogTitle.GetWithTime().c_str(),
+        ExtendedDebugState().c_str());
 
     ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
 }
 
-bool TWriteRequestExecutor::ShouldReplyOk() const
+bool TWriteRequestExecutor::IsQuorumReached() const
 {
     return CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount;
 }
@@ -519,12 +545,17 @@ THostMask TWriteRequestExecutor::GetRunningDirectWrites() const
 TString TWriteRequestExecutor::ExtendedDebugState() const
 {
     TStringBuilder result;
-    result << "dr:" << RequestedDirectWrites.Print();
-    result << " ir:" << IndirectCoordinator.Print()
+    result << "d:" << RequestedDirectWrites.Print();
+    result << " i:" << IndirectCoordinator.Print()
            << RequestedIndirectWrites.Print();
     result << " c:" << CompletedWrites.Print();
     result << " f:" << FailedWrites.Print();
     return result;
+}
+
+TString TWriteRequestExecutor::PrintHostAndNode(THostIndex host) const
+{
+    return PrintHostAndNodeId(host, DirectBlockGroup->GetNodeId(host));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

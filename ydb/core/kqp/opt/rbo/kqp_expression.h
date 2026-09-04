@@ -3,6 +3,9 @@
 #include "kqp_info_unit.h"
 #include "kqp_rbo_context.h"
 #include "kqp_plan_props.h"
+
+#include <optional>
+
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 
@@ -29,8 +32,12 @@ class TExpression {
     ~TExpression() = default;
 
     // Split a conjunct into a vector of expressions. If the is no conjunction at the top level,
-    // just return a vector with this node. Handles pg conversions as well
+    // just return a vector with this node.
     TVector<TExpression> SplitConjunct() const;
+
+    // Split a disjunct into a vector of expressions. If the is no disjunction at the top level,
+    // just return a vector with this node.
+    TVector<TExpression> SplitDisjunct() const;
 
     // Check if the expression is just getting a single column from a tuple
     bool IsColumnAccess() const;
@@ -41,14 +48,14 @@ class TExpression {
     // Check if the expression is a cast
     bool IsCast() const;
 
-    // Check is the expression can be folded
-    bool IsConstantExpr() const;
-
     // Check if this is a potential equi-join condition
     bool MaybeEquiJoinCondition() const;
 
     // Check if this is a potential equi-join condition over simple expressions
     bool MaybeExprEquiJoinCondition() const;
+
+    // Check if this is a potential comparison of a column with a constant
+    bool MaybeConstantCondition() const;
 
     // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;
@@ -59,14 +66,27 @@ class TExpression {
     // Return all column references used in this expression
     // Optionally include columns that bind to subplan results and external columns inside correlated subqueries
     // If the result list of column references is not empty and plan properties are not set in the expression,
-    // an exception will be thrown
-    TVector<TInfoUnit> GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
+    // an exception will be thrown. A subsequent GetInputIUs() call on the same
+    // TExpression may refresh the returned buffer; do not retain references,
+    // pointers, or iterators into it across calls.
+    const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
+
+    // Return Member names without classifying them against the current subplan registry.
+    // The result depends only on Node and is cached after the first AST traversal.
+    const TVector<TInfoUnit>& GetRawInputIUs() const;
+
+    void BindPlanProps(TPlanProps* props) const {
+        PlanProps = props;
+    }
 
     // Rename column references in the expression
     TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
 
     // Apply a generic replace map to the lambda of the expression
     TExpression ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) const;
+
+    // Extract common conjuncts from OR branches.
+    std::optional<TExpression> TryExtractCommonConjuncts() const;
 
     // Remove a cast from the expression
     TExpression PruneCast() const;
@@ -78,11 +98,18 @@ class TExpression {
     TString ToExplainString() const;
 
     TExprNode::TPtr Node;
-    TExprContext* Ctx;
-    TPlanProps* PlanProps;
+    TExprContext* Ctx = nullptr;
+    mutable TPlanProps* PlanProps = nullptr;
 
   private:
     bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;
+
+    mutable TExprNode::TPtr RawInputIUsCacheKey;
+    mutable std::optional<TVector<TInfoUnit>> RawInputIUs;
+    // Reusable scratch buffer. Every resolving call refreshes it against the
+    // current subplan registry, so registry mutations cannot stale the result.
+    mutable TVector<TInfoUnit> ResolvedInputIUs;
+
 };
 
 /**
@@ -127,6 +154,12 @@ TExpression MakeNegation(const TExpression& expr);
 
 // Make a binary predicate with an arbitrary callable, extract context and properties from one of the arguments
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right);
+
+// Make an unary callable
+TExpression MakeUnaryCallable(const TString& callable, const TExpression& arg);
+
+// Make ensure.
+TExpression MakeEnsure(const TExpression& value, const TExpression& predicate, const TString& message);
 
 // Get all members from a expression node
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs);

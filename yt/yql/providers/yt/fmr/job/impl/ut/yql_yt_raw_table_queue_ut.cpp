@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(FmrRawTableQueueTests) {
             // each thread writes repeatsNum copies of TableContent to queue
             threadPool->SafeAddFunc([queue, repeatsNum, i, rowEnd] {
                 TFmrRawTableQueueWriterSettings writerSettings{.ChunkSize = 100};
-                TFmrRawTableQueueWriter queueWriter(queue, writerSettings);
+                TFmrRawTableQueueWriter queueWriter(queue, /* tableIndex */ 0, /* enableTableIndexMarking */ false, writerSettings);
                 for (ui64 j = 0; j < repeatsNum; ++j) {
                     for (auto& row: TableContentRows) {
                         queueWriter.Write(row + rowEnd);
@@ -51,6 +51,23 @@ Y_UNIT_TEST_SUITE(FmrRawTableQueueTests) {
         for (auto& row: TableContentRows) {
             UNIT_ASSERT_VALUES_EQUAL(gottenRows[row], inputStreamsNum * repeatsNum);
         }
+    }
+
+    Y_UNIT_TEST(MaxSizedRowFitsInEmptyQueue) {
+        // A row exactly as large as MaxInflightBytes must be acceptable into an
+        // otherwise empty queue; a strict "<" wait predicate would block forever.
+        ui64 maxInflightBytes = 10;
+        TFmrRawTableQueueSettings queueSettings{.MaxInflightBytes = maxInflightBytes};
+        auto queue = MakeIntrusive<TFmrRawTableQueue>(1u, queueSettings);
+
+        TBuffer row;
+        row.Resize(maxInflightBytes);
+        queue->AddRow(std::move(row));
+        queue->NotifyInputFinished(0);
+
+        TFmrRawTableQueueReader reader{queue};
+        TString result = reader.ReadAll();
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), maxInflightBytes);
     }
 }
 

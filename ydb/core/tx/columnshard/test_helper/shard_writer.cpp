@@ -24,7 +24,7 @@ NKikimrDataEvents::TEvWriteResult TShardWriter::StartCommitImpl(const ui64 txId)
 
 void TShardWriter::StartCommitFail(const ui64 txId) {
     auto event = StartCommitImpl(txId);
-    AFL_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+    AFL_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
 }
 
 TPlanStep TShardWriter::StartCommit(const ui64 txId) {

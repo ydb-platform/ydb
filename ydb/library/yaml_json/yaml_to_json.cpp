@@ -16,8 +16,9 @@ namespace NKikimr::NYaml {
         return false;
     }
 
-    NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot, TString currentPath) {
+    NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot, TString currentPath, ui32 depthLimit) {
         Y_ENSURE_BT(!isRoot || yaml.IsMap(), "YAML root is expected to be a map");
+        Y_ENSURE_BT(depthLimit > 0, "Depth limit reached");
 
         NJson::TJsonValue json;
 
@@ -28,7 +29,7 @@ namespace NKikimr::NYaml {
 
                 Y_ENSURE_BT(!json.Has(key), "duplicate key " << key.Quote() << " at path " << childPath.Quote());
 
-                json[key] = Yaml2Json(it.second, false, childPath);
+                json[key] = Yaml2Json(it.second, false, childPath, depthLimit - 1);
             }
             return json;
         } else if (yaml.IsSequence()) {
@@ -36,7 +37,7 @@ namespace NKikimr::NYaml {
             ui64 index = 0;
             for (const auto& it : yaml) {
                 TString childPath = currentPath ? (currentPath + "/" + ToString(index)) : ToString(index);
-                json.AppendValue(Yaml2Json(it, false, childPath));
+                json.AppendValue(Yaml2Json(it, false, childPath, depthLimit - 1));
                 ++index;
             }
             return json;

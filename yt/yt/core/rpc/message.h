@@ -69,6 +69,14 @@ void FromProto(
     TStreamingParameters* parameters,
     const NProto::TStreamingParameters& protoParameters);
 
+void ToProto(
+    NProto::TDirectPlacementTransferParameters* protoParameters,
+    const TDirectPlacementTransferParameters& parameters);
+
+void FromProto(
+    TDirectPlacementTransferParameters* parameters,
+    const NProto::TDirectPlacementTransferParameters& protoParameters);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 EMessageType GetMessageType(const TSharedRefArray& message);

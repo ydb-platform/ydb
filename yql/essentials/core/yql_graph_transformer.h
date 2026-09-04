@@ -98,7 +98,7 @@ public:
         static TStatistics Zero() { return TStatistics(); }
     };
 
-    virtual ~IGraphTransformer() {}
+    virtual ~IGraphTransformer() = default;
 
     virtual TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
     virtual NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) = 0;
@@ -164,7 +164,7 @@ public:
     }
 
     NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) final {
-        TTransformScope scope(Statistics_, nullptr);
+        TTransformScope scope(Statistics_, /*exprCtx=*/nullptr);
         AsyncStart_ = TInstant::Now();
 
         return DoGetAsyncFuture(input);
@@ -179,7 +179,7 @@ public:
 
     TStatistics GetStatistics() const override { return Statistics_; }
 
-public:
+
     virtual TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
     virtual NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) = 0;
     virtual TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
@@ -396,19 +396,21 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
                                 : message);
                     });
 
-                    if constexpr (AlwaysRaiseIssues)
+                    if constexpr (AlwaysRaiseIssues) {
                         res.ReportIssues(ctx.IssueManager);
+                    }
 
                     if (!res.Success()) {
-                        if constexpr (!AlwaysRaiseIssues)
+                        if constexpr (!AlwaysRaiseIssues) {
                             res.ReportIssues(ctx.IssueManager);
+                        }
                         input->SetState(TExprNode::EState::Error);
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
                     else {
                         if (res.Repeat()) {
                             input->SetState(TExprNode::EState::ExecutionRequired);
-                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, false);
+                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/false);
                         }
                         return callback(res, input, output, ctx);
                     }
@@ -434,7 +436,7 @@ WrapModifyFuture(const TFuture& future, const TResultExtractor& extractor, const
         input->SetState(TExprNode::EState::ExecutionComplete);
         output->SetResult(std::move(resultNode));
         if (input != output) {
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         }
         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
     }, message);
@@ -457,7 +459,7 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
 }
 
 inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> SyncRepeatWithRestart() {
-    return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+    return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
 }
 
 using TSyncMap = std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash>;

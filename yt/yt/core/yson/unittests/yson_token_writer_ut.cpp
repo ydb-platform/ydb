@@ -4,6 +4,8 @@
 #include <yt/yt/core/yson/token_writer.h>
 #include <yt/yt/core/yson/writer.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NYson {
 namespace {
 
@@ -12,8 +14,7 @@ namespace {
 void IntListTest(EYsonFormat format, size_t stringBufferSize)
 {
     std::string out1;
-    // TODO(babenko): migrate to std::string
-    TString out2;
+    std::string out2;
     std::vector<i64> ints = {1LL << 62, 12345678, 1, -12345678, 12, -(1LL << 62), 12345678910121LL, -12345678910121LL, 1, -1, 2, -2, 0};
     std::vector<ui64> uints = {1ULL << 63, 1, 10, 100, 1000000000000, 0, 1ULL << 31};
 
@@ -44,7 +45,7 @@ void IntListTest(EYsonFormat format, size_t stringBufferSize)
     }
 
     {
-        TStringOutput outStream(out2);
+        TStdStringOutput outStream(out2);
         TYsonWriter writer(&outStream, format);
 
         writer.OnBeginList();

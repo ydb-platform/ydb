@@ -302,6 +302,9 @@ struct aws_cbor_decoder {
 
     struct aws_cbor_decoder_context cached_context;
 
+    /* Number of bytes from src consumed by peek (cached but not yet popped) */
+    size_t cached_bytes_consumed;
+
     /* Error code during decoding. Fail the decoding process without recovering, */
     int error_code;
 
@@ -324,6 +327,15 @@ struct aws_cbor_decoder *aws_cbor_decoder_destroy(struct aws_cbor_decoder *decod
 }
 
 size_t aws_cbor_decoder_get_remaining_length(const struct aws_cbor_decoder *decoder) {
+    return decoder->src.len;
+}
+
+size_t aws_cbor_decoder_get_unconsumed_length(const struct aws_cbor_decoder *decoder) {
+    if (decoder->cached_context.type != AWS_CBOR_TYPE_UNKNOWN) {
+        /* peek_type decodes the next element and advances src, but from the caller's perspective
+         * those bytes haven't been consumed yet (the item hasn't been popped). Add them back. */
+        return decoder->src.len + decoder->cached_bytes_consumed;
+    }
     return decoder->src.len;
 }
 
@@ -506,6 +518,7 @@ static int s_cbor_decode_next_element(struct aws_cbor_decoder *decoder) {
     }
 
     aws_byte_cursor_advance(&decoder->src, result.read);
+    decoder->cached_bytes_consumed = result.read;
 
     return AWS_OP_SUCCESS;
 }

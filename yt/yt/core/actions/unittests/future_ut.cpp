@@ -8,6 +8,7 @@
 #include <yt/yt/core/concurrency/context_switch.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
+#include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
@@ -2214,7 +2215,7 @@ TEST_F(TFutureTest, ErrorFromException)
 
     TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {
         if (testFromExceptionEnricherEnabled) {
-            *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+            error->Add("test_attribute", getAttribute(*error) + "X");
         }
     });
 

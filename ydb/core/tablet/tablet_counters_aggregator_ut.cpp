@@ -2,11 +2,21 @@
 #include "private/labeled_db_counters.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
+#include <library/cpp/monlib/service/monservice.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
+
+#include <util/generic/array_size.h>
+#include <util/generic/hash_set.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 
@@ -199,57 +209,27 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
            return GetAppCounters(runtime, tabletType)->FindHistogram(PercentileCountersMetaInfo[index]);
         }
 
-        static std::vector<ui64> GetOldHistogram(TTestBasicRuntime& runtime, const char* name, const TTabletTypes::EType tabletType) {
-            size_t index = PercentileNameToIndex(name);
-            auto rangesArray = RangeDefs[index].first;
-            auto rangeCount = RangeDefs[index].second;
-
-            std::vector<TTabletPercentileCounter::TRangeDef> ranges(rangesArray, rangesArray + rangeCount);
-            ranges.push_back({});
-            ranges.back().RangeName = "inf";
-            ranges.back().RangeVal = Max<ui64>();
-
-            auto appCounters = GetAppCounters(runtime, tabletType);
-            std::vector<ui64> buckets;
-            for (auto i: xrange(ranges.size())) {
-                auto subGroup = appCounters->GetSubgroup("range", ranges[i].RangeName);
-                auto sensor = subGroup->FindCounter(PercentileCountersMetaInfo[index]);
-                if (sensor) {
-                    buckets.push_back(sensor->Val());
-                }
-            }
-
-            return buckets;
-        }
-
         static void CheckHistogram(
             TTestBasicRuntime& runtime,
             const char* name,
-            const std::vector<ui64>& goldValuesNew,
-            const std::vector<ui64>& goldValuesOld,
+            const std::vector<ui64>& goldValues,
             const TTabletTypes::EType tabletType
         )
         {
-            // new stype histogram
             auto histogram = TTabletWithHist::GetHistogram(runtime, name, tabletType);
             UNIT_ASSERT(histogram);
             auto snapshot = histogram->Snapshot();
             UNIT_ASSERT(snapshot);
 
-            UNIT_ASSERT_VALUES_EQUAL(snapshot->Count(), goldValuesNew.size());
+            UNIT_ASSERT_VALUES_EQUAL(snapshot->Count(), goldValues.size());
             {
                 // for pretty printing the diff
                 std::vector<ui64> values;
-                values.reserve(goldValuesNew.size());
-                for (auto i: xrange(goldValuesNew.size()))
+                values.reserve(goldValues.size());
+                for (auto i: xrange(goldValues.size()))
                     values.push_back(snapshot->Value(i));
-                UNIT_ASSERT_VALUES_EQUAL(values, goldValuesNew);
+                UNIT_ASSERT_VALUES_EQUAL(values, goldValues);
             }
-
-            // old histogram
-            auto values = TTabletWithHist::GetOldHistogram(runtime, name, tabletType);
-            UNIT_ASSERT_VALUES_EQUAL(values.size(), goldValuesOld.size());
-            UNIT_ASSERT_VALUES_EQUAL(values, goldValuesOld);
         }
 
     public:
@@ -328,7 +308,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(CountSingleBucket)",
             {0, 2},
-            {0, 2},
             TTabletTypes::Dummy
         );
 
@@ -338,7 +317,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -346,14 +324,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {2, 0, 0, 0, 0},
-            {2, 0, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHistSingleBucket",
-            {0, 0},
             {0, 0},
             TTabletTypes::Dummy
         );
@@ -384,7 +360,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 1, 0, 0, 0},
-            {0, 1, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -395,7 +370,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {0, 1, 1, 0, 0},
             {0, 1, 1, 0, 0},
             TTabletTypes::Dummy
         );
@@ -408,7 +382,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 2, 1, 0, 0},
-            {0, 2, 1, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -419,7 +392,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 1, 2, 0, 0},
-            {0, 1, 2, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -428,7 +400,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {0, 1, 1, 0, 0},
             {0, 1, 1, 0, 0},
             TTabletTypes::Dummy
         );
@@ -439,7 +410,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -447,14 +417,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(CountSingleBucket)",
             {2, 0},
-            {2, 0},
             TTabletTypes::Dummy
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHistSingleBucket",
-            {0, 0},
             {0, 0},
             TTabletTypes::Dummy
         );
@@ -488,7 +456,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 0, 0, 0, 1},
-            {0, 0, 0, 0, 1},
             TTabletTypes::Dummy
         );
 
@@ -499,7 +466,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {0, 0, 0, 0, 2},
             {0, 0, 0, 0, 2},
             TTabletTypes::Dummy
         );
@@ -531,7 +497,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 1, 0, 0, 0},
-            {0, 1, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -542,7 +507,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 1, 1, 0, 0},
             {0, 1, 1, 0, 0},
             TTabletTypes::Dummy
         );
@@ -556,7 +520,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 3, 1, 0, 1},
             {0, 3, 1, 0, 1},
             TTabletTypes::Dummy
         );
@@ -595,7 +558,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 3, 1, 0, 0},
-            {0, 3, 1, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -604,7 +566,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 2, 0, 0, 0},
             {0, 2, 0, 0, 0},
             TTabletTypes::Dummy
         );
@@ -615,7 +576,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {2, 0, 0, 0, 0},
-            {2, 0, 0, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -623,14 +583,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHistSingleBucket",
             {0, 0},
-            {0, 0},
             TTabletTypes::Dummy
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(CountSingleBucket)",
-            {2, 0},
             {2, 0},
             TTabletTypes::Dummy
         );
@@ -668,7 +626,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "MyHist",
             {0, 0, v, 0, 0},
-            {0, 0, v, 0, 0},
             TTabletTypes::Dummy
         );
 
@@ -676,7 +633,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 0, 30, 0, 0},
             {0, 0, 30, 0, 0},
             TTabletTypes::Dummy
         );
@@ -705,9 +661,92 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(Count)",
             {0, 1, 0, 0, 0},
-            {0, 1, 0, 0, 0},
             tablet1.TabletType
         );
+    }
+
+    Y_UNIT_TEST(SearchCounters) {
+        TTestBasicRuntime runtime(1);
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+        TActorId edge = runtime.AllocateEdgeActor();
+
+        auto aggregator = CreateTabletCountersAggregator(false);
+        auto aggregatorId = runtime.Register(aggregator);
+        runtime.EnableScheduleForActor(aggregatorId);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(options);
+
+        TTabletWithHist dummyTablet(1, TTabletTypes::Dummy);
+        dummyTablet.SetSimpleCount("JustCount1", 11);
+        dummyTablet.SendUpdate(runtime, aggregatorId, edge);
+
+        TTabletWithHist columnShardTablet(2, TTabletTypes::ColumnShard);
+        columnShardTablet.SetSimpleCount("JustCount1", 22);
+        columnShardTablet.SendUpdate(runtime, aggregatorId, edge);
+
+        struct TTestHttpRequest : NMonitoring::IHttpRequest {
+            HTTP_METHOD Method;
+            TCgiParameters CgiParameters;
+            THttpHeaders HttpHeaders;
+            TString Path;
+
+            TTestHttpRequest(HTTP_METHOD method, TString path)
+                : Method(method)
+                , Path(std::move(path))
+            {
+            }
+
+            const char* GetURI() const override {
+                return "";
+            }
+
+            const char* GetPath() const override {
+                return Path.c_str();
+            }
+
+            const TCgiParameters& GetParams() const override {
+                return CgiParameters;
+            }
+
+            const TCgiParameters& GetPostParams() const override {
+                return CgiParameters;
+            }
+
+            TStringBuf GetPostContent() const override {
+                return {};
+            }
+
+            HTTP_METHOD GetMethod() const override {
+                return Method;
+            }
+
+            const THttpHeaders& GetHeaders() const override {
+                return HttpHeaders;
+            }
+
+            TString GetRemoteAddr() const override {
+                return {};
+            }
+        };
+
+        TTestHttpRequest httpReq(HTTP_METHOD_GET, "/actors/tablet_counters_aggregator/search");
+        httpReq.CgiParameters.emplace("name", "JustCount1");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "/search", nullptr);
+        runtime.Send(new IEventHandle(aggregatorId, edge, new NMon::TEvHttpInfo(monReq)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(resp);
+
+        const TString& answer = resp->Answer;
+        UNIT_ASSERT_STRING_CONTAINS(answer, "JustCount1");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "TabletID=1");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "TabletID=2");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "<td>11</td>");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "<td>22</td>");
     }
 }
 
@@ -1005,6 +1044,988 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
 
             PQCounters.FromProto(counters);
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TEvTabletAddCountersDetailedMetricsFields) {
+    Y_UNIT_TEST(DefaultsToLeader) {
+        TEvTabletCounters::TEvTabletAddCounters ev(
+            new TEvTabletCounters::TInFlightCookie, 1, TTabletTypes::DataShard, TPathId(1113, 1001),
+            new TTabletCountersBase, new TTabletCountersBase);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev.FollowerId, 0u);
+    }
+
+    Y_UNIT_TEST(StampsFollowerIdWhenProvided) {
+        TEvTabletCounters::TEvTabletAddCounters ev(
+            new TEvTabletCounters::TInFlightCookie, 1, TTabletTypes::DataShard, TPathId(1113, 1001),
+            new TTabletCountersBase, new TTabletCountersBase,
+            7);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev.FollowerId, 7u);
+    }
+}
+
+/**
+ * Tests for the detailed metrics, which the two aggregator actors of a node build
+ * within the private "ydb_detailed_raw" counter group.
+ */
+Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
+
+    const TString DETAILED_RAW_GROUP = "ydb_detailed_raw";
+
+    const TString DATABASE_PATH = "/Root/db";
+
+    const TString TABLE_PATH = "/Root/db/dir/table";
+    const TString RELATIVE_TABLE_PATH = "dir/table";
+
+    const TPathId TENANT_PATH_ID(1113, 1001);
+    const TPathId TABLE_ID(1113, 42);
+
+    // A newer PathId at the very same TABLE_PATH: models a table dropped and recreated
+    // at the same path, reporting under a fresh identity while the old table's tablet
+    // may still be alive and reporting too
+    const TPathId RECREATED_TABLE_ID(1113, 44);
+
+    constexpr TTabletTypes::EType TABLET_TYPE = TTabletTypes::DataShard;
+
+    constexpr ui32 LEVEL_TABLE = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+    constexpr ui32 LEVEL_PARTITION = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+    constexpr ui32 LEVEL_DISABLED = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
+
+    // The only tablet type with a detailed metrics counter set is DataShard, and
+    // GetDetailedMetricsCounterNames() allow-lists this Executor counter name (it is
+    // the source of the public table.datashard.row_count metric, see
+    // counters_detailed_datashard.proto)
+    const TString ALLOWED_EXECUTOR_COUNTER = "DbUniqueRowsTotal";
+
+    // An Executor simple counter, which is NOT in that allow-list (see
+    // flat_executor_counters.h / counters_detailed_datashard.proto)
+    const TString UNLISTED_EXECUTOR_COUNTER = "LogRedoItems";
+
+    constexpr const char* EXECUTOR_SIMPLE_COUNTER_NAMES[] = {
+        "DbUniqueRowsTotal",
+        "LogRedoItems",
+    };
+
+    enum EExecutorSimpleCounter : ui32 {
+        DB_UNIQUE_ROWS_TOTAL = 0,
+        LOG_REDO_ITEMS = 1,
+    };
+
+    ////////////////////////////////////////////
+
+    /**
+     * A stand-in for the scheme cache: it resolves the path id of the database to
+     * its path and nothing else.
+     */
+    class TFakeSchemeCache : public TActor<TFakeSchemeCache> {
+    public:
+        TFakeSchemeCache(ui32* requestCounter, THashSet<TPathId>* watchedPathIds)
+            : TActor(&TThis::StateWork)
+            , RequestCounter(requestCounter)
+            , WatchedPathIds(watchedPathIds)
+        {}
+
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvWatchPathId, Handle);
+                default:
+                    break;
+            }
+        }
+
+    private:
+        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
+            ++*RequestCounter;
+
+            TAutoPtr<NSchemeCache::TSchemeCacheNavigate> navigate = ev->Get()->Request.Release();
+
+            for (auto& entry : navigate->ResultSet) {
+                entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                entry.Path = SplitPath(DATABASE_PATH);
+            }
+
+            Send(ev->Sender, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(navigate));
+        }
+
+        void Handle(TEvTxProxySchemeCache::TEvWatchPathId::TPtr& ev) {
+            WatchedPathIds->insert(ev->Get()->PathId);
+        }
+
+    private:
+        ui32* const RequestCounter;
+        THashSet<TPathId>* const WatchedPathIds;
+    };
+
+    ////////////////////////////////////////////
+
+    /**
+     * The two aggregator actors of a single node and a scheme cache, which resolves
+     * the path of the database.
+     */
+    struct TEnv {
+        explicit TEnv(bool detailedMetricsEnabled)
+            : Runtime(1)
+        {
+            TAppPrepare app;
+            app.SetEnableDataShardDetailedMetrics(detailedMetricsEnabled);
+            Runtime.Initialize(app.Unwrap());
+
+            Edge = Runtime.AllocateEdgeActor();
+
+            Runtime.RegisterService(
+                MakeSchemeCacheID(),
+                Runtime.Register(new TFakeSchemeCache(&NavigateRequests, &WatchedPathIds))
+            );
+
+            LeaderAggregatorId = Runtime.Register(CreateTabletCountersAggregator(false));
+            FollowerAggregatorId = Runtime.Register(CreateTabletCountersAggregator(true));
+
+            Runtime.EnableScheduleForActor(LeaderAggregatorId);
+            Runtime.EnableScheduleForActor(FollowerAggregatorId);
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 2);
+            Runtime.DispatchEvents(options);
+        }
+
+        TActorId GetAggregatorId(ui32 followerId) const {
+            return followerId == 0 ? LeaderAggregatorId : FollowerAggregatorId;
+        }
+
+        ::NMonitoring::TDynamicCounterPtr GetCountersRoot() {
+            ::NMonitoring::TDynamicCounterPtr counters = Runtime.GetAppData(0).Counters;
+            UNIT_ASSERT(counters);
+            return counters;
+        }
+
+        TTestBasicRuntime Runtime;
+        TActorId Edge;
+        TActorId LeaderAggregatorId;
+        TActorId FollowerAggregatorId;
+
+        ui32 NavigateRequests = 0;
+        THashSet<TPathId> WatchedPathIds;
+    };
+
+    ////////////////////////////////////////////
+
+    /**
+     * A single tablet of the table, which reports its low level counters to
+     * the aggregator actor of its role. The table identity (TEvTabletSetTableInfo)
+     * and the counters (TEvTabletAddCounters) are two separate events.
+     */
+    struct TFakeTablet {
+        TFakeTablet(
+            ui64 tabletId,
+            ui32 followerId,
+            ui32 metricsLevel,
+            TPathId tableId = TABLE_ID,
+            ui64 schemaVersion = 1
+        )
+            : TabletId(tabletId)
+            , FollowerId(followerId)
+            , MetricsLevel(metricsLevel)
+            , TableId(tableId)
+            , SchemaVersion(schemaVersion)
+            , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
+            , ExecutorCounters(new TTabletCountersBase(
+                Y_ARRAY_SIZE(EXECUTOR_SIMPLE_COUNTER_NAMES),
+                0, // cumulativeCnt
+                0, // percentileCnt
+                EXECUTOR_SIMPLE_COUNTER_NAMES,
+                nullptr,
+                nullptr))
+            , ExecutorCountersBaseline(new TTabletCountersBase)
+            , AppCounters(new TTabletCountersBase)
+            , AppCountersBaseline(new TTabletCountersBase)
+        {
+            ExecutorCounters->RememberCurrentStateAsBaseline(*ExecutorCountersBaseline);
+            AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
+        }
+
+        TFakeTablet& SetSimple(EExecutorSimpleCounter counter, ui64 value) {
+            ExecutorCounters->Simple()[counter].Set(value);
+            return *this;
+        }
+
+        void SetMetricsLevel(ui32 metricsLevel) {
+            MetricsLevel = metricsLevel;
+        }
+
+        void SendTableInfo(TEnv& env) {
+            const TActorId aggregatorId = env.GetAggregatorId(FollowerId);
+
+            env.Runtime.Send(new IEventHandle(aggregatorId, env.Edge,
+                new TEvTabletCounters::TEvTabletSetTableInfo(
+                    TabletId, TENANT_PATH_ID, FollowerId, TableId, TABLE_PATH,
+                    SchemaVersion, MetricsLevel)));
+        }
+
+        void SendCounters(TEnv& env) {
+            auto executorCounters = ExecutorCounters->MakeDiffForAggr(*ExecutorCountersBaseline);
+            ExecutorCounters->RememberCurrentStateAsBaseline(*ExecutorCountersBaseline);
+
+            auto appCounters = AppCounters->MakeDiffForAggr(*AppCountersBaseline);
+            AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
+
+            const TActorId aggregatorId = env.GetAggregatorId(FollowerId);
+
+            env.Runtime.Send(new IEventHandle(aggregatorId, env.Edge,
+                new TEvTabletCounters::TEvTabletAddCounters(
+                    CounterEventsInFlight, TabletId, TABLET_TYPE, TENANT_PATH_ID,
+                    executorCounters, appCounters, FollowerId)));
+
+            // force recalc
+            env.Runtime.Send(new IEventHandle(aggregatorId, env.Edge, new TEvents::TEvWakeup()));
+        }
+
+        /**
+         * Send the table identity and one round of the counters, the way a real
+         * tablet does it after boot.
+         */
+        void SendUpdate(TEnv& env) {
+            SendTableInfo(env);
+            SendCounters(env);
+        }
+
+        void SendForget(TEnv& env) {
+            const TActorId aggregatorId = env.GetAggregatorId(FollowerId);
+
+            env.Runtime.Send(new IEventHandle(aggregatorId, env.Edge,
+                new TEvTabletCounters::TEvTabletCountersForgetTablet(
+                    TabletId, TABLET_TYPE, TENANT_PATH_ID, FollowerId)));
+
+            // force recalc
+            env.Runtime.Send(new IEventHandle(aggregatorId, env.Edge, new TEvents::TEvWakeup()));
+        }
+
+        const ui64 TabletId;
+        const ui32 FollowerId;
+        ui32 MetricsLevel;
+        const TPathId TableId;
+        const ui64 SchemaVersion;
+
+        TIntrusivePtr<TEvTabletCounters::TInFlightCookie> CounterEventsInFlight;
+
+        std::unique_ptr<TTabletCountersBase> ExecutorCounters;
+        std::unique_ptr<TTabletCountersBase> ExecutorCountersBaseline;
+
+        std::unique_ptr<TTabletCountersBase> AppCounters;
+        std::unique_ptr<TTabletCountersBase> AppCountersBaseline;
+    };
+
+    /**
+     * Report the counters of the tablets, giving the aggregator actors the round, which
+     * they spend on resolving the path of the database.
+     */
+    void ReportCounters(TEnv& env, const TVector<TFakeTablet*>& tablets) {
+        for (ui32 round = 0; round < 2; ++round) {
+            for (auto* tablet : tablets) {
+                tablet->SendCounters(env);
+            }
+            env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+    }
+
+    ////////////////////////////////////////////
+
+    ::NMonitoring::TDynamicCounterPtr FindRawGroup(TEnv& env) {
+        return env.GetCountersRoot()->FindSubgroup("counters", DETAILED_RAW_GROUP);
+    }
+
+    /**
+     * @note There is no role= node: both actors of the node build ONE shared tree,
+     *       exactly the shape the specification defines. At the partition level the
+     *       role is carried by follower_id (follower_id=0 IS the leader) and at the
+     *       table level the bucket belongs to the actor of the leaders alone.
+     */
+    ::NMonitoring::TDynamicCounterPtr FindTableGroup(TEnv& env) {
+        auto rawGroup = FindRawGroup(env);
+        if (!rawGroup) {
+            return nullptr;
+        }
+
+        auto databaseGroup = rawGroup->FindSubgroup("database", DATABASE_PATH);
+        if (!databaseGroup) {
+            return nullptr;
+        }
+
+        return databaseGroup->FindSubgroup("table", RELATIVE_TABLE_PATH);
+    }
+
+    ::NMonitoring::TDynamicCounterPtr FindExecutorCounters(::NMonitoring::TDynamicCounterPtr bucketGroup) {
+        if (!bucketGroup) {
+            return nullptr;
+        }
+
+        auto typeGroup = bucketGroup->FindSubgroup("type", TString(TTabletTypes::TypeToStr(TABLET_TYPE)));
+        if (!typeGroup) {
+            return nullptr;
+        }
+
+        return typeGroup->FindSubgroup("category", "executor");
+    }
+
+    /**
+     * @return The bucket, which collapses ALL the partitions of a TABLE level table
+     *         (this bucket lives directly on the table= node)
+     */
+    ::NMonitoring::TDynamicCounterPtr FindTableBucketCounters(TEnv& env) {
+        return FindExecutorCounters(FindTableGroup(env));
+    }
+
+    /**
+     * @return The leaf of a single tablet of a PARTITION level table
+     */
+    ::NMonitoring::TDynamicCounterPtr FindLeafCounters(TEnv& env, ui64 tabletId, ui32 followerId) {
+        auto tableGroup = FindTableGroup(env);
+        if (!tableGroup) {
+            return nullptr;
+        }
+
+        auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
+        if (!perPartitionGroup) {
+            return nullptr;
+        }
+
+        auto tabletGroup = perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId));
+        if (!tabletGroup) {
+            return nullptr;
+        }
+
+        return FindExecutorCounters(tabletGroup->FindSubgroup("follower_id", ToString(followerId)));
+    }
+
+    ui64 GetCounterValue(::NMonitoring::TDynamicCounterPtr countersGroup, const TString& aggregate, const TString& name) {
+        UNIT_ASSERT_C(countersGroup, "no counter group for " << aggregate << "(" << name << ")");
+
+        auto counter = countersGroup->FindNamedCounter("sensor", aggregate + "(" + name + ")");
+        UNIT_ASSERT_C(counter, "no counter " << aggregate << "(" << name << ")");
+
+        return counter->Val();
+    }
+
+    ////////////////////////////////////////////
+
+    /**
+     * Verify that nothing at all is created while the feature flag is off.
+     */
+    Y_UNIT_TEST(NoCountersWhenDisabled) {
+        TEnv env(false /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT(!FindRawGroup(env));
+    }
+
+    /**
+     * Verify that at the partition level both aggregator actors of the node fill their
+     * own leaves of one and the same private counter tree, told apart by follower_id
+     * alone and sharing the tablet_id= node above them.
+     */
+    Y_UNIT_TEST(PartitionLevelLeavesOfBothRoles) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 1), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
+
+        // The two leaves hang off ONE shared tablet_id= node, written by the two
+        // different actors, and no invented label appears anywhere
+        auto tabletGroup = FindTableGroup(env)
+            ->FindSubgroup("detailed_metrics", "per_partition")
+            ->FindSubgroup("tablet_id", "1000");
+        UNIT_ASSERT(tabletGroup);
+        UNIT_ASSERT(tabletGroup->FindSubgroup("follower_id", "0"));
+        UNIT_ASSERT(tabletGroup->FindSubgroup("follower_id", "1"));
+
+        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("role", "leader"));
+        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("role", "follower"));
+    }
+
+    /**
+     * Verify that at the table level the leader partitions of the table are collapsed
+     * into a single bucket and no per-partition group is created.
+     */
+    Y_UNIT_TEST(TableLevelCollapsesPartitions) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader1(1000, 0, LEVEL_TABLE);
+        TFakeTablet leader2(2000, 0, LEVEL_TABLE);
+
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader1.SendUpdate(env);
+        leader2.SendUpdate(env);
+        ReportCounters(env, {&leader1, &leader2});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 1u + 2u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(env), "MAX", ALLOWED_EXECUTOR_COUNTER), 2u);
+
+        auto tableGroup = FindTableGroup(env);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
+    }
+
+    /**
+     * Verify the ordering guarantee of the identity join: counters, which arrive
+     * before the identity of their table is known, are skipped, not queued.
+     */
+    Y_UNIT_TEST(CountersBeforeTableInfoAreSkipped) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+
+        // Counters arrive first: nothing is published yet
+        ReportCounters(env, {&leader});
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        // The identity arrives, followed by another round of counters
+        leader.SendTableInfo(env);
+        ReportCounters(env, {&leader});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 1u);
+    }
+
+    /**
+     * Verify that forgetting a tablet drops its own leaf and ONLY its own leaf while the
+     * other role of the very same tablet is still on the node, and that the shared nodes
+     * above it are reclaimed once that role goes too.
+     *
+     * The leader and its follower share the tablet_id= node and are reported by two
+     * different actors, so a cleanup that reached above the leaf too eagerly would detach
+     * the other actor's live counters for good.
+     */
+    Y_UNIT_TEST(ForgetTabletKeepsTheOtherRole) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 1));
+
+        leader.SendForget(env);
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // The leader's own leaf is gone ...
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+
+        // ... the shared spine above it stays, because the follower is still there ...
+        UNIT_ASSERT(FindTableGroup(env));
+
+        // ... and the follower's leaf is still reachable from the root
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 1), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
+
+        // The follower goes too, so nothing of this tablet is left on the node: the
+        // tablet_id=, detailed_metrics=, table= and database= nodes are all reclaimed,
+        // which is what a rebalanced away tablet must leave behind — nothing
+        follower.SendForget(env);
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        // The private root of the node itself stays: it is created once at boot, not
+        // per database
+        auto rawGroup = FindRawGroup(env);
+        UNIT_ASSERT(rawGroup);
+        UNIT_ASSERT(!rawGroup->FindSubgroup("database", DATABASE_PATH));
+    }
+
+    /**
+     * Verify the same for two followers of one tablet, which a node holds while it is
+     * drained or rolled: unlike the leader and its follower, the two are remembered by
+     * ONE actor under one and the same tablet id, so forgetting one of them must not
+     * take the counters of the other with it.
+     */
+    Y_UNIT_TEST(ForgetFollowerKeepsTheOtherFollower) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet follower1(1000, 1, LEVEL_PARTITION);
+        TFakeTablet follower2(1000, 2, LEVEL_PARTITION);
+
+        follower1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        follower1.SendUpdate(env);
+        follower2.SendUpdate(env);
+        ReportCounters(env, {&follower1, &follower2});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 2));
+
+        follower1.SendForget(env);
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 2), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
+
+        // The one, which is left, keeps reporting into its own leaf
+        follower2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 3);
+        ReportCounters(env, {&follower2});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 2), "SUM", ALLOWED_EXECUTOR_COUNTER), 3u);
+
+        follower2.SendForget(env);
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindTableGroup(env));
+    }
+
+    /**
+     * Verify that only the allow-listed counter set of the tablet type is published:
+     * an Executor counter, which is not in counters_detailed_datashard.proto, must
+     * not appear anywhere in the tree.
+     */
+    Y_UNIT_TEST(PublishesOnlyTheDetailedMetricsCounterSet) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        leader.SetSimple(LOG_REDO_ITEMS, 5);
+
+        leader.SendUpdate(env);
+        ReportCounters(env, {&leader});
+
+        auto executorCounters = FindLeafCounters(env, 1000, 0);
+        UNIT_ASSERT(executorCounters);
+
+        UNIT_ASSERT(executorCounters->FindNamedCounter("sensor", "SUM(" + ALLOWED_EXECUTOR_COUNTER + ")"));
+        UNIT_ASSERT(!executorCounters->FindNamedCounter("sensor", "SUM(" + UNLISTED_EXECUTOR_COUNTER + ")"));
+        UNIT_ASSERT(!executorCounters->FindNamedCounter("sensor", "MAX(" + UNLISTED_EXECUTOR_COUNTER + ")"));
+        UNIT_ASSERT(!executorCounters->FindCounter(UNLISTED_EXECUTOR_COUNTER));
+    }
+
+    /**
+     * Verify that when a Table level table's level drops to Disabled, the bucket it
+     * published is withdrawn, not just frozen in place.
+     */
+    Y_UNIT_TEST(TableLevelDisabledDropsTheBucket) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader1(1000, 0, LEVEL_TABLE);
+        TFakeTablet leader2(2000, 0, LEVEL_TABLE);
+
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader1.SendUpdate(env);
+        leader2.SendUpdate(env);
+        ReportCounters(env, {&leader1, &leader2});
+
+        UNIT_ASSERT(FindTableBucketCounters(env));
+
+        leader1.SetMetricsLevel(LEVEL_DISABLED);
+        leader1.SendTableInfo(env);
+        leader2.SetMetricsLevel(LEVEL_DISABLED);
+        leader2.SendTableInfo(env);
+        ReportCounters(env, {&leader1, &leader2});
+
+        UNIT_ASSERT(!FindTableBucketCounters(env));
+        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("database", DATABASE_PATH));
+    }
+
+    /**
+     * Same as above for a Partition level table: both leaves must be withdrawn.
+     */
+    Y_UNIT_TEST(PartitionLevelDisabledDropsTheLeaves) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 1));
+
+        leader.SetMetricsLevel(LEVEL_DISABLED);
+        leader.SendTableInfo(env);
+        follower.SetMetricsLevel(LEVEL_DISABLED);
+        follower.SendTableInfo(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+    }
+
+    /**
+     * Verify that disabling one follower's level withdraws only its own leaf, not the
+     * sibling follower's -- the withdraw is per tablet+follower, not per table.
+     */
+    Y_UNIT_TEST(PartitionLevelDisabledDropsOnlyTheDisabledFollower) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet follower1(1000, 1, LEVEL_PARTITION);
+        TFakeTablet follower2(1000, 2, LEVEL_PARTITION);
+
+        follower1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        follower1.SendUpdate(env);
+        follower2.SendUpdate(env);
+        ReportCounters(env, {&follower1, &follower2});
+
+        follower1.SetMetricsLevel(LEVEL_DISABLED);
+        follower1.SendTableInfo(env);
+        ReportCounters(env, {&follower1, &follower2});
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 2), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
+    }
+
+    /**
+     * Verify that the follower actor gets its OWN db watcher and registers its own
+     * watch, even though EnableDbCounters (the leader-only db counters feature) is off
+     * in TEnv -- detailed metrics alone must be enough to create the watcher.
+     */
+    Y_UNIT_TEST(FollowerActorWatchesItsDetailedMetricsDatabase) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&follower});
+
+        UNIT_ASSERT(env.WatchedPathIds.contains(TENANT_PATH_ID));
+    }
+
+    /**
+     * Verify that the follower actor's own TEvRemoveDatabase drops its own leaves (and
+     * the leader's TEvRemoveDatabase drops the leader's).
+     */
+    Y_UNIT_TEST(RemoveDatabaseDropsFollowerLeaves) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 1));
+
+        env.Runtime.Send(new IEventHandle(env.LeaderAggregatorId, env.Edge,
+            new TEvTabletCounters::TEvRemoveDatabase(DATABASE_PATH, TENANT_PATH_ID)));
+        env.Runtime.Send(new IEventHandle(env.FollowerAggregatorId, env.Edge,
+            new TEvTabletCounters::TEvRemoveDatabase(DATABASE_PATH, TENANT_PATH_ID)));
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+
+        auto rawGroup = FindRawGroup(env);
+        UNIT_ASSERT(rawGroup);
+        UNIT_ASSERT(!rawGroup->FindSubgroup("database", DATABASE_PATH));
+    }
+
+    /**
+     * Pin that the two actors are independently notified rather than accidentally
+     * coupled: TEvRemoveDatabase sent to the leader alone must not touch the follower.
+     */
+    Y_UNIT_TEST(RemoveDatabaseOnlyReachesItsOwnRole) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        env.Runtime.Send(new IEventHandle(env.LeaderAggregatorId, env.Edge,
+            new TEvTabletCounters::TEvRemoveDatabase(DATABASE_PATH, TENANT_PATH_ID)));
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 1), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
+    }
+
+    /**
+     * Verify that a tablet whose OWN (TableId, SchemaVersion) is older than the newest
+     * one seen at its table's path is a straggler: its report is withdrawn rather than
+     * applied, and the live table's counters are untouched.
+     *
+     * @note The scenario the node aggregator can no longer defend against on its own: a
+     *       table is dropped and recreated at the same path with a newer PathId. The new
+     *       table's own tablet reports and builds the correct state. The OLD table's
+     *       tablet is still alive and keeps sending its own 5s round, still carrying its
+     *       own (by now stale) identity — LatestByPath is what tells the two apart.
+     */
+    Y_UNIT_TEST(StaleTabletReportIsWithdrawnNotApplied) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+
+        // The table is dropped and recreated at the same path with a newer PathId: its
+        // own (different) tablet reports and builds the correct state
+        TFakeTablet newTablet(2000, 0, LEVEL_PARTITION, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 2000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+
+        // The OLD table's tablet is still alive and reports again, without ever having
+        // learned of the recreation — its own idea of the identity is still the old one
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
+        ReportCounters(env, {&oldTablet});
+
+        // The straggler's report is withdrawn rather than applied: its own leaf is gone ...
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+
+        // ... and the live table's counters are exactly as they were
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 2000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+    }
+
+    /**
+     * Verify that LatestByPath is reclaimed once the last tablet reporting a path is
+     * forgotten, rather than leaking and wedging that path forever.
+     *
+     * @note Proven by an identity that would have been rejected as stale had the old
+     *       entry survived (an OLDER SchemaVersion than the forgotten tablet's) —
+     *       publishing normally means nothing was left behind to compare it against.
+     */
+    Y_UNIT_TEST(LatestByPathIsReclaimedOnceTheLastTabletIsForgotten) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_PARTITION, TABLE_ID, 2 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+
+        oldTablet.SendForget(env);
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        TFakeTablet newTablet(2000, 0, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion, OLDER than the forgotten tablet's */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 2000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+    }
+
+    /**
+     * Verify the Hole-A scenario from the PR review: a table recreated at a level that
+     * collects NOTHING at all (Disabled). Two different guards cooperate to reach the
+     * same end state: the recreated table's own tablet is stopped by the
+     * `IsCollectedMetricsLevel` gate on ITS OWN Disabled level (the level is a
+     * per-tablet input — see `ApplyDetailedMetrics`), and only ever withdraws its OWN
+     * (never-published) contribution; the OLD table's straggler is rejected earlier
+     * still, by the identity comparison (`IsOlderThan`), before the level gate is ever
+     * consulted — and it is THAT rejection which finally withdraws the old leaf, since
+     * the recreated table's own report never touches it.
+     */
+    Y_UNIT_TEST(StaleReportAfterRecreationAsDisabledPublishesNothing) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 5u);
+
+        // The table is dropped and recreated at the same path with a newer PathId, and
+        // this time it collects nothing at all: its own (different) tablet reports Disabled
+        TFakeTablet newTablet(2000, 0, LEVEL_DISABLED, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        // Nothing of the recreated table is published — the IsCollectedMetricsLevel
+        // gate stops it on its own (Disabled) level
+        UNIT_ASSERT(!FindLeafCounters(env, 2000, 0));
+
+        // The OLD table's tablet is still alive and reports again, without ever having
+        // learned of the recreation — its own idea of the identity is still the old one
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
+        ReportCounters(env, {&oldTablet});
+
+        // Nothing came back: no leaf for either tablet, no table= group at all
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(!FindLeafCounters(env, 2000, 0));
+        UNIT_ASSERT(!FindTableGroup(env));
+    }
+
+    /**
+     * Verify the Hole-B scenario from the PR review: a table recreated at Table level,
+     * observed on the FOLLOWER instance. The follower never builds anything for Table
+     * level (`IsFollowerRole && IsTableLevel(...)` returns before `GetOrCreateTable()`),
+     * so the recreated table's own report only ever tears the old PARTITION leaf down —
+     * nothing replaces it. The straggler's later report, rejected by `IsOlderThan`
+     * before the level gate is ever consulted, then has nothing left to resurrect either.
+     */
+    Y_UNIT_TEST(StaleFollowerReportAfterRecreationAsTableLevelPublishesNothing) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldFollower(1000, 1, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion */);
+        oldFollower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldFollower.SendUpdate(env);
+        ReportCounters(env, {&oldFollower});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 1), "SUM", ALLOWED_EXECUTOR_COUNTER), 5u);
+
+        // The table is recreated at Table level: its own (different) follower tablet
+        // reports it. The follower instance skips building anything for Table level, but
+        // the old leaf is still torn down as part of the level reconcile.
+        TFakeTablet newFollower(2000, 1, LEVEL_TABLE, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newFollower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newFollower.SendUpdate(env);
+        ReportCounters(env, {&newFollower});
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT(!FindTableBucketCounters(env));
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        // The OLD follower tablet is still alive and reports again, still carrying its
+        // own (by now stale) PARTITION identity — the straggler
+        oldFollower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
+        ReportCounters(env, {&oldFollower});
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT(!FindTableBucketCounters(env));
+        UNIT_ASSERT(!FindTableGroup(env));
+    }
+
+    /**
+     * Verify the eager eviction of the older generation (PR review Part 2): a table
+     * recreated at the SAME path and the SAME level must not have to wait for the old
+     * tablet to report again (and get rejected by `IsOlderThan`) before the bucket
+     * reflects the new generation alone. Without this, the bucket would sum BOTH
+     * generations' tablets — 5 + 7, not 7 — for as long as the old one stays quiet.
+     */
+    Y_UNIT_TEST(RecreatedTableAtTheSameLevelDropsOldContributions) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_TABLE, TABLE_ID, 1 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 5u);
+
+        // The table is dropped and recreated at the SAME path and the SAME level: its
+        // own (different) tablet reports and sends its own round of counters, without
+        // the old one ever reporting again
+        TFakeTablet newTablet(2000, 0, LEVEL_TABLE, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        // The bucket holds the NEW generation alone
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+    }
+
+    /**
+     * Verify the rename cleanup (PR review Part 3): once a tablet's identity event
+     * moves it to a new path, the OLD path's group is dropped right away, driven by
+     * the identity event alone — not left to leak until the database is torn down,
+     * and not waiting on a counters tick that will never come again at the old path.
+     */
+    Y_UNIT_TEST(RenameDropsTheStaleGroupOfTheOldPath) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        const TString RENAMED_TABLE_PATH = "/Root/db/dir/renamed_table";
+        const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
+
+        TFakeTablet tablet(1000, 0, LEVEL_PARTITION);
+        tablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        tablet.SendUpdate(env);
+        ReportCounters(env, {&tablet});
+
+        UNIT_ASSERT(FindTableGroup(env));
+
+        // The tablet reports a new identity at another path — an ESchemeOpMoveTable
+        // rename, seen from here as the very same tablet now reporting a different
+        // TablePath — and sends no counters at all afterwards
+        env.Runtime.Send(new IEventHandle(env.GetAggregatorId(tablet.FollowerId), env.Edge,
+            new TEvTabletCounters::TEvTabletSetTableInfo(
+                tablet.TabletId, TENANT_PATH_ID, tablet.FollowerId, tablet.TableId,
+                RENAMED_TABLE_PATH, tablet.SchemaVersion, tablet.MetricsLevel)));
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // The old table= group is gone immediately: the identity event alone drives
+        // the cleanup, no further counters tick is needed
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        // Nothing of the new path exists yet either: an identity event alone builds
+        // no counter group, only a report does. Guarded at every step, the same shape
+        // as FindTableGroup: this tablet was the database's only one, so ForgetLeaf's
+        // pruning may well have taken database= (and even the raw group) with it too
+        auto rawGroup = FindRawGroup(env);
+        auto databaseGroup = rawGroup ? rawGroup->FindSubgroup("database", DATABASE_PATH) : nullptr;
+        UNIT_ASSERT(!databaseGroup || !databaseGroup->FindSubgroup("table", RENAMED_RELATIVE_TABLE_PATH));
     }
 }
 

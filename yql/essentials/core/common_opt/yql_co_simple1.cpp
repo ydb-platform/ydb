@@ -94,11 +94,11 @@ TExprNode::TPtr ExpandPgIsTorF(const TExprNode::TPtr& input, bool value, TExprCo
 }
 
 TExprNode::TPtr ExpandPgIsTrue(const TExprNode::TPtr& input, TExprContext& ctx) {
-    return ExpandPgIsTorF(input, true, ctx);
+    return ExpandPgIsTorF(input, /*value=*/true, ctx);
 }
 
 TExprNode::TPtr ExpandPgIsFalse(const TExprNode::TPtr& input, TExprContext& ctx) {
-    return ExpandPgIsTorF(input, false, ctx);
+    return ExpandPgIsTorF(input, /*value=*/false, ctx);
 }
 
 TExprNode::TPtr ExpandPgIsUnknown(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -148,8 +148,9 @@ bool CanRewriteToEmptyContainer(const TExprNode& src) {
     if (src.GetConstraint<TPartOfSortedConstraintNode>() ||
         src.GetConstraint<TPartOfChoppedConstraintNode>() ||
         src.GetConstraint<TPartOfUniqueConstraintNode>() ||
-        src.GetConstraint<TPartOfDistinctConstraintNode>())
+        src.GetConstraint<TPartOfDistinctConstraintNode>()) {
         return false;
+    }
     if (const auto multi = src.GetConstraint<TMultiConstraintNode>()) {
         for (auto& item: multi->GetItems()) {
             for (auto c: item.second.GetAllConstraints()) {
@@ -181,7 +182,7 @@ bool ConstIntAggregate(const TExprNode::TChildrenType& values, std::function<TIn
         ui64 extracted;
         bool hasSign;
         bool isSigned;
-        ExtractIntegralValue(*values[index], false, hasSign, isSigned, extracted);
+        ExtractIntegralValue(*values[index], /*negate=*/false, hasSign, isSigned, extracted);
         value = static_cast<TInt>(hasSign ? -extracted : extracted);
         return true;
     };
@@ -732,16 +733,21 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
     ui32 negations = 0U;
     ui32 literals = 0U;
     node->ForEachChild([&](const TExprNode& child) {
-        if (child.IsCallable(node->Content()))
+        if (child.IsCallable(node->Content())) {
             ++same;
-        if (child.IsCallable("Nothing"))
+        }
+        if (child.IsCallable("Nothing")) {
             ++nothings;
-        if (child.IsCallable("Not"))
+        }
+        if (child.IsCallable("Not")) {
             ++negations;
-        if (child.IsCallable("Just"))
+        }
+        if (child.IsCallable("Just")) {
             ++justs;
-        if (child.IsCallable("Bool"))
+        }
+        if (child.IsCallable("Bool")) {
             ++literals;
+        }
     });
 
     if (size == nothings) {
@@ -830,14 +836,18 @@ TExprNode::TPtr SimplifyLogicalXor(const TExprNode::TPtr& node, TExprContext& ct
             YQL_CLOG(DEBUG, Core) << node->Content() <<  " over Nothing";
             return node->ChildPtr(i);
         }
-        if (child->IsCallable(node->Content()))
+        if (child->IsCallable(node->Content())) {
             ++same;
-        if (child->IsCallable("Not"))
+        }
+        if (child->IsCallable("Not")) {
             ++negations;
-        if (child->IsCallable("Just"))
+        }
+        if (child->IsCallable("Just")) {
             ++justs;
-        if (child->IsCallable("Bool"))
+        }
+        if (child->IsCallable("Bool")) {
             ++literals;
+        }
     };
 
     if (same) {
@@ -1599,7 +1609,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
                                 .Add(1, sqlIn.Lookup().Ptr())
                                 .Add(2, AddSetting(sqlIn.Options().Ref(), sqlIn.Options().Pos(), "nullsProcessed", nullptr, ctx))
                             .Seal()
-                            .Add(1, MakeBool(sqlIn.Pos(), true, ctx))
+                            .Add(1, MakeBool(sqlIn.Pos(), /*value=*/true, ctx))
                         .Seal()
                     .Seal()
                     .Build();
@@ -1827,7 +1837,7 @@ TExprNode::TPtr SplitPredicateChain(TExprNode::TPtr&& node, const TExprNode::TPt
         return std::move(node);
     }
 
-    children.erase(std::remove_if(children.begin(), children.end(), std::logical_not<TExprNode::TPtr>()), children.end());
+    children.erase(std::remove_if(children.begin(), children.end(), std::logical_not<>()), children.end());
 
     if (children.empty()) {
         return {};
@@ -2684,9 +2694,9 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx, 
                 auto keys = node->Tail().Tail().ChildrenList();
                 auto dirs = node->Child(ascIndex)->IsList() ? node->Child(ascIndex)->ChildrenList() : TExprNode::TListType();
                 for (auto it = keys.cbegin(); keys.cend() != it;) {
-                    if (set.erase(it->Get()))
+                    if (set.erase(it->Get())) {
                         ++it;
-                    else {
+                    } else {
                         if (!dirs.empty()) {
                             auto jt = dirs.cbegin();
                             std::advance(jt, std::distance(keys.cbegin(), it));
@@ -2697,8 +2707,9 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx, 
                 }
                 auto children = node->ChildrenList();
                 children.back() = ctx.DeepCopyLambda(node->Tail(), ctx.NewList(node->Tail().Tail().Pos(), std::move(keys)));
-                if (!dirs.empty())
+                if (!dirs.empty()) {
                     children[ascIndex] = ctx.ChangeChildren(*children[ascIndex], std::move(dirs));
+                }
                 return ctx.ChangeChildren(*node, std::move(children));
             }
         }
@@ -2784,8 +2795,9 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx, 
                             .Add(1, node->ChildPtr(2))
                             .Add(2, node->ChildPtr(3))
                         .Seal().Build();
-                } else
+                } else {
                     return ctx.RenameNode(*node, "AssumeSorted");
+                }
             }
         }
 
@@ -2849,7 +2861,7 @@ TExprNode::TPtr ConvertSqlInPredicatesPrefixToJoins(const TExprNode::TPtr& flatM
                               << extraRights.size() << " extra right predicates due to NOT IN";
 
         auto combinedPred = ctx.NewCallable(predicates.front()->Pos(), "And", std::move(predicates));
-        return RebuildFlatmapOverPartOfPredicate(flatMap, flatMap->HeadPtr(), combinedPred, true, ctx);
+        return RebuildFlatmapOverPartOfPredicate(flatMap, flatMap->HeadPtr(), combinedPred, /*isOuter=*/true, ctx);
     }
 
     YQL_CLOG(DEBUG, Core) << "FlatMapOverJoinableSqlInChain of size " << chain.size();
@@ -2858,7 +2870,7 @@ TExprNode::TPtr ConvertSqlInPredicatesPrefixToJoins(const TExprNode::TPtr& flatM
     eq = MakeSortByConstraint(std::move(eq), flatMap->GetConstraint<TSortedConstraintNode>(), GetSeqItemType(flatMap->GetTypeAnn()), ctx);
 
     auto tail = sqlInTail ? sqlInTail : MakeBool<true>(flatMap->Pos(), ctx);
-    return RebuildFlatmapOverPartOfPredicate(flatMap, eq, tail, true, ctx);
+    return RebuildFlatmapOverPartOfPredicate(flatMap, eq, tail, /*isOuter=*/true, ctx);
 }
 
 TExprNode::TPtr ConvertSqlInPredicatesToJoins(const TCoFlatMapToEquiJoinBase& flatMap, TExprContext& ctx) {
@@ -3125,7 +3137,7 @@ TExprNodeList DedupCalcOverWindowsOnSamePartitioningFilterAware(const TExprNodeL
                 for (size_t i = 0; i < peer.Calcs.size(); ++i) {
                     const TCoCalcOverWindowTuple& candidate = peer.Calcs[isLeftPeer ? (peer.Calcs.size() - 1 - i) : i];
                     if (auto it = peer.UniqueIndexes->find(TDedupKey::Make(candidate)); it != peer.UniqueIndexes->end()) {
-                        calc = isLeftPeer ? MergeCalcs(candidate, calc, ctx) : MergeCalcs(calc, candidate, ctx, true);
+                        calc = isLeftPeer ? MergeCalcs(candidate, calc, ctx) : MergeCalcs(calc, candidate, ctx, /*useParamsFromRight=*/true);
                         peer.UniqueIndexes->erase(it);
                         break;
                     }
@@ -3596,11 +3608,11 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
 
     NHopping::EnsureNotDistinct(aggregate);
 
-    const auto maybeHopTraits = NHopping::ExtractHopTraits(aggregate, ctx, false);
+    const auto maybeHopTraits = NHopping::ExtractHopTraits(aggregate, ctx, /*analyticsMode=*/false);
     if (!maybeHopTraits) {
         return nullptr;
     }
-    const auto hopTraits = *maybeHopTraits;
+    const auto& hopTraits = *maybeHopTraits;
 
     const auto aggregateInputType = GetSeqItemType(*aggregate.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
     NHopping::TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hopTraits.Column);
@@ -3788,7 +3800,7 @@ TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStri
         return maybeUdfApply.Cast().Arg(1).Ptr();
     };
 
-    const auto directRes = directCase(apply);
+    auto directRes = directCase(apply);
     if (directRes.Get() != node.Get()) {
         return directRes;
     }
@@ -3926,10 +3938,11 @@ TExprNode::TPtr ExpandSelectMembers(const TExprNode::TPtr& node, TExprContext& c
     node->Child(1)->ForEachChild([&](const TExprNode& prefixNode){ prefixes.emplace(prefixNode.Content()); });
 
     const MemberUpdaterFunc filterByPrefixFunc = [&prefixes](const std::string_view& memberName, const TTypeAnnotationNode*) {
-        if constexpr (ByPrefix)
+        if constexpr (ByPrefix) {
             return std::any_of(prefixes.cbegin(), prefixes.cend(), [&memberName](const std::string_view& prefix){ return memberName.starts_with(prefix); });
-        else
+        } else {
             return prefixes.contains(memberName);
+        }
     };
 
     TExprNode::TListType members;
@@ -4041,7 +4054,7 @@ TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& c
     const auto ex = exports.find(TString(node->Content()) + "Impl");
     YQL_ENSURE(exports.cend() != ex);
     TNodeOnNodeOwnedMap deepClones;
-    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
 
     TNodeOnNodeOwnedMap replaces;
     for (size_t i = 0; i < node->ChildrenSize(); i++) {
@@ -4734,7 +4747,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                             .Seal()
                             .Callable(1, "Null")
                             .Seal()
-                            .Add(2, MakeBool(node->Pos(), false, ctx))
+                            .Add(2, MakeBool(node->Pos(), /*value=*/false, ctx))
                         .Seal()
                         .Build();
                 }
@@ -4746,7 +4759,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
             YQL_CLOG(DEBUG, Core) << "IN Empty collection";
             return (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) ?
-                   MakeOptionalBool(node->Pos(), false, ctx) : MakeBool(node->Pos(), false, ctx);
+                   MakeOptionalBool(node->Pos(), /*value=*/false, ctx) : MakeBool(node->Pos(), /*value=*/false, ctx);
         }
 
         if (collectionKind == ETypeAnnotationKind::Tuple) {
@@ -4798,7 +4811,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 return ctx.Builder(node->Pos())
                     .Callable("If")
                         .Add(0, BuildSqlInCollectionEmptyPred(TCoSqlIn(node), ctx))
-                        .Add(1, MakeBool(node->Pos(), false, ctx))
+                        .Add(1, MakeBool(node->Pos(), /*value=*/false, ctx))
                         .Callable(2, "Null")
                         .Seal()
                     .Seal()
@@ -5161,7 +5174,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (auto ret = MemberOverRenamingFlatMap(node, ctx); ret != node) {
-            return ret;
+            return KeepWorld(ret, *node, ctx, *optCtx.Types);
         }
 
         if (auto ret = MemberOverFilterSkipNullMembers(node, ctx); ret != node) {
@@ -5212,7 +5225,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.ChangeChild(node->Head(), 0U, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx));
         }
 
-        if (node->Head().IsCallable("If") && node->Head().ChildrenSize() == 3) {
+        if (node->Head().IsCallable("If") && node->Head().ChildrenSize() == 3 &&
+            !node->GetTypeAnn()->HasStaticLinear()) {
             TCoIf childIf(node->HeadPtr());
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return Build<TCoIf>(ctx, node->Pos())
@@ -5290,7 +5304,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
             if (const auto maybeInt = TMaybeNode<TCoIntegralCtor>(&node->Head())) {
                 TString atomValue;
-                if (AllowIntegralConversion(maybeInt.Cast(), false, targetType->GetSlot(), &atomValue)) {
+                if (AllowIntegralConversion(maybeInt.Cast(), /*negate=*/false, targetType->GetSlot(), &atomValue)) {
                     YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content() << " '" << node->Head().Head().Content();
                     return ctx.NewCallable(node->Pos(), targetType->GetName(),
                         {ctx.NewAtom(node->Pos(), atomValue, TNodeFlags::Default)});
@@ -5672,7 +5686,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             ui64 extracted;
             bool hasSign;
             bool isSigned;
-            ExtractIntegralValue(node->Head(), true, hasSign, isSigned, extracted);
+            ExtractIntegralValue(node->Head(), /*negate=*/true, hasSign, isSigned, extracted);
             const auto atomValue = GetIntegralAtomValue(extracted, hasSign && isSigned);
             return ctx.ChangeChild(node->Head(), 0U, ctx.NewAtom(node->Pos(), atomValue, TNodeFlags::Default));
         }
@@ -5743,7 +5757,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (auto clean = RemoveDeadPayloadColumns(self, ctx); clean != node) {
-            return clean;
+            return KeepWorld(clean, *node, ctx, *optCtx.Types);
         }
 
         if (auto hopping = RewriteAsHoppingWindow(node, ctx)) {
@@ -5828,7 +5842,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         ret = RemoveDeadPayloadColumns(node, ctx);
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << "RemoveDeadPayloadColumns in EquiJoin";
-            return ret;
+            return KeepWorld(ret, *node, ctx, *optCtx.Types);
         }
 
         ret = PullAssumeColumnOrderOverEquiJoin(node, ctx, optCtx);
@@ -7260,9 +7274,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (const TCoMapJoinCore mapJoin(node); IsEmptyContainer(mapJoin.RightDict().Ref())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with empty " << mapJoin.RightDict().Ref().Content();
 
-            if (const auto& joinKind = mapJoin.JoinKind().Value(); joinKind == "Inner" || joinKind == "LeftSemi")
+            if (const auto& joinKind = mapJoin.JoinKind().Value(); joinKind == "Inner" || joinKind == "LeftSemi") {
                 return KeepConstraints(ctx.NewCallable(mapJoin.Pos(), "EmptyIterator", {ExpandType(mapJoin.Pos(), *node->GetTypeAnn(), ctx)}), *node, ctx);
-            else if (joinKind == "Left" || joinKind == "LeftOnly") {
+            } else if (joinKind == "Left" || joinKind == "LeftOnly") {
                 switch (const auto& itemType = GetSeqItemType(*node->GetTypeAnn()); itemType.GetKind()) {
                     case ETypeAnnotationKind::Tuple: {
                         const auto& items = itemType.Cast<TTupleExprType>()->GetItems();
@@ -7479,7 +7493,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
             TExprNode::TPtr sequence = KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx);
             auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
-            return lambdaResult;
+            return KeepWorld(lambdaResult, *node, ctx, *optCtx.Types);
         }
         return node;
     };
@@ -7501,7 +7515,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream || lambdaType->GetKind() == ETypeAnnotationKind::Flow) {
                 lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
             }
-            return lambdaResult;
+            return KeepWorld(lambdaResult, *node, ctx, *optCtx.Types);
         }
         return node;
     };
@@ -7660,8 +7674,8 @@ TExprNode::TPtr TryConvertSqlInPredicatesToJoins(const TCoFlatMapBase& flatMap,
             }
             auto prefixPred = ctx.NewCallable(flatMap.Pos(), "And", std::move(predicates));
 
-            auto innerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), flatMap.Input().Ptr(), prefixPred, false, ctx);
-            auto outerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), innerFlatMap, sqlInTail, true, ctx);
+            auto innerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), flatMap.Input().Ptr(), prefixPred, /*isOuter=*/false, ctx);
+            auto outerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), innerFlatMap, sqlInTail, /*isOuter=*/true, ctx);
             return ctx.RenameNode(*outerFlatMap,
                 outerFlatMap->Content() == "OrderedFlatMap" ? "OrderedFlatMapToEquiJoin" : "FlatMapToEquiJoin");
         }

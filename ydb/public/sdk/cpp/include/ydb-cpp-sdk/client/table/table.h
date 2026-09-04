@@ -41,6 +41,8 @@ class TtlSettings;
 class TtlTier;
 class TableIndex;
 class TableIndexDescription;
+class TableMultiColumnStatistics;
+class TableMultiColumnStatisticsDescription;
 class ValueSinceUnixEpochModeSettings;
 class EvictionToExternalStorageSettings;
 class CompactItem;
@@ -389,6 +391,7 @@ public:
         Whitespace,
         Standard,
         Keyword,
+        Alphanumeric,
     };
 
     struct TAnalyzers {
@@ -403,6 +406,13 @@ public:
         std::optional<bool> UseFilterLength;
         std::optional<int32_t> FilterLengthMin;
         std::optional<int32_t> FilterLengthMax;
+        std::optional<bool> UseFilterSnowball;
+        std::optional<bool> UseFilterSuperLemmer;
+
+        static TAnalyzers Standard();
+        static TAnalyzers Snowball(std::string language);
+        static TAnalyzers SuperLemmer(std::string language);
+        static TAnalyzers Keyword();
     };
 
     struct TColumnAnalyzers {
@@ -598,6 +608,41 @@ public:
         uint32_t MaxInFlight = 0;
         uint32_t Total = 0;
         uint32_t Done = 0;
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
+class TAnalyzeOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TAnalyzeOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        EAnalyzeState State = EAnalyzeState::Unspecified;
+        float Progress = 0;
+        std::vector<std::string> Paths;           // All paths covered by this analyze.
+        std::vector<std::string> InProgressPaths; // Subset of Paths currently being traversed
+        std::vector<std::string> DonePaths;       // Subset of Paths whose analysis completed
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
+class TSetNotNullOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TSetNotNullOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        ESetNotNullState State = ESetNotNullState::Unspecified;
+        float Progress = 0;
+        std::string Path;
+        std::vector<std::string> Columns;
     };
 
     const TMetadata& Metadata() const;
@@ -998,6 +1043,45 @@ enum class EStoreType {
     Column = 1
 };
 
+enum class EMultiColumnStatisticsType {
+    Unknown = 0,
+    CountMinSketch = 1,
+    EqHeightHistogram = 2,
+};
+
+//! Represents multi-column table statistics description
+class TMultiColumnStatisticsDescription {
+    friend class NYdb::TProtoAccessor;
+
+public:
+    TMultiColumnStatisticsDescription(
+        const std::string& name,
+        const std::vector<std::string>& columns,
+        const std::vector<EMultiColumnStatisticsType>& types
+    );
+
+    const std::string& GetName() const;
+    const std::vector<std::string>& GetColumns() const;
+    const std::vector<EMultiColumnStatisticsType>& GetTypes() const;
+
+    void SerializeTo(Ydb::Table::TableMultiColumnStatistics& proto) const;
+
+private:
+    explicit TMultiColumnStatisticsDescription(const Ydb::Table::TableMultiColumnStatistics& proto);
+    explicit TMultiColumnStatisticsDescription(const Ydb::Table::TableMultiColumnStatisticsDescription& proto);
+
+    template <typename TProto>
+    static TMultiColumnStatisticsDescription FromProto(const TProto& proto);
+
+private:
+    std::string Name_;
+    std::vector<std::string> Columns_;
+    std::vector<EMultiColumnStatisticsType> Types_;
+};
+
+bool operator==(const TMultiColumnStatisticsDescription& lhs, const TMultiColumnStatisticsDescription& rhs);
+bool operator!=(const TMultiColumnStatisticsDescription& lhs, const TMultiColumnStatisticsDescription& rhs);
+
 //! Represents table description
 class TTableDescription {
     friend class TTableBuilder;
@@ -1013,6 +1097,7 @@ public:
     std::vector<TColumn> GetColumns() const;
     std::vector<TTableColumn> GetTableColumns() const;
     std::vector<TIndexDescription> GetIndexDescriptions() const;
+    std::vector<TMultiColumnStatisticsDescription> GetMultiColumnStatisticsDescriptions() const;
     std::vector<TChangefeedDescription> GetChangefeedDescriptions() const;
     std::optional<TTtlSettings> GetTtlSettings() const;
     // Deprecated. Use GetTtlSettings() instead
@@ -1023,6 +1108,7 @@ public:
     const std::string& GetOwner() const;
     const std::vector<NScheme::TPermissions>& GetPermissions() const;
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
+    bool GetInterruptInheritance() const;
 
     const std::vector<TKeyRange>& GetKeyRanges() const;
 
@@ -1105,6 +1191,9 @@ private:
     // default
     void AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns);
     void AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns);
+
+    // multi-column statistics
+    void AddMultiColumnStatistics(const TMultiColumnStatisticsDescription& statisticsDescription);
 
     void SetTtlSettings(TTtlSettings&& settings);
     void SetTtlSettings(const TTtlSettings& settings);
@@ -1360,6 +1449,9 @@ public:
     TTableBuilder& AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns);
     TTableBuilder& AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns);
     TTableBuilder& AddSecondaryIndex(const std::string& indexName, const std::string& indexColumn);
+
+    // multi-column statistics
+    TTableBuilder& AddMultiColumnStatistics(const TMultiColumnStatisticsDescription& statisticsDescription);
 
     TTableBuilder& SetTtlSettings(TTtlSettings&& settings);
     TTableBuilder& SetTtlSettings(const TTtlSettings& settings);
@@ -1700,6 +1792,7 @@ struct TTxOnlineSettings {
     FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
 };
 
+
 class TTxSettings {
     friend class TTableClient;
 
@@ -1729,6 +1822,10 @@ public:
         return TTxSettings(TS_SNAPSHOT_RW);
     }
 
+    static TTxSettings StrictSerializableRW() {
+        return TTxSettings(TS_STRICT_SERIALIZABLE_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -1746,6 +1843,9 @@ public:
         case TS_SNAPSHOT_RW:
             out << "SnapshotRW";
             break;
+        case TS_STRICT_SERIALIZABLE_RW:
+            out << "StrictSerializableRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -1759,6 +1859,7 @@ private:
         TS_STALE_RO,
         TS_SNAPSHOT_RO,
         TS_SNAPSHOT_RW,
+        TS_STRICT_SERIALIZABLE_RW,
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
@@ -2739,6 +2840,7 @@ class TReadRowsResult : public TStatus {
     TResultSet ResultSet;
 
   public:
+    explicit TReadRowsResult(TStatus&& status);
     explicit TReadRowsResult(TStatus&& status, TResultSet&& resultSet);
 
     TResultSet GetResultSet() {

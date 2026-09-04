@@ -1,3 +1,2 @@
-/* postgres can not */
 /* custom error:Fulltext match is not implemented yet*/
 select FulltextMatch("some text", "text");

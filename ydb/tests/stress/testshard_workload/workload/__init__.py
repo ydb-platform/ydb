@@ -202,7 +202,7 @@ class TestShardStatsCollector:
 
 
 class YdbTestShardWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, owner_idx, count, config_path=None, channels=None, tsserver_host='localhost',
+    def __init__(self, endpoint, database, duration, path, count, config_path=None, channels=None, tsserver_host='localhost',
                  tsserver_port=35000, stats_interval=10, monitoring_port=8765):
         self.tsserver_process = None
         self.tempdir = None
@@ -210,7 +210,7 @@ class YdbTestShardWorkload(WorkloadBase):
         self.endpoint = endpoint
         self.database = database
         self.duration = int(duration)
-        self.owner_idx = str(owner_idx)
+        self.path = path if path.startswith('/') else f"{database.rstrip('/')}/{path}"
         self.count = str(count)
         self.custom_config_path = config_path
         self.channels = channels
@@ -280,7 +280,14 @@ class YdbTestShardWorkload(WorkloadBase):
 
     def cmd_run(self, cmd) -> str:
         logger.info(f"Executing: {' '.join(cmd)}")
-        result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+        try:
+            result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+        except subprocess.CalledProcessError as error:
+            if error.stdout:
+                logger.error(f"Command stdout:\n{error.stdout.rstrip()}")
+            if error.stderr:
+                logger.error(f"Command stderr:\n{error.stderr.rstrip()}")
+            raise
         return result.stdout
 
     def _parse_tablet_ids(self, output: str) -> list[int]:
@@ -353,12 +360,13 @@ class YdbTestShardWorkload(WorkloadBase):
 
     def __loop(self):
         self._start_tsserver()
+        created = False
 
         try:
             cmd = [
                 *self._get_cli_common_args(),
                 'workload', 'testshard', 'init',
-                '--owner-idx', self.owner_idx,
+                self.path,
                 '--count', self.count,
                 '--config-file', self.config_path,
             ]
@@ -366,6 +374,7 @@ class YdbTestShardWorkload(WorkloadBase):
                 cmd.extend(['--channels', ','.join(self.channels)])
 
             output = self.cmd_run(cmd)
+            created = True
             self.tablet_ids = self._parse_tablet_ids(output)
             logger.info(f"Created tablets: {self.tablet_ids}")
 
@@ -383,15 +392,16 @@ class YdbTestShardWorkload(WorkloadBase):
 
             logger.info("=== Final statistics ===")
             self._fetch_and_print_stats()
-
-            self.cmd_run([
-                *self._get_cli_common_args(),
-                'workload', 'testshard', 'clean',
-                '--owner-idx', self.owner_idx,
-                '--count', self.count,
-            ])
         finally:
-            self._stop_tsserver()
+            try:
+                if created:
+                    self.cmd_run([
+                        *self._get_cli_common_args(),
+                        'workload', 'testshard', 'clean',
+                        self.path,
+                    ])
+            finally:
+                self._stop_tsserver()
 
     def get_workload_thread_funcs(self):
         return [self.__loop]

@@ -18,7 +18,67 @@ java {
 configurations.implementation {
     isTransitive = false
 }
+configurations.runtimeOnly {
+    isTransitive = false
+}
 
 configurations.testImplementation {
     isTransitive = false
 }
+configurations.testRuntimeOnly {
+    isTransitive = false
+}
+
+{%- if named_tests -%}
+{%-     for extra_target in ordered_extra_targets -%}
+{%-         set testname = SourceSetName(extra_target) -%}
+{%-         if testname != NS_TEST %}
+
+sourceSets {
+    create("{{ testname }}") {
+{%-             if target is defined %}
+        val mainSourceSet = sourceSets.main.get()
+        compileClasspath += mainSourceSet.output + mainSourceSet.compileClasspath
+        runtimeClasspath += mainSourceSet.output + mainSourceSet.runtimeClasspath
+{%-             else %}
+        val testSourceSet = sourceSets.test.get()
+        compileClasspath += testSourceSet.output + testSourceSet.compileClasspath
+        runtimeClasspath += testSourceSet.output + testSourceSet.runtimeClasspath
+{%-             endif %}
+    }
+}
+{#-
+    Do NOT extendsFrom main implementation/testImplementation here.
+    The main module classpath is already appended to this source set via
+    "compileClasspath += mainSourceSet.compileClasspath" (and runtimeClasspath)
+    with LOWER priority, while this source set's own explicit dependencies
+    (generated in dependencies.jinja) must take precedence. extendsFrom would
+    pull the aggregate main module deps INTO this config AHEAD of the source
+    set's own deps, breaking version overrides (e.g. two spring-kafka versions
+    on the same classpath) and diverging from `ya make` module isolation.
+#}
+val {{ testname }}Implementation by configurations.getting {
+    isTransitive = false
+}
+configurations.named(sourceSets["{{ testname }}"].runtimeOnlyConfigurationName) {
+    isTransitive = false
+}
+{%-         endif -%}
+{%-     endfor -%}
+
+{%-     for extra_target in ordered_extra_targets|selectattr('extra_depends') -%}
+{%-         set testname = SourceSetName(extra_target) %}
+
+sourceSets {
+    {% if testname == NS_TEST %}test{% else %}named("{{ testname }}"){% endif %} {
+{%-         for extra_depend in extra_target.extra_depends -%}
+{%-             set depend_testname = TestRelDir2SourceSetName(extra_depend) -%}
+{%-             set val = "testFixtures" + loop.index0|tojson + "SourceSet" %}
+        val {{ val }} = sourceSets.named("{{ depend_testname }}").get()
+        compileClasspath += {{ val }}.output + {{ val }}.compileClasspath
+        runtimeClasspath += {{ val }}.output + {{ val }}.runtimeClasspath
+{%-         endfor %}
+    }
+}
+{%-     endfor -%}
+{%- endif -%}

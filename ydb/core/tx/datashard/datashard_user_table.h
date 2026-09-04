@@ -7,6 +7,7 @@
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
@@ -464,8 +465,12 @@ struct TUserTable : public TThrRefBase {
     TReplicationConfig ReplicationConfig;
     TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
+    // Per-table METRICS_LEVEL override (Unspecified = falls back to the
+    // database-wide TABLES_METRICS_LEVEL default).
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel DetailedMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ui32 UniqueIndexKeySize = 0;
-    NKikimrSchemeOp::EIndexType IndexImplType = NKikimrSchemeOp::EIndexType::EIndexTypeInvalid;
+    NKikimrSchemeOp::ESpecialTableType SpecialTableType = NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeNone;
 
     TMap<TPathId, TTableIndex> Indexes;
 
@@ -541,6 +546,10 @@ struct TUserTable : public TThrRefBase {
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
+        return DetailedMetricsLevel;
+    }
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);

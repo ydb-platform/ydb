@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_expression.cpp
+    kqp_olap_expr_inspection.cpp
     kqp_operator.cpp
     kqp_plan_conversion_utils.cpp
     kqp_plan_to_json.cpp
@@ -12,6 +13,7 @@ SRCS(
     kqp_rbo_type_ann.cpp
     kqp_rbo_utils.cpp
     kqp_rbo.cpp
+    kqp_rbo_cbo.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
     analysis/logical_aliases.cpp
@@ -26,6 +28,8 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
+    library/cpp/containers/stack_vector
     ydb/core/kqp/common
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver

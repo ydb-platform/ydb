@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
                 .RequestId = 1,
                 .Range = range});
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
             LogTitle,
@@ -65,13 +65,15 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
                 .RequestId = 1,
                 .Range = range});
 
-        DirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(20, 10));
-        DirtyMap.WriteFinished(
-            100,
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(100),
+            TBlockRange64::WithLength(20, 10));
+        DirtyMap->WriteFinished(
+            MakeKey(100),
             TBlockRange64::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
             LogTitle,
@@ -101,7 +103,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
         ExpectedRange = range;
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto originalRequest =
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
@@ -132,16 +134,20 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
     {
         Init();
 
-        DirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(20, 10));
-        DirtyMap.WriteFinished(
-            100,
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(100),
+            TBlockRange64::WithLength(20, 10));
+        DirtyMap->WriteFinished(
+            MakeKey(100),
             TBlockRange64::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
 
-        DirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(40, 10));
-        DirtyMap.WriteFinished(
-            200,
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(200),
+            TBlockRange64::WithLength(40, 10));
+        DirtyMap->WriteFinished(
+            MakeKey(200),
             TBlockRange64::WithLength(40, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
@@ -150,7 +156,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         ExpectedRange = range;
         RangeData = GenerateRandomString(ExpectedRange.Size() * BlockSize);
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
 
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
@@ -195,7 +201,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
         ExpectedRange = range;
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto originalRequest =
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
@@ -245,6 +251,81 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         // Response with success for second request.
         ReadPromises[1].SetValue({.Error = MakeError(S_OK)});
+        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
+        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+    }
+
+    Y_UNIT_TEST_F(ShouldHedgeAllReadAttempts, TBaseFixture)
+    {
+        Init();
+
+        DirectBlockGroup->Oracle.ReadHedgingDelay = TDuration::Seconds(1);
+        DirectBlockGroup->Oracle.ReadRequestTimeout = TDuration::Seconds(10);
+
+        const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
+        ExpectedRange = range;
+
+        auto readHint = DirtyMap->MakeReadHint(range);
+        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+        auto originalRequest =
+            std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = range});
+
+        auto readRequest = CreateReadRequestExecutor(
+            Runtime->GetActorSystem(0),
+            LogTitle,
+            VChunkConfig,
+            DirectBlockGroup,
+            std::move(readHint),
+            std::move(callContext),
+            std::move(originalRequest),
+            NWilson::TTraceId());
+        auto future = readRequest->GetFuture();
+        readRequest->Run();
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(1, ReadPromises.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(2, ScheduledTasks.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Seconds(10),
+            ScheduledTasks[0].Delay);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Seconds(1),
+            ScheduledTasks[1].Delay);
+
+        // Run hedging task #1. Will launch a new read request from H1.
+        ExpectedHost = 1;
+        ScheduledTasks[1].Callback();
+        UNIT_ASSERT_VALUES_EQUAL(3, ScheduledTasks.size());
+        UNIT_ASSERT_VALUES_EQUAL(2, ReadPromises.size());
+
+        // Run hedging task #2. Will launch a new read request from H2.
+        ExpectedHost = 2;
+        ScheduledTasks[2].Callback();
+        UNIT_ASSERT_VALUES_EQUAL(4, ScheduledTasks.size());
+        UNIT_ASSERT_VALUES_EQUAL(3, ReadPromises.size());
+
+        // Run hedging task #3. Will not launch a new read request.
+        ExpectedHost = 3;
+        ScheduledTasks[3].Callback();
+        UNIT_ASSERT_VALUES_EQUAL(4, ScheduledTasks.size());
+        UNIT_ASSERT_VALUES_EQUAL(3, ReadPromises.size());
+
+        // Response with error for first request.
+        ReadPromises[0].SetValue({.Error = MakeError(E_FAIL)});
+        UNIT_ASSERT_VALUES_EQUAL(3, ReadPromises.size());
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+
+        // Response with error for second request.
+        ReadPromises[1].SetValue({.Error = MakeError(E_FAIL)});
+        UNIT_ASSERT_VALUES_EQUAL(3, ReadPromises.size());
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+
+        // Response with success for third request.
+        ReadPromises[2].SetValue({.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());

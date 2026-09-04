@@ -170,6 +170,12 @@ EDGE_CASES = [
     ('\x1b', 0, 'lone_ESC'),
     ('\x1b!', 1, 'ESC_unrecognized'),
     ('*\x1b*', 2, 'lone_ESC_between_text'),
+    ('\tA\u0CBE\rB\u0CBE\b', 10, 'backspace_flush_below_max_extent'),
+    ('\tA\u0CBE\rB\u0CBE\x1b', 10, 'esc_flush_below_max_extent'),
+    ('\tA\u0CBE\rB\u0CBE\x00', 10, 'zero_width_flush_below_max_extent'),
+    ('\tA\u0CBE\rB\u0CBE\x01', 10, 'illegal_ctrl_flush_below_max_extent'),
+    ('\tA\u0CBE\rB\u0CBE\n', 10, 'vertical_ctrl_flush_below_max_extent'),
+    ('\u4e2d\u0bcd\u4e2d\u0bcd\u4e2d\u0bcd\u4e2d', 2, 'glitch_virama_chain_capped'),
 ]
 
 

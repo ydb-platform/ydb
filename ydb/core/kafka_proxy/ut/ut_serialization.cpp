@@ -3,7 +3,7 @@
 #include <strstream>
 
 #include <ydb/core/kafka_proxy/kafka_messages.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 using namespace NKafka;
 

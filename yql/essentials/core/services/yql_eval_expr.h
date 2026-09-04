@@ -13,8 +13,10 @@ class IFunctionRegistry;
 
 namespace NYql {
 
-IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExprNode::TPtr& output, TTypeAnnotationContext& types, TExprContext& ctx,
-                                              const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-                                              IGraphTransformer* calcTransfomer = nullptr, TTypeAnnCallableFactory typeAnnCallableFactory = {});
+THolder<IGraphTransformer> CreateEvaluateExpressionTransformer(
+    TTypeAnnotationContext& types,
+    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
+    IGraphTransformer* calcTransformer = nullptr,
+    TTypeAnnCallableFactory typeAnnCallableFactory = {});
 
 } // namespace NYql

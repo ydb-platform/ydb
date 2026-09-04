@@ -11,6 +11,11 @@
 
 namespace NYdb::inline Dev::NObservability {
 
+// SDK build-info chain versions. Bump these when the corresponding
+// observability integration changes incompatibly.
+inline constexpr std::string_view kTracingChainVersion = "0.1.0";
+inline constexpr std::string_view kMetricsChainVersion = "0.2.0";
+
 // ---------------------------------------------------------------------------
 // OTel Semconv attribute keys shared between span attributes and metric labels.
 // ---------------------------------------------------------------------------
@@ -115,6 +120,7 @@ inline constexpr std::string_view kSessionPrefixGeneric       = "ydb.session";
 
 // Leaf names for session-pool metrics (combined as "<prefix>.<leaf>").
 inline constexpr std::string_view kSessionLeafCount           = "count";
+inline constexpr std::string_view kSessionLeafClosed          = "closed";
 inline constexpr std::string_view kSessionLeafCreateTime      = "create_time";
 inline constexpr std::string_view kSessionLeafPendingRequests = "pending_requests";
 inline constexpr std::string_view kSessionLeafTimeouts        = "timeouts";

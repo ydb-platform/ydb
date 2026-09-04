@@ -50,7 +50,7 @@ public:
         : DirectOut_(directOut)
         , Builder_(builder)
         , OutputFormat_(outputFormat)
-        , PlanSettings_(std::move(settings))
+        , PlanSettings_(settings)
     {
     }
 

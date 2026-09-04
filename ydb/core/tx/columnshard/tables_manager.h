@@ -194,6 +194,9 @@ public:
         if (it == SchemeShardLocalPathIds.end()) {
             return std::nullopt;
         }
+        if (it->second.DropVersion) {
+            return std::nullopt;
+        }
         return it->second.CopyVersion;
     }
 
@@ -270,7 +273,7 @@ public:
         if (!minReadSnapshot) {
             return true;
         }
-        return *dropVersion < *minReadSnapshot;
+        return *dropVersion <= *minReadSnapshot;
     }
 
     TTableInfo(const std::set<TUnifiedPathId>& unifiedPathIds) {
@@ -410,10 +413,11 @@ public:
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
 
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
-        const TString& tablePath, const TSchemeShardLocalPathId externalPathId);
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
-        const TString& tablePath, const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId);
+    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
+        const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
+    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
+        const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId,
+        const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
 
     class TSchemaAddress {
     private:
@@ -516,6 +520,18 @@ public:
 
     const THashSet<ui32>& GetSchemaPresets() const {
         return SchemaPresetsIds;
+    }
+
+    // Tables belonging to a column store carry a non-standalone schema preset (id != 0), whereas
+    // standalone column tables use an inline schema (their only preset, if any, is the id-0
+    // placeholder registered on load). So a non-zero preset id means this tablet backs a column store.
+    bool IsStoreTablet() const {
+        for (const ui32 presetId : SchemaPresetsIds) {
+            if (presetId != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool HasPrimaryIndex() const {

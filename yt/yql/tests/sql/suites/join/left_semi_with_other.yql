@@ -1,5 +1,4 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not */
 USE plato;
 
 $data1 = (select cast(key as uint32) as key, subkey, value from Input1);

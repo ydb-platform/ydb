@@ -21,8 +21,8 @@ public:
     struct TResponse
     {
         THostIndex Host = InvalidHostIndex;
-        TVector<ui64> EraseOk;
-        TVector<ui64> EraseFailed;
+        TVector<TPBufferKey> EraseOk;
+        TVector<TPBufferKey> EraseFailed;
     };
 
     TEraseRequestExecutor(
@@ -45,7 +45,10 @@ public:
 private:
     void SendEraseRequest(THostIndex host);
     void OnEraseResponse(const TDBGEraseResponse& response);
-    void Reply(TVector<ui64> eraseOk, TVector<ui64> eraseFailed);
+    void Reply(TVector<TPBufferKey> eraseOk, TVector<TPBufferKey> eraseFailed);
+
+    void ScheduleRequestTimeout();
+    void OnRequestTimeout();
 
     NActors::TActorSystem const* ActorSystem;
     const TChildLogTitle LogTitle;
@@ -54,6 +57,7 @@ private:
     const NWilson::TSpan Span;
     const THostIndex Host;
     const TEraseHint Hint;
+    const TDuration RequestTimeout;
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

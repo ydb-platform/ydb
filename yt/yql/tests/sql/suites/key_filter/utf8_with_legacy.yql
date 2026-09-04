@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 pragma yt.UseNewPredicateExtraction="false";
 
 SELECT key FROM plato.Input WHERE StartsWith(key, String("150")) ORDER BY key;

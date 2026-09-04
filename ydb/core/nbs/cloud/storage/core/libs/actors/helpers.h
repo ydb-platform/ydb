@@ -71,19 +71,30 @@ inline void Send(
         cookie);
 }
 
+enum class ESubscribeOnSession
+{
+    No,
+    Yes,
+};
+
 inline void SendWithUndeliveryTracking(
     const NActors::TActorContext& ctx,
     const NActors::TActorId& recipient,
     NActors::IEventBasePtr event,
     ui64 cookie,
-    NWilson::TTraceId traceId)
+    NWilson::TTraceId traceId,
+    ESubscribeOnSession subscribeOnSession)
 {
+    ui32 flags = NActors::IEventHandle::FlagForwardOnNondelivery;
+    if (subscribeOnSession == ESubscribeOnSession::Yes) {
+        flags |= NActors::IEventHandle::FlagSubscribeOnSession;
+    }
     auto ev = std::make_unique<NActors::IEventHandle>(
         recipient,
         ctx.SelfID,
         event.release(),
-        NActors::IEventHandle::FlagForwardOnNondelivery,   // flags
-        cookie,                                            // cookie
+        flags,
+        cookie,        // cookie
         &ctx.SelfID,   // forwardOnNondelivery
         std::move(traceId));
 
@@ -133,27 +144,27 @@ Schedule(const NActors::TActorContext& ctx, TDuration delta, TArgs&&... args)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define STORAGE_IMPLEMENT_REQUEST(name, ns)                        \
-    void Handle##name(                                             \
-        const ns::TEv##name##Request::TPtr& ev,                    \
-        const NActors::TActorContext& ctx);                        \
-                                                                   \
-    void Reject##name(                                             \
-        const ns::TEv##name##Request::TPtr& ev,                    \
-        const NActors::TActorContext& ctx)                         \
-    {                                                              \
-        auto response = std::make_unique<ns::TEv##name##Response>( \
-            MakeError(E_REJECTED, #name " request rejected"));     \
-        NYdb::NBS::Reply(ctx, *ev, std::move(response));           \
-    }                                                              \
+#define STORAGE_IMPLEMENT_REQUEST(name, ns)                                    \
+    void Handle##name(                                                         \
+        const ns::TEv##name##Request::TPtr& ev,                                \
+        const NActors::TActorContext& ctx);                                    \
+                                                                               \
+    void Reject##name(                                                         \
+        const ns::TEv##name##Request::TPtr& ev,                                \
+        const NActors::TActorContext& ctx)                                     \
+    {                                                                          \
+        auto response = std::make_unique<ns::TEv##name##Response>(             \
+            MakeError(E_REJECTED, #name " request rejected"));                 \
+        NYdb::NBS::Reply(ctx, *ev, std::move(response));                       \
+    }                                                                          \
     // STORAGE_IMPLEMENT_REQUEST
 
-#define STORAGE_HANDLE_REQUEST(name, ns)         \
-    HFunc(ns::TEv##name##Request, Handle##name); \
+#define STORAGE_HANDLE_REQUEST(name, ns)                                       \
+    HFunc(ns::TEv##name##Request, Handle##name);                               \
     // STORAGE_HANDLE_REQUEST
 
-#define STORAGE_REJECT_REQUEST(name, ns)         \
-    HFunc(ns::TEv##name##Request, Reject##name); \
+#define STORAGE_REJECT_REQUEST(name, ns)                                       \
+    HFunc(ns::TEv##name##Request, Reject##name);                               \
     // STORAGE_REJECT_REQUEST
 
 }   // namespace NYdb::NBS

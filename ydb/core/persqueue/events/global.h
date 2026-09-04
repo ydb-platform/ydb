@@ -19,7 +19,7 @@
 namespace NKikimr::TEvPersQueue {
     enum EEv {
         EvRequest = InternalEventSpaceBegin(NPQ::NEvents::EServices::GLOBAL),
-        EvUpdateConfig, //change config for all partitions and count of partitions
+        EvUpdateConfig, // reserved: TEvUpdateConfig removed
         EvUpdateConfigResponse,
         EvOffsets, //get offsets from all partitions in order 0..n-1 - it's for scheemeshard to change (TabletId,PartId) to Partition
         EvOffsetsResponse,
@@ -89,15 +89,6 @@ namespace NKikimr::TEvPersQueue {
         TEvResponse() {}
     };
 
-    struct TEvUpdateConfig: public TEventPreSerializedPB<TEvUpdateConfig,
-            NKikimrPQ::TUpdateConfig, EvUpdateConfig> {
-            TEvUpdateConfig() {}
-    };
-
-    struct TEvUpdateConfigBuilder: public TEvUpdateConfig {
-        using TBase::Record;
-    };
-
     struct TEvUpdateBalancerConfig: public TEventPB<TEvUpdateBalancerConfig,
             NKikimrPQ::TUpdateBalancerConfig, EvUpdateBalancerConfig> {
             TEvUpdateBalancerConfig() {}
@@ -131,9 +122,12 @@ namespace NKikimr::TEvPersQueue {
 
     struct TEvGetPartitionsLocation: public TEventPB<TEvGetPartitionsLocation,
             NKikimrPQ::TGetPartitionsLocation, EvGetPartitionsLocation> {
-            TEvGetPartitionsLocation(const TVector<ui64>& partitionIds = {}) {
+            TEvGetPartitionsLocation(const TVector<ui64>& partitionIds = {}, TDuration timeout = {}) {
                 for (const auto& p : partitionIds) {
                     Record.AddPartitions(p);
+                }
+                if (timeout) {
+                    Record.SetTimeoutMs(timeout.MilliSeconds());
                 }
             }
     };

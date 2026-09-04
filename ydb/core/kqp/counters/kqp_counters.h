@@ -103,8 +103,6 @@ protected:
     void ReportCompileRequestRejected();
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
-    void ReportCompileEnforceConfigSuccess();
-    void ReportCompileEnforceConfigFailed();
     void ReportCompileNewRBOSuccess();
     void ReportCompileNewRBOFailed();
     void ReportRecompileRequestGet();
@@ -130,7 +128,6 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr ParametersBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr YdbParametersBytes;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr SqlV0Translations;
     ::NMonitoring::TDynamicCounters::TCounterPtr SqlV1Translations;
     ::NMonitoring::TDynamicCounters::TCounterPtr SqlUnknownTranslations;
 
@@ -214,8 +211,6 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileTotal;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileActive;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CompileEnforceConfigSuccess;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CompileEnforceConfigFailed;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileNewRBOSuccess;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileNewRBOFailed;
     NMonitoring::THistogramPtr CompileCpuTime;
@@ -345,8 +340,6 @@ public:
     void ReportCompileRequestRejected(TKqpDbCountersPtr dbCounters);
     void ReportCompileRequestTimeout(TKqpDbCountersPtr dbCounters);
     void ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuration duration, TDuration cpuTime);
-    void ReportCompileEnforceConfigSuccess(TKqpDbCountersPtr dbCounters);
-    void ReportCompileEnforceConfigFailed(TKqpDbCountersPtr dbCounters);
     void ReportCompileNewRBOSuccess(TKqpDbCountersPtr dbCounters);
     void ReportCompileNewRBOFailed(TKqpDbCountersPtr dbCounters);
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
@@ -456,6 +449,8 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ModifiedRowsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr LockedRowsCount;
     NMonitoring::THistogramPtr MaxInFlightLockTimeOnExit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupLockTotalQuotaBytesInFlight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupLockTotalQuotaBytesExceeded;
 
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;

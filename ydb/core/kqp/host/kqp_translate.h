@@ -100,11 +100,6 @@ public:
     NSQLTranslation::TTranslationSettings Build(NYql::TExprContext& ctx);
     TKqpTranslationSettingsBuilder& SetFromConfig(const NYql::TKikimrConfiguration& config);
 
-    TKqpTranslationSettingsBuilder& SetUsePgParser(const TMaybe<bool> value) {
-        UsePgParser = value;
-        return *this;
-    }
-
     TKqpTranslationSettingsBuilder& SetKqpTablePathPrefix(const TString& value) {
         KqpTablePathPrefix = value;
         return *this;
@@ -112,11 +107,6 @@ public:
 
     TKqpTranslationSettingsBuilder& SetIsEnableExternalDataSources(bool value) {
         IsEnableExternalDataSources = value;
-        return *this;
-    }
-
-    TKqpTranslationSettingsBuilder& SetIsEnablePgConstsToParams(bool value) {
-        IsEnablePgConstsToParams = value;
         return *this;
     }
 
@@ -132,16 +122,6 @@ public:
 
     TKqpTranslationSettingsBuilder& SetQueryParameters(const std::shared_ptr<std::map<TString, Ydb::Type>>& value) {
         QueryParameters = value;
-        return *this;
-    }
-
-    TKqpTranslationSettingsBuilder& SetSqlVersion(const TMaybe<ui16>& value) {
-        SqlVersion = value;
-        return *this;
-    }
-
-    TKqpTranslationSettingsBuilder& SetIsEnablePgSyntax(bool value) {
-        IsEnablePgSyntax = value;
         return *this;
     }
 
@@ -176,21 +156,16 @@ public:
 
 private:
     const NYql::EKikimrQueryType QueryType;
-    ui16 KqpYqlSyntaxVersion = 1;
     const TString Cluster;
     const TString QueryText;
     const NSQLTranslation::EBindingsMode BindingsMode;
 
-    TMaybe<bool> UsePgParser = {};
     TString KqpTablePathPrefix = {};
     bool IsEnableExternalDataSources = false;
-    bool IsEnablePgConstsToParams = false;
-    bool IsEnablePgSyntax = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameters = {};
-    TMaybe<ui16> SqlVersion = {};
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     bool IsAmbiguityError = false;

@@ -1,7 +1,7 @@
 #include "dictionary_fetching.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
@@ -46,7 +46,7 @@ TDictionaryChunkRestoreInfo TDictionaryChunkRestoreInfo::BuildEmpty(const NArrow
     return TDictionaryChunkRestoreInfo(TBlobRange(), chunkExternalInfo);
 }
 
-void TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
+TConclusionStatus TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
     NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
     for (auto&& i : ColumnChunks) {
         const auto& dictArray = i.GetDictionaryArray();
@@ -57,6 +57,7 @@ void TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
     const NArrow::TColumnFilter& filter = context.GetAccessors().GetFilter();
     AFL_VERIFY(NCommon::IsDictionaryOnlyFetchCompatible(filter))("filter", filter.DebugString());
     context.GetSource()->MutableStageData().MarkDictionaryOnlyFetch(GetEntityId());
+    return TConclusionStatus::Success();
 }
 
 void TDictionaryFetchLogic::DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {

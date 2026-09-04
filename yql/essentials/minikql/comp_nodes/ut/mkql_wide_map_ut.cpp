@@ -2,8 +2,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideMapTest) {
 Y_UNIT_TEST_LLVM(TestSimpleSwap) {
@@ -17,7 +16,7 @@ Y_UNIT_TEST_LLVM(TestSimpleSwap) {
                                                                {i32(4), i32(4), {}},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple({items[2U], items[1U], items[0U]}); }));
 
@@ -41,7 +40,7 @@ Y_UNIT_TEST_LLVM(TestThinLambda) {
                                                                {i32(4)},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
                                                               [&](TRuntimeNode::TList items) { return items; }),
                                                    [&](TRuntimeNode::TList) -> TRuntimeNode { return pb.NewTuple({}); }));
@@ -61,7 +60,7 @@ Y_UNIT_TEST_LLVM(TestWideMap) {
                                                                {i32(4), i32(4), {}},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                               [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrMin(items[0], items[1]), pb.AggrMax(items[1], items[2]), pb.AggrAdd(items[0], items[2])}; }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -88,7 +87,7 @@ Y_UNIT_TEST_LLVM(TestDotCalculateUnusedField) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, TStringBuf("ACHTUNG MINEN!"));
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                               [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.Mul(items.front(), items.back()), pb.Unwrap(items[1], landmine, __FILE__, __LINE__, 0), pb.Add(items.front(), items.back())}; }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple({items.back(), items.front()}); }));
@@ -113,9 +112,9 @@ Y_UNIT_TEST_LLVM(TestPasstroughtFieldsAsIs) {
                                                                {i32(4), {}, i32(-4)},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
-                                                              [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), pb.Minus(items[1u]), items.back()}; }),
+                                                              [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), pb.Minus(items[1U]), items.back()}; }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -138,7 +137,7 @@ Y_UNIT_TEST_LLVM(TestPasstroughtFieldSplitAsIs) {
                                                                {i32(4), {}, i32(-4)},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                               [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U], pb.Mul(items.front(), items.back()), items[1U]}; }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -163,7 +162,7 @@ Y_UNIT_TEST_LLVM(TestFieldBothWayPasstroughtAndArg) {
                                                                {i32(4), {}, i32(-4)},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                               [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U], pb.Sub(items.front(), items.back()), pb.Minus(items[1U])}; }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -188,7 +187,7 @@ Y_UNIT_TEST_LLVM(TestPasstroughtFieldSplitAndFirstUnused) {
                                                                {i32(4), {}, i32(-1)},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                               [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U], pb.AggrAdd(items.front(), items.back()), items[1U]}; }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple({items[1], items[2]}); }));
@@ -203,5 +202,4 @@ Y_UNIT_TEST_LLVM(TestPasstroughtFieldSplitAndFirstUnused) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideMapTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

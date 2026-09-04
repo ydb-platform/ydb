@@ -136,6 +136,10 @@ static void FillColumns(
                 Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
                     cinfo.DefaultValue));
                 break;
+            case ETableColumnDefaultKind::FromExpression:
+                Y_ABORT_UNLESS(colDescr->MutableDefaultFromExpression()->ParseFromString(
+                    cinfo.DefaultValue));
+                break;
         }
     }
 }
@@ -211,6 +215,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
                 case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                     return TPathElement::EPathSubType::EPathSubTypeLocalMinMaxIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalCountMinSketchIndex;
                 case NKikimrSchemeOp::EIndexTypeInvalid:
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -601,6 +607,8 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 break;
             case ETableColumnDefaultKind::FromLiteral:
                 break;
+            case ETableColumnDefaultKind::FromExpression:
+                break;
         }
     }
 }
@@ -708,7 +716,21 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 Y_VERIFY_S(it != Self->ShardInfos.end(), "No shard with shardIdx: " << shardIdx);
 
                 for (const auto& partition : pqShard->Partitions) {
-                    if (partition->AlterVersion <= pqGroupInfo->AlterVersion) {
+                    // Describe the partition set as of the committed topic AlterVersion.
+                    //
+                    // ReassignIds bumps parent AlterVersion (and sets Inactive) before FinishAlter
+                    // bumps topic AlterVersion. Filtering only by partition.AlterVersion would hide
+                    // those parents together with new children and leave no open-ended Active range
+                    // for TBoundaryChooser / writers.
+                    //
+                    // CreateVersion is the topic version when the partition was added:
+                    // - created in the in-flight alter: CreateVersion > committed → hidden
+                    // - existed before: CreateVersion <= committed → visible; if AlterVersion was
+                    //   bumped by the in-flight alter, still report Active until FinishAlter
+                    // - topic create quirk: CreateVersion may be 1 while AlterVersion is still 0 →
+                    //   visible via AlterVersion <= committed
+                    if (partition->CreateVersion <= pqGroupInfo->AlterVersion
+                            || partition->AlterVersion <= pqGroupInfo->AlterVersion) {
                         Y_VERIFY_S(partition->PqId < pqGroupInfo->NextPartitionId,
                                    "Wrong pqId: " << partition->PqId << ", nextPqId: " << pqGroupInfo->NextPartitionId);
                         descriptions[partition->PqId] = {it->second.TabletID, partition.Get()};
@@ -732,12 +754,19 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                     desc.Info->KeyRange->SerializeToProto(*partition.MutableKeyRange());
                 }
 
-                partition.SetStatus(desc.Info->Status);
+                // Parents deactivated in the in-flight alter still look Active at committed version.
+                partition.SetStatus(desc.Info->AlterVersion > pqGroupInfo->AlterVersion
+                    ? NKikimrPQ::ETopicPartitionStatus::Active
+                    : desc.Info->Status);
                 for (const auto parent : desc.Info->ParentPartitionIds) {
                     partition.AddParentPartitionIds(parent);
                 }
-                for (const auto child : desc.Info->ChildPartitionIds) {
-                    partition.AddChildPartitionIds(child);
+                // Do not expose child links created by the in-flight alter while we still
+                // present the parent as committed-Active.
+                if (desc.Info->AlterVersion <= pqGroupInfo->AlterVersion) {
+                    for (const auto child : desc.Info->ChildPartitionIds) {
+                        partition.AddChildPartitionIds(child);
+                    }
                 }
                 if (desc.Info->CreationTimestamp) {
                     partition.SetCreationTimestampSeconds(desc.Info->CreationTimestamp.Seconds());
@@ -766,14 +795,20 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
             const auto& shardInfo = Self->ShardInfos.at(shardIdx);
             for (const auto& pq : pqShard->Partitions) {
-                if (pq->AlterVersion <= pqGroupInfo->AlterVersion) {
+                if (pq->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
+                    continue;
+                }
+                if (pq->CreateVersion <= pqGroupInfo->AlterVersion
+                        || pq->AlterVersion <= pqGroupInfo->AlterVersion) {
                     auto partition = allocate->MutablePartitions()->Add();
                     partition->SetPartitionId(pq->PqId);
                     partition->SetGroupId(pq->GroupId);
                     partition->SetTabletId(ui64(shardInfo.TabletID));
                     partition->SetOwnerId(shardIdx.GetOwnerId());
                     partition->SetShardId(ui64(shardIdx.GetLocalId()));
-                    partition->SetStatus(pq->Status);
+                    partition->SetStatus(pq->AlterVersion > pqGroupInfo->AlterVersion
+                        ? NKikimrPQ::ETopicPartitionStatus::Active
+                        : pq->Status);
                     for (const auto parent : pq->ParentPartitionIds) {
                         partition->AddParentPartitionIds(parent);
                     }
@@ -990,9 +1025,15 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDomainState()->SetDiskQuotaExceeded(true);
     }
 
+    if (subDomainInfo->GetSmallBlobsQuotaExceeded()) {
+        entry->MutableDomainState()->SetSmallBlobsQuotaExceeded(true);
+    }
+
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }
+
+    entry->SetTablesMetricsLevel(subDomainInfo->GetTablesMetricsLevel());
 
     if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
         entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
@@ -1211,6 +1252,34 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
     *entry.MutableProperties() = streamingQueryInfo->Properties;
 }
 
+void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl) {
+    const auto it = Self->TestShardSets.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "TestShardSet is not found");
+    const auto testShardSetInfo = *it;
+
+    auto& entry = *Result->Record.MutablePathDescription()->MutableTestShardSetDescription();
+    entry.SetName(pathEl->Name);
+    entry.SetPathId(pathId.LocalPathId);
+    entry.SetVersion(testShardSetInfo->AlterVersion);
+
+    TVector<std::pair<TShardIdx, TTabletId>> sortedShards(testShardSetInfo->TestShards.begin(), testShardSetInfo->TestShards.end());
+    std::sort(sortedShards.begin(), sortedShards.end(),
+              [](const auto& l, const auto& r) { return l.first < r.first; });
+
+    for (const auto& [shardIdx, tabletId] : sortedShards) {
+        entry.AddTabletIds(ui64(tabletId));
+    }
+
+    if (!sortedShards.empty()) {
+        const auto& shardIdx = sortedShards.front().first;
+        auto shardInfo = Self->ShardInfos.FindPtr(shardIdx);
+        Y_ABORT_UNLESS(shardInfo);
+        for (const auto& channel : shardInfo->BindedChannels) {
+            entry.AddBoundChannels()->CopyFrom(channel);
+        }
+    }
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1382,6 +1451,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeStreamingQuery:
             DescribeStreamingQuery(base->PathId, base);
             break;
+        case NKikimrSchemeOp::EPathTypeTestShardSet:
+            DescribeTestShardSet(base->PathId, base);
+            break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
         }
@@ -1476,6 +1548,10 @@ void TSchemeShard::DescribeTable(
         entry->MutableIncrementalBackupConfig()->CopyFrom(tableInfo.IncrementalBackupConfig());
     }
 
+    if (tableInfo.HasMultiColumnStatistics()) {
+        entry->MutableMultiColumnStatistics()->CopyFrom(tableInfo.MultiColumnStatistics());
+    }
+
     entry->SetIsBackup(tableInfo.IsBackup);
     entry->SetIsRestore(tableInfo.IsRestore);
 }
@@ -1518,8 +1594,17 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
         const auto* tableInfoPtr = Tables.FindPtr(indexImplTablePathId.second);
-        if (!tableInfoPtr && NTableIndex::IsBuildImplTable(indexImplTablePathId.first)) {
-            continue; // it's possible because of dropping build index impl tables without dropping index
+        if (!tableInfoPtr) {
+            // The impl table info may be legitimately absent while the table itself is being dropped:
+            //  - build impl tables are dropped without dropping the index during index build;
+            //  - regular impl tables (level/posting/prefix) are temporarily dropped during index rebuild.
+            // In both cases the child path element is marked as (planned to be) dropped. Any other
+            // missing impl table indicates an inconsistency and must still trip the assertion below.
+            const auto* childPathPtr = PathsById.FindPtr(indexImplTablePathId.second);
+            if (NTableIndex::IsBuildImplTable(indexImplTablePathId.first)
+                || (childPathPtr && ((*childPathPtr)->PlannedToDrop() || (*childPathPtr)->Dropped()))) {
+                continue;
+            }
         }
         Y_ABORT_UNLESS(tableInfoPtr);
         const auto& tableInfo = *tableInfoPtr->Get();
@@ -1545,6 +1630,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
         case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             break;

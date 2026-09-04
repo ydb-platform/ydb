@@ -5,6 +5,7 @@
 #include "scheduler_basic.h"
 #include "actor_bootstrapped.h"
 #include "actor_benchmark_helper.h"
+#include "thread_context.h"
 #include "subsystems/stats.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -16,6 +17,9 @@
 #include <util/system/rwlock.h>
 #include <util/system/hp_timer.h>
 
+#include <array>
+#include <chrono>
+
 using namespace NActors;
 using namespace NActors::NTests;
 
@@ -24,6 +28,145 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TActorBenchmark = ::NActors::NTests::TActorBenchmark<>;
     using TSettings = TActorBenchmark::TSettings;
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
+
+    struct TWakerBurstCounters {
+        std::atomic<ui32> Remaining = 0;
+        TThreadParkPad Completed;
+    };
+
+    class TWakerBurstActor : public TActor<TWakerBurstActor> {
+    public:
+        explicit TWakerBurstActor(TWakerBurstCounters* counters)
+            : TActor<TWakerBurstActor>(&TWakerBurstActor::StateFunc)
+            , Counters(counters)
+        {}
+
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvPing, Handle);
+            }
+        }
+
+    private:
+        void Handle(TEvents::TEvPing::TPtr&) {
+            if (Counters->Remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                Counters->Completed.Unpark();
+            }
+        }
+
+        TWakerBurstCounters* const Counters;
+    };
+
+    struct TWakerBurstStats {
+        ui64 Mean = 0;
+        ui64 P50 = 0;
+        ui64 P95 = 0;
+    };
+
+    TWakerBurstStats CalculateWakerBurstStats(TVector<ui64> values) {
+        Sort(values);
+        ui64 sum = 0;
+        for (ui64 value : values) {
+            sum += value;
+        }
+        return {
+            .Mean = sum / values.size(),
+            .P50 = values[values.size() / 2],
+            .P95 = values[(values.size() * 95) / 100],
+        };
+    }
+
+    void RunWakerMessageBurstsBenchmark(bool enableWaker) {
+        constexpr ui32 Threads = 8;
+        constexpr ui32 Rounds = 100;
+        const TDuration idleDuration = TDuration::MilliSeconds(10);
+        constexpr std::array<ui32, 3> MessageCounts = {Threads, 10 * Threads, 100 * Threads};
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, Threads, false, false);
+        auto& config = setup->CpuManager.Basic.back();
+        config.EnableWaker = enableWaker;
+        config.SpinThreshold = 0;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TWakerBurstCounters counters;
+        TVector<TActorId> actors;
+        actors.reserve(Threads);
+        for (ui32 i = 0; i < Threads; ++i) {
+            actors.push_back(actorSystem.Register(new TWakerBurstActor(&counters)));
+        }
+
+        for (ui32 messageCount : MessageCounts) {
+            TVector<ui64> sendTimes;
+            TVector<ui64> completionTimes;
+            sendTimes.reserve(Rounds);
+            completionTimes.reserve(Rounds);
+
+            for (ui32 round = 0; round < Rounds; ++round) {
+                TVector<THolder<TEvents::TEvPing>> events;
+                events.reserve(messageCount);
+                for (ui32 i = 0; i < messageCount; ++i) {
+                    events.emplace_back(MakeHolder<TEvents::TEvPing>());
+                }
+
+                Sleep(idleDuration);
+                counters.Remaining.store(messageCount, std::memory_order_release);
+
+                const auto started = std::chrono::steady_clock::now();
+                for (ui32 i = 0; i < messageCount; ++i) {
+                    actorSystem.Send(actors[i % Threads], events[i].Release());
+                }
+                const auto sent = std::chrono::steady_clock::now();
+                counters.Completed.Park();
+                const auto completed = std::chrono::steady_clock::now();
+
+                sendTimes.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(sent - started).count());
+                completionTimes.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(completed - started).count());
+            }
+
+            const auto sendStats = CalculateWakerBurstStats(std::move(sendTimes));
+            const auto completionStats = CalculateWakerBurstStats(std::move(completionTimes));
+            Cout << "waker=" << (enableWaker ? "on" : "off")
+                 << ",messages=" << messageCount
+                 << ",send_mean_ns=" << sendStats.Mean
+                 << ",send_p50_ns=" << sendStats.P50
+                 << ",send_p95_ns=" << sendStats.P95
+                 << ",completion_mean_ns=" << completionStats.Mean
+                 << ",completion_p50_ns=" << completionStats.P50
+                 << ",completion_p95_ns=" << completionStats.P95
+                 << Endl;
+        }
+
+        actorSystem.Stop();
+    }
+
+    void RunWakerSaturatedBenchmark(bool enableWaker) {
+        constexpr ui32 Threads = 8;
+        constexpr ui32 ActorPairs = 2 * Threads;
+        constexpr ui32 InFlight = 1;
+        const TDuration duration = TDuration::Seconds(1);
+
+        const auto stats = TActorBenchmark::CountStats([=] {
+            return TActorBenchmark::BenchContentedThreads(
+                Threads,
+                ActorPairs,
+                TActorBenchmark::EPoolType::Basic,
+                ESendingType::Common,
+                duration,
+                InFlight,
+                enableWaker);
+        });
+        const double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
+        const ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;
+        Cout << "waker=" << (enableWaker ? "on" : "off")
+             << ",threads=" << Threads
+             << ",actor_pairs=" << ActorPairs
+             << ",in_flight=" << InFlight
+             << ",messages_per_second=" << eventsPerSecond
+             << Endl;
+    }
 
     class TLongRunningActor : public TActorBootstrapped<TLongRunningActor> {
         public:
@@ -441,6 +584,54 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         }
     }
 
+    Y_UNIT_TEST(WakerMessageBurstsBenchmark) {
+        RunWakerMessageBurstsBenchmark(false);
+        RunWakerMessageBurstsBenchmark(true);
+    }
+
+    Y_UNIT_TEST(WakerSaturatedBenchmark) {
+        RunWakerSaturatedBenchmark(false);
+        RunWakerSaturatedBenchmark(true);
+    }
+
+    Y_UNIT_TEST(WakerIdleStatistics) {
+        constexpr ui64 SampleDurationUs = 200'000;
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, false, false);
+        auto& config = setup->CpuManager.Basic.back();
+        config.EnableWaker = true;
+        config.SpinThreshold = 0;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        const auto getThreadStats = [&] {
+            TExecutorPoolStats poolStats;
+            TVector<TExecutorThreadStats> threadStats;
+            GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, threadStats);
+            UNIT_ASSERT_VALUES_EQUAL(threadStats.size(), 2);
+            return threadStats[1];
+        };
+
+        Sleep(TDuration::MilliSeconds(50));
+        const TExecutorThreadStats before = getThreadStats();
+        Sleep(TDuration::MicroSeconds(SampleDurationUs));
+        const TExecutorThreadStats after = getThreadStats();
+
+        actorSystem.Stop();
+
+        const ui64 parkedUs = Ts2Us(after.SafeParkedTicks - before.SafeParkedTicks);
+        const ui64 elapsedUs = Ts2Us(after.SafeElapsedTicks - before.SafeElapsedTicks);
+        const ui64 cpuUs = after.CpuUs - before.CpuUs;
+        UNIT_ASSERT_GE_C(parkedUs, SampleDurationUs / 2,
+            "parked_us# " << parkedUs << " elapsed_us# " << elapsedUs << " cpu_us# " << cpuUs);
+        UNIT_ASSERT_LT_C(elapsedUs, SampleDurationUs / 2,
+            "parked_us# " << parkedUs << " elapsed_us# " << elapsedUs << " cpu_us# " << cpuUs);
+        UNIT_ASSERT_LT_C(cpuUs, SampleDurationUs / 2,
+            "parked_us# " << parkedUs << " elapsed_us# " << elapsedUs << " cpu_us# " << cpuUs);
+    }
+
     Y_UNIT_TEST(SendReceive1Pool1ThreadNoAlloc) {
         for (const auto& mType : TSettings::MailboxTypes) {
             auto stats =  TActorBenchmark::CountStats([mType] {
@@ -754,18 +945,358 @@ Y_UNIT_TEST_SUITE(TestAliases) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TestActorLiveness) {
+    struct TTargetActor : TActorBootstrapped<TTargetActor> {
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+        }
+
+        STRICT_STFUNC(StateWork,
+            cFunc(TEvents::TSystem::Poison, PassAway)
+        )
+    };
+
+    struct TProbeActor : TActorBootstrapped<TProbeActor> {
+        static constexpr ui64 AliveCookie = 1;
+        static constexpr ui64 DeadCookie = 2;
+
+        TProbeActor(
+                TActorId target,
+                TThreadParkPad* donePad,
+                std::atomic<bool>* doneFlag)
+            : Target(target)
+            , DonePad(donePad)
+            , DoneFlag(doneFlag)
+        {
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+            SendActorLivenessCheck(Target, AliveCookie);
+        }
+
+        STRICT_STFUNC(StateWork,
+            hFunc(TEvents::TEvActorAlive, Handle)
+            hFunc(TEvents::TEvActorDead, Handle)
+        )
+
+        void Handle(TEvents::TEvActorAlive::TPtr& ev) {
+            Y_ABORT_UNLESS(!ev->HasEvent());
+            Y_ABORT_UNLESS(ev->Sender == Target);
+            Y_ABORT_UNLESS(ev->Cookie == AliveCookie);
+
+            Send(Target, new TEvents::TEvPoison());
+            SendActorLivenessCheck(Target, DeadCookie);
+        }
+
+        void Handle(TEvents::TEvActorDead::TPtr& ev) {
+            Y_ABORT_UNLESS(!ev->HasEvent());
+            Y_ABORT_UNLESS(ev->Sender == Target);
+            Y_ABORT_UNLESS(ev->Cookie == DeadCookie);
+
+            if (DoneFlag) {
+                DoneFlag->store(true, std::memory_order_release);
+            }
+            if (DonePad) {
+                DonePad->Unpark();
+            }
+            PassAway();
+        }
+
+        const TActorId Target;
+        TThreadParkPad* const DonePad;
+        std::atomic<bool>* const DoneFlag;
+    };
+
+    struct TRemoteProbeActor : TActorBootstrapped<TRemoteProbeActor> {
+        static constexpr ui64 Cookie = 1;
+
+        TRemoteProbeActor(TActorId target, TThreadParkPad& done)
+            : Target(target)
+            , Done(done)
+        {
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+            SendActorLivenessCheck(Target, Cookie);
+        }
+
+        STRICT_STFUNC(StateWork,
+            hFunc(TEvents::TEvActorLivenessUnsure, Handle)
+        )
+
+        void Handle(TEvents::TEvActorLivenessUnsure::TPtr& ev) {
+            Y_ABORT_UNLESS(!ev->HasEvent());
+            Y_ABORT_UNLESS(ev->Sender == Target);
+            Y_ABORT_UNLESS(ev->Cookie == Cookie);
+            Done.Unpark();
+            PassAway();
+        }
+
+        const TActorId Target;
+        TThreadParkPad& Done;
+    };
+
+    Y_UNIT_TEST(ActorSystemHandlesLivenessCheck) {
+        using TActorBenchmark = NActors::NTests::TActorBenchmark<>;
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, true, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        const TActorId target = actorSystem.Register(
+            new TTargetActor(),
+            TMailboxType::HTSwap,
+            0);
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TProbeActor(target, &done, nullptr),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(ActorSystemReportsRemoteLivenessAsUnsure) {
+        using TActorBenchmark = NActors::NTests::TActorBenchmark<>;
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, true, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        const TActorId remoteTarget(2, 0, 1, 0);
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TRemoteProbeActor(remoteTarget, done),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(TestRuntimeHandlesLivenessCheck) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+
+        const TActorId target = runtime.Register(new TTargetActor());
+        std::atomic<bool> done = false;
+        runtime.Register(new TProbeActor(target, nullptr, &done));
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return done.load(std::memory_order_acquire);
+        };
+        runtime.DispatchEvents(options);
+
+        UNIT_ASSERT(done.load(std::memory_order_acquire));
+    }
+}
+
+Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
+    using EFinishReason = TEvents::TEvMailboxProcessingFinished::EReason;
+    using TActorBenchmark = NActors::NTests::TActorBenchmark<>;
+
+    struct TResult {
+        EFinishReason Reason = EFinishReason::QueueEmpty;
+        ui32 ExecutedEvents = 0;
+        ui64 ElapsedCycles = 0;
+    };
+
+    class TObserverActor : public TActorBootstrapped<TObserverActor> {
+    public:
+        TObserverActor(EFinishReason expectedReason, TResult& result, TThreadParkPad& done)
+            : ExpectedReason(expectedReason)
+            , Result(result)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
+            ForceFinishReason();
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvMailboxProcessingFinished, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingFinished::TPtr& ev) {
+            RestoreExecutorState();
+            Result.Reason = ev->Get()->Reason;
+            Result.ExecutedEvents = ev->Get()->ExecutedEvents;
+            Result.ElapsedCycles = ev->Get()->ElapsedCycles;
+            Done.Unpark();
+            PassAway();
+        }
+
+    private:
+        void ForceFinishReason() {
+            OriginalEventsPerMailbox = TlsThreadContext->WorkerContext.EventsPerMailbox;
+            OriginalTimePerMailboxTs = TlsThreadContext->WorkerContext.TimePerMailboxTs;
+            OriginalSoftDeadlineTs = TlsThreadContext->WorkerContext.SoftDeadlineTs;
+            OriginalCapturedSendingType =
+                TlsThreadContext->ExecutionContext.CapturedActivation.SendingType;
+
+            switch (ExpectedReason) {
+                case EFinishReason::QueueEmpty:
+                    break;
+                case EFinishReason::EventCountLimitReached:
+                    TlsThreadContext->WorkerContext.EventsPerMailbox = 1;
+                    break;
+                case EFinishReason::TimeLimitReached:
+                    TlsThreadContext->WorkerContext.TimePerMailboxTs = 0;
+                    break;
+                case EFinishReason::SoftDeadlineReached:
+                    TlsThreadContext->WorkerContext.SoftDeadlineTs = 0;
+                    break;
+                case EFinishReason::TailSend:
+                    TlsThreadContext->ExecutionContext.CapturedActivation.SendingType =
+                        ESendingType::Tail;
+                    break;
+            }
+        }
+
+        void RestoreExecutorState() {
+            TlsThreadContext->WorkerContext.EventsPerMailbox = OriginalEventsPerMailbox;
+            TlsThreadContext->WorkerContext.TimePerMailboxTs = OriginalTimePerMailboxTs;
+            TlsThreadContext->WorkerContext.SoftDeadlineTs = OriginalSoftDeadlineTs;
+            TlsThreadContext->ExecutionContext.CapturedActivation.SendingType =
+                OriginalCapturedSendingType;
+        }
+
+    private:
+        const EFinishReason ExpectedReason;
+        TResult& Result;
+        TThreadParkPad& Done;
+        ui32 OriginalEventsPerMailbox = 0;
+        ui64 OriginalTimePerMailboxTs = 0;
+        ui64 OriginalSoftDeadlineTs = 0;
+        ESendingType OriginalCapturedSendingType = ESendingType::Common;
+    };
+
+    class TPersistentObserverActor : public TActorBootstrapped<TPersistentObserverActor> {
+    public:
+        TPersistentObserverActor(ui32& notifications, TThreadParkPad& done)
+            : Notifications(notifications)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvMailboxProcessingFinished, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingFinished::TPtr&) {
+            ++Notifications;
+            if (Notifications == 1) {
+                Send(SelfId(), new TEvents::TEvWakeup(1));
+            } else if (Notifications == 2) {
+                ClearSystemFlag(ESystemFlag::MailboxProcessingFinished);
+                Send(SelfId(), new TEvents::TEvWakeup(2));
+            } else {
+                Done.Unpark();
+                PassAway();
+            }
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr& ev) {
+            if (ev->Get()->Tag == 2) {
+                Send(SelfId(), new TEvents::TEvWakeup(3));
+            } else if (ev->Get()->Tag == 3) {
+                Done.Unpark();
+                PassAway();
+            }
+        }
+
+    private:
+        ui32& Notifications;
+        TThreadParkPad& Done;
+    };
+
+    TResult Run(EFinishReason expectedReason) {
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, false, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TResult result;
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TObserverActor(expectedReason, result, done),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+        return result;
+    }
+
+    Y_UNIT_TEST(NotifiesForEveryFinishReason) {
+        const EFinishReason expectedReasons[] = {
+            EFinishReason::QueueEmpty,
+            EFinishReason::EventCountLimitReached,
+            EFinishReason::TimeLimitReached,
+            EFinishReason::SoftDeadlineReached,
+            EFinishReason::TailSend,
+        };
+
+        for (const EFinishReason expectedReason : expectedReasons) {
+            const TResult result = Run(expectedReason);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<ui8>(result.Reason),
+                static_cast<ui8>(expectedReason));
+            UNIT_ASSERT_VALUES_EQUAL(result.ExecutedEvents, 1);
+            UNIT_ASSERT_C(
+                result.ElapsedCycles > 0,
+                "Expected non-zero mailbox processing time");
+        }
+    }
+
+    Y_UNIT_TEST(SystemFlagStaysSetUntilExplicitlyCleared) {
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, true, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        ui32 notifications = 0;
+        TThreadParkPad done;
+        actorSystem.Register(new TPersistentObserverActor(notifications, done), TMailboxType::HTSwap, 0);
+
+        done.Park();
+        actorSystem.Stop();
+
+        UNIT_ASSERT_VALUES_EQUAL(notifications, 2);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
     using namespace NThreading;
 
     struct TQueueTimestamps {
         NHPTimer::STime EventEnqueuedTimestamp = 0;
-        TInstant EventEnqueuedInstant;
         NHPTimer::STime MailboxScheduledTimestamp = 0;
-        TInstant MailboxScheduledInstant;
         ui64 EventDeliveryTimeUs = 0;
         ui64 ActivationTimeUs = 0;
         NHPTimer::STime ObservedTimestamp = 0;
-        TInstant ObservedInstant;
     };
 
     struct TQueueTimestampActor : TActorBootstrapped<TQueueTimestampActor> {
@@ -792,13 +1323,10 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
         void Handle(TEvents::TEvWakeup::TPtr&) {
             TQueueTimestamps timestamps;
             timestamps.EventEnqueuedTimestamp = TActivationContext::GetCurrentEventEnqueuedTimestampTs();
-            timestamps.EventEnqueuedInstant = TActivationContext::GetCurrentEventEnqueuedTimestamp();
             timestamps.MailboxScheduledTimestamp = TActivationContext::GetCurrentMailboxScheduledTimestampTs();
-            timestamps.MailboxScheduledInstant = TActivationContext::GetCurrentMailboxScheduledTimestamp();
             timestamps.EventDeliveryTimeUs = TActivationContext::GetCurrentEventDeliveryTimeUs();
             timestamps.ActivationTimeUs = TActivationContext::GetCurrentActivationTimeUs();
             timestamps.ObservedTimestamp = GetCycleCountFast();
-            timestamps.ObservedInstant = TActivationContext::Now();
             Done.SetValue(std::move(timestamps));
             PassAway();
         }
@@ -835,8 +1363,6 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
 
         UNIT_ASSERT_C(timestamps.EventEnqueuedTimestamp > 0, "missing current event enqueue timestamp");
         UNIT_ASSERT_C(timestamps.MailboxScheduledTimestamp > 0, "missing current mailbox schedule timestamp");
-        UNIT_ASSERT_C(timestamps.EventEnqueuedInstant.MicroSeconds() > 0, "missing current event enqueue instant");
-        UNIT_ASSERT_C(timestamps.MailboxScheduledInstant.MicroSeconds() > 0, "missing current mailbox schedule instant");
         UNIT_ASSERT_C(
             timestamps.EventDeliveryTimeUs <= static_cast<ui64>(Ts2Us(timestamps.ObservedTimestamp - timestamps.EventEnqueuedTimestamp)),
             "event delivery time must match enqueue timestamp"
@@ -864,16 +1390,6 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
             "mailbox timestamp must not be in the future"
                 << ": mailbox=" << timestamps.MailboxScheduledTimestamp
                 << " observed=" << timestamps.ObservedTimestamp);
-        UNIT_ASSERT_C(
-            timestamps.EventEnqueuedInstant <= timestamps.MailboxScheduledInstant,
-            "event instant must not be after mailbox scheduling instant"
-                << ": event=" << timestamps.EventEnqueuedInstant
-                << " mailbox=" << timestamps.MailboxScheduledInstant);
-        UNIT_ASSERT_C(
-            timestamps.MailboxScheduledInstant <= timestamps.ObservedInstant,
-            "mailbox instant must not be in the future"
-                << ": mailbox=" << timestamps.MailboxScheduledInstant
-                << " observed=" << timestamps.ObservedInstant);
     }
 
     struct TTailSenderActor : TActorBootstrapped<TTailSenderActor> {

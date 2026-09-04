@@ -30,6 +30,12 @@
 #include "opentelemetry/trace/trace_state.h"
 #include "opentelemetry/version.h"
 
+// Must be included after opentelemetry/version.h,
+// (for opentelemetry/common/macros.h)
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+#  include <exception>
+#endif
+
 namespace trace_sdk = opentelemetry::sdk::trace;
 namespace trace_api = opentelemetry::trace;
 namespace sdkcommon = opentelemetry::sdk::common;
@@ -75,45 +81,63 @@ sdk::common::ExportResult OStreamSpanExporter::Export(
     return sdk::common::ExportResult::kFailure;
   }
 
-  for (auto &recordable : spans)
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+  try
   {
-    auto span = std::unique_ptr<trace_sdk::SpanData>(
-        static_cast<trace_sdk::SpanData *>(recordable.release()));
-
-    if (span != nullptr)
+#endif
+    for (auto &recordable : spans)
     {
+      auto span = std::unique_ptr<trace_sdk::SpanData>(
+          static_cast<trace_sdk::SpanData *>(recordable.release()));
 
-      char trace_id[32]       = {0};
-      char span_id[16]        = {0};
-      char parent_span_id[16] = {0};
+      if (span != nullptr)
+      {
 
-      span->GetTraceId().ToLowerBase16(trace_id);
-      span->GetSpanId().ToLowerBase16(span_id);
-      span->GetParentSpanId().ToLowerBase16(parent_span_id);
+        char trace_id[32]       = {0};
+        char span_id[16]        = {0};
+        char parent_span_id[16] = {0};
 
-      sout_ << "{" << "\n  name          : " << span->GetName()
-            << "\n  trace_id      : " << std::string(trace_id, 32)
-            << "\n  span_id       : " << std::string(span_id, 16)
-            << "\n  tracestate    : " << span->GetSpanContext().trace_state()->ToHeader()
-            << "\n  parent_span_id: " << std::string(parent_span_id, 16)
-            << "\n  start         : " << span->GetStartTime().time_since_epoch().count()
-            << "\n  duration      : " << span->GetDuration().count()
-            << "\n  description   : " << span->GetDescription()
-            << "\n  span kind     : " << span->GetSpanKind()
-            << "\n  status        : " << statusMap[static_cast<int>(span->GetStatus())]
-            << "\n  attributes    : ";
-      printAttributes(span->GetAttributes());
-      sout_ << "\n  events        : ";
-      printEvents(span->GetEvents());
-      sout_ << "\n  links         : ";
-      printLinks(span->GetLinks());
-      sout_ << "\n  resources     : ";
-      printResources(span->GetResource());
-      sout_ << "\n  instr-lib     : ";
-      printInstrumentationScope(span->GetInstrumentationScope());
-      sout_ << "\n}\n";
+        span->GetTraceId().ToLowerBase16(trace_id);
+        span->GetSpanId().ToLowerBase16(span_id);
+        span->GetParentSpanId().ToLowerBase16(parent_span_id);
+
+        sout_ << "{" << "\n  name          : " << span->GetName()
+              << "\n  trace_id      : " << std::string(trace_id, 32)
+              << "\n  span_id       : " << std::string(span_id, 16)
+              << "\n  tracestate    : " << span->GetSpanContext().trace_state()->ToHeader()
+              << "\n  parent_span_id: " << std::string(parent_span_id, 16)
+              << "\n  start         : " << span->GetStartTime().time_since_epoch().count()
+              << "\n  duration      : " << span->GetDuration().count()
+              << "\n  description   : " << span->GetDescription()
+              << "\n  span kind     : " << span->GetSpanKind()
+              << "\n  status        : " << statusMap[static_cast<int>(span->GetStatus())]
+              << "\n  attributes    : ";
+        printAttributes(span->GetAttributes());
+        sout_ << "\n  events        : ";
+        printEvents(span->GetEvents());
+        sout_ << "\n  links         : ";
+        printLinks(span->GetLinks());
+        sout_ << "\n  resources     : ";
+        printResources(span->GetResource());
+        sout_ << "\n  instr-lib     : ";
+        printInstrumentationScope(span->GetInstrumentationScope());
+        sout_ << "\n}\n";
+      }
     }
+
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
   }
+  catch (const std::exception &e)
+  {
+    OTEL_INTERNAL_LOG_ERROR("[Ostream Trace Exporter] Export failed with exception: " << e.what());
+    return sdk::common::ExportResult::kFailure;
+  }
+  catch (...)
+  {
+    OTEL_INTERNAL_LOG_ERROR("[Ostream Trace Exporter] Export failed with unknown exception");
+    return sdk::common::ExportResult::kFailure;
+  }
+#endif
 
   return sdk::common::ExportResult::kSuccess;
 }

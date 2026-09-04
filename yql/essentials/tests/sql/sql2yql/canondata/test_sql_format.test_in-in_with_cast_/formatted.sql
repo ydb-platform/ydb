@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     NULL IN (100500) AS `void`,
     Just(CAST(1 AS Uint8)) IN (23, NULL, 32, NULL, 255) AS byte_wrap_match,

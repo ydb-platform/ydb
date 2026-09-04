@@ -31,7 +31,9 @@
 #include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
@@ -39,6 +41,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -50,10 +53,8 @@
 #include <util/generic/ymath.h>
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_BACKUP
 
-#define LOG_BACKUP_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
-#define LOG_BACKUP_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
-#define LOG_BACKUP_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -134,6 +135,13 @@ private:
     bool Active = false;
 };
 
+static TActorActivityType DetectOwnerActivityType(NFlatExecutorSetup::ITablet* owner) {
+    if (auto* actor = dynamic_cast<IActor*>(owner)) {
+        return actor->GetActivityType();
+    }
+    return TActorActivityType();
+}
+
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
@@ -141,6 +149,7 @@ TExecutor::TExecutor(
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)
+    , OwnerActivityType(DetectOwnerActivityType(owner))
     , Emitter(new TIdEmitter)
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
@@ -252,7 +261,7 @@ void TExecutor::Broken(EBrokenReason reason) {
     if (Owner) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
         Owner->Detach(OwnerCtx());
     }
 
@@ -867,7 +876,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower()) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     }
 
     if (!Counters) {
@@ -958,7 +967,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 void TExecutor::DetachTablet() {
     ForceSendCounters();
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     return PassAway();
 }
 
@@ -2026,6 +2035,11 @@ bool TExecutor::CancelTransaction(ui64 id) {
 
 void TExecutor::ExecuteTransaction(TSeat* seat) {
     TActiveTransactionZone activeTransaction(this);
+    // Attribute allocations to the owner tablet's activity type when known.
+    std::optional<NProfiling::TMemoryTagScope> ownerScope;
+    if (OwnerActivityType != TActorActivityType()) {
+        ownerScope.emplace(OwnerActivityType.GetIndex());
+    }
     ++seat->Retries;
 
     THPTimer cpuTimer;
@@ -2338,7 +2352,8 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             || env.LoanBundle
             || env.LoanTxStatus
             || env.LoanConfirmation
-            || env.BorrowUpdates;
+            || env.BorrowUpdates
+            || env.AttachedParts;
 
         auto commitResult = LogicRedo->CommitRWTransaction(std::move(seat), *change, force);
 
@@ -2752,6 +2767,84 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
 
             PrepareExternalTxStatus(partSwitch, loaned->DataId, loaned->Epoch, loaned->Data);
+        }
+
+        for (auto &attached : env.AttachedParts) {
+            const ui32 attachTableId = attached.TableId;
+            auto &result = attached.Result;
+
+            // Place the part at the table's current head epoch and advance the
+            // head above it, so it merges below the (new) mutable memtable. For
+            // the empty restore target this is the table's only layer; the general
+            // "bottom of a non-empty table" case (epoch renumbering) is deferred.
+            const NTable::TEpoch head = Database->Head(attachTableId).Epoch;
+            Y_ENSURE(head > NTable::TEpoch::Zero(),
+                "Cannot attach a part to table " << attachTableId << " with head epoch " << head);
+            const NTable::TEpoch partEpoch = head;
+            const NTable::TEpoch snapEpoch = head + 1;
+            const auto stamp = MakeGenStepPair(Generation(), commit->Step);
+
+            NKikimrExecutorFlat::TTablePartSwitch proto;
+            proto.SetTableId(attachTableId);
+
+            {
+                TGCBlobDelta dummy; /* this isn't a real cut log operation */
+                LogicRedo->CutLog(attachTableId, { stamp, snapEpoch }, dummy);
+                Y_ENSURE(!dummy.Deleted && !dummy.Created);
+
+                auto *sx = proto.MutableTableSnapshoted();
+                sx->SetTable(attachTableId);
+                sx->SetGeneration(Generation());
+                sx->SetStep(commit->Step);
+                sx->SetHead(snapEpoch.ToProto());
+            }
+
+            const auto &cacheModes = GetCacheModes(attachTableId);
+            auto *snap = proto.MutableIntroducedParts();
+            auto *bySwitchAux = aux.AddBySwitchAux();
+
+            for (size_t i = 0; i < result->Parts.size(); ++i) {
+                auto partView = result->Parts[i].CloneWithEpoch(partEpoch);
+
+                AddPartStorePageCollections(partView, cacheModes);
+
+                auto *partStore = partView.As<NTable::TPartStore>();
+                Y_ENSURE(partStore, "Direct write produced an unexpected part type");
+
+                { /*_ register all new blobs (including external) with gc logic */
+                    partStore->SaveAllBlobIdsTo(commit->GcDelta.Created);
+                    for (auto &hole : result->Growth[i]) {
+                        for (auto seq : xrange(hole.Begin, hole.End)) {
+                            commit->GcDelta.Created.push_back(partStore->Blobs->Glob(seq).Logo);
+                        }
+                    }
+                }
+
+                Database->Merge(attachTableId, partView);
+                CompactionLogic->BorrowedPart(attachTableId, partView);
+
+                TPageCollectionProtoHelper::Snap(snap, partView, attachTableId, CompactionLogic->BorrowedPartLevel());
+                TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), partView);
+            }
+            Database->MergeDone(attachTableId);
+
+            {
+                auto body = proto.SerializeAsString();
+                auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
+                LogoBlobIDFromLogoBlobID(glob.Logo, bySwitchAux->MutablePartSwitchRef());
+            }
+
+            // Move the held GC barrier into the per-step collection released once
+            // this redo commit (carrying the keep-flags) is durable. The blobs are
+            // protected until then; a restart before that re-runs the whole write.
+            if (auto bIt = DirectWriteBarriers.find(result->Step); bIt != DirectWriteBarriers.end()) {
+                InFlySnapCollectionBarriers[commit->Step].push_back(std::move(bIt->second));
+                DirectWriteBarriers.erase(bIt);
+            }
+
+            if (result->YellowMoveChannels || result->YellowStopChannels) {
+                CheckYellow(std::move(result->YellowMoveChannels), std::move(result->YellowStopChannels));
+            }
         }
 
         if (!hadPendingPartSwitches) {
@@ -3270,6 +3363,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         break;
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
+        GcLogic->Confirm(ctx);
 
         VacuumLogic->OnSnapshotCommited(Generation(), step);
         if (NeedLogSnapshot || VacuumLogic->NeedLogSnaphot())
@@ -3319,7 +3413,7 @@ void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorCo
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev)) {
+    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, OwnerCtx(), Launcher)) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
     VacuumLogic->OnCollectedGarbage(OwnerCtx());
@@ -3935,6 +4029,12 @@ void TExecutor::UpdateUsedTabletMemory() {
 }
 
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
+    if (GcLogic && Counters) {
+        if (const ui64 dropped = GcLogic->TakeSentinelDroppedMarks()) {
+            Counters->Cumulative()[TExecutorCounters::GC_SENTINEL_DROPPED_MARKS].Increment(dropped);
+        }
+    }
+
     TAutoPtr<TTabletCountersBase> executorCounters;
     TAutoPtr<TTabletCountersBase> externalTabletCounters;
 
@@ -4065,7 +4165,8 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);
@@ -4094,7 +4195,8 @@ void TExecutor::ForceSendCounters() {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId));
     }
 }
 
@@ -4343,6 +4445,8 @@ STFUNC(TExecutor::StateInit) {
 }
 
 STFUNC(TExecutor::StateBoot) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateBoot"});
     Y_ENSURE(BootLogic);
     switch (ev->GetTypeRewrite()) {
         // N.B. must work during follower promotion to leader
@@ -4357,6 +4461,8 @@ STFUNC(TExecutor::StateBoot) {
 }
 
 STFUNC(TExecutor::StateWork) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateWork"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
@@ -4397,6 +4503,8 @@ STFUNC(TExecutor::StateWork) {
 }
 
 STFUNC(TExecutor::StateFollower) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateFollower"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
@@ -4417,6 +4525,8 @@ STFUNC(TExecutor::StateFollower) {
 
 STFUNC(TExecutor::StateFollowerBoot) {
     Y_ENSURE(BootLogic);
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateBoot"});
     switch (ev->GetTypeRewrite()) {
         // N.B. must handle activities started before resync
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
@@ -4900,6 +5010,113 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
     return false;
 }
 
+THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
+{
+    using NTable::NPage::ECache;
+
+    auto rowScheme = RowScheme(tableId);
+    auto *tableInfo = Scheme().GetTableInfo(tableId);
+    Y_ENSURE(tableInfo, "Cannot write a part for an unknown table " << tableId);
+    auto *policy = tableInfo->CompactionPolicy.Get();
+
+    LogicRedo->FlushBatchedLog();
+    auto commit = CommitManager->Begin(true, ECommit::Misc, {});
+    const ui32 step = commit->Step;
+    TIntrusivePtr<TBarrier> barrier = new TBarrier(step);
+    AttachLeaseCommit(commit.Get());
+    CommitManager->Commit(commit);
+
+    GcLogic->HoldBarrier(barrier->Step);
+    Y_ENSURE(DirectWriteBarriers.emplace(step, barrier).second, "Duplicate direct write step");
+
+    CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
+
+    TDirectWriteCfg cfg;
+    // Bottom-layer parts get a low baked epoch; the final epoch is rebased at
+    // commit time to sit below the table's mutable memtable (see AttachPart).
+    cfg.Epoch = NTable::TEpoch::Zero() + 1;
+    cfg.Layout.Final = false;
+    cfg.Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    cfg.Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    cfg.Writer.StickyFlatIndex = !cfg.Layout.WriteBTreeIndex;
+    for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
+        cfg.Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
+    }
+    cfg.Layout.Groups.resize(rowScheme->Families.size());
+    cfg.Writer.Groups.resize(rowScheme->Families.size());
+
+    auto addChannel = [&](ui8 channel) {
+        auto group = Owner->Info()->GroupFor(channel, Generation());
+        cfg.Writer.Slots.emplace_back(channel, group);
+    };
+    auto addChannels = [&](const std::vector<ui8>& channels) {
+        for (auto channel : channels) {
+            addChannel(channel);
+        }
+    };
+
+    for (size_t group : xrange(rowScheme->Families.size())) {
+        auto familyId = rowScheme->Families[group];
+        static const NTable::TScheme::TFamily defaultFamilySettings;
+        const auto& family = tableInfo->Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
+
+        auto* room = tableInfo->Rooms.FindPtr(family.Room);
+        Y_ENSURE(room, "Cannot find room " << family.Room << " in table " << tableId);
+
+        auto& pageGroup = cfg.Layout.Groups.at(group);
+        auto& writeGroup = cfg.Writer.Groups.at(group);
+
+        pageGroup.Codec = family.Codec;
+        pageGroup.PageSize = policy->MinDataPageSize;
+        pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
+        pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
+
+        writeGroup.Cache = Max(family.Cache, ECache::None);
+        writeGroup.CacheMode = family.CacheMode;
+        writeGroup.MaxBlobSize = NBlockIO::BlockSize;
+        writeGroup.Channel = room->Main;
+        addChannel(room->Main);
+
+        if (group == 0) {
+            cfg.Layout.SmallEdge = family.Small;
+            cfg.Layout.LargeEdge = family.Large;
+
+            cfg.Writer.BlobsChannels = room->Blobs;
+            cfg.Writer.OuterChannel = room->Outer;
+            addChannels(room->Blobs);
+            addChannel(room->Outer);
+
+            cfg.Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+        }
+    }
+
+    cfg.DataKind = DataKindByTabletType(Owner->TabletType());
+
+    TLogoBlobID mask(Owner->TabletID(), Generation(), step, Max<ui8>(), 0, 0);
+
+    if (auto logl = Logger->Log(ELnLev::Info)) {
+        logl << NFmt::Do(*this) << " begin direct part write for table " << tableId << " at step " << step;
+    }
+
+    return MakeHolder<TDirectPartWriter>(mask, std::move(cfg), std::move(rowScheme));
+}
+
+void TExecutor::ReleaseWritePart(ui32 step)
+{
+    auto it = DirectWriteBarriers.find(step);
+    if (it == DirectWriteBarriers.end()) {
+        return;
+    }
+
+    if (auto logl = Logger->Log(ELnLev::Info)) {
+        logl << NFmt::Do(*this) << " release direct part write barrier at step " << step;
+    }
+
+    TIntrusivePtr<TBarrier> barrier = std::move(it->second);
+    DirectWriteBarriers.erase(it);
+    CheckCollectionBarrier(barrier);
+}
+
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
     if (auto logl = Logger->Log(ELnLev::Info))
@@ -4932,6 +5149,28 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
     comp->Layout.Groups.resize(rowScheme->Families.size());
     comp->Writer.Groups.resize(rowScheme->Families.size());
+
+    // Detect fulltext compact tables
+    if (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
+        tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
+        comp->IsFulltextCompact = true;
+        comp->FulltextWithRelevance = (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance);
+        // Resolve column tags by name from tableInfo->Columns
+        for (const auto& [id, col] : tableInfo->Columns) {
+            if (col.Name == NTableIndex::NFulltext::AddedColumn) {
+                comp->FulltextAddedTag = id;
+            } else if (col.Name == NTableIndex::NFulltext::SegmentColumn) {
+                comp->FulltextSegmentTag = id;
+            }
+        }
+        // Determine if key type is signed from the last key column (__ydb_max_id)
+        if (tableInfo->KeyColumns.size() >= 3) {
+            auto maxIdColId = tableInfo->KeyColumns.back();
+            auto keyTypeId = tableInfo->Columns.at(maxIdColId).PType.GetTypeId();
+            comp->FulltextKeySigned = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+            comp->FulltextKeySize = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Uint64 ? 8 : 4);
+        }
+    }
 
     auto addChannel = [&](ui8 channel) {
         auto group = Owner->Info()->GroupFor(channel, Generation());
@@ -5022,6 +5261,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         // We are not compacting tx status, avoid deleting current blobs
         snapshot->Subset->TxStatus.clear();
     }
+
+    comp->DataKind = DataKindByTabletType(Owner->TabletType());
 
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);
@@ -5172,8 +5413,12 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
-TStringBuilder TExecutor::BackupLogPrefix() const {
-    return TStringBuilder() << "[" << Owner->TabletID() << ":" << Generation0 << "] ";
+NActors::NStructuredLog::TStructuredMessage TExecutor::GetLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TExecutor"},
+        {"selfId", SelfId()},
+        {"tabletId", Owner->TabletID()},
+        {"generation", Generation0});
 }
 
 void TExecutor::StartNewBackup() {
@@ -5190,7 +5435,7 @@ void TExecutor::StartNewBackup() {
     ui64 tabletId = Owner->TabletID();
 
     if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
-        LOG_BACKUP_D("Tablet excluded from backup");
+        YDB_LOG_DEBUG("Tablet excluded from backup");
         return;
     }
 
@@ -5213,7 +5458,10 @@ void TExecutor::StartNewBackup() {
         tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        LOG_BACKUP_N("Starting new backup" << " Type# " << tabletType << " Gen# " << Generation0 << " Step# " << Step0);
+        YDB_LOG_NOTICE("Starting new backup",
+            {"type", tabletType},
+            {"gen", Generation0},
+            {"step", Step0});
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         const ui32 workBudgetPercent = std::clamp<ui32>(backupConfig.GetSnapshotWorkBudgetPercent(), 1, 100);
         for (const auto& [tableId, table] : tables) {
@@ -5230,7 +5478,8 @@ void TExecutor::StartNewBackup() {
         auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->SystemPoolId);
         CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor);
     } else {
-        LOG_BACKUP_D("Backup not configured");
+        YDB_LOG_DEBUG("Backup not configured",
+            {"backupLogPrefix", GetLogPrefix()});
     }
 }
 
@@ -5238,7 +5487,8 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     BackupSnapshotInProgress = false;
     Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
     if (ev->Get()->Success) {
-        LOG_BACKUP_N("Snapshot completed" << " Bytes# " << ev->Get()->WrittenBytes);
+        YDB_LOG_NOTICE("Snapshot completed",
+            {"bytes", ev->Get()->WrittenBytes});
         Owner->BackupSnapshotComplete(OwnerCtx());
 
         if (CommitManager->BackupLogic.IsRunning()) {
@@ -5269,7 +5519,8 @@ void TExecutor::FailBackup(const TString& error) {
         Y_TABLET_ERROR(error);
     }
 
-    LOG_BACKUP_E(error);
+    YDB_LOG_ERROR("Backup failed",
+        {"error", error});
     CommitManager->BackupLogic.Stop();
     ScheduleRetryBackup();
 }
@@ -5284,9 +5535,9 @@ void TExecutor::ScheduleRetryBackup() {
         }
 
         auto retryTimeout = BackupRetry->Next();
-        LOG_BACKUP_N("Scheduling backup retry"
-            << " Timeout# " << retryTimeout
-            << " Attempt# " << BackupRetry->GetIteration());
+        YDB_LOG_NOTICE("Scheduling backup retry",
+            {"timeout", retryTimeout},
+            {"attempt", BackupRetry->GetIteration()});
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
     }
 }
@@ -5330,12 +5581,23 @@ void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
     }
 }
 
+void TExecutor::StartMoveDataVacuumFromOwner() {
+    MoveDataVacuumInProgress = true;
+    StartVacuum(TNoTag());
+}
+
 void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) {
     if (generation) {
         Owner->VacuumComplete(generation, ctx);
     }
+    if (MoveDataVacuumInProgress) {
+        Owner->MoveDataCompleted(ctx);
+    }
+    MoveDataVacuumInProgress = false;
     for (const auto& actor : MoveDataSubscribers) {
-        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
+        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(
+            TabletId(),
+            NKikimrTabletBase::TEvMoveDataResponse::Success));
     }
     MoveDataSubscribers.clear();
 }

@@ -4,7 +4,9 @@
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
 #include <ydb/core/persqueue/pqtablet/fix_transaction_states.h>
+#include <memory>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -13,8 +15,10 @@
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/protos/actors.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/json/json_reader.h>
 
@@ -39,7 +43,16 @@ struct TTxOperation {
     TString Path;
     TMaybe<ui32> SupportivePartition;
     bool KafkaTransaction = false;
+    TMaybe<NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp> DeferredPublicationOp;
 };
+
+TWriteId MakeDeferredWriteId(ui64 intPublicationId, const TString& extPublicationId = "ext-publication")
+{
+    NKikimrPQ::TWriteId proto;
+    proto.MutableDeferredPublicationApi()->SetIntPublicationId(intPublicationId);
+    proto.MutableDeferredPublicationApi()->SetExtPublicationId(extPublicationId);
+    return TWriteId(std::move(proto));
+}
 
 struct TConfigParams {
     TMaybe<NKikimrPQ::TPQTabletConfig> Tablet;
@@ -53,11 +66,13 @@ struct TProposeTransactionParams {
     TVector<TTxOperation> TxOps;
     TMaybe<TConfigParams> Configs;
     TMaybe<TWriteId> WriteId;
+    TMaybe<bool> Immediate;
 };
 
 struct TPlanStepParams {
     ui64 Step;
     TVector<ui64> TxIds;
+    TMaybe<TActorId> Sender;
 };
 
 struct TReadSetParams {
@@ -110,6 +125,87 @@ using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
 using TPQTabletMock = NKikimr::NPQ::NHelpers::TPQTabletMock;
 
 } // namespace NHelpers
+
+namespace NDeferredWriterTest {
+
+class TClientActor : public TActorBootstrapped<TClientActor> {
+public:
+    TClientActor(ui64 tabletId, ui32 partitionId, ui64 writeCookie, const std::shared_ptr<bool>& writeDone)
+        : TabletId(tabletId)
+        , PartitionId(partitionId)
+        , WriteCookie(writeCookie)
+        , WriteDone(writeDone)
+    {
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        TPartitionWriterOpts opts;
+        opts.WithDeduplication(false)
+            .WithSourceId("deferred-writer-source")
+            .WithTopicPath("/topic")
+            .WithDatabase("/Root")
+            .WithDeferredPublish(52, "ext-52");
+
+        WriterId = ctx.Register(CreatePartitionWriter(SelfId(), TabletId, PartitionId, opts));
+        Become(&TThis::StateWork);
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPartitionWriter::TEvInitResult, HandleInit);
+            hFunc(TEvPartitionWriter::TEvWriteResponse, HandleWrite);
+            hFunc(TEvPartitionWriter::TEvDisconnected, HandleDisconnected);
+            hFunc(TEvPartitionWriter::TEvRequestDeferredDestinationUpsert, HandleDeferredDestinationUpsert);
+        default:
+            break;
+        }
+    }
+
+private:
+    void HandleDeferredDestinationUpsert(TEvPartitionWriter::TEvRequestDeferredDestinationUpsert::TPtr&) {
+        auto* result = new TEvPartitionWriter::TEvDeferredDestinationUpsertResult;
+        result->Success = true;
+        Send(WriterId, result);
+    }
+
+    void HandleInit(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
+        if (!ev->Get()->IsSuccess()) {
+            *WriteDone = false;
+            return;
+        }
+
+        auto writeEv = MakeHolder<TEvPartitionWriter::TEvWriteRequest>(WriteCookie);
+        auto* request = writeEv->Record.MutablePartitionRequest();
+        request->SetOwnerCookie(ev->Get()->GetResult().OwnerCookie);
+        auto* cmdWrite = request->AddCmdWrite();
+        cmdWrite->SetSourceId("deferred-writer-source");
+        cmdWrite->SetSeqNo(0);
+        const TString data = "deferred-writer-payload";
+        cmdWrite->SetData(data);
+        cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+        cmdWrite->SetDisableDeduplication(true);
+        cmdWrite->SetUncompressedSize(data.size());
+        cmdWrite->SetIgnoreQuotaDeadline(true);
+        cmdWrite->SetExternalOperation(true);
+        Send(WriterId, writeEv.Release());
+    }
+
+    void HandleWrite(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
+        *WriteDone = ev->Get()->IsSuccess();
+    }
+
+    void HandleDisconnected(TEvPartitionWriter::TEvDisconnected::TPtr&) {
+        *WriteDone = false;
+    }
+
+    const ui64 TabletId;
+    const ui32 PartitionId;
+    const ui64 WriteCookie;
+    const std::shared_ptr<bool> WriteDone;
+    TActorId WriterId;
+};
+
+} // namespace NDeferredWriterTest
 
 Y_UNIT_TEST_SUITE(TPQTabletTests) {
 
@@ -219,6 +315,7 @@ protected:
     void SendPlanStep(const TPlanStepParams& params);
     void WaitPlanStepAck(const TPlanStepAckMatcher& matcher = {});
     void WaitPlanStepAccepted(const TPlanStepAcceptedMatcher& matcher = {});
+    void WaitForNoPlanStepAccepted(TDuration timeout = TDuration::Seconds(2));
 
     void WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadSetMatcher& matcher);
     void WaitReadSetEx(NHelpers::TPQTabletMock& tablet, const TReadSetMatcher& matcher);
@@ -251,6 +348,10 @@ protected:
     bool FoundPQWriteState = false;
     bool FoundPQWriteTxs = false;
 
+    bool WriteTxRequestInterceptActive_ = false;
+    TTestActorRuntimeBase::TEventFilter PrevWriteTxRequestFilter_;
+    TAutoPtr<IEventHandle> CapturedWriteTxRequest_;
+
     void SendGetOwnershipRequest(const TGetOwnershipRequestParams& params);
     // returns ownerCookie
     TString WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher);
@@ -265,11 +366,42 @@ protected:
     void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId = 0);
     void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0});
 
+    TString CreateSupportivePartitionForDeferredPublication(const TWriteId& writeId, ui32 partitionId = 0);
+    void SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, ui32 partitionId = 0);
+    void SendDeferredPublicationWriteRequestWithoutWait(const TWriteId& writeId, const TString& ownerCookie, ui32 partitionId = 0);
+    void WaitDeferredPublicationWriteResponse();
+    TVector<TString> ReadMainPartitionMessages(ui32 partitionId = 0, ui32 count = 10);
+    NKikimrClient::TCmdReadResult CmdReadCapture(const TPQCmdReadSettings& settings);
+    void CommitTopicTransaction(const TWriteId& writeId, ui32 supportivePartitionId, ui64 txId,
+                                const std::vector<ui32>& partitionIds = {0});
+    void SendSupportivePartitionWrite(
+        const TWriteId& writeId,
+        const TString& ownerCookie,
+        ui64 seqNo,
+        ui64 messageNo,
+        const TString& data,
+        ui64 cookie,
+        ui32 partitionId = 0);
+    void CommitDeferredPublicationFinalize(
+        const TWriteId& writeId,
+        ui64 txId,
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
+        const std::vector<ui32>& partitionIds = {0});
+    void AbortDeferredPublicationFinalize(
+        const TWriteId& writeId,
+        ui64 txId,
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
+        const std::vector<ui32>& partitionIds = {0});
+    void SendAbortDeferredStagingRequest(const TWriteId& writeId, ui32 partitionId = 0, ui64 cookie = 55);
+    void WaitAbortDeferredStagingResponse(ui64 cookie = 55);
+
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
 
     void TestMultiplePQTablets(const TString& consumer1, const TString& consumer2);
     void TestParallelTransactions(const TString& consumer1, const TString& consumer2);
+
+    void AssertTabletIsAlive(ui64 txId = 2);
 
     void StartPQCalcPredicateObserver(size_t& received);
     void WaitForPQCalcPredicate(size_t& received, size_t expected);
@@ -281,11 +413,19 @@ protected:
     void SendSaveTxState(TAutoPtr<IEventHandle>& event);
 
     void WaitForTheTransactionToBeDeleted(ui64 txId);
+    void AssertTransactionInKV(ui64 txId);
 
     TVector<TString> WaitForExactSupportivePartitionsCount(ui32 expectedCount);
     TVector<TString> GetSupportivePartitionsKeysFromKV();
     NKikimrPQ::TTabletTxInfo WaitForExactTxWritesCount(ui32 expectedCount);
     NKikimrPQ::TTabletTxInfo GetTxWritesFromKV();
+
+    void BeginInterceptWriteTxRequest();
+    void WaitForCapturedWriteTxRequest();
+    NKikimrPQ::TTabletTxInfo GetCapturedTxWritesFromWriteTxRequestAndFlush();
+    void EndInterceptWriteTxRequest();
+
+    void InstallWriteTxRequestInterceptFilter();
 
     void SendAppSendRsRequest(const TAppSendReadSetParams& params);
     void WaitForAppSendRsResponse(const TAppSendReadSetMatcher& matcher);
@@ -340,6 +480,7 @@ void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
     Finalizer.ConstructInPlace(*Ctx);
 
     Ctx->Prepare();
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTabletDevUiSecurePath(true);
     Ctx->Runtime->SetScheduledLimit(5'000);
 }
 
@@ -419,6 +560,9 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
             if (txOp.KafkaTransaction) {
                 operation->SetKafkaTransaction(true);
             }
+            if (txOp.DeferredPublicationOp.Defined()) {
+                operation->MutableWrite()->MutableDeferredPublication()->SetOp(*txOp.DeferredPublicationOp);
+            }
 
             partitions.insert(txOp.Partition);
         }
@@ -431,7 +575,11 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
         if (params.WriteId) {
             SetWriteId(*body, *params.WriteId);
         }
-        body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1) && !params.WriteId.Defined());
+        if (params.Immediate.Defined()) {
+            body->SetImmediate(*params.Immediate);
+        } else {
+            body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1) && !params.WriteId.Defined());
+        }
     }
 
     SendToPipe(Ctx->Edge,
@@ -467,7 +615,8 @@ void TPQTabletFixture::SendPlanStep(const TPlanStepParams& params)
         ActorIdToProto(Ctx->Edge, tx->MutableAckTo());
     }
 
-    SendToPipe(Ctx->Edge,
+    const TActorId sender = params.Sender.GetOrElse(Ctx->Edge);
+    SendToPipe(sender,
                event.Release());
 }
 
@@ -496,6 +645,26 @@ void TPQTabletFixture::WaitPlanStepAccepted(const TPlanStepAcceptedMatcher& matc
         UNIT_ASSERT(event->Record.HasStep());
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Step, event->Record.GetStep());
     }
+}
+
+void TPQTabletFixture::WaitForNoPlanStepAccepted(TDuration timeout)
+{
+    bool sawAccepted = false;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvTxProcessing::TEvPlanStepAccepted::EventType) {
+            sawAccepted = true;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return sawAccepted;
+    };
+    Ctx->Runtime->DispatchEvents(options, timeout);
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    UNIT_ASSERT(!sawAccepted);
 }
 
 void TPQTabletFixture::WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadSetMatcher& matcher)
@@ -913,6 +1082,274 @@ void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId produc
     WaitPlanStepAccepted({.Step=100});
 }
 
+TString TPQTabletFixture::CreateSupportivePartitionForDeferredPublication(const TWriteId& writeId, const ui32 partitionId) {
+    EnsurePipeExist();
+
+    auto request = MakeGetOwnershipRequest({.Partition=partitionId,
+                     .WriteId=writeId,
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=4}, Pipe);
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             request.release(),
+                             0, 0);
+
+    return WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
+}
+
+void TPQTabletFixture::SendDeferredPublicationWriteRequestWithoutWait(
+    const TWriteId& writeId,
+    const TString& ownerCookie,
+    const ui32 partitionId)
+{
+    EnsurePipeExist();
+
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(partitionId);
+    request->SetCookie(123);
+    request->SetOwnerCookie(ownerCookie);
+    request->SetMessageNo(0);
+    SetWriteId(*request, writeId);
+
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    auto* cmdWrite = request->AddCmdWrite();
+    cmdWrite->SetSourceId("deferred-source");
+    cmdWrite->SetSeqNo(0);
+    const TString data = "deferred-publish-payload";
+    cmdWrite->SetData(data);
+    cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    cmdWrite->SetDisableDeduplication(true);
+    cmdWrite->SetUncompressedSize(data.size());
+    cmdWrite->SetIgnoreQuotaDeadline(true);
+    cmdWrite->SetExternalOperation(true);
+
+    SendToPipe(Ctx->Edge, event.Release());
+}
+
+void TPQTabletFixture::WaitDeferredPublicationWriteResponse() {
+    bool found = false;
+    auto observer = [&found](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            const auto& partitionResponse = msg->Record.GetPartitionResponse();
+            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == 123) {
+                found = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
+}
+
+void TPQTabletFixture::SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, const ui32 partitionId) {
+    SendDeferredPublicationWriteRequestWithoutWait(writeId, ownerCookie, partitionId);
+    WaitDeferredPublicationWriteResponse();
+}
+
+void TPQTabletFixture::SendAbortDeferredStagingRequest(
+    const TWriteId& writeId,
+    const ui32 partitionId,
+    const ui64 cookie)
+{
+    EnsurePipeExist();
+
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(partitionId);
+    request->SetCookie(cookie);
+    SetWriteId(*request, writeId);
+    request->MutableCmdAbortDeferredStaging();
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    SendToPipe(Ctx->Edge, event.Release());
+}
+
+void TPQTabletFixture::WaitAbortDeferredStagingResponse(const ui64 cookie) {
+    bool found = false;
+    auto observer = [&found, cookie](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            const auto& partitionResponse = msg->Record.GetPartitionResponse();
+            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == cookie
+                && partitionResponse.HasCmdAbortDeferredStagingResult()) {
+                found = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
+}
+
+TVector<TString> TPQTabletFixture::ReadMainPartitionMessages(const ui32 partitionId, const ui32 count) {
+    TPQCmdReadSettings readSettings{"", partitionId, 0, count, 16_MB, 0};
+
+    const auto readResult = CmdReadCapture(readSettings);
+
+    TVector<TString> payloads;
+    payloads.reserve(readResult.ResultSize());
+    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+        payloads.push_back(readResult.GetResult(i).GetData());
+    }
+    return payloads;
+}
+
+NKikimrClient::TCmdReadResult TPQTabletFixture::CmdReadCapture(const TPQCmdReadSettings& settings) {
+    bool found = false;
+    NKikimrClient::TCmdReadResult readResult;
+    auto observer = [&found, &readResult](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            const auto& partitionResponse = msg->Record.GetPartitionResponse();
+            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == 123
+                && partitionResponse.HasCmdReadResult()) {
+                readResult = partitionResponse.GetCmdReadResult();
+                found = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+    BeginCmdRead(settings, *Ctx);
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() { return found; };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
+    return readResult;
+}
+
+void TPQTabletFixture::SendSupportivePartitionWrite(
+    const TWriteId& writeId,
+    const TString& ownerCookie,
+    const ui64 seqNo,
+    const ui64 messageNo,
+    const TString& data,
+    const ui64 cookie,
+    const ui32 partitionId)
+{
+    EnsurePipeExist();
+
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(partitionId);
+    request->SetCookie(cookie);
+    request->SetOwnerCookie(ownerCookie);
+    request->SetMessageNo(messageNo);
+    SetWriteId(*request, writeId);
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    auto* cmdWrite = request->AddCmdWrite();
+    cmdWrite->SetSourceId("tx-src");
+    cmdWrite->SetSeqNo(seqNo);
+    cmdWrite->SetData(data);
+    cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    cmdWrite->SetDisableDeduplication(true);
+    cmdWrite->SetUncompressedSize(data.size());
+    cmdWrite->SetIgnoreQuotaDeadline(true);
+    cmdWrite->SetExternalOperation(true);
+
+    SendToPipe(Ctx->Edge, event.Release());
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+    UNIT_ASSERT(response != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCookie(), cookie);
+}
+
+void TPQTabletFixture::CommitTopicTransaction(
+    const TWriteId& writeId,
+    const ui32 supportivePartitionId,
+    const ui64 txId,
+    const std::vector<ui32>& partitionIds)
+{
+    EnsurePipeExist();
+
+    TProposeTransactionParams params;
+    params.TxId = txId;
+    params.Senders = {Ctx->TabletId};
+    params.Receivers = {Ctx->TabletId};
+    params.WriteId = writeId;
+    for (const ui32& partitionId : partitionIds) {
+        params.TxOps.push_back({
+            .Partition = partitionId,
+            .Path = "/topic",
+            .SupportivePartition = supportivePartitionId,
+        });
+    }
+    SendProposeTransactionRequest(params);
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
+void TPQTabletFixture::CommitDeferredPublicationFinalize(
+    const TWriteId& writeId,
+    ui64 txId,
+    NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
+    const std::vector<ui32>& partitionIds)
+{
+    EnsurePipeExist();
+
+    TProposeTransactionParams params;
+    params.TxId = txId;
+    params.Senders = {Ctx->TabletId};
+    params.Receivers = {Ctx->TabletId};
+    params.WriteId = writeId;
+    for (const ui32& partitionId : partitionIds) {
+        params.TxOps.push_back({.Partition=partitionId, .Path="/topic", .DeferredPublicationOp=op});
+    }
+    SendProposeTransactionRequest(params);
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
+void TPQTabletFixture::AbortDeferredPublicationFinalize(
+    const TWriteId& writeId,
+    ui64 txId,
+    NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
+    const std::vector<ui32>& partitionIds)
+{
+    EnsurePipeExist();
+
+    TProposeTransactionParams params;
+    params.TxId = txId;
+    params.Senders = {Ctx->TabletId};
+    params.Receivers = {Ctx->TabletId};
+    params.WriteId = writeId;
+    for (const ui32& partitionId : partitionIds) {
+        params.TxOps.push_back({.Partition=partitionId, .Path="/topic", .DeferredPublicationOp=op});
+    }
+    SendProposeTransactionRequest(params);
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
 void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
 {
     bool found = false;
@@ -1019,6 +1456,13 @@ NHelpers::TPQTabletMock* TPQTabletFixture::CreatePQTabletMock(ui64 tabletId)
     Ctx->Runtime->DispatchEvents(options);
 
     return mock;
+}
+
+void TPQTabletFixture::AssertTabletIsAlive(ui64 txId)
+{
+    SendProposeTransactionRequest({.TxId=txId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 void TPQTabletFixture::TestMultiplePQTablets(const TString& consumer1, const TString& consumer2)
@@ -1229,6 +1673,106 @@ void TPQTabletFixture::WaitForExecStep(ui64 step)
     UNIT_FAIL("expected execution step " << step);
 }
 
+namespace {
+
+constexpr ui32 WRITE_TX_COOKIE = 5; // TPersQueue::WRITE_TX_COOKIE
+constexpr const char* TX_INFO_KEY = "_txinfo";
+
+NKikimrPQ::TTabletTxInfo ParseTxWritesFromWriteTxRequest(const NKikimrClient::TKeyValueRequest& request)
+{
+    for (const auto& cmd : request.GetCmdWrite()) {
+        if (cmd.GetKey() == TX_INFO_KEY) {
+            NKikimrPQ::TTabletTxInfo info;
+            UNIT_ASSERT(info.ParseFromString(cmd.GetValue()));
+            return info;
+        }
+    }
+    UNIT_FAIL("WRITE_TX request has no _txinfo");
+    return {};
+}
+
+THashSet<i64> CollectKafkaProducerIds(const NKikimrPQ::TTabletTxInfo& info)
+{
+    THashSet<i64> producerIds;
+    for (size_t i = 0; i < info.TxWritesSize(); ++i) {
+        const auto& writeId = info.GetTxWrites(i).GetWriteId();
+        if (writeId.GetKafkaTransaction()) {
+            producerIds.insert(writeId.GetKafkaProducerInstanceId().GetId());
+        }
+    }
+    return producerIds;
+}
+
+} // namespace
+
+void TPQTabletFixture::InstallWriteTxRequestInterceptFilter()
+{
+    auto filter = [this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) -> bool {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                CapturedWriteTxRequest_ = event;
+                return true;
+            }
+        }
+        return false;
+    };
+    PrevWriteTxRequestFilter_ = Ctx->Runtime->SetEventFilter(filter);
+}
+
+void TPQTabletFixture::BeginInterceptWriteTxRequest()
+{
+    UNIT_ASSERT(!WriteTxRequestInterceptActive_);
+    CapturedWriteTxRequest_.Reset();
+    InstallWriteTxRequestInterceptFilter();
+    WriteTxRequestInterceptActive_ = true;
+}
+
+void TPQTabletFixture::WaitForCapturedWriteTxRequest()
+{
+    UNIT_ASSERT(WriteTxRequestInterceptActive_);
+    if (CapturedWriteTxRequest_) {
+        return;
+    }
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [this]() {
+        return CapturedWriteTxRequest_.Get() != nullptr;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    UNIT_ASSERT(CapturedWriteTxRequest_);
+}
+
+NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetCapturedTxWritesFromWriteTxRequestAndFlush()
+{
+    WaitForCapturedWriteTxRequest();
+
+    const auto& request = CapturedWriteTxRequest_->Get<TEvKeyValue::TEvRequest>()->Record;
+    const NKikimrPQ::TTabletTxInfo info = ParseTxWritesFromWriteTxRequest(request);
+
+    Ctx->Runtime->SetEventFilter(PrevWriteTxRequestFilter_);
+    TAutoPtr<IEventHandle> requestToSend;
+    requestToSend.Swap(CapturedWriteTxRequest_);
+
+    SendSaveTxState(requestToSend);
+
+    StartPQWriteTxsObserver();
+    WaitForPQWriteTxs();
+
+    InstallWriteTxRequestInterceptFilter();
+
+    return info;
+}
+
+void TPQTabletFixture::EndInterceptWriteTxRequest()
+{
+    if (!WriteTxRequestInterceptActive_) {
+        return;
+    }
+    Ctx->Runtime->SetEventFilter(PrevWriteTxRequestFilter_);
+    WriteTxRequestInterceptActive_ = false;
+    CapturedWriteTxRequest_.Reset();
+}
+
 void TPQTabletFixture::InterceptSaveTxState(TAutoPtr<IEventHandle>& ev)
 {
     bool found = false;
@@ -1236,7 +1780,7 @@ void TPQTabletFixture::InterceptSaveTxState(TAutoPtr<IEventHandle>& ev)
     TTestActorRuntimeBase::TEventFilter prev;
     auto filter = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) -> bool {
         if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
-            if (msg->Record.HasCookie() && (msg->Record.GetCookie() == 5)) { // WRITE_TX_COOKIE
+            if (msg->Record.HasCookie() && (msg->Record.GetCookie() == WRITE_TX_COOKIE)) {
                 ev = event;
                 found = true;
                 return true;
@@ -1263,19 +1807,48 @@ void TPQTabletFixture::SendSaveTxState(TAutoPtr<IEventHandle>& event)
     Ctx->Runtime->Send(event);
 }
 
+void TPQTabletFixture::AssertTransactionInKV(ui64 txId)
+{
+    EnsurePipeExist();
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    auto cmd = request->Record.AddCmdReadRange();
+    auto range = cmd->MutableRange();
+    range->SetFrom(GetTxKey(txId));
+    range->SetIncludeFrom(true);
+    range->SetTo(GetTxKey(txId + 1));
+    range->SetIncludeTo(false);
+    cmd->SetIncludeData(false);
+    SendToPipe(Ctx->Edge, request.release());
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    const auto& result = response->Record.GetReadRangeResult(0);
+    if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+        UNIT_ASSERT(result.PairSize() > 0);
+        return;
+    }
+
+    if (result.GetStatus() == NKikimrProto::NODATA) {
+        UNIT_FAIL("Transaction " << txId << " was not found in KV");
+    }
+
+    UNIT_FAIL("Unexpected status from KV tablet " << result.GetStatus());
+}
+
 void TPQTabletFixture::WaitForTheTransactionToBeDeleted(ui64 txId)
 {
-    const TString key = GetTxKey(txId);
-
     for (size_t i = 0; i < 200; ++i) {
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
         request->Record.SetCookie(12345);
         auto cmd = request->Record.AddCmdReadRange();
         auto range = cmd->MutableRange();
-        range->SetFrom(key);
+        range->SetFrom(GetTxKey(txId));
         range->SetIncludeFrom(true);
-        range->SetTo(key);
-        range->SetIncludeTo(true);
+        range->SetTo(GetTxKey(txId + 1));
+        range->SetIncludeTo(false);
         cmd->SetIncludeData(false);
         SendToPipe(Ctx->Edge, request.release());
 
@@ -1283,14 +1856,16 @@ void TPQTabletFixture::WaitForTheTransactionToBeDeleted(ui64 txId)
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
 
         const auto& result = response->Record.GetReadRangeResult(0);
+        if (result.GetStatus() == NKikimrProto::NODATA) {
+            return;
+        }
+
         if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
             Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
             continue;
         }
 
-        if (result.GetStatus() == NKikimrProto::NODATA) {
-            return;
-        }
+        UNIT_FAIL("Unexpected status from KV tablet " << result.GetStatus());
     }
 
     UNIT_FAIL("Too many attempts");
@@ -1393,22 +1968,28 @@ NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
     }
 }
 
-
 void TPQTabletFixture::SendAppSendRsRequest(const TAppSendReadSetParams& params) {
     auto makeEv = [this, &params]() {
-        TCgiParameters cgi{
-            {"TabletID", ToString(Ctx->TabletId)},
-            {"SendReadSet", "1"},
-            {"decision", params.Predicate ? "commit" : "abort"},
-            {"step", ToString(params.Step)},
-            {"txId", ToString(params.TxId)},
+        NActorsProto::TRemoteHttpInfo pb;
+        pb.SetMethod(HTTP_METHOD_GET);
+        pb.SetPath("/app/secure");
+        auto addParam = [&](const TString& key, const TString& value) {
+            auto* kv = pb.AddQueryParams();
+            kv->SetKey(key);
+            kv->SetValue(value);
         };
+        addParam("TabletID", ToString(Ctx->TabletId));
+        addParam("SendReadSet", "1");
+        addParam("decision", params.Predicate ? "commit" : "abort");
+        addParam("step", ToString(params.Step));
+        addParam("txId", ToString(params.TxId));
         if (params.SenderId.Defined()) {
-            cgi.InsertUnescaped("senderTablet", ToString(*params.SenderId));
+            addParam("senderTablet", ToString(*params.SenderId));
         } else {
-            cgi.InsertUnescaped("allSenderTablets", "1");
+            addParam("allSenderTablets", "1");
         }
-        return std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(TStringBuilder() << "/app?" << cgi.Print());
+        pb.SetUserToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString());
+        return std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(std::move(pb));
     };
     Ctx->Runtime->SendToPipe(Ctx->TabletId, Ctx->Edge, makeEv().release(), 0, GetPipeConfigWithRetries());
 }
@@ -1511,6 +2092,70 @@ Y_UNIT_TEST_F(PQTablet_Send_RS_With_Abort, TPQTabletFixture)
 
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(PlanStep_Ack_All_Senders_After_Mediator_Restart, TPQTabletFixture)
+{
+    // The mediator tablet may restart: a TEvPlanStep from a stale mediator leader
+    // can arrive after the one from the current leader. The PQ tablet must keep
+    // all senders and ack each of them on transaction completion, not only the
+    // last one (otherwise the real mediator never gets the ack for its PlanStep).
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    // The current mediator leader plans the step.
+    const TActorId realLeader = Ctx->Edge;
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    // The tx is now in WAIT_RS (a readset was sent to the mock tablet and not
+    // yet answered), so it is not yet EXECUTED — a window for a stale leader.
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    // A stale mediator leader (a different ActorId) replays the same PlanStep.
+    // It arrives after the real leader's message but before the tx completes.
+    const TActorId staleLeader = Ctx->Runtime->AllocateEdgeActor();
+    SendPlanStep({.Step=100, .TxIds={txId}, .Sender=staleLeader});
+
+    // The mock tablet answers the readset, completing the transaction.
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                         .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    // Both leaders must receive TEvPlanStepAccepted; the coordinator (AckTo ==
+    // Ctx->Edge) must receive one TEvPlanStepAck per stored PlanStep event.
+    auto accepted1 = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(realLeader);
+    UNIT_ASSERT(accepted1);
+    auto accepted2 = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(staleLeader);
+    UNIT_ASSERT(accepted2);
+
+    auto ack1 = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(realLeader);
+    UNIT_ASSERT(ack1);
+    UNIT_ASSERT_VALUES_EQUAL(100, ack1->Get()->Record.GetStep());
+    UNIT_ASSERT_VALUES_EQUAL(1, ack1->Get()->Record.TxIdSize());
+    UNIT_ASSERT_VALUES_EQUAL(txId, ack1->Get()->Record.GetTxId(0));
+
+    auto ack2 = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(realLeader);
+    UNIT_ASSERT(ack2);
+    UNIT_ASSERT_VALUES_EQUAL(100, ack2->Get()->Record.GetStep());
+    UNIT_ASSERT_VALUES_EQUAL(1, ack2->Get()->Record.TxIdSize());
+    UNIT_ASSERT_VALUES_EQUAL(txId, ack2->Get()->Record.GetTxId(0));
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
 Y_UNIT_TEST_F(Partition_Send_Predicate_With_False, TPQTabletFixture)
@@ -1942,6 +2587,15 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_1, TPQTabletFixture)
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
+Y_UNIT_TEST_F(Ignore_Late_TransactionCompleted_For_Unknown_WriteId, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvTransactionCompleted(TWriteId(0, 3)));
+
+    AssertTabletIsAlive();
+}
+
 Y_UNIT_TEST_F(ProposeTx_Unknown_WriteId, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -1975,6 +2629,15 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_2, TPQTabletFixture)
                                   .WriteId=writeId});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(Ignore_MLPConsumerStatus_Without_ReadBalancer, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvMLPConsumerStatus("user", 0, true));
+
+    AssertTabletIsAlive();
 }
 
 Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
@@ -2191,13 +2854,7 @@ Y_UNIT_TEST_F(One_New_Partition_In_Another_Tablet, TPQTabletFixture)
 
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
 
-    // PQ отправит запрос в KV, а потом пришлёт ответ на TEvReadSet
-    SendProposeTransactionRequest({.TxId=txId + 1,
-                                  .Configs=NHelpers::TConfigParams{
-                                  .Tablet=tabletConfig,
-                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
-                                  }});
-
+    // Deferred TEvReadSetAck is flushed by the WRITE_TX cycle without a follow-up ProposeTransaction.
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
@@ -2303,6 +2960,80 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
     //WaitPlanStepAccepted({.Step=100});
 }
 
+Y_UNIT_TEST_F(Duplicate_ReadSetAck_From_Same_Recipient, TPQTabletFixture)
+{
+    const ui64 txId = 67890;
+    const ui64 tabletB = 22222;
+    const ui64 tabletC = 33333;
+
+    NHelpers::TPQTabletMock* mockB = CreatePQTabletMock(tabletB);
+    NHelpers::TPQTabletMock* mockC = CreatePQTabletMock(tabletC);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Receivers={tabletB, tabletC},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitForCalcPredicateResult();
+
+    WaitReadSet(*mockB, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=tabletB,
+                         .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    WaitReadSet(*mockC, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=tabletC,
+                         .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    auto sendReadSetAck = [&](ui64 consumerTabletId) {
+        auto event = std::make_unique<TEvTxProcessing::TEvReadSetAck>(
+            100, txId, Ctx->TabletId, consumerTabletId, consumerTabletId, 0);
+        SendToPipe(Ctx->Edge, event.release());
+    };
+
+    const TString deleteTxKeyFrom = GetTxKey(txId);
+    const TString deleteTxKeyTo = GetTxKey(txId + 1);
+    bool sawPrematureDelete = false;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                for (const auto& cmd : msg->Record.GetCmdDeleteRange()) {
+                    if (cmd.HasRange() &&
+                        cmd.GetRange().GetFrom() == deleteTxKeyFrom &&
+                        cmd.GetRange().GetTo() == deleteTxKeyTo)
+                    {
+                        sawPrematureDelete = true;
+                    }
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    sendReadSetAck(tabletB);
+    sendReadSetAck(tabletB);
+
+    // Without dedup, two acks from B would satisfy HaveAllRecipientsReceive (2/2) even though C
+    // has not acked. DeleteTx must not run; give WRITE_TX a chance to flush if it were queued.
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return sawPrematureDelete;
+    };
+    Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(2));
+    UNIT_ASSERT(!sawPrematureDelete);
+    AssertTransactionInKV(txId);
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    sendReadSetAck(tabletC);
+
+    // Delete is persisted by a WRITE_TX cycle without a follow-up ProposeTransaction.
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
 Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
 {
     const ui64 txId = 67890;
@@ -2353,15 +3084,8 @@ Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
 
     WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
-    // We will send a TEvProposeTransaction to delete the previous transaction
-    SendProposeTransactionRequest({.TxId=txId + 1,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-
     // Instead of TEvReadSetAck, the PQ tablet will receive TEvClientConnected with the Dead flag. The transaction
-    // will switch from the WAIT_RS_AKS state to the DELETING state.
+    // will switch from the WAIT_RS_ACKS state to the DELETING state and be deleted without a follow-up propose.
     WaitForTheTransactionToBeDeleted(txId);
 }
 
@@ -2404,6 +3128,789 @@ Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
 
     UNIT_ASSERT_EQUAL(preparedCount, 1000);
     UNIT_ASSERT_EQUAL(overloadedCount, 2);
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Complete, TPQTabletFixture)
+{
+    // A1-N1: non-Kafka COMPLETE tx is deleted from KV without a follow-up ProposeTransaction.
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Abort, TPQTabletFixture)
+{
+    // A1-N2: ABORTED tx is deleted from KV without a follow-up ProposeTransaction.
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Frees_Slot_For_New_Propose, TPQTabletFixture)
+{
+    // A1-N3: completed txs leave DELETING without a propose; slots free so a new propose is PREPARED.
+    const ui64 mockTabletId = 22222;
+    const ui64 baseTxId = 67890;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    for (ui64 i = 0; i < 3; ++i) {
+        const ui64 txId = baseTxId + i;
+        const ui64 step = 100 + i;
+
+        SendProposeTransactionRequest({.TxId=txId,
+                                      .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                      .TxOps={
+                                      {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                      }});
+        WaitProposeTransactionResponse({.TxId=txId,
+                                       .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+        SendPlanStep({.Step=step, .TxIds={txId}});
+
+        WaitReadSet(*tablet, {.Step=step, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                              .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+        tablet->SendReadSet(*Ctx->Runtime, {.Step=step, .TxId=txId, .Target=Ctx->TabletId,
+                                            .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+        WaitProposeTransactionResponse({.TxId=txId,
+                                       .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+        tablet->ReadSetAck.Clear();
+        tablet->SendReadSetAck(*Ctx->Runtime, {.Step=step, .TxId=txId, .Source=Ctx->TabletId});
+        WaitForTheTransactionToBeDeleted(txId);
+    }
+
+    const ui64 nextTxId = baseTxId + 3;
+    SendProposeTransactionRequest({.TxId=nextTxId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=nextTxId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Batch, TPQTabletFixture)
+{
+    // A1-N4: several DeleteTxs flush without a follow-up ProposeTransaction.
+    const ui64 mockTabletId = 22222;
+    const ui64 baseTxId = 67890;
+    constexpr ui64 txCount = 3;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    for (ui64 i = 0; i < txCount; ++i) {
+        const ui64 txId = baseTxId + i;
+        const ui64 step = 100 + i;
+
+        SendProposeTransactionRequest({.TxId=txId,
+                                      .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                      .TxOps={
+                                      {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                      }});
+        WaitProposeTransactionResponse({.TxId=txId,
+                                       .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+        SendPlanStep({.Step=step, .TxIds={txId}});
+
+        WaitReadSet(*tablet, {.Step=step, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                              .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+        tablet->SendReadSet(*Ctx->Runtime, {.Step=step, .TxId=txId, .Target=Ctx->TabletId,
+                                            .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+        WaitProposeTransactionResponse({.TxId=txId,
+                                       .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    }
+
+    for (ui64 i = 0; i < txCount; ++i) {
+        const ui64 txId = baseTxId + i;
+        const ui64 step = 100 + i;
+        tablet->ReadSetAck.Clear();
+        tablet->SendReadSetAck(*Ctx->Runtime, {.Step=step, .TxId=txId, .Source=Ctx->TabletId});
+    }
+
+    for (ui64 i = 0; i < txCount; ++i) {
+        WaitForTheTransactionToBeDeleted(baseTxId + i);
+    }
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Kafka, TPQTabletFixture)
+{
+    // A1-N5: Kafka commit still deletes the tx without a follow-up ProposeTransaction.
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+    CommitKafkaTransaction(producerInstanceId, txId);
+
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
+Y_UNIT_TEST_F(DeleteTx_With_Concurrent_Propose, TPQTabletFixture)
+{
+    // A1-N6: DeleteTxs and a new ProposeTransaction share one WRITE_TX persist.
+    const ui64 txId = 67890;
+    const ui64 nextTxId = txId + 1;
+    const ui64 unknownTxId = 424299;
+    const ui64 mockTabletId = 22222;
+    const TString deleteTxKeyFrom = GetTxKey(txId);
+    const TString deleteTxKeyTo = GetTxKey(txId + 1);
+    const TString proposeTxKey = GetTxKey(nextTxId);
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    // Hold the next WRITE_TX so DeleteTx and the new propose both queue while WriteTxsInProgress.
+    TVector<TAutoPtr<IEventHandle>> heldWriteTxRequests;
+    bool holdWriteTx = true;
+    bool foundCombinedPersist = false;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                if (holdWriteTx) {
+                    heldWriteTxRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+
+                bool hasDelete = false;
+                bool hasProposeWrite = false;
+                for (const auto& cmd : msg->Record.GetCmdDeleteRange()) {
+                    if (cmd.HasRange() &&
+                        cmd.GetRange().GetFrom() == deleteTxKeyFrom &&
+                        cmd.GetRange().GetTo() == deleteTxKeyTo)
+                    {
+                        hasDelete = true;
+                    }
+                }
+                for (const auto& cmd : msg->Record.GetCmdWrite()) {
+                    if (cmd.GetKey() == proposeTxKey) {
+                        hasProposeWrite = true;
+                    }
+                }
+                if (hasDelete && hasProposeWrite) {
+                    foundCombinedPersist = true;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // Start a WRITE_TX cycle (deferred RS ack) and keep it in flight.
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=200, .TxId=unknownTxId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldWriteTxRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    SendProposeTransactionRequest({.TxId=nextTxId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+
+    holdWriteTx = false;
+    for (auto& held : heldWriteTxRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldWriteTxRequests.clear();
+
+    WaitProposeTransactionResponse({.TxId=nextTxId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    WaitForTheTransactionToBeDeleted(txId);
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return foundCombinedPersist;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    UNIT_ASSERT(foundCombinedPersist);
+}
+
+Y_UNIT_TEST_F(Deferred_ReadSetAck_For_Unknown_Tx_Without_Propose, TPQTabletFixture)
+{
+    // B1-N1: unknown TEvReadSet is acked after WRITE_TX without a follow-up ProposeTransaction.
+    const ui64 unknownTxId = 424242;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=unknownTxId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=unknownTxId, .Source=mockTabletId,
+                             .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(Deferred_ReadSetAck_Waits_For_Successful_WriteTx, TPQTabletFixture)
+{
+    // B1-N2: stale-leader gate — ack is not sent until WRITE_TX succeeds.
+    const ui64 unknownTxId = 424243;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=unknownTxId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    WaitForNoReadSetAck(*tablet);
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=unknownTxId, .Source=mockTabletId,
+                             .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(Deferred_ReadSetAck_While_WriteTx_In_Progress, TPQTabletFixture)
+{
+    // B1-N3: unknown RS during an in-flight WRITE_TX is flushed after that cycle ends.
+    const ui64 txId = 67890;
+    const ui64 unknownTxId = 424244;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    // Catch the propose WRITE_TX and inject an unknown RS while it is in progress.
+    TVector<TAutoPtr<IEventHandle>> heldResponses;
+    bool holdWriteTxResponse = true;
+    bool seenWriteTxRequest = false;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                seenWriteTxRequest = true;
+            }
+        }
+        if (holdWriteTxResponse && seenWriteTxRequest) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldResponses.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return seenWriteTxRequest;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=200, .TxId=unknownTxId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldResponses.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    WaitForNoReadSetAck(*tablet);
+
+    holdWriteTxResponse = false;
+    for (auto& held : heldResponses) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldResponses.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    WaitReadSetAck(*tablet, {.Step=200, .TxId=unknownTxId, .Source=mockTabletId,
+                             .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(Deferred_ReadSetAck_Multiple_Unknown_Without_Propose, TPQTabletFixture)
+{
+    // B1-N4: several deferred unknown RS acks flush without ProposeTransaction.
+    const ui64 mockTabletId = 22222;
+    const ui64 baseTxId = 424250;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    THashSet<ui64> ackedTxIds;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvTxProcessing::TEvReadSetAck>()) {
+            if (msg->Record.GetTabletDest() == Ctx->TabletId) {
+                ackedTxIds.insert(msg->Record.GetTxId());
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    for (ui64 i = 0; i < 3; ++i) {
+        tablet->SendReadSet(*Ctx->Runtime, {.Step=100 + i, .TxId=baseTxId + i, .Target=Ctx->TabletId,
+                                            .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+    }
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return ackedTxIds.size() >= 3;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    for (ui64 i = 0; i < 3; ++i) {
+        UNIT_ASSERT(ackedTxIds.contains(baseTxId + i));
+    }
+}
+
+Y_UNIT_TEST_F(Known_ReadSet_Path_Unchanged, TPQTabletFixture)
+{
+    // B1-N5: known-tx TEvReadSet path still completes and deletes without relying on deferred-only flush.
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId,
+                             .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
+Y_UNIT_TEST_F(Deferred_ReadSetAck_From_Silent_Peer_Without_Propose, TPQTabletFixture)
+{
+    // B1-N6: simplified PQ↔PQ ring — peer RS for an absent local tx is acked without propose.
+    const ui64 peerTxId = 1412647829058208ull;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=1779169393560ull, .TxId=peerTxId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitReadSetAck(*tablet, {.Step=1779169393560ull, .TxId=peerTxId, .Source=mockTabletId,
+                             .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(Deferred_PlanStepAck_Future_Unknown_Waits_WriteTx, TPQTabletFixture)
+{
+    // All-unknown future PlanStep: ack only after successful WRITE_TX; PlanStep not advanced.
+    const ui64 unknownTxId = 424301;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    SendPlanStep({.Step=100, .TxIds={unknownTxId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    WaitForNoPlanStepAccepted();
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
+Y_UNIT_TEST_F(Deferred_PlanStepAck_Empty_Future_Waits_WriteTx, TPQTabletFixture)
+{
+    // Empty Transactions + future step: same deferred fence.
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    SendPlanStep({.Step=100, .TxIds={}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    WaitForNoPlanStepAccepted();
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    // Empty Transactions list: only TEvPlanStepAccepted is sent (no per-TxId AckTo).
+    WaitPlanStepAccepted({.Step=100});
+}
+
+Y_UNIT_TEST_F(Deferred_PlanStepAck_Past_Retransmit_After_Delete, TPQTabletFixture)
+{
+    // After execute+delete, retransmit of the same step is all-unknown with step <= PlanStep;
+    // ack is still deferred until WRITE_TX (stale-leader fence).
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitForTheTransactionToBeDeleted(txId);
+
+    // Drain PlanStep ack/accepted from the known-tx path (sent at EXECUTED).
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    ui32 planStepAcceptedCount = 0;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvTxProcessing::TEvPlanStepAccepted::EventType) {
+            ++planStepAcceptedCount;
+        }
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    const ui32 acceptedBeforeRetransmit = planStepAcceptedCount;
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(planStepAcceptedCount, acceptedBeforeRetransmit);
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
+Y_UNIT_TEST_F(Deferred_PlanStepAck_Multiple_Unknown_One_WriteTx, TPQTabletFixture)
+{
+    // Several all-unknown PlanSteps while WRITE_TX is held flush together after one cycle.
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    THashSet<ui64> acceptedSteps;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvTxProcessing::TEvPlanStepAccepted>()) {
+            acceptedSteps.insert(msg->Record.GetStep());
+        }
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    for (ui64 i = 0; i < 3; ++i) {
+        SendPlanStep({.Step=100 + i, .TxIds={424310 + i}});
+    }
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    UNIT_ASSERT(acceptedSteps.empty());
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return acceptedSteps.size() >= 3;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    for (ui64 i = 0; i < 3; ++i) {
+        UNIT_ASSERT(acceptedSteps.contains(100 + i));
+    }
+}
+
+Y_UNIT_TEST_F(Deferred_PlanStepAck_While_WriteTx_In_Progress, TPQTabletFixture)
+{
+    // Unknown PlanStep during an in-flight WRITE_TX is flushed after that cycle ends.
+    const ui64 txId = 67890;
+    const ui64 unknownTxId = 424320;
+    const ui64 mockTabletId = 22222;
+
+    CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    TVector<TAutoPtr<IEventHandle>> heldResponses;
+    bool holdWriteTxResponse = true;
+    bool seenWriteTxRequest = false;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                seenWriteTxRequest = true;
+            }
+        }
+        if (holdWriteTxResponse && seenWriteTxRequest) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldResponses.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return seenWriteTxRequest;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    SendPlanStep({.Step=200, .TxIds={unknownTxId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldResponses.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    WaitForNoPlanStepAccepted();
+
+    holdWriteTxResponse = false;
+    for (auto& held : heldResponses) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldResponses.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    WaitPlanStepAck({.Step=200, .TxIds={unknownTxId}});
+    WaitPlanStepAccepted({.Step=200});
 }
 
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
@@ -2537,6 +4044,47 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId2.Id);
 }
 
+Y_UNIT_TEST_F(Kafka_Multi_Transaction_TxWrites_Stores_Distinct_Producer_Ids_In_Memory, TPQTabletFixture)
+{
+    const NKafka::TProducerInstanceId producerInstanceId1 = {1, 0};
+    const NKafka::TProducerInstanceId producerInstanceId2 = {2, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    BeginInterceptWriteTxRequest();
+    SendGetOwnershipRequest({.Partition=0,
+                             .WriteId=TWriteId{producerInstanceId1},
+                             .NeedSupportivePartition=true,
+                             .Owner=DEFAULT_OWNER,
+                             .Cookie=4});
+    const auto flushedAfterFirst = GetCapturedTxWritesFromWriteTxRequestAndFlush();
+    WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
+    EndInterceptWriteTxRequest();
+
+    const auto producerIdsAfterFirst = CollectKafkaProducerIds(flushedAfterFirst);
+    UNIT_ASSERT_VALUES_EQUAL(producerIdsAfterFirst.size(), 1u);
+    UNIT_ASSERT(producerIdsAfterFirst.contains(producerInstanceId1.Id));
+
+    BeginInterceptWriteTxRequest();
+    SendGetOwnershipRequest({.Partition=0,
+                             .WriteId=TWriteId{producerInstanceId2},
+                             .NeedSupportivePartition=true,
+                             .Owner=DEFAULT_OWNER,
+                             .Cookie=4});
+    const auto flushedAfterSecond = GetCapturedTxWritesFromWriteTxRequestAndFlush();
+    WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
+    EndInterceptWriteTxRequest();
+
+    const auto producerIdsAfterSecond = CollectKafkaProducerIds(flushedAfterSecond);
+    UNIT_ASSERT_VALUES_EQUAL(producerIdsAfterSecond.size(), 2u);
+    UNIT_ASSERT(producerIdsAfterSecond.contains(producerInstanceId1.Id));
+    UNIT_ASSERT(producerIdsAfterSecond.contains(producerInstanceId2.Id));
+
+    const auto txInfo = WaitForExactTxWritesCount(2);
+    const auto persistedProducerIds = CollectKafkaProducerIds(txInfo);
+    UNIT_ASSERT(persistedProducerIds.contains(producerInstanceId1.Id));
+    UNIT_ASSERT(persistedProducerIds.contains(producerInstanceId2.Id));
+}
+
 Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_Came_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};
     const ui64 txId = 67890;
@@ -2575,13 +4123,6 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
                              Ctx->Edge,
                              deleteDoneEvent.Release(),
                              0, 0);
-
-    // We will send a TEvProposeTransaction to delete the previous transaction
-    SendProposeTransactionRequest({.TxId=txId + 1,
-                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
 
     WaitForTheTransactionToBeDeleted(txId);
 
@@ -2641,13 +4182,6 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
                              0, i);
     }
 
-    // We will send a TEvProposeTransaction to delete the previous transaction
-    SendProposeTransactionRequest({.TxId=txId + 1,
-                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-
     WaitForTheTransactionToBeDeleted(txId);
 
     // check that information about a transaction with this WriteId has been renewed on disk
@@ -2677,6 +4211,28 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Successful_Commit,
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie2, 1);
 
     const NKikimrPQ::TTabletTxInfo& txInfo = WaitForExactTxWritesCount(2);
+    CommitKafkaTransaction(producerInstanceId, txId, {0, 1});
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Commit_Without_Writes_Should_Succeed, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Commit_With_Unwritten_Partition_Should_Succeed, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId, 0);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie, 0);
+    WaitForExactTxWritesCount(1);
+
     CommitKafkaTransaction(producerInstanceId, txId, {0, 1});
 }
 
@@ -2732,6 +4288,475 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
     // wait for a deferred response for last GetOwnership request we sent
     TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Successful_Commit, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(42, "ext-42");
+    const ui64 txId = 70001;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie);
+    WaitForExactTxWritesCount(1);
+
+    CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "deferred-publish-payload");
+}
+
+// Full tablet CmdRead after seed (parent EndOffset = S) + kafka-tx BodyKeys rename.
+// Mid-blob Offset = S+k must return parent-space GetOffset(), not supportive header coords.
+Y_UNIT_TEST_F(KafkaTxnRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) {
+    constexpr ui32 seedCount = 5;
+    constexpr ui32 txCount = 6;
+    constexpr ui32 midK = 2;
+    constexpr ui64 parentKeyOffset = seedCount;
+    constexpr ui64 midReadOffset = parentKeyOffset + midK;
+    static_assert(midK > 0 && midK < txCount);
+
+    PQTabletPrepare({.partitions=1}, {{"user1", true}}, *Ctx);
+    EnsurePipeExist();
+
+    // Advance parent so rename maps supportive headers (0..) onto Key.Offset = S.
+    TVector<std::pair<ui64, TString>> seed;
+    for (ui32 i = 0; i < seedCount; ++i) {
+        seed.emplace_back(i + 1, TStringBuilder() << "seed-" << i);
+    }
+    CmdWrite(/*partition=*/0, "seed-src", seed, *Ctx);
+
+    NKafka::TProducerInstanceId producerInstanceId = {7, 0};
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    for (ui32 i = 0; i < txCount; ++i) {
+        auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto* request = event->Record.MutablePartitionRequest();
+        request->SetTopic("/topic");
+        request->SetPartition(0);
+        request->SetCookie(200 + i);
+        request->SetOwnerCookie(ownerCookie);
+        request->SetMessageNo(i);
+
+        auto* writeId = request->MutableWriteId();
+        writeId->SetKafkaTransaction(true);
+        auto* requestProducerInstanceId = writeId->MutableKafkaProducerInstanceId();
+        requestProducerInstanceId->SetId(producerInstanceId.Id);
+        requestProducerInstanceId->SetEpoch(producerInstanceId.Epoch);
+
+        ActorIdToProto(Pipe, request->MutablePipeClient());
+
+        auto* cmdWrite = request->AddCmdWrite();
+        cmdWrite->SetSourceId(std::to_string(producerInstanceId.Id));
+        cmdWrite->SetSeqNo(i);
+        const TString data = TStringBuilder() << "tx-" << i;
+        cmdWrite->SetData(data);
+        cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+        cmdWrite->SetDisableDeduplication(true);
+        cmdWrite->SetUncompressedSize(data.size());
+        cmdWrite->SetIgnoreQuotaDeadline(true);
+        cmdWrite->SetExternalOperation(true);
+
+        SendToPipe(Ctx->Edge, event.Release());
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+        UNIT_ASSERT(response != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCookie(), 200 + i);
+    }
+
+    CommitKafkaTransaction(producerInstanceId, /*txId=*/9001);
+
+    TPQCmdReadSettings readSettings{"", /*partition=*/0, static_cast<i64>(midReadOffset),
+                                    /*count=*/txCount, 16_MB, 0};
+    readSettings.User = "user1";
+
+    const auto readResult = CmdReadCapture(readSettings);
+
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
+        const ui64 expectedOffset = midReadOffset + i;
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readResult.GetResult(i).GetOffset(), expectedOffset,
+            "result index=" << i
+                << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "tx-" << (midK + i));
+    }
+}
+
+// Same Key≠Header mid-CmdRead contract for Topic API (KQP) write tx: BodyKeys rename
+// uses SupportivePartition from propose; blob headers stay in supportive space.
+Y_UNIT_TEST_F(TopicTxRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) {
+    constexpr ui32 seedCount = 5;
+    constexpr ui32 txCount = 6;
+    constexpr ui32 midK = 2;
+    constexpr ui64 parentKeyOffset = seedCount;
+    constexpr ui64 midReadOffset = parentKeyOffset + midK;
+    static_assert(midK > 0 && midK < txCount);
+
+    PQTabletPrepare({.partitions=1}, {{"user1", true}}, *Ctx);
+    EnsurePipeExist();
+
+    TVector<std::pair<ui64, TString>> seed;
+    for (ui32 i = 0; i < seedCount; ++i) {
+        seed.emplace_back(i + 1, TStringBuilder() << "seed-" << i);
+    }
+    CmdWrite(/*partition=*/0, "seed-src", seed, *Ctx);
+
+    const TWriteId writeId(0, 42);
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    for (ui32 i = 0; i < txCount; ++i) {
+        SendSupportivePartitionWrite(
+            writeId, ownerCookie, /*seqNo=*/i, /*messageNo=*/i,
+            TStringBuilder() << "topic-tx-" << i, /*cookie=*/300 + i);
+    }
+    const ui32 supportivePartitionId =
+        WaitForExactTxWritesCount(1).GetTxWrites(0).GetInternalPartitionId();
+    CommitTopicTransaction(writeId, supportivePartitionId, /*txId=*/9101);
+
+    TPQCmdReadSettings readSettings{"", /*partition=*/0, static_cast<i64>(midReadOffset),
+                                    /*count=*/txCount, 16_MB, 0};
+    readSettings.User = "user1";
+    const auto readResult = CmdReadCapture(readSettings);
+
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readResult.GetResult(i).GetOffset(), midReadOffset + i,
+            "result index=" << i
+                << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "topic-tx-" << (midK + i));
+    }
+}
+
+// Deferred publication Publish also renames BodyKeys; mid-blob CmdRead must keep parent offsets.
+Y_UNIT_TEST_F(DeferredPublicationRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    constexpr ui32 seedCount = 5;
+    constexpr ui32 txCount = 6;
+    constexpr ui32 midK = 2;
+    constexpr ui64 parentKeyOffset = seedCount;
+    constexpr ui64 midReadOffset = parentKeyOffset + midK;
+    static_assert(midK > 0 && midK < txCount);
+
+    PQTabletPrepare({.partitions=1}, {{"user1", true}}, *Ctx);
+    EnsurePipeExist();
+
+    TVector<std::pair<ui64, TString>> seed;
+    for (ui32 i = 0; i < seedCount; ++i) {
+        seed.emplace_back(i + 1, TStringBuilder() << "seed-" << i);
+    }
+    CmdWrite(/*partition=*/0, "seed-src", seed, *Ctx);
+
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(77, "ext-77");
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    for (ui32 i = 0; i < txCount; ++i) {
+        SendSupportivePartitionWrite(
+            writeId, ownerCookie, /*seqNo=*/i, /*messageNo=*/i,
+            TStringBuilder() << "deferred-tx-" << i, /*cookie=*/400 + i);
+    }
+    WaitForExactTxWritesCount(1);
+    CommitDeferredPublicationFinalize(writeId, /*txId=*/9201, TDeferredPublicationApi::Publish);
+
+    TPQCmdReadSettings readSettings{"", /*partition=*/0, static_cast<i64>(midReadOffset),
+                                    /*count=*/txCount, 16_MB, 0};
+    readSettings.User = "user1";
+    const auto readResult = CmdReadCapture(readSettings);
+
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readResult.GetResult(i).GetOffset(), midReadOffset + i,
+            "result index=" << i
+                << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "deferred-tx-" << (midK + i));
+    }
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(43, "ext-43");
+    const ui64 txId = 70002;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie);
+    WaitForExactTxWritesCount(1);
+
+    CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Cancel);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Several_Partitions_One_Tablet_Successful_Commit, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(51, "ext-51");
+    const ui64 txId = 70012;
+
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie0 = CreateSupportivePartitionForDeferredPublication(writeId, 0);
+    const TString ownerCookie1 = CreateSupportivePartitionForDeferredPublication(writeId, 1);
+    UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie0, ownerCookie1);
+
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie0, 0);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie1, 1);
+    WaitForExactTxWritesCount(2);
+
+    CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish, {0, 1});
+
+    const auto messages0 = ReadMainPartitionMessages(0);
+    const auto messages1 = ReadMainPartitionMessages(1);
+    UNIT_ASSERT_VALUES_EQUAL(messages0.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages1.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages0[0], "deferred-publish-payload");
+    UNIT_ASSERT_VALUES_EQUAL(messages1[0], "deferred-publish-payload");
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Several_Partitions_One_Tablet_Cancel, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(52, "ext-52");
+    const ui64 txId = 70013;
+
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie0 = CreateSupportivePartitionForDeferredPublication(writeId, 0);
+    const TString ownerCookie1 = CreateSupportivePartitionForDeferredPublication(writeId, 1);
+
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie0, 0);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie1, 1);
+    WaitForExactTxWritesCount(2);
+
+    CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Cancel, {0, 1});
+
+    UNIT_ASSERT_VALUES_EQUAL(ReadMainPartitionMessages(0).size(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(ReadMainPartitionMessages(1).size(), 0u);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Finalize_MixedPublishAndCancel_Aborted, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(53, "ext-53");
+    const ui64 txId = 70014;
+
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={Ctx->TabletId},
+                                  .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                      {.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish},
+                                      {.Partition=1, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Cancel},
+                                  },
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Finalize_WithReadOperation_Aborted, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(54, "ext-54");
+    const ui64 txId = 70015;
+
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={Ctx->TabletId},
+                                  .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                      {.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish},
+                                      {.Partition=1, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  },
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Finalize_PartialPartitionSet_Aborted, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(55, "ext-55");
+    const ui64 txId = 70016;
+
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie0 = CreateSupportivePartitionForDeferredPublication(writeId, 0);
+    const TString ownerCookie1 = CreateSupportivePartitionForDeferredPublication(writeId, 1);
+
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie0, 0);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie1, 1);
+    WaitForExactTxWritesCount(2);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={Ctx->TabletId},
+                                  .Receivers={Ctx->TabletId},
+                                  .TxOps={{.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish}},
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Before_Write_Ack, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(45, "ext-45");
+    const ui64 txId = 70004;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+
+    bool blockWriteQuota = true;
+    auto observer = [&blockWriteQuota](TAutoPtr<IEventHandle>& input) {
+        if (blockWriteQuota && input->CastAsLocal<TEvPQ::TEvApproveWriteQuota>()) {
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+
+    SendDeferredPublicationWriteRequestWithoutWait(writeId, ownerCookie);
+    AbortDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish);
+
+    Ctx->Runtime->SetObserverFunc(prev);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Deleting_WriteId, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(46, "ext-46");
+    const ui64 firstTxId = 70005;
+    const ui64 secondTxId = 70006;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie);
+    WaitForExactTxWritesCount(1);
+
+    CommitDeferredPublicationFinalize(writeId, firstTxId, TDeferredPublicationApi::Publish);
+
+    SendProposeTransactionRequest({.TxId=secondTxId,
+                                  .Senders={Ctx->TabletId},
+                                  .Receivers={Ctx->TabletId},
+                                  .TxOps={{.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish}},
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=secondTxId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Empty_Staging, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(47, "ext-47");
+    const ui64 txId = 70007;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    CreateSupportivePartitionForDeferredPublication(writeId);
+    WaitForExactTxWritesCount(1);
+
+    AbortDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Immediate_Tx, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(48, "ext-48");
+    const ui64 txId = 70008;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    CreateSupportivePartitionForDeferredPublication(writeId);
+    WaitForExactTxWritesCount(1);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={{.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish}},
+                                  .WriteId=writeId,
+                                  .Immediate=true});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Unknown_WriteId, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(44, "ext-44");
+    const ui64 txId = 70003;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={Ctx->TabletId},
+                                  .Receivers={Ctx->TabletId},
+                                  .TxOps={{.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish}},
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(DeferredPublication_AbortDeferredStaging_AfterOwnership, TPQTabletFixture) {
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(49, "ext-49");
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    CreateSupportivePartitionForDeferredPublication(writeId);
+    WaitForExactTxWritesCount(1);
+
+    SendAbortDeferredStagingRequest(writeId);
+    WaitAbortDeferredStagingResponse();
+    WaitForExactTxWritesCount(0);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_AbortDeferredStaging_Idempotent, TPQTabletFixture) {
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(50, "ext-50");
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    SendAbortDeferredStagingRequest(writeId);
+    WaitAbortDeferredStagingResponse();
+    WaitForExactTxWritesCount(0);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Writer_StagingNotVisibleOnMain, TPQTabletFixture) {
+    for (ui32 node = 0; node < Ctx->Runtime->GetNodeCount(); ++node) {
+        Ctx->Runtime->GetAppData(node).FeatureFlags.SetEnableTopicDeferredPublish(true);
+    }
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    auto writeDone = std::make_shared<bool>(false);
+    Ctx->Runtime->Register(new NDeferredWriterTest::TClientActor(
+        Ctx->TabletId, 0, 777, writeDone));
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [writeDone]() {
+        return *writeDone;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    UNIT_ASSERT(*writeDone);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
 }
 
 void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestParams& params)

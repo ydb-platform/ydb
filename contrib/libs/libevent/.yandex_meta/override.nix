@@ -1,11 +1,19 @@
 pkgs: attrs: with pkgs; rec {
-  pname = "libevent";
-  version = "2.1.12";
+  version = "2.1.13";
 
-  src = fetchurl {
-    url = "https://github.com/libevent/libevent/releases/download/release-${version}-stable/libevent-${version}-stable.tar.gz";
-    sha256 = "1fq30imk8zd26x8066di3kpc5zyfc5z6frr3zll685zcx4dxxrlj";
+  src = fetchFromGitHub {
+    owner = "libevent";
+    repo = "libevent";
+    rev = "release-${version}-stable";
+    sha256 = "sha256-JYA50pqzar4vWg5omjToS3tfLXjTGDRMNbdEb3sqyFk=";
   };
 
-  buildInputs = attrs.buildInputs ++ [ zlib ];
+  nativeBuildInputs = [
+    autoreconfHook
+  ];
+
+  buildInputs = [
+    openssl
+    zlib
+  ];
 }

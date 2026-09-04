@@ -1,0 +1,14 @@
+====================Apache-2.0 WITH LLVM-exception====================
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================COPYRIGHT====================
+  Type *Int8Ty = Type::getInt8Ty(C);
+  Type *Int1Ty = Type::getInt1Ty(C);
+  // Implementation of Align guarantees that ShiftValue < 64
+  unsigned AlignShiftValue = Log2_64(Insn->getAlign().value());

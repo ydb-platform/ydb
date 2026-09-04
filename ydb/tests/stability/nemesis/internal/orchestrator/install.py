@@ -3,7 +3,9 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 
+import requests
 import yaml
 
 from ydb.tests.stability.nemesis.internal.config import Settings, AgentSettings
@@ -391,12 +393,68 @@ WantedBy=multi-user.target
     return orchestrator_host
 
 
-def stop_agent_services(hosts):
+def graceful_disable_schedules(orchestrator_host: str, app_port: int = 31434, timeout: int = 30) -> bool:
+    """
+    Call the orchestrator HTTP API to disable all nemesis schedules
+    before stopping systemd services. This ensures that extract/cleanup
+    commands are flushed to agents while they are still running.
+
+    Returns True if the API call succeeded, False otherwise.
+    """
+    url = f"http://{orchestrator_host}:{app_port}/api/schedule/all"
+    try:
+        resp = requests.post(url, json={"enabled": False}, timeout=timeout)
+        if resp.status_code == 200:
+            data = resp.json()
+            stopped = data.get("stopped", [])
+            print(f"[{orchestrator_host}] Gracefully disabled schedules: {stopped}")
+            return True
+        else:
+            print(
+                f"[{orchestrator_host}] WARNING: schedule disable returned HTTP {resp.status_code}: {resp.text}",
+                file=sys.stderr,
+            )
+            return False
+    except Exception as e:
+        print(
+            f"[{orchestrator_host}] WARNING: could not disable schedules via API (orchestrator may already be down): {e}",
+            file=sys.stderr,
+        )
+        return False
+
+
+def stop_agent_services(hosts, app_port: int = 31434):
     if not hosts:
         return
-    futures = []
-    with ThreadPoolExecutor(max_workers=max(len(hosts), 1)) as executor:
-        for host in hosts:
-            futures.append(executor.submit(stop_agent_service, host))
-        for fut in as_completed(futures):
-            fut.result()
+
+    sorted_hosts = sorted(hosts)
+    orchestrator_host = sorted_hosts[0]
+    agent_hosts = sorted_hosts[1:]
+
+    graceful_disable_schedules(orchestrator_host, app_port=app_port)
+
+    extract_wait_seconds = 30
+    print(f"Waiting {extract_wait_seconds}s for extract processes to complete...")
+    time.sleep(extract_wait_seconds)
+
+    errors: list[str] = []
+    if agent_hosts:
+        with ThreadPoolExecutor(max_workers=max(len(agent_hosts), 1)) as executor:
+            futures = {executor.submit(stop_agent_service, host): host for host in agent_hosts}
+            for fut in as_completed(futures):
+                host = futures[fut]
+                try:
+                    fut.result()
+                except Exception as e:
+                    errors.append(f"{host}: {e}")
+                    print(f"WARNING: failed to stop agent on {host}: {e}", file=sys.stderr)
+
+    # Stop the orchestrator last (always attempted even if agents failed).
+    try:
+        stop_agent_service(orchestrator_host)
+    except Exception as e:
+        errors.append(f"{orchestrator_host}: {e}")
+        print(f"WARNING: failed to stop orchestrator on {orchestrator_host}: {e}", file=sys.stderr)
+
+    if errors:
+        print(f"WARNING: {len(errors)} host(s) failed to stop: {errors}", file=sys.stderr)

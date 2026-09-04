@@ -2,18 +2,17 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TNowWrapper: public TMutableComputationNode<TNowWrapper> {
-    typedef TMutableComputationNode<TNowWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TNowWrapper>;
 
 public:
     TNowWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes)
         : TBaseComputation(mutables)
-        , DependentNodes(dependentNodes)
+        , DependentNodes_(dependentNodes)
     {
     }
 
@@ -23,10 +22,10 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TNowWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind(&TNowWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    const TComputationNodePtrVector DependentNodes;
+    const TComputationNodePtrVector DependentNodes_;
 };
 
 } // namespace
@@ -40,5 +39,4 @@ IComputationNode* WrapNow(TCallable& callable, const TComputationNodeFactoryCont
     return new TNowWrapper(ctx.Mutables, std::move(dependentNodes));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

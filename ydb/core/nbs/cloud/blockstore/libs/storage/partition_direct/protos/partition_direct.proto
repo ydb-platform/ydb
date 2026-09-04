@@ -42,3 +42,9 @@ message TTabletInfo {
     NKikimrBlockStore.TVolumeConfig VolumeConfig = 2;
     TDirectBlockGroupsConnections DirectBlockGroupsConnections = 3;
 }
+
+// An in-flight AddHost, persisted so it can be finished (replayed) on restart.
+message TAddHostInProgress {
+    uint32 DirectBlockGroupId = 1;
+    uint32 NewHostIndex = 2;
+}

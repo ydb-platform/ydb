@@ -87,7 +87,11 @@ bool CheckBaseConfigLayout(const TGroupGeometryInfo& geom, const NKikimrBlobStor
         auto pdisk = cfg.GetPDisk(i);
         TNodeLocation loc = nodes[pdisk.GetNodeId()];
         TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
-        pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc, pdiskId, geom);
+        std::optional<TString> diskScope;
+        if (pdisk.HasDiskScope()) {
+            diskScope = pdisk.GetDiskScope();
+        }
+        pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc, diskScope, pdiskId, geom);
     }
 
     std::unordered_map<ui32, TGroupMapper::TGroupDefinition> groups;

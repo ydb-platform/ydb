@@ -62,6 +62,7 @@ class TKafkaTestClient {
         }
 
         TMessagePtr<TApiVersionsResponseData> ApiVersions(bool silent = false);
+        TMessagePtr<TApiVersionsResponseData> ApiVersionsAtVersion(TKafkaVersion version, bool silent = false);
 
         TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, bool allowAutoTopicCreation = true);
 
@@ -100,7 +101,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
 
-        TMessagePtr<TJoinGroupResponseData> JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout = 1000000);
+        TMessagePtr<TJoinGroupResponseData> JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout = 1000000, bool emptyMetadata = false);
 
         TMessagePtr<TSyncGroupResponseData> SyncGroup(TString& memberId, ui64 generationId, TString& groupId, std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments, TString& protocolName);
 
@@ -131,6 +132,8 @@ class TKafkaTestClient {
         TMessagePtr<TDescribeGroupsResponseData> DescribeGroups(TDescribeGroupsRequestData& request);
 
         TMessagePtr<TDescribeGroupsResponseData> DescribeGroups(const std::vector<std::optional<TString>>& groups);
+
+        TMessagePtr<TFindCoordinatorResponseData> FindCoordinator(const TString& key, i8 keyType = 0);
 
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TKafkaUuid, std::vector<i32>>>& topics, i64 offset = 0);
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);

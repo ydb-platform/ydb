@@ -190,7 +190,7 @@ struct TAstNode {
     }
 
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool) {
-        return NewList(position, nullptr, 0, pool);
+        return NewList(position, /*children=*/nullptr, 0, pool);
     }
 
     static TAstNode QuoteAtom;
@@ -199,8 +199,7 @@ struct TAstNode {
         return NewList(position, pool, &QuoteAtom, node);
     }
 
-    inline ~TAstNode() {
-    }
+    inline ~TAstNode() = default;
 
     void Destroy() {
         TString().swap(Position_.File);

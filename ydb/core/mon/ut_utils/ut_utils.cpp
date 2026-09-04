@@ -6,6 +6,8 @@
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TICKET_PARSER
+
 namespace NMonitoring::NTests {
 
 using namespace NActors;
@@ -81,7 +83,10 @@ TFakeTicketParserActor::TFakeTicketParserActor(TVector<TString> groupSIDs)
 {}
 
 void TFakeTicketParserActor::Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
+    YDB_LOG_INFO("Ticket parser: got TEvAuthorizeTicket",
+        {"event", ev->Get()->Ticket},
+        {"database", ev->Get()->Database},
+        {"entries", ev->Get()->Entries.size()});
     ++AuthorizeTicketRequests;
 
     if (ev->Get()->Ticket == ROOT_TOKEN) {
@@ -134,8 +139,8 @@ void TFakeTicketParserActor::Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev,
     TEvTicketParser::TError err;
     err.Retryable = false;
     err.Message = message ? message : "Test error";
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER,
-        "Send TEvAuthorizeTicketResult: " << err.Message);
+    YDB_LOG_INFO("Send",
+        {"TEvAuthorizeTicketResult", err.Message});
     Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
 }
 
@@ -154,8 +159,7 @@ void TFakeTicketParserActor::Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& 
         userToken->SetSubjectType(NACLibProto::SUBJECT_TYPE_USER);
     }
     userToken->SaveSerializationInfo();
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER,
-        "Send TEvAuthorizeTicketResult success");
+    YDB_LOG_INFO("Send TEvAuthorizeTicketResult success");
     Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
 }
 

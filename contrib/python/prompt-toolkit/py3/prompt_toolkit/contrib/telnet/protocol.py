@@ -8,7 +8,7 @@ Inspired by `Twisted.conch.telnet`.
 from __future__ import annotations
 
 import struct
-from typing import Callable, Generator
+from collections.abc import Callable, Generator
 
 from .log import logger
 
@@ -135,7 +135,7 @@ class TelnetProtocolParser:
         """
         subcmd, data = data[0:1], data[1:]
         if subcmd == IS:
-            ttype = data.decode("ascii")
+            ttype = data.decode("ascii", errors="replace")
             self.ttype_received_callback(ttype)
         else:
             logger.warning("Received a non-IS terminal type Subnegotiation")

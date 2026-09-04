@@ -137,10 +137,9 @@ public:
         }, Span);
     }
 
-    template<typename T>
-    void EndError(T&& error) {
+    void EndError(const char* error) {
         std::visit(TOverloaded{
-            [&](NWilson::TSpan& span) -> void { span.EndError(std::move(error)); },
+            [&](NWilson::TSpan& span) -> void { span.EndError(error); },
             [&](TRetroSpanType& span) -> void { span.EndError(); },
             [&](const std::monostate&) -> void {},
         }, Span);

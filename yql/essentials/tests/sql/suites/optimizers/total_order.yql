@@ -1,4 +1,3 @@
-/* postgres can not */
 $x = AsTuple(Double("nan"),42);
 
 select $x = $x;

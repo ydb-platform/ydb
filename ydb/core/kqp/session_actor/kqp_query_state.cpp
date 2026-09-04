@@ -3,18 +3,11 @@
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SESSION
+
 namespace NKikimr::NKqp {
 
 using namespace NSchemeCache;
-
-#define LOG_C(msg) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_E(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_N(msg) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-
 
 TKqpQueryState::TQueryTxId::TQueryTxId(const TQueryTxId& other) {
     YQL_ENSURE(!Id);
@@ -28,7 +21,8 @@ TKqpQueryState::TQueryTxId& TKqpQueryState::TQueryTxId::operator=(const TQueryTx
 }
 
 void TKqpQueryState::TQueryTxId::SetValue(const TTxId& id) {
-    YQL_ENSURE(!Id);
+    YQL_ENSURE(!Id, "user tx id is already set to '" << Id->HumanStr
+        << "', attempt to overwrite it with '" << id.HumanStr << "'");
     Id = id.Id;
 }
 
@@ -37,7 +31,7 @@ TTxId TKqpQueryState::TQueryTxId::GetValue() {
 }
 
 void TKqpQueryState::TQueryTxId::Reset() {
-    Id = TTxId();
+    Id.Clear();
 }
 
 bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response) {
@@ -49,8 +43,8 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
             case TSchemeCacheNavigate::EStatus::Ok: {
                 auto expectedVersion = TableVersions.FindPtr(TTableId(entry.TableId.PathId));
                 if (!expectedVersion) {
-                    LOG_W("Unexpected tableId in scheme cache navigate reply"
-                        << ", tableId: " << entry.TableId);
+                    YDB_LOG_WARN("Unexpected tableId in scheme cache navigate reply",
+                        {"tableId", entry.TableId});
                     continue;
                 }
 
@@ -60,10 +54,10 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
                 }
 
                 if (entry.TableId.SchemaVersion && entry.TableId.SchemaVersion != *expectedVersion) {
-                    LOG_I("Scheme version mismatch"
-                        << ", pathId: " << entry.TableId.PathId
-                        << ", expected version: " << *expectedVersion
-                        << ", actual version: " << entry.TableId.SchemaVersion);
+                    YDB_LOG_INFO("Scheme version mismatch",
+                        {"pathId", entry.TableId.PathId},
+                        {"expectedVersion", *expectedVersion},
+                        {"actualVersion", entry.TableId.SchemaVersion});
                     return false;
                 }
 
@@ -73,9 +67,9 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
             case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
             case TSchemeCacheNavigate::EStatus::PathNotTable:
             case TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-                LOG_I("Scheme error"
-                    << ", pathId: " << entry.TableId.PathId
-                    << ", status: " << entry.Status);
+                YDB_LOG_INFO("Scheme error",
+                    {"pathId", entry.TableId.PathId},
+                    {"status", entry.Status});
                 return false;
 
             case TSchemeCacheNavigate::EStatus::LookupError:
@@ -87,9 +81,9 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
             default:
                 // Unexpected reply, do not invalidate the query as it may block the query execution.
                 // Hard validation will be performed later during the query execution.
-                LOG_E("Unexpected reply from scheme cache"
-                    << ", pathId: " << entry.TableId.PathId
-                    << ", status: " << entry.Status);
+                YDB_LOG_ERROR("Unexpected reply from scheme cache",
+                    {"pathId", entry.TableId.PathId},
+                    {"status", entry.Status});
                 break;
         }
     }
@@ -442,6 +436,11 @@ bool TKqpQueryState::ProcessingLastStatementPart() {
 }
 
 bool TKqpQueryState::PrepareNextStatementPart() {
+    // Despite its name, this is also called once after a non-split query finishes,
+    // before PreparedQuery and CompileResult are cleared and the response is logged.
+    if (QueryTextForLogging.empty() && PreparedQuery && (!RequestEv || RequestEv->GetQuery().empty())) {
+        QueryTextForLogging = PreparedQuery->GetText();
+    }
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};
@@ -463,6 +462,28 @@ bool TKqpQueryState::PrepareNextStatementPart() {
 
     ++NextSplittedExpr;
     return true;
+}
+
+void TKqpQueryState::FillDeferredPublicationOperations() {
+    YQL_ENSURE(HasDeferredPublication());
+
+    const auto& request = GetDeferredPublicationFromRequest();
+    NTopic::ValidateDeferredPublicationRequest(request);
+
+    TopicOperations = NTopic::TTopicOperations();
+    // Same default as Kafka in FillTopicOperations: conflict check stays enabled on wire.
+    TopicOperations.SetTrackProducerId(true);
+
+    for (const auto& destination : request.GetDestinations()) {
+        auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), destination.GetPath()));
+        TopicOperations.AddDeferredPublicationOperation(
+            path,
+            destination.GetPartitionId(),
+            destination.GetTabletId(),
+            request.GetOp(),
+            request.GetIntPublicationId(),
+            request.GetExtPublicationId());
+    }
 }
 
 void TKqpQueryState::FillTopicOperations() {
@@ -625,6 +646,9 @@ NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel(TKqpTransactionCont
         switch (txSettings.tx_mode_case()) {
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
                 isolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                break;
+            case Ydb::Table::TransactionSettings::kStrictSerializableReadWrite:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
                 break;
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
                 if (AppData()->FeatureFlags.GetDisableOnlineRO()) {

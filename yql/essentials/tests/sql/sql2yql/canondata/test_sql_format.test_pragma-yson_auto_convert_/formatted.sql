@@ -1,4 +1,3 @@
-/* postgres can not */
 PRAGMA yson.AutoConvert;
 PRAGMA yson.Strict;
 

@@ -77,7 +77,7 @@ protected:
     {
         Config_->TotalLimit = 100;
 
-        auto logger = Logger().WithTag("Test: %v", ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        auto logger = Logger().WithTag("Test", ::testing::UnitTest::GetInstance()->current_test_info()->name());
         Throttler_ = CreateFairThrottler(Config_, logger, NProfiling::TProfiler{});
     }
 };
@@ -297,10 +297,10 @@ protected:
         Config_->IpcPath = (GetOutputPath() / (testName + ".throttler")).GetPath();
         Config_->TotalLimit = 100;
 
-        auto logger = Logger().WithTag("Test: %v", testName);
+        auto logger = Logger().WithTag("Test", testName);
 
-        DatNodeThrottler_ = CreateFairThrottler(Config_, logger.WithTag("Node: dat"), NProfiling::TProfiler{});
-        ExeNodeThrottler_ = CreateFairThrottler(Config_, logger.WithTag("Node: exe"), NProfiling::TProfiler{});
+        DatNodeThrottler_ = CreateFairThrottler(Config_, logger.WithTag("Node", "dat"), NProfiling::TProfiler{});
+        ExeNodeThrottler_ = CreateFairThrottler(Config_, logger.WithTag("Node", "exe"), NProfiling::TProfiler{});
     }
 };
 

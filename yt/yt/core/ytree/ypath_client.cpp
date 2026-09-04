@@ -1,4 +1,5 @@
 #include "ypath_client.h"
+
 #include "helpers.h"
 #include "exception_helpers.h"
 #include "ypath_detail.h"
@@ -201,6 +202,26 @@ NRpc::TStreamingParameters& TYPathRequest::ServerAttachmentsStreamingParameters(
     YT_ABORT();
 }
 
+const NRpc::TDirectPlacementTransferParameters& TYPathRequest::RequestAttachmentsDptParameters() const
+{
+    YT_ABORT();
+}
+
+NRpc::TDirectPlacementTransferParameters& TYPathRequest::RequestAttachmentsDptParameters()
+{
+    YT_ABORT();
+}
+
+const NRpc::TDirectPlacementTransferParameters& TYPathRequest::ResponseAttachmentsDptParameters() const
+{
+    YT_ABORT();
+}
+
+NRpc::TDirectPlacementTransferParameters& TYPathRequest::ResponseAttachmentsDptParameters()
+{
+    YT_ABORT();
+}
+
 NConcurrency::IAsyncZeroCopyOutputStreamPtr TYPathRequest::GetRequestAttachmentsStream() const
 {
     YT_ABORT();
@@ -371,8 +392,8 @@ void ResolveYPath(
                 NYTree::EErrorCode::ResolveError,
                 "Error resolving path %v",
                 originalPath)
-                << TErrorAttribute("method", context->GetMethod())
-                << ex;
+                .With("method", context->GetMethod())
+                .With(ex);
         }
     }
 }

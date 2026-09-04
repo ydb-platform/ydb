@@ -759,11 +759,11 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
             .Value(RotateRightJoinType(dqJoin.JoinType().Value()))
             .Build()
         .JoinKeys(joinKeysBuilder.Done())
-        .LeftJoinKeyNames(dqJoin.LeftJoinKeyNames())
-        .RightJoinKeyNames(dqJoin.RightJoinKeyNames())
+        .LeftJoinKeyNames(dqJoin.RightJoinKeyNames())
+        .RightJoinKeyNames(dqJoin.LeftJoinKeyNames())
         .JoinAlgo(dqJoin.JoinAlgo())
-        .ShuffleLeftSideBy(dqJoin.ShuffleLeftSideBy())
-        .ShuffleRightSideBy(dqJoin.ShuffleRightSideBy())
+        .ShuffleLeftSideBy(dqJoin.ShuffleRightSideBy())
+        .ShuffleRightSideBy(dqJoin.ShuffleLeftSideBy())
         .JoinAlgoOptions(dqJoin.JoinAlgoOptions())
         .Flags(newFlags)
         .Done();
@@ -1381,6 +1381,7 @@ TExprBase DqBuildHashJoin(
     EHashJoinMode mode,
     TExprContext& ctx,
     IOptimizationContext& optCtx,
+    TTypeAnnotationContext& typeCtx,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
@@ -1438,7 +1439,7 @@ TExprBase DqBuildHashJoin(
             } else if (rightKind){
                 commonType = JoinDryKeyType(!filter, keyType2, keyType1, ctx);
             } else {
-                commonType = JoinCommonDryKeyType(join.Pos(), !filter, keyType1, keyType2, ctx);
+                commonType = JoinCommonDryKeyType(join.Pos(), !filter, keyType1, keyType2, ctx, typeCtx);
             }
 
             if (commonType) {

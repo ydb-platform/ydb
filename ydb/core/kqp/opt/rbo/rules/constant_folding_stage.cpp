@@ -94,7 +94,7 @@ void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> globalExtractedExprs;
     TVector<TIntrusivePtr<IOperator>> affectedOps;
 
-    for (auto it : root) {
+    for (const auto& it : root) {
         if (!it.Current->GetExpressions().empty()) {
             auto expressions = it.Current->GetExpressions();
             bool affected = false;

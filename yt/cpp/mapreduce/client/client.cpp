@@ -1195,9 +1195,9 @@ void TTransaction::Unlock(
         });
 }
 
-void TTransaction::Commit()
+void TTransaction::Commit(const TCommitTransactionOptions& options)
 {
-    PingableTx_->Commit();
+    PingableTx_->Commit(options);
 }
 
 void TTransaction::Abort()

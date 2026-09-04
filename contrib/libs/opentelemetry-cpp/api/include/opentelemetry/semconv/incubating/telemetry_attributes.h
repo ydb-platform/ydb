@@ -69,6 +69,8 @@ static constexpr const char *kGo = "go";
 
 static constexpr const char *kJava = "java";
 
+static constexpr const char *kKotlin = "kotlin";
+
 static constexpr const char *kNodejs = "nodejs";
 
 static constexpr const char *kPhp = "php";

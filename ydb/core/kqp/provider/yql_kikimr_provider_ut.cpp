@@ -4,8 +4,8 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/sql/v1/context.h>
-#include <yql/essentials/sql/v1/source.h>
+#include <yql/essentials/sql/v1/translation/context.h>
+#include <yql/essentials/sql/v1/translation/source.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -63,6 +63,16 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
+    Y_UNIT_TEST(LegacySyntaxVersionIsNormalized) {
+        NYql::NProto::TTranslationSettings serializedSettings;
+        serializedSettings.SetSyntaxVersion(0);
+
+        NSQLTranslation::TTranslationSettings settings;
+        NSQLTranslation::Deserialize(serializedSettings, settings);
+
+        UNIT_ASSERT_VALUES_EQUAL(settings.SyntaxVersion, 1);
+    }
+
     Y_UNIT_TEST(SystemColumnsMatchCoreScheme) {
         const auto& schemeColumns = NKikimr::GetSystemColumns();
         const auto& kikimrColumns = KikimrSystemColumns();

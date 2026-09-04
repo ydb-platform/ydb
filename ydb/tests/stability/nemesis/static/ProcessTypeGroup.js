@@ -10,7 +10,8 @@ export default {
     hosts: Object, // { hostName: hostData }
     processes: Object, // { hostName: [ProcessInfo] }
     scheduleStatus: Object, // Schedule status for all nemesis types
-    processTypes: Array // All process types with their configurations
+    processTypes: Array, // All process types with their configurations
+    inventory: Object // { hosts, nodes, slots }
   },
   setup(props) {
     const { ref, computed, reactive, watch } = Vue
@@ -31,6 +32,13 @@ export default {
       return props.processTypes.find(pt => pt.name === props.type) || {}
     })
 
+    const targetKind = computed(() => processTypeEntry.value.target_kind || 'host')
+
+    const supportsManual = computed(() => {
+      // Default true when field absent (older API); explicit false hides host/node Run UI.
+      return processTypeEntry.value.supports_manual !== false
+    })
+
     // Get default interval from process types
     const defaultInterval = computed(() => {
       return processTypeEntry.value.schedule || 60
@@ -42,6 +50,17 @@ export default {
     })
 
     const hasParams = computed(() => paramSchema.value.length > 0)
+
+    function entitiesForHost(host) {
+      const inv = props.inventory || {}
+      if (targetKind.value === 'slot') {
+        return (inv.slots || []).filter(s => s.host === host)
+      }
+      if (targetKind.value === 'node' || targetKind.value === 'disk') {
+        return (inv.nodes || []).filter(n => n.host === host)
+      }
+      return []
+    }
 
     const PARAMS_STORAGE_KEY = 'nemesis:last-run-params'
 
@@ -186,6 +205,24 @@ export default {
         })
     }
 
+    function runTarget(entity) {
+      const kind = targetKind.value
+      const target = {
+        kind: kind === 'disk' ? 'disk' : kind,
+        host: entity.host,
+        node_id: entity.node_id ?? null,
+        ic_port: entity.ic_port ?? null,
+        slot_idx: entity.slot_idx ?? null
+      }
+      axios.post('/api/hosts/process', { host: entity.host, type: props.type, target })
+        .then(() => {
+          console.log(`Started process ${props.type} target=`, target)
+        })
+        .catch(err => {
+          console.error(`Failed to start process ${props.type}`, err)
+        })
+    }
+
     function getProcessesByTypeAndHost(host) {
       const hostProcs = props.processes[host] || []
       return hostProcs
@@ -201,11 +238,15 @@ export default {
       hasParams,
       showParamsModal,
       paramValues,
+      targetKind,
+      supportsManual,
+      entitiesForHost,
       openRunModal,
       cancelRunModal,
       submitParamsModal,
       stopSchedule,
       runProcess,
+      runTarget,
       getProcessesByTypeAndHost
     }
   },
@@ -216,6 +257,7 @@ export default {
           <div class="flex-1">
             <div class="flex items-center gap-3">
               <h2 class="text-xl font-bold">{{ type }}</h2>
+              <span class="badge badge-outline badge-sm">{{ targetKind }}</span>
               
               <div class="flex items-center gap-2">
                 <label class="text-sm">Interval (sec):</label>
@@ -329,15 +371,21 @@ export default {
       </teleport>
 
       <div class="collapse-content">
-        <div class="pt-4">
+        <div v-if="supportsManual" class="pt-4">
           <host-process-item
             v-for="(hostData, host) in hosts"
             :key="host"
             :host="host"
             :processes="getProcessesByTypeAndHost(host)"
             :is-scheduled="isEnabled"
+            :target-kind="targetKind"
+            :entities="entitiesForHost(host)"
             @run-process="runProcess"
+            @run-target="runTarget"
           ></host-process-item>
+        </div>
+        <div v-else class="pt-4 text-sm text-base-content/60">
+          Manual host/node inject is not available for this nemesis (schedule only).
         </div>
       </div>
     </details>

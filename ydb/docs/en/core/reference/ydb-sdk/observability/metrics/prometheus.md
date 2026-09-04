@@ -6,7 +6,7 @@ Below are code examples for enabling metrics in Prometheus in different {{ ydb-s
 
 - C++
 
-  This functionality is not currently supported.
+  This feature is not currently supported.
 
 - Go
 
@@ -108,6 +108,8 @@ Below are code examples for enabling metrics in Prometheus in different {{ ydb-s
 - Rust
 
   {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#267](https://github.com/ydb-platform/ydb-rs-sdk/issues/267)
 
 - PHP
 

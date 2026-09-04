@@ -56,7 +56,7 @@ TStringBuf ToStringBuf(const grpc_slice& slice)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStringBuf TGrpcMetadataArray::Find(const char* key) const
+std::optional<TStringBuf> TGrpcMetadataArray::Find(const char* key) const
 {
     for (size_t index = 0; index < Native_.count; ++index) {
         const auto& metadata = Native_.metadata[index];
@@ -65,7 +65,7 @@ TStringBuf TGrpcMetadataArray::Find(const char* key) const
         }
     }
 
-    return TStringBuf();
+    return std::nullopt;
 }
 
 THashMap<std::string, std::string> TGrpcMetadataArray::ToMap() const
@@ -447,12 +447,9 @@ TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode)
 std::string SerializeError(const TError& error)
 {
     // TODO(babenko): migrate to std::string
-    TString serializedError;
-    google::protobuf::io::StringOutputStream output(&serializedError);
     NYT::NProto::TError protoError;
     ToProto(&protoError, error);
-    YT_VERIFY(protoError.SerializeToZeroCopyStream(&output));
-    return serializedError;
+    return protoError.SerializeAsString();
 }
 
 TError DeserializeError(TStringBuf serializedError)

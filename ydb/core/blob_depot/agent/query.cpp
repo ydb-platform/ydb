@@ -65,6 +65,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             if (size + PendingEventBytes > MaxPendingEventBytes) {
+                ++*PendingEventQueueOverflows;
                 CreateQuery<0>(std::move(p), received)->EndWithError(NKikimrProto::ERROR, "pending event queue overflow");
                 return;
             }
@@ -145,6 +146,7 @@ namespace NKikimr::NBlobDepot {
             size_t numItems = 0;
             ui64 numBytes = 0;
             for (it = PendingEventQ.begin(); it != PendingEventQ.end() && it->ExpirationTimestamp <= now; ++it) {
+                ++*PendingEventQueueTimeouts;
                 CreateQuery<0>(std::move(it->Event), it->Received)
                     ->EndWithError(NKikimrProto::ERROR, "pending event queue timeout");
                 PendingEventBytes -= it->Size;
@@ -185,8 +187,16 @@ namespace NKikimr::NBlobDepot {
         , QueryId(RandomNumber<ui64>())
         , StartTime(TActivationContext::Monotonic())
         , QueryWatchdogMapIter(agent.QueryWatchdogMap.emplace(StartTime + WatchdogDuration, this))
+        , Span(TWilsonBlobDepot::AgentQuery, std::move(Event->TraceId), "BlobDepotAgent.Query",
+                NWilson::EFlags::AUTO_END)
     {
         agent.ExecutingQueries.PushBack(this);
+        if (Span) {
+            Span
+                .Name(TStringBuilder() << "BlobDepotAgent." << GetName())
+                .Attribute("agent_id", Agent.LogId)
+                .Attribute("blob_depot_tablet_id", static_cast<i64>(Agent.TabletId));
+        }
     }
 
     TBlobDepotAgent::TQuery::~TQuery() {
@@ -209,7 +219,8 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
+    void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
+            bool isTabletStorageInfoVersionObsolete) {
         YDB_LOG_INFO("Query ends with error",
             {"marker", "BDA14"},
             {"agentId", Agent.LogId},
@@ -239,7 +250,15 @@ namespace NKikimr::NBlobDepot {
 #undef XX
         }
         Y_ABORT_UNLESS(response);
+        if (isTabletStorageInfoVersionObsolete) {
+            Y_ABORT_UNLESS(Event->GetTypeRewrite() == TEvBlobStorage::EvBlock);
+            static_cast<TEvBlobStorage::TEvBlockResult&>(*response).IsTabletStorageInfoVersionObsolete = true;
+        }
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
+        if (Span) {
+            Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
+        }
+
         OnDestroy(false);
         DoDestroy();
     }
@@ -271,6 +290,10 @@ namespace NKikimr::NBlobDepot {
 #undef XX
         }
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
+        if (Span) {
+            Span.EndOk();
+        }
+
         OnDestroy(true);
         DoDestroy();
     }

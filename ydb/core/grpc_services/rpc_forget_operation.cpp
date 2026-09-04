@@ -7,13 +7,17 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -46,6 +50,10 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return "[ForgetForcedCompaction]";
         case TOperationId::FULL_BACKUP:
             return "[ForgetFullBackup]";
+        case TOperationId::ANALYZE:
+            return "[ForgetAnalyze]";
+        case TOperationId::SET_NOT_NULL:
+            return "[ForgetSetNotNull]";
         default:
             return "[Untagged]";
         }
@@ -67,6 +75,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return new TEvForcedCompaction::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::FULL_BACKUP:
             return new TEvBackup::TEvForgetFullBackupRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::SET_NOT_NULL:
+            return new TEvSetColumnConstraint::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -80,14 +90,94 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             || kind == TOperationId::INCREMENTAL_BACKUP
             || kind == TOperationId::RESTORE
             || kind == TOperationId::COMPACTION
-            || kind == TOperationId::FULL_BACKUP;
+            || kind == TOperationId::FULL_BACKUP
+            || kind == TOperationId::SET_NOT_NULL;
+    }
+
+    void HandleNavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (OperationId.GetKind() == TOperationId::ANALYZE) {
+            HandleSANavigateResult(ev);
+        } else {
+            TRpcOperationRequestActor::Handle(ev);
+        }
+    }
+
+    // SA navigation for ANALYZE forget
+    void ResolveStatisticsAggregatorForForget() {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto req = MakeHolder<TNavigate>();
+        req->DatabaseName = GetDatabaseName();
+        auto& entry = req->ResultSet.emplace_back();
+        entry.Operation = TNavigate::OpPath;
+        entry.Path = NKikimr::SplitPath(GetDatabaseName());
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req.Release()), 0, SANav1Cookie);
+    }
+
+    void HandleSANavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& request = ev->Get()->Request;
+        if (request->ResultSet.empty() || request->ErrorCount > 0) {
+            return Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR, "Scheme error");
+        }
+        const auto& entry = request->ResultSet.front();
+        if (!entry.DomainInfo) {
+            return Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR, "Internal error");
+        }
+        if (!this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, GetRequiredAccessRights())) {
+            return;
+        }
+        if (ev->Cookie == SANav2Cookie) {
+            if (!entry.DomainInfo->Params.HasStatisticsAggregator()) {
+                return Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR, "No SA");
+            }
+            SendForgetToSA(entry.DomainInfo->Params.GetStatisticsAggregator());
+            return;
+        }
+        const auto& domainInfo = entry.DomainInfo;
+        if (!domainInfo->IsServerless()) {
+            if (domainInfo->Params.HasStatisticsAggregator()) {
+                SendForgetToSA(domainInfo->Params.GetStatisticsAggregator());
+            } else {
+                NavigateDomainKeyForSA(domainInfo->DomainKey);
+            }
+        } else {
+            NavigateDomainKeyForSA(domainInfo->ResourcesDomainKey);
+        }
+    }
+
+    void NavigateDomainKeyForSA(const TPathId& domainKey) {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto nav = MakeHolder<TNavigate>();
+        nav->DatabaseName = GetDatabaseName();
+        auto& entry = nav->ResultSet.emplace_back();
+        entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+        entry.Operation = TNavigate::EOp::OpPath;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(nav.Release()), 0, SANav2Cookie);
+    }
+
+    void SendForgetToSA(ui64 saTabletId) {
+        NTabletPipe::TClientConfig config;
+        config.RetryPolicy = {.RetryLimitCount = 3};
+        SAPipeClient_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), saTabletId, config));
+        NTabletPipe::SendData(SelfId(), SAPipeClient_,
+            new NStat::TEvStatistics::TEvAnalyzeOpForgetRequest(GetDatabaseName(), AnalyzeOperationId_));
+    }
+
+    void Handle(NStat::TEvStatistics::TEvAnalyzeOpForgetResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        Reply(record.GetStatus(), record.GetIssues());
     }
 
     void Handle(TEvExport::TEvForgetExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvForgetExportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvExport::TEvForgetExportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -95,8 +185,11 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvImport::TEvForgetImportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvForgetImportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvImport::TEvForgetImportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -104,8 +197,11 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvIndexBuilder::TEvForgetResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvForgetResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvForgetResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -113,8 +209,23 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvForcedCompaction::TEvForgetResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvForcedCompaction::TEvForgetResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvForgetResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
+    void Handle(TEvSetColumnConstraint::TEvForgetResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvForgetResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -122,8 +233,11 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(NKqp::TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issuesProto;
         NYql::IssuesToMessage(ev->Get()->Issues, &issuesProto);
-        LOG_D("Handle NKqp::TEvForgetScriptExecutionOperationResponse response"
-            << ": status# " << ev->Get()->Status);
+        YDB_LOG_DEBUG("Handle NKqp::TEvForgetScriptExecutionOperationResponse response",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"status", ev->Get()->Status});
         Reply(ev->Get()->Status, issuesProto);
     }
 
@@ -134,8 +248,11 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvBackup::TEvForgetIncrementalBackupResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvForgetIncrementalBackupResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvForgetIncrementalBackupResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -143,8 +260,11 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvBackup::TEvForgetBackupCollectionRestoreResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvForgetBackupCollectionRestoreResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvForgetBackupCollectionRestoreResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
     }
@@ -152,10 +272,20 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvBackup::TEvForgetFullBackupResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvForgetFullBackupResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvForgetFullBackupResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
+    }
+
+    void PassAway() override {
+        // SAPipeClient_ is opened only on the ANALYZE path. Closing the default actor id is a no-op,
+        // so this is safe regardless of operation kind.
+        NTabletPipe::CloseAndForgetClient(SelfId(), SAPipeClient_);
+        TRpcOperationRequestActor::PassAway();
     }
 
 public:
@@ -175,10 +305,23 @@ public:
             case TOperationId::RESTORE:
             case TOperationId::COMPACTION:
             case TOperationId::FULL_BACKUP:
+            case TOperationId::SET_NOT_NULL:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
                 break;
+
+            case TOperationId::ANALYZE:
+                if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+                    return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR,
+                        "ANALYZE long-running operation is disabled");
+                }
+                if (!TryGetUlidId(OperationId, AnalyzeOperationId_)) {
+                    return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
+                }
+                ResolveStatisticsAggregatorForForget();
+                Become(&TForgetOperationRPC::StateWait);
+                return;
 
             case TOperationId::SCRIPT_EXECUTION:
                 SendForgetScriptExecutionOperation();
@@ -202,10 +345,13 @@ public:
             hFunc(TEvImport::TEvForgetImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvForgetResponse, Handle);
             hFunc(TEvForcedCompaction::TEvForgetResponse, Handle);
+            hFunc(TEvSetColumnConstraint::TEvForgetResponse, Handle);
             hFunc(NKqp::TEvForgetScriptExecutionOperationResponse, Handle);
             hFunc(TEvBackup::TEvForgetIncrementalBackupResponse, Handle);
             hFunc(TEvBackup::TEvForgetBackupCollectionRestoreResponse, Handle);
             hFunc(TEvBackup::TEvForgetFullBackupResponse, Handle);
+            hFunc(NStat::TEvStatistics::TEvAnalyzeOpForgetResponse, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateResult);
         default:
             return StateBase(ev);
         }
@@ -214,6 +360,11 @@ public:
 private:
     TOperationId OperationId;
     ui64 RawOperationId = 0;
+    TString AnalyzeOperationId_;
+    TActorId SAPipeClient_;
+
+    static constexpr ui64 SANav1Cookie = 100;
+    static constexpr ui64 SANav2Cookie = 101;
 
 }; // TForgetOperationRPC
 

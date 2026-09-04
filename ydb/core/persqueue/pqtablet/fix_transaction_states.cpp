@@ -1,6 +1,7 @@
 #include "fix_transaction_states.h"
 #include <ydb/core/persqueue/common/key.h>
 #include <util/generic/maybe.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -8,7 +9,7 @@ static const size_t TX_KEY_LENGTH = GetTxKey(0).size();
 
 bool IsMainContextOfTransaction(const TString& key)
 {
-    Y_ENSURE(key.size() >= TX_KEY_LENGTH);
+    AFL_ENSURE(key.size() >= TX_KEY_LENGTH);
     return key.size() == TX_KEY_LENGTH;
 }
 

@@ -13,21 +13,16 @@ SRCS(
     schema.cpp
     select_builder.h
     select_builder.cpp
-    tx_ack_timeout.cpp
-    tx_aggr_stat_response.cpp
     tx_analyze.cpp
     tx_analyze_deadline.cpp
-    tx_analyze_shard_delivery_problem.cpp
-    tx_analyze_shard_request.cpp
-    tx_analyze_shard_response.cpp
+    tx_analyze_op_cancel.cpp
+    tx_analyze_op_forget.cpp
+    tx_analyze_op_get.cpp
+    tx_analyze_op_list.cpp
     tx_configure.cpp
-    tx_datashard_scan_response.cpp
     tx_finish_trasersal.cpp
     tx_init.cpp
     tx_init_schema.cpp
-    tx_navigate.cpp
-    tx_resolve.cpp
-    tx_response_tablet_distribution.cpp
     tx_schedule_traversal.cpp
     tx_schemeshard_stats.cpp
 )
@@ -40,6 +35,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/statistics/database
     ydb/library/yql/udfs/statistics_internal
+    yql/essentials/core/histogram
     yql/essentials/core/minsketch
 )
 

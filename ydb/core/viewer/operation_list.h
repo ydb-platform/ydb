@@ -73,6 +73,7 @@ public:
                           * `incbackup`
                           * `restore`
                           * `compaction`
+                          * `analyze`
                     required: true
                     type: string
                   - name: page_size

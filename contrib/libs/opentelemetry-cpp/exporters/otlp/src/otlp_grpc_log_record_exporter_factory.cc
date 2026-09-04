@@ -27,18 +27,14 @@ OtlpGrpcLogRecordExporterFactory::Create()
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
 OtlpGrpcLogRecordExporterFactory::Create(const OtlpGrpcLogRecordExporterOptions &options)
 {
-  std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> exporter(
-      new OtlpGrpcLogRecordExporter(options));
-  return exporter;
+  return std::make_unique<OtlpGrpcLogRecordExporter>(options);
 }
 
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
 OtlpGrpcLogRecordExporterFactory::Create(const OtlpGrpcLogRecordExporterOptions &options,
                                          const std::shared_ptr<OtlpGrpcClient> &client)
 {
-  std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> exporter(
-      new OtlpGrpcLogRecordExporter(options, client));
-  return exporter;
+  return std::make_unique<OtlpGrpcLogRecordExporter>(options, client);
 }
 
 }  // namespace otlp

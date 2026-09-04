@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     ListFromRange(3, 0, -1),
     ListFromRange(3, 0),

@@ -7,6 +7,8 @@
 
 #include <ydb/library/aclib/user_context.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 using NTableIndex::NFulltext::TGen;
@@ -63,7 +65,9 @@ NTable::EReady TDataShardUserDb::SelectRow(
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
 
-    if (LockMode == ELockMode::Optimistic && stats.InvisibleRowSkips > 0) {
+    if (LockMode != ELockMode::OptimisticSnapshotIsolation && stats.InvisibleRowSkips > 0) {
+        // In PessimisticNone lock mode this shouldn't happen, but we still
+        // break the lock to avoid data corruption.
         if (LockTxId) {
             Self.SysLocksTable().BreakSetLocks();
         }
@@ -260,255 +264,6 @@ void TDataShardUserDb::UpdateRow(
     IncreaseUpdateCounters(key, ops);
 }
 
-void TDataShardUserDb::InsertFulltext(
-    const TTableId& tableId,
-    const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops,
-    TIntrusivePtr<NACLib::TUserContext> userCtx,
-    bool withRelevance)
-{
-    auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
-
-    // Key = { token, max_id, generation }, but actually max_id and generation are ignored
-    // Data = { added, segment }
-
-    ui32 addedTag = UINT32_MAX, segmentTag = UINT32_MAX;
-    const TUserTable& userTable = *Self.GetUserTables().at(tableId.PathId.LocalPathId);
-    for (const auto& it : userTable.Columns) {
-        if (it.second.Name == "__ydb_added") {
-            addedTag = it.first;
-        } else if (it.second.Name == "__ydb_segment") {
-            segmentTag = it.first;
-        }
-    }
-    Y_ENSURE(addedTag != UINT32_MAX && segmentTag != UINT32_MAX, "__ydb_added / __ydb_segment columns are not found");
-
-    const auto keyTypeId = userTable.KeyColumnTypes.at(1).GetTypeId();
-    const ui32 keySize = (keyTypeId == NScheme::NTypeIds::Uint64 || keyTypeId == NScheme::NTypeIds::Int64 ? 8 : 4);
-    const ui64 keyTypeMax = (keyTypeId == NScheme::NTypeIds::Uint64 ? UINT64_MAX
-        : (keyTypeId == NScheme::NTypeIds::Int64 ? INT64_MAX
-        : (keyTypeId == NScheme::NTypeIds::Uint32 ? UINT32_MAX : INT32_MAX)));
-    const bool keySigned = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
-    auto asKey = [&](const TCell& cell) {
-        if (keyTypeId == NScheme::NTypeIds::Uint64 || keyTypeId == NScheme::NTypeIds::Int64) {
-            return cell.AsValue<ui64>();
-        } else if (keyTypeId == NScheme::NTypeIds::Int32) {
-            return (ui64)(i64)cell.AsValue<i32>(); // sign-extend
-        } else {
-            return (ui64)cell.AsValue<ui32>();
-        }
-    };
-
-    // For now, we don't support fulltext index tables partitioned in the middle of a token
-    // To support it, we need to guarantee splitting of the index table on a real max_id and without gen
-    //
-    // Otherwise, we may hit the following problematic case:
-    // - shard1 range: [0, 100); shard2 range: [100, +inf)
-    // - shard1 contents: some ids between 0..50 maxid=50; shard2 contents: some ids between 51..200 maxid=200
-    // - then we insert something into the second shard between 51..100, the list becomes too long, split into 2 lists
-    //   and the second shard may receive maxid < 100. so we always have to make sure that maxid is the actual split key.
-    //
-    // Then, if we guarantee splitting on a real max_id, we can even allow to split on gen. But in that
-    // case we should only allow modifications on the first shard out of two (with smaller gen's) and
-    // preserve deletions during compaction because deletions from the first shard may override additions
-    // from the second one.
-    //
-    // For now, we just fail such insertions with a Unique Constraint Violation.
-    const auto& rangeFrom = userTable.Range.From.GetCells();
-    const auto& rangeTo = userTable.Range.To.GetCells();
-    if (rangeFrom.size() >= 2 && rangeFrom[1].Size() > 0 && key[0].ToStringBuf() == rangeFrom[0].AsBuf() ||
-        rangeTo.size() >= 2 && rangeTo[1].Size() > 0 && key[0].ToStringBuf() == rangeTo[0].AsBuf()) {
-        throw TUniqueConstrainException();
-    }
-
-    // Unpack the list
-    bool rowAdded = false;
-    TConstArrayRef<ui8> rowSegment;
-    for (const auto& op: ops) {
-        if (op.Tag == addedTag && op.Op == NTable::ECellOp::Set) {
-            rowAdded = op.AsCell().AsValue<bool>();
-        } else if (op.Tag == segmentTag && op.Op == NTable::ECellOp::Set) {
-            rowSegment = TConstArrayRef<ui8>((const ui8*)op.Value.Data(), op.Value.Size());
-        }
-    }
-    if (!rowSegment.size()) {
-        return;
-    }
-
-    auto version = MvccVersion;
-    if (LockMode == ELockMode::OptimisticSnapshotIsolation && SnapshotVersion < version) {
-        // We want to keep using snapshot version at commit time in SnapshotRW isolation
-        version = SnapshotVersion;
-    }
-    SetPerformedUserReads(true);
-    auto txMap = GetReadTxMap(tableId);
-    auto txObserver = GetReadTxObserver(tableId);
-    InvisibleRowSkips = 0;
-
-    NFulltext::TDeltaReader reader(rowSegment, withRelevance, keySigned);
-
-    auto insertSegments = [&](bool unlimited, ui64 lastMaxId, TGen lastGen, bool added, NFulltext::IDeltaReader& reader) {
-        ui64 docId = 0;
-        ui32 freq = 0;
-        if (!reader.Read(docId, freq)) {
-            return false;
-        }
-        bool last = false;
-        NFulltext::TDeltaWriter wr;
-        wr.Reset(withRelevance, keySigned);
-        while (!last) {
-            while (true) {
-                wr.Add(docId, freq);
-                if (!reader.Read(docId, freq)) {
-                    last = true;
-                    break;
-                }
-                if (!unlimited && wr.GetCount() >= gFulltextMaxSegment) {
-                    break;
-                }
-            }
-            ui64 maxId = last ? lastMaxId : docId - 1;
-            TGen gen = last ? lastGen : std::numeric_limits<TGen>::max();
-            auto newSegment = wr.GetBuf();
-            TVector<TRawTypeValue> newKey;
-            newKey.push_back(key[0]);
-            newKey.emplace_back(&maxId, keySize, keyTypeId);
-            newKey.emplace_back(&gen, sizeof(gen), NTableIndex::NFulltext::GenType);
-            TVector<const NIceDb::TUpdateOp> newOps;
-            newOps.emplace_back(addedTag, NTable::ECellOp::Set, TRawTypeValue(&added, 1, NScheme::NTypeIds::Bool));
-            newOps.emplace_back(segmentTag, NTable::ECellOp::Set, TRawTypeValue(newSegment.data(), newSegment.size(), NScheme::NTypeIds::String));
-            UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, newKey, newOps, userCtx);
-            IncreaseUpdateCounters(newKey, newOps);
-            wr.Reset(withRelevance, keySigned);
-        }
-        return true;
-    };
-
-    auto findMaxId = [&](TConstArrayRef<const TRawTypeValue> minKey, ui64& maxId, TGen& gen) {
-        auto iter = Db.IterateRange(localTableId, NTable::TKeyRange{minKey, {}, true, false}, {}, version, txMap, txObserver);
-        auto ready = iter->Next(NTable::ENext::Data);
-        if (LockMode == ELockMode::Optimistic && InvisibleRowSkips > 0) {
-            if (LockTxId) {
-                Self.SysLocksTable().BreakSetLocks();
-            }
-            MvccReadConflict = true;
-            return false;
-        }
-        switch (ready) {
-        case NTable::EReady::Page:
-            throw TNotReadyTabletException();
-        case NTable::EReady::Data: {
-            auto existingKey = iter->GetKey().Cells();
-            if (existingKey[0].AsBuf() == key[0].ToStringBuf()) {
-                maxId = asKey(existingKey[1]);
-                gen = existingKey[2].AsValue<TGen>();
-            }
-            IncreaseSelectCounters(existingKey);
-            break;
-        }
-        case NTable::EReady::Gone:
-            break;
-        }
-        return true;
-    };
-
-    auto scanMaxId = [&](ui64 maxId, TConstArrayRef<const TRawTypeValue> minKey,
-        TVector<TVector<ui8>>& segments, NFulltext::TMultiDeltaReader& merger) {
-        auto iter = Db.IterateRange(localTableId, NTable::TKeyRange{minKey, {}, true, false}, {addedTag, segmentTag}, version, txMap, txObserver);
-        while (true) {
-            auto ready = iter->Next(NTable::ENext::Data);
-            if (ready == NTable::EReady::Page) {
-                throw TNotReadyTabletException();
-            }
-            if (LockMode == ELockMode::Optimistic && InvisibleRowSkips > 0) {
-                if (LockTxId) {
-                    Self.SysLocksTable().BreakSetLocks();
-                }
-                MvccReadConflict = true;
-                return false;
-            }
-            if (ready != NTable::EReady::Data) {
-                break;
-            }
-            auto existingKey = iter->GetKey().Cells();
-            if (existingKey[0].AsBuf() != key[0].ToStringBuf()) {
-                break;
-            }
-            auto nextMaxId = asKey(existingKey[1]);
-            IncreaseSelectCounters(existingKey);
-            if (nextMaxId != maxId) {
-                break;
-            }
-            auto rowValues = iter->GetValues().Cells();
-            auto nextAdded = rowValues[0].AsValue<bool>();
-            segments.emplace_back((const ui8*)rowValues[1].Data(), (const ui8*)rowValues[1].Data() + rowValues[1].Size());
-            merger.Add(nextAdded, segments[segments.size() - 1]);
-            UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, NStreamScan::MakeKey(existingKey, userTable.KeyColumnTypes), {}, userCtx);
-            ui64 keyBytes = CalculateKeyBytes(existingKey);
-            Counters.NEraseRow++;
-            Counters.EraseRowBytes += keyBytes + 8;
-        }
-        return true;
-    };
-
-    ui64 docId = 0;
-    ui32 freq = 0;
-    ui64 zero = 0;
-    reader.Save();
-    while (reader.Read(docId, freq)) {
-        ui64 maxId = 0;
-        TGen gen = 0;
-        auto minKey = TVector<const TRawTypeValue>{
-            key[0],
-            TRawTypeValue(&docId, keySize, keyTypeId),
-            TRawTypeValue(&zero, sizeof(TGen), NTableIndex::NFulltext::GenType),
-        };
-        if (!findMaxId(minKey, maxId, gen)) {
-            return;
-        }
-        if (!gen) {
-            // Copy the rest of reader to new segment(s)
-            // The last new segment should have maxid == MAX and gen == MAX
-            // Previous new segments should have maxid < MAX and gen == MAX
-            reader.Restore();
-            insertSegments(false, keyTypeMax, std::numeric_limits<TGen>::max(), rowAdded, reader);
-            reader.Save();
-            continue;
-        }
-        // Count new documents in the segment to assign the new 'gen'
-        reader.SetMaxId(maxId);
-        ui32 count = 1;
-        while (reader.Read(docId, freq)) {
-            count++;
-        }
-        reader.Restore();
-        gen = gen < count + gFulltextSegmentPenalty ? 0 : gen - count - gFulltextSegmentPenalty;
-        if (gen <= std::numeric_limits<TGen>::max() - gFulltextMaxDelta) {
-            // Amount of changes exceeded the limit
-            // Read all rows for this MaxId and merge/compact them
-            TVector<TVector<ui8>> segments;
-            NFulltext::TMultiDeltaReader merger;
-            merger.Reset(withRelevance, keySigned);
-            merger.Add(rowAdded, &reader);
-            if (!scanMaxId(maxId, minKey, segments, merger)) {
-                return;
-            }
-            // Copy from merger to new segment(s)
-            // Last new segment should have maxid == maxId and gen == MAX
-            // All previous new segments should have maxid < maxId and gen == MAX
-            merger.Start();
-            insertSegments(false, maxId, std::numeric_limits<TGen>::max(), true, merger);
-        } else {
-            // Copy from reader to a single new segment up to maxId
-            // The new segment should have maxid == maxId and gen == gen
-            insertSegments(true/*unlimited*/, maxId, gen, rowAdded, reader);
-            reader.Save();
-        }
-        reader.SetMaxId(keyTypeMax);
-    }
-}
-
 void TDataShardUserDb::IncrementRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
@@ -568,8 +323,14 @@ void TDataShardUserDb::EraseRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
+    // CollectAffectedRows only adds an extra read to determine whether the
+    // row existed; it must not affect writes, locks, or conflict checks.
+    const bool rowExists =
+        (LockMode == ELockMode::OptimisticSnapshotIsolation || CollectAffectedRows)
+        && RowExists(tableId, key);
+
     if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
-        if (!RowExists(tableId, key)) {
+        if (!rowExists) {
             // Don't perform write for keys which don't exist, SnapshotRW
             // transaction may break otherwise even when not actually
             // performing operations from the user's viewpoint
@@ -583,6 +344,10 @@ void TDataShardUserDb::EraseRow(
 
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
+
+    if (CollectAffectedRows && rowExists) {
+        Counters.NAffectedRows++;
+    }
 }
 
 bool TDataShardUserDb::PrechargeRow(
@@ -604,6 +369,10 @@ void TDataShardUserDb::IncreaseUpdateCounters(
 
     Counters.NUpdateRow++;
     Counters.UpdateRowBytes += keyBytes + valueBytes;
+
+    if (CollectAffectedRows) {
+        Counters.NAffectedRows++;
+    }
 }
 
 void TDataShardUserDb::IncreaseSelectCounters(
@@ -784,8 +553,10 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
 
     if (!Db.HasOpenTx(localTid, lockId)) {
         if (Db.HasRemovedTx(localTid, lockId)) {
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Committing removed changes lockId# " << lockId << " tid# " << localTid << " shard# " << Self.TabletID());
+            YDB_LOG_CRIT("Committing removed changes",
+                {"lockId", lockId},
+                {"tid", localTid},
+                {"shard", Self.TabletID()});
             Self.IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
         }
         return;
@@ -803,12 +574,15 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
     }
 
     if (VolatileTxId) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Scheduling commit of lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self.TabletID());
+        YDB_LOG_TRACE("Scheduling commit",
+            {"lockId", lockId},
+            {"localTid", localTid},
+            {"shard", Self.TabletID()});
         if (VolatileCommitTxIds.insert(lockId).second) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
             if (it != TxMaps.end()) {
-                it->second->Add(lockId, MvccVersion);
+                it->second->Add(lockId, TRowVersion::Min());
             }
         }
         // Note for AI agents: we don't add lockId to CommittedTxIds because
@@ -816,7 +590,10 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
         return;
     }
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Committing changes lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self.TabletID());
+    YDB_LOG_TRACE("Committing changes",
+        {"lockId", lockId},
+        {"localTid", localTid},
+        {"shard", Self.TabletID()});
     Db.CommitTx(localTid, lockId, MvccVersion);
     Self.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(lockId, Db);
     CommittedTxIds.insert(lockId);
@@ -831,7 +608,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
 
 void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId) {
     auto* dynamicTxMap = static_cast<NTable::TDynamicTransactionMap*>(GetReadTxMap(tableId).Get());
-    dynamicTxMap->Add(txId, MvccVersion);
+    dynamicTxMap->Add(txId, TRowVersion::Min());
 }
 
 class TLockedReadTxObserver: public NTable::ITransactionObserver {
@@ -1243,7 +1020,7 @@ ui64 TDataShardUserDb::GetWriteTxId(const TTableId& tableId) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
             if (it != TxMaps.end()) {
-                it->second->Add(VolatileTxId, MvccVersion);
+                it->second->Add(VolatileTxId, TRowVersion::Min());
             }
         }
         // Note for AI agents: we don't add VolatileTxId to CommittedTxIds
@@ -1266,7 +1043,13 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
         // We need tx map to see committed volatile tx changes
         VolatileTxId && !VolatileCommitTxIds.empty() ||
         // We need tx map when current lock has uncommitted changes
-        LockTxId && Self.SysLocksTable().HasCurrentWriteLock(tableId)
+        LockTxId && Self.SysLocksTable().HasCurrentWriteLock(tableId) ||
+        // In SnapshotIsolation mode we need tx map to see changes committed by our
+        // own locks earlier in this EvWrite (immediate commit path). Those deltas
+        // remain in the localdb under their original LockTxId; without a TxMap entry
+        // they are only visible at MvccVersion, which may be newer than SnapshotVersion.
+        // Mapping them to TRowVersion::Min() makes them visible at any snapshot.
+        LockMode == ELockMode::OptimisticSnapshotIsolation && !CommittedTxIds.empty()
     );
 
     if (!needTxMap) {
@@ -1281,9 +1064,18 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
             // Uncommitted changes are visible in all possible snapshots
             txMap->Add(LockTxId, TRowVersion::Min());
         } else if (VolatileTxId) {
-            // We want committed volatile changes to be visible at the write version
+            // Own volatile commit-time writes must be visible at any snapshot,
+            // same as LockTxId.
             for (ui64 commitTxId : VolatileCommitTxIds) {
-                txMap->Add(commitTxId, MvccVersion);
+                txMap->Add(commitTxId, TRowVersion::Min());
+            }
+        }
+        if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+            // Make immediately committed lock changes visible at any snapshot.
+            // This allows commit-time writes (e.g. DELETE in the same EvWrite as the
+            // lock commit) to see rows committed by the lock via RowExists checks.
+            for (ui64 txId : CommittedTxIds) {
+                txMap->Add(txId, TRowVersion::Min());
             }
         }
     }
@@ -1345,7 +1137,7 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
             Self.SysLocksTable().BreakSetLocks();
         }
         MvccReadConflict = true;
-    } else if (rowVersion > SnapshotVersion && LockMode == ELockMode::OptimisticSnapshotIsolation) {
+    } else if (rowVersion > SnapshotVersion) {
         // During commit we read at the current mvcc version, however we may
         // notice there have been changes between the snapshot and current
         // commit version. This is not necessarily an error, but indicates
@@ -1389,3 +1181,7 @@ const NMiniKQL::TEngineHostCounters& TDataShardUserDb::GetCounters() const {
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

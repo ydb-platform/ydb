@@ -24,6 +24,8 @@
 
 #include <library/cpp/yt/memory/range.h>
 
+#include <util/stream/mem.h>
+
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h>
 
 #include <contrib/libs/apache/arrow_next/cpp/src/generated/Message.fbs.h>
@@ -441,7 +443,8 @@ TArrowSchemaType SerializeColumnType(
             return SerializeDictColumnType(flatbufBuilder, denullifiedType->AsDictTypeRef(), arrowConfig);
 
         case ELogicalMetatype::Tagged:
-            // Denullified type should not contain tagged type.
+        case ELogicalMetatype::AggregateState:
+            // Denullified type should not contain tagged types.
             YT_ABORT();
 
         default:
@@ -561,9 +564,9 @@ struct TRecordBatchSerializationContext final
 
     void AddBuffer(i64 size, TBodyWriter writer)
     {
-        YT_LOG_DEBUG("Buffer registered (Offset: %v, Size: %v)",
-            CurrentBodyOffset,
-            size);
+        YT_TLOG_DEBUG("Buffer registered")
+            .With("Offset", CurrentBodyOffset)
+            .With("Size", size);
 
         Buffers.emplace_back(CurrentBodyOffset, size);
         CurrentBodyOffset += AlignUp<i64>(size, ArrowAlignment);
@@ -656,10 +659,10 @@ void SerializeRleButNotDictionaryEncodedStringLikeColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding RLE but not dictionary-encoded string-like column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount);
+    YT_TLOG_DEBUG("Adding RLE but not dictionary-encoded string-like column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount);
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -687,11 +690,11 @@ void SerializeDictionaryColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding dictionary column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding dictionary column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     auto relevantDictionaryIndexes = column->GetRelevantTypedValues<ui32>();
 
@@ -730,11 +733,11 @@ void SerializeRleDictionaryColumn(
     YT_VERIFY(column->Rle->ValueColumn->Values->BaseValue == 0);
     YT_VERIFY(!column->Rle->ValueColumn->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding dictionary column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding dictionary column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     auto dictionaryIndexes = column->Rle->ValueColumn->GetTypedValues<ui32>();
     auto rleIndexes = column->GetTypedValues<ui64>();
@@ -778,11 +781,11 @@ void SerializeIntegerColumn(
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
 
-    YT_LOG_DEBUG("Adding integer column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding integer column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -854,11 +857,11 @@ void SerializeDateColumn(
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
 
-    YT_LOG_DEBUG("Adding data column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding data column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -896,7 +899,9 @@ void SerializeDateColumn(
                 },
                 [&] (auto value) {
                     if (value > std::numeric_limits<i32>::max()) {
-                        THROW_ERROR_EXCEPTION("Date value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, std::numeric_limits<i32>::max());
+                        THROW_ERROR_EXCEPTION("Date value %v cannot be represented in arrow: maximum allowed value is %v",
+                            value,
+                            std::numeric_limits<i32>::max());
                     }
                     *currentOutput++ = value;
                 });
@@ -910,11 +915,11 @@ void SerializeDatetimeColumn(
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
 
-    YT_LOG_DEBUG("Adding datetime column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding datetime column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -963,11 +968,11 @@ void SerializeTimestampColumn(
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
 
-    YT_LOG_DEBUG("Adding timestamp column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding timestamp column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1005,7 +1010,7 @@ void SerializeTimestampColumn(
                 },
                 [&] (auto value) {
                     if (value > std::numeric_limits<i64>::max()) {
-                        THROW_ERROR_EXCEPTION("Timestamp value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, std::numeric_limits<i64>::max());
+                        THROW_ERROR_EXCEPTION("Timestamp value %v cannot be represented in arrow: maximum allowed value is %v", value, std::numeric_limits<i64>::max());
                     }
                     *currentOutput++ = value;
                 });
@@ -1022,12 +1027,11 @@ void SerializeDoubleColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG(
-        "Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding double column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1052,12 +1056,11 @@ void SerializeFloatColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG(
-        "Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding float column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1127,13 +1130,13 @@ void SerializeStringLikeColumn(
     auto endOffset = DecodeStringOffset(offsets, avgLength, endIndex);
     auto stringsSize = endOffset - startOffset;
 
-    YT_LOG_DEBUG("Adding string-like column (ColumnId: %v, StartIndex: %v, ValueCount: %v, StartOffset: %v, EndOffset: %v, StringsSize: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        startOffset,
-        endOffset,
-        stringsSize);
+    YT_TLOG_DEBUG("Adding string-like column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("StartOffset", startOffset)
+        .With("EndOffset", endOffset)
+        .With("StringsSize", stringsSize);
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1183,13 +1186,13 @@ void SerializeTzColumnImpl(
     auto stringsSize = endOffset - startOffset;
     std::vector<ui32> tzOffsets(column->ValueCount + 1);
 
-    YT_LOG_DEBUG("Adding tz-type column (ColumnId: %v, StartIndex: %v, ValueCount: %v, StartOffset: %v, EndOffset: %v, StringsSize: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        startOffset,
-        endOffset,
-        stringsSize);
+    YT_TLOG_DEBUG("Adding tz-type column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("StartOffset", startOffset)
+        .With("EndOffset", endOffset)
+        .With("StringsSize", stringsSize);
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1290,10 +1293,10 @@ void SerializeBooleanColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(column->Values->BitWidth == 1);
 
-    YT_LOG_DEBUG("Adding boolean column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount);
+    YT_TLOG_DEBUG("Adding boolean column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount);
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -2231,11 +2234,11 @@ void SerializeComplexTypeColumn(
         int currentBufferIndex = initialBufferIndex;
 
         if (offsets[rowOffset] != offsets[rowOffset + 1]) {
-            TString ysonString(
+            std::string ysonString(
                 currentStringData + offsets[rowOffset],
                 currentStringData + offsets[rowOffset + 1]);
 
-            TStringInput input(ysonString);
+            TMemoryInput input(ysonString);
             TYsonPullParser parser(&input, EYsonType::Node);
             TYsonPullParserCursor cursor = &parser;
 
@@ -2422,7 +2425,7 @@ public:
         TableCount_ = tableSchemas.size();
         ColumnSchemas_.resize(tableSchemas.size());
         TableIdToIndex_.resize(tableSchemas.size());
-        IsFirstBatchForSpecificTable_.assign(tableSchemas.size(), false);
+        IsTableInitialized_.assign(tableSchemas.size(), false);
 
         for (int tableIndex = 0; tableIndex < std::ssize(tableSchemas); ++tableIndex) {
             THashSet<std::string> columnNames;
@@ -2452,6 +2455,20 @@ public:
                 ColumnSchemas_[tableIndex][GetTabletIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetTabletIndexColumnId()), GetTabletIndexColumnId());
             }
         }
+    }
+
+    TFuture<void> Close() override
+    {
+        try {
+            for (int tableIndex = 0; tableIndex < TableCount_; ++tableIndex) {
+                if (!IsTableInitialized_[tableIndex]) {
+                    WriteRowsForSingleTable(TRange<TUnversionedRow>(), tableIndex);
+                }
+            }
+        } catch (const std::exception& ex) {
+            SetError(TError(ex));
+        }
+        return TSchemalessFormatWriterBase::Close();
     }
 
 private:
@@ -2591,7 +2608,7 @@ private:
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
     std::vector<TColumnConverters> ColumnConverters_;
     std::vector<THashMap<int, int>> TableIdToIndex_;
-    std::vector<bool> IsFirstBatchForSpecificTable_;
+    std::vector<bool> IsTableInitialized_;
     TConvertedColumnRange MissingColumns_;
 
     std::vector<TArrowWriterBuffer> Buffers_;
@@ -2632,7 +2649,7 @@ private:
 
     void PrepareColumns(const TRange<const TBatchColumn*>& batchColumns, int tableIndex)
     {
-        if (!IsFirstBatchForSpecificTable_[tableIndex]) {
+        if (!IsTableInitialized_[tableIndex]) {
             int currentIndex = 0;
             for (const auto& columnSchema : ColumnSchemas_[tableIndex]) {
                 auto columnId = columnSchema.first;
@@ -2642,7 +2659,7 @@ private:
                 }
             }
 
-            IsFirstBatchForSpecificTable_[tableIndex] = true;
+            IsTableInitialized_[tableIndex] = true;
         }
 
         TypedColumns_.resize(TableIdToIndex_[tableIndex].size());
@@ -2717,7 +2734,7 @@ private:
 
     void RegisterEosMarker()
     {
-        YT_LOG_DEBUG("EOS marker registered");
+        YT_TLOG_DEBUG("EOS marker registered");
 
         Messages_.push_back(TMessage{
                 std::nullopt,
@@ -2731,10 +2748,10 @@ private:
         i64 bodySize = 0,
         std::function<void(TMutableRef)> bodyWriter = nullptr)
     {
-        YT_LOG_DEBUG("Message registered (Type: %v, MessageSize: %v, BodySize: %v)",
-            flatbuf::EnumNameMessageHeader(type),
-            flatbufBuilder.GetSize(),
-            bodySize);
+        YT_TLOG_DEBUG("Message registered")
+            .With("Type", flatbuf::EnumNameMessageHeader(type))
+            .With("MessageSize", flatbufBuilder.GetSize())
+            .With("BodySize", bodySize);
 
         YT_VERIFY((bodySize % ArrowAlignment) == 0);
         Messages_.push_back(TMessage{
@@ -2831,15 +2848,15 @@ private:
             const auto& typedColumn = TypedColumns_[columnIndex];
             auto previousYTDictionaryId = ArrowDictionaryIds_[columnIndex];
             if (ytDictionaryId == previousYTDictionaryId) {
-                YT_LOG_DEBUG("Reusing previous dictionary (ColumnId: %v, YTDictionaryId: %v, ArrowDictionaryId: %v)",
-                    typedColumn.Column->Id,
-                    ytDictionaryId,
-                    arrowDictionaryId);
+                YT_TLOG_DEBUG("Reusing previous dictionary")
+                    .With("ColumnId", typedColumn.Column->Id)
+                    .With("YTDictionaryId", ytDictionaryId)
+                    .With("ArrowDictionaryId", arrowDictionaryId);
             } else {
-                YT_LOG_DEBUG("Sending new dictionary (ColumnId: %v, YTDictionaryId: %v, ArrowDictionaryId: %v)",
-                    typedColumn.Column->Id,
-                    ytDictionaryId,
-                    arrowDictionaryId);
+                YT_TLOG_DEBUG("Sending new dictionary")
+                    .With("ColumnId", typedColumn.Column->Id)
+                    .With("YTDictionaryId", ytDictionaryId)
+                    .With("ArrowDictionaryId", arrowDictionaryId);
                 PrepareDictionaryBatch(
                     TTypedBatchColumn{dictionaryColumn, typedColumn.Type},
                     arrowDictionaryId);
@@ -2850,8 +2867,8 @@ private:
         for (int columnIndex = 0; columnIndex < std::ssize(TypedColumns_); ++columnIndex) {
             const auto& typedColumn = TypedColumns_[columnIndex];
             if (typedColumn.Column->Dictionary) {
-                YT_LOG_DEBUG("Adding dictionary batch for dictionary-encoded column (ColumnId: %v)",
-                    typedColumn.Column->Id);
+                YT_TLOG_DEBUG("Adding dictionary batch for dictionary-encoded column")
+                    .With("ColumnId", typedColumn.Column->Id);
                 prepareDictionaryBatch(
                     columnIndex,
                     typedColumn.Column->Dictionary->DictionaryId,
@@ -2859,15 +2876,15 @@ private:
             } else if (IsRleButNotDictionaryEncodedStringLikeColumn(*typedColumn.Column) ||
                 IsRleButNotDictionaryEncodedTzColumn(*typedColumn.Column))
             {
-                YT_LOG_DEBUG("Adding dictionary batch for RLE but not dictionary-encoded string-like column (ColumnId: %v)",
-                    typedColumn.Column->Id);
+                YT_TLOG_DEBUG("Adding dictionary batch for RLE but not dictionary-encoded string-like column")
+                    .With("ColumnId", typedColumn.Column->Id);
                 prepareDictionaryBatch(
                     columnIndex,
                     IUnversionedColumnarRowBatch::GenerateDictionaryId(), // any unique one will do
                     typedColumn.Column->Rle->ValueColumn);
             } else if (IsRleAndDictionaryEncodedColumn(*typedColumn.Column)) {
-                YT_LOG_DEBUG("Adding dictionary batch for RLE and dictionary-encoded column (ColumnId: %v)",
-                    typedColumn.Column->Id);
+                YT_TLOG_DEBUG("Adding dictionary batch for RLE and dictionary-encoded column")
+                    .With("ColumnId", typedColumn.Column->Id);
                 prepareDictionaryBatch(
                     columnIndex,
                     typedColumn.Column->Rle->ValueColumn->Dictionary->DictionaryId,
@@ -2953,7 +2970,7 @@ private:
 
     void WritePayload(TBlobOutput* output)
     {
-        YT_LOG_DEBUG("Started writing payload");
+        YT_TLOG_DEBUG("Started writing payload");
         for (const auto& message : Messages_) {
             // Continuation indicator
             ui32 constMax = 0xFFFFFFFF;
@@ -2988,7 +3005,7 @@ private:
 
         Buffers_.clear();
 
-        YT_LOG_DEBUG("Finished writing payload");
+        YT_TLOG_DEBUG("Finished writing payload");
     }
 };
 
@@ -3029,7 +3046,7 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
     try {
         arrowConfig = ConvertTo<TArrowFormatConfigPtr>(attributes);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for arrow format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for arrow format").With(ex);
     }
     return CreateWriterForArrow(
         std::move(arrowConfig),

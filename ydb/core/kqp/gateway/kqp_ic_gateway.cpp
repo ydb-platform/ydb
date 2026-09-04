@@ -42,6 +42,8 @@
 
 #include <ydb/core/protos/auth.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -302,8 +304,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for scan query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event for scan",
+            {"selfId", SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }
@@ -399,8 +402,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, this->SelfId()
-            << "Received abort execution event for data query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event for data query",
+            {"selfId", this->SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }
@@ -465,8 +469,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event",
+            {"selfId", SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }
@@ -913,10 +918,6 @@ public:
             });
 
         return tablePromise.GetFuture();
-    }
-
-    TFuture<TGenericResult> SetConstraint(const TString&, TVector<NYql::TSetColumnConstraintSettings>&&) override {
-        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> AlterDatabase(const TString&, const NYql::TAlterDatabaseSettings&) override {
@@ -2305,8 +2306,17 @@ private:
 
     TFuture<TGenericResult> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request, bool failedOnAlreadyExists = false)
     {
+        const auto& modifyScheme = request->Record.GetTransaction().GetModifyScheme();
+        bool actualFailedOnAlreadyExists = failedOnAlreadyExists;
+        bool successOnNotExist = false;
+        if (modifyScheme.HasFailedOnAlreadyExists()) {
+            actualFailedOnAlreadyExists = modifyScheme.GetFailedOnAlreadyExists();
+        }
+        if (modifyScheme.HasSuccessOnNotExist()) {
+            successOnNotExist = modifyScheme.GetSuccessOnNotExist();
+        }
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, failedOnAlreadyExists);
+        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, actualFailedOnAlreadyExists, successOnNotExist);
         RegisterActor(requestHandler);
 
         return promise.GetFuture();

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $data = [
     <|id: 1, time: 1, value: 'a'|>,
     <|id: 1, time: 2, value: NULL|>,

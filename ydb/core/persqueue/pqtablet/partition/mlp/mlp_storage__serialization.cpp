@@ -3,10 +3,15 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/packedtypes/longs.h>
+#include <util/generic/ymath.h>
 
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
+
+ui64 ReceiveAttemptExpiryToSeconds(TInstant expiry) {
+    return CeilDiv<ui64>(expiry.MicroSeconds(), 1'000'000ULL);
+}
 
 struct TSnapshotMessage {
         union {
@@ -419,6 +424,13 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         DoUpdateExternalLockedMessageGroupsId(externalLockedMessageGroupsId, true);
     }
 
+    for (const auto& receiveAttempt : snapshot.GetReceiveAttempts()) {
+        ReceiveAttempts_[receiveAttempt.GetReceiveAttemptId()] = {
+            .Offsets = {receiveAttempt.GetOffsets().begin(), receiveAttempt.GetOffsets().end()},
+            .Expiry = TInstant::Seconds(receiveAttempt.GetExpirySeconds()),
+        };
+    }
+
     BuildAndLinkMessageGroups();
     return true;
 }
@@ -606,6 +618,16 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         DoUpdateExternalLockedMessageGroupsId(externalLockedMessageGroupsId, true);
     }
 
+    for (const auto& receiveAttemptId : wal.GetReceiveAttemptDeletes()) {
+        ReceiveAttempts_.erase(receiveAttemptId);
+    }
+    for (const auto& receiveAttempt : wal.GetReceiveAttemptUpserts()) {
+        ReceiveAttempts_[receiveAttempt.GetReceiveAttemptId()] = {
+            .Offsets = {receiveAttempt.GetOffsets().begin(), receiveAttempt.GetOffsets().end()},
+            .Expiry = TInstant::Seconds(receiveAttempt.GetExpirySeconds()),
+        };
+    }
+
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
     FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
 
@@ -686,6 +708,13 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         }
     }
 
+    for (const auto& [receiveAttemptId, attempt] : ReceiveAttempts_) {
+        auto* receiveAttempt = snapshot.AddReceiveAttempts();
+        receiveAttempt->SetReceiveAttemptId(receiveAttemptId);
+        receiveAttempt->MutableOffsets()->Assign(attempt.Offsets.begin(), attempt.Offsets.end());
+        receiveAttempt->SetExpirySeconds(ReceiveAttemptExpiryToSeconds(attempt.Expiry));
+    }
+
     return true;
 }
 
@@ -711,14 +740,23 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         TSerializerWithOffset<TAddedMessage> serializer;
         serializer.Reserve(NewMessageCount);
 
+        auto add = [&](ui64 offset, const TMessage& message) {
+            TAddedMessage msg;
+            msg.MessageGroup.Fields.HasMessageGroupId = message.HasMessageGroupId;
+            msg.MessageGroup.Fields.MessageGroupIdHash = message.MessageGroupIdHash;
+            msg.WriteTimestampDelta = message.WriteTimestampDelta;
+            serializer.Add(offset, msg);
+        };
+
+        // New messages that were moved to the slow zone within this batch
+        for (auto it = Storage->SlowMessages.lower_bound(FirstNewMessage.value()); it != Storage->SlowMessages.end(); ++it) {
+            add(it->first, it->second);
+        }
+
         for (size_t offset = std::max(FirstNewMessage.value(), Storage->FirstOffset); offset < lastOffset; ++offset) {
             auto [message, _] = Storage->GetMessage(offset);
             if (message) {
-                TAddedMessage msg;
-                msg.MessageGroup.Fields.HasMessageGroupId = message->HasMessageGroupId;
-                msg.MessageGroup.Fields.MessageGroupIdHash = message->MessageGroupIdHash;
-                msg.WriteTimestampDelta = message->WriteTimestampDelta;
-                serializer.Add(offset, msg);
+                add(offset, *message);
             }
         }
 
@@ -807,6 +845,17 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
             Storage->SerializeFullExternalLockedMessageGroupsIdTo(*msg, info);
         }
     }
+
+    for (const auto& receiveAttemptId : ReceiveAttemptDeletes) {
+        wal.AddReceiveAttemptDeletes(receiveAttemptId);
+    }
+    for (const auto& [receiveAttemptId, attempt] : ReceiveAttemptUpserts) {
+        auto* receiveAttempt = wal.AddReceiveAttemptUpserts();
+        receiveAttempt->SetReceiveAttemptId(receiveAttemptId);
+        receiveAttempt->MutableOffsets()->Assign(attempt.Offsets.begin(), attempt.Offsets.end());
+        receiveAttempt->SetExpirySeconds(ReceiveAttemptExpiryToSeconds(attempt.Expiry));
+    }
+
     return true;
 }
 

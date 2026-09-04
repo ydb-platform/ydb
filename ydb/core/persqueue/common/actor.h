@@ -117,7 +117,7 @@ protected:
 };
 
 
-class TConstantLogPrefix: virtual NPrivate::ILogPrefixBase {
+class TConstantLogPrefix: virtual public NPrivate::ILogPrefixBase {
 public:
     const TString& GetLogPrefix() const final;
     virtual TString BuildLogPrefix() const {
@@ -143,9 +143,12 @@ public:
     }
 
     bool OnUndelivered(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        auto& pipe = Pipes[ev->Get()->TabletId];
-        if (ev->Cookie == pipe.Cookie) {
-            pipe.Subscribed = false;
+        auto it = Pipes.find(ev->Get()->TabletId);
+        if (it == Pipes.end()) {
+            return false;
+        }
+        if (ev->Cookie == it->second.Cookie) {
+            it->second.Subscribed = false;
             return true;
         }
         return false;
@@ -163,7 +166,7 @@ private:
 
     struct TPipeInfo {
         ui64 Cookie = 0;
-        ui64 Subscribed = false;
+        bool Subscribed = false;
 
         ui64 GetCookie() {
             if (Subscribed) {

@@ -10,11 +10,11 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <cfloat>
+#include <array>
 #include <utility>
 #include <random>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -39,7 +39,9 @@ std::vector<std::pair<i8, double>> MakeSamples() {
     std::vector<std::pair<i8, double>> samples(TotalSambles);
 
     eng.seed(std::time(nullptr));
-    std::generate(samples.begin(), samples.end(), std::bind(&std::make_pair<i8, double>, std::bind(std::move(keys), std::move(eng)), std::bind(std::move(unif), std::move(eng))));
+    std::generate(samples.begin(), samples.end(), [&] {
+        return std::pair<i8, double>{keys(eng), unif(eng)};
+    });
     return samples;
 }
 
@@ -51,7 +53,9 @@ std::vector<std::pair<ui16, double>> MakeOtherSamples() {
     std::vector<std::pair<ui16, double>> samples(TotalSambles);
 
     eng.seed(std::time(nullptr));
-    std::generate(samples.begin(), samples.end(), std::bind(&std::make_pair<ui16, double>, std::bind(std::move(keys), std::move(eng)), std::bind(std::move(unif), std::move(eng))));
+    std::generate(samples.begin(), samples.end(), [&] {
+        return std::pair<ui16, double>{keys(eng), unif(eng)};
+    });
     return samples;
 }
 
@@ -241,7 +245,7 @@ Y_UNIT_TEST_LLVM(TestFloatAbs) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{11.433f, -3.14f, 0.0f, -HUGE_VALF});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{11.433F, -3.14F, 0.0F, -HUGE_VALF});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -249,7 +253,7 @@ Y_UNIT_TEST_LLVM(TestFloatAbs) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{11.433f, 3.14f, 0.0f, HUGE_VALF});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{11.433F, 3.14F, 0.0F, HUGE_VALF});
 }
 
 Y_UNIT_TEST_LLVM(TestIntegerAbs) {
@@ -271,8 +275,8 @@ Y_UNIT_TEST_LLVM(TestToIntegral) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ten = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, float(10.0)), pb.NewDataType(NUdf::TDataType<i32>::Id, true));
-    const auto two = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, float(2.0)), pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
+    const auto ten = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, float(10.0)), pb.NewDataType(NUdf::TDataType<i32>::Id, /*optional=*/true));
+    const auto two = pb.ToIntegral(NTest::ConvertValueToLiteralNode(pb, float(2.0)), pb.NewDataType(NUdf::TDataType<ui32>::Id, /*optional=*/true));
     const auto pgmReturn = pb.NewTuple({ten, two});
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -284,12 +288,12 @@ Y_UNIT_TEST_LLVM(TestFloatToI16) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{
-                                                               0.0f, 0.0f * HUGE_VALF, -3.14f, 12121324.0f, -7898.8f,
-                                                               210000.0f, HUGE_VALF, -HUGE_VALF, -HUGE_VALF, FLT_MIN / 2.0f});
+                                                               0.0F, 0.0F * HUGE_VALF, -3.14F, 12121324.0F, -7898.8F,
+                                                               210000.0F, HUGE_VALF, -HUGE_VALF, -HUGE_VALF, FLT_MIN / 2.0F});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
-                                      return pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i16>::Id, true));
+                                      return pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i16>::Id, /*optional=*/true));
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -307,7 +311,7 @@ Y_UNIT_TEST_LLVM(TestDoubleToBool) {
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
-                                      return pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<bool>::Id, true));
+                                      return pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<bool>::Id, /*optional=*/true));
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -325,7 +329,7 @@ Y_UNIT_TEST_LLVM(TestDoubleToUI32) {
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
-                                      return pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
+                                      return pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui32>::Id, /*optional=*/true));
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -347,13 +351,13 @@ Y_UNIT_TEST_LLVM(TestUI64ToIntegral) {
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
                                       return pb.NewTuple({
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i8>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui8>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i16>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui16>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i32>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui32>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i64>::Id, true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i8>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui8>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i16>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui16>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i32>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui32>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i64>::Id, /*optional=*/true)),
                                       });
                                   });
 
@@ -387,13 +391,13 @@ Y_UNIT_TEST_LLVM(TestI64ToIntegral) {
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
                                       return pb.NewTuple({
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i8>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui8>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i16>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui16>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i32>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui32>::Id, true)),
-                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui64>::Id, true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i8>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui8>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i16>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui16>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<i32>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui32>::Id, /*optional=*/true)),
+                                          pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<ui64>::Id, /*optional=*/true)),
                                       });
                                   });
 
@@ -429,17 +433,17 @@ Y_UNIT_TEST_LLVM(TestFloatFromString) {
     const auto iterator = graph->GetValue().GetListIterator();
     NUdf::TUnboxedValue item;
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, 0.f);
+    AssertUnboxedValueElementEqual(item, 0.F);
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT(std::isnan(item.template Get<float>()));
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, -3.14f);
+    AssertUnboxedValueElementEqual(item, -3.14F);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, 1212.f);
+    AssertUnboxedValueElementEqual(item, 1212.F);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, -7898.8f);
+    AssertUnboxedValueElementEqual(item, -7898.8F);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, 210000.f);
+    AssertUnboxedValueElementEqual(item, 210000.F);
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, HUGE_VALF);
     UNIT_ASSERT(iterator.Next(item));
@@ -488,7 +492,7 @@ Y_UNIT_TEST_LLVM(TestFloatToString) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{
-                                                               0.0f, 0.0f * HUGE_VALF, -3.14f, 1212.0f, -7898.8f, 210000.0f, HUGE_VALF, -HUGE_VALF});
+                                                               0.0F, 0.0F * HUGE_VALF, -3.14F, 1212.0F, -7898.8F, 210000.0F, HUGE_VALF, -HUGE_VALF});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -510,7 +514,7 @@ Y_UNIT_TEST_LLVM(TestInt64ToTimestamp) {
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
-                                      return pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<NUdf::TTimestamp>::Id, true));
+                                      return pb.ToIntegral(item, pb.NewDataType(NUdf::TDataType<NUdf::TTimestamp>::Id, /*optional=*/true));
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -538,7 +542,7 @@ Y_UNIT_TEST_LLVM(TestFloatConvertToUint32) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0f, 1212.0f, 210000.0f});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0F, 1212.0F, 210000.0F});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -553,7 +557,7 @@ Y_UNIT_TEST_LLVM(TestFloatConvertToInt32) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0f, -3.14f, 1212.0f, -7898.8f, 210000.0f});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0F, -3.14F, 1212.0F, -7898.8F, 210000.0F});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -618,7 +622,7 @@ Y_UNIT_TEST_LLVM(TestNanvl) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<float>>{
-                                                               float(0.0f), float(0.0f * HUGE_VALF), float(HUGE_VALF), float(-HUGE_VALF), float(FLT_MIN / 2.0f), {}});
+                                                               float(0.0F), float(0.0F * HUGE_VALF), float(HUGE_VALF), float(-HUGE_VALF), float(FLT_MIN / 2.0F), {}});
     const auto data = NTest::ConvertValueToLiteralNode(pb, double(3.14));
 
     const auto pgmReturn = pb.Map(list,
@@ -638,7 +642,7 @@ Y_UNIT_TEST_LLVM(TestNanvl) {
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, -HUGE_VAL);
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, double(FLT_MIN / 2.0f));
+    AssertUnboxedValueElementEqual(item, double(FLT_MIN / 2.0F));
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT(!item);
     UNIT_ASSERT(!iterator.Next(item));
@@ -652,7 +656,7 @@ Y_UNIT_TEST_LLVM(TestConvertToFloat) {
     const auto seven = NTest::ConvertValueToLiteralNode(pb, i32(7));
     const auto pgmReturn = pb.Convert(seven, NTest::ConvertToMinikqlType<float>(pb));
     const auto graph = setup.BuildGraph(pgmReturn);
-    AssertUnboxedValueElementEqual(graph->GetValue(), 7.0f);
+    AssertUnboxedValueElementEqual(graph->GetValue(), 7.0F);
 }
 
 Y_UNIT_TEST_LLVM(TestAppend) {
@@ -771,7 +775,7 @@ Y_UNIT_TEST_LLVM(TestExtendOverFlows) {
     const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<double>{0.0, 1.1, -3.14});
     const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<double>{121324.323, -7898.8});
 
-    const auto pgmReturn = pb.FromFlow(pb.Extend({pb.ToFlow(list1), pb.ToFlow(list2), pb.ToFlow(list2)}));
+    const auto pgmReturn = pb.FromFlow(pb.Extend({pb.ToFlow(list1, {}), pb.ToFlow(list2, {}), pb.ToFlow(list2, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(),
@@ -784,33 +788,33 @@ class TGraphInput: public TComputationValue<TGraphInput> {
 public:
     TGraphInput(TMemoryUsageInfo* memInfo, ui32 value)
         : TBase(memInfo)
-        , Value(value)
+        , Value_(value)
     {
     }
 
     NUdf::EFetchStatus GetReturnStatus() const {
-        return Status;
+        return Status_;
     }
 
     void SetReturnStatus(NUdf::EFetchStatus status) {
-        Status = status;
+        Status_ = status;
     }
 
 private:
     NUdf::EFetchStatus Fetch(NKikimr::NUdf::TUnboxedValue& item) final {
-        if (Status == NUdf::EFetchStatus::Ok) {
-            item = NKikimr::NUdf::TUnboxedValuePod(Value);
+        if (Status_ == NUdf::EFetchStatus::Ok) {
+            item = NKikimr::NUdf::TUnboxedValuePod(Value_);
         }
-        return Status;
+        return Status_;
     }
 
     NUdf::EFetchStatus WideFetch(NKikimr::NUdf::TUnboxedValue*, ui32) final {
         UNIT_ASSERT(false);
-        return Status;
+        return Status_;
     }
 
-    const ui32 Value;
-    NUdf::EFetchStatus Status = NUdf::EFetchStatus::Yield;
+    const ui32 Value_;
+    NUdf::EFetchStatus Status_ = NUdf::EFetchStatus::Yield;
 };
 
 Y_UNIT_TEST_QUAD(TestExtendYields, LLVM, WIDE) {
@@ -823,10 +827,10 @@ Y_UNIT_TEST_QUAD(TestExtendYields, LLVM, WIDE) {
 
     const auto pgmReturn = WIDE ? pb.FromFlow(
                                       pb.NarrowMap(
-                                          pb.Extend({pb.ExpandMap(pb.ToFlow(arg0), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
-                                                     pb.ExpandMap(pb.ToFlow(arg1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; })}),
+                                          pb.Extend({pb.ExpandMap(pb.ToFlow(arg0, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
+                                                     pb.ExpandMap(pb.ToFlow(arg1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; })}),
                                           [&](TRuntimeNode::TList items) { return items[0]; }))
-                                : pb.FromFlow(pb.Extend({pb.ToFlow(arg0), pb.ToFlow(arg1)}));
+                                : pb.FromFlow(pb.Extend({pb.ToFlow(arg0, {}), pb.ToFlow(arg1, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn, {arg0.GetNode(), arg1.GetNode()});
 
@@ -836,8 +840,8 @@ Y_UNIT_TEST_QUAD(TestExtendYields, LLVM, WIDE) {
     auto* input0 = dynamic_cast<TGraphInput*>(inputPod0.AsRawBoxed());
     auto* input1 = dynamic_cast<TGraphInput*>(inputPod1.AsRawBoxed());
 
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(inputPod0));
-    graph->GetEntryPoint(1, true)->SetValue(graph->GetContext(), std::move(inputPod1));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), std::move(inputPod0));
+    graph->GetEntryPoint(1, /*require=*/true)->SetValue(graph->GetContext(), std::move(inputPod1));
 
     const auto iterator = graph->GetValue();
     NUdf::TUnboxedValue item;
@@ -874,22 +878,22 @@ Y_UNIT_TEST_QUAD(TestExtendRandomYields, LLVM, WIDE) {
     const auto pgmReturn = WIDE ? pb.FromFlow(
                                       pb.NarrowMap(
                                           pb.Extend({
-                                              pb.ExpandMap(pb.ToFlow(arg0), expandLambda),
-                                              pb.ExpandMap(pb.ToFlow(arg1), expandLambda),
-                                              pb.ExpandMap(pb.ToFlow(arg2), expandLambda),
-                                              pb.ExpandMap(pb.ToFlow(arg3), expandLambda),
+                                              pb.ExpandMap(pb.ToFlow(arg0, {}), expandLambda),
+                                              pb.ExpandMap(pb.ToFlow(arg1, {}), expandLambda),
+                                              pb.ExpandMap(pb.ToFlow(arg2, {}), expandLambda),
+                                              pb.ExpandMap(pb.ToFlow(arg3, {}), expandLambda),
                                           }),
                                           [&](TRuntimeNode::TList items) { return items[0]; }))
-                                : pb.FromFlow(pb.Extend({pb.ToFlow(arg0), pb.ToFlow(arg1), pb.ToFlow(arg2), pb.ToFlow(arg3)}));
+                                : pb.FromFlow(pb.Extend({pb.ToFlow(arg0, {}), pb.ToFlow(arg1, {}), pb.ToFlow(arg2, {}), pb.ToFlow(arg3, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn, {arg0.GetNode(), arg1.GetNode(), arg2.GetNode(), arg3.GetNode()});
 
-    TGraphInput* inputs[4];
+    std::array<TGraphInput*, 4> inputs{};
 
     for (ui32 i = 0; i < 4; i++) {
         NUdf::TUnboxedValuePod inputPod = graph->GetHolderFactory().template Create<TGraphInput>(i);
         inputs[i] = dynamic_cast<TGraphInput*>(inputPod.AsRawBoxed());
-        graph->GetEntryPoint(i, true)->SetValue(graph->GetContext(), std::move(inputPod));
+        graph->GetEntryPoint(i, /*require=*/true)->SetValue(graph->GetContext(), std::move(inputPod));
     }
 
     const auto iterator = graph->GetValue();
@@ -897,8 +901,8 @@ Y_UNIT_TEST_QUAD(TestExtendRandomYields, LLVM, WIDE) {
 
     const auto yieldCountLambda = [&]() -> ui32 {
         ui32 result = 0;
-        for (ui32 i = 0; i < 4; i++) {
-            if (inputs[i]->GetReturnStatus() == NUdf::EFetchStatus::Yield) {
+        for (auto& input : inputs) {
+            if (input->GetReturnStatus() == NUdf::EFetchStatus::Yield) {
                 result++;
             }
         }
@@ -967,7 +971,7 @@ Y_UNIT_TEST_LLVM(TestOrderedExtendOverFlows) {
     const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<double>{0.0, 1.1, -3.14});
     const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<double>{121324.323, -7898.8});
 
-    const auto pgmReturn = pb.FromFlow(pb.OrderedExtend({pb.ToFlow(list2), pb.ToFlow(list1), pb.ToFlow(list2)}));
+    const auto pgmReturn = pb.FromFlow(pb.OrderedExtend({pb.ToFlow(list2, {}), pb.ToFlow(list1, {}), pb.ToFlow(list2, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(),
@@ -990,7 +994,7 @@ Y_UNIT_TEST_LLVM(TestFlowForwardList) {
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui32>{34, 56, 7});
 
-    const auto pgmReturn = pb.ForwardList(pb.ToFlow(list));
+    const auto pgmReturn = pb.ForwardList(pb.ToFlow(list, {}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{34, 56, 7});
@@ -1005,7 +1009,7 @@ Y_UNIT_TEST_LLVM(TestFlowFromOptional) {
     const auto opt2 = NTest::ConvertValueToLiteralNode(pb, TMaybe<double>{-3.14});
     const auto opt = NTest::ConvertValueToLiteralNode(pb, TMaybe<double>{});
 
-    const auto pgmReturn = pb.FromFlow(pb.OrderedExtend({pb.ToFlow(opt0), pb.ToFlow(opt), pb.ToFlow(opt1), pb.ToFlow(opt), pb.ToFlow(opt2)}));
+    const auto pgmReturn = pb.FromFlow(pb.OrderedExtend({pb.ToFlow(opt0, {}), pb.ToFlow(opt, {}), pb.ToFlow(opt1, {}), pb.ToFlow(opt, {}), pb.ToFlow(opt2, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(),
@@ -1018,7 +1022,7 @@ Y_UNIT_TEST_LLVM(TestCollectOverFlow) {
 
     const auto data = NTest::ConvertValueToLiteralNode(pb, TVector<double>{0.0, 1.1, -3.14, 121324.323, -7898.8});
 
-    const auto pgmReturn = pb.Collect(pb.ToFlow(data));
+    const auto pgmReturn = pb.Collect(pb.ToFlow(data, {}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
 
@@ -1175,7 +1179,7 @@ Y_UNIT_TEST_LLVM(TestMapOverFlow) {
     const auto data0 = NTest::ConvertValueToLiteralNode(pb, TStringBuf("PREFIX:"));
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TStringBuf>{"very large string", "", "small"});
 
-    const auto pgmReturn = pb.FromFlow(pb.Map(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.Map(pb.ToFlow(list, {}),
                                               [&](TRuntimeNode item) {
                                                   return pb.Concat(data0, item);
                                               }));
@@ -1352,7 +1356,7 @@ Y_UNIT_TEST_LLVM(TestFloatMinMax) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{-NAN, HUGE_VALF, 3.14f, -2.13f, -HUGE_VALF});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{-NAN, HUGE_VALF, 3.14F, -2.13F, -HUGE_VALF});
     const auto pgmReturn = pb.FlatMap(list,
                                       [&](TRuntimeNode left) {
                                           return pb.Map(list,
@@ -1373,9 +1377,9 @@ Y_UNIT_TEST_LLVM(TestFloatMinMax) {
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, std::tuple<float, float>{HUGE_VALF, HUGE_VALF});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14f, 3.14f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14F, 3.14F});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13f, -2.13f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13F, -2.13F});
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, -HUGE_VALF});
 
@@ -1384,42 +1388,42 @@ Y_UNIT_TEST_LLVM(TestFloatMinMax) {
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, std::tuple<float, float>{HUGE_VALF, HUGE_VALF});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14f, HUGE_VALF});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14F, HUGE_VALF});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13f, HUGE_VALF});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13F, HUGE_VALF});
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, HUGE_VALF});
 
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14f, 3.14f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14F, 3.14F});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14f, HUGE_VALF});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14F, HUGE_VALF});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14f, 3.14f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{3.14F, 3.14F});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13f, 3.14f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13F, 3.14F});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, 3.14f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, 3.14F});
 
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13f, -2.13f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13F, -2.13F});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13f, HUGE_VALF});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13F, HUGE_VALF});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13f, 3.14f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13F, 3.14F});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13f, -2.13f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-2.13F, -2.13F});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, -2.13f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, -2.13F});
 
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, -HUGE_VALF});
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, HUGE_VALF});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, 3.14f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, 3.14F});
     UNIT_ASSERT(iterator.Next(item));
-    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, -2.13f});
+    AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, -2.13F});
     UNIT_ASSERT(iterator.Next(item));
     AssertUnboxedValueElementEqual(item, std::tuple<float, float>{-HUGE_VALF, -HUGE_VALF});
 
@@ -1432,15 +1436,15 @@ Y_UNIT_TEST_LLVM(TestFloatMod) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     // data2 is used as a runtime operand in the lambda body.
-    const auto data2 = pb.NewDataLiteral<float>(3.14f);
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{-1.75f, 3.14f, -6.28f, 7.28f});
+    const auto data2 = pb.NewDataLiteral<float>(3.14F);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{-1.75F, 3.14F, -6.28F, 7.28F});
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
                                       return pb.Mod(item, data2);
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{-1.75f, 0.0f, 0.0f, 1.0f});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{-1.75F, 0.0F, 0.0F, 1.0F});
 }
 
 Y_UNIT_TEST_LLVM(TestDoubleMod) {
@@ -1465,7 +1469,7 @@ Y_UNIT_TEST_LLVM(TestDiscardOverFlow) {
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TStringBuf>{"000", "100", "200", "300"});
 
-    const auto pgmReturn = pb.FromFlow(pb.Discard(pb.ToFlow(list)));
+    const auto pgmReturn = pb.FromFlow(pb.Discard(pb.ToFlow(list, {})));
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
     NUdf::TUnboxedValue item;
@@ -1481,9 +1485,9 @@ Y_UNIT_TEST_LLVM(TestHead) {
     const auto listType = pb.NewListType(itemType);
 
     const auto data0 = pb.NewEmptyList(itemType);
-    const auto data1 = NTest::ConvertValueToLiteralNode(pb, TVector<float>{-1.5f, 0.f, 3.14f});
-    const auto data2 = NTest::ConvertValueToLiteralNode(pb, TVector<float>{3.14f, -1.5f, 0.f});
-    const auto data3 = pb.LazyList(NTest::ConvertValueToLiteralNode(pb, TVector<float>{1.1f, -2.2f}));
+    const auto data1 = NTest::ConvertValueToLiteralNode(pb, TVector<float>{-1.5F, 0.F, 3.14F});
+    const auto data2 = NTest::ConvertValueToLiteralNode(pb, TVector<float>{3.14F, -1.5F, 0.F});
+    const auto data3 = pb.LazyList(NTest::ConvertValueToLiteralNode(pb, TVector<float>{1.1F, -2.2F}));
 
     const auto list = pb.NewList(listType, {data0, data1, data2, data3});
 
@@ -1491,7 +1495,7 @@ Y_UNIT_TEST_LLVM(TestHead) {
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TMaybe<float>>{
-                                                          {}, float(-1.5f), float(3.14f), float(1.1f)});
+                                                          {}, float(-1.5F), float(3.14F), float(1.1F)});
 }
 
 Y_UNIT_TEST_LLVM(TestLast) {
@@ -1502,9 +1506,9 @@ Y_UNIT_TEST_LLVM(TestLast) {
     const auto listType = pb.NewListType(itemType);
 
     const auto data0 = pb.NewEmptyList(itemType);
-    const auto data1 = NTest::ConvertValueToLiteralNode(pb, TVector<float>{-1.5f, 0.f, 3.14f});
-    const auto data2 = NTest::ConvertValueToLiteralNode(pb, TVector<float>{3.14f, -1.5f, 0.f});
-    const auto data3 = pb.LazyList(NTest::ConvertValueToLiteralNode(pb, TVector<float>{1.1f, -2.2f}));
+    const auto data1 = NTest::ConvertValueToLiteralNode(pb, TVector<float>{-1.5F, 0.F, 3.14F});
+    const auto data2 = NTest::ConvertValueToLiteralNode(pb, TVector<float>{3.14F, -1.5F, 0.F});
+    const auto data3 = pb.LazyList(NTest::ConvertValueToLiteralNode(pb, TVector<float>{1.1F, -2.2F}));
 
     const auto list = pb.NewList(listType, {data0, data1, data2, data3});
 
@@ -1512,7 +1516,7 @@ Y_UNIT_TEST_LLVM(TestLast) {
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TMaybe<float>>{
-                                                          {}, float(3.14f), float(0.f), float(-2.2f)});
+                                                          {}, float(3.14F), float(0.F), float(-2.2F)});
 }
 
 Y_UNIT_TEST_LLVM(TestCoalesce) {
@@ -1688,8 +1692,8 @@ Y_UNIT_TEST_LLVM(TestLogical) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto truth = NTest::ConvertValueToLiteralNode(pb, true);
-    const auto falsehood = NTest::ConvertValueToLiteralNode(pb, false);
+    const auto truth = NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true);
+    const auto falsehood = NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false);
     auto pgmReturn = pb.NewEmptyList(NTest::ConvertToMinikqlType<bool>(pb));
 
     pgmReturn = pb.Append(pgmReturn, pb.And({truth, truth}));
@@ -1885,7 +1889,8 @@ Y_UNIT_TEST_LLVM(TestSkipForAppend) {
 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iteratorLists = graph->GetValue().GetListIterator();
-        NUdf::TUnboxedValue test, item;
+        NUdf::TUnboxedValue test;
+        NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iteratorLists.Next(test));
         auto iterator = test.GetListIterator();
@@ -1947,7 +1952,8 @@ Y_UNIT_TEST_LLVM(TestSkipForPrepend) {
 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iteratorLists = graph->GetValue().GetListIterator();
-        NUdf::TUnboxedValue test, item;
+        NUdf::TUnboxedValue test;
+        NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iteratorLists.Next(test));
         auto iterator = test.GetListIterator();
@@ -2009,7 +2015,8 @@ Y_UNIT_TEST_LLVM(TestTakeForAppend) {
 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iteratorLists = graph->GetValue().GetListIterator();
-        NUdf::TUnboxedValue test, item;
+        NUdf::TUnboxedValue test;
+        NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iteratorLists.Next(test));
         auto iterator = test.GetListIterator();
@@ -2071,7 +2078,8 @@ Y_UNIT_TEST_LLVM(TestTakeForPrepend) {
 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iteratorLists = graph->GetValue().GetListIterator();
-        NUdf::TUnboxedValue test, item;
+        NUdf::TUnboxedValue test;
+        NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iteratorLists.Next(test));
         auto iterator = test.GetListIterator();
@@ -2305,7 +2313,7 @@ Y_UNIT_TEST_LLVM(TestSize) {
 
     const auto data1 = NTest::ConvertValueToLiteralNode(pb, TStringBuf("aaa"));
     const auto data2 = NTest::ConvertValueToLiteralNode(pb, ui32(3));
-    const auto data3 = NTest::ConvertValueToLiteralNode(pb, ui64(7878786987536ull));
+    const auto data3 = NTest::ConvertValueToLiteralNode(pb, ui64(7878786987536ULL));
     const auto data4 = NTest::ConvertValueToLiteralNode(pb, TStringBuf("qqqqq"));
     const auto pgmReturn = pb.NewList(NTest::ConvertToMinikqlType<ui32>(pb),
                                       {pb.Size(data1), pb.Size(data2), pb.Size(data3), pb.Size(data4)});
@@ -2471,21 +2479,21 @@ Y_UNIT_TEST_LLVM(TestSortTuples) {
 
     const auto listMaker = [&]()
     {
-        TTriple testData[] = {
+        const std::array<TTriple, 6> testData = {{
             {1, 1, 1},
             {1, 1, 2},
             {1, 2, 3},
             {1, 3, 0},
             {2, 0, 1},
             {2, 1, 0},
-        };
+        }};
 
         TVector<TRuntimeNode> tuplesList;
-        for (ui32 i = 0; i < Y_ARRAY_SIZE(testData); i++) {
+        for (auto& i : testData) {
             TVector<TRuntimeNode> elements(3);
-            elements[0] = pb.NewDataLiteral(std::get<0>(testData[i]));
-            elements[1] = pb.NewDataLiteral(std::get<1>(testData[i]));
-            elements[2] = pb.NewDataLiteral(std::get<2>(testData[i]));
+            elements[0] = pb.NewDataLiteral(std::get<0>(i));
+            elements[1] = pb.NewDataLiteral(std::get<1>(i));
+            elements[2] = pb.NewDataLiteral(std::get<2>(i));
             tuplesList.push_back(pb.NewTuple(elements));
         }
 
@@ -2498,61 +2506,61 @@ Y_UNIT_TEST_LLVM(TestSortTuples) {
     };
 
     {
-        TRuntimeNode order = TupleOrder(pb, true, true, true);
-        TTriple expectedData[] = {
+        TRuntimeNode order = TupleOrder(pb, /*asc1=*/true, /*asc2=*/true, /*asc3=*/true);
+        const std::array<TTriple, 6> expectedData = {{
             {1, 1, 1},
             {1, 1, 2},
             {1, 2, 3},
             {1, 3, 0},
             {2, 0, 1},
             {2, 1, 0},
-        };
-        TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+        }};
+        TVector<TTriple> expected(expectedData.begin(), expectedData.end());
         TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
         UNIT_ASSERT_EQUAL(result, expected);
     }
 
     {
-        TRuntimeNode order = TupleOrder(pb, false, false, false);
-        TTriple expectedData[] = {
+        TRuntimeNode order = TupleOrder(pb, /*asc1=*/false, /*asc2=*/false, /*asc3=*/false);
+        const std::array<TTriple, 6> expectedData = {{
             {2, 1, 0},
             {2, 0, 1},
             {1, 3, 0},
             {1, 2, 3},
             {1, 1, 2},
             {1, 1, 1},
-        };
-        TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+        }};
+        TVector<TTriple> expected(expectedData.begin(), expectedData.end());
         TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
         UNIT_ASSERT_EQUAL(result, expected);
     }
 
     {
-        TRuntimeNode order = TupleOrder(pb, true, false, true);
-        TTriple expectedData[] = {
+        TRuntimeNode order = TupleOrder(pb, /*asc1=*/true, /*asc2=*/false, /*asc3=*/true);
+        const std::array<TTriple, 6> expectedData = {{
             {1, 3, 0},
             {1, 2, 3},
             {1, 1, 1},
             {1, 1, 2},
             {2, 1, 0},
             {2, 0, 1},
-        };
-        TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+        }};
+        TVector<TTriple> expected(expectedData.begin(), expectedData.end());
         TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
         UNIT_ASSERT_EQUAL(result, expected);
     }
 
     {
-        TRuntimeNode order = TupleOrder(pb, false, true, false);
-        TTriple expectedData[] = {
+        TRuntimeNode order = TupleOrder(pb, /*asc1=*/false, /*asc2=*/true, /*asc3=*/false);
+        const std::array<TTriple, 6> expectedData = {{
             {2, 0, 1},
             {2, 1, 0},
             {1, 1, 2},
             {1, 1, 1},
             {1, 2, 3},
             {1, 3, 0},
-        };
-        TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+        }};
+        TVector<TTriple> expected(expectedData.begin(), expectedData.end());
         TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
         UNIT_ASSERT_EQUAL(result, expected);
     }
@@ -2570,7 +2578,7 @@ Y_UNIT_TEST_LLVM(TestAsList) {
 Y_UNIT_TEST_LLVM(TestListIfTrue) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
-    const auto pgmReturn = pb.ListIf(NTest::ConvertValueToLiteralNode(pb, true),
+    const auto pgmReturn = pb.ListIf(NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true),
                                      NTest::ConvertValueToLiteralNode(pb, ui32(34)));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -2580,7 +2588,7 @@ Y_UNIT_TEST_LLVM(TestListIfTrue) {
 Y_UNIT_TEST_LLVM(TestListIfFalse) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
-    const auto pgmReturn = pb.ListIf(NTest::ConvertValueToLiteralNode(pb, false),
+    const auto pgmReturn = pb.ListIf(NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false),
                                      NTest::ConvertValueToLiteralNode(pb, ui32(34)));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -2601,13 +2609,13 @@ Y_UNIT_TEST_LLVM(NonDeterministicEnv) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{1.f, 2.f, 3.f});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{1.F, 2.F, 3.F});
     const auto pgmReturn = pb.Sort(list,
-                                   NTest::ConvertValueToLiteralNode(pb, false),
+                                   NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false),
                                    [](TRuntimeNode item) { return item; });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{3.f, 2.f, 1.f});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{3.F, 2.F, 1.F});
 }
 
 Y_UNIT_TEST_LLVM(TestIndexDictContains) {
@@ -2670,7 +2678,7 @@ Y_UNIT_TEST_LLVM(TestToBytes) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.f, -3.14f, -HUGE_VALF, HUGE_VALF});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.F, -3.14F, -HUGE_VALF, HUGE_VALF});
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
                                       return pb.ToBytes(item);
@@ -2690,7 +2698,7 @@ Y_UNIT_TEST_LLVM(TestToBytesOpt) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<float>>{
-                                                               {}, 0.f, -3.14f, -HUGE_VALF, HUGE_VALF});
+                                                               {}, 0.F, -3.14F, -HUGE_VALF, HUGE_VALF});
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
                                       return pb.ToBytes(item);
@@ -2712,7 +2720,7 @@ Y_UNIT_TEST_LLVM(TestToStringTemporarryUtf8) {
 
     const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{"long prefix "});
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<NTest::TUtf8>{
-                                                               {"01234567890 long string"}, {"01234567890 very long string"}});
+                                                               NTest::TUtf8{"01234567890 long string"}, NTest::TUtf8{"01234567890 very long string"}});
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
                                       return pb.ToString(pb.Concat(data0, item));
@@ -2799,11 +2807,11 @@ Y_UNIT_TEST_LLVM(TestMTRand) {
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{
-                                                          13930160852258120406ull,
-                                                          11788048577503494824ull,
-                                                          13874630024467741450ull,
-                                                          2513787319205155662ull,
-                                                          16662371453428439381ull,
+                                                          13930160852258120406ULL,
+                                                          11788048577503494824ULL,
+                                                          13874630024467741450ULL,
+                                                          2513787319205155662ULL,
+                                                          16662371453428439381ULL,
                                                       });
 }
 
@@ -2859,7 +2867,7 @@ Y_UNIT_TEST_LLVM(TestSkipAndTakeOverFlow) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui8>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
-    const auto pgmReturn = pb.FromFlow(pb.Take(pb.Skip(pb.ToFlow(list), pb.NewDataLiteral<ui64>(4ULL)), pb.NewDataLiteral<ui64>(3ULL)));
+    const auto pgmReturn = pb.FromFlow(pb.Take(pb.Skip(pb.ToFlow(list, {}), pb.NewDataLiteral<ui64>(4ULL)), pb.NewDataLiteral<ui64>(3ULL)));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), NYql::NUdf::TUnboxedValueComparatorStreamView<ui8>({ui8(4), ui8(5), ui8(6)}));
@@ -2919,8 +2927,8 @@ Y_UNIT_TEST_LLVM(TestRemoveTimezone) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
-    const auto datetimeTypeTz = pb.NewDataType(NUdf::EDataSlot::TzDatetime, true);
+    const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
+    const auto datetimeTypeTz = pb.NewDataType(NUdf::EDataSlot::TzDatetime, /*optional=*/true);
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TStringBuf>{"", "2019-10-24T13:01:37,Zulu", "2019-10-24T13:01:37,Japan", "2019-10-24T13:01:37,Jamaica"});
 
@@ -2948,7 +2956,7 @@ Y_UNIT_TEST_LLVM(TestSqueezeToList) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<double>{0.0, 1.1, -3.14, 121324.323, -7898.8});
-    const auto pgmReturn = pb.FromFlow(pb.SqueezeToList(pb.ToFlow(list), pb.NewDataLiteral<ui64>(1000ULL)));
+    const auto pgmReturn = pb.FromFlow(pb.SqueezeToList(pb.ToFlow(list, {}), pb.NewDataLiteral<ui64>(1000ULL)));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     // SqueezeToList emits one list item then Finish — verify via stream-view of length 1
@@ -2965,8 +2973,8 @@ Y_UNIT_TEST_LLVM(TestSqueezeToListWithLimit) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0f, 1.1f, -3.14f, 12.323f, -7898.8f});
-    const auto pgmReturn = pb.FromFlow(pb.SqueezeToList(pb.ToFlow(list), pb.NewDataLiteral<ui64>(3ULL)));
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0F, 1.1F, -3.14F, 12.323F, -7898.8F});
+    const auto pgmReturn = pb.FromFlow(pb.SqueezeToList(pb.ToFlow(list, {}), pb.NewDataLiteral<ui64>(3ULL)));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto stream = graph->GetValue();
@@ -2975,7 +2983,7 @@ Y_UNIT_TEST_LLVM(TestSqueezeToListWithLimit) {
     UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, stream.Fetch(full));
 
     UNIT_ASSERT_VALUES_EQUAL(full.GetListLength(), 3ULL);
-    AssertUnboxedValueElementEqual(full, TVector<float>{0.0f, 1.1f, -3.14f});
+    AssertUnboxedValueElementEqual(full, TVector<float>{0.0F, 1.1F, -3.14F});
 }
 
 Y_UNIT_TEST_LLVM(TestPerfHolders) {
@@ -2991,7 +2999,7 @@ Y_UNIT_TEST_LLVM(TestPerfHolders) {
     TCallableBuilder listRet(pb.GetTypeEnvironment(), "TestList", listType);
     const auto listNode = listRet.Build();
 
-    const auto pgmReturn = pb.Map(pb.LazyList(TRuntimeNode(listNode, false)),
+    const auto pgmReturn = pb.Map(pb.LazyList(TRuntimeNode(listNode, /*isImmediate=*/false)),
                                   [&](TRuntimeNode item) {
                                       return pb.NewStruct({{"key", pb.Member(item, "key")},
                                                            {"value", pb.AggrConcat(mark, pb.Member(item, "value"))}});
@@ -3012,7 +3020,7 @@ Y_UNIT_TEST_LLVM(TestPerfHolders) {
     {
         const auto graph = setup.BuildGraph(pgmReturn, {listNode});
         NUdf::TUnboxedValue* items = nullptr;
-        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(src.size(), items));
+        graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(src.size(), items));
         std::transform(src.cbegin(), src.cend(), items, std::bind(myStructFactory, std::ref(graph->GetHolderFactory()), std::placeholders::_1));
 
         const auto iterator = graph->GetValue().GetListIterator();
@@ -3047,7 +3055,7 @@ Y_UNIT_TEST_LLVM(TestPerfGrep) {
     const auto t1 = TInstant::Now();
     {
         const auto graph = setup.BuildGraph(pgmReturn, {rowArg.GetNode()});
-        const auto row = graph->GetEntryPoint(0, true);
+        const auto row = graph->GetEntryPoint(0, /*require=*/true);
 
         NUdf::TUnboxedValue* items = nullptr;
         const auto structObj = graph->GetHolderFactory().CreateDirectArrayHolder(2, items);
@@ -3074,12 +3082,12 @@ Y_NO_INLINE NUdf::TUnboxedValuePod SpecialFunc(const NUdf::TUnboxedValuePod* arg
 Y_UNIT_TEST_LLVM(TestPerfGrepSpecialFunc) {
     const auto t1 = TInstant::Now();
     {
-        NUdf::TUnboxedValuePod items[2];
+        std::array<NUdf::TUnboxedValuePod, 2> items;
         const ui32 n = 10000;
         for (ui32 i = 0; i < n; ++i) {
             items[0] = NUdf::TUnboxedValuePod(i);
             items[1] = NUdf::TUnboxedValuePod::Embedded("ABCDF");
-            bool keep = SpecialFunc(items).template Get<bool>();
+            bool keep = SpecialFunc(items.data()).template Get<bool>();
             UNIT_ASSERT(!keep);
         }
     }
@@ -3111,7 +3119,7 @@ Y_UNIT_TEST_LLVM(TestBuiltinsAdd) {
     testAdd(Max<i64>(), i64(1), Min<i64>());
     testAdd(Max<ui64>(), ui64(1), ui64(0));
 
-    testAdd(3.14f, 2.71f, 5.85f);
+    testAdd(3.14F, 2.71F, 5.85F);
     testAdd(1.5, 2.5, 4.0);
 }
 
@@ -3137,7 +3145,7 @@ Y_UNIT_TEST_LLVM(TestBuiltinsSub) {
     testSub(Min<i64>(), i64(1), Max<i64>());
     testSub(ui64(0), ui64(1), Max<ui64>());
 
-    testSub(5.5f, 2.3f, 3.2f);
+    testSub(5.5F, 2.3F, 3.2F);
     testSub(10.0, 3.5, 6.5);
 }
 
@@ -3163,7 +3171,7 @@ Y_UNIT_TEST_LLVM(TestBuiltinsMul) {
     testMul(Max<i64>(), i64(2), i64(-2));
     testMul(Max<ui64>(), ui64(2), ui64(18446744073709551614ULL));
 
-    testMul(2.5f, 4.0f, 10.0f);
+    testMul(2.5F, 4.0F, 10.0F);
     testMul(3.0, 7.0, 21.0);
 }
 
@@ -3188,7 +3196,7 @@ Y_UNIT_TEST_LLVM(TestBuiltinsInc) {
     testInc(Max<i64>(), Min<i64>());
     testInc(Max<ui64>(), ui64(0));
 
-    testInc(5.5f, 6.5f);
+    testInc(5.5F, 6.5F);
     testInc(10.0, 11.0);
 }
 
@@ -3213,7 +3221,7 @@ Y_UNIT_TEST_LLVM(TestBuiltinsDec) {
     testDec(Min<i64>(), Max<i64>());
     testDec(ui64(0), Max<ui64>());
 
-    testDec(7.5f, 6.5f);
+    testDec(7.5F, 6.5F);
     testDec(20.0, 19.0);
 }
 
@@ -3238,7 +3246,7 @@ Y_UNIT_TEST_LLVM(TestBuiltinsMinus) {
     testMinus(Min<i64>(), Min<i64>());
     testMinus(Max<ui64>(), ui64(1));
 
-    testMinus(3.14f, -3.14f);
+    testMinus(3.14F, -3.14F);
     testMinus(2.5, -2.5);
 }
 
@@ -3261,10 +3269,9 @@ Y_UNIT_TEST_LLVM(TestBuiltinsAbs) {
     testAbs(Min<i32>(), Min<i32>());
     testAbs(Min<i64>(), Min<i64>());
 
-    testAbs(-3.14f, 3.14f);
+    testAbs(-3.14F, 3.14F);
     testAbs(-2.5, 2.5);
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

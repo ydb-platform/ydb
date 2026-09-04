@@ -16,7 +16,7 @@ import yatest
 
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_config import GRPC_TLS_DATA_FILES, KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.daemon import Daemon
 from ydb.tests.library.harness.util import LogLevels
@@ -44,6 +44,8 @@ class EmptyArguments(object):
         self.dont_use_log_files = False
         self.enabled_feature_flags = []
         self.enabled_grpc_services = []
+        self.enable_http_proxy = False
+        self.enable_sqs_topic_api = False
 
 
 def _get_build_path(path):
@@ -221,6 +223,12 @@ class Recipe(object):
     def write_mon_port(self, mon_port):
         self.setenv('YDB_MON_PORT', str(mon_port))
 
+    def write_kafka_api_port(self, kafka_api_port):
+        self.setenv('YDB_KAFKA_PROXY_PORT', str(kafka_api_port))
+
+    def write_http_proxy_endpoint(self, http_proxy_port):
+        self.setenv('YDB_HTTP_PROXY_ENDPOINT', 'http://localhost:%d' % http_proxy_port)
+
     def read_metafile(self):
         return json.loads(self.read(self.metafile_path()))
 
@@ -258,8 +266,12 @@ def default_users():
     return {user: password}
 
 
+def parse_grpc_tls_enable(value):
+    return (value or '').strip().lower() in ('1', 'true')
+
+
 def enable_tls():
-    return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
+    return parse_grpc_tls_enable(os.getenv('YDB_GRPC_ENABLE_TLS'))
 
 
 def is_tiny_mode():
@@ -301,6 +313,16 @@ def generic_connector_config():
 def grpc_tls_data_path(arguments):
     default_store = arguments.ydb_working_dir if arguments.ydb_working_dir else None
     return os.getenv('YDB_GRPC_TLS_DATA_PATH', default_store)
+
+
+def has_any_grpc_tls_data_file(tls_data_path):
+    if not tls_data_path:
+        return False
+    return any(os.path.lexists(os.path.join(tls_data_path, filename)) for filename in GRPC_TLS_DATA_FILES)
+
+
+def should_generate_grpc_tls_data(tls_data_path):
+    return not has_any_grpc_tls_data_file(tls_data_path)
 
 
 def pq_client_service_types(arguments):
@@ -345,6 +367,32 @@ def resolve_deploy_config_action(config_path, target_config):
     return 'generate'
 
 
+def resolve_http_proxy_config(arguments):
+    enable_sqs_topic_api = (
+        getattr(arguments, 'enable_sqs_topic_api', False)
+        or os.getenv('YDB_ENABLE_SQS_TOPIC_API') == 'true'
+    )
+    enable_http_proxy = (
+        enable_sqs_topic_api
+        or getattr(arguments, 'enable_http_proxy', False)
+        or os.getenv('YDB_ENABLE_HTTP_PROXY') == 'true'
+    )
+
+    if not enable_http_proxy:
+        return None
+
+    config = {
+        'enabled': True,
+        'yandex_cloud_service_region': ['ru-central1', 'ru-central-1'],
+    }
+    if enable_sqs_topic_api:
+        config.update({
+            'sqs_topic_enabled': True,
+            'ymq_enabled': False,
+        })
+    return config
+
+
 def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
@@ -373,8 +421,14 @@ def deploy(arguments):
 
     optionals = {}
     if enable_tls():
-        optionals.update({'grpc_tls_data_path': grpc_tls_data_path(arguments)})
+        tls_data_path = grpc_tls_data_path(arguments)
+        optionals.update({'grpc_tls_data_path': tls_data_path})
         optionals.update({'grpc_ssl_enable': enable_tls()})
+        optionals.update(
+            {
+                'generate_grpc_tls_data': should_generate_grpc_tls_data(os.getenv('YDB_GRPC_TLS_DATA_PATH'))
+            }
+        )
     pdisk_store_path = arguments.ydb_working_dir if arguments.ydb_working_dir else None
 
     enable_feature_flags = arguments.enabled_feature_flags.copy()  # type: typing.List[str]
@@ -383,12 +437,15 @@ def deploy(arguments):
         for flag_name in flags:
             enable_feature_flags.append(flag_name)
 
-    if 'YDB_EXPERIMENTAL_PG' in os.environ:
-        optionals['pg_compatible_expirement'] = True
-
-    kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "0"))
+    kafka_api_port = os.environ.get("YDB_KAFKA_PROXY_PORT", "auto")
+    if kafka_api_port != 'auto':
+        kafka_api_port = int(kafka_api_port)
     if kafka_api_port != 0:
         optionals['kafka_api_port'] = kafka_api_port
+
+    http_proxy_config = resolve_http_proxy_config(arguments)
+    if http_proxy_config is not None:
+        optionals['http_proxy_config'] = http_proxy_config
 
     enabled_grpc_services = arguments.enabled_grpc_services.copy()  # type: typing.List[str]
     if 'YDB_GRPC_SERVICES' in os.environ:
@@ -438,12 +495,10 @@ def deploy(arguments):
         target_config = os.path.join(configs_path, "config.yaml")
         action = resolve_deploy_config_action(config_path, target_config)
         if action == 'copy':
-            self.write_tls_data()
             shutil.copyfile(config_path, target_config)
             return
         if action == 'preserve':
             logger.info('Preserving existing config at %s', target_config)
-            self.write_tls_data()
             return
 
         original_write_proto_configs(configs_path)
@@ -456,6 +511,8 @@ def deploy(arguments):
     info = {'nodes': {}}
     endpoints = []
     mon_port = None
+    kafka_api_port = None
+    http_proxy_port = None
     for node_id, node in cluster.nodes.items():
         info['nodes'][node_id] = {
             'pid': node.pid,
@@ -463,6 +520,8 @@ def deploy(arguments):
             'sqs_port': node.sqs_port,
             'grpc_port': node.port,
             'mon_port': node.mon_port,
+            'kafka_api_port': node.kafka_api_port,
+            'http_proxy_port': node.http_proxy_port,
             'command': node.command,
             'cwd': node.cwd,
             'stderr_file': node.stderr_file_name,
@@ -476,6 +535,12 @@ def deploy(arguments):
         if mon_port is None:
             mon_port = node.mon_port
 
+        if kafka_api_port is None:
+            kafka_api_port = node.kafka_api_port
+
+        if http_proxy_port is None:
+            http_proxy_port = node.http_proxy_port
+
         endpoints.append("localhost:%d" % node.grpc_port)
 
     endpoint = endpoints[0]
@@ -488,6 +553,10 @@ def deploy(arguments):
         recipe.write_mon_port(mon_port)
     if enable_tls():
         recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
+    if kafka_api_port is not None:
+        recipe.write_kafka_api_port(kafka_api_port)
+    if http_proxy_port is not None:
+        recipe.write_http_proxy_endpoint(http_proxy_port)
     return endpoint, database
 
 
@@ -596,6 +665,8 @@ def produce_arguments(args):
     parser.add_argument("--base-port-offset", action="store", type=int, default=0)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
+    parser.add_argument("--enable-http-proxy", action='store_true', default=False)
+    parser.add_argument("--enable-sqs-topic-api", action='store_true', default=False)
     parser.add_argument("--config-path", action="store")
     parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
@@ -610,6 +681,8 @@ def produce_arguments(args):
     arguments.enable_pq = parsed.enable_pq
     arguments.pq_client_service_types = parsed.pq_client_service_type
     arguments.enable_pqcd = parsed.enable_pqcd
+    arguments.enable_http_proxy = parsed.enable_http_proxy
+    arguments.enable_sqs_topic_api = parsed.enable_sqs_topic_api
     arguments.config_path = parsed.config_path
     return arguments
 

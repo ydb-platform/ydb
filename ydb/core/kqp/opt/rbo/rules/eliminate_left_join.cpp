@@ -3,6 +3,10 @@
 namespace NKikimr {
 namespace NKqp {
 
+bool TEliminateLeftJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Join;
+}
+
 // Given this shape:
 // Left Join (L_keys = R_keys)
 //     |- L
@@ -12,6 +16,7 @@ namespace NKqp {
 // then left join can be eliminated, leaving only "L"
 TIntrusivePtr<IOperator> TEliminateLeftJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Join) {
         return input;
@@ -25,7 +30,7 @@ TIntrusivePtr<IOperator> TEliminateLeftJoinRule::SimpleMatchAndApply(const TIntr
     auto& rhs = join->GetRightInput();
 
     // R is should not be live
-    if (!IUSetIntersect(rhs->GetOutputIUs(), props.LiveOut.find(join.get())->second).empty()) {
+    if (!IUSetIntersect(rhs->GetOutputIUs(), GetLiveOut(join.get())).empty()) {
         return input;
     }
 

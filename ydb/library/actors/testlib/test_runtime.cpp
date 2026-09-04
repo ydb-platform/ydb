@@ -1774,7 +1774,7 @@ namespace NActors {
         }
 
         if (UseRdmaAllocator) {
-            auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+            auto memPool = NInterconnect::NRdma::CreateDummyMemPool(/*emulateRegistration=*/true);
             setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
         }
 

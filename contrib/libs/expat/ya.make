@@ -4,18 +4,18 @@ LIBRARY()
 
 LICENSE(
     CC0-1.0 AND
-    JSON AND
     MIT
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.8.1)
+VERSION(2.8.3)
 
-ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_8_1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_8_3.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

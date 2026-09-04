@@ -38,12 +38,12 @@ void TWriteRequestTestFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [this]   //
         (ui32 vChunkIndex,
          ui8 hostIndex,
-         ui64 lsn,
+         TPBufferKey pBufferKey,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
+        Y_UNUSED(hostIndex, pBufferKey, traceId, guardedSglist);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -59,8 +59,8 @@ void TWriteRequestTestFixture::Init()
         [this](
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
-            std::vector<THostIndex> hostIndexes,
-            ui64 lsn,
+            THostMask hostIndexes,
+            TPBufferKey pBufferKey,
             TBlockRange64 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
@@ -71,7 +71,7 @@ void TWriteRequestTestFixture::Init()
             vChunkIndex,
             coordinatorHostIndex,
             hostIndexes,
-            lsn,
+            pBufferKey,
             range,
             replyTimeout,
             guardedSglist,
@@ -105,7 +105,6 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteRequestTestFixture::CreateOkResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse okResponse;
-    okResponse.OverallError = MakeError(S_OK);
     okResponse.Responses.push_back(
         {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
     okResponse.Responses.push_back(
@@ -121,7 +120,6 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteRequestTestFixture::CreateOneOkResponse(THostIndex hostIndex)
 {
     TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
-    partiallyOkResponse.OverallError = MakeError(S_OK);
     partiallyOkResponse.Responses.push_back(
         {.HostIndex = hostIndex, .Error = MakeError(S_OK)});
 
@@ -133,8 +131,6 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteRequestTestFixture::CreateDBGErrorResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse dbgErrorResponse;
-    dbgErrorResponse.OverallError = MakeError(E_FAIL);
-
     return dbgErrorResponse;
 }
 
@@ -145,8 +141,8 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
         [this](
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
-            std::vector<THostIndex> hostIndexes,
-            ui64 lsn,
+            THostMask hostIndexes,
+            TPBufferKey pBufferKey,
             TBlockRange64 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
@@ -155,21 +151,21 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
     {
         Y_UNUSED(coordinatorHostIndex, replyTimeout, guardedSglist, traceId);
 
-        UNIT_ASSERT_VALUES_EQUAL(UserLsn, lsn);
+        UNIT_ASSERT_VALUES_EQUAL(UserPBufferKey.Print(), pBufferKey.Print());
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
-        UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
+        UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.Count());
 
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[0]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes.Get(0)));
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[1]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes.Get(1)));
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[2]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes.Get(2)));
 
         callback(CreateOkResponse());
     };
@@ -192,7 +188,7 @@ TWriteRequestExecutorPtr TWriteRequestTestFixture::CreateRequestExecutor(
         NWilson::TTraceId(),
         MakeIntrusive<TCallContext>(),
         Range);
-    bundle->SetLsn(UserLsn);
+    bundle->SetPBufferKey(UserPBufferKey);
 
     WriteClient->Response.reset();
     DirectBlockGroup->Oracle.WriteMode = writeMode;

@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
+#include <ydb/core/kafka_proxy/kafka_log_impl.h>
 #include "kafka_consumer_protocol.h"
 
 namespace NKafka {
@@ -16,32 +17,32 @@ enum EListenerType {
 };
 
 enum EApiKey {
-    HEADER = -1, // []
-    PRODUCE = 0, // [ZK_BROKER, BROKER]
-    FETCH = 1, // [ZK_BROKER, BROKER, CONTROLLER]
-    LIST_OFFSETS = 2, // [ZK_BROKER, BROKER]
-    METADATA = 3, // [ZK_BROKER, BROKER]
-    OFFSET_COMMIT = 8, // [ZK_BROKER, BROKER]
-    OFFSET_FETCH = 9, // [ZK_BROKER, BROKER]
-    FIND_COORDINATOR = 10, // [ZK_BROKER, BROKER]
-    JOIN_GROUP = 11, // [ZK_BROKER, BROKER]
-    HEARTBEAT = 12, // [ZK_BROKER, BROKER]
-    LEAVE_GROUP = 13, // [ZK_BROKER, BROKER]
-    SYNC_GROUP = 14, // [ZK_BROKER, BROKER]
-    DESCRIBE_GROUPS = 15, // [ZK_BROKER, BROKER]
-    LIST_GROUPS = 16, // [ZK_BROKER, BROKER]
-    SASL_HANDSHAKE = 17, // [ZK_BROKER, BROKER, CONTROLLER]
-    API_VERSIONS = 18, // [BROKER, CONTROLLER]
-    CREATE_TOPICS = 19, // [ZK_BROKER, BROKER, CONTROLLER]
-    INIT_PRODUCER_ID = 22, // [ZK_BROKER, BROKER]
-    ADD_PARTITIONS_TO_TXN = 24, // [ZK_BROKER, BROKER]
-    ADD_OFFSETS_TO_TXN = 25, // [ZK_BROKER, BROKER]
-    END_TXN = 26, // [ZK_BROKER, BROKER]
-    TXN_OFFSET_COMMIT = 28, // [ZK_BROKER, BROKER]
-    DESCRIBE_CONFIGS = 32, // [ZK_BROKER, BROKER]
-    ALTER_CONFIGS = 33, // [ZK_BROKER, BROKER, CONTROLLER]
-    SASL_AUTHENTICATE = 36, // [ZK_BROKER, BROKER, CONTROLLER]
-    CREATE_PARTITIONS = 37, // [ZK_BROKER, BROKER, CONTROLLER]
+    HEADER = -1, // [] 
+    PRODUCE = 0, // [ZK_BROKER, BROKER] 
+    FETCH = 1, // [ZK_BROKER, BROKER, CONTROLLER] 
+    LIST_OFFSETS = 2, // [ZK_BROKER, BROKER] 
+    METADATA = 3, // [ZK_BROKER, BROKER] 
+    OFFSET_COMMIT = 8, // [ZK_BROKER, BROKER] 
+    OFFSET_FETCH = 9, // [ZK_BROKER, BROKER] 
+    FIND_COORDINATOR = 10, // [ZK_BROKER, BROKER] 
+    JOIN_GROUP = 11, // [ZK_BROKER, BROKER] 
+    HEARTBEAT = 12, // [ZK_BROKER, BROKER] 
+    LEAVE_GROUP = 13, // [ZK_BROKER, BROKER] 
+    SYNC_GROUP = 14, // [ZK_BROKER, BROKER] 
+    DESCRIBE_GROUPS = 15, // [ZK_BROKER, BROKER] 
+    LIST_GROUPS = 16, // [ZK_BROKER, BROKER] 
+    SASL_HANDSHAKE = 17, // [ZK_BROKER, BROKER, CONTROLLER] 
+    API_VERSIONS = 18, // [ZK_BROKER, BROKER, CONTROLLER] 
+    CREATE_TOPICS = 19, // [ZK_BROKER, BROKER, CONTROLLER] 
+    INIT_PRODUCER_ID = 22, // [ZK_BROKER, BROKER] 
+    ADD_PARTITIONS_TO_TXN = 24, // [ZK_BROKER, BROKER] 
+    ADD_OFFSETS_TO_TXN = 25, // [ZK_BROKER, BROKER] 
+    END_TXN = 26, // [ZK_BROKER, BROKER] 
+    TXN_OFFSET_COMMIT = 28, // [ZK_BROKER, BROKER] 
+    DESCRIBE_CONFIGS = 32, // [ZK_BROKER, BROKER] 
+    ALTER_CONFIGS = 33, // [ZK_BROKER, BROKER, CONTROLLER] 
+    SASL_AUTHENTICATE = 36, // [ZK_BROKER, BROKER, CONTROLLER] 
+    CREATE_PARTITIONS = 37, // [ZK_BROKER, BROKER, CONTROLLER] 
 };
 
 extern const std::unordered_map<EApiKey, TString> EApiKeyNames;
@@ -8714,4 +8715,4 @@ public:
     bool operator==(const TCreatePartitionsResponseData& other) const = default;
 };
 
-} // namespace NKafka
+} // namespace NKafka 

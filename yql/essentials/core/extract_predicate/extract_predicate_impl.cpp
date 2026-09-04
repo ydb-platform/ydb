@@ -309,7 +309,7 @@ bool IsValidForRange(TExprNode::TPtr& node, const TExprNode& row, const TPredica
     }
 
     if (node->IsCallable("Exists")) {
-        return IsValidForRange(node->Head(), nullptr, row);
+        return IsValidForRange(node->Head(), /*otherNode=*/nullptr, row);
     }
 
     if (node->IsCallable("StartsWith") && settings.HaveNextValueCallable) {
@@ -790,7 +790,7 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
             return ctx.Builder(node->Pos())
                 .Callable("==")
                     .Add(0, node)
-                    .Add(1, MakeBool(node->Pos(), true, ctx))
+                    .Add(1, MakeBool(node->Pos(), /*value=*/true, ctx))
                 .Seal()
                 .Build();
             // clang-format on
@@ -853,7 +853,7 @@ void DoOptimizeForRangeExtraction(const TExprNode::TPtr& input, TExprNode::TPtr&
             continue;
         }
         TExprNode::TPtr newChild = child;
-        DoOptimizeForRangeExtraction(child, newChild, false, ctx, input);
+        DoOptimizeForRangeExtraction(child, newChild, /*topLevel=*/false, ctx, input);
         if (newChild != child) {
             changed = true;
             child = std::move(newChild);
@@ -875,10 +875,10 @@ THolder<IGraphTransformer> CreateRangeExtractionOptimizer(TTypeAnnotationContext
     //     "ExtractPredicateOpt", issueCode, "ExtractPredicateOpt");
     pipeline.Add(CreateFunctorTransformer(
                      [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                         DoOptimizeForRangeExtraction(input, output, true, ctx);
+                         DoOptimizeForRangeExtraction(input, output, /*topLevel=*/true, ctx);
                          IGraphTransformer::TStatus result = IGraphTransformer::TStatus::Ok;
                          if (input != output) {
-                             result = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                             result = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
                          }
                          return result;
                      }), "ExtractPredicate", issueCode);
@@ -900,7 +900,7 @@ TCoLambda OptimizeLambdaForRangeExtraction(const TExprNode::TPtr& filterLambdaNo
     TExprNode::TPtr output = filterLambdaNode;
     YQL_CLOG(DEBUG, Core) << "Begin optimizing lambda for range extraction";
     for (;;) {
-        const auto status = InstantTransform(*transformer, output, ctx, true);
+        const auto status = InstantTransform(*transformer, output, ctx, /*breakOnRestart=*/true);
         if (status == IGraphTransformer::TStatus::Ok) {
             break;
         }
@@ -1285,7 +1285,7 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
     if (range->IsCallable("Range")) {
         auto keys = GetColumnsFromRange(*range, indexKeysOrder);
         if (!keys.empty()) {
-            resultIndexRange = ExtractIndexRangeFromKeys(keys, indexKeysOrder, false);
+            resultIndexRange = ExtractIndexRangeFromKeys(keys, indexKeysOrder, /*isPoint=*/false);
             return range;
         }
         return ctx.RenameNode(*range, "RangeRest");
@@ -1646,8 +1646,8 @@ TMaybe<TRangeBoundHint> CompareBounds(
 }
 
 TMaybe<TRangeHint> RangeHintIntersect(const TRangeHint& hint1, const TRangeHint& hint2) {
-    auto left = CompareBounds(hint1.Left, hint2.Left, /* min */ false, true);
-    auto right = CompareBounds(hint1.Right, hint2.Right, /* min */ true, false);
+    auto left = CompareBounds(hint1.Left, hint2.Left, /* min */ false, /*lefts=*/true);
+    auto right = CompareBounds(hint1.Right, hint2.Right, /* min */ true, /*lefts=*/false);
     if (left && right) {
         return TRangeHint{.Left = std::move(*left), .Right = std::move(*right)};
     } else {
@@ -1706,8 +1706,8 @@ TMaybe<TRangeHint> RangeHintUnion(const TRangeHint& hint1, const TRangeHint& hin
         return Nothing();
     }
 
-    auto left = CompareBounds(hint1.Left, hint2.Left, /* min */ true, true);
-    auto right = CompareBounds(hint1.Right, hint2.Right, /* min */ false, false);
+    auto left = CompareBounds(hint1.Left, hint2.Left, /* min */ true, /*lefts=*/true);
+    auto right = CompareBounds(hint1.Right, hint2.Right, /* min */ false, /*lefts=*/false);
     auto intersection = RangeHintIntersect(hint1, hint2);
     if (!left || !right || !intersection) {
         return Nothing();
@@ -2042,7 +2042,7 @@ IGraphTransformer::TStatus ConvertLiteral(TExprNode::TPtr& node, const NYql::TTy
 
                 if (const auto maybeInt = TMaybeNode<TCoIntegralCtor>(current)) {
                     TString atomValue;
-                    if (AllowIntegralConversion(maybeInt.Cast(), false, to, &atomValue)) {
+                    if (AllowIntegralConversion(maybeInt.Cast(), /*negate=*/false, to, &atomValue)) {
                         node = ctx.NewCallable(node->Pos(), expectedType.Cast<TDataExprType>()->GetName(),
                                                {ctx.NewAtom(node->Pos(), atomValue, TNodeFlags::Default)});
                         return IGraphTransformer::TStatus::Repeat;
@@ -2121,7 +2121,7 @@ void NormalizeRangeHint(TMaybe<TRangeHint>& hint, const TVector<TString>& indexK
             auto transformer = pipeline.BuildWithNoArgChecks(true);
 
             for (;;) {
-                auto status = InstantTransform(*transformer, hint.Columns[i], ctx, true);
+                auto status = InstantTransform(*transformer, hint.Columns[i], ctx, /*breakOnRestart=*/true);
                 if (status == IGraphTransformer::TStatus::Ok) {
                     break;
                 }
@@ -2281,7 +2281,7 @@ bool TPredicateRangeExtractor::Prepare(const TExprNode::TPtr& filterLambdaNode, 
     }
 
     TSet<TString> keysInScope;
-    DoBuildRanges(rowArg, pred, Settings_, Range_, keysInScope, ctx, false);
+    DoBuildRanges(rowArg, pred, Settings_, Range_, keysInScope, ctx, /*negated=*/false);
     possibleIndexKeys.insert(keysInScope.begin(), keysInScope.end());
 
     TOptimizeExprSettings settings(nullptr);

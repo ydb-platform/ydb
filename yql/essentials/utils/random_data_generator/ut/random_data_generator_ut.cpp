@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NMiniKQL {
+namespace NYql {
 
 namespace {
 struct TPoint {
@@ -10,7 +10,6 @@ struct TPoint {
 };
 } // namespace
 
-namespace NPrivate {
 template <>
 struct TRandomDataGenerator<TPoint> {
     struct TSettings {
@@ -25,7 +24,6 @@ struct TRandomDataGenerator<TPoint> {
         };
     }
 };
-} // namespace NPrivate
 
 namespace {
 
@@ -288,4 +286,4 @@ Y_UNIT_TEST(CustomType) {
 } // Y_UNIT_TEST_SUITE(TRandomDataGeneratorTest)
 
 } // namespace
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql

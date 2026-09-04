@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
-#include <ydb/library/kafka/kafka.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka.h>
 
 namespace NKafka {
 
@@ -249,5 +249,24 @@ public:
 
     bool operator==(const TConsumerProtocolAssignment& other) const = default;
 };
+
+// Consumer protocol blobs are stored as [ignored i16][version i16][body...].
+// OffsetFetch and JoinGroup read version at offset sizeof(TKafkaVersion).
+inline constexpr size_t KafkaConsumerProtocolVersionBytes = 2 * sizeof(TKafkaVersion);
+
+template<typename TProtocolMessage>
+std::optional<TProtocolMessage> TryReadConsumerProtocolBlob(const TKafkaBytes& blob) {
+    if (!blob || blob.value().size_bytes() < KafkaConsumerProtocolVersionBytes) {
+        return std::nullopt;
+    }
+
+    TKafkaVersion version = *(TKafkaVersion*)(blob.value().data() + sizeof(TKafkaVersion));
+    TBuffer buffer(blob.value().data() + sizeof(TKafkaVersion), blob.value().size_bytes() - sizeof(TKafkaVersion));
+    TKafkaReadable readable(buffer);
+
+    TProtocolMessage result;
+    result.Read(readable, version);
+    return result;
+}
 
 } // namespace NKafka

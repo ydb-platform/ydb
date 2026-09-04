@@ -58,6 +58,20 @@ namespace NGRpcService {
 
 using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
+inline void EndGrpcRequestSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status) {
+    if (!span) {
+        return;
+    }
+
+    if (status == Ydb::StatusIds::SUCCESS) {
+        span.EndOk();
+    } else {
+        span.Attribute("ydb_status", static_cast<int>(status));
+        span.Attribute("ydb_status_name", Ydb::StatusIds_StatusCode_Name(status));
+        span.EndError(Ydb::StatusIds_StatusCode_Name(status));
+    }
+}
+
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
 TString DatabaseFromDomain(const TAppData* appdata);
@@ -381,9 +395,7 @@ public:
 
 private:
     void FinishSpan() {
-        if (Span_) {
-            Span_.End();
-        }
+        EndGrpcRequestSpanWithStatus(Span_, Ydb::StatusIds::StatusCode(Status_));
     }
 
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
@@ -484,6 +496,12 @@ public:
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
     virtual void FinishSpan() = 0;
+    virtual void SetUserFacingTraceId(NWilson::TTraceId id) {
+        UserFacingTraceId = std::move(id);
+    }
+    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
+        return NWilson::TTraceId(UserFacingTraceId);
+    }
     // Returns pointer to a state that denotes whether this request ever been a subject
     // to tracing decision. CAN be nullptr
     virtual bool* IsTracingDecided() = 0;
@@ -531,6 +549,9 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+private:
+    NWilson::TTraceId UserFacingTraceId;
 };
 
 // Request context
@@ -614,9 +635,10 @@ class TRefreshTokenImpl
     , public TEventLocal<TRefreshTokenImpl<TRpcId>, TRpcId>
 {
 public:
-    TRefreshTokenImpl(const TString& token, const TString& database, TActorId from)
+    TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, TActorId from)
         : Token_(token)
         , Database_(database)
+        , PeerName_(peerName)
         , From_(from)
         , State_(true)
     { }
@@ -664,7 +686,7 @@ public:
     }
 
     TString GetPeerName() const override {
-        return {};
+        return PeerName_;
     }
 
     void SetRlPath(TMaybe<NRpcService::TRlPath>&&) override {
@@ -809,6 +831,7 @@ public:
 private:
     const TString Token_;
     const TString Database_;
+    const TString PeerName_;
     const TActorId From_;
     NYdbGrpc::TAuthState State_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
@@ -869,7 +892,7 @@ private:
         TResponse resp;
         FillYdbStatus(resp, IssueManager_.GetIssues(), status);
         AuditLogRequestEnd(status);
-        FinishSpan();
+        FinishSpan(status);
         Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
     }
 
@@ -942,7 +965,7 @@ public:
 
     void ReplyUnauthenticated(const TString& in) override {
         AuditLogRequestEnd(Ydb::StatusIds::UNAUTHORIZED);
-        FinishSpan();
+        FinishSpan(Ydb::StatusIds::UNAUTHORIZED);
         Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, MakeAuthError(in, IssueManager_)));
     }
 
@@ -1064,6 +1087,10 @@ public:
         }
     }
 
+    void FinishSpan(Ydb::StatusIds::StatusCode status) {
+        EndGrpcRequestSpanWithStatus(Span_, status);
+    }
+
     bool* IsTracingDecided() override {
         return &IsTracingDecided_;
     }
@@ -1105,19 +1132,19 @@ public:
 
     bool Finish(Ydb::StatusIds::StatusCode status, const grpc::Status& grpcStatus = grpc::Status::OK) {
         AuditLogRequestEnd(status);
-        FinishSpan();
+        FinishSpan(status);
         return Ctx_->Finish(grpcStatus);
     }
 
     bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::Status& grpcStatus = grpc::Status::OK) {
         AuditLogRequestEnd(status);
-        FinishSpan();
+        FinishSpan(status);
         return Ctx_->WriteAndFinish(std::move(message), grpcStatus);
     }
 
     bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::WriteOptions& options, const grpc::Status& grpcStatus = grpc::Status::OK) {
         AuditLogRequestEnd(status);
-        FinishSpan();
+        FinishSpan(status);
         return Ctx_->WriteAndFinish(std::move(message), options, grpcStatus);
     }
 
@@ -1297,7 +1324,7 @@ public:
     }
 
     void ReplyUnauthenticated(const TString& in) override {
-        FinishSpan();
+        FinishSpan(Ydb::StatusIds::UNAUTHORIZED);
         Ctx_->ReplyUnauthenticated(MakeAuthError(in, IssueManager));
     }
 
@@ -1420,7 +1447,7 @@ public:
             AuditLogRequestEnd(status);
         }
         if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
-            FinishSpan();
+            FinishSpan(status);
         }
         Ctx_->Reply(&data, status, flag);
     }
@@ -1431,7 +1458,7 @@ public:
             AuditLogRequestEnd(status);
         }
         if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
-            FinishSpan();
+            FinishSpan(status);
         }
         Ctx_->Reply(&data, status, flag);
     }
@@ -1477,8 +1504,9 @@ public:
 
     void FinishStream(ui32 status) override {
         // End Of Request for streaming requests
-        AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
-        FinishSpan();
+        const auto ydbStatus = Ydb::StatusIds::StatusCode(status);
+        AuditLogRequestEnd(ydbStatus);
+        FinishSpan(ydbStatus);
         Ctx_->FinishStreamingOk();
     }
 
@@ -1539,6 +1567,10 @@ public:
         }
     }
 
+    void FinishSpan(Ydb::StatusIds::StatusCode status) {
+        EndGrpcRequestSpanWithStatus(Span_, status);
+    }
+
     bool* IsTracingDecided() override {
         return &IsTracingDecided_;
     }
@@ -1574,7 +1606,7 @@ private:
                 std::move(span)));
         }
         if (finishRequest) {
-            FinishSpan();
+            FinishSpan(Ydb::StatusIds::StatusCode(status));
         }
         return Ctx_->Reply(resp, status);
     }
@@ -2084,7 +2116,7 @@ public:
         return {};
     }
 
-    TString Database;
+    TString Database; // Raw `database` extracted from the HTTP request
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
     NYdbGrpc::TAuthState AuthState;

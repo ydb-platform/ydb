@@ -1,0 +1,10 @@
+[
+    {
+        name=md5;
+        calling_convention=unversioned_value;
+        argument_types=[
+            {value=string; tag=concrete_type};
+        ];
+        result_type={value=string; tag=concrete_type;};
+    };
+]

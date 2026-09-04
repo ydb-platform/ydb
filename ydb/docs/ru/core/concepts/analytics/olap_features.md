@@ -33,7 +33,7 @@
 
 ### Пакетная загрузка (Batch Ingestion)
 
-  - [Коннектор Apache Spark](../../integrations/ingestion/spark.md): чтение и запись данных для ETL/ELT-задач.
+  - [Коннектор Apache Spark](../../integrations/query-engines/spark.md): чтение и запись данных для ETL/ELT-задач.
   - [BulkUpsert API](../../recipes/ydb-sdk/bulk-upsert.md): высокопроизводительная вставка больших объемов данных через SDK.
 
 ### Взаимодействие с внешними системами
@@ -90,7 +90,7 @@
 
 ### Мониторинг и диагностика
 
-  - [Встроенный UI](../../reference/embedded-ui/index.md): веб-интерфейс для мониторинга состояния и диагностики кластера.
+  - [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md): веб-интерфейс для мониторинга состояния и диагностики кластера.
   - [Справочник по метрикам](../../reference/observability/metrics/index.md): полный список метрик для систем мониторинга.
   - [Готовые дашборды для Grafana](../../reference/observability/metrics/grafana-dashboards.md): шаблоны для быстрой настройки мониторинга.
 

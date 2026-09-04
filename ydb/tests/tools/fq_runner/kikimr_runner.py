@@ -89,7 +89,7 @@ class BaseTenant(abc.ABC):
             self.config_generator.yaml_config['auth_config'] = {}
         return self.config_generator.yaml_config['auth_config']
 
-    def enable_logging(self, component, level=LogLevels.TRACE):
+    def enable_logging(self, component, level=LogLevels.DEBUG):
         log_config = self.config_generator.yaml_config['log_config']
         if not isinstance(log_config['entry'], list):
             log_config['entry'] = []
@@ -99,7 +99,7 @@ class BaseTenant(abc.ABC):
         self.enable_logging("INTERCONNECT", LogLevels.WARN)  # IC is too verbose
         self.enable_logging("FQ_QUOTA_PROXY")
         self.enable_logging("FQ_QUOTA_SERVICE")
-        self.enable_logging("KQP_COMPUTE", LogLevels.TRACE)
+        self.enable_logging("KQP_COMPUTE", LogLevels.DEBUG)
         self.enable_logging("KQP_YQL")
         self.enable_logging("STREAMS")
         self.enable_logging("STREAMS_STORAGE_SERVICE")  # TODO: rename to YQ_STORAGE_SERVICE
@@ -125,6 +125,8 @@ class BaseTenant(abc.ABC):
         self.enable_logging("PUBLIC_HTTP")
         self.enable_logging("FQ_CONTROL_PLANE_CONFIG")
         self.enable_logging("FQ_ROW_DISPATCHER", LogLevels.TRACE)
+        self.enable_logging("KQP_EXECUTER")
+        self.enable_logging("KQP_PROXY")
         # self.enable_logging("GRPC_SERVER")
 
     @abc.abstractclassmethod

@@ -88,7 +88,7 @@ private:
     TExprNode::TPtr MakeInputBlocks(const TExprNode::TPtr& stream, TExprNode::TListType& keyIdxs,
         TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn = nullptr);
 
-private:
+
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";
 
     const TExprNode::TPtr Node_;
@@ -136,7 +136,7 @@ inline TExprNode::TPtr ExpandAggregatePeepholeImpl(const TExprNode::TPtr& node, 
     const bool useFinalizeByKey, const bool useBlocks, const bool allowSpilling) {
     const bool usePhases = typesCtx.PeepholeFlags.contains("useaggphases");
     TAggregateExpander aggExpander(!useFinalizeByKey && !useBlocks, useFinalizeByKey, node, ctx, typesCtx,
-        !usePhases, false, usePhases, typesCtx.IsBlockEngineEnabled() && !allowSpilling);
+        !usePhases, /*compactForDistinct=*/false, usePhases, typesCtx.IsBlockEngineEnabled() && !allowSpilling);
     return aggExpander.ExpandAggregate();
 }
 

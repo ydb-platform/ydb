@@ -16,7 +16,7 @@ TErrorOr<typename TFuture::TValueType> WaitFor(TFuture future, IInvokerPtr invok
     YT_ASSERT(future);
     YT_ASSERT(invoker);
 
-    WaitUntilSet(future.AsVoid(), std::move(invoker));
+    WaitUntilSet(future.AsVoid(), {.ResumingInvoker = std::move(invoker)});
 
     return future.GetOrCrash();
 }
@@ -27,24 +27,9 @@ TErrorOr<typename TFuture::TValueType> WaitForFast(TFuture future)
     YT_ASSERT(future);
     YT_ASSERT(!IsContextSwitchForbidden());
 
-    if (!future.IsSet()) {
-        WaitUntilSet(future.AsVoid(), GetCurrentInvoker());
-    }
+    WaitUntilSet(future.AsVoid(), {.AlwaysYieldFiber = false});
 
     return future.GetOrCrash();
-}
-
-template <CFuture TFuture>
-TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWaitForStrategy strategy)
-{
-    switch (strategy) {
-        case EWaitForStrategy::WaitFor:
-            return WaitFor(future);
-        case EWaitForStrategy::Get:
-            return future.BlockingGet();
-        default:
-            YT_ABORT();
-    }
 }
 
 inline void Yield()
@@ -54,7 +39,7 @@ inline void Yield()
 
 inline void SwitchTo(IInvokerPtr invoker)
 {
-    WaitUntilSet(OKFuture, std::move(invoker));
+    WaitUntilSet(OKFuture, {.ResumingInvoker = std::move(invoker)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

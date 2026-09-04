@@ -9,8 +9,11 @@
 #include <ydb/core/tx/datashard/import_s3.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard::NBackup {
 
@@ -48,14 +51,27 @@ public:
             Counters.OnError();
             return Fail(result.GetError().GetErrorMessage());
         }
-        Register(result.DetachResult().release());
+        DownloaderActorId = Register(result.DetachResult().release());
         Become(&TThis::StateMain);
     }
 
     STRICT_STFUNC(StateMain,
         hFunc(NKikimr::TEvDataShard::TEvGetS3DownloadInfo, Handle) hFunc(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo, Handle)
             hFunc(NKikimr::TEvDataShard::TEvS3UploadRowsRequest, Handle) hFunc(NKikimr::TEvDataShard::TEvAsyncJobComplete, Handle)
-                hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle))
+                hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
+
+    void HandlePoisonPill() {
+        Counters.OnActorDead();
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (DownloaderActorId) {
+            Send(DownloaderActorId, new NActors::TEvents::TEvPoisonPill());
+            DownloaderActorId = {};
+        }
+        TActorBootstrapped<TImportDownloader>::PassAway();
+    }
 
     void Handle(TEvPrivate::TEvBackupImportRecordBatchResult::TPtr&) {
         auto response = std::make_unique<NKikimr::TEvDataShard::TEvS3UploadRowsResponse>();
@@ -73,8 +89,10 @@ public:
     }
 
     void Handle(NKikimr::TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev) {
-        const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)(
-            "event", "import_s3_upload_rows")("tx_id", TxId)("ydb_schema_size", YdbSchema.size());
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"event", "import_s3_upload_rows"},
+            {"txId", TxId},
+            {"ydbSchemaSize", YdbSchema.size()});
 
         Counters.OnProcessStarted();
         const TInstant processStartTime = TInstant::Now();
@@ -100,8 +118,12 @@ public:
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "s3_upload_rows_schema")("key_columns", rowScheme.KeyColumnIdsSize())(
-            "value_columns", rowScheme.ValueColumnIdsSize())("total_columns", rowSchemaOrder.size())("rows", record.RowsSize());
+        YDB_LOG_DEBUG("",
+            {"event", "s3_upload_rows_schema"},
+            {"keyColumns", rowScheme.KeyColumnIdsSize()},
+            {"valueColumns", rowScheme.ValueColumnIdsSize()},
+            {"totalColumns", rowSchemaOrder.size()},
+            {"rows", record.RowsSize()});
 
         TSerializedCellVec keyCells;
         TSerializedCellVec valueCells;
@@ -167,6 +189,7 @@ public:
     }
 
 private:
+    TActorId DownloaderActorId;
     NDataShard::TS3Download LastInfo;
     TActorId LastActorId;
     NActors::TActorId SubscriberActorId;

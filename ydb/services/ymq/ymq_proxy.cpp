@@ -24,6 +24,8 @@
 #include "utils.h"
 #include "ydb/core/ymq/actor/log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
+
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -53,6 +55,7 @@ namespace NKikimr::NYmq::V1 {
     static const TString CONTENT_BASED_DEDUPLICATION = "ContentBasedDeduplication";
     static const TString CREATED_TIMESTAMP = "CreatedTimestamp";
     static const TString DELAY_SECONDS = "DelaySeconds";
+    static const TString FIFO_QUEUE = "FifoQueue";
     static const TString LAST_MODIFIED_TIMESTAMP = "LastModifiedTimestamp";
     static const TString MAXIMUM_MESSAGE_SIZE = "MaximumMessageSize";
     static const TString MESSAGE_RETENTION_PERIOD = "MessageRetentionPeriod";
@@ -138,15 +141,11 @@ namespace NKikimr::NYmq::V1 {
         ~TBaseRpcRequestActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
-            LOG_DEBUG_S(
-                ctx,
-                NKikimrServices::SQS,
-                TStringBuilder() << "Got new request in YMQ proxy."
-                << " FolderId: " << FolderId
-                << ", CloudId: " << CloudId
-                << ", UserSid: " << UserSid
-                << ", RequestId: " << RequestId;
-            );
+            YDB_LOG_DEBUG_CTX(ctx, "Got new request in YMQ proxy",
+                {"folderId", FolderId},
+                {"cloudId", CloudId},
+                {"userSid", UserSid},
+                {"requestId", RequestId});
             TSqsRequest sqsRequest;
 
             sqsRequest.SetRequestId(RequestId);
@@ -156,6 +155,7 @@ namespace NKikimr::NYmq::V1 {
             request->MutableAuth()->SetUserName(CloudId);
             request->MutableAuth()->SetFolderId(FolderId);
             request->MutableAuth()->SetUserSID(UserSid);
+            request->MutableAuth()->SetSourceAddress(SourceAddress);
 
             if (SecurityToken) {
                 request->MutableCredentials()->SetOAuthToken(SecurityToken);
@@ -490,6 +490,9 @@ namespace NKikimr::NYmq::V1 {
             }
             if (attrs.HasDelaySeconds()) {
                 AddAttribute(result, DELAY_SECONDS, attrs.GetDelaySeconds());
+            }
+            if (attrs.HasFifoQueue()) {
+                AddAttribute(result, FIFO_QUEUE, attrs.GetFifoQueue());
             }
             if (attrs.HasLastModifiedTimestamp()) {
                 AddAttribute(result, LAST_MODIFIED_TIMESTAMP, attrs.GetLastModifiedTimestamp());

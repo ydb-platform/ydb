@@ -25,7 +25,6 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/library/sqs
     contrib/python/xmltodict
-    contrib/python/boto3
     contrib/python/botocore
 )
 

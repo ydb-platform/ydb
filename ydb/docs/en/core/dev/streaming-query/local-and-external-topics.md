@@ -1,43 +1,48 @@
 # Local and external topics in streaming queries
 
-[Streaming queries](../../concepts/streaming-query.md) read events from [topics](../../concepts/datamodel/topic.md) and can write results back to topics. Messages can come from a topic **in the same database** where the query runs, or from a topic **in another** {{ ydb-short-name }} database.
+[Streaming queries](../../concepts/streaming-query/streaming-query.md) read events from [topics](../../concepts/datamodel/topic.md) and can write results back to topics. The source and destination of messages can be either a topic **in the same database** where the query is executed, or a topic **in another database** {{ ydb-short-name }}.
 
-All [streaming query](../../concepts/streaming-query.md) scenarios work the same for [local](#local-topics) and [external](#external-topics) topics. One query can read from a local topic, write to an external one, or the other way around.
+All use cases of [streaming queries](../../concepts/streaming-query/streaming-query.md) work the same for local{#local-topics} and external{#external-topics} topics. The same query can simultaneously read a local topic, write to an external one, and vice versa.
 
 ## Local topics {#local-topics}
 
-**Local topics** are topics created in the **same** {{ ydb-short-name }} database as the [streaming query](../../concepts/streaming-query.md).
+**Local topics**: topics created in the **same database** {{ ydb-short-name }} as the [streaming query](../../concepts/streaming-query/streaming-query.md).
 
-In query text, refer to them **by short name**, the same way as to a table in the current database:
+In the query text, they are referred to **by a short name** — just like a table in the current database:
+
 
 ```yql
 SELECT * FROM input_topic WITH (FORMAT = json_each_row, SCHEMA = (...));
 ```
 
+
 ```yql
 INSERT INTO output_topic SELECT ...;
 ```
 
+
 ## External topics {#external-topics}
 
-**External topics** are topics in **another** {{ ydb-short-name }} database.
+**External topics** — topics located **in another database** {{ ydb-short-name }}.
 
-A streaming query accesses them only through a pre-created [external data source](../../concepts/datamodel/external_data_source.md) with source type YDB. Create it with [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md); use [secrets](../../yql/reference/syntax/create-secret.md) when authentication is required.
+Access to them from a streaming query is performed only through a pre-created [external data source](../../concepts/datamodel/external_data_source.md) with the YDB source type. Creating the object is the [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md) command; if authentication is required, secrets are used.
 
-After you create a source named `ext_source`, access topic `input_topic` in the external database like this:
+After creating a source, for example named `ext_source`, referring to topic `input_topic` in the external database is written as follows:
+
 
 ```yql
 SELECT * FROM ext_source.input_topic WITH (FORMAT = json_each_row, SCHEMA = (...));
 ```
 
-The name `ext_source` in the documentation is **illustrative** — your source may have a different name; it must match in `CREATE EXTERNAL DATA SOURCE` and in the prefix before the topic name.
+
+The name `ext_source` in the documentation is **conditional** — in your database, the source may be named differently; it is important that it matches in `CREATE EXTERNAL DATA SOURCE` and in the prefix before the topic name.
 
 ## See also
 
-- [Common streaming query patterns](patterns.md) — ready-to-use YQL snippets
-- [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) — create a query
-- [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md) — declare a source for an external database
+- [Typical streaming query patterns](patterns.md) — ready-made YQL snippets
+- [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) — creating a query
+- [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md) — declaring a source for an external database
 - [External data source](../../concepts/datamodel/external_data_source.md) — concept
 - [Topic](../../concepts/datamodel/topic.md) — data model
-- [Data enrichment](enrichment.md) — examples with topic reads and `JOIN`
-- [Debug reads from a topic](../../recipes/streaming_queries/debug-read.md)
+- [Data enrichment](enrichment.md) — examples with reading from a topic and `JOIN`
+- [Debug reading from a topic](../../recipes/streaming_queries/debug-read.md)

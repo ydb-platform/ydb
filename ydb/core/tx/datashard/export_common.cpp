@@ -60,6 +60,7 @@ static TMaybe<Ydb::Table::CreateTableRequest> GenRowTableScheme(
     FillPartitioningSettings(scheme, tableDesc);
     FillKeyBloomFilter(scheme, tableDesc);
     FillReadReplicasSettings(scheme, tableDesc);
+    FillMultiColumnStatisticsDescription(scheme, tableDesc);
 
     TString error;
     Ydb::StatusIds::StatusCode status;
@@ -120,12 +121,7 @@ TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSch
 
     const auto& selfDesc = pathDesc.GetSelf();
     permissions.mutable_actions()->Add()->set_change_owner(selfDesc.GetOwner());
-
-    NProtoBuf::RepeatedPtrField<Ydb::Scheme::Permissions> toGrant;
-    ConvertAclToYdb(selfDesc.GetOwner(), selfDesc.GetACL(), false, &toGrant);
-    for (const auto& permission : toGrant) {
-        *permissions.mutable_actions()->Add()->mutable_grant() = permission;
-    }
+    FillPermissionsFromAcl(selfDesc, /* withEffectiveAcl */ false, &permissions);
 
     return permissions;
 }

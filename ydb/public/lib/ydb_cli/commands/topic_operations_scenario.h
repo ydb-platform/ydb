@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/fwd.h>
@@ -97,6 +98,7 @@ public:
     TDuration BatchFlushInterval = TDuration::Seconds(1);
     std::optional<ui64> BatchFlushSizeBytes;
     ui32 BatchFlushMessageCount = 1;
+    bool SdkProducerAsyncExecutionMode = false;
     TString BatchInnerCodecStr;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;
@@ -141,7 +143,7 @@ protected:
     bool AnyIncomingMessages() const;
     bool AnyOutgoingMessages() const;
 
-    std::unique_ptr<TDriver> Driver;
+    std::unique_ptr<TScopedDriver> Driver;
     std::shared_ptr<TLog> Log;
     std::shared_ptr<std::atomic_bool> ErrorFlag;
     std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;

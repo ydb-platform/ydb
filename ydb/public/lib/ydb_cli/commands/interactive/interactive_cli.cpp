@@ -159,8 +159,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     // Probe driver: only used for the connectivity check and welcome message.
     {
-        TDriver probeDriver(config.CreateDriverConfigWithBuildInfo("interactive"));
-        Y_DEFER { probeDriver.Stop(true); };
+        TScopedDriver probeDriver(TDriver(config.CreateDriverConfigWithBuildInfo("interactive")));
         if (auto code = PrintWelcomeMessage(config, probeDriver, configManager)) {
             return code;
         }

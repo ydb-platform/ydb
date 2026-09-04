@@ -1,6 +1,16 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/tests/common/fake_metric_registry.h>
+#include <ydb/public/sdk/cpp/tests/common/fake_trace_provider.h>
+
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime/runtime.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -13,7 +23,13 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/generic/mapfindptr.h>
 
+#include <array>
 #include <atomic>
+#include <functional>
+#include <future>
+#include <memory>
+#include <thread>
+#include <vector>
 
 #include <google/protobuf/text_format.h>
 
@@ -22,6 +38,24 @@ using namespace NYdb::NTable;
 
 namespace {
 
+    constexpr const char LegacyV1Certificate[] = R"(-----BEGIN CERTIFICATE-----
+MIIBbTCCARMCFBthJdWIg/H6ITeelffnCYoK8fDFMAoGCCqGSM49BAMCMDkxCzAJ
+BgNVBAYTAlJVMQwwCgYDVQQKDANZREIxHDAaBgNVBAMME0xlZ2FjeSBUZXN0IFJv
+b3QgQ0EwHhcNMjYwNzI3MDk0NDU2WhcNMzYwNzI0MDk0NDU2WjA5MQswCQYDVQQG
+EwJSVTEMMAoGA1UECgwDWURCMRwwGgYDVQQDDBNMZWdhY3kgVGVzdCBSb290IENB
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4zlS2ha5hOd20QJEh17FP/mjkzsO
+PmwF7iY9zJ0HILwBjqxJSCGnNMMdT+A2d+Nry6de3WC6RkR72HTe6gffuTAKBggq
+hkjOPQQDAgNIADBFAiEA/0rBKAconmtFcliTZ0i9HzIkQeG+E/zVMiUvlhwpylYC
+IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
+-----END CERTIFICATE-----)";
+
+    std::string ReadBuildInfo(grpc::ServerContext* context) {
+        const auto& metadata = context->client_metadata();
+        const auto it = metadata.find(YDB_SDK_BUILD_INFO_HEADER);
+        Y_ABORT_UNLESS(it != metadata.end());
+        return {it->second.data(), it->second.length()};
+    }
+
     class TMockDiscoveryService : public Ydb::Discovery::V1::DiscoveryService::Service {
     public:
         grpc::Status ListEndpoints(
@@ -29,7 +63,7 @@ namespace {
                 const Ydb::Discovery::ListEndpointsRequest* request,
                 Ydb::Discovery::ListEndpointsResponse* response) override
         {
-            Y_UNUSED(context);
+            BuildInfo = ReadBuildInfo(context);
 
             std::cerr << "ListEndpoints: " << request->ShortDebugString() << std::endl;
 
@@ -45,6 +79,7 @@ namespace {
 
         // From database name to result
         std::unordered_map<std::string, Ydb::Discovery::ListEndpointsResult> MockResults;
+        std::string BuildInfo;
     };
 
     class TMockTableService : public Ydb::Table::V1::TableService::Service {
@@ -54,7 +89,7 @@ namespace {
                 const Ydb::Table::CreateSessionRequest* request,
                 Ydb::Table::CreateSessionResponse* response) override
         {
-            Y_UNUSED(context);
+            BuildInfo = ReadBuildInfo(context);
 
             std::cerr << "CreateSession: " << request->ShortDebugString() << std::endl;
 
@@ -67,6 +102,8 @@ namespace {
             op->mutable_result()->PackFrom(result);
             return grpc::Status::OK;
         }
+
+        std::string BuildInfo;
     };
 
     template<class TService>
@@ -77,9 +114,289 @@ namespace {
         return builder.BuildAndStart();
     }
 
+    class TCountingCredentialsProvider final : public ICredentialsProvider {
+    public:
+        std::string GetAuthInfo() const override {
+            return "token";
+        }
+
+        bool IsValid() const override {
+            return true;
+        }
+    };
+
+    class TCountingCredentialsProviderFactory final : public ICredentialsProviderFactory {
+    public:
+        explicit TCountingCredentialsProviderFactory(std::atomic_int& providerCount)
+            : ProviderCount_(providerCount)
+        {}
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            ++ProviderCount_;
+            return std::make_shared<TCountingCredentialsProvider>();
+        }
+
+        std::string GetClientIdentity() const override {
+            return "same-credentials";
+        }
+
+    private:
+        std::atomic_int& ProviderCount_;
+    };
+
+    class TDeferredAuthProvider final : public ICredentialsProvider {
+    public:
+        TDeferredAuthProvider()
+            : AuthInfo_(NThreading::NewPromise<std::string>())
+        {}
+
+        std::string GetAuthInfo() const override {
+            return AuthInfo_.GetFuture().GetValueSync();
+        }
+
+        NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+            return AuthInfo_.GetFuture();
+        }
+
+        bool IsValid() const override {
+            return true;
+        }
+
+        void SetReady() {
+            AuthInfo_.SetValue("token");
+        }
+
+    private:
+        NThreading::TPromise<std::string> AuthInfo_;
+    };
+
+    class TDeferredCredentialsFactory final : public ICredentialsProviderFactory {
+    public:
+        TDeferredCredentialsFactory()
+            : Provider_(std::make_shared<TDeferredAuthProvider>())
+        {}
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            return Provider_;
+        }
+
+        void SetReady() {
+            Provider_->SetReady();
+        }
+
+    private:
+        std::shared_ptr<TDeferredAuthProvider> Provider_;
+    };
+
 } // namespace
 
+Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
+    Y_UNIT_TEST(RuntimeIsProcessSingleton) {
+        constexpr size_t ThreadCount = 8;
+        std::array<TSdkRuntime*, ThreadCount> runtimes{};
+        std::array<std::thread, ThreadCount> threads;
+
+        for (size_t i = 0; i < ThreadCount; ++i) {
+            threads[i] = std::thread([&, i] {
+                runtimes[i] = &GetSdkRuntime();
+            });
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        for (auto* runtime : runtimes) {
+            UNIT_ASSERT_VALUES_EQUAL(runtime, &GetSdkRuntime());
+        }
+    }
+
+    Y_UNIT_TEST(DriverScopesCancelIndependently) {
+        NYdbGrpc::TGRpcClientLow client(1);
+        auto scopeA = GetSdkRuntime().CreateDriverScope(client);
+        auto scopeB = GetSdkRuntime().CreateDriverScope(client);
+        auto contextA = scopeA->CreateContext();
+        auto contextB = scopeB->CreateContext();
+
+        UNIT_ASSERT(contextA);
+        UNIT_ASSERT(contextB);
+        UNIT_ASSERT(!contextA->IsCancelled());
+        UNIT_ASSERT(!contextB->IsCancelled());
+
+        scopeA->Cancel();
+
+        UNIT_ASSERT(contextA->IsCancelled());
+        UNIT_ASSERT(!scopeA->CreateContext());
+        auto childContextA = contextA->CreateContext();
+        UNIT_ASSERT(childContextA);
+        UNIT_ASSERT(childContextA->IsCancelled());
+        UNIT_ASSERT(!contextB->IsCancelled());
+        auto secondContextB = scopeB->CreateContext();
+        UNIT_ASSERT(secondContextB);
+
+        childContextA.reset();
+        contextA.reset();
+        contextB.reset();
+        secondContextB.reset();
+        scopeB->Cancel();
+        scopeA->CloseCallbacksAndWait();
+        scopeB->CloseCallbacksAndWait();
+        client.Stop(true);
+    }
+
+    Y_UNIT_TEST(DriverScopeWaitsForCallbacks) {
+        NYdbGrpc::TGRpcClientLow client(1);
+        auto scope = GetSdkRuntime().CreateDriverScope(client);
+        auto guard = scope->GetCallbackGuardFactory()();
+        UNIT_ASSERT(guard->IsEntered());
+
+        std::promise<void> waiterStarted;
+        auto waiterStartedFuture = waiterStarted.get_future();
+        std::atomic_bool waiterFinished = false;
+        std::thread waiter([&] {
+            waiterStarted.set_value();
+            scope->WaitCallbacksDrained();
+            waiterFinished.store(true);
+        });
+
+        waiterStartedFuture.wait();
+        UNIT_ASSERT(!waiterFinished.load());
+        guard.reset();
+        waiter.join();
+        UNIT_ASSERT(waiterFinished.load());
+
+        scope->CloseCallbacksAndWait();
+        auto rejectedGuard = scope->GetCallbackGuardFactory()();
+        UNIT_ASSERT(!rejectedGuard->IsEntered());
+
+        rejectedGuard.reset();
+        scope->Cancel();
+        client.Stop(true);
+    }
+
+    Y_UNIT_TEST(DriverScopeCancelCreateRace) {
+        constexpr size_t Iterations = 32;
+        for (size_t i = 0; i < Iterations; ++i) {
+            NYdbGrpc::TGRpcClientLow client(1);
+            auto scope = GetSdkRuntime().CreateDriverScope(client);
+            NYdbGrpc::IQueueClientContextPtr context;
+            std::promise<void> start;
+            auto startFuture = start.get_future().share();
+
+            std::thread creator([&] {
+                startFuture.wait();
+                context = scope->CreateContext();
+            });
+            std::thread canceller([&] {
+                startFuture.wait();
+                scope->Cancel();
+            });
+
+            start.set_value();
+            creator.join();
+            canceller.join();
+
+            if (context) {
+                UNIT_ASSERT(context->IsCancelled());
+            }
+            UNIT_ASSERT(!scope->CreateContext());
+
+            context.reset();
+            scope->CloseCallbacksAndWait();
+            client.Stop(true);
+        }
+    }
+
+    Y_UNIT_TEST(DriverScopeCancelCreateChildRace) {
+        constexpr size_t Iterations = 32;
+        for (size_t i = 0; i < Iterations; ++i) {
+            NYdbGrpc::TGRpcClientLow client(1);
+            auto scope = GetSdkRuntime().CreateDriverScope(client);
+            auto parentContext = scope->CreateContext();
+            NYdbGrpc::IQueueClientContextPtr childContext;
+            std::promise<void> start;
+            auto startFuture = start.get_future().share();
+
+            std::thread creator([&] {
+                startFuture.wait();
+                childContext = parentContext->CreateContext();
+            });
+            std::thread canceller([&] {
+                startFuture.wait();
+                scope->Cancel();
+            });
+
+            start.set_value();
+            creator.join();
+            canceller.join();
+
+            UNIT_ASSERT(childContext);
+            UNIT_ASSERT(childContext->IsCancelled());
+            UNIT_ASSERT(!scope->CreateContext());
+
+            childContext.reset();
+            parentContext.reset();
+            scope->CloseCallbacksAndWait();
+            client.Stop(true);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
+    Y_UNIT_TEST(RequestWaitsForAuthInfo) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession();
+
+        UNIT_ASSERT(!result.Wait(TDuration::MilliSeconds(100)));
+        factory->SetReady();
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(RequestDeadlineWhileWaitingForCredentials) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession(
+            TCreateSessionSettings().ClientTimeout(TDuration::MilliSeconds(100))).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
+    }
+
+    Y_UNIT_TEST(DriverStopCancelsCredentialsWait) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession();
+
+        driver.Stop(true);
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
+    }
+
+}
+
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+    Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {
+        std::atomic_int providerCount = 0;
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:1")
+                .SetDatabase("/Root")
+                .SetDiscoveryMode(EDiscoveryMode::Off));
+
+        auto firstClient = TTableClient(driver, TClientSettings().CredentialsProviderFactory(
+            std::make_shared<TCountingCredentialsProviderFactory>(providerCount)));
+        auto secondClient = TTableClient(driver, TClientSettings().CredentialsProviderFactory(
+            std::make_shared<TCountingCredentialsProviderFactory>(providerCount)));
+
+        UNIT_ASSERT_VALUES_EQUAL(providerCount.load(), 1);
+    }
+
     Y_UNIT_TEST(InvalidRootCertificatePemFailsFast) {
         auto driver = TDriver(
             TDriverConfig()
@@ -92,6 +409,35 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Client TLS credentials validation failed");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root CA PEM:");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "failed to parse certificate #1");
+    }
+
+    Y_UNIT_TEST(LegacyV1TrustAnchorPassesValidation) {
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100")
+                .UseSecureConnection(LegacyV1Certificate));
+        auto client = NTable::TTableClient(driver);
+
+        auto result = client.CreateSession().GetValueSync();
+        auto issues = result.GetIssues().ToString();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT(issues.find("Client TLS credentials validation failed") == std::string::npos);
+    }
+
+    Y_UNIT_TEST(MalformedCertificateAfterValidRootPassesValidation) {
+        const std::string rootBundle = std::string(LegacyV1Certificate) + R"(
+-----BEGIN CERTIFICATE-----
+not-base64
+-----END CERTIFICATE-----)";
+        grpc::SslCredentialsOptions sslOptions{
+            .pem_root_certs = NYdb::TStringType{rootBundle},
+        };
+        std::string validationDetail;
+
+        UNIT_ASSERT(NYdbGrpc::ValidateTlsCredentials(sslOptions, validationDetail));
+        UNIT_ASSERT(validationDetail.empty());
     }
 
     Y_UNIT_TEST(EmptyRootCertificateWithoutClientCredentialsKeepsBehavior) {
@@ -217,7 +563,10 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         auto driver = TDriver(
             TDriverConfig()
                 .SetEndpoint(TStringBuilder() << "localhost:" << discoveryPort)
-                .SetDatabase("/Root/My/DB"));
+                .SetDatabase("/Root/My/DB")
+                .SetTraceProvider(std::make_shared<NTests::TFakeTraceProvider>())
+                .SetMetricRegistry(std::make_shared<NTests::TFakeMetricRegistry>())
+                .AppendBuildInfo("test-client/1.2.3"));
         auto client = NTable::TTableClient(driver);
         auto sessionFuture = client.CreateSession();
 
@@ -226,6 +575,15 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         UNIT_ASSERT(sessionResult.IsSuccess());
         auto session = sessionResult.GetSession();
         UNIT_ASSERT_VALUES_EQUAL(session.GetId(), "my-session-id");
+
+        const auto baseBuildInfo = "ydb-cpp-sdk/" + GetSdkSemver();
+        UNIT_ASSERT_VALUES_EQUAL(
+            discoveryService.BuildInfo,
+            baseBuildInfo
+                + " ydb-sdk-tracing/" + std::string(NObservability::kTracingChainVersion)
+                + " ydb-sdk-metrics/" + std::string(NObservability::kMetricsChainVersion)
+                + ";test-client/1.2.3");
+        UNIT_ASSERT_VALUES_EQUAL(tableService.BuildInfo, baseBuildInfo + ";test-client/1.2.3");
     }
 
     Y_UNIT_TEST(WithoutDiscoveryDriverLevel) {

@@ -16,6 +16,8 @@
 #include <yt/yt/core/https/config.h>
 #include <yt/yt/core/https/server.h>
 
+#include <yt/yt/core/dns/dns_resolver.h>
+
 #include <yt/yt/core/net/config.h>
 #include <yt/yt/core/net/connection.h>
 #include <yt/yt/core/net/dialer.h>
@@ -36,6 +38,10 @@
 #include <yt/yt/core/misc/finally.h>
 
 #include <library/cpp/testing/common/network.h>
+
+#include <library/cpp/yt/string/stream.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -137,9 +143,8 @@ TEST(THeadersTest, HeaderCaseIsIrrelevant)
     ASSERT_EQ(std::string("F"), headers->GetOrThrow("x-test"));
     ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
 
-    // TODO(babenko): migrate to std::string
-    TString buffer;
-    TStringOutput output(buffer);
+    std::string buffer;
+    TStdStringOutput output(buffer);
     headers->WriteTo(&output);
 
     std::string expected = "x-tEsT: F\r\n";
@@ -772,6 +777,57 @@ TEST_P(THttpServerTest, SimpleRequest)
     ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 }
 
+class TRecordingDnsResolver
+    : public NDns::IDnsResolver
+{
+public:
+    NThreading::TAtomicObject<NDns::TDnsResolveOptions> LastOptions;
+
+    TFuture<TNetworkAddress> Resolve(
+        const std::string& /*hostName*/,
+        const NDns::TDnsResolveOptions& options) override
+    {
+        LastOptions.Store(options);
+        return MakeFuture(TNetworkAddress::Parse("127.0.0.1"));
+    }
+};
+
+TEST_P(THttpServerTest, ClientDnsResolveOptions)
+{
+    Server->AddHandler("/ok", New<TOKHttpHandler>());
+    Server->Start();
+
+    auto fakeDns = New<TRecordingDnsResolver>();
+    auto* addressResolver = TAddressResolver::Get();
+    auto realDns = addressResolver->GetDnsResolver();
+    addressResolver->SetDnsResolver(fakeDns);
+    addressResolver->PurgeCache();
+    auto guard = Finally([&] {
+        addressResolver->SetDnsResolver(realDns);
+        addressResolver->PurgeCache();
+    });
+
+    NDns::TDnsResolveOptions options{.EnableIPv4 = true, .EnableIPv6 = false};
+
+    IClientPtr client;
+    if (!GetParam()) {
+        auto clientConfig = New<NHttp::TClientConfig>();
+        clientConfig->DnsResolveOptions = options;
+        client = NHttp::CreateClient(clientConfig, Poller);
+    } else {
+        auto clientConfig = New<NHttps::TClientConfig>();
+        clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
+        clientConfig->Credentials->CertificateAuthority = CreateTestKeyBlob("ca.pem");
+        clientConfig->DnsResolveOptions = options;
+        client = NHttps::CreateClient(clientConfig, Poller);
+    }
+
+    auto rsp = WaitFor(client->Get(TestUrl + "/ok")).ValueOrThrow();
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    // Checks that client->Get actually routes through Resolve with dns resolve options from client config.
+    EXPECT_EQ(fakeDns->LastOptions.Load(), options);
+}
+
 TEST_P(THttpServerTest, EmptyPath)
 {
     Server->AddHandler("/", New<TOKHttpHandler>());
@@ -944,7 +1000,7 @@ class TTestTrailersHandler
 public:
     void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) override
     {
-        WaitFor(rsp->Write(TSharedRef::FromString("test"))).ThrowOnError();
+        WaitFor(rsp->Write(TSharedRef::FromString(std::string("test")))).ThrowOnError();
 
         rsp->GetTrailers()->Set("X-Yt-Test", "foo; bar");
         WaitFor(rsp->Close()).ThrowOnError();
@@ -980,7 +1036,7 @@ class TImpatientHandler
 public:
     void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) override
     {
-        WaitFor(rsp->Write(TSharedRef::FromString("body"))).ThrowOnError();
+        WaitFor(rsp->Write(TSharedRef::FromString(std::string("body")))).ThrowOnError();
         WaitFor(rsp->Close()).ThrowOnError();
     }
 };
@@ -1139,17 +1195,18 @@ public:
     void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& /*rsp*/) override
     {
         auto finally = Finally([this] {
-            YT_LOG_DEBUG("Running finally block");
+            YT_TLOG_DEBUG("Running finally block");
             Canceled.Set();
         });
 
         auto p = NewPromise<void>();
         p.OnCanceled(BIND([p] (const TError& error) {
-            YT_LOG_INFO(error, "Promise is canceled");
+            YT_TLOG_INFO("Promise is canceled")
+                .With(error);
             p.Set(error);
         }));
 
-        YT_LOG_DEBUG("Blocking on promise");
+        YT_TLOG_DEBUG("Blocking on promise");
         WaitFor(p.ToFuture())
             .ThrowOnError();
     }
@@ -1174,11 +1231,11 @@ TEST_P(THttpServerTest, RequestCancel)
     auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto connection = WaitFor(dialer->Dial(TNetworkAddress::CreateIPv6Loopback(TestPort)))
         .ValueOrThrow();
-    WaitFor(connection->Write(TSharedRef::FromString("POST /cancel HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")))
+    WaitFor(connection->Write(TSharedRef::FromString(std::string("POST /cancel HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"))))
         .ThrowOnError();
 
     Sleep(TDuration::Seconds(1));
-    YT_LOG_DEBUG("Closing client connection");
+    YT_TLOG_DEBUG("Closing client connection");
     WaitFor(connection->CloseWrite())
         .ThrowOnError();
 
@@ -1213,7 +1270,7 @@ TEST_P(THttpServerTest, RequestHangUp)
     auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto connection = WaitFor(dialer->Dial(TNetworkAddress::CreateIPv6Loopback(TestPort)))
         .ValueOrThrow();
-    WaitFor(connection->Write(TSharedRef::FromString("POST /validating HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")))
+    WaitFor(connection->Write(TSharedRef::FromString(std::string("POST /validating HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"))))
         .ThrowOnError();
     WaitFor(connection->CloseWrite())
         .ThrowOnError();
@@ -1259,7 +1316,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         for (int i = 0; i < 10; ++i) {
             request->WriteRequest(EMethod::Post, "/echo");
-            WaitFor(request->Write(TSharedRef::FromString("foo")))
+            WaitFor(request->Write(TSharedRef::FromString(std::string("foo"))))
                 .ThrowOnError();
             WaitFor(request->Close())
                 .ThrowOnError();
@@ -1294,7 +1351,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         for (int i = 0; i < 10; ++i) {
             request->WriteRequest(EMethod::Post, "/echo");
-            WaitFor(request->Write(TSharedRef::FromString("foo")))
+            WaitFor(request->Write(TSharedRef::FromString(std::string("foo"))))
                 .ThrowOnError();
             WaitFor(request->Close())
                 .ThrowOnError();

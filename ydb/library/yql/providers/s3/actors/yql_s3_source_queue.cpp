@@ -177,7 +177,8 @@ public:
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
-        bool allowLocalFiles)
+        bool allowLocalFiles,
+        IDqSchedulerContextPtr schedulerContext)
         : TxId(std::move(txId))
         , PrefetchSize(prefetchSize)
         , FileSizeLimit(fileSizeLimit)
@@ -196,6 +197,9 @@ public:
         , PatternVariant(patternVariant)
         , PatternType(patternType)
         , AllowLocalFiles(allowLocalFiles) {
+        if (schedulerContext) {
+            HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(schedulerContext->GetWorkScope());
+        }
         for (size_t i = 0; i < paths.size(); ++i) {
             NS3::FileQueue::TObjectPath object;
             object.SetPath(paths[i].Path);
@@ -518,7 +522,9 @@ private:
                     object.GetPath()},
                 Nothing(),
                 AllowLocalFiles,
-                NActors::TActivationContext::ActorSystem());
+                NActors::TActivationContext::ActorSystem(),
+                nullptr,
+                HttpRequestContext);
             Fetch();
             return true;
         }
@@ -641,6 +647,7 @@ private:
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
     const bool AllowLocalFiles;
+    IHttpRequestContext::TPtr HttpRequestContext;
 
     static constexpr TDuration PoisonTimeout = TDuration::Minutes(30);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
@@ -663,7 +670,8 @@ NActors::IActor* CreateS3FileQueueActor(
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
-        bool allowLocalFiles) {
+        bool allowLocalFiles,
+        IDqSchedulerContextPtr schedulerContext) {
     return new TS3FileQueueActor(
         txId,
         paths,
@@ -681,7 +689,8 @@ NActors::IActor* CreateS3FileQueueActor(
         pattern,
         patternVariant,
         patternType,
-        allowLocalFiles
+        allowLocalFiles,
+        std::move(schedulerContext)
     );
 }
 

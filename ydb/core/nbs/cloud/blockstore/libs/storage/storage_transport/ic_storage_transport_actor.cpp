@@ -1,6 +1,9 @@
 #include "ic_storage_transport_actor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 
 #include <ydb/library/actors/util/rope.h>
 
@@ -13,48 +16,6 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr TStringBuf DestroyErrorMessage =
-    "TICStorageTransportActor is destroyed";
-constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
-constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <typename T>
-void SetErrorStatus(
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
-    TStringBuf reason,
-    T& record)
-{
-    record.SetStatus(status);
-    record.SetErrorReason(TString(reason));
-}
-
-std::unique_ptr<NDDisk::TEvWritePersistentBuffersResult>
-MakeWritePersistentBuffersResult(
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
-    TStringBuf reason,
-    const TVector<NKikimrBlobStorage::NDDisk::TDDiskId>& pbufferIds)
-{
-    auto errorResponse =
-        std::make_unique<NDDisk::TEvWritePersistentBuffersResult>();
-    for (const auto& pbufferId: pbufferIds) {
-        auto* res = errorResponse->Record.AddResult();
-        *res->MutablePersistentBufferId() = pbufferId;
-        SetErrorStatus(status, reason, *res->MutableResult());
-    }
-    return errorResponse;
-}
-
-template <typename T>
-void SetCantAcquireStatus(T& record)
-{
-    SetErrorStatus(
-        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
-        CantAcquireDataErrorMessage,
-        record);
-}
-
 template <typename TEvent, typename TMap>
 void RejectAllPending(TMap& map)
 {
@@ -66,6 +27,21 @@ void RejectAllPending(TMap& map)
             event.Record);
         request.second->Promise.SetValue(std::move(event.Record));
     }
+    map.clear();
+}
+
+void RejectAllPending(
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvConnect>>& map)
+{
+    for (auto& request: map) {
+        NKikimrBlobStorage::NDDisk::TEvConnectResult record;
+        SetErrorStatus(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+            DestroyErrorMessage,
+            record);
+        request.second->ConnectPromise.SetValue(std::move(record));
+    }
+    map.clear();
 }
 
 template <typename T>
@@ -77,13 +53,104 @@ void SetUndeliveryError(T& record)
         record);
 }
 
+template <typename T>
+void SetSessionBrokenError(T& record)
+{
+    SetErrorStatus(
+        NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
+        SessionBrokenErrorMessage,
+        record);
+}
+
+template <typename TEvent, typename TMap>
+void RejectRequestsForNode(TMap& map, ui32 nodeId)
+{
+    for (auto it = map.begin(); it != map.end();) {
+        auto& request = it->second;
+        if (request->ServiceId.NodeId() == nodeId) {
+            TEvent event;
+            SetSessionBrokenError(event.Record);
+            request->Promise.SetValue(std::move(event.Record));
+
+            map.erase(it++);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void RejectRequestsForNode(
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvConnect>>& map,
+    ui32 nodeId)
+{
+    for (auto it = map.begin(); it != map.end();) {
+        auto& request = it->second;
+        if (request->ServiceId.NodeId() == nodeId) {
+            NKikimrBlobStorage::NDDisk::TEvConnectResult record;
+            SetSessionBrokenError(record);
+            request->DisconnectPromise.SetValue(nodeId);
+
+            map.erase(it++);
+        } else {
+            ++it;
+        }
+    }
+}
+
+template <typename TRequest>
+void AttachPayload(TRequest& request, TRope rope, bool enableChecksums)
+{
+    if (enableChecksums) {
+        request.AddPayloadThenChecksum(std::move(rope));
+    } else {
+        request.AddPayload(std::move(rope));
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TActorId CreateTransportActor(
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex,
+    bool enableChecksums,
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
+{
+    auto actor = std::make_unique<TICStorageTransportActor>(
+        diskDescription,
+        dbgIndex,
+        enableChecksums,
+        std::move(directSessionRegistry));
+
+    return TActivationContext::Register(
+        actor.release(),
+        TActorId(),
+        TMailboxType::ReadAsFilled,
+        NKikimr::AppData()->SystemPoolId);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TICStorageTransportActor::TICStorageTransportActor(
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex,
+    bool enableChecksums,
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
+    : LogTitle(
+          GetCycleCount(),
+          TLogTitle::TInterconnectTransport{
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
+              .DBGIndex = dbgIndex})
+    , DirectSessionRegistry(std::move(directSessionRegistry))
+    , EnableChecksums(enableChecksums)
+{}
+
 TICStorageTransportActor::~TICStorageTransportActor()
 {
-    RejectAllPending<NDDisk::TEvConnectResult>(ConnectRequests);
+    RejectAllPending(ConnectRequests);
     RejectAllPending<NDDisk::TEvReadPersistentBufferResult>(
         ReadFromPBufferRequests);
     RejectAllPending<NDDisk::TEvReadResult>(ReadFromDDiskRequests);
@@ -97,15 +164,15 @@ TICStorageTransportActor::~TICStorageTransportActor()
         BarrierEraseFromPBufferRequests);
     RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
         ListPBufferEntriesRequests);
+    RejectAllPending<NDDisk::TEvDeleteTabletChunksResult>(
+        DeleteTabletChunksRequests);
 
     for (auto& [id, requestInfo]: WriteToManyPBuffersRequests) {
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             DestroyErrorMessage,
             requestInfo.Request->PersistentBufferIds);
-        if (requestInfo.Request->Callback) {
-            requestInfo.Request->Callback(std::move(response->Record));
-        }
+        requestInfo.Request->Reply(response->Record);
     }
 }
 
@@ -119,25 +186,27 @@ void TICStorageTransportActor::HandleConnect(
     const TEvTransportPrivate::TEvConnect::TPtr& ev,
     const TActorContext& ctx)
 {
-    const auto* msg = ev->Get();
-
     const ui64 requestId = ++RequestIdGenerator;
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Sent TEvConnect with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
+        requestId);
+
     auto [it, inserted] =
         ConnectRequests.emplace(requestId, ev->Release().Release());
     Y_ABORT_UNLESS(inserted);
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "Sent TEvConnect with requestId# %lu",
-        requestId);
+    const auto& request = *it->second;
 
     SendWithUndeliveryTracking(
         ctx,
-        msg->ServiceId,
-        std::make_unique<NDDisk::TEvConnect>(msg->Credentials),
+        request.ServiceId,
+        std::make_unique<NDDisk::TEvConnect>(request.Credentials),
         requestId,
-        NWilson::TTraceId());
+        NWilson::TTraceId(),
+        ESubscribeOnSession::Yes);
 }
 
 void TICStorageTransportActor::HandleConnectUndelivery(
@@ -149,21 +218,23 @@ void TICStorageTransportActor::HandleConnectUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvConnect undelivery with requestId# %lu",
+        "%s Received NDDisk::TEvConnect undelivery with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
         auto& request = **r;
         auto result = NKikimrBlobStorage::NDDisk::TEvConnectResult();
         SetUndeliveryError(result);
-        request.Promise.SetValue(std::move(result));
+        request.ConnectPromise.SetValue(std::move(result));
         ConnectRequests.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_ERROR(
+        LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ConnectEvent with requestId# %lu not found",
+            "%s ConnectEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -177,19 +248,24 @@ void TICStorageTransportActor::HandleConnectResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvConnectResult with requestId# %lu",
+        "%s Received TEvConnectResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
         auto& request = **r;
-        request.Promise.SetValue(std::move(ev->Get()->Record));
+        request.ConnectPromise.SetValue(std::move(ev->Get()->Record));
+
+        ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
+            request.DisconnectPromise);
         ConnectRequests.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_ERROR(
+        LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ConnectEvent with requestId# %lu not found",
+            "%s ConnectEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -208,7 +284,8 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvWriteToPBuffer with requestId# %lu",
+        "%s Sent TEvWriteToPBuffer with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto guard = msg->Data.Acquire()) {
@@ -221,23 +298,29 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayload(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
+        // TODO(RFC 006): checksums should be computed by the Partition and
+        // carried down to here rather than recomputed post-copy; computing it
+        // after SgListCopy only covers corruption from this point on and bakes
+        // in anything already wrong upstream of the copy.
 
         SendWithUndeliveryTracking(
             ctx,
             msg->ServiceId,
             std::move(request),
             requestId,
-            std::move(msg->TraceId));
+            std::move(msg->TraceId),
+            ESubscribeOnSession::No);
 
         return;
     }
 
-    LOG_INFO(
+    LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvWriteToPBuffer with requestId# %lu was failed - can't "
+        "%s Sent TEvWriteToPBuffer with requestId# %lu was failed - can't "
         "acquire data. Returning an immediate error.",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     auto errorResponse =
@@ -263,7 +346,8 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvWritePersistentBufferResult with requestId# %lu",
+        "%s Received TEvWritePersistentBufferResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = WriteToPBufferRequests.FindPtr(requestId)) {
@@ -275,7 +359,8 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "WritePersistentBufferEvent with requestId# %lu not found",
+            "%s WritePersistentBufferEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -289,8 +374,9 @@ void TICStorageTransportActor::HandleWritePersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvWritePersistentBuffer undelivery with requestId# "
-        "%lu",
+        "%s Received NDDisk::TEvWritePersistentBuffer undelivery with "
+        "requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = WriteToPBufferRequests.FindPtr(requestId)) {
@@ -305,7 +391,8 @@ void TICStorageTransportActor::HandleWritePersistentBufferUndelivery(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "WritePersistentBufferEvent with requestId# %lu not found",
+            "%s WritePersistentBufferEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -335,8 +422,9 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with requestId# "
-        "%lu",
+        "%s Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with "
+        "requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto guard = msg->Data.Acquire()) {
@@ -352,27 +440,33 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayload(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
+        // TODO(RFC 006): checksums should be computed by the Partition and
+        // carried down to here rather than recomputed post-copy; computing it
+        // after SgListCopy only covers corruption from this point on and bakes
+        // in anything already wrong upstream of the copy.
 
         SendWithUndeliveryTracking(
             ctx,
             msg->ServiceId,
             std::move(request),
             requestId,
-            std::move(msg->TraceId));
+            std::move(msg->TraceId),
+            ESubscribeOnSession::No);
         return;
     }
 
     LOG_ERROR(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with "
+        "%s Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with "
         "requestId# %lu was failed - can't acquire data. Immediate error's "
         "returning.",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     auto errorResponse = MakeWritePersistentBuffersResult(
-        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+        NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
         CantAcquireDataErrorMessage,
         msg->PersistentBufferIds);
     ctx.Send(MakeHolder<IEventHandle>(
@@ -394,25 +488,31 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvWritePersistentBuffers undelivery with requestId# "
-        "%lu",
+        "%s Received NDDisk::TEvWritePersistentBuffers undelivery with "
+        "requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
         auto& requestInfo = *r;
         auto& request = *requestInfo.Request;
+
+        // Will reply undelivered only for coordinator.
+        const NKikimrBlobStorage::NDDisk::TDDiskId coordinator[1] = {
+            request.PersistentBufferIds[0]};
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             UndeliveryErrorMessage,
-            request.PersistentBufferIds);
-        Y_ABORT_UNLESS(request.Callback);
-        request.Callback(std::move(response->Record));
+            coordinator);
+        request.Reply(response->Record);
         WriteToManyPBuffersRequests.erase(requestId);
     } else {
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "WriteToManyPersistentBuffersEvent with requestId# %lu not found",
+            "%s WriteToManyPersistentBuffersEvent with requestId# %lu not "
+            "found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -426,7 +526,8 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvWriteToManyPersistentBuffersResult with requestId# %lu",
+        "%s Received TEvWriteToManyPersistentBuffersResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
@@ -434,9 +535,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
         auto& request = *requestInfo.Request;
         auto& waitingReplies = requestInfo.WaitingReplies;
 
-        Y_ABORT_UNLESS(request.Callback);
-        request.Callback(ev->Get()->Record);
-        request.NumberOfCallbackCalls++;
+        request.Reply(ev->Get()->Record);
 
         for (const auto& singlePBufferResponse: ev->Get()->Record.GetResult()) {
             waitingReplies.erase(singlePBufferResponse.GetPersistentBufferId());
@@ -449,8 +548,9 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
         LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "TEvWriteToManyPersistentBuffersResult with requestId# %lu not "
+            "%s TEvWriteToManyPersistentBuffersResult with requestId# %lu not "
             "found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -469,7 +569,8 @@ void TICStorageTransportActor::HandleWriteToDDisk(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent HandleWriteToDDisk with requestId# %lu",
+        "%s Sent HandleWriteToDDisk with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto guard = msg->Data.Acquire()) {
@@ -481,22 +582,24 @@ void TICStorageTransportActor::HandleWriteToDDisk(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayload(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
 
         SendWithUndeliveryTracking(
             ctx,
             msg->ServiceId,
             std::move(request),
             requestId,
-            std::move(msg->TraceId));
+            std::move(msg->TraceId),
+            ESubscribeOnSession::No);
         return;
     }
 
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent HandleWriteToDDisk with requestId# %lu was failed - can't "
+        "%s Sent HandleWriteToDDisk with requestId# %lu was failed - can't "
         "acquire data. Returning an immediate error.",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     auto errorResponse = std::make_unique<NKikimr::NDDisk::TEvWriteResult>();
@@ -521,7 +624,8 @@ void TICStorageTransportActor::HandleWriteToDDiskUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvWrite undelivery with requestId# %lu",
+        "%s Received NDDisk::TEvWrite undelivery with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = WriteToDDiskRequests.FindPtr(requestId)) {
@@ -535,7 +639,8 @@ void TICStorageTransportActor::HandleWriteToDDiskUndelivery(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "HandleWriteToDDiskEvent with requestId# %lu not found",
+            "%s HandleWriteToDDiskEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -549,7 +654,8 @@ void TICStorageTransportActor::HandleWriteToDDiskResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received HandleWriteToDDiskResult with requestId# %lu",
+        "%s Received HandleWriteToDDiskResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = WriteToDDiskRequests.FindPtr(requestId)) {
@@ -561,8 +667,8 @@ void TICStorageTransportActor::HandleWriteToDDiskResult(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "HandleWriteToDDiskResult with requestId# %lu not "
-            "found",
+            "%s HandleWriteToDDiskResult with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -582,13 +688,14 @@ void TICStorageTransportActor::HandleBatchErasePersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvBatchEraseFromPBuffer with requestId# %lu",
+        "%s Sent TEvBatchEraseFromPBuffer with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     auto request = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(
         msg->Credentials);
-    for (auto lsn: msg->Lsns) {
-        request->AddErase(lsn, msg->Credentials.Generation);
+    for (const auto& pBufferKey: msg->PBufferKeys) {
+        request->AddErase(pBufferKey.Lsn, pBufferKey.Generation);
     }
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -601,7 +708,7 @@ void TICStorageTransportActor::HandleBatchErasePersistentBuffer(
         std::move(msg->TraceId)));
 }
 
-void TICStorageTransportActor::HandleErasePersistentBuffer(
+void TICStorageTransportActor::HandleBarrierErasePersistentBuffer(
     const TEvTransportPrivate::TEvBarrierEraseFromPBuffer::TPtr& ev,
     const TActorContext& ctx)
 {
@@ -616,7 +723,8 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvBarrierEraseFromPBuffer with requestId# %lu lsn# %lu",
+        "%s Sent TEvBarrierEraseFromPBuffer with requestId# %lu lsn# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId,
         msg->Lsn);
 
@@ -629,11 +737,12 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
         msg->ServiceId,
         std::move(request),
         requestId,
-        std::move(msg->TraceId));
+        std::move(msg->TraceId),
+        ESubscribeOnSession::No);
 }
 
-void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
-    const NKikimr::NDDisk::TEvBatchErasePersistentBuffer::TPtr& ev,
+void TICStorageTransportActor::HandleBatchErasePersistentBufferUndelivery(
+    const NDDisk::TEvBatchErasePersistentBuffer::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     const ui64 requestId = ev->Cookie;
@@ -641,8 +750,9 @@ void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvBatchErasePersistentBuffer undelivery with "
+        "%s Received NDDisk::TEvBatchErasePersistentBuffer undelivery with "
         "requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = BatchEraseFromPBufferRequests.FindPtr(requestId)) {
@@ -657,7 +767,40 @@ void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ErasePersistentBufferEvent with requestId# %lu not found",
+            "%s TEvBatchErasePersistentBuffer with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
+            requestId);
+    }
+}
+
+void TICStorageTransportActor::HandleBarrierErasePersistentBufferUndelivery(
+    const NDDisk::TEvErasePersistentBuffer::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_WARN(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Received NDDisk::TEvErasePersistentBuffer undelivery with "
+        "requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
+        requestId);
+
+    if (auto* r = BarrierEraseFromPBufferRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        auto result =
+            NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult();
+        SetUndeliveryError(result);
+        request.Promise.SetValue(std::move(result));
+        BarrierEraseFromPBufferRequests.erase(requestId);
+    } else {
+        // That means that request is already completed
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s TEvErasePersistentBuffer with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -671,7 +814,8 @@ void TICStorageTransportActor::HandleErasePersistentBufferResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvErasePersistentBufferResult with requestId# %lu",
+        "%s Received TEvErasePersistentBufferResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = BatchEraseFromPBufferRequests.FindPtr(requestId)) {
@@ -690,7 +834,8 @@ void TICStorageTransportActor::HandleErasePersistentBufferResult(
     LOG_ERROR(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "ErasePersistentBufferEvent with requestId# %lu not found",
+        "%s ErasePersistentBufferEvent with requestId# %lu not found",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 }
 
@@ -709,14 +854,15 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvReadFromPBuffer with requestId# %lu",
+        "%s Sent TEvReadFromPBuffer with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     auto request = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
         msg->Credentials,
         msg->Selector,
-        msg->Lsn,
-        msg->Credentials.Generation,
+        msg->PBufferKey.Lsn,
+        msg->PBufferKey.Generation,
         msg->Instruction);
 
     SendWithUndeliveryTracking(
@@ -724,7 +870,8 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
         msg->ServiceId,
         std::move(request),
         requestId,
-        std::move(msg->TraceId));
+        std::move(msg->TraceId),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
@@ -736,8 +883,9 @@ void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvReadPersistentBuffer undelivery with requestId# "
-        "%lu",
+        "%s Received NDDisk::TEvReadPersistentBuffer undelivery with "
+        "requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = ReadFromPBufferRequests.FindPtr(requestId)) {
@@ -751,7 +899,8 @@ void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ReadPersistentBufferEvent with requestId# %lu not found",
+            "%s ReadPersistentBufferEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -765,7 +914,8 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvReadPersistentBufferResult with requestId# %lu",
+        "%s Received TEvReadPersistentBufferResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     // That means that request is already completed
@@ -779,8 +929,9 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
             LOG_INFO(
                 ctx,
                 NKikimrServices::NBS_PARTITION,
-                "Received TEvReadPersistentBufferResult with requestId# %lu "
+                "%s Received TEvReadPersistentBufferResult with requestId# %lu "
                 "was failed - can't acquire data. Aborting.",
+                LogTitle.GetWithTime().c_str(),
                 requestId);
 
             NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult
@@ -794,7 +945,8 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ReadPersistentBufferEvent with requestId# %lu not found",
+            "%s ReadPersistentBufferEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -813,7 +965,8 @@ void TICStorageTransportActor::HandleRead(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvReadFromDDisk with requestId# %lu",
+        "%s Sent TEvReadFromDDisk with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     auto request = std::make_unique<NDDisk::TEvRead>(
@@ -826,7 +979,8 @@ void TICStorageTransportActor::HandleRead(
         msg->ServiceId,
         std::move(request),
         requestId,
-        std::move(msg->TraceId));
+        std::move(msg->TraceId),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleReadUndelivery(
@@ -838,7 +992,8 @@ void TICStorageTransportActor::HandleReadUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvRead undelivery with requestId# %lu",
+        "%s Received NDDisk::TEvRead undelivery with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = ReadFromDDiskRequests.FindPtr(requestId)) {
@@ -852,7 +1007,8 @@ void TICStorageTransportActor::HandleReadUndelivery(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ReadEvent with requestId# %lu not found",
+            "%s ReadEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -866,7 +1022,8 @@ void TICStorageTransportActor::HandleReadResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvReadResult with requestId# %lu",
+        "%s Received TEvReadResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = ReadFromDDiskRequests.FindPtr(requestId)) {
@@ -876,11 +1033,12 @@ void TICStorageTransportActor::HandleReadResult(
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
             request.Promise.SetValue(std::move(ev->Get()->Record));
         } else {
-            LOG_INFO(
+            LOG_DEBUG(
                 ctx,
                 NKikimrServices::NBS_PARTITION,
-                "Received TEvReadResult with requestId# %lu was failed - can't "
-                "acquire data.",
+                "%s Received TEvReadResult with requestId# %lu was failed - "
+                "can't acquire data.",
+                LogTitle.GetWithTime().c_str(),
                 requestId);
 
             NKikimrBlobStorage::NDDisk::TEvReadResult errorResult;
@@ -894,7 +1052,8 @@ void TICStorageTransportActor::HandleReadResult(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ReadEvent with requestId# %lu not found",
+            "%s ReadEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -918,7 +1077,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvSyncWithPBuffer with requestId# %lu",
+        "%s Sent TEvSyncWithPBuffer with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     auto request = std::make_unique<NDDisk::TEvSync>(msg->Credentials);
@@ -927,14 +1087,14 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         msg->PBufferId.PDiskId,
         msg->PBufferId.DDiskSlotId);
 
-    Y_ABORT_UNLESS(msg->Selectors.size() == msg->Lsns.size());
+    Y_ABORT_UNLESS(msg->Selectors.size() == msg->PBufferKeys.size());
     for (size_t i = 0; i < msg->Selectors.size(); ++i) {
         request->AddSegmentFromPB(
             pBufferId,
             *msg->PBufferCredentials.DDiskInstanceGuid,
             msg->Selectors[i],
-            msg->Lsns[i],
-            msg->Credentials.Generation);
+            msg->PBufferKeys[i].Lsn,
+            msg->PBufferKeys[i].Generation);
     }
 
     SendWithUndeliveryTracking(
@@ -942,7 +1102,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         msg->ServiceId,
         std::move(request),
         requestId,
-        std::move(msg->TraceId));
+        std::move(msg->TraceId),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
@@ -954,7 +1115,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvSync undelivery with requestId# %lu",
+        "%s Received NDDisk::TEvSync undelivery with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
@@ -968,7 +1130,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "SyncEvent with requestId# %lu not found",
+            "%s SyncEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -982,7 +1145,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvSyncResult with requestId# %lu",
+        "%s Received TEvSyncResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
@@ -994,7 +1158,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "SyncEvent with requestId# %lu not found",
+            "%s SyncEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -1017,7 +1182,8 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
         msg->ServiceId,
         std::move(request),
         requestId,
-        NWilson::TTraceId());
+        NWilson::TTraceId(),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleListPersistentBufferUndelivery(
@@ -1029,8 +1195,9 @@ void TICStorageTransportActor::HandleListPersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvListPersistentBuffer undelivery with requestId# "
-        "%lu",
+        "%s Received NDDisk::TEvListPersistentBuffer undelivery with "
+        "requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = ListPBufferEntriesRequests.FindPtr(requestId)) {
@@ -1045,7 +1212,8 @@ void TICStorageTransportActor::HandleListPersistentBufferUndelivery(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ListPBufferEntries with requestId# %lu not found",
+            "%s ListPBufferEntries with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
 }
@@ -1059,7 +1227,8 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received HandleListPersistentBufferResult with requestId# %lu",
+        "%s Received HandleListPersistentBufferResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
         requestId);
 
     if (auto* r = ListPBufferEntriesRequests.FindPtr(requestId)) {
@@ -1071,9 +1240,234 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ListPBufferEntries with requestId# %lu not found",
+            "%s ListPBufferEntries with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
             requestId);
     }
+}
+
+void TICStorageTransportActor::HandleDeleteTabletChunks(
+    const TEvTransportPrivate::TEvDeleteTabletChunks::TPtr& ev,
+    const TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    const ui64 requestId = ++RequestIdGenerator;
+    auto [it, inserted] =
+        DeleteTabletChunksRequests.emplace(requestId, ev->Release().Release());
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Sent TEvDeleteTabletChunks with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
+        requestId);
+
+    auto request =
+        std::make_unique<NDDisk::TEvDeleteTabletChunks>(msg->Credentials);
+
+    SendWithUndeliveryTracking(
+        ctx,
+        msg->ServiceId,
+        std::move(request),
+        requestId,
+        NWilson::TTraceId(),
+        ESubscribeOnSession::No);
+}
+
+void TICStorageTransportActor::HandleDeleteTabletChunksUndelivery(
+    const NDDisk::TEvDeleteTabletChunks::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_WARN(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Received NDDisk::TEvDeleteTabletChunks undelivery with "
+        "requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
+        requestId);
+
+    if (auto* r = DeleteTabletChunksRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        auto result = NKikimrBlobStorage::NDDisk::TEvDeleteTabletChunksResult();
+        SetUndeliveryError(result);
+        request.Promise.SetValue(std::move(result));
+        DeleteTabletChunksRequests.erase(requestId);
+    } else {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s TEvDeleteTabletChunks with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
+            requestId);
+    }
+}
+
+void TICStorageTransportActor::HandleDeleteTabletChunksResult(
+    const NDDisk::TEvDeleteTabletChunksResult::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Received TEvDeleteTabletChunksResult with requestId# %lu",
+        LogTitle.GetWithTime().c_str(),
+        requestId);
+
+    if (auto* r = DeleteTabletChunksRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        request.Promise.SetValue(std::move(ev->Get()->Record));
+        DeleteTabletChunksRequests.erase(requestId);
+    } else {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s DeleteTabletChunksEvent with requestId# %lu not found",
+            LogTitle.GetWithTime().c_str(),
+            requestId);
+    }
+}
+
+void TICStorageTransportActor::PassAway()
+{
+    for (auto& [nodeId, promises]: ICSubscribedNodes) {
+        for (auto& promise: promises) {
+            if (!promise.HasValue()) {
+                promise.SetValue(nodeId);
+            }
+        }
+
+        if (nodeId != SelfId().NodeId()) {
+            Send(
+                TActivationContext::InterconnectProxy(nodeId),
+                std::make_unique<TEvents::TEvUnsubscribe>().release());
+        }
+    }
+    ICSubscribedNodes.clear();
+    if (DirectSessionRegistry) {
+        DirectSessionRegistry->Clear();
+    }
+    NActors::IActor::PassAway();
+}
+
+void TICStorageTransportActor::RejectAllSessionRequestsForNode(
+    ui32 nodeId,
+    const NActors::TActorContext& ctx)
+{
+    LOG_WARN(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s All session's requests for node #%u were rejected",
+        LogTitle.GetWithTime().c_str(),
+        nodeId);
+
+    RejectRequestsForNode(ConnectRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvReadPersistentBufferResult>(
+        ReadFromPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvWritePersistentBufferResult>(
+        WriteToPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvSyncResult>(
+        FlushFromPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvErasePersistentBufferResult>(
+        BatchEraseFromPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvErasePersistentBufferResult>(
+        BarrierEraseFromPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvListPersistentBufferResult>(
+        ListPBufferEntriesRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvDeleteTabletChunksResult>(
+        DeleteTabletChunksRequests,
+        nodeId);
+
+    for (auto it = WriteToManyPBuffersRequests.begin();
+         it != WriteToManyPBuffersRequests.end();)
+    {
+        auto& requestInfo = it->second;
+        if (requestInfo.Request->ServiceId.NodeId() != nodeId) {
+            ++it;
+            continue;
+        }
+
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> remaining(
+            requestInfo.WaitingReplies.begin(),
+            requestInfo.WaitingReplies.end());
+        auto response = MakeWritePersistentBuffersResult(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
+            SessionBrokenErrorMessage,
+            remaining);
+        requestInfo.Request->Reply(response->Record);
+        WriteToManyPBuffersRequests.erase(it++);
+    }
+}
+
+void TICStorageTransportActor::HandleICNodeConnected(
+    const TEvInterconnect::TEvNodeConnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const ui32 nodeId = ev->Get()->NodeId;
+    auto directSession = ev->Get()->DirectSession;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Node #%u connected, hasDirectSession# %s",
+        LogTitle.GetWithTime().c_str(),
+        nodeId,
+        directSession ? "true" : "false");
+
+    if (DirectSessionRegistry) {
+        if (directSession) {
+            DirectSessionRegistry->Set(
+                nodeId,
+                MakeSessionEntry(ctx.ActorSystem(), std::move(directSession)));
+        } else {
+            // Reconnect without a direct session must drop any previously
+            // published entry so datapath cannot send on a stale session.
+            DirectSessionRegistry->Reset(nodeId);
+        }
+    }
+}
+
+void TICStorageTransportActor::HandleICNodeDisconnected(
+    const TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const ui32 nodeId = ev->Get()->NodeId;
+
+    LOG_WARN(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Node #%u disconnected",
+        LogTitle.GetWithTime().c_str(),
+        nodeId);
+
+    if (DirectSessionRegistry) {
+        DirectSessionRegistry->Reset(nodeId);
+    }
+
+    auto it = ICSubscribedNodes.find(nodeId);
+    if (it != ICSubscribedNodes.end()) {
+        for (auto& disconnectPromise: it->second) {
+            if (!disconnectPromise.HasValue()) {
+                disconnectPromise.SetValue(nodeId);
+            }
+        }
+        ICSubscribedNodes.erase(it);
+    }
+
+    RejectAllSessionRequestsForNode(nodeId, ctx);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1083,7 +1477,8 @@ STFUNC(TICStorageTransportActor::StateWork)
     LOG_DEBUG(
         TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "Processing event: %s from sender: %lu",
+        "%s Processing event: %s from sender: %lu",
+        LogTitle.GetWithTime().c_str(),
         ev->GetTypeName().data(),
         ev->Sender.LocalId());
 
@@ -1123,10 +1518,13 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleBatchErasePersistentBuffer);
         HFunc(
             TEvTransportPrivate::TEvBarrierEraseFromPBuffer,
-            HandleErasePersistentBuffer);
+            HandleBarrierErasePersistentBuffer);
         HFunc(
             NDDisk::TEvBatchErasePersistentBuffer,
-            HandleErasePersistentBufferUndelivery);
+            HandleBatchErasePersistentBufferUndelivery);
+        HFunc(
+            NDDisk::TEvErasePersistentBuffer,
+            HandleBarrierErasePersistentBufferUndelivery);
         HFunc(
             NDDisk::TEvErasePersistentBufferResult,
             HandleErasePersistentBufferResult);
@@ -1165,27 +1563,29 @@ STFUNC(TICStorageTransportActor::StateWork)
             NKikimr::NDDisk::TEvListPersistentBufferResult,
             HandleListPersistentBufferResult);
 
+        HFunc(
+            TEvTransportPrivate::TEvDeleteTabletChunks,
+            HandleDeleteTabletChunks);
+        HFunc(
+            NKikimr::NDDisk::TEvDeleteTabletChunks,
+            HandleDeleteTabletChunksUndelivery);
+        HFunc(
+            NKikimr::NDDisk::TEvDeleteTabletChunksResult,
+            HandleDeleteTabletChunksResult);
+
+        HFunc(TEvInterconnect::TEvNodeDisconnected, HandleICNodeDisconnected);
+        HFunc(TEvInterconnect::TEvNodeConnected, HandleICNodeConnected);
+
         default:
-            LOG_ERROR_S(
+            LOG_ERROR(
                 TActivationContext::AsActorContext(),
                 NKikimrServices::NBS_PARTITION,
-                "Unhandled event type: " << ev->GetTypeRewrite()
-                                         << " event: " << ev->ToString());
+                "%s Unhandled event type: %u event %s ",
+                LogTitle.GetWithTime().c_str(),
+                ev->GetTypeRewrite(),
+                ev->ToString().c_str());
             break;
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TActorId CreateTransportActor()
-{
-    auto actor = std::make_unique<TICStorageTransportActor>();
-
-    return TActivationContext::Register(
-        actor.release(),
-        TActorId(),
-        TMailboxType::ReadAsFilled,
-        NKikimr::AppData()->SystemPoolId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

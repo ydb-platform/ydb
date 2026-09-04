@@ -69,7 +69,10 @@ struct TTenantInfo {
         }
 
         auto tenant = vTenant.Vtenant ? TenantMapping.Value(vTenant.Vtenant, DefaultTenantName) : DefaultTenantName;
-        // CPS_LOG_D("AssignTenantName: {" << cloudId << ", " << scope << "} => " << tenant);
+        // YDB_LOG_COMP_DEBUG(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "AssignTenantName: { } =>",
+        //       {"cloudId", cloudId},
+        //       {"scope", scope},
+        //       {"tenant", tenant});
         // Cerr << "AssignTenantName: {" << cloudId << ", " << scope << "} => " << tenant << Endl;
         return TMapResult{tenant, vTenant.NodeIds};
     }

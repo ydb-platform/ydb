@@ -82,6 +82,8 @@ class WorkloadRenameTables(WorkloadBase):
                 print(e)
             except ydb.issues.PreconditionFailed as e:
                 print(e)
+            except ydb.issues.GenericError as e:
+                print(e)
 
     def get_stat(self):
         with self.lock:

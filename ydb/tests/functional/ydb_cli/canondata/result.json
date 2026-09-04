@@ -680,9 +680,6 @@
     "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_tsv[sql]": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_tsv_sql_/result.output"
     },
-    "test_ydb_sql.TestExecuteSqlWithPgSyntax.test_pg_syntax": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithPgSyntax.test_pg_syntax/result.output"
-    },
     "test_ydb_sql.TestExecuteSqlWithStdinDetection.test_empty_stdin_no_params": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithStdinDetection.test_empty_stdin_no_params/result.output"
     },

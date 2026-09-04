@@ -1,6 +1,6 @@
 #include "kafka_consumer_protocol.h"
 
-#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 
 
 namespace NKafka {
@@ -128,13 +128,13 @@ void TConsumerProtocolAssignment::Read(TKafkaReadable& _readable, TKafkaVersion 
     NPrivate::Read<UserDataMeta>(_readable, _version, UserData);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -181,13 +181,13 @@ void TConsumerProtocolAssignment::TopicPartition::Read(TKafkaReadable& _readable
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }

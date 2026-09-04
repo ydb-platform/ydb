@@ -1,9 +1,10 @@
 
 #include "yql_yt_phy_opt.h"
 
-#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/providers/stat/expr_nodes/yql_stat_expr_nodes.h>
 
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/log/log.h>
 
 
@@ -41,13 +42,14 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TCoOrderedLMap::Match, HNDL(LMap<TCoOrderedLMap>));
     AddHandler(0, &TCoEquiJoin::Match, HNDL(EquiJoin));
     AddHandler(0, &TCoCountBase::Match, HNDL(TakeOrSkip));
-    if (State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
-        AddHandler(0, &TYtMaterialize::Match, HNDL(DqMaterialize));
-        AddHandler(0, &TYtMaterialize::Match, HNDL(Materialize));
+    if (IsAvailableLangVersion(NFeature::Materialize.MinLangVer, State_->Types->LangVer)) {
         AddHandler(0, &TYtWriteTable::Match, HNDL(FillToMaterialize));
     } else {
         AddHandler(0, &TYtWriteTable::Match, HNDL(Fill));
     }
+    AddHandler(0, &TYtMaterialize::Match, HNDL(DqMaterialize));
+    AddHandler(0, &TYtMaterialize::Match, HNDL(Materialize));
+
     AddHandler(0, &TResPull::Match, HNDL(ResPull));
     if (State_->Configuration->UseNewPredicateExtraction.Get().GetOrElse(DEFAULT_USE_NEW_PREDICATE_EXTRACTION)) {
         AddHandler(0, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(ExtractKeyRange));
@@ -83,6 +85,7 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(WeakFields));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(BypassMerge));
     AddHandler(1, &TYtPublish::Match, HNDL(BypassMergeBeforePublish));
+    AddHandler(1, &TYtPublish::Match, HNDL(BypassPersistBeforePublish));
     AddHandler(1, &TCoRight::Match, HNDL(ReadWithSettings));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(PushDownKeyExtract));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(TransientOpWithSettings));

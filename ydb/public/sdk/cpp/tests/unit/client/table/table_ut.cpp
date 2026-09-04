@@ -1,17 +1,25 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/common/network.h>
 
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
 #include <gtest/gtest.h>
+
+#include <atomic>
+#include <chrono>
+#include <future>
+#include <thread>
 
 using namespace NYdb;
 
@@ -59,6 +67,11 @@ namespace {
 
             //
 
+            if (CreateTableStarted) {
+                CreateTableStarted->set_value();
+                ContinueCreateTable.wait();
+            }
+
             auto op = response->mutable_operation();
 
             op->set_ready(true);
@@ -66,6 +79,24 @@ namespace {
 
             // Save the CreateTable request to allow the test to verify it
             LastCreateTableRequest = Ydb::Table::CreateTableRequest(*request);
+            return grpc::Status::OK;
+        }
+
+        virtual grpc::Status DeleteSession(
+            grpc::ServerContext* /* context */,
+            const Ydb::Table::DeleteSessionRequest* request,
+            Ydb::Table::DeleteSessionResponse* response
+        ) override {
+            std::cerr << "DeleteSession():" << std::endl
+                << request->DebugString()
+                << std::endl;
+
+            ++DeleteSessionRequests;
+
+            auto op = response->mutable_operation();
+            op->set_ready(true);
+            op->set_status(Ydb::StatusIds::SUCCESS);
+
             return grpc::Status::OK;
         }
 
@@ -92,6 +123,9 @@ namespace {
 
         std::optional<Ydb::Table::CreateTableRequest> LastCreateTableRequest;
         std::optional<Ydb::Table::AlterTableRequest> LastAlterTableRequest;
+        std::atomic_uint DeleteSessionRequests = 0;
+        std::promise<void>* CreateTableStarted = nullptr;
+        std::shared_future<void> ContinueCreateTable;
     };
 
     /**
@@ -110,6 +144,18 @@ namespace {
             .AddListeningPort(TString{address}, grpc::InsecureServerCredentials())
             .RegisterService(&service)
             .BuildAndStart();
+    }
+
+    template<class TPredicate>
+    bool WaitUntil(TPredicate&& predicate, std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (predicate()) {
+                return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return predicate();
     }
 
     /**
@@ -159,6 +205,375 @@ namespace {
     }
 
 } // namespace <anonymous>
+
+TEST(TableTest, FulltextSuperLemmerAnalyzerRoundTrip) {
+    NTable::TFulltextIndexSettings settings;
+    NTable::TFulltextIndexSettings::TColumnAnalyzers column;
+    column.Column = "Text";
+    column.Analyzers = NTable::TFulltextIndexSettings::TAnalyzers::SuperLemmer("russian");
+    settings.Columns.push_back(column);
+
+    Ydb::Table::FulltextIndexSettings proto;
+    settings.SerializeTo(proto);
+    ASSERT_EQ(proto.columns_size(), 1);
+    ASSERT_TRUE(proto.columns(0).has_analyzers());
+    ASSERT_TRUE(proto.columns(0).analyzers().use_filter_superlemmer());
+
+    const auto restored = NTable::TFulltextIndexSettings::FromProto(proto);
+    ASSERT_EQ(restored.Columns.size(), 1);
+    ASSERT_TRUE(restored.Columns[0].Analyzers.has_value());
+    const auto& analyzers = *restored.Columns[0].Analyzers;
+    ASSERT_EQ(analyzers.Language.value_or(""), "russian");
+    ASSERT_TRUE(analyzers.UseFilterLowercase.value_or(false));
+    ASSERT_TRUE(analyzers.UseFilterStopwords.value_or(false));
+    ASSERT_TRUE(analyzers.UseFilterSuperLemmer.value_or(false));
+    ASSERT_NE(ToString(restored).find("use_filter_superlemmer: true"), TString::npos);
+}
+
+TEST(TableTest, SessionHandleDestructionSendsDeleteSession) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    tableSession.reset();
+    ASSERT_TRUE(WaitUntil([&] {
+        return tableService.DeleteSessionRequests.load() == 1u;
+    }));
+
+    tableClient.reset();
+    driver.reset();
+}
+
+TEST(TableTest, ClientDestructorSendsDeleteSessionForPooledSessions) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    tableSession.reset();
+    ASSERT_TRUE(WaitUntil([&] {
+        return tableService.DeleteSessionRequests.load() == 1u;
+    }));
+    tableService.DeleteSessionRequests.store(0);
+
+    {
+        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
+        ASSERT_TRUE(pooledSessionResult.IsSuccess());
+        auto pooledSession = pooledSessionResult.GetSession();
+    }
+
+    tableClient.reset();
+    ASSERT_TRUE(WaitUntil([&] {
+        return tableService.DeleteSessionRequests.load() == 1u;
+    }));
+
+    driver.reset();
+}
+
+TEST(TableTest, ExplicitStopClosesPooledSessions) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    tableSession.reset();
+    ASSERT_TRUE(WaitUntil([&] {
+        return tableService.DeleteSessionRequests.load() == 1u;
+    }));
+    tableService.DeleteSessionRequests.store(0);
+
+    {
+        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
+        ASSERT_TRUE(pooledSessionResult.IsSuccess());
+        auto pooledSession = pooledSessionResult.GetSession();
+    }
+
+    ASSERT_EQ(tableService.DeleteSessionRequests.load(), 0u);
+
+    ASSERT_TRUE(tableClient->Stop().Wait(TDuration::Seconds(10)));
+    ASSERT_EQ(tableService.DeleteSessionRequests.load(), 1u);
+}
+
+TEST(TableTest, CheckedOutPooledSessionClosesRemotelyAfterExplicitStop) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    tableSession.reset();
+    ASSERT_TRUE(WaitUntil([&] {
+        return tableService.DeleteSessionRequests.load() == 1u;
+    }));
+    tableService.DeleteSessionRequests.store(0);
+
+    {
+        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
+        ASSERT_TRUE(pooledSessionResult.IsSuccess());
+        auto pooledSession = pooledSessionResult.GetSession();
+
+        ASSERT_TRUE(tableClient->Stop().Wait(TDuration::Seconds(10)));
+        ASSERT_EQ(tableService.DeleteSessionRequests.load(), 0u);
+    }
+
+    ASSERT_TRUE(WaitUntil([&] {
+        return tableService.DeleteSessionRequests.load() == 1u;
+    }));
+}
+
+TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    {
+        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
+        ASSERT_TRUE(pooledSessionResult.IsSuccess());
+        auto pooledSession = pooledSessionResult.GetSession();
+    }
+
+    std::promise<void> createTableStarted;
+    auto createTableStartedFuture = createTableStarted.get_future();
+    std::promise<void> continueCreateTable;
+    tableService.CreateTableStarted = &createTableStarted;
+    tableService.ContinueCreateTable = continueCreateTable.get_future().share();
+
+    std::promise<void> callbackDone;
+    auto callbackDoneFuture = callbackDone.get_future();
+    std::atomic_bool success = false;
+
+    auto requestFuture = tableSession->CreateTable(
+        "/Root/My/DB/driver_stop_from_callback",
+        NTable::TTableBuilder().Build()
+    );
+
+    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+
+    requestFuture.Subscribe([&](const NThreading::TFuture<TStatus>& future) mutable {
+        success.store(future.GetValue().IsSuccess());
+        driver->Stop(true);
+        callbackDone.set_value();
+    });
+
+    continueCreateTable.set_value();
+
+    ASSERT_EQ(callbackDoneFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    ASSERT_TRUE(success.load());
+
+    ASSERT_TRUE(WaitUntil([&] {
+        return tableService.DeleteSessionRequests.load() >= 1u;
+    }));
+    ASSERT_TRUE(WaitUntil([&] {
+        auto stoppedSessionResult = tableClient->CreateSession().ExtractValueSync();
+        return stoppedSessionResult.GetStatus() == EStatus::CLIENT_CANCELLED;
+    }));
+}
+
+TEST(TableTest, DriverStopDoesNotAffectOtherDriver) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driverB;
+    std::unique_ptr<NTable::TTableClient> tableClientB;
+    std::unique_ptr<NTable::TSession> tableSessionB;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driverB,
+        tableClientB,
+        tableSessionB
+    );
+
+    TDriver driverA(driverB->GetConfig());
+    NTable::TTableClient tableClientA(driverA);
+
+    std::promise<void> createTableStarted;
+    auto createTableStartedFuture = createTableStarted.get_future();
+    std::promise<void> continueCreateTable;
+    tableService.CreateTableStarted = &createTableStarted;
+    tableService.ContinueCreateTable = continueCreateTable.get_future().share();
+
+    auto requestB = tableSessionB->CreateTable(
+        "/Root/My/DB/driver_scope_isolation",
+        NTable::TTableBuilder().Build()
+    );
+    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+
+    driverA.Stop(true);
+
+    auto stoppedResult = tableClientA.CreateSession().ExtractValueSync();
+    ASSERT_EQ(stoppedResult.GetStatus(), EStatus::CLIENT_CANCELLED);
+    ASSERT_FALSE(requestB.Wait(TDuration::MilliSeconds(100)));
+
+    continueCreateTable.set_value();
+    ASSERT_TRUE(requestB.Wait(TDuration::Seconds(10)));
+    ASSERT_TRUE(requestB.ExtractValueSync().IsSuccess());
+
+    auto secondResultB = tableClientB->CreateSession().ExtractValueSync();
+    ASSERT_TRUE(secondResultB.IsSuccess());
+}
+
+TEST(TableTest, DropLastOwnersFromResponseCallbackDoesNotDeadlock) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    std::weak_ptr<TGRpcConnectionsImpl> connections = CreateInternalInterface(*driver);
+
+    {
+        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
+        ASSERT_TRUE(pooledSessionResult.IsSuccess());
+        auto pooledSession = pooledSessionResult.GetSession();
+    }
+
+    std::promise<void> createTableStarted;
+    auto createTableStartedFuture = createTableStarted.get_future();
+    std::promise<void> continueCreateTable;
+    tableService.CreateTableStarted = &createTableStarted;
+    tableService.ContinueCreateTable = continueCreateTable.get_future().share();
+
+    std::promise<void> callbackDone;
+    auto callbackDoneFuture = callbackDone.get_future();
+    std::atomic_bool success = false;
+
+    auto requestFuture = tableSession->CreateTable(
+        "/Root/My/DB/drop_owners",
+        NTable::TTableBuilder().Build()
+    );
+
+    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+
+    requestFuture.Subscribe([&](const NThreading::TFuture<TStatus>& future) mutable {
+        success.store(future.GetValue().IsSuccess());
+        tableSession.reset();
+        tableClient.reset();
+        driver.reset();
+        callbackDone.set_value();
+    });
+
+    continueCreateTable.set_value();
+
+    ASSERT_EQ(callbackDoneFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    ASSERT_TRUE(success.load());
+    ASSERT_TRUE(WaitUntil([&] {
+        return connections.expired();
+    }));
+    ASSERT_EQ(tableService.DeleteSessionRequests.load(), 2u);
+}
+
+TEST(TableTest, DriverStopFromResponseCallbackThenDropOwnersDoesNotDeadlock) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    std::weak_ptr<TGRpcConnectionsImpl> connections = CreateInternalInterface(*driver);
+
+    {
+        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
+        ASSERT_TRUE(pooledSessionResult.IsSuccess());
+        auto pooledSession = pooledSessionResult.GetSession();
+    }
+
+    std::promise<void> createTableStarted;
+    auto createTableStartedFuture = createTableStarted.get_future();
+    std::promise<void> continueCreateTable;
+    tableService.CreateTableStarted = &createTableStarted;
+    tableService.ContinueCreateTable = continueCreateTable.get_future().share();
+
+    std::promise<void> callbackDone;
+    auto callbackDoneFuture = callbackDone.get_future();
+    std::atomic_bool success = false;
+
+    auto requestFuture = tableSession->CreateTable(
+        "/Root/My/DB/driver_stop_drop_owners",
+        NTable::TTableBuilder().Build()
+    );
+
+    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+
+    requestFuture.Subscribe([&](const NThreading::TFuture<TStatus>& future) mutable {
+        success.store(future.GetValue().IsSuccess());
+        driver->Stop(true);
+        tableSession.reset();
+        tableClient.reset();
+        driver.reset();
+        callbackDone.set_value();
+    });
+
+    continueCreateTable.set_value();
+
+    ASSERT_EQ(callbackDoneFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    ASSERT_TRUE(success.load());
+    ASSERT_TRUE(WaitUntil([&] {
+        return connections.expired();
+    }));
+}
 
 /**
  * Verify that the SDK creates the CREATE TABLE request correctly,
@@ -366,6 +781,29 @@ TEST(TableTest, AlterTableDroppedMetricsSettings) {
 
     ASSERT_TRUE(!tableService.LastAlterTableRequest->has_set_metrics_settings());
     ASSERT_TRUE(tableService.LastAlterTableRequest->has_drop_metrics_settings());
+}
+
+/**
+ * Verify proto round-trip for equi-height histogram multi-column statistics.
+ */
+TEST(TableTest, MultiColumnStatisticsEqHeightHistogramRoundTrip) {
+    NTable::TMultiColumnStatisticsDescription desc(
+        "h1",
+        {"a", "b"},
+        {NTable::EMultiColumnStatisticsType::EqHeightHistogram});
+
+    Ydb::Table::TableMultiColumnStatistics proto;
+    desc.SerializeTo(proto);
+    ASSERT_EQ(proto.name(), "h1");
+    ASSERT_EQ(proto.columns_size(), 2);
+    ASSERT_EQ(proto.types_size(), 1);
+    ASSERT_EQ(proto.types(0), Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM);
+
+    auto roundTrip = TProtoAccessor::FromProto(proto);
+    ASSERT_EQ(roundTrip.GetName(), "h1");
+    ASSERT_EQ(roundTrip.GetColumns().size(), 2u);
+    ASSERT_EQ(roundTrip.GetTypes().size(), 1u);
+    ASSERT_EQ(roundTrip.GetTypes()[0], NTable::EMultiColumnStatisticsType::EqHeightHistogram);
 }
 
 /**

@@ -1,9 +1,11 @@
 #include "accessor.h"
+#include "types.h"
 #include "direct_builder.h"
 #include "signals.h"
 
 #include <util/generic/overloaded.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
@@ -73,9 +75,15 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     ui32 columnIdx = 0;
     TMonotonic pred = TMonotonic::Now();
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
-        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::binary(), externalInfo.GetDefaultSerializer());
-        blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
+        TChunkConstructionData cData(
+            GetRecordsCount(), nullptr, ColumnsData.GetStats().GetField(columnIdx)->type(), externalInfo.GetDefaultSerializer());
         auto* cInfo = proto.AddKeyColumns();
+        auto blobAndMeta =
+            ColumnsData.GetStats().GetAccessorConstructor(columnIdx, Settings.GetEncodingParams()).SerializeToBlobAndMeta(i, cData);
+        if (auto additional = blobAndMeta.Meta->SerializeToProto()) {
+            *cInfo->MutableAdditionalAccessorData() = std::move(*additional);
+        }
+        blobRanges.emplace_back(std::move(blobAndMeta.Blob));
         cInfo->SetSize(blobRanges.back().size());
         TMonotonic next = TMonotonic::Now();
         NSubColumns::TSignals::GetColumnSignals().OnBlobSize(ColumnsData.GetStats().GetColumnSize(columnIdx), blobRanges.back().size(), next - pred);
@@ -87,7 +95,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         TMonotonic pred = TMonotonic::Now();
         for (auto&& i : OthersData.GetRecords()->GetColumns()) {
             TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
-            blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+            blobRanges.emplace_back(NPlain::TConstructor().SerializeToBlobAndMeta(i, cData).Blob);
             TMonotonic next = TMonotonic::Now();
             NSubColumns::TSignals::GetOtherSignals().OnBlobSize(i->GetRawSizeVerified(), blobRanges.back().size(), next - pred);
             pred = next;
@@ -124,7 +132,7 @@ TConclusion<NBinaryJson::TBinaryJson> ToBinaryJson(const TJsonRestorer& restorer
         [](NBinaryJson::TBinaryJson&& val) -> TConclusion<NBinaryJson::TBinaryJson> {
             return std::move(val);
         }},
-        NBinaryJson::SerializeToBinaryJson(restorer.GetResult().GetStringRobust()));
+        NBinaryJson::SerializeToBinaryJson(WriteJsonRoundTripSafe(restorer.GetResult())));
 }
 
 std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {

@@ -7,7 +7,9 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 
-#include <cstdint>
+#include <algorithm>
+#include <optional>
+#include <utility>
 
 namespace NKikimr {
 namespace NKqp {
@@ -21,77 +23,127 @@ enum ESubplanType : ui32 { EXPR, IN_SUBPLAN, EXISTS };
 struct TPlanProps;
 
 struct TSubplanEntry {
+    TSubplanEntry(TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple)
+        : Plan(std::move(plan))
+        , Tuple(std::move(tuple))
+        , Type(type) {
+    }
+
     TIntrusivePtr<ISimpleOperator> Plan;
     TVector<TInfoUnit> Tuple;
     ESubplanType Type;
-    TInfoUnit IU;
     TVector<TInfoUnit> DependentIUs;
 };
 
-struct TSubplans {
+class TSubplans {
+public:
+    using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-    void Add(const TInfoUnit& iu, const TSubplanEntry& entry) {
-        OrderedList.push_back(iu);
-        PlanMap.insert({iu, entry});
+    // A binding is the stable identity of a registry entry. Replacing the
+    // referenced plan preserves that identity; changing it requires rewriting
+    // every expression that names it and is intentionally unsupported here.
+    void Add(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple = {}) {
+        Y_ENSURE(plan, "Cannot register a null subplan for " << binding.GetFullName());
+        const bool inserted = Entries.emplace(binding, TSubplanEntry(std::move(plan), type, std::move(tuple))).second;
+        Y_ENSURE(inserted, "Duplicate subplan binding " << binding.GetFullName());
     }
 
-    void Replace(const TInfoUnit& iu, TIntrusivePtr<ISimpleOperator> op) {
-        auto entry = PlanMap.at(iu);
-        entry.Plan = op;
-        PlanMap.erase(iu);
-        PlanMap.insert({iu, entry});
+    void ReplacePlan(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan) {
+        Y_ENSURE(plan, "Cannot replace " << binding.GetFullName() << " with a null subplan");
+        Entries.at(binding).Plan = std::move(plan);
     }
 
-    TVector<TSubplanEntry> Get() {
-        TVector<TSubplanEntry> result;
-        for (const auto& iu : OrderedList) {
-            result.push_back(PlanMap.at(iu));
+    void AddDependentIU(const TInfoUnit& binding, const TInfoUnit& iu) {
+        auto& dependentIUs = Entries.at(binding).DependentIUs;
+        if (std::find(dependentIUs.begin(), dependentIUs.end(), iu) == dependentIUs.end()) {
+            dependentIUs.push_back(iu);
         }
+    }
+
+    void Remove(const TInfoUnit& binding) {
+        const auto entryIt = Entries.find(binding);
+        Y_ENSURE(entryIt != Entries.end(), "Unknown subplan binding " << binding.GetFullName());
+        Entries.erase(entryIt);
+    }
+
+    const TSubplanEntry* Find(const TInfoUnit& binding) const {
+        const auto it = Entries.find(binding);
+        return it == Entries.end() ? nullptr : &it->second;
+    }
+
+    const TSubplanEntry& At(const TInfoUnit& binding) const {
+        return Entries.at(binding);
+    }
+
+    bool Contains(const TInfoUnit& binding) const {
+        return Entries.contains(binding);
+    }
+
+    bool Empty() const {
+        return Entries.empty();
+    }
+
+    auto begin() const {
+        return Entries.begin();
+    }
+
+    auto end() const {
+        return Entries.end();
+    }
+
+    bool RenameExternalReferences(const TRenameMap& renameMap, TExprContext& ctx);
+
+private:
+    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> Entries;
+};
+
+class TInfoUnitConstraintSet {
+public:
+    // A name constraint can be finite, or all names except a finite exception set.
+    static TInfoUnitConstraintSet AllExcept(TInfoUnitSet except) {
+        TInfoUnitConstraintSet result;
+        result.AllExcept_ = true;
+        result.Units_ = std::move(except);
         return result;
     }
 
-    void Remove(const TInfoUnit& iu) {
-        std::erase(OrderedList, iu);
-        PlanMap.erase(iu);
+    bool Empty() const {
+        return !AllExcept_ && Units_.empty();
     }
 
-    bool RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx);
-
-    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> PlanMap;
-    TVector<TInfoUnit> OrderedList;
-};
-
-struct TPlanEdgeKey {
-    IOperator* Parent = nullptr;
-    ui32 ChildIdx = 0;
-    IOperator* Child = nullptr;
-
-    bool operator==(const TPlanEdgeKey& other) const {
-        return Parent == other.Parent && ChildIdx == other.ChildIdx && Child == other.Child;
+    bool IsAllExcept() const {
+        return AllExcept_;
     }
 
-    struct THashFunction {
-        size_t operator()(const TPlanEdgeKey& key) const {
-            size_t hash = reinterpret_cast<std::uintptr_t>(key.Parent);
-            hash ^= reinterpret_cast<std::uintptr_t>(key.Child) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
-            hash ^= static_cast<size_t>(key.ChildIdx) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
-            return hash;
-        }
-    };
+    bool contains(const TInfoUnit& iu) const {
+        return AllExcept_ ? !Units_.contains(iu) : Units_.contains(iu);
+    }
+
+    const TInfoUnitSet& GetUnits() const {
+        return Units_;
+    }
+
+    bool UnionWith(const TInfoUnit& iu);
+    bool UnionWith(const TInfoUnitSet& ius);
+    bool UnionWith(const TInfoUnitConstraintSet& other);
+    bool Subtract(const TInfoUnit& iu);
+    bool Subtract(const TInfoUnitSet& ius);
+    bool IntersectWith(const TInfoUnitConstraintSet& other);
+    TInfoUnitConstraintSet Complement() const;
+
+private:
+    bool AllExcept_ = false;
+    TInfoUnitSet Units_;
 };
 
 struct TPlanNameConstraints {
     void Clear();
 
-    bool AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnit& iu);
-    bool AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnitSet& ius);
+    bool AddForbidden(const TInfoUnitConstraintSet& forbidden);
 
-    const TInfoUnitSet& GetForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child) const;
-    const TInfoUnitSet& GetForbiddenOut(IOperator* parent, ui32 childIdx) const;
-    const TInfoUnitSet& GetForbiddenOutForSingleConsumer(IOperator* op) const;
-    bool IsForbiddenAtOutput(IOperator* op, const TInfoUnit& iu) const;
+    const TInfoUnitConstraintSet& GetForbidden() const;
 
-    THashMap<TPlanEdgeKey, TInfoUnitSet, TPlanEdgeKey::THashFunction> ForbiddenOut;
+    TInfoUnitConstraintSet Forbidden;
 };
 
 struct TAliasCandidate {
@@ -99,25 +151,19 @@ struct TAliasCandidate {
     i32 Priority = 0;
 };
 
+// Names required to exist by a contract that alias rewriting must not touch.
+// Hard: the root output contract; these names can never be renamed away.
+// Soft: produced-name contracts inside the plan (aggregate keys, UnionAll
+//       columns) that only their dedicated push rules may rename.
+// Recomputed together with plan aliases; valid only while aliases are.
+struct TPinnedNames {
+    TInfoUnitSet Hard;
+    TInfoUnitSet Soft;
+};
+
 struct TPlanAliases {
     using TCandidates = TVector<TAliasCandidate>;
     using TAliasMap = THashMap<TInfoUnit, TCandidates, TInfoUnit::THashFunction>;
-
-    void Clear() {
-        AliasesAtOutput.clear();
-    }
-
-    const TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu) const {
-        const auto opIt = AliasesAtOutput.find(op);
-        if (opIt == AliasesAtOutput.end()) {
-            return nullptr;
-        }
-
-        const auto aliasIt = opIt->second.find(iu);
-        return aliasIt == opIt->second.end() ? nullptr : &aliasIt->second;
-    }
-
-    THashMap<IOperator*, TAliasMap> AliasesAtOutput;
 };
 
 /**
@@ -125,12 +171,10 @@ struct TPlanAliases {
  */
 struct TPlanProps {
     TStageGraph StageGraph;
-    THashMap<IOperator*, TInfoUnitSet> LiveOut;
-    TPlanNameConstraints NameConstraints;
-    TPlanAliases Aliases;
     int InternalVarIdx = 1;
     TSubplans Subplans;
     bool PgSyntax = false;
+    std::optional<TPinnedNames> PinnedNames;
 };
 
 }

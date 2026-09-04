@@ -1,8 +1,11 @@
 PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
 
 TEST_SRCS(
+    test_iam.py
     test_scalar_topic_write.py
     test_streaming.py
     test_watermarks.py
@@ -18,8 +21,8 @@ PY_SRCS(
     conftest.py
 )
 
-
 REQUIREMENTS(cpu:4)
+REQUIREMENTS(ram:16)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -27,6 +30,8 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
+    REQUIREMENTS(ram:12)
+    SPLIT_FACTOR(20)
 ENDIF()
 
 PEERDIR(
@@ -42,8 +47,12 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/tests/tools/pq_read
     yql/essentials/udfs/common/python/python3_small
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    streaming_large
+    generic
+)

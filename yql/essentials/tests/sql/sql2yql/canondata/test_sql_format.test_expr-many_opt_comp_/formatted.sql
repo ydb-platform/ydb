@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     AsTuple(
         Just(Just(1)) == Just(Just(2u)),

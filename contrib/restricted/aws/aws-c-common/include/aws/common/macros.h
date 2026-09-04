@@ -114,6 +114,20 @@ enum { AWS_CACHE_LINE = 64 };
 #endif
 
 #if defined(__has_feature)
+#    if __has_feature(hwaddress_sanitizer)
+#        define AWS_SUPPRESS_HWASAN __attribute__((no_sanitize("hwaddress")))
+#    endif
+#elif defined(__SANITIZE_HWADDRESS__)
+#    if defined(__GNUC__)
+#        define AWS_SUPPRESS_HWASAN __attribute__((no_sanitize("hwaddress")))
+#    endif
+#endif
+
+#if !defined(AWS_SUPPRESS_HWASAN)
+#    define AWS_SUPPRESS_HWASAN
+#endif
+
+#if defined(__has_feature)
 #    if __has_feature(thread_sanitizer)
 #        define AWS_SUPPRESS_TSAN __attribute__((no_sanitize("thread")))
 #    endif

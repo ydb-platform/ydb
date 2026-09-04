@@ -142,7 +142,7 @@ function ruleTitleBarHtml(ref, options) {
 
     if (diffable) {
         html += ruleFeatureButtonHtml(ref, 'fields', 'fieldbtn', 'Toggle fields', 'info', options);
-        html += ruleFeatureButtonHtml(ref, 'pinned', 'pinbtn', 'Toggle pinned columns', 'drawing-pin', options);
+        html += ruleFeatureButtonHtml(ref, 'pinned', 'pinbtn', 'Toggle pinned fields', 'drawing-pin', options);
         html += ruleFeatureButtonHtml(ref, 'info', 'infobtn', 'Toggle info', 'file-text', options);
     }
 
@@ -374,6 +374,7 @@ function ruleRunSignature(item) {
         traceRuleType(item.si, rawRuleIndex(item.si, item.gi, item.ri)),
         effectiveRuleOpen(item.si, item.gi, item.ri) ? 'o' : 'c',
         ruleHasInfo(ref) ? 'info-shell' : '',
+        effectiveRuleFeature(item.si, item.gi, item.ri, 'info') ? 'info-on' : 'info-off',
         searchRuntime().collapsedSearchIndicators &&
             searchRuntime().collapsedSearchIndicators.rules &&
             searchRuntime().collapsedSearchIndicators.rules[item.key] ? 'h' : '',
@@ -481,6 +482,10 @@ function ruleElementTreeWrap(el, key) {
 
 function rulePaneScrollSessionKey(ref) {
     if (!ref) return '';
+    if (typeof currentRuleSessionKey === 'function') {
+        var key = currentRuleSessionKey(ref);
+        if (key) return key;
+    }
     var traceIndex = 0;
     try {
         traceIndex = Math.max(0, Number(traceRuntime().activeTraceIndex) || 0);

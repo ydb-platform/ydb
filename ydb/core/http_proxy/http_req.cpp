@@ -7,6 +7,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/net/source_address.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>
@@ -15,6 +16,8 @@
 
 #include <util/string/ascii.h>
 #include <util/string/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 
 namespace NKikimr::NHttpProxy {
@@ -73,17 +76,10 @@ namespace NKikimr::NHttpProxy {
         , Sender(sender)
         , Driver(driver)
         , ServiceAccountCredentialsProvider(serviceAccountCredentialsProvider) {
-        char address[INET6_ADDRSTRLEN];
-        if (inet_ntop(AF_INET6, &(Request->Address), address, INET6_ADDRSTRLEN) == nullptr) {
-            SourceAddress = "unknown";
-        } else {
-            SourceAddress = address;
-        }
+        SourceAddress = NKikimr::NNet::FormatSourceAddress(
+            Request->Address ? Request->Address->SockAddr() : nullptr);
 
-        DatabasePath = Request->URL.Before('?');
-        if (DatabasePath == "/") {
-           DatabasePath = "";
-        }
+        DatabasePath = ParseDatabasePathFromRequestUrl(Request->URL);
         CgiParameters = TCgiParameters(Request->URL.After('?'));
         if (auto it = CgiParameters.Find("folderId"); it != CgiParameters.end()) {
             FolderId = it->second;
@@ -121,8 +117,10 @@ namespace NKikimr::NHttpProxy {
 
     void THttpRequestContext::DoReply(THttpResponseData&& data) {
         auto ctx = TlsActivationContext->AsActorContext();
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-            "reply with status: " << data.HttpCode << " message: " << data.Message);
+        YDB_LOG_INFO_CTX(ctx, "Reply with",
+            {"logPrefix", LogPrefix()},
+            {"status", data.HttpCode},
+            {"message", data.Message});
 
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(
             Request,

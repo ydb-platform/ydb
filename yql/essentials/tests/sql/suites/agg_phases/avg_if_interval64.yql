@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-
 $t = SELECT * FROM AS_TABLE(
     [<|key: 1, value: Interval64('P1D')|>,
     <|key: 1, value: Interval64('P1D')|>]);

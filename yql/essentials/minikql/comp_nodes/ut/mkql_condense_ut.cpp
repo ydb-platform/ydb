@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
 Y_UNIT_TEST_LLVM(TestSqueeze) {
@@ -144,7 +143,7 @@ Y_UNIT_TEST_LLVM(TestCondenseInterrupt) {
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<bool>>{false, false, false, false, true, {}, {}});
 
-    const auto pgmReturn = pb.FromFlow(pb.Condense(pb.ToFlow(list), NTest::ConvertValueToLiteralNode(pb, bool(false)),
+    const auto pgmReturn = pb.FromFlow(pb.Condense(pb.ToFlow(list, {}), pb.NewDataLiteral<bool>(false),
                                                    [&](TRuntimeNode, TRuntimeNode state) { return pb.If(state, NTest::ConvertValueToLiteralNode(pb, TMaybe<bool>{}), NTest::ConvertValueToLiteralNode(pb, bool(false))); },
                                                    [&](TRuntimeNode item, TRuntimeNode state) { return pb.Or({pb.Unwrap(item, NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0), state}); }));
 
@@ -158,7 +157,7 @@ Y_UNIT_TEST_LLVM(TestCondense1Interrupt) {
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<bool>>{true, true, true, true, false, {}, {}});
 
-    const auto pgmReturn = pb.FromFlow(pb.Condense1(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.Condense1(pb.ToFlow(list, {}),
                                                     [&](TRuntimeNode item) { return pb.Unwrap(item, NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0); },
                                                     [&](TRuntimeNode, TRuntimeNode state) { return pb.If(state, NTest::ConvertValueToLiteralNode(pb, bool(false)), NTest::ConvertValueToLiteralNode(pb, TMaybe<bool>{})); },
                                                     [&](TRuntimeNode item, TRuntimeNode state) { return pb.And({pb.Unwrap(item, NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0), state}); }));
@@ -231,5 +230,4 @@ Y_UNIT_TEST_LLVM(TestCondense1ListeralListInMap) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

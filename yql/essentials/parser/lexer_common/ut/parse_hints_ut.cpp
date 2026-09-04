@@ -8,7 +8,7 @@ using namespace NSQLTranslation;
 using namespace NSQLTranslation::NDetail;
 
 void CheckParse(TStringBuf comment, TStringBuf expected) {
-    TString parsed = JoinSeq(",", ParseSqlHints({}, comment, false));
+    TString parsed = JoinSeq(",", ParseSqlHints({}, comment, /*utf8Aware=*/false));
     UNIT_ASSERT_NO_DIFF(parsed, expected);
 }
 

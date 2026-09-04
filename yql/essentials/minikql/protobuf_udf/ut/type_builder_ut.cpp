@@ -32,7 +32,7 @@ struct TSetup {
         , RuntimeSettings(MakeRuntimeSettings())
         , FunctionRegistry(CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr()))
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(UnknownLangVersion, *RuntimeSettings, Env, TypeInfoHelper, "", nullptr, NYql::NUdf::TSourcePosition())
+        , FunctionTypeInfoBuilder(UnknownLangVersion, *RuntimeSettings, Env, TypeInfoHelper, "", /*countersProvider=*/nullptr, NYql::NUdf::TSourcePosition())
         , PgmBuilder(Env, *FunctionRegistry)
     {
     }
@@ -62,7 +62,7 @@ void CheckYtSchemaCompatibility() {
     NUdf::ProtoTypeBuild<TProto>(setup.FunctionTypeInfoBuilder, &info);
     auto protoType = NCommon::TypeToYsonNode(static_cast<const NKikimr::NMiniKQL::TStructType*>(info.StructType));
 
-    auto ytSchema = NYT::CreateTableSchema(*TProto::GetDescriptor(), true);
+    auto ytSchema = NYT::CreateTableSchema(*TProto::GetDescriptor(), /*keepFieldsWithoutExtension=*/true);
     auto ytSchemaType = YTSchemaToRowSpec(ytSchema.ToNode())[RowSpecAttrType];
     // Yt schema has struct fields in protobuf-order. Make them in name ascending order
     ytSchemaType = NCommon::TypeToYsonNode(NCommon::ParseTypeFromYson(ytSchemaType, setup.PgmBuilder, Cerr));

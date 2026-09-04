@@ -11,6 +11,20 @@ NProto::TError TranslateError(
     const TString& errorReason,
     ETranslateFlags flags)
 {
+    if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN &&
+        errorReason == CantAcquireDataErrorMessage)
+    {
+        return MakeCanNotAcquireDataError();
+    }
+    if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED) {
+        return MakeError(
+            E_REJECTED,
+            TString(TabletGenerationBlockedErrorMessage));
+    }
+    if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::BROKEN) {
+        return MakeError(E_INVALID_STATE, TString(DeviceBrokenErrorMessage));
+    }
+
     switch (flags) {
         case ETranslateFlags::None: {
             if (HasSuccess(errorResponse)) {

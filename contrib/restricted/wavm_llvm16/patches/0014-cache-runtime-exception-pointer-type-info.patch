@@ -1,0 +1,30 @@
+diff --git a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMModule.cpp b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMModule.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMModule.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMModule.cpp
+@@ -762,15 +762,17 @@ std::shared_ptr<LLVMJIT::Module> LLVMJIT::loadModule(
+ #if !USE_WINDOWS_SEH
+ 	// Use __cxxabiv1::__cxa_current_exception_type to get a reference to the std::type_info for
+ 	// Runtime::Exception* without enabling RTTI.
+-	std::type_info* runtimeExceptionPointerTypeInfo = nullptr;
+-	try
+-	{
+-		throw(Runtime::Exception*) nullptr;
+-	}
+-	catch(Runtime::Exception*)
+-	{
+-		runtimeExceptionPointerTypeInfo = __cxxabiv1::__cxa_current_exception_type();
+-	}
++	static auto* runtimeExceptionPointerTypeInfo = [] -> std::type_info* {
++		try
++		{
++			throw(Runtime::Exception*) nullptr;
++		}
++		catch(Runtime::Exception*)
++		{
++			return __cxxabiv1::__cxa_current_exception_type();
++		}
++		return nullptr;
++	}();
+ 
+ 	// Bind the std::type_info for Runtime::Exception.
+ 	importedSymbolMap.addOrFail("runtimeExceptionTypeInfo",

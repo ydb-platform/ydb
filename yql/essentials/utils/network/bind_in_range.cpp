@@ -13,7 +13,7 @@ TVector<NBus::TBindResult> BindInRange(TRangeWalker<int>& portWalker) {
     for (int cycle = 0; cycle < cyclesLimit; ++cycle) {
         for (int i = 0; i < rangeSize; ++i) {
             try {
-                return NBus::BindOnPort(portWalker.MoveToNext(), false).second;
+                return NBus::BindOnPort(portWalker.MoveToNext(), /*reusePort=*/false).second;
             } catch (const TSystemError&) {
                 YQL_LOG(DEBUG) << CurrentExceptionMessage();
             }

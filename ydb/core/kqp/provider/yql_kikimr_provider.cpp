@@ -1,5 +1,8 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <yql/essentials/core/yql_opt_utils.h>
+
+#include <array>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -174,6 +177,7 @@ void TKikimrQueryContext::Reset() {
     SuppressDdlChecks = false;
     StatsMode = EKikimrStatsMode::None;
     Type = EKikimrQueryType::Unspecified;
+    IsolateEffects = false;
     Deadlines = {};
     Limits = {};
 
@@ -971,6 +975,49 @@ bool IsKikimrSystemColumn(const TStringBuf columnName) {
     return KikimrSystemColumns().FindPtr(columnName);
 }
 
+namespace {
+
+struct TShowCreateSettingMapping {
+    TStringBuf SettingName;
+    TStringBuf PathType;
+};
+
+constexpr auto ShowCreateSettingsMap = std::to_array<TShowCreateSettingMapping>({
+    {"showCreateTable", "Table"},
+    {"showCreateView", "View"},
+    {"showCreateExternalDataSource", "ExternalDataSource"},
+    {"showCreateExternalTable", "ExternalTable"},
+});
+
+} // anonymous namespace
+
+bool IsShowCreateSettingName(TStringBuf name) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (name == entry.SettingName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TStringBuf ShowCreateSettingToPathType(TStringBuf name) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (name == entry.SettingName) {
+            return entry.PathType;
+        }
+    }
+    return {};
+}
+
+TStringBuf GetShowCreateSetting(const TExprNode& settings) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (HasSetting(settings, entry.SettingName)) {
+            return entry.SettingName;
+        }
+    }
+    return {};
+}
+
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos) {
     if (metadata->Indexes.empty()) {
         ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
@@ -1058,7 +1105,12 @@ void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, T
         }
 
         DeserializeSetting(PathPrefix);
-        DeserializeSetting(SyntaxVersion);
+        if (serializedSettings.HasSyntaxVersion()) {
+            // Syntax v0 settings may be persisted in old view definitions.
+            settings.SyntaxVersion = serializedSettings.GetSyntaxVersion() == 0
+                ? 1
+                : serializedSettings.GetSyntaxVersion();
+        }
         DeserializeSetting(AnsiLexer);
         DeserializeSetting(PgParser);
 

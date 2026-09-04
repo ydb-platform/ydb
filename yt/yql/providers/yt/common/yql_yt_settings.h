@@ -134,6 +134,8 @@ public:
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
+    NCommon::TConfSetting<ui64, StaticPerCluster> NativeYtTypeCompatibility;
+    NCommon::TConfSetting<bool, StaticPerCluster> ApplyMaxJobCountToAll;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -156,6 +158,7 @@ public:
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
     NCommon::TConfSetting<bool, Static> QueryCacheCombineChunksReplace;
+    NCommon::TConfSetting<bool, Static> QueryCacheReportProgress;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
@@ -188,6 +191,8 @@ public:
     NCommon::TConfSetting<ETmpSecurityMode, Static> TmpSecurity;
     NCommon::TConfSetting<bool, Static> _ParseExpressionColumns;
     NCommon::TConfSetting<TDuration, Static> _SecureTmpTokenUsersAccessPeriod;
+    NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
+    NCommon::TConfSetting<bool, Static> _ForbidReservedColumns;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -274,7 +279,6 @@ public:
     NCommon::TConfSetting<TString, Dynamic> IntermediateDataMedium;
     NCommon::TConfSetting<TString, Dynamic> PrimaryMedium;
     NCommon::TConfSetting<ui64, Dynamic> QueryCacheChunkLimit;
-    NCommon::TConfSetting<ui64, Dynamic> NativeYtTypeCompatibility;
     NCommon::TConfSetting<bool, Dynamic> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, Dynamic> NetworkProject;
     NCommon::TConfSetting<bool, Dynamic> _EnableYtPartitioning;
@@ -364,6 +368,8 @@ public:
     NCommon::TConfSetting<ui64, Static> MaxKeyRangeCount;
     NCommon::TConfSetting<ui64, Static> MaxChunksForDqRead;
     NCommon::TConfSetting<bool, Static> JoinCommonUseMapMultiOut;
+    NCommon::TConfSetting<bool, Static> JoinCommonUseFlatPayload;
+    NCommon::TConfSetting<ui64, Static> JoinCommonFlatPayloadColumnLimit;
     NCommon::TConfSetting<bool, Static> UseAggPhases;
     NCommon::TConfSetting<bool, Static> UsePartitionsByKeysForFinalAgg;
     NCommon::TConfSetting<double, Static> MaxCpuUsageToFuseMultiOuts;
@@ -384,6 +390,7 @@ public:
     NCommon::TConfSetting<bool, Static> DontForceTransformForInputTables;
     NCommon::TConfSetting<bool, Static> _RequestOnlyRequiredAttrs;
     NCommon::TConfSetting<bool, Static> _CacheSchemaBySchemaId;
+    NCommon::TConfSetting<bool, Static> JoinCommonAnySideFirst;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
@@ -400,8 +407,8 @@ struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher
     TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext = {});
     TYtConfiguration(const TYtConfiguration&) = delete;
 
-    template <class TProtoConfig, typename TFilter>
-    void Init(const TProtoConfig& config, const TFilter& filter, TTypeAnnotationContext& typeCtx) {
+    template <class TProtoConfig, typename TActivationPolicy>
+    void Init(const TProtoConfig& config, const TActivationPolicy& activationPolicy, TTypeAnnotationContext& typeCtx) {
         TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
             clusters.push_back(cluster.GetName());
@@ -416,9 +423,9 @@ struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher
         this->SetValidClusters(clusters);
 
         // Init settings from config
-        this->Dispatch(config.GetDefaultSettings(), filter);
+        this->DispatchWithActivationPolicy(config.GetDefaultSettings(), activationPolicy);
         for (auto& cluster: config.GetClusterMapping()) {
-            this->Dispatch(cluster.GetName(), cluster.GetSettings(), filter);
+            this->DispatchWithActivationPolicy(cluster.GetName(), cluster.GetSettings(), activationPolicy);
         }
         this->FreezeDefaults();
     }

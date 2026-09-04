@@ -48,8 +48,8 @@ namespace NKikimr {
             , ReplSchedulerId(replSchedulerId)
             , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), name, NWilson::EFlags::AUTO_END)
         {
-            if (Span) {
-                Span.Attribute("event", TEvBlobStorage::TEvVGet::ToString(BatcherCtx->OrigEv->Get()->Record));
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("event", TEvBlobStorage::TEvVGet::ToString(BatcherCtx->OrigEv->Get()->Record));
             }
             Y_VERIFY_DEBUG_S(Result, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
         }
@@ -100,9 +100,13 @@ namespace NKikimr {
                             "TEvVGetResult: Result message is too large; size# %" PRIu64 " orig# %s;"
                             " VDISK CAN NOT REPLY ON TEvVGet REQUEST",
                             ResultSize.GetSize(), BatcherCtx->OrigEv->Get()->ToString().data());
-                LOG_CRIT(ctx, NKikimrServices::BS_VDISK_GET, msg);
+                YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_VDISK_GET, msg);
 
-                Span.EndError(std::move(msg));
+                if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                    wilsonSpan->EndError(std::move(msg));
+                } else if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->EndError();
+                }
             } else {
                 ui64 total = 0;
                 for (const auto& result : Result->Record.GetResult()) {
@@ -110,9 +114,7 @@ namespace NKikimr {
                     hasNotYet = hasNotYet || result.GetStatus() == NKikimrProto::NOT_YET;
                 }
                 QueryCtx->MonGroup.GetTotalBytes() += total;
-                LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_GET,
-                        VDISKP(QueryCtx->HullCtx->VCtx->VDiskLogPrefix,
-                            "TEvVGetResult: %s", Result->ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_GET, VDISKP(QueryCtx->HullCtx->VCtx->VDiskLogPrefix, "TEvVGetResult: %s", Result->ToString().data()));
 
                 Span.EndOk();
             }

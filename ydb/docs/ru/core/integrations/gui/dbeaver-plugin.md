@@ -16,7 +16,7 @@
 - Управление [правами доступа (ACL)](../../security/authorization.md#right): выдача, отзыв, просмотр разрешений.
 - Управление [потоковыми запросами](../../concepts/glossary.md#streaming-query): просмотр, изменение, запуск, остановка.
 - [Федеративные запросы](../../concepts/query_execution/federated_query/index.md) через внешние источники данных (S3, базы данных).
-- [Конвертер SQL-запросов](../sql-dialect-converter.md) из других диалектов (PostgreSQL, MySQL, ClickHouse и других) в YQL.
+- [Конвертер SQL-запросов](../sql-translation/sql-dialect-converter.md) из других диалектов (PostgreSQL, MySQL, ClickHouse и других) в YQL.
 - Специализированные редакторы для типов данных `JSON`, `JSONDOCUMENT`, `YSON`.
 
 ## Требования {#requirements}
@@ -153,7 +153,7 @@
     | **Host** | Хост [эндпойнта](../../concepts/connect.md#endpoint) кластера {{ ydb-name }} | `ydb.example.com` |
     | **Port** | Порт (по умолчанию `2135`) | `2135` |
     | **Database** | Путь к [базе данных](../../concepts/glossary.md#database) | `/Root/database` |
-    | **Monitoring URL** | URL [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md) с путём к базе данных, используется для дашборда (необязательно) | `http://ydb.example.com:8765/monitoring/tenant?name=%2FRoot%2Fdatabase` |
+    | **Monitoring URL** | URL [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) с путём к базе данных, используется для дашборда (необязательно) | `http://ydb.example.com:8765/monitoring/tenant?name=%2FRoot%2Fdatabase` |
     | **Use secure connection** | Использовать защищённое соединение (`grpcs://`) | ☑ |
     | **Enable autocomplete API** | Автодополнение через API {{ ydb-short-name }} | ☑ |
 
@@ -250,7 +250,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 {% note warning %}
 
-Дашборд доступен только при работе с self-hosted инсталляциями {{ ydb-short-name }}, где есть доступ к [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md). В Yandex Cloud Managed Service for {{ ydb-short-name }} Embedded UI не публикуется, поэтому данные дашборда недоступны — для мониторинга используйте [средства облачной платформы](https://yandex.cloud/ru/docs/ydb/operations/monitoring).
+Дашборд доступен только при работе с self-hosted инсталляциями {{ ydb-short-name }}, где есть доступ к [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md). В Yandex Cloud Managed Service for {{ ydb-ui-name }} не публикуется, поэтому данные дашборда недоступны — для мониторинга используйте [средства облачной платформы](https://yandex.cloud/ru/docs/ydb/operations/monitoring).
 
 {% endnote %}
 
@@ -283,7 +283,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 1. Нажмите **Convert**. Результат появится в нижнем поле.
 1. Нажмите **Copy**, чтобы скопировать результат в буфер обмена.
 
-Подробнее о принципах работы конвертера, поддерживаемых диалектах и ограничениях см. в статье [Конвертер SQL-диалектов в YQL](../sql-dialect-converter.md).
+Подробнее о принципах работы конвертера, поддерживаемых диалектах и ограничениях см. в статье [Конвертер SQL-диалектов в YQL](../sql-translation/sql-dialect-converter.md).
 
 {% note warning %}
 

@@ -74,7 +74,7 @@ def parse_callable(expr) -> tuple[str, tuple[str | int, ...], str]:
     return name, tuple(values), expr[pos:].strip()
 
 
-def parse_enum(expr) -> tuple[tuple[str], tuple[int]]:
+def parse_enum(expr) -> tuple[tuple[str, ...], tuple[int, ...]]:
     """
     Parse a ClickHouse enum definition expression of the form ('key1' = 1, 'key2' = 2)
     :param expr: ClickHouse enum expression/arguments
@@ -84,8 +84,8 @@ def parse_enum(expr) -> tuple[tuple[str], tuple[int]]:
     values = []
     pos = expr.find("(") + 1
     in_key = False
-    key = []
-    value = []
+    key: list[str] = []
+    value: list[str] = []
     while True:
         char = expr[pos]
         pos += 1
@@ -110,8 +110,8 @@ def parse_enum(expr) -> tuple[tuple[str], tuple[int]]:
                 in_key = True
             else:
                 value.append(char)
-    values, keys = zip(*sorted(zip(values, keys)))
-    return tuple(keys), tuple(values)
+    sorted_values, sorted_keys = zip(*sorted(zip(values, keys)))
+    return tuple(sorted_keys), tuple(sorted_values)
 
 
 def parse_columns(expr: str):
@@ -135,8 +135,9 @@ def parse_columns(expr: str):
             if char == quote:
                 quote = None
             elif char == "\\" and expr[pos] == "'" and expr[pos : pos + 4] != "' = " and expr[pos : pos + 2] != "')":
-                label += expr[pos]
+                label += char + expr[pos]
                 pos += 1
+                continue
         else:
             if level == 0:
                 if char in (" ", "="):

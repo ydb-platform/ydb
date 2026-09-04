@@ -12,4 +12,7 @@ struct TColumnsInfo {
 
 TVector<NYT::TRawTableReaderPtr> MakeTextYsonInputs(const TVector<std::pair<TString, TColumnsInfo>>& files, bool addRowIndex = true);
 
+// Returns splitted=N from the .attr file or 0 if no such atttribute exists
+i64 ReadSplittedPartsCount(const TString& filePath);
+
 } // namespace NYql::NFile

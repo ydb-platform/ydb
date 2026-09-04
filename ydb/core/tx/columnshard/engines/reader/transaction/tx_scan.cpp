@@ -3,16 +3,24 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
+
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader {
 
 LWTRACE_USING(YDB_CS_SCAN);
 
 void TTxScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("problem", problem)("details", details);
+    YDB_LOG_WARN("",
+        {"event", "TTxScan failed"},
+        {"problem", problem},
+        {"details", details});
     const auto& request = Ev->Get()->Record;
     const TString table = request.GetTablePath();
     const ui32 scanGen = request.GetGeneration();
@@ -42,7 +50,16 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     snapshot = Self->TablesManager.ResolveReadSnapshot(ssPathId, snapshot);
-    const bool deduplicationEnabled = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
+    const bool deduplicationEnabled = [&]() {
+        const bool defGlobal = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
+        if (Self->HasIndex()) {
+            const auto& vIndex = Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
+            const auto schema = vIndex.GetSchemaVerified(snapshot);
+            return schema->GetIndexInfo().GetDeduplicationEnabled().value_or(defGlobal);
+        } else {
+            return defGlobal;
+        }
+    }();
     const TReadMetadataBase::ESorting sorting = [&]() {
         if (request.HasReverse()) {
             return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
@@ -64,8 +81,15 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build() ("tx_id", txId)("scan_id", scanId)("gen", scanGen)(
-        "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout)("cpu_limits", cpuLimits.DebugString());
+    YDB_LOG_CREATE_CONTEXT(
+        {"txId", txId},
+        {"scanId", scanId},
+        {"gen", scanGen},
+        {"table", table},
+        {"snapshot", snapshot},
+        {"tablet", Self->TabletID()},
+        {"timeout", timeout},
+        {"cpuLimits", cpuLimits.DebugString()});
 
     ui64 rawPathId = 0;
     TReadMetadataPtr readMetadataRange;
@@ -75,6 +99,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.SetFakeSort(!request.HasReverse() && deduplicationEnabled);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
+        read.GroupedMemoryLimiterOperator =
+            request.GetCSScanPolicy() == "EXPORT" ? EScanGroupedMemoryLimiterOperator::Deduplication : EScanGroupedMemoryLimiterOperator::Scan;
         read.Orbit = orbit;
         read.TxId = txId;
         read.ScanId = scanId;
@@ -84,8 +110,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
             request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr, false);
 
         {
-            auto accConclusion =
-                Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId);
+            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(
+                request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId, snapshot);
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
@@ -116,7 +142,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }();
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
             const TString scanType = [&]() {
-                return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
+                const TString policy = request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
+                if (policy == "EXPORT") {
+                    return TString("PLAIN");
+                }
+                return policy;
             }();
             auto constructor =
                 NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);
@@ -214,13 +244,18 @@ void TTxScan::Complete(const TActorContext& ctx) {
         scanDiagnosticsEvent->RequestId = requestCookie;
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(scanDiagnosticsEvent));
     }
-    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId,
-        Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(),
-        shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat,
-        Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId));
+    const ui32 scanPoolId = request.GetUseBatchPool() ? AppDataVerified().BatchPoolId : Max<ui32>();
+    auto scanActorId =
+        ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
+                         Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
+                         scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat,
+                         Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId), TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
+    YDB_LOG_DEBUG("",
+        {"event", "TTxScan started"},
+        {"actorId", scanActorId},
+        {"traceDetailed", detailedInfo});
 }
 
 }   // namespace NKikimr::NOlap::NReader

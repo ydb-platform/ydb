@@ -6,6 +6,7 @@
 
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
@@ -160,6 +161,13 @@ private:
     const NUdf::IPgBuilder* PgBuilder_ = nullptr;
     ui32 PgTypeId_ = 0;
     i32 TypeLen_ = 0;
+};
+
+template <bool Nullable>
+using TUuidBlockItemConverter = TStringBlockItemConverter<arrow::BinaryType, Nullable, NUdf::EPgStringType::None>;
+
+template <bool Nullable>
+class TFixedSizeBlockItemConverter<TGUID, Nullable>: public TUuidBlockItemConverter<Nullable> {
 };
 
 template <bool IsNull>

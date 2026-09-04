@@ -141,15 +141,73 @@ void SetStatsObserver(TTestActorRuntime& runtime, const std::function<TTestActor
     });
 }
 
+void SetPqrbTopicStatsSuppressor(TTestActorRuntime& runtime, ui32& allowInjectedTopicStats) {
+    auto originalObserver = runtime.SetObserverFunc([](TAutoPtr<IEventHandle>&) {
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+    runtime.SetObserverFunc([originalObserver, &allowInjectedTopicStats](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPersQueue::EvPeriodicTopicStats) {
+            if (allowInjectedTopicStats > 0) {
+                --allowInjectedTopicStats;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return originalObserver(ev);
+    });
+}
+
+void InjectPeriodicTopicStats(
+    TTestActorRuntime& runtime,
+    ui32& allowInjectedTopicStats,
+    ui64 topicId,
+    ui64 generation,
+    ui64 round,
+    ui64 dataSize,
+    ui64 usedReserveSize)
+{
+    ++allowInjectedTopicStats;
+    SendTEvPeriodicTopicStats(runtime, topicId, generation, round, dataSize, usedReserveSize);
+}
+
 TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
     auto response = Navigate(runtime, path);
     return response->ResultSet.at(0).TableId;
 }
 
+ui64 GetRowUpdates(TTestActorRuntime& runtime, const TString& path) {
+    auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, path, true, true);
+    return description.GetPathDescription().GetTableStats().GetRowUpdates();
+}
+
+void WaitRowUpdatesAtLeast(TTestActorRuntime& runtime, TTestEnv& env, const TString& path, ui64 expected) {
+    while (GetRowUpdates(runtime, path) < expected) {
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+    }
+}
+
+// A single-shard table whose writes go through the datashard write path, so they
+// increment the RowUpdates counter (LocalMiniKQL writes do not).
+void CreateSimpleTable(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId) {
+    TestCreateTable(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot", R"(
+        Name: "Simple"
+        Columns { Name: "key"   Type: "Uint32" }
+        Columns { Name: "value" Type: "Utf8" }
+        KeyColumnNames: ["key"]
+    )");
+    env.TestWaitNotification(runtime, txId);
+}
+
+void WriteRows(TTestActorRuntime& runtime, ui64& txId, int partitionIdx, ui32 fromKeyInclusive, ui32 toKey) {
+    for (ui32 key = fromKeyInclusive; key < toKey; ++key) {
+        WriteRow(runtime, ++txId, "/MyRoot/Simple", partitionIdx, key, "value");
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
-    constexpr ui64 WRITTEN_TOPIC_DATA_SIZE = 16975350; // unstable value, can change if internal message store changes
+    constexpr ui64 WRITTEN_TOPIC_DATA_SIZE = 16975298; // unstable value, can change if internal message store changes
 
     Y_UNIT_TEST(ShouldNotBatchWhenDisabled) {
         TTestBasicRuntime runtime;
@@ -306,10 +364,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         // disable batching
         appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+        appData.PQConfig.SetBalancerWakeupIntervalSec(3600);
 
         // apply config via reboot
         TActorId sender = runtime.AllocateEdgeActor();
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui32 allowInjectedTopicStats = 0;
+        SetPqrbTopicStatsSuppressor(runtime, allowInjectedTopicStats);
 
         const auto Assert = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic1"),
@@ -370,23 +432,23 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         ui64 generation = 1;
         ui64 round = 1;
 
-        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, ++round, 101, 101);
+        InjectPeriodicTopicStats(runtime, allowInjectedTopicStats, topic1Id, generation, ++round, 101, 101);
         Assert(1369, 101); // only reserve size
 
-        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, ++round, 383, 247);
+        InjectPeriodicTopicStats(runtime, allowInjectedTopicStats, topic1Id, generation, ++round, 383, 247);
         Assert(1369 + (383 - 247), 247); // 1505, 247 reserve + exceeding the limit
 
-        SendTEvPeriodicTopicStats(runtime, topic2Id, generation, ++round, 113, 113);
+        InjectPeriodicTopicStats(runtime, allowInjectedTopicStats, topic2Id, generation, ++round, 113, 113);
         Assert(1369 + (383 - 247), 247 + 113); // 1505, 360
 
-        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, ++round, 31, 31);
+        InjectPeriodicTopicStats(runtime, allowInjectedTopicStats, topic1Id, generation, ++round, 31, 31);
         Assert(1369, 31 + 113); // only reserve, data size
 
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Topic2");
         env.TestWaitNotification(runtime, txId);
         Assert(808, 31);
 
-        SendTEvPeriodicTopicStats(runtime, topic3Id, generation, ++round, 151, 151);
+        InjectPeriodicTopicStats(runtime, allowInjectedTopicStats, topic3Id, generation, ++round, 151, 151);
         Assert(808, 31 + 151);
     }
 
@@ -536,11 +598,15 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         // disable batching
         appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+        appData.PQConfig.SetBalancerWakeupIntervalSec(3600);
 
         // apply config via reboot
         TActorId sender = runtime.AllocateEdgeActor();
 
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui32 allowInjectedTopicStats = 0;
+        SetPqrbTopicStatsSuppressor(runtime, allowInjectedTopicStats);
 
         const auto AssertTopicSize = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic1"),
@@ -570,19 +636,113 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         ui64 generation = 1;
         ui64 round = 97;
 
-        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, round, 17, 7);
+        InjectPeriodicTopicStats(runtime, allowInjectedTopicStats, topic1Id, generation, round, 17, 7);
         AssertTopicSize(17, 7);
 
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         AssertTopicSize(17, 7); // loaded from db
 
-        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, round - 1, 19, 7);
+        InjectPeriodicTopicStats(runtime, allowInjectedTopicStats, topic1Id, generation, round - 1, 19, 7);
 
         AssertTopicSize(17, 7); // not changed because round is less
     }
 
+    Y_UNIT_TEST(RowUpdatesSurviveShardRestart) {
+        // A datashard keeps RowUpdates in memory, so a restart resets it to zero.
+        // The schemeshard re-baselines the shard on the generation bump, so the table
+        // aggregate must keep growing across the restart, never drop.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 1000;
+        CreateSimpleTable(runtime, env, txId);
+        WriteRows(runtime, txId, 0, 0, INITIAL_ROWS_COUNT);
+
+        WaitRowUpdatesAtLeast(runtime, env, "/MyRoot/Simple", INITIAL_ROWS_COUNT);
+
+        // Restart the datashard: its in-memory RowUpdates counter resets to zero.
+        auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, shards[0], sender);
+
+        // Write more rows after the restart.
+        const ui32 extraRows = 50;
+        WriteRows(runtime, txId, 0, INITIAL_ROWS_COUNT, INITIAL_ROWS_COUNT + extraRows);
+
+        // The aggregate keeps the pre-restart updates and adds the new ones; if it had
+        // dropped on the generation bump it would stall at extraRows and never reach this.
+        WaitRowUpdatesAtLeast(runtime, env, "/MyRoot/Simple", INITIAL_ROWS_COUNT + extraRows);
+        UNIT_ASSERT_GE(GetRowUpdates(runtime, "/MyRoot/Simple"), INITIAL_ROWS_COUNT + extraRows);
+    }
+
+    Y_UNIT_TEST(RowUpdatesSurviveShardSplit) {
+        // On split the schemeshard removes the parent shard and adds empty children.
+        // RowUpdates is deliberately not subtracted with the parent's current-state
+        // metrics, so the table aggregate survives the reshard.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 1000;
+        // Single-shard table with keys [0, INITIAL_ROWS_COUNT).
+        CreateSimpleTable(runtime, env, txId);
+        WriteRows(runtime, txId, 0, 0, INITIAL_ROWS_COUNT);
+
+        WaitRowUpdatesAtLeast(runtime, env, "/MyRoot/Simple", INITIAL_ROWS_COUNT);
+
+        auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        // Split the single shard in two at key = INITIAL_ROWS_COUNT / 2.
+        TestSplitTable(runtime, ++txId, "/MyRoot/Simple", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: %lu } } } }
+            )", shards[0], INITIAL_ROWS_COUNT / 2));
+        env.TestWaitNotification(runtime, txId);
+
+        auto newShards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(newShards.size(), 2u);
+
+        // Children start at zero, but the table aggregate still carries the parent's
+        // updates — they were not lost in the reshard.
+        UNIT_ASSERT_GE(GetRowUpdates(runtime, "/MyRoot/Simple"), INITIAL_ROWS_COUNT);
+    }
+
 };
+
+Y_UNIT_TEST_SUITE(TStatsParseOffloadTest) {
+    // Stats must round-trip through persist + restart the same regardless of the offload flag.
+    Y_UNIT_TEST_FLAG(StatsPersistRegardlessOfOffload, EnablePeriodicTableStatsParseOffload) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.DataShardStatsReportIntervalSeconds(1);
+        TTestEnv env(runtime, opts);
+
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnablePersistentPartitionStats(true);
+        appData.FeatureFlags.SetEnablePeriodicTableStatsParseOffload(EnablePeriodicTableStatsParseOffload);
+
+        auto eventAction = TTestActorRuntime::EEventAction::PROCESS;
+        SetStatsObserver(runtime, [&]() {
+                return eventAction;
+            }
+        );
+
+        ui64 txId = 1000;
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        WaitAndCheckStatPersisted(runtime, env, INITIAL_ROWS_COUNT, TDuration::Zero(), eventAction);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
     Y_UNIT_TEST(SameAggregatedStatsAfterRestart) {

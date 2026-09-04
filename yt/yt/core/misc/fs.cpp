@@ -19,6 +19,7 @@
 #include <util/string/split.h>
 #include <util/system/env.h>
 #include <util/system/fs.h>
+#include <util/system/fstat.h>
 #include <util/system/maxlen.h>
 #include <util/system/shellcommand.h>
 
@@ -50,7 +51,7 @@ namespace NYT::NFS {
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "FS");
 
 [[noreturn]] [[maybe_unused]]
 void ThrowNotSupported()
@@ -113,7 +114,7 @@ void Remove(const std::string& path)
     if (!ok) {
         THROW_ERROR_EXCEPTION("Cannot remove %v",
             path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -142,7 +143,7 @@ void Rename(const std::string& source, const std::string& destination)
         THROW_ERROR_EXCEPTION("Cannot rename %v to %v",
             source,
             destination)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -254,15 +255,16 @@ std::string GetFileNameWithoutExtension(const std::string& path)
 
 void CleanTempFiles(const std::string& path)
 {
-    YT_LOG_INFO("Cleaning temp files in %v", path);
+    YT_TLOG_INFO("Cleaning temp files")
+        .With("Path", path);
 
     // TODO(ignat): specify suffix in EnumerateFiles.
     auto entries = EnumerateFiles(path, std::numeric_limits<int>::max());
     for (const auto& entry : entries) {
         if (entry.ends_with(TempFileSuffix)) {
             auto fileName = NFS::CombinePaths(path, entry);
-            YT_LOG_DEBUG("Removing file (FileName: %v)",
-                fileName);
+            YT_TLOG_DEBUG("Removing file")
+                .With("FileName", fileName);
             NFS::Remove(fileName);
         }
     }
@@ -363,7 +365,7 @@ TDiskSpaceStatistics GetDiskSpaceStatistics(const std::string& path)
     if (!ok) {
         THROW_ERROR_EXCEPTION("Failed to get disk space statistics for %v",
             path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     return result;
@@ -371,7 +373,29 @@ TDiskSpaceStatistics GetDiskSpaceStatistics(const std::string& path)
 
 void MakeDirRecursive(const std::string& path, int mode)
 {
-    MakePathIfNotExist(path.c_str(), mode);
+    if (Exists(path)) {
+        if (!TFileStat(path).IsDir()) {
+            THROW_ERROR_EXCEPTION("Path %v already exists and is not a directory", path);
+        }
+        return;
+    }
+
+    if (auto parentPath = GetDirectoryName(path); parentPath != path) {
+        MakeDirRecursive(parentPath, mode);
+    }
+
+    // TODO(dann239): migrate to std::string.
+    if (!NFs::MakeDirectory(TString(path), NFs::EFilePermission(mode))) {
+        auto error = TError::FromSystem();
+
+        // The directory could have been created concurrently.
+        if (TFileStat(path).IsDir()) {
+            return;
+        }
+
+        THROW_ERROR_EXCEPTION("Failed to create directory %v", path)
+            .With(std::move(error));
+    }
 }
 
 TPathStatistics GetPathStatistics(const std::string& path)
@@ -385,7 +409,7 @@ TPathStatistics GetPathStatistics(const std::string& path)
     if (result == -1) {
         THROW_ERROR_EXCEPTION("Failed to get statistics for %v",
             path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     statistics.Size = static_cast<i64>(fileStat.st_size);
@@ -439,10 +463,10 @@ i64 GetDirectoriesSize(const std::vector<std::string>& paths, bool ignoreUnavail
                     deviceId = GetPathStatistics(path).DeviceId;
                 } else if (*deviceId != GetPathStatistics(path).DeviceId) {
                     THROW_ERROR_EXCEPTION("Seed directories reside on different devices")
-                        << TErrorAttribute("path", path)
-                        << TErrorAttribute("device_id", ToString(GetPathStatistics(path).DeviceId))
-                        << TErrorAttribute("other_path", paths.front())
-                        << TErrorAttribute("other_device_id", ToString(*deviceId));
+                        .With("path", path)
+                        .With("device_id", ToString(GetPathStatistics(path).DeviceId))
+                        .With("other_path", paths.front())
+                        .With("other_device_id", ToString(*deviceId));
                 }
             });
         }
@@ -458,7 +482,20 @@ i64 GetDirectoriesSize(const std::vector<std::string>& paths, bool ignoreUnavail
         wrapNoEntryError([&] {
             auto subdirectories = EnumerateDirectories(directory);
             for (const auto& subdirectory : subdirectories) {
-                directories.push(CombinePaths(directory, subdirectory));
+                auto subpath = CombinePaths(directory, subdirectory);
+                if (checkDeviceId) {
+                    // Skip subdirectories residing on a different device (e.g. overlay mounts
+                    // such as a root volume) to avoid traversing them unnecessarily.
+                    wrapNoEntryError([&] {
+                        auto subStat = GetPathStatistics(subpath);
+                        if (deviceId && subStat.DeviceId != *deviceId) {
+                            return;
+                        }
+                        directories.push(subpath);
+                    });
+                } else {
+                    directories.push(subpath);
+                }
             }
         });
 
@@ -498,7 +535,7 @@ void Touch(const std::string& path)
     if (result != 0) {
         THROW_ERROR_EXCEPTION("Failed to touch %v",
             path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 #else
     ThrowNotSupported();
@@ -597,9 +634,9 @@ void SetPermissions(const std::string& path, int permissions)
     auto res = HandleEintr(::chmod, path.c_str(), permissions);
     if (res == -1) {
         THROW_ERROR_EXCEPTION("Failed to set permissions for descriptor")
-            << TErrorAttribute("path", path)
-            << TErrorAttribute("permissions", permissions)
-            << TError::FromSystem();
+            .With("path", path)
+            .With("permissions", permissions)
+            .With(TError::FromSystem());
     }
 #else
     Y_UNUSED(path, permissions);
@@ -627,7 +664,7 @@ void MakeSymbolicLink(const std::string& filePath, const std::string& linkPath)
             "Failed to link %v to %v",
             filePath,
             linkPath)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -640,7 +677,7 @@ bool AreInodesIdentical(const std::string& lhsPath, const std::string& rhsPath)
             THROW_ERROR_EXCEPTION(
                 "Failed to check for identical inodes: stat failed for %v",
                 path)
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     };
 
@@ -673,14 +710,14 @@ void FlushDirectory(const std::string& path)
     int fd = ::open(path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (fd < 0) {
         THROW_ERROR_EXCEPTION("Failed to open directory %v", path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     int result = ::fsync(fd);
     if (result < 0) {
         SafeClose(fd, false);
         THROW_ERROR_EXCEPTION("Failed to flush directory %v", path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     SafeClose(fd, false);
@@ -722,9 +759,9 @@ void MountTmpfs(const std::string& path, int userId, i64 size)
     int result = ::mount("none", path.c_str(), "tmpfs", 0, opts.c_str());
     if (result < 0) {
         THROW_ERROR_EXCEPTION("Failed to mount tmpfs at %v", path)
-            << TErrorAttribute("user_id", userId)
-            << TErrorAttribute("size", size)
-            << TError::FromSystem();
+            .With("user_id", userId)
+            .With("size", size)
+            .With(TError::FromSystem());
     }
 #else
     Y_UNUSED(path, userId, size);
@@ -744,7 +781,7 @@ void Umount(const std::string& path, bool detach)
     // ENOENT means 'No such file or directory'.
     if (result < 0 && LastSystemError() != EINVAL && LastSystemError() != ENOENT) {
         auto error = TError("Failed to umount %v", path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
         if (LastSystemError() == EBUSY) {
             error = AttachLsofOutput(error, path);
             error = AttachFindOutput(error, path);
@@ -764,7 +801,7 @@ struct stat Stat(const std::string& path)
     int result = ::stat(path.c_str(), &statInfo);
     if (result != 0) {
         THROW_ERROR_EXCEPTION("Failed to execute ::stat for %v", path)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
     return statInfo;
 }
@@ -828,11 +865,11 @@ void SetQuota(
         reinterpret_cast<caddr_t>(&info));
     if (result < 0) {
         THROW_ERROR_EXCEPTION("Failed to set FS quota for user")
-            << TErrorAttribute("user_id", userId)
-            << TErrorAttribute("disk_space_limit", diskSpaceLimit.value_or(0))
-            << TErrorAttribute("inode_limit", inodeLimit.value_or(0))
-            << TErrorAttribute("path", path)
-            << TError::FromSystem();
+            .With("user_id", userId)
+            .With("disk_space_limit", diskSpaceLimit.value_or(0))
+            .With("inode_limit", inodeLimit.value_or(0))
+            .With("path", path)
+            .With(TError::FromSystem());
     }
 #else
     Y_UNUSED(userId, path, diskSpaceLimit, inodeLimit);
@@ -855,18 +892,20 @@ void WrapIOErrors(std::function<void()> func)
 
             case EIO:
             case ENOSPC:
+            case EDQUOT:
             case EROFS:
             case EWOULDBLOCK: // aka EAGAIN
 #ifdef _linux_
             case EUCLEAN:
 #endif
                 THROW_ERROR_EXCEPTION(NFS::EErrorCode::IOError, "I/O error")
-                    << TErrorAttribute("status", status)
-                    << TError(ex);
+                    .With("status", status)
+                    .With(ex);
 
             default: {
                 TError error(ex);
-                YT_LOG_FATAL(error, "Unexpected exception thrown during I/O operation");
+                YT_TLOG_FATAL("Unexpected exception thrown during I/O operation")
+                    .With(error);
                 break;
             }
         }
@@ -879,8 +918,8 @@ void Chmod(const std::string& path, int mode)
     int result = ::Chmod(path.c_str(), mode);
     if (result < 0) {
         THROW_ERROR_EXCEPTION("Failed to change mode of %v", path)
-            << TErrorAttribute("mode", Format("%04o", mode))
-            << TError::FromSystem();
+            .With("mode", Format("%04o", mode))
+            .With(TError::FromSystem());
     }
 #else
     Y_UNUSED(path, mode);
@@ -905,7 +944,7 @@ void SendfileChunkedCopy(
         THROW_ERROR_EXCEPTION("Failed to copy %v to %v",
             existingPath,
             newPath)
-            << ex;
+            .With(ex);
     }
 #else
     Y_UNUSED(existingPath, newPath, chunkSize);
@@ -924,7 +963,7 @@ void SendfileChunkedCopy(
         if (srcSize == -1) {
             THROW_ERROR_EXCEPTION("Cannot get source file length: stat failed for %v",
                 destination.GetName())
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
 
         int srcFd = source.GetHandle();
@@ -936,7 +975,7 @@ void SendfileChunkedCopy(
                 auto size = sendfile(dstFd, srcFd, nullptr, chunkSize);
                 if (size == -1) {
                     THROW_ERROR_EXCEPTION("Error while doing chunked copy: sendfile failed")
-                        << TError::FromSystem();
+                        .With(TError::FromSystem());
                 }
                 currentChunkSize += size;
                 srcSize -= size;
@@ -952,7 +991,7 @@ void SendfileChunkedCopy(
         THROW_ERROR_EXCEPTION("Failed to copy %v to %v",
             source.GetName(),
             destination.GetName())
-            << ex;
+            .With(ex);
     }
 #else
     Y_UNUSED(source, destination, chunkSize);
@@ -979,9 +1018,9 @@ void Splice(
                 auto size = splice(srcFd, nullptr, dstFd, &offset, chunkSize, SPLICE_F_MOVE | SPLICE_F_MORE);
                 if (size == -1) {
                     THROW_ERROR_EXCEPTION("Error while doing splice")
-                        << TErrorAttribute("source_path", source.GetName())
-                        << TErrorAttribute("destination_path", destination.GetName())
-                        << TError::FromSystem();
+                        .With("source_path", source.GetName())
+                        .With("destination_path", destination.GetName())
+                        .With(TError::FromSystem());
                 } else if (size == 0) {
                     completed = true;
                     break;
@@ -997,7 +1036,7 @@ void Splice(
         THROW_ERROR_EXCEPTION("Failed to copy %v to %v via splice",
             source.GetName(),
             destination.GetName())
-            << ex;
+            .With(ex);
     }
 #else
     Y_UNUSED(source, destination, chunkSize);
@@ -1074,9 +1113,9 @@ TFuture<TSpliceResult> SpliceAsync(
             } else if (errno != EAGAIN) {
                 completionPromise.TrySet(
                     TError("Error while doing splice")
-                        << TErrorAttribute("source_path", src.GetName())
-                        << TErrorAttribute("destination_path", dst.GetName())
-                        << TError::FromSystem());
+                        .With("source_path", src.GetName())
+                        .With("destination_path", dst.GetName())
+                        .With(TError::FromSystem()));
             }
             return;
         }
@@ -1090,7 +1129,7 @@ TFuture<TSpliceResult> SpliceAsync(
                     .Run())
                 .ThrowOnError();
         },
-        "SimplePollable");
+        NLogging::TLoggingTagList().With("Pollable", "Simple"));
 
     bool registered = poller->TryRegister(pollable);
     THROW_ERROR_EXCEPTION_UNLESS(registered, "Failed to register pollable");
@@ -1120,7 +1159,7 @@ TError AttachLsofOutput(TError error, const std::string& path)
         .Wait()
         .GetOutput();
     return error
-        << TErrorAttribute("lsof_output", lsofOutput);
+        .With("lsof_output", lsofOutput);
 }
 
 TError AttachFindOutput(TError error, const std::string& path)
@@ -1130,7 +1169,7 @@ TError AttachFindOutput(TError error, const std::string& path)
         .Wait()
         .GetOutput();
     return error
-        << TErrorAttribute("find_output", findOutput);
+        .With("find_output", findOutput);
 }
 
 TDeviceId GetDeviceId(const std::string& path)
@@ -1186,7 +1225,7 @@ std::optional<std::string> FindBinaryPath(const std::string& binary)
 bool IsOutOfDiskSpaceError(const TError& error)
 {
 #ifdef _linux_
-    return error.FindMatching(ELinuxErrorCode::NOSPC).has_value();
+    return error.FindMatching({ELinuxErrorCode::NOSPC, ELinuxErrorCode::DQUOT}).has_value();
 #else
     Y_UNUSED(error);
     YT_UNIMPLEMENTED();

@@ -3,7 +3,7 @@
 #include "secret_resolver.h"
 
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -13,6 +13,8 @@
 #include <ydb/services/metadata/service.h>
 
 #include <util/generic/ptr.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -27,15 +29,16 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"entry", entry});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"entry", entry});
             return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }
 
@@ -46,15 +49,23 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         const auto& userSID = entry.SecurityObject->GetOwnerSID();
         SecretId = NMetadata::NSecret::TSecretId(userSID, SecretName);
 
-        if (NKqp::UseSchemaSecrets(AppData()->FeatureFlags, SecretId.GetSecretId())) {
+        if (NSecret::UseSchemaSecrets(AppData()->FeatureFlags, SecretId.GetSecretId())) {
             const TVector<TString> secretNames{SecretId.GetSecretId()};
             auto userToken = MakeIntrusiveConst<NACLib::TUserToken>(userSID, TVector<TString>());
             const auto actorSystem = ActorContext().ActorSystem();
             const auto replyActorId = SelfId();
-            auto future = NKqp::DescribeSecret(secretNames, userToken, Database, actorSystem);
+            auto future = NSecret::DescribeSecret(
+                secretNames,
+                userToken,
+                Database,
+                actorSystem,
+                {.RetryPolicy = NSecret::MakeLongRetryPolicy()});
             future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
                 actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });
+        } else if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+            // Just in case - when we disable old secrets, we'll make sure they are not needed any more
+            return Reply(false, "Usage of old secrets is disabled now. Please use new secrets");
         } else {
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));
@@ -105,11 +116,12 @@ public:
         , SecretName(secretName)
         , Cookie(cookie)
         , Database(database)
-        , LogPrefix("SecretResolver", ReplicationId)
+        , LogPrefix(CreateActorLogPrefix("SecretResolver", ReplicationId))
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             return Reply(false, "Metadata service is not active");
         }
@@ -128,6 +140,8 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
@@ -144,7 +158,7 @@ private:
     const TString SecretName;
     const ui64 Cookie;
     const TString Database;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     static constexpr auto RetryInterval = TDuration::Seconds(1);
     NMetadata::NSecret::TSecretId SecretId;

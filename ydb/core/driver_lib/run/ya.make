@@ -26,6 +26,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/containers/absl
     library/cpp/getopt/small
     library/cpp/logger
     library/cpp/malloc/api
@@ -74,10 +75,10 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
-    ydb/core/local_pgwire
     ydb/core/log_backend
     ydb/core/memory_controller
     ydb/core/metering
@@ -89,6 +90,7 @@ PEERDIR(
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
@@ -111,6 +113,8 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/general_cache
     ydb/core/tx/columnshard/data_accessor/cache_policy
     ydb/core/tx/columnshard/column_fetching
@@ -120,6 +124,8 @@ PEERDIR(
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
+    ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/replication/service
     ydb/core/tx/scheme_board
@@ -151,6 +157,7 @@ PEERDIR(
     ydb/library/security
     ydb/library/yql/providers/pq/cm_client
     ydb/library/slide_limiter/service
+    ydb/library/slide_limiter/usage
     ydb/library/yql/providers/s3/actors
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
@@ -164,8 +171,6 @@ PEERDIR(
     ydb/services/deprecated/persqueue_v0
     ydb/services/discovery
     ydb/services/dynamic_config
-    ydb/services/ext_index/metadata
-    ydb/services/ext_index/service
     ydb/services/fq
     ydb/services/kesus
     ydb/services/keyvalue
@@ -173,14 +178,17 @@ PEERDIR(
     ydb/services/maintenance
     ydb/services/metadata
     ydb/services/metadata/ds_table
+    ydb/services/udf_store
     ydb/services/monitoring
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/distributed_storage
     ydb/services/tablet
     ydb/services/test_shard
     ydb/services/view
+    ydb/services/workload_manager/service
     ydb/services/ydb
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
@@ -198,6 +206,8 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/bootstrap
         ydb/core/nbs/cloud/blockstore/config/protos
+        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
+        ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet
         ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/libs/storage/volume
 

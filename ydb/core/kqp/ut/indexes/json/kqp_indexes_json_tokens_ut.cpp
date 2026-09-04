@@ -6,6 +6,14 @@ using namespace NYdb::NQuery;
 using namespace NYdb;
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
+    Y_UNIT_TEST(JsonExistsFullRangeIsRejected) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            ValidateError(db, R"(JSON_EXISTS(Text, '$[*]'))",
+                "JSON index cannot be used: full-range search cannot be performed using full-text search",
+                "Failed to extract jsonpath tokens from the predicate");
+        });
+    }
+
     Y_UNIT_TEST(JsonExists) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Basic path exists cases
@@ -1494,8 +1502,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                 {NJsonIndex::TToken{"\3k1", ""}}, utfParam("param"));
 
             // Top-level wildcard member access
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.*' RETURNING Utf8) == $param)",
-                {NJsonIndex::TToken{"", ""}}, utfParam("param"));
+            ValidateError(db, R"(JSON_VALUE(Text, '$.*' RETURNING Utf8) == $param)", utfParam("param"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
 
             // Methods stop param collection
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.size()' RETURNING Int32) == $param)",
@@ -1686,9 +1694,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                 {NJsonIndex::TToken{"\3k1", "$param"}}, utfParam("param"));
 
             // Wildcard in outer path before filter
-            ValidateTokens(db,
-                R"(JSON_EXISTS(Text, '$.* ? (@.k1 == $v)' PASSING $param AS v))",
-                {NJsonIndex::TToken{"", ""}}, utfParam("param"));
+            ValidateError(db,
+                R"(JSON_EXISTS(Text, '$.* ? (@.k1 == $v)' PASSING $param AS v))", utfParam("param"),
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
 
             // Non-equality operators in filter
             ValidateTokens(db,
@@ -1910,8 +1918,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
 
     Y_UNIT_TEST(JsonExistsPaths) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            constexpr TStringBuf fullRangeError =
+                "JSON index cannot be used: full-range search cannot be performed using full-text search";
+            const auto validateFullRangeError = [&](const std::string& predicate) {
+                ValidateError(db, predicate, TString{fullRangeError});
+            };
+
             // Context object - empty path token
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$'))", {""});
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$'))");
 
             // Empty key
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.""'))", {"\1"});
@@ -1919,12 +1933,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$."".k1'))", {"\1\3k1"});
 
             // Array access at the root
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$[0]'))", {""});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$[3]'))", {""});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$[last]'))", {""});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$[1 to 3]'))", {""});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$[0, 3]'))", {""});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$[*]'))", {""});
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$[0]'))");
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$[3]'))");
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$[last]'))");
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$[1 to 3]'))");
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$[0, 3]'))");
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$[*]'))");
 
             // Array access after a key - should not stop collection
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1[0]'))", {"\3k1"});
@@ -1938,7 +1952,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             // Chains of array access
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1[*][0]'))", {"\3k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1[0][*]'))", {"\3k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$[0][0][0]'))", {""});
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$[0][0][0]'))");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$[*].k1'))", {"\3k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$[0].k1'))", {"\3k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$[last].k1'))", {"\3k1"});
@@ -1946,13 +1960,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1[0].k2.k3'))", {"\3k1\3k2\3k3"});
 
             // Wildcard member access stops collection
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.*'))", {""});
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$.*'))");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.*'))", {"\3k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.k2.*'))", {"\3k1\3k2"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.*.k2'))", {"\3k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.*.*'))", {"\3k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.*.k1'))", {""});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.*[0].k1'))", {""});
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$.*.k1'))");
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$.*[0].k1'))");
 
             // Methods stop collection
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.size()'))", {"\3k1"});
@@ -1972,8 +1986,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.keyvalue().value.size()'))", {"\3k1"});
 
             // Methods at the root
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.size()'))", {""});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.type()'))", {""});
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$.size()'))");
+            validateFullRangeError(R"(JSON_EXISTS(Text, '$.type()'))");
 
             // Quoted keys preserve content as-is (no nested splitting on dots)
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$."key with spaces"'))", {"\x10key with spaces"});
@@ -2176,7 +2190,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
 
             // Outer wildcard / method before filter
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.* ? (@.k2 == 1)'))", {"\3k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.* ? (@.k1 == 1)'))", {""});
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.* ? (@.k1 == 1)'))",
+                "JSON index cannot be used: full-range search cannot be performed using full-text search");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.size() ? (@ > 0)'))", {"\3k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.size() ? (@ == 3)'))", {"\3k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.keyvalue() ? (@.name == "k")'))", {"\3k1"});

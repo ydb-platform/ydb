@@ -20,8 +20,53 @@ HDD_POOL = "dynamic_storage_pool:1"
 S3_ACCESS_KEY_SECRET = "kv_volume_tool_s3_access_key"
 S3_SECRET_KEY_SECRET = "kv_volume_tool_s3_secret_key"
 SECRET_OWNER = "root@builtin"
-VIRTUAL_STORAGE_CHANNEL = "4"
+VIRTUAL_STORAGE_CHANNEL = "2"
 S3_OBJECT_PREFIX = "{}/{}".format("blob_depot", BLOB_DEPOT_NAME)
+
+MB = 1024 * 1024
+GB = 1024 * MB
+UPLOAD_DOWNLOAD_FILE_SIZES = [
+    0,
+    1 * MB,
+    2 * MB,
+    4 * MB,
+    8 * MB,
+    16 * MB,
+    32 * MB,
+    64 * MB,
+    128 * MB,
+    256 * MB,
+    512 * MB,
+    1 * GB,
+]
+
+
+def _upload_download_size_id(size):
+    if size >= GB:
+        return "{}GB".format(size // GB)
+    return "{}MB".format(size // MB)
+
+
+def _write_file_of_size(path, size_bytes):
+    chunk = (b"kv_volume_tool_upload_download_test_" * 32)[:1024]
+    big_chunk = chunk * 1024  # 1MB
+    with open(path, "wb") as file:
+        written = 0
+        while written < size_bytes:
+            to_write = min(len(big_chunk), size_bytes - written)
+            file.write(big_chunk[:to_write])
+            written += to_write
+
+
+def _assert_files_equal(path_a, path_b):
+    assert os.path.getsize(path_a) == os.path.getsize(path_b)
+    with open(path_a, "rb") as file_a, open(path_b, "rb") as file_b:
+        while True:
+            block_a = file_a.read(MB)
+            block_b = file_b.read(MB)
+            assert block_a == block_b
+            if not block_a:
+                break
 
 
 def _dstool_binary():
@@ -88,6 +133,37 @@ class TestKvVolumeTool(StressFixture):
         )
 
         self._run("describe")
+        self._run("remove")
+
+    @pytest.mark.parametrize(
+        "file_size",
+        UPLOAD_DOWNLOAD_FILE_SIZES,
+        ids=_upload_download_size_id,
+    )
+    def test_upload_download(self, file_size):
+        self._create_volume()
+        key = "upload_download_{}".format(file_size)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = os.path.join(tmpdir, "source.bin")
+            downloaded_path = os.path.join(tmpdir, "downloaded.bin")
+
+            _write_file_of_size(source_path, file_size)
+
+            self._run(
+                "upload",
+                "--partition-id", "0",
+                "--key", key,
+                "--file", source_path,
+            )
+            self._run(
+                "download",
+                "--partition-id", "0",
+                "--key", key,
+                "--file", downloaded_path,
+            )
+            _assert_files_equal(source_path, downloaded_path)
+
         self._run("remove")
 
     def test_write_read(self):
@@ -256,7 +332,6 @@ class TestKvVolumeToolS3(StressFixture):
         resource, s3_endpoint = self._setup_s3()
         self._create_s3_secrets()
         self._configure_blob_depot_over_s3(s3_endpoint)
-
         self._run(
             "create",
             "--partition-count", "4",

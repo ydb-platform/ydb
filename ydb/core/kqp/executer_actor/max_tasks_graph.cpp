@@ -1,26 +1,39 @@
 #include "max_tasks_graph.h"
 
 #include <util/generic/yexception.h>
+#include <util/string/join.h>
 
+#include <algorithm>
 #include <numeric>
-#include <unordered_map>
+#include <set>
 
 namespace NKikimr::NKqp {
 
-TMaxTasksGraph::TMaxTasksGraph(size_t maxChannelsCount) : MaxChannelsCount(maxChannelsCount) {}
+namespace {
+    size_t Total(const std::vector<size_t>& perNode) {
+        return std::accumulate(perNode.begin(), perNode.end(), size_t{0});
+    }
+}
+
+TMaxTasksGraph::TMaxTasksGraph(size_t maxChannelsCount, TTaskResourceEstimationParams estimationParams)
+    : MaxChannelsCount(maxChannelsCount)
+    , EstimationParams(estimationParams)
+{}
 
 void TMaxTasksGraph::AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot) {
     YQL_ENSURE(!resourcesSnapshot.empty());
 
-    Y_ENSURE(Nodes.empty() && NodeIds.empty(), "AddNodes must be called on an empty graph");
+    Y_ENSURE(NodeIds.empty(), "AddNodes must be called on an empty graph");
     Y_ENSURE(Stages.empty(), "AddNodes must be called before any stages are added");
 
-    Nodes.reserve(resourcesSnapshot.size());
-    Nodes.resize(resourcesSnapshot.size(), {.MaxChannelsCount=MaxChannelsCount});
-
-    size_t nodeIdx = 0;
     for (const auto& node : resourcesSnapshot) {
-        Y_ENSURE(NodeIds.emplace(node.GetNodeId(), nodeIdx++).second);
+        Y_ENSURE(NodeIds.emplace(node.GetNodeId(), NodeIdByIdx.size()).second);
+        NodeIdByIdx.push_back(node.GetNodeId());
+        NodeResources.push_back(TNodeResources{
+            .RemainsMemory = node.GetTotalMemory() - node.GetUsedMemory(),
+            .RemainsTasks = node.GetAvailableComputeActors(), // one task == one compute actor.
+            .DataCenterId = node.GetKqpProxyNodeResources().GetDataCenterId(),
+        });
     }
 
     CheckInvariants();
@@ -29,27 +42,18 @@ void TMaxTasksGraph::AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& reso
 void TMaxTasksGraph::AddNode(TNodeId node) {
     Y_ENSURE(Stages.empty(), "AddNode must be called before any stages are added");
 
-    auto nodeIt = NodeIds.find(node);
-    if (nodeIt == NodeIds.end()) {
-        {
-            TStringStream ss;
-            ss << "Adding node that is not found in resource snapshot: " << node << Endl;
-            ss << "Known nodes:";
-            for (const auto [knownNode, _] : NodeIds) {
-                ss << " " << knownNode;
-            }
-            ss << Endl;
-        }
-
-        NodeIds.emplace(node, Nodes.size());
-        Nodes.push_back({.MaxChannelsCount=MaxChannelsCount});
+    if (!NodeIds.contains(node)) {
+        NodeIds.emplace(node, NodeIdByIdx.size());
+        NodeIdByIdx.push_back(node);
+        NodeResources.emplace_back(); // no snapshot entry: zero budgets, fine for round-robin.
     }
 
     CheckInvariants();
 }
 
-void TMaxTasksGraph::AddStage(const TStageId& stage, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput) {
+void TMaxTasksGraph::AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput) {
     TStage newStage;
+    newStage.Info = &stageInfo;
     newStage.Type = type;
     newStage.Source = copyInput ? std::optional{StageIds.at(*copyInput)} : std::nullopt;
 
@@ -61,265 +65,573 @@ void TMaxTasksGraph::AddStage(const TStageId& stage, EStageType type, const std:
             newStage.Type = FIXED;
         }
         if (prevStage.Source) {
-            newStage.Source = prevStage.Source;
+            newStage.Source = prevStage.Source; // normalize to the group root.
         }
     }
 
-    TStageIdx newStageIdx = Stages.size();
-    Stages.push_back(newStage);
-    Y_ENSURE(StageIds.emplace(stage, newStageIdx).second);
-
-    // inputs
-    std::list<TStageIdx> newInputs;
     for (const auto& input : inputs) {
-        newInputs.push_back(StageIds.at(input));
+        newStage.Inputs.push_back(StageIds.at(input));
     }
-    Inputs.push_back(newInputs);
 
-    // outputs
-    for (const auto input : newInputs) {
-        Outputs.at(input).push_back(newStageIdx);
+    const TStageIdx newStageIdx = Stages.size();
+    for (TStageIdx inputIdx : newStage.Inputs) {
+        Stages.at(inputIdx).Outputs.push_back(newStageIdx);
     }
-    Outputs.emplace_back();
 
-    Tasks.emplace_back(Nodes.size(), 0);
-    TasksPerStage.push_back(0);
+    // Group assignment: a follower joins its root's group, a root starts a new one.
+    if (newStage.Source) {
+        newStage.Group = Stages.at(*newStage.Source).Group;
+        Groups.at(newStage.Group).Stages.push_back(newStageIdx);
+    } else {
+        newStage.Group = Groups.size();
+        TGroup group;
+        group.Root = newStageIdx;
+        group.Fixed = (newStage.Type == FIXED);
+        group.Stages.push_back(newStageIdx);
+        Groups.push_back(std::move(group));
+    }
 
-    Y_DEBUG_ABORT_UNLESS(Stages.size() == Inputs.size() && Inputs.size() == Tasks.size() && Inputs.size() == Outputs.size());
+    Y_ENSURE(StageIds.emplace(stageInfo.Id, newStageIdx).second);
+    Stages.push_back(std::move(newStage));
 
     CheckInvariants();
 }
 
-void TMaxTasksGraph::AddTasks(const TStageId& stage, TNodeId node, size_t tasksCount) {
-    YQL_ENSURE(tasksCount);
-
-    auto stageIdx = StageIds.at(stage);
-    auto nodeIdx = NodeIds.find(node);
-
-    Y_ENSURE(nodeIdx != NodeIds.end(), "Trying to add tasks to unknown node: " << node); // TODO: how can there be unknown nodes?
-
-    Tasks.at(stageIdx).at(nodeIdx->second) += tasksCount;
-    Nodes.at(nodeIdx->second).TasksCount += tasksCount;
-    TasksPerStage.at(stageIdx) += tasksCount;
-
-    CheckInvariants();
+TMaxTasksGraph::TNodeIdx TMaxTasksGraph::ResolveNodeIdx(TNodeId node) const {
+    auto nodeIt = NodeIds.find(node);
+    Y_ENSURE(nodeIt != NodeIds.end(), "Trying to add task to unknown node: " << node); // TODO: how can there be unknown nodes?
+    return nodeIt->second;
 }
 
-void TMaxTasksGraph::AddTasks(const TStageId& stage, size_t tasksCount) {
-    YQL_ENSURE(tasksCount);
+void TMaxTasksGraph::AddTask(const TTask& task, std::optional<TNodeId> node) {
+    const TStageIdx stageIdx = StageIds.at(task.StageId);
+    auto& stage = Stages.at(stageIdx);
+    auto& group = Groups.at(stage.Group);
 
-    auto stageIdx = StageIds.at(stage);
-    TasksPerStage.at(stageIdx) += tasksCount;
-    while (tasksCount--) {
-        auto nodeIdx = Stages.at(stageIdx).RoundRobin;
-        Tasks.at(stageIdx).at(nodeIdx)++;
-        Nodes.at(nodeIdx).TasksCount++;
-        if (++Stages.at(stageIdx).RoundRobin == Nodes.size()) {
-            Stages.at(stageIdx).RoundRobin = 0;
+    const size_t columnIdx = stage.Tasks.size();
+    stage.Tasks.push_back(task.Id);
+
+    if (stageIdx == group.Root) {
+        // The root defines the group's columns.
+        Y_ENSURE(group.ColumnNodes.size() == columnIdx);
+        if (node) {
+            group.ColumnNodes.push_back(ResolveNodeIdx(*node)); // pinned column.
+        } else {
+            group.ColumnNodes.push_back(std::nullopt);          // free column, placed in DistributeTasksToNodes.
+        }
+    } else {
+        // A follower task joins an existing column and inherits its node. Normally the `node` argument is nullopt for
+        // copy tasks; the one exception is a stage that must run on a specific node regardless of the copy connection
+        // (a buffer-actor write - see StageNeedsLocalPlacement). In that case pin the whole shared column, and require
+        // it not to clash with an existing pin (e.g. the root being a scan already tied to a shard node).
+        Y_ENSURE(columnIdx < group.ColumnNodes.size(), "follower stage has more tasks than its group root");
+        if (node) {
+            const TNodeIdx nodeIdx = ResolveNodeIdx(*node);
+            auto& columnNode = group.ColumnNodes[columnIdx];
+            Y_ENSURE(!columnNode || *columnNode == nodeIdx,
+                "Cannot pin copy-group column " << columnIdx << " to node " << *node << ": already pinned to node "
+                    << NodeIdByIdx[*columnNode]);
+            columnNode = nodeIdx;
         }
     }
 
     CheckInvariants();
 }
 
-void TMaxTasksGraph::Shrink() {
-    if (Stages.empty() || Nodes.empty()) {
+// static
+void TMaxTasksGraph::PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx node) {
+    group.ColumnNodes.at(columnIdx) = node;
+}
+
+void TMaxTasksGraph::EstimateTasksResources() {
+    size_t totalTasks = 0;
+    for (const auto& stage : Stages) {
+        totalTasks += stage.Tasks.size();
+    }
+
+    for (auto& group : Groups) {
+        TColumnCost cost;
+        for (TStageIdx stageIdx : group.Stages) {
+            const auto& stage = Stages[stageIdx];
+            if (stage.Tasks.empty()) {
+                continue; // empty stage (e.g. a COPY of an empty input) contributes no task to the column.
+            }
+
+            TTaskResourceEstimation est;
+            est.ChannelBuffersCount = (stage.Info->InputsCount ? 1 : 0) + (stage.Info->OutputsCount ? 1 : 0);
+            est.HeavyProgram = stage.Info->Meta.GetStage(stage.Info->Id).GetProgram().GetSettings().GetHasMapJoin();
+            EstimateTaskResources(est, EstimationParams, totalTasks);
+
+            cost.Memory += est.TotalMemoryLimit;
+            cost.Tasks += 1; // one task of this stage per column.
+        }
+        group.ColumnCost = cost;
+    }
+}
+
+std::optional<TMaxTasksGraph::TNodeIdx> TMaxTasksGraph::LocalNodeIdx(const TPlacementParams& params) const {
+    if (params.ExecuterNodeId == 0) {
+        return std::nullopt;
+    }
+    auto it = NodeIds.find(params.ExecuterNodeId);
+    if (it == NodeIds.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+void TMaxTasksGraph::DistributeTasksToNodes(const TPlacementParams& params) {
+    if (NodesCount() == 0) {
         return;
     }
 
-    // TODO: verify that all stage groups have the same number of tasks.
-    // TODO: verify there is no empty stages.
+    const std::optional<TNodeIdx> executer = LocalNodeIdx(params);
+    if (executer) {
+        if (TryPlaceAllLocally(params, *executer)) {
+            CheckInvariants();
+            return;
+        }
+        PinTopStageLocally(params, *executer);
+    }
+
+    // Resource-aware placement first - and round-robin only when it can't fit everything.
+    // Pinned columns are kept by both paths (idempotent).
+    if (!DistributeByResources(params, executer)) {
+        DistributeRoundRobin();
+    }
+
+    CheckInvariants();
+}
+
+bool TMaxTasksGraph::TryPlaceAllLocally(const TPlacementParams& params, TNodeIdx executer) {
+    ui64 totalMemory = 0;
+    ui64 totalTasks = 0;
+    size_t freeColumns = 0;
+    std::set<TNodeIdx> pinnedNodes;
+    for (const auto& group : Groups) {
+        totalMemory += group.ColumnCost.Memory * group.ColumnNodes.size();
+        totalTasks += static_cast<ui64>(group.ColumnCost.Tasks) * group.ColumnNodes.size();
+        for (const auto& node : group.ColumnNodes) {
+            if (node) {
+                pinnedNodes.insert(*node);
+            } else {
+                ++freeColumns;
+            }
+        }
+    }
+
+    if (freeColumns == 0) {
+        return false; // nothing left to place locally; keep the already-pinned columns.
+    }
+
+    constexpr ui64 memoryOverflow = 2;
+    const ui64 nonParallelLimit = params.MayRunTasksLocally
+        ? params.MaxNonParallelDataQueryTasksLimit
+        : params.MaxNonParallelTasksExecutionLimit;
+
+    const bool singleNodeMakesSense = (totalTasks <= nonParallelLimit) || (pinnedNodes.size() == 1);
+    const bool fitsLocally = totalMemory * memoryOverflow <= params.LocalMemory
+        && totalTasks <= params.LocalExecutionUnits;
+
+    if (!fitsLocally || !singleNodeMakesSense) {
+        return false;
+    }
+
+    for (auto& group : Groups) {
+        for (auto& node : group.ColumnNodes) {
+            if (!node) {
+                node = executer;
+            }
+        }
+    }
+    return true;
+}
+
+void TMaxTasksGraph::PinTopStageLocally(const TPlacementParams& params, TNodeIdx executer) {
+    const auto stageLevel = [](const TStage& stage) {
+        return stage.Info->Meta.GetStage(stage.Info->Id).GetProgram().GetSettings().GetStageLevel();
+    };
+
+    std::optional<ui64> maxLevel;
+    for (const auto& stage : Stages) {
+        if (stage.Tasks.empty()) {
+            continue;
+        }
+        const ui64 level = stageLevel(stage);
+        if (!maxLevel || level > *maxLevel) {
+            maxLevel = level;
+        }
+    }
+    if (!maxLevel) {
+        return;
+    }
+
+    ui64 topTasks = 0;
+    for (const auto& stage : Stages) {
+        if (!stage.Tasks.empty() && stageLevel(stage) == *maxLevel) {
+            topTasks += stage.Tasks.size();
+        }
+    }
+
+    // More than the limit -> the top stage is parallel (not a merge/union-all collector); leave it to the spread.
+    if (topTasks > params.MaxNonParallelTopStageExecutionLimit) {
+        return;
+    }
+
+    for (const auto& stage : Stages) {
+        if (stage.Tasks.empty() || stageLevel(stage) != *maxLevel) {
+            continue;
+        }
+        auto& group = Groups[stage.Group];
+        for (size_t columnIdx = 0; columnIdx < stage.Tasks.size(); ++columnIdx) {
+            if (!group.ColumnNodes[columnIdx]) {
+                group.ColumnNodes[columnIdx] = executer; // free column of the collector stage -> executer node.
+            }
+        }
+    }
+}
+
+bool TMaxTasksGraph::DistributeByResources(const TPlacementParams& params, std::optional<TNodeIdx> executer) {
+    if (params.PreferLocalDatacenterExecution && executer) {
+        const TString& localDc = NodeResources[*executer].DataCenterId;
+        std::vector<bool> localDcNodes(NodesCount(), false);
+        size_t localCount = 0;
+        for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+            if (NodeResources[n].DataCenterId == localDc) {
+                localDcNodes[n] = true;
+                ++localCount;
+            }
+        }
+        if (localCount > 0 && localCount < NodesCount() && DistributeByResourcesOnNodes(localDcNodes)) {
+            return true;
+        }
+    }
+
+    return DistributeByResourcesOnNodes(std::vector<bool>(NodesCount(), true));
+}
+
+bool TMaxTasksGraph::DistributeByResourcesOnNodes(const std::vector<bool>& allowedNodes) {
+    // Task memory can grow during execution; reserve a bit more than the estimate (mirrors KqpPlanner).
+    constexpr double memoryOverflow = 1.2;
+
+    const auto memoryCost = [&](const TGroup& group) {
+        return static_cast<ui64>(group.ColumnCost.Memory * memoryOverflow);
+    };
+
+    // Working per-node budget, started from the snapshot and pre-charged with the already-pinned columns. Pinned columns
+    // charge their own node even if it is outside allowedNodes (their placement is fixed).
+    std::vector<ui64> freeMemory(NodesCount());
+    std::vector<ui32> freeTasks(NodesCount());
+    std::vector<size_t> tasksOnNode(NodesCount(), 0); // load metric for the spread tie-break.
+    for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+        freeMemory[n] = NodeResources[n].RemainsMemory;
+        freeTasks[n] = NodeResources[n].RemainsTasks;
+    }
+
+    std::vector<std::pair<TGroupIdx, size_t>> freeColumns; // (group, column index) of every column still to place.
+    for (TGroupIdx g = 0; g < Groups.size(); ++g) {
+        const auto& group = Groups[g];
+        for (size_t columnIdx = 0; columnIdx < group.ColumnNodes.size(); ++columnIdx) {
+            if (const auto& node = group.ColumnNodes[columnIdx]) {
+                const TNodeIdx n = *node;
+                freeMemory[n] -= std::min(freeMemory[n], memoryCost(group));
+                freeTasks[n] -= std::min<ui32>(freeTasks[n], group.ColumnCost.Tasks);
+                tasksOnNode[n] += group.ColumnCost.Tasks;
+            } else {
+                freeColumns.emplace_back(g, columnIdx);
+            }
+        }
+    }
+
+    // Place the heaviest columns first: harder-to-fit columns get the pick of the nodes (mirrors KqpPlanner). Stable, so
+    // equal-cost columns keep creation (group) order and stay contiguous per group - otherwise a small group's columns
+    // could interleave into a large sibling and perturb its otherwise-even spread.
+    std::ranges::stable_sort(freeColumns, [&](const auto& lhs, const auto& rhs) {
+        return Groups[lhs.first].ColumnCost.Memory > Groups[rhs.first].ColumnCost.Memory;
+    });
+
+    std::vector<TNodeIdx> placement(freeColumns.size()); // chosen node per free column; applied only if all fit.
+    for (size_t i = 0; i < freeColumns.size(); ++i) {
+        const auto& group = Groups[freeColumns[i].first];
+        const ui64 memNeed = memoryCost(group);
+        const ui32 taskNeed = group.ColumnCost.Tasks;
+
+        // A real column always holds at least one task; zero means EstimateTasksResources hasn't run (e.g. unit tests),
+        // so there is no resource signal to place by - fall back to round-robin.
+        if (taskNeed == 0) {
+            return false;
+        }
+
+        // Least-loaded fitting node among the allowed ones, tie-broken by most free memory, then most free task slots.
+        std::optional<TNodeIdx> best;
+        for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+            if (!allowedNodes[n] || freeMemory[n] < memNeed || freeTasks[n] < taskNeed) {
+                continue;
+            }
+            if (!best) {
+                best = n;
+            } else if (tasksOnNode[n] != tasksOnNode[*best]) {
+                if (tasksOnNode[n] < tasksOnNode[*best]) { best = n; }
+            } else if (freeMemory[n] != freeMemory[*best]) {
+                if (freeMemory[n] > freeMemory[*best]) { best = n; }
+            } else if (freeTasks[n] > freeTasks[*best]) {
+                best = n;
+            }
+        }
+
+        if (!best) {
+            return false; // doesn't fit anywhere - return without touching the placement.
+        }
+
+        placement[i] = *best;
+        freeMemory[*best] -= memNeed;
+        freeTasks[*best] -= taskNeed;
+        tasksOnNode[*best] += taskNeed;
+    }
+
+    for (size_t i = 0; i < freeColumns.size(); ++i) {
+        PlaceColumnOnNode(Groups[freeColumns[i].first], freeColumns[i].second, placement[i]);
+    }
+    return true;
+}
+
+void TMaxTasksGraph::DistributeRoundRobin() {
+    // Place every free column round-robin. Pinned columns already have a node and are left untouched (idempotent).
+    for (auto& group : Groups) {
+        TNodeIdx roundRobin = 0;
+        for (size_t columnIdx = 0; columnIdx < group.ColumnNodes.size(); ++columnIdx) {
+            if (!group.ColumnNodes[columnIdx]) {
+                PlaceColumnOnNode(group, columnIdx, roundRobin);
+                if (++roundRobin == NodesCount()) {
+                    roundRobin = 0;
+                }
+            }
+        }
+    }
+}
+
+std::vector<TMaxTasksGraph::TColumnsPerNode> TMaxTasksGraph::GroupColumns() const {
+    std::vector<TColumnsPerNode> result(Groups.size(), TColumnsPerNode(NodesCount(), 0));
+    for (TGroupIdx g = 0; g < Groups.size(); ++g) {
+        for (const auto& columnNode : Groups[g].ColumnNodes) {
+            Y_ENSURE(columnNode.has_value(), "Shrink before all columns are placed (call DistributeTasksToNodes first)");
+            result[g][*columnNode]++;
+        }
+    }
+    return result;
+}
+
+void TMaxTasksGraph::Shrink() {
+    if (Stages.empty() || NodesCount() == 0) {
+        return;
+    }
+
+    // TODO: verify that there are no empty stages.
+
+    const auto base = GroupColumns();
+
+    std::vector<size_t> columnsPerNode(NodesCount(), 0);
+    for (const auto& groupColumns : base) {
+        for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+            columnsPerNode[n] += groupColumns[n];
+        }
+    }
 
     double lo = 0.0;
     double hi = 1.0;
 
-    if (IsFeasible(hi) || !IsFeasible(lo)) {
+    if (IsFeasible(base, hi) || !IsFeasible(base, lo)) {
         return;
     }
 
-    // Binary search the global scale coefficient
+    // Binary search the global scale coefficient.
     const int maxIterations = 50;
-    const double epsilon = 1 / double(std::ranges::max(Nodes, {}, &TNode::TasksCount).TasksCount);
+    const double epsilon = 1 / double(*std::ranges::max_element(columnsPerNode));
 
     for (int i = 0; i < maxIterations && (hi - lo > epsilon); ++i) {
         double mid = (lo + hi) / 2.0;
-        if (IsFeasible(mid)) {
+        if (IsFeasible(base, mid)) {
             lo = mid;
         } else {
             hi = mid;
         }
     }
 
-    Tasks = std::move(LastFeasible);
+    // Apply the last feasible distribution: per group, keep the first LastFeasible[g][n] columns on each node (in
+    // creation order) and drop the rest - removing a column drops its task from every member stage at once.
+    for (TGroupIdx g = 0; g < Groups.size(); ++g) {
+        auto& group = Groups[g];
+        const auto& target = LastFeasible[g];
 
-    TasksPerStage.clear();
-    TasksPerStage.resize(Stages.size(), 0);
-    for (size_t stageIdx = 0; stageIdx < Tasks.size(); ++stageIdx) {
-        for (auto tasksPerNode : Tasks.at(stageIdx)) {
-            TasksPerStage.at(stageIdx) += tasksPerNode;
+        std::vector<size_t> kept(NodesCount(), 0);
+        std::vector<bool> survives(group.ColumnNodes.size(), false);
+        for (size_t columnIdx = 0; columnIdx < group.ColumnNodes.size(); ++columnIdx) {
+            const TNodeIdx n = *group.ColumnNodes[columnIdx];
+            if (kept[n] < target[n]) {
+                survives[columnIdx] = true;
+                kept[n]++;
+            }
+        }
+
+        std::vector<std::optional<TNodeIdx>> survivingColumns;
+        for (size_t columnIdx = 0; columnIdx < survives.size(); ++columnIdx) {
+            if (survives[columnIdx]) {
+                survivingColumns.push_back(group.ColumnNodes[columnIdx]);
+            }
+        }
+        group.ColumnNodes = std::move(survivingColumns);
+
+        for (TStageIdx stageIdx : group.Stages) {
+            auto& tasks = Stages[stageIdx].Tasks;
+            std::vector<ui64> survivingTasks;
+            for (size_t columnIdx = 0; columnIdx < survives.size(); ++columnIdx) {
+                if (survives[columnIdx]) {
+                    survivingTasks.push_back(tasks[columnIdx]);
+                }
+            }
+            tasks = std::move(survivingTasks);
+        }
+    }
+}
+
+void TMaxTasksGraph::PlaceTasks(TKqpTasksGraph& graph) {
+    auto& tasks = graph.GetTasks();
+
+    // Mark survivors: every task Id still referenced after Shrink.
+    std::vector<bool> survives(tasks.size() + 1, false);
+    for (const auto& stage : Stages) {
+        for (ui64 id : stage.Tasks) {
+            survives.at(id) = true;
+        }
+    }
+
+    // Rebuild the graph's task list keeping survivors, renumbering them so Ids stay contiguous.
+    TVector<TTask> compacted;
+    std::vector<ui64> idMap(tasks.size() + 1, 0); // old Id -> new Id (0 = removed)
+    for (auto& task : tasks) {
+        const ui64 oldId = task.Id;
+        if (survives[oldId]) {
+            auto& kept = compacted.emplace_back(std::move(task));
+            kept.Id = compacted.size();
+            idMap[oldId] = kept.Id;
+        }
+    }
+    tasks = std::move(compacted);
+
+    // Lay the surviving tasks into stageInfo.Tasks (node-major order), remapping Ids and stamping ExpectedNodeId. Every
+    // member stage of a group emits columns in the same order, so co-located tasks stay index-aligned across the group.
+    for (auto& stage : Stages) {
+        const auto& group = Groups[stage.Group];
+
+        // A column may be left unplaced when the placement pipeline is disabled: its tasks are laid into
+        // the stage in column (creation) order without an ExpectedNodeId, deferring the node choice to TKqpPlanner.
+        std::vector<std::vector<ui64>> byNode(NodesCount());
+        std::vector<ui64> unplaced;
+        for (size_t columnIdx = 0; columnIdx < stage.Tasks.size(); ++columnIdx) {
+            const ui64 id = idMap.at(stage.Tasks[columnIdx]);
+            if (const auto& node = group.ColumnNodes[columnIdx]) {
+                byNode[*node].push_back(id);
+            } else {
+                unplaced.push_back(id);
+            }
+        }
+
+        auto& stageTasks = stage.Info->Tasks;
+        stageTasks.clear();
+        for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+            for (ui64 id : byNode[n]) {
+                graph.GetTask(id).Meta.ExpectedNodeId = NodeIdByIdx[n];
+                stageTasks.push_back(id);
+            }
+        }
+        for (ui64 id : unplaced) {
+            stageTasks.push_back(id); // no ExpectedNodeId - placed later by TKqpPlanner.
+        }
+    }
+
+    // Check that tasks from one column are placed on the same node.
+    for (const auto& group : Groups) {
+        const auto& rootTasks = Stages[group.Root].Info->Tasks;
+        for (TStageIdx memberIdx : group.Stages) {
+            if (memberIdx == group.Root) {
+                continue;
+            }
+
+            const auto& memberTasks = Stages[memberIdx].Info->Tasks;
+            Y_ENSURE(memberTasks.size() == rootTasks.size(),
+                "Copy-group placement mismatch: root stage[" << group.Root << "] has " << rootTasks.size()
+                    << " tasks, but member stage[" << memberIdx << "] has " << memberTasks.size());
+
+            for (size_t i = 0; i < memberTasks.size(); ++i) {
+                const auto& rootNode = graph.GetTask(rootTasks[i]).Meta.ExpectedNodeId;
+                const auto& memberNode = graph.GetTask(memberTasks[i]).Meta.ExpectedNodeId;
+                if (!rootNode && !memberNode) {
+                    continue; // unplaced column (ShrinkTasks off): node choice deferred to TKqpPlanner.
+                }
+                Y_ENSURE(rootNode && memberNode && *rootNode == *memberNode,
+                    "Copy-group placement mismatch: root stage[" << group.Root << "] task[" << i << "] is on node "
+                        << (rootNode ? ToString(*rootNode) : TString("<none>")) << ", but member stage[" << memberIdx
+                        << "] task[" << i << "] (same column) is on node "
+                        << (memberNode ? ToString(*memberNode) : TString("<none>")));
+            }
         }
     }
 }
 
 size_t TMaxTasksGraph::GetStageTasksCount(const TStageId& stage, TNodeId node) const {
-    return Tasks.at(StageIds.at(stage)).at(NodeIds.at(node));
+    const auto& group = Groups.at(Stages.at(StageIds.at(stage)).Group);
+    const TNodeIdx nodeIdx = NodeIds.at(node);
+    size_t count = 0;
+    for (const auto& columnNode : group.ColumnNodes) {
+        if (columnNode == nodeIdx) {
+            count++;
+        }
+    }
+    return count;
 }
 
 size_t TMaxTasksGraph::GetStageTasksCount(const TStageId& stage) const {
-    return TasksPerStage.at(StageIds.at(stage));
+    return Stages.at(StageIds.at(stage)).Tasks.size();
 }
 
-void TMaxTasksGraph::Print() const {
-    auto& out = Cerr;
+bool TMaxTasksGraph::IsFeasible(const std::vector<TColumnsPerNode>& base, double alpha) const {
+    auto columns = ComputeScaledColumns(base, alpha);
 
-    out << "=== TMaxTasksGraph ===" << Endl;
-    out << "MaxChannelsCount: " << MaxChannelsCount << Endl;
-    out << Endl;
-
-    // Nodes
-    out << "--- Nodes (" << Nodes.size() << ") ---" << Endl;
-    for (const auto& [nodeId, nodeIdx] : NodeIds) {
-        const auto& node = Nodes.at(nodeIdx);
-        out << "  Node[" << nodeIdx << "] (id=" << nodeId << ")"
-            << " MaxChannels=" << node.MaxChannelsCount
-            << " TasksCount=" << node.TasksCount
-            << Endl;
-    }
-    out << Endl;
-
-    // Stages
-    out << "--- Stages (" << Stages.size() << ") ---" << Endl;
-    for (const auto& [stageId, stageIdx] : StageIds) {
-        const auto& stage = Stages[stageIdx];
-        const char* typeName = "UNKNOWN";
-        switch (stage.Type) {
-            case EStageType::FIXED: typeName = "FIXED"; break;
-            case EStageType::COPY:  typeName = "COPY";  break;
-            case EStageType::ANY:   typeName = "ANY";   break;
-        }
-
-        out << "  Stage[" << stageIdx << "] (txId=" << stageId.TxId << ", stageId=" << stageId.StageId << ")"
-            << " Type=" << typeName
-            << " Source=" << (stage.Source.has_value() ? ToString(*stage.Source) : "none")
-            << " RoundRobin=" << stage.RoundRobin
-            << " TotalTasks=" << TasksPerStage[stageIdx]
-            << Endl;
-
-        // Inputs
-        out << "    Inputs: [";
-        bool first = true;
-        for (auto inputIdx : Inputs[stageIdx]) {
-            if (!first) {
-                out << ", ";
-            }
-            out << inputIdx;
-            first = false;
-        }
-        out << "]" << Endl;
-
-        // Outputs
-        out << "    Outputs: [";
-        first = true;
-        for (auto outputIdx : Outputs[stageIdx]) {
-            if (!first) {
-                out << ", ";
-            }
-            out << outputIdx;
-            first = false;
-        }
-        out << "]" << Endl;
-
-        // Tasks per node
-        out << "    Tasks per node:";
-        if (stageIdx < Tasks.size() && !Tasks[stageIdx].empty()) {
-            for (size_t nodeIdx = 0; nodeIdx < Tasks[stageIdx].size(); ++nodeIdx) {
-                if (Tasks[stageIdx][nodeIdx] > 0) {
-                    out << " [node " << nodeIdx << "]=" << Tasks[stageIdx][nodeIdx];
-                }
-            }
-        } else {
-            out << " (empty)";
-        }
-        out << Endl;
-    }
-    out << Endl;
-
-    // LastFeasible distribution (if available)
-    if (!LastFeasible.empty()) {
-        out << "--- Last Feasible Distribution ---" << Endl;
-        for (size_t stageIdx = 0; stageIdx < LastFeasible.size(); ++stageIdx) {
-            out << "  Stage[" << stageIdx << "]:";
-            for (size_t nodeIdx = 0; nodeIdx < LastFeasible[stageIdx].size(); ++nodeIdx) {
-                if (LastFeasible[stageIdx][nodeIdx] > 0) {
-                    out << " [node " << nodeIdx << "]=" << LastFeasible[stageIdx][nodeIdx];
-                }
-            }
-            out << Endl;
-        }
-        out << Endl;
-    }
-
-    out << "=== End TMaxTasksGraph ===" << Endl;
-}
-
-bool TMaxTasksGraph::IsFeasible(double alpha) const {
-    auto tasks = ComputeScaledTasks(alpha);
-
-    for (TNodeId nodeId = 0; nodeId < Nodes.size(); ++nodeId) {
-        uint64_t channels = CountChannelsOnNode(tasks, nodeId);
-        if (channels > Nodes.at(nodeId).MaxChannelsCount) {
+    for (TNodeIdx nodeIdx = 0; nodeIdx < NodesCount(); ++nodeIdx) {
+        if (CountChannelsOnNode(columns, nodeIdx) > MaxChannelsCount) {
             return false;
         }
     }
 
-    LastFeasible = std::move(tasks);
+    LastFeasible = std::move(columns);
 
     return true;
 }
 
-std::vector<TMaxTasksGraph::TTasksPerNode> TMaxTasksGraph::ComputeScaledTasks(double alpha) const {
+std::vector<TMaxTasksGraph::TColumnsPerNode> TMaxTasksGraph::ComputeScaledColumns(const std::vector<TColumnsPerNode>& base, double alpha) const {
     if (alpha == 1.0) {
-        return Tasks;
+        return base;
     }
 
-    std::vector<TTasksPerNode> result(Stages.size());
-    std::unordered_map<TStageIdx, size_t> scaledTotals;
-
-    for (TStageIdx stageId = 0; stageId < Stages.size(); ++stageId) {
-        TStageIdx root = Stages[stageId].Source.value_or(stageId);
-
-        if (Stages[root].Type == FIXED) {
-            result[stageId] = Tasks[stageId];
-            continue;
-        }
-
-        auto rootIt = scaledTotals.find(root);
-        if (rootIt == scaledTotals.end()) {
-            auto rootTotal = std::accumulate(Tasks[root].begin(), Tasks[root].end(), size_t{0});
-            rootIt = scaledTotals.emplace(root, std::max<size_t>(rootTotal * alpha, 1)).first;
-        }
-
-        auto targetTotal = rootIt->second;
-        auto stageTotal = TasksPerStage[stageId];
-        auto stageAlpha = targetTotal / double(stageTotal);
-
-        result[stageId] = ScaleTasks(stageId, stageAlpha);
+    // Groups are independent placement units: a FIXED group keeps its columns, any other group is scaled by alpha.
+    // (Copy stages don't need special handling here - they share their group's columns by construction.)
+    std::vector<TColumnsPerNode> result(Groups.size());
+    for (TGroupIdx g = 0; g < Groups.size(); ++g) {
+        result[g] = Groups[g].Fixed ? base[g] : ScaleColumns(base[g], alpha);
     }
-
     return result;
 }
 
-TMaxTasksGraph::TTasksPerNode TMaxTasksGraph::ScaleTasks(TStageIdx stageId, double alpha) const {
-    const auto& origin = Tasks[stageId];
+TMaxTasksGraph::TColumnsPerNode TMaxTasksGraph::ScaleColumns(const TColumnsPerNode& origin, double alpha) const {
     const size_t nodeCount = origin.size();
-    TMaxTasksGraph::TTasksPerNode result(nodeCount, 0);
+    TColumnsPerNode result(nodeCount, 0);
 
-    size_t oldTotal = TasksPerStage[stageId];
+    const size_t oldTotal = Total(origin);
     if (oldTotal == 0) {
         return result;
     }
 
-    size_t newTotal = std::max<size_t>(oldTotal * alpha, 1);
+    const size_t newTotal = std::max<size_t>(oldTotal * alpha, 1);
 
     std::vector<double> fractions(nodeCount);
     for (size_t j = 0; j < nodeCount; ++j) {
@@ -328,7 +640,7 @@ TMaxTasksGraph::TTasksPerNode TMaxTasksGraph::ScaleTasks(TStageIdx stageId, doub
         fractions[j] = scaled - result[j];
     }
 
-    size_t currentTotal = std::accumulate(result.begin(), result.end(), size_t{0});
+    size_t currentTotal = Total(result);
     size_t remainder = (newTotal > currentTotal) ? (newTotal - currentTotal) : 0;
 
     if (remainder > 0) {
@@ -354,30 +666,32 @@ TMaxTasksGraph::TTasksPerNode TMaxTasksGraph::ScaleTasks(TStageIdx stageId, doub
     return result;
 }
 
-ui64 TMaxTasksGraph::CountChannelsOnNode(const std::vector<TTasksPerNode>& tasks, TNodeId nodeId) const {
+size_t TMaxTasksGraph::CountChannelsOnNode(const std::vector<TColumnsPerNode>& columns, TNodeIdx nodeIdx) const {
+    std::vector<size_t> groupTotal(columns.size());
+    for (TGroupIdx g = 0; g < columns.size(); ++g) {
+        groupTotal[g] = Total(columns[g]);
+    }
+
     ui64 totalChannels = 0;
 
-    for (TStageIdx stageId = 0; stageId < Stages.size(); ++stageId) {
-        auto tasksOnNode = tasks[stageId][nodeId];
+    for (TStageIdx stageIdx = 0; stageIdx < Stages.size(); ++stageIdx) {
+        const auto& stage = Stages[stageIdx];
+        const auto tasksOnNode = columns[stage.Group][nodeIdx];
         if (tasksOnNode == 0) {
             continue;
         }
 
         ui64 channelsPerTask = 0;
 
-        for (TStageIdx input : Inputs[stageId]) {
-            if (Stages[stageId].Source && *Stages[stageId].Source == input) {
-                channelsPerTask += 1;
-            } else {
-                channelsPerTask += std::accumulate(tasks[input].begin(), tasks[input].end(), size_t{0});
-            }
+        // An edge within the same group is a copy connection: 1 local channel per task (the paired task is co-located).
+        // An edge to another group is a full mesh: a channel to every task of the other stage.
+        for (TStageIdx input : stage.Inputs) {
+            const TGroupIdx inputGroup = Stages[input].Group;
+            channelsPerTask += (inputGroup == stage.Group) ? 1 : groupTotal[inputGroup];
         }
-        for (TStageIdx output : Outputs[stageId]) {
-            if (Stages[output].Source && *Stages[output].Source == stageId) {
-                channelsPerTask += 1;
-            } else {
-                channelsPerTask += std::accumulate(tasks[output].begin(), tasks[output].end(), size_t{0});
-            }
+        for (TStageIdx output : stage.Outputs) {
+            const TGroupIdx outputGroup = Stages[output].Group;
+            channelsPerTask += (outputGroup == stage.Group) ? 1 : groupTotal[outputGroup];
         }
 
         totalChannels += tasksOnNode * channelsPerTask;
@@ -386,121 +700,132 @@ ui64 TMaxTasksGraph::CountChannelsOnNode(const std::vector<TTasksPerNode>& tasks
     return totalChannels;
 }
 
-void TMaxTasksGraph::CheckInvariants() const {
-    // --- 1) Согласованность размеров основных контейнеров ---
-    Y_ENSURE(Nodes.size()  == NodeIds.size(),
-        "Nodes/NodeIds size mismatch: " << Nodes.size() << " vs " << NodeIds.size());
-    Y_ENSURE(Stages.size() == StageIds.size(),
-        "Stages/StageIds size mismatch: " << Stages.size() << " vs " << StageIds.size());
-    Y_ENSURE(Stages.size() == Inputs.size(),
-        "Stages/Inputs size mismatch: " << Stages.size() << " vs " << Inputs.size());
-    Y_ENSURE(Stages.size() == Outputs.size(),
-        "Stages/Outputs size mismatch: " << Stages.size() << " vs " << Outputs.size());
-    Y_ENSURE(Stages.size() == Tasks.size(),
-        "Stages/Tasks size mismatch: " << Stages.size() << " vs " << Tasks.size());
-    Y_ENSURE(Stages.size() == TasksPerStage.size(),
-        "Stages/TasksPerStage size mismatch: " << Stages.size() << " vs " << TasksPerStage.size());
+TString TMaxTasksGraph::DumpToString() const {
+    TStringStream out;
 
-    // --- 2) NodeIds: значения - валидные индексы в Nodes, без дыр ---
-    {
-        std::vector<bool> seenNode(Nodes.size(), false);
-        for (const auto& [nodeId, idx] : NodeIds) {
-            Y_ENSURE(idx < Nodes.size(),
-                "NodeIds entry (nodeId=" << nodeId << ") has out-of-range idx=" << idx);
-            Y_ENSURE(!seenNode[idx],
-                "NodeIds has duplicate idx=" << idx << " (nodeId=" << nodeId << ")");
-            seenNode[idx] = true;
-        }
-        for (size_t i = 0; i < Nodes.size(); ++i) {
-            Y_ENSURE(seenNode[i], "Node idx=" << i << " is not present in NodeIds");
-        }
+    out << "=== TMaxTasksGraph ===" << Endl;
+    out << "MaxChannelsCount: " << MaxChannelsCount << Endl;
+
+    out << "--- Nodes (" << NodesCount() << ") ---" << Endl;
+    for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+        const auto& res = NodeResources[n];
+        out << "  Node[" << n << "] (id=" << NodeIdByIdx[n] << ")"
+            << " Memory=" << res.RemainsMemory
+            << " Tasks=" << res.RemainsTasks
+            << " DC=" << res.DataCenterId
+            << Endl;
     }
 
-    // --- 3) StageIds: значения - валидные индексы в Stages, без дыр ---
-    {
-        std::vector<bool> seenStage(Stages.size(), false);
-        for (const auto& [stageKey, idx] : StageIds) {
-            Y_ENSURE(idx < Stages.size(),
-                "StageIds entry (txId=" << stageKey.TxId << ", stageId=" << stageKey.StageId
-                << ") has out-of-range idx=" << idx);
-            Y_ENSURE(!seenStage[idx],
-                "StageIds has duplicate idx=" << idx);
-            seenStage[idx] = true;
-        }
-        for (size_t i = 0; i < Stages.size(); ++i) {
-            Y_ENSURE(seenStage[i], "Stage idx=" << i << " is not present in StageIds");
-        }
-    }
-
-    // --- 4) Ширина каждой строки Tasks равна числу нод ---
-    for (size_t s = 0; s < Tasks.size(); ++s) {
-        Y_ENSURE(Tasks[s].size() == Nodes.size(),
-            "Tasks[" << s << "].size()=" << Tasks[s].size()
-            << " != Nodes.size()=" << Nodes.size());
-    }
-
-    // --- 5) Stage.Source и Stage.RoundRobin ---
-    for (size_t s = 0; s < Stages.size(); ++s) {
+    out << "--- Stages (" << Stages.size() << ") ---" << Endl;
+    for (TStageIdx s = 0; s < Stages.size(); ++s) {
         const auto& stage = Stages[s];
+        const char* typeName = stage.Type == FIXED ? "FIXED" : (stage.Type == COPY ? "COPY" : "ANY");
+
+        out << "  Stage[" << s << "] (" << stage.Info->Id << ")"
+            << " Type=" << typeName
+            << " Group=" << stage.Group
+            << " TotalTasks=" << stage.Tasks.size()
+            << Endl;
+        out << "    Inputs: [" << JoinSeq(", ", stage.Inputs) << "]" << Endl;
+        out << "    Outputs: [" << JoinSeq(", ", stage.Outputs) << "]" << Endl;
+
+        // Node histogram: tasks-on-a-node -> number of nodes hosting that many tasks of the stage. Same diagram the
+        // tests assert via TTaskDistribution::NodeHistogram, so its output can be transcribed straight into the
+        // per-stage expected tables.
+        const auto& group = Groups[stage.Group];
+        THashMap<TNodeIdx, size_t> perNode;
+        for (size_t c = 0; c < stage.Tasks.size() && c < group.ColumnNodes.size(); ++c) {
+            if (const auto& node = group.ColumnNodes[c]) {
+                perNode[*node]++;
+            }
+        }
+        std::map<size_t, size_t> histogram; // tasksOnNode -> nodeCount, ordered for stable output.
+        for (const auto& [node, count] : perNode) {
+            histogram[count]++;
+        }
+        out << "    Node histogram (tasksOnNode -> nodes): {";
+        bool first = true;
+        for (const auto& [tasksOnNode, nodeCount] : histogram) {
+            out << (first ? " " : ", ") << tasksOnNode << " -> " << nodeCount;
+            first = false;
+        }
+        out << " }" << Endl;
+    }
+
+    out << "--- Groups (" << Groups.size() << ") ---" << Endl;
+    for (TGroupIdx g = 0; g < Groups.size(); ++g) {
+        const auto& group = Groups[g];
+        out << "  Group[" << g << "] Root=" << group.Root << (group.Fixed ? " FIXED" : "")
+            << " Columns=" << group.ColumnNodes.size()
+            << " ColumnCost={mem=" << group.ColumnCost.Memory << ", tasks=" << group.ColumnCost.Tasks << "}"
+            << Endl;
+        out << "    Columns per node:";
+        TColumnsPerNode perNode(NodesCount(), 0);
+        for (const auto& columnNode : group.ColumnNodes) {
+            if (columnNode) {
+                perNode[*columnNode]++;
+            }
+        }
+        for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+            if (perNode[n] > 0) {
+                out << " [node " << n << "]=" << perNode[n];
+            }
+        }
+        out << Endl;
+    }
+
+    out << "=== End TMaxTasksGraph ===" << Endl;
+
+    return out.Str();
+}
+
+void TMaxTasksGraph::CheckInvariants() const {
+    Y_ENSURE(NodeIds.size() == NodeIdByIdx.size(),
+        "NodeIds/NodeIdByIdx size mismatch: " << NodeIds.size() << " vs " << NodeIdByIdx.size());
+    Y_ENSURE(NodeResources.size() == NodeIdByIdx.size(),
+        "NodeResources/NodeIdByIdx size mismatch: " << NodeResources.size() << " vs " << NodeIdByIdx.size());
+    Y_ENSURE(StageIds.size() == Stages.size(),
+        "StageIds/Stages size mismatch: " << StageIds.size() << " vs " << Stages.size());
+
+    for (TStageIdx s = 0; s < Stages.size(); ++s) {
+        const auto& stage = Stages[s];
+
+        Y_ENSURE(stage.Info, "Stage[" << s << "] has no StageInfo");
+        Y_ENSURE(StageIds.at(stage.Info->Id) == s, "StageIds/Stages mismatch for stage idx " << s);
+        Y_ENSURE(stage.Group < Groups.size(), "Stage[" << s << "].Group=" << stage.Group << " out of range");
+
+        const auto& group = Groups[stage.Group];
+        // While a stage is being filled its tasks grow up to the group's column count; the root grows in lockstep.
+        Y_ENSURE(stage.Tasks.size() <= group.ColumnNodes.size(),
+            "Stage[" << s << "] has more tasks (" << stage.Tasks.size() << ") than its group columns (" << group.ColumnNodes.size() << ")");
+        if (s == group.Root) {
+            Y_ENSURE(stage.Tasks.size() == group.ColumnNodes.size(),
+                "Root stage[" << s << "] tasks (" << stage.Tasks.size() << ") != group columns (" << group.ColumnNodes.size() << ")");
+            Y_ENSURE(!stage.Source.has_value(), "Root stage[" << s << "] must not have a Source");
+        }
+
+        // Source (group leader): points backwards, is never a COPY (normalized in AddStage), shares the same group.
         if (stage.Source) {
-            Y_ENSURE(*stage.Source < s,
-                "Stage[" << s << "].Source=" << *stage.Source << " must be < " << s);
-            // После нормализации в AddStage Source никогда не должен указывать на COPY.
-            Y_ENSURE(Stages[*stage.Source].Type != COPY,
-                "Stage[" << s << "].Source=" << *stage.Source << " points to a COPY stage");
-            // У COPY должен быть Source; у не-COPY (после AddStage) — он опционален.
+            Y_ENSURE(*stage.Source < s, "Stage[" << s << "].Source=" << *stage.Source << " must be < " << s);
+            Y_ENSURE(Stages[*stage.Source].Type != COPY, "Stage[" << s << "].Source points to a COPY stage");
+            Y_ENSURE(Stages[*stage.Source].Group == stage.Group, "Stage[" << s << "] is not in its Source's group");
         }
         if (stage.Type == COPY) {
-            Y_ENSURE(stage.Source.has_value(),
-                "COPY Stage[" << s << "] has no Source");
+            Y_ENSURE(stage.Source.has_value(), "COPY Stage[" << s << "] has no Source");
         }
-        Y_ENSURE(!Nodes.empty() ? stage.RoundRobin < Nodes.size() : stage.RoundRobin == 0,
-            "Stage[" << s << "].RoundRobin=" << stage.RoundRobin
-            << " out of range (Nodes.size()=" << Nodes.size() << ")");
-    }
 
-    // --- 6) Inputs/Outputs: индексы валидны, DAG topologически упорядочен, симметрия ---
-    for (size_t s = 0; s < Stages.size(); ++s) {
-        for (auto in : Inputs[s]) {
-            Y_ENSURE(in < Stages.size(),
-                "Inputs[" << s << "] has out-of-range idx=" << in);
-            Y_ENSURE(in < s,
-                "Inputs[" << s << "]=" << in << " must be < " << s << " (topological order)");
-            // Должна быть встречная запись в Outputs[in]
-            const auto& outs = Outputs[in];
+        // Inputs/Outputs: topologically ordered and symmetric.
+        for (TStageIdx in : stage.Inputs) {
+            Y_ENSURE(in < s, "Inputs[" << s << "]=" << in << " must be < " << s << " (topological order)");
+            const auto& outs = Stages[in].Outputs;
             Y_ENSURE(std::ranges::find(outs, s) != outs.end(),
-                "Inputs[" << s << "] contains " << in
-                << " but Outputs[" << in << "] does not contain " << s);
+                "Inputs[" << s << "] contains " << in << " but Outputs[" << in << "] does not contain " << s);
         }
-        for (auto out : Outputs[s]) {
-            Y_ENSURE(out < Stages.size(),
-                "Outputs[" << s << "] has out-of-range idx=" << out);
-            Y_ENSURE(out > s,
-                "Outputs[" << s << "]=" << out << " must be > " << s << " (topological order)");
-            const auto& ins = Inputs[out];
+        for (TStageIdx out : stage.Outputs) {
+            Y_ENSURE(out > s, "Outputs[" << s << "]=" << out << " must be > " << s << " (topological order)");
+            const auto& ins = Stages[out].Inputs;
             Y_ENSURE(std::ranges::find(ins, s) != ins.end(),
-                "Outputs[" << s << "] contains " << out
-                << " but Inputs[" << out << "] does not contain " << s);
-        }
-    }
-
-    // --- 7) TasksPerStage == sum(Tasks[s]); агрегаты по нодам совпадают с Nodes[n].TasksCount ---
-    {
-        std::vector<size_t> perNode(Nodes.size(), 0);
-        for (size_t s = 0; s < Stages.size(); ++s) {
-            size_t rowSum = 0;
-            for (size_t n = 0; n < Nodes.size(); ++n) {
-                rowSum += Tasks[s][n];
-                perNode[n] += Tasks[s][n];
-            }
-            Y_ENSURE(rowSum == TasksPerStage[s],
-                "TasksPerStage[" << s << "]=" << TasksPerStage[s]
-                << " != sum(Tasks[" << s << "])=" << rowSum);
-        }
-        for (size_t n = 0; n < Nodes.size(); ++n) {
-            Y_ENSURE(perNode[n] == Nodes.at(n).TasksCount,
-                "Nodes[" << n << "].TasksCount=" << Nodes.at(n).TasksCount
-                << " != sum over stages=" << perNode[n]);
+                "Outputs[" << s << "] contains " << out << " but Inputs[" << out << "] does not contain " << s);
         }
     }
 }

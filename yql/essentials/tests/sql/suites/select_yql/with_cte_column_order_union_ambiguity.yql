@@ -1,0 +1,10 @@
+/* custom error: No column order at source to match pattern (a, b) */
+
+PRAGMA YqlSelect = 'force';
+
+WITH x (a, b) AS (
+    SELECT 1 AS a, '2' AS b
+    UNION ALL
+    SELECT '22' AS b, 11 AS a
+)
+SELECT * FROM x;

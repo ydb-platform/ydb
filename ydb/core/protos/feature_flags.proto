@@ -137,7 +137,7 @@ message TFeatureFlags {
     reserved 111; // UseVDisksBalancing
     optional bool EnableViews = 112 [default = true];
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
-    optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
+    optional bool EnableAccessServiceBulkAuthorization = 114 [default = true];
     optional bool EnableAddColumsWithDefaults = 115 [default = true];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = true];
     optional bool EnableCMSRequestPriorities = 117 [default = true];
@@ -162,7 +162,8 @@ message TFeatureFlags {
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
     optional bool EnableGranularTimecast = 137 [default = true];
     optional bool EnableAlterShardingInColumnShard = 138 [default = false];
-    optional bool EnablePgSyntax = 139 [default = false];
+    reserved 139; // EnablePgSyntax
+    reserved "EnablePgSyntax";
     optional bool EnableTieringInColumnShard = 140 [default = false];
     optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
     optional bool EnableOlapCompression = 142 [default = true];
@@ -205,20 +206,21 @@ message TFeatureFlags {
     optional bool EnableLoginCache = 178 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
+    // Implies EnableExportFiltering.
     optional bool EnableEncryptedExport = 181 [default = false];
     optional bool EnableAlterDatabase = 182 [default = false];
     optional bool EnableExportAutoDropping = 183 [default = true];
     optional bool EnableThrottlingReport = 184 [default = true];
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = true];
     optional bool EnableAccessToIndexImplTables = 186 [default = true];
-    optional bool EnableAddUniqueIndex = 187 [default = false];
+    optional bool EnableAddUniqueIndex = 187 [default = true];
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     reserved 189; // RequireDbPrefixInSecretName
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
-    optional bool EnableArrowResultSetFormat = 194 [default = true];
+    optional bool EnableArrowResultSetFormat = 194 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = true];
     optional bool EnableTopicCompactificationByKey = 196 [default = true];
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
@@ -236,10 +238,10 @@ message TFeatureFlags {
     optional bool EnableCompileCacheView = 209 [default = true];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = true];
-    optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
+    optional bool EnableTopicMessageLevelParallelism = 212 [default = true];
     optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
-    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
+    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableColumnTablesBackup = 216 [default = true];
     optional bool EnableReplication = 217 [default = true];
     optional bool EnableShuttingDownNodeState = 218 [default = true];
@@ -249,7 +251,7 @@ message TFeatureFlags {
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableCmsLocksPriority = 223 [default = false];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
-    optional bool EnableTruncateTable = 225 [default = true];
+    reserved 225; // EnableTruncateTable
     optional bool EnableTopicsSqlIoOperations = 226 [default = true];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
@@ -258,7 +260,7 @@ message TFeatureFlags {
     optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
-    optional bool EnableSetDropDefaultValue = 234 [default = true];
+    optional bool EnableSetDropDefaultValue = 234 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
@@ -282,7 +284,7 @@ message TFeatureFlags {
     optional bool EnableDataShardSplitHistogramSorting = 244 [default = true];
     optional bool EnableDataShardSplitKeySelection = 245 [default = true];
     optional bool EnableDataShardSplitHistogramOmission = 246 [default = true];
-    optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
+    optional bool EnableOnlineAddUniqueIndex = 247 [default = true];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableCsDictionaryEncoding = 249 [default = true];
     optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
@@ -294,7 +296,7 @@ message TFeatureFlags {
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
-    optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+    reserved 259; // ForbidDiscoveryInnerDbPaths
     optional bool EnableStreamingQueryDisposition = 260 [default = true];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
@@ -313,13 +315,70 @@ message TFeatureFlags {
     optional bool EnableTablePartitionsFormatShardIdx = 271 [default = false];
     optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
     optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
-    optional bool EnableTopicMessagesBatching = 274 [default = false];
-    optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
+    optional bool EnableTopicMessagesBatching = 274 [default = false, (RequireRestart) = true];
+    optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false, (RequireRestart) = true];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
-    optional bool EnableCompactFulltextIndex = 280 [default = false];
+    optional bool EnableCompactFulltextIndex = 280 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
-    optional bool EnableFulltextIndexPrefix = 282 [default = false];
+    optional bool EnableFulltextIndexPrefix = 282 [default = true];
+    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
+    optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
+    optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
+    optional bool EnableTopicDeferredPublish = 286 [default = false];
+    optional bool EnableConfiguredBootstrapper = 287 [default = false, (RequireRestart) = true];
+    optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = true];
+    // Guards using the synthetic __ydb_row_id column as doc_id for fulltext/JSON indexes over tables
+    // whose primary key is not a single integer. When OFF, no __ydb_row_id column or its unique index
+    // is used or auto-provisioned, and such indexes fall back to requiring a single integer primary key.
+    optional bool EnableFulltextIndexRowId = 289 [default = true];
+    optional bool EnableForcedColumnCompactions = 290 [default = false];
+    optional bool EnableExportFiltering = 291 [default = false];
+    optional bool EnableNodeBrokerLongLease = 292 [default = false];
+    optional bool EnableExportInParquet = 293 [default = false];
+    optional bool EnableCutHistory = 294 [default = false];
+    optional bool DisableOldSecretCreation = 295 [default = false];
+    optional bool EnableColumnshardInterval = 296 [default = true];
+    optional bool EnableColumnshardUuid = 297 [default = true];
+    optional bool EnableColumnshardDyNumber = 298 [default = true];
+    optional bool EnableDataShardDirectPartImport = 299 [default = false];
+    // For test purposes only, may cause persistent system failure if enabled
+    optional bool BsControllerRestartBeforeCompatibilityInfoUpdate = 300 [default = false];
+    optional bool EnableIdmPermissionsManagement = 301 [default = false];
+    // Disables accumulating the SSD-system component of FileStore (filesystem) space into the
+    // owning domain's allocated counter. FileStore shards are resized to the final filesystem
+    // size (up to petabytes), with thousands of shards the per-domain ui64 counter can overflow.
+    // RequireRestart: the in-memory counter is rebuilt from all FileStores at SchemeShard start,
+    // the counter can be re-enabled, which requires restarting the SchemeShard tablet.
+    optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
+    optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = true];
+    optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = true];
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
+    optional bool DisableOldSecrets = 306 [default = false];
+    optional bool EnableKafkaServerlessTransactions = 307 [default = false];
+    optional bool EnableGeneratedStored = 308 [default = false];
+    optional bool EnableGeneratedVirtual = 309 [default = false];
+    optional bool EnableTxIdInStats = 310 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
+    optional bool EnableCsFlowControl = 312 [default = true];
+    // Keys SourceId→Partition mapping by a unique topic Id (UUID) instead of the topic name,
+    // so that deleting and recreating a topic with the same name does not inherit stale mappings.
+    optional bool EnableTopicSourceIdMappingById = 313 [default = false];
+    optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
+    optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
+    optional bool EnableUpdatingPartitionsOnStreamingQueryRestart = 316 [default = false];
+    // Offloads TEvDataShard::TEvPeriodicTableStats parsing to a dedicated aux actor to reduce
+    // SchemeShard's single-threaded load.
+    optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
+    optional bool EnableTruncateColumnTable = 318 [default = false];
+    optional bool EnableSuperLemmer = 319 [default = false];
+    optional bool EnableImportInParquet = 320 [default = false];
+    optional bool EnableS3Scheduling = 321 [default = false];
+    optional bool EnableInsecureMirrorFactory = 322 [default = false];
+    optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
+    // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
+    // size-class slots. Reads of the stripe format work even when this flag is off.
+    optional bool EnableVDiskHeapAllocator = 324 [default = false];
 }

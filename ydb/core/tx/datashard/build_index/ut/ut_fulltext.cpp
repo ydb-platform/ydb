@@ -197,13 +197,13 @@ namespace NKikimr {
             }, "Error: Unknown snapshot", true);
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.ClearSnapshotStep();
-            }, "{ <main>: Error: Missing snapshot }");
+            }, "Error: Unknown snapshot", true);
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.SetSnapshotTxId(request.GetSnapshotTxId() + 1);
             }, "Error: Unknown snapshot", true);
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.ClearSnapshotTxId();
-            }, "{ <main>: Error: Missing snapshot }");
+            }, "Error: Unknown snapshot", true);
 
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.clear_settings();
@@ -236,6 +236,24 @@ namespace NKikimr {
                 request.ClearIndexName();
                 request.AddDataColumns("some");
             }, "[ { <main>: Error: Empty index table name } { <main>: Error: Unknown data column: some } ]");
+        }
+
+        Y_UNIT_TEST(BuildWithSuperLemmerReportsUnavailableInOpenSource) {
+            TPortManager pm;
+            TServerSettings serverSettings(pm.GetPort(2134));
+            serverSettings.SetDomainName("Root");
+
+            Tests::TServer::TPtr server = new TServer(serverSettings);
+            auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+            Setup(server, sender);
+
+            DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+                auto* analyzers = request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers();
+                analyzers->set_use_filter_superlemmer(true);
+                analyzers->set_language("russian");
+            }, "{ <main>: Error: Scan failed Superlemmer can't be enabled in opensource ydb build }", false,
+                NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }
 
         Y_UNIT_TEST(Build) {
@@ -1072,13 +1090,13 @@ key = 4, data = (empty maybe), __ydb_length = 2
                 Cerr << "Docs:" << Endl;
                 Cerr << docs << Endl;
                 if (keyType[0] == 'U') {
-                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x41\x02\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 2, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x01\x41\x02\x01\n\
+__ydb_token = blue, __ydb_generation = 18446744073709551615, __ydb_max_id = 2, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_generation = 18446744073709551615, __ydb_max_id = 1, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x03\n\
 ");
                     UNIT_ASSERT_VALUES_EQUAL(docs, R"(key = 1, data = (empty maybe), __ydb_length = 2
 key = 2, data = (empty maybe), __ydb_length = 5
@@ -1086,13 +1104,13 @@ key = 3, data = (empty maybe), __ydb_length = 2
 key = 4, data = (empty maybe), __ydb_length = 2
 )");
                 } else {
-                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\x41\x02\x04\n\
-__ydb_token = blue, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\n\
-__ydb_token = green, __ydb_max_id = -2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
-__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x05\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x06\n\
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = -1, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x03\x41\x02\x04\n\
+__ydb_token = blue, __ydb_generation = 18446744073709551615, __ydb_max_id = -1, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = car, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_generation = 18446744073709551615, __ydb_max_id = -2, __ydb_added = 1, __ydb_segment = \x03\n\
+__ydb_token = red, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x01\x05\n\
+__ydb_token = yellow, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x06\n\
 ");
                     UNIT_ASSERT_VALUES_EQUAL(docs, R"(key = -2, data = (empty maybe), __ydb_length = 2
 key = -1, data = (empty maybe), __ydb_length = 5
@@ -1102,22 +1120,22 @@ key = 4, data = (empty maybe), __ydb_length = 2
                 }
             } else {
                 if (keyType[0] == 'U') {
-                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 2, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
+__ydb_token = blue, __ydb_generation = 18446744073709551615, __ydb_max_id = 2, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_generation = 18446744073709551615, __ydb_max_id = 1, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x03\n\
 ");
                 } else {
-                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\x01\x04\n\
-__ydb_token = blue, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\n\
-__ydb_token = green, __ydb_max_id = -2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
-__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x05\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x06\n\
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = -1, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x03\x01\x04\n\
+__ydb_token = blue, __ydb_generation = 18446744073709551615, __ydb_max_id = -1, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = car, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_generation = 18446744073709551615, __ydb_max_id = -2, __ydb_added = 1, __ydb_segment = \x03\n\
+__ydb_token = red, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x01\x05\n\
+__ydb_token = yellow, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x06\n\
 ");
                 }
             }

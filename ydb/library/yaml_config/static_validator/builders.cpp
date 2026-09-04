@@ -3,10 +3,17 @@
 #include <ydb/library/yaml_config/validator/validator_checks.h>
 #include <ydb/library/yaml_config/validator/configurators.h>
 
+#include <util/generic/hash_set.h>
+#include <util/string/builder.h>
+
+#include <limits>
+
 namespace NKikimr {
 
 using namespace NYamlConfig::NValidator;
 using namespace NYamlConfig::NValidator::Configurators;
+
+constexpr i64 MaxExecutorPoolId = std::numeric_limits<ui8>::max();
 
 TArrayBuilder HostConfigBuilder() {
   return TArrayBuilder([](auto& hostsConfig) {
@@ -160,6 +167,9 @@ TMapBuilder ActorSystemConfigBuilder() {
     .Bool("use_auto_config", [](auto& useAutoConfig){
       useAutoConfig.Optional();
     })
+    .Bool("use_shared_threads", [](auto& useSharedThreads){
+      useSharedThreads.Optional();
+    })
     .Enum("node_type", [](auto& nodeType){
       nodeType
       .SetItems({"STORAGE", "COMPUTE", "HYBRID"})
@@ -175,13 +185,37 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Optional()
       .MapItem([](auto& executorItem){
         executorItem
-        .Enum("name", {"System", "User", "Batch", "IO", "IC"})
+        .String("name")
         .Int64("spin_threshold", [](auto& spinThreshold){
           spinThreshold
           .Min(0)
           .Optional();
         })
-        .Int64("threads", nonNegative())
+        .Int64("threads", [](auto& threads){
+          threads
+          .Optional()
+          .Min(0);
+        })
+        .Int64("placement", [](auto& placement){
+          placement
+          .Optional()
+          .Min(0);
+        })
+        .Map("affinity", [](auto& affinity){
+          affinity
+          .Optional()
+          .Array("x", [](auto& cpus){
+            cpus
+            .Optional()
+            .Int64Item(nonNegative());
+          })
+          .String("cpu_list", [](auto& cpuList){
+            cpuList.Optional();
+          })
+          .String("exclude_cpu_list", [](auto& excludeCpuList){
+            excludeCpuList.Optional();
+          });
+        })
         .Int64("max_threads", [](auto& maxThreads){
           maxThreads
           .Optional()
@@ -192,12 +226,70 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Min(0)
           .Optional();
         })
+        .Int64("harmonizer_needy_cpu_window_seconds", [](auto& window){
+          window
+          .Range(1, 32)
+          .Optional();
+        })
         .Int64("time_per_mailbox_micro_secs", [](auto& timePerMailboxMicroSecs){
           timePerMailboxMicroSecs
           .Optional()
           .Min(0);
         })
-        .Enum("type", {"IO", "BASIC"});
+        .Enum("type", {"IO", "BASIC"})
+        .AddCheck("Executor placement settings", [](auto& executorContext) {
+          auto node = executorContext.Node();
+          executorContext.Expect(node["threads"].Exists(),
+            "executor must define threads");
+          if (node["placement"].Exists()) {
+            executorContext.Expect(node["type"].Enum().Value() == "BASIC",
+              "placement is supported only for BASIC executors");
+            executorContext.Expect(!node["affinity"].Exists(),
+              "executor must not define both affinity and placement");
+          }
+        })
+        .AddCheck("Harmonizer needy CPU window is supported only for BASIC executors", [](auto& executorContext){
+          auto node = executorContext.Node();
+          if (node["harmonizer_needy_cpu_window_seconds"].Exists()) {
+            executorContext.Expect(node["type"].Enum().Value() == "BASIC");
+          }
+        });
+      });
+    })
+    .Int64("sys_executor", [](auto& sysExecutor){
+      sysExecutor
+      .Optional()
+      .Range(0, MaxExecutorPoolId);
+    })
+    .Int64("user_executor", [](auto& userExecutor){
+      userExecutor
+      .Optional()
+      .Range(0, MaxExecutorPoolId);
+    })
+    .Int64("io_executor", [](auto& ioExecutor){
+      ioExecutor
+      .Optional()
+      .Range(0, MaxExecutorPoolId);
+    })
+    .Int64("batch_executor", [](auto& batchExecutor){
+      batchExecutor
+      .Optional()
+      .Range(0, MaxExecutorPoolId);
+    })
+    .Array("interconnect_session_executor", [](auto& interconnectSessionExecutor){
+      interconnectSessionExecutor
+      .Optional()
+      .Int64Item(nonNegative());
+    })
+    .Array("service_executor", [](auto& serviceExecutor){
+      serviceExecutor
+      .Optional()
+      .MapItem([](auto& serviceExecutorItem){
+        serviceExecutorItem
+        .String("service_name")
+        .Int64("executor_id", [](auto& executorId){
+          executorId.Range(0, MaxExecutorPoolId);
+        });
       });
     })
     .Map("scheduler", [](auto& scheduler){
@@ -207,6 +299,49 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Int64("resolution", nonNegative())
       .Int64("spin_threshold", nonNegative());
     })
+    .AddCheck("Executor references", [](auto& actorSystemContext){
+      auto node = actorSystemContext.Node();
+      if (!node["executor"].Exists()) {
+        return;
+      }
+
+      const i64 executorCount = node["executor"].Array().Length();
+      auto validateReference = [&](auto reference, const TString& referenceName) {
+        if (!reference.Exists()) {
+          return;
+        }
+
+        const i64 executorId = reference.Int64();
+        actorSystemContext.Expect(executorId < executorCount,
+          ::TStringBuilder() << referenceName << " must refer to an existing executor (got "
+            << executorId << ", executor count is " << executorCount << ")");
+      };
+
+      validateReference(node["sys_executor"], "sys_executor");
+      validateReference(node["user_executor"], "user_executor");
+      validateReference(node["io_executor"], "io_executor");
+      validateReference(node["batch_executor"], "batch_executor");
+
+      if (node["service_executor"].Exists()) {
+        auto serviceExecutors = node["service_executor"].Array();
+        for (int i = 0; i < serviceExecutors.Length(); ++i) {
+          validateReference(serviceExecutors[i].Map()["executor_id"],
+            ::TStringBuilder() << "service_executor[" << i << "].executor_id");
+        }
+      }
+
+      if (node["interconnect_session_executor"].Exists()) {
+        auto interconnectSessionExecutors = node["interconnect_session_executor"].Array();
+        THashSet<i64> seenExecutorIds;
+        for (int i = 0; i < interconnectSessionExecutors.Length(); ++i) {
+          const i64 executorId = interconnectSessionExecutors[i].Int64();
+          validateReference(interconnectSessionExecutors[i],
+            ::TStringBuilder() << "interconnect_session_executor[" << i << "]");
+          actorSystemContext.Expect(seenExecutorIds.insert(executorId).second,
+            "interconnect_session_executor contains duplicate executor ids");
+        }
+      }
+    })
     .AddCheck("Must either be auto config or manual config", [](auto& actorSystemContext){
       bool autoConfig = false;
       auto node = actorSystemContext.Node();
@@ -214,17 +349,20 @@ TMapBuilder ActorSystemConfigBuilder() {
         autoConfig = true;
       }
       if (autoConfig) {
-        actorSystemContext.Expect(node["node_type"].Exists(), "node_type must exist when using auto congfig");
-        actorSystemContext.Expect(node["cpu_count"].Exists(), "cpu_count must exist when using auto congfig");
+        actorSystemContext.Expect(node["node_type"].Exists(), "node_type must exist when using auto config");
+        actorSystemContext.Expect(node["cpu_count"].Exists(), "cpu_count must exist when using auto config");
 
-        actorSystemContext.Expect(!node["executor"].Exists(), "executor must not exist when using auto congfig");
-        actorSystemContext.Expect(!node["scheduler"].Exists(), "scheduler must not exist when using auto congfig");
+        actorSystemContext.Expect(!node["executor"].Exists(), "executor must not exist when using auto config");
+        actorSystemContext.Expect(!node["interconnect_session_executor"].Exists(), "interconnect_session_executor must not exist when using auto config");
+        actorSystemContext.Expect(!node["scheduler"].Exists(), "scheduler must not exist when using auto config");
       } else {
-        actorSystemContext.Expect(node["executor"].Exists(), "executor must exist when not using auto congfig");
-        actorSystemContext.Expect(node["scheduler"].Exists(), "scheduler must exist when not using auto congfig");
+        actorSystemContext.Expect(node["executor"].Exists(), "executor must exist when not using auto config");
+        actorSystemContext.Expect(node["scheduler"].Exists(), "scheduler must exist when not using auto config");
 
-        actorSystemContext.Expect(!node["node_type"].Exists(), "node_type must not exist when not using auto congfig");
-        actorSystemContext.Expect(!node["cpu_count"].Exists(), "cpu_count must not exist when not using auto congfig");
+        actorSystemContext.Expect(!node["use_shared_threads"].Exists() || !node["use_shared_threads"].Bool(),
+          "use_shared_threads must not be enabled when not using auto config");
+        actorSystemContext.Expect(!node["node_type"].Exists(), "node_type must not exist when not using auto config");
+        actorSystemContext.Expect(!node["cpu_count"].Exists(), "cpu_count must not exist when not using auto config");
       }
     });
   });

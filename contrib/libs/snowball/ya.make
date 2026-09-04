@@ -6,9 +6,9 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.0.1)
+VERSION(3.1.1)
 
-ORIGINAL_SOURCE(https://snowballstem.org/dist/libstemmer_c-3.0.1.tar.gz)
+ORIGINAL_SOURCE(https://snowballstem.org/dist/libstemmer_c-3.1.1.tar.gz)
 
 NO_COMPILER_WARNINGS()
 

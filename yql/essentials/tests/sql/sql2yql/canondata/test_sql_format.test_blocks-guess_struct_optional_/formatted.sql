@@ -1,0 +1,14 @@
+$structVariantType = Variant<a: Int32, b: String>;
+
+$optionalVariantData = [
+    <|variantValue: Just(Variant(1, 'a', $structVariantType))|>,
+    <|variantValue: Nothing(OptionalType($structVariantType))|>,
+    <|variantValue: Just(Variant('hello', 'b', $structVariantType))|>,
+];
+
+SELECT
+    variantValue.a AS aAlternative,
+    variantValue.b AS bAlternative
+FROM
+    as_table($optionalVariantData)
+;

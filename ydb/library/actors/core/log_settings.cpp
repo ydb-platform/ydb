@@ -25,6 +25,7 @@ namespace NActors {
             , ShortHostName("")
             , ClusterName("")
             , TenantName("")
+            , NodeId(0)
         {
             Append(minVal, maxVal, func);
         }
@@ -49,6 +50,7 @@ namespace NActors {
             , ShortHostName("")
             , ClusterName("")
             , TenantName("")
+            , NodeId(0)
         {
         }
 
@@ -215,6 +217,10 @@ namespace NActors {
 
         void TSettings::SetUseLocalTimestamps(bool value) {
             UseLocalTimestamps = value;
+        }
+
+        void TSettings::SetEnableStructuredLogInJson(bool value) {
+            EnableStructuredLogInJson = value;
         }
 
         EComponent TSettings::FindComponent(const TStringBuf& componentName) const {

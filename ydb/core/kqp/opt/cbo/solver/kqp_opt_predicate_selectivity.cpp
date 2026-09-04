@@ -89,6 +89,44 @@ namespace {
         return Nothing();
     }
 
+    enum class EValueParseClass {
+        Bool,
+        SignedInt,
+        UnsignedInt,
+        Float,
+        Text
+    };
+
+    EValueParseClass GetValueParseClass(TStringBuf typeName) {
+        static const THashSet<TStringBuf> unsignedTypes = {
+            "Uint8", "Uint16", "Uint32", "Uint64", "Date", "Datetime", "Timestamp"};
+        static const THashSet<TStringBuf> signedTypes = {
+            "Int8", "Int16", "Int32", "Int64", "Date32", "Datetime64", "Interval", "Timestamp64", "Interval64"};
+
+        if (typeName == "Bool") {
+            return EValueParseClass::Bool;
+        } else if (unsignedTypes.contains(typeName)) {
+            return EValueParseClass::UnsignedInt;
+        } else if (signedTypes.contains(typeName)) {
+            return EValueParseClass::SignedInt;
+        } else if (typeName == "Float" || typeName == "Double" || typeName.StartsWith("Decimal")) {
+            return EValueParseClass::Float;
+        }
+        return EValueParseClass::Text;
+    }
+
+    TMaybe<EValueParseClass> GetValueParseClass(const TExprBase& input) {
+        const TTypeAnnotationNode* type = input.Ref().GetTypeAnn();
+        if (!type) {
+            return Nothing();
+        }
+        type = RemoveAllOptionals(type);
+        if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
+            return Nothing();
+        }
+        return GetValueParseClass(type->Cast<TDataExprType>()->GetName());
+    }
+
     double DefaultEqualitySelectivity(const std::shared_ptr<NKikimr::NKqp::TOptimizerStatistics>& stats, const TString& attributeName) {
         if (stats == nullptr) {
             return 1.0;
@@ -212,7 +250,7 @@ namespace {
         return Nothing();
     }
 
-    i8 CompareValues(const TString& left, const TString& right, const TString columnType) {
+    i8 CompareValuesImpl(const TString& left, const TString& right, const TString columnType) {
         if (columnType == "Bool") {
             ui8 l = FromString<bool>(left);
             ui8 r = FromString<bool>(right);
@@ -253,7 +291,7 @@ namespace {
             float l = FromString<float>(left);
             float r = FromString<float>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+        } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
             double l = FromString<double>(left);
             double r = FromString<double>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
@@ -284,8 +322,16 @@ namespace {
         return (left < right) ? -1 : (left > right) ? 1 : 0;
     }
 
+    i8 CompareValues(const TString& left, const TString& right, const TString columnType) {
+        try {
+            return CompareValuesImpl(left, right, columnType);
+        } catch (const yexception&) {
+            return (left < right) ? -1 : (left > right) ? 1 : 0;
+        }
+    }
+
     // Returns a number of rows based on predicate.
-    TMaybe<ui64> EstimateInequalityPredicateByHistogram(NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
+    TMaybe<ui64> EstimateInequalityPredicateByHistogramImpl(NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
                                             const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
                                             EInequalityPredicateType predicate) {
         const TMaybe<TString> literal = ExtractLiteral(maybeLiteral);
@@ -318,7 +364,7 @@ namespace {
             } else if (columnType == "Int64") {
                 i64 val = FromString<i64>(value);
                 return EstimateInequalityPredicateByType<i64>(eqWidthHistogram, val, predicate);
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return EstimateInequalityPredicateByType<double>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Date") {
@@ -335,7 +381,17 @@ namespace {
         return Nothing();
     }
 
-    TMaybe<ui64> EstimateRangePredicateByHistogram(NYql::NNodes::TExprBase maybeLeftLiteral, NYql::NNodes::TExprBase maybeRightLiteral,
+    TMaybe<ui64> EstimateInequalityPredicateByHistogram(NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
+                                            const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
+                                            EInequalityPredicateType predicate) {
+        try {
+            return EstimateInequalityPredicateByHistogramImpl(maybeLiteral, columnType, eqWidthHistogram, predicate);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+    }
+
+    TMaybe<ui64> EstimateRangePredicateByHistogramImpl(NYql::NNodes::TExprBase maybeLeftLiteral, NYql::NNodes::TExprBase maybeRightLiteral,
                                             const TString& columnType,
                                             const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
                                             EInequalityPredicateType leftPredicate, EInequalityPredicateType rightPredicate) {
@@ -382,7 +438,7 @@ namespace {
                 i64 leftVal = FromString<i64>(leftValue);
                 i64 rightVal = FromString<i64>(rightValue);
                 return EstimateRangePredicateByType<i64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double leftVal = FromString<double>(leftValue);
                 double rightVal = FromString<double>(rightValue);
                 return EstimateRangePredicateByType<double>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
@@ -402,7 +458,18 @@ namespace {
         return Nothing();
     }
 
-    TMaybe<ui32> EstimateEqualityPredicateBySketch(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
+    TMaybe<ui64> EstimateRangePredicateByHistogram(NYql::NNodes::TExprBase maybeLeftLiteral, NYql::NNodes::TExprBase maybeRightLiteral,
+                                            const TString& columnType,
+                                            const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
+                                            EInequalityPredicateType leftPredicate, EInequalityPredicateType rightPredicate) {
+        try {
+            return EstimateRangePredicateByHistogramImpl(maybeLeftLiteral, maybeRightLiteral, columnType, eqWidthHistogram, leftPredicate, rightPredicate);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+    }
+
+    TMaybe<ui32> EstimateEqualityPredicateBySketchImpl(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
                                         const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
         const TMaybe<TString> literal = ExtractLiteral(maybeLiteral);
         if (literal.Defined()) {
@@ -437,7 +504,7 @@ namespace {
             } else if (columnType == "Float") {
                 float val = FromString<float>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Date") {
@@ -469,6 +536,15 @@ namespace {
 
         return Nothing();
     }
+
+    TMaybe<ui32> EstimateEqualityPredicateBySketch(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
+                                        const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
+        try {
+            return EstimateEqualityPredicateBySketchImpl(maybeLiteral, columnType, countMinSketch);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+    }
 }
 
 template<typename T>
@@ -491,13 +567,25 @@ namespace NKikimr::NKqp {
 
 
 TMaybe<TString> TPredicateSelectivityComputer::GetAttributeType(const TString& attributeName) {
-    if (Stats && Stats->ColumnStatistics) {
-        auto it = Stats->ColumnStatistics->Data.find(attributeName);
-        if (it != Stats->ColumnStatistics->Data.end()) {
-            return it->second.Type;
-        }
+    if (!Stats || !Stats->ColumnStatistics) {
         return Nothing();
     }
+
+    TString columnName = attributeName;
+    if (Lineage) {
+        const auto& mapping = Lineage->Mapping;
+        if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+            const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+            auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+            columnName = infoUnit.GetColumnName();
+        }
+    }
+
+    auto it = Stats->ColumnStatistics->Data.find(columnName);
+    if (it != Stats->ColumnStatistics->Data.end()) {
+        return it->second.Type;
+    }
+
     return Nothing();
 }
 
@@ -536,7 +624,7 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
                 if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
                     const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
                     auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
-                    attributeName = infoUnit.GetFullName();
+                    attributeName = infoUnit.GetColumnName();
                 }
             }
 
@@ -606,7 +694,7 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                 if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
                     const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
                     auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
-                    attributeName = infoUnit.GetFullName();
+                    attributeName = infoUnit.GetColumnName();
                 }
             }
 
@@ -890,12 +978,29 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
     auto logicalOperator = underNot ? ELogicalOperator::And : ELogicalOperator::Or;
     node->Operator = logicalOperator;
 
+    TMaybe<EValueParseClass> columnParseClass;
+    if (auto member = IsMember(left)) {
+        columnParseClass = GetValueParseClass(TExprBase(member.GetRef()));
+    }
+
+    bool droppedElements = false;
     for (const auto& element : list->Children()) {
         TExprBase right = TExprBase(element);
+
+        auto elementParseClass = GetValueParseClass(right);
+        if (columnParseClass.Defined() && elementParseClass.Defined() && *columnParseClass != *elementParseClass) {
+            droppedElements = true;
+            continue;
+        }
+
         auto child = ConvertEqualityToRange(left, right, underNot, collectMembers);
         if (child) {
             node->Children.push_back(child);
         }
+    }
+
+    if (droppedElements && node->Children.empty()) {
+        return nullptr;
     }
 
     return node;
@@ -920,7 +1025,7 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
         if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
             const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
             auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
-            attributeName = infoUnit.GetFullName();
+            attributeName = infoUnit.GetColumnName();
         }
     }
 
@@ -1281,8 +1386,10 @@ double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
 
     TSet<TString> tableAliases;
     double resSelectivity = ComputeSelectivity(rootNode, tableAliases);
-    if (tableAliases.size() != 1) {
-        YQL_CLOG(TRACE, CoreDq) << "No or multiple table aliases in computing selectivity.";
+    if (tableAliases.size() == 0) {
+        YQL_CLOG(TRACE, CoreDq) << "No table aliases in computing selectivity.";
+    } else if (tableAliases.size() != 1) {
+        YQL_CLOG(TRACE, CoreDq) << "Multiple table aliases in computing selectivity.";
     }
 
     return std::min(1.0, resSelectivity);

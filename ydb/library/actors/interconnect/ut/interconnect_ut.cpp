@@ -1,8 +1,11 @@
+#include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
 #include <ydb/library/actors/interconnect/interconnect_counters.h>
 #include <ydb/library/actors/interconnect/interconnect_metrics_aggregator.h>
+#include <ydb/library/actors/interconnect/uring_context.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/logger/record.h>
@@ -137,6 +140,45 @@ void WaitForCondition(TDuration timeout, TCallback&& callback, TStringBuf descri
     UNIT_FAIL(TStringBuilder() << "condition failed: " << description);
 }
 
+class TSessionPoolProbeActor : public TActorBootstrapped<TSessionPoolProbeActor> {
+public:
+    TSessionPoolProbeActor(TActorId proxy, NThreading::TPromise<ui32> promise)
+        : Proxy(proxy)
+        , Promise(std::move(promise))
+    {}
+
+    void Bootstrap() {
+        Send(Proxy, new TEvents::TEvSubscribe);
+        Become(&TThis::StateFunc);
+    }
+
+private:
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        Promise.SetValue(ev->Sender.PoolID());
+        Send(Proxy, new TEvents::TEvUnsubscribe);
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvInterconnect::TEvNodeConnected, Handle);
+    )
+
+private:
+    const TActorId Proxy;
+    NThreading::TPromise<ui32> Promise;
+};
+
+ui32 GetSessionPoolId(TTestICCluster& cluster, ui32 nodeId, ui32 peerNodeId) {
+    auto promise = NThreading::NewPromise<ui32>();
+    auto future = promise.GetFuture();
+    cluster.RegisterActor(
+        new TSessionPoolProbeActor(cluster.InterconnectProxy(peerNodeId, nodeId), std::move(promise)),
+        nodeId);
+    UNIT_ASSERT_C(future.Wait(TDuration::Seconds(10)),
+        "timed out waiting for TEvNodeConnected from session on node " << nodeId << " peer " << peerNodeId);
+    return future.GetValueSync();
+}
+
 class TDropRecipientActor : public TActor<TDropRecipientActor> {
 public:
     TDropRecipientActor()
@@ -158,6 +200,37 @@ private:
 
 private:
     std::atomic<size_t> Received = 0;
+};
+
+class TConnectionSubscriberActor : public TActorBootstrapped<TConnectionSubscriberActor> {
+public:
+    explicit TConnectionSubscriberActor(ui32 peerNodeId)
+        : PeerNodeId(peerNodeId)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        Send(TActivationContext::InterconnectProxy(PeerNodeId), new TEvents::TEvSubscribe);
+    }
+
+    bool IsConnected() const {
+        return Connected.load(std::memory_order_acquire);
+    }
+
+private:
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr&) {
+        Connected.store(true, std::memory_order_release);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvInterconnect::TEvNodeConnected, Handle)
+        cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, PassAway)
+        cFunc(TEvents::TSystem::Poison, PassAway)
+    )
+
+private:
+    const ui32 PeerNodeId;
+    std::atomic<bool> Connected = false;
 };
 
 class TBurstSenderActor : public TActorBootstrapped<TBurstSenderActor> {
@@ -184,6 +257,397 @@ private:
     const size_t PayloadSize;
 };
 
+struct TEvXdcCatchReplay
+    : TEventPB<TEvXdcCatchReplay, NInterconnectTest::TEvTestSerialization, EventSpaceBegin(TEvents::ES_PRIVATE) + 100>
+{};
+
+struct TEvOversizedTcpEvent
+    : TEventPB<TEvOversizedTcpEvent, NInterconnectTest::TEvTestSerialization, EventSpaceBegin(TEvents::ES_PRIVATE) + 101>
+{};
+
+struct TOversizedTcpEventContext {
+    std::atomic<bool> Undelivered = false;
+    std::atomic<bool> Received = false;
+};
+
+class TOversizedTcpEventSenderActor : public TActorBootstrapped<TOversizedTcpEventSenderActor> {
+public:
+    TOversizedTcpEventSenderActor(TActorId recipient, std::unique_ptr<IEventBase> event,
+            std::shared_ptr<TOversizedTcpEventContext> context)
+        : Recipient(recipient)
+        , Event(std::move(event))
+        , Context(std::move(context))
+    {}
+
+    void Bootstrap() {
+        Send(Recipient, std::move(Event), IEventHandle::FlagTrackDelivery);
+        Become(&TThis::StateFunc);
+    }
+
+private:
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        Context->Undelivered.store(true, std::memory_order_release);
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvents::TEvUndelivered, Handle);
+    )
+
+private:
+    const TActorId Recipient;
+    std::unique_ptr<IEventBase> Event;
+    const std::shared_ptr<TOversizedTcpEventContext> Context;
+};
+
+class TOversizedTcpEventReceiverActor : public TActorBootstrapped<TOversizedTcpEventReceiverActor> {
+public:
+    explicit TOversizedTcpEventReceiverActor(std::shared_ptr<TOversizedTcpEventContext> context)
+        : Context(std::move(context))
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+    }
+
+private:
+    void Handle(TEvOversizedTcpEvent::TPtr&) {
+        Context->Received.store(true, std::memory_order_release);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvOversizedTcpEvent, Handle);
+    )
+
+private:
+    const std::shared_ptr<TOversizedTcpEventContext> Context;
+};
+
+class TXdcCatchReplaySenderActor : public TActorBootstrapped<TXdcCatchReplaySenderActor> {
+public:
+    TXdcCatchReplaySenderActor(TActorId recipient, IEventBase* event)
+        : Recipient(recipient)
+        , Event(event)
+    {}
+
+    void Bootstrap() {
+        Send(Recipient, Event);
+        PassAway();
+    }
+
+private:
+    const TActorId Recipient;
+    IEventBase* const Event;
+};
+
+class TXdcCatchReplayReceiverActor : public TActorBootstrapped<TXdcCatchReplayReceiverActor> {
+public:
+    TXdcCatchReplayReceiverActor(TString expectedPayload, ui32 expectedPayloadCount)
+        : ExpectedPayload(std::move(expectedPayload))
+        , ExpectedPayloadCount(expectedPayloadCount)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+    }
+
+    void Handle(TEvXdcCatchReplay::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 42u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "catch-replay");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), ExpectedPayloadCount);
+        for (ui32 i = 0; i < ExpectedPayloadCount; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[i].GetSize(), ExpectedPayload.size());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[i].ConvertToString(), ExpectedPayload);
+        }
+        Received.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    size_t GetReceived() const noexcept {
+        return Received.load(std::memory_order_relaxed);
+    }
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvXdcCatchReplay, Handle);
+    )
+
+private:
+    const TString ExpectedPayload;
+    const ui32 ExpectedPayloadCount;
+    std::atomic<size_t> Received = 0;
+};
+
+enum class EXdcCatchReplayMode {
+    Tcp,
+    Rdma,
+};
+
+enum class EXdcCatchReplayReconnectAction {
+    CloseInputSession,
+    ClosePeerSocket,
+};
+
+TEvXdcCatchReplay* MakeXdcCatchReplayEvent(
+        TStringBuf payload,
+        ui32 payloadCount,
+        const std::shared_ptr<NInterconnect::NRdma::IMemPool>& rdmaMemPool) {
+    auto* event = new TEvXdcCatchReplay;
+    event->Record.SetBlobID(42);
+    event->Record.SetBuffer("catch-replay");
+
+    for (ui32 i = 0; i < payloadCount; ++i) {
+        if (rdmaMemPool) {
+            auto buffer = rdmaMemPool->AllocRcBuf(payload.size(), 0).value();
+            Y_ABORT_UNLESS(buffer);
+            memcpy(buffer.GetDataMut(), payload.data(), payload.size());
+            event->AddPayload(TRope(std::move(buffer)));
+        } else {
+            event->AddPayload(TRope(TString(payload)));
+        }
+    }
+
+    UNIT_ASSERT(event->AllowExternalDataChannel());
+    return event;
+}
+
+void WaitForXdcCatchReplayPreReconnectState(
+        TTestICCluster& cluster,
+        TXdcCatchReplayReceiverActor* receiver,
+        EXdcCatchReplayMode mode) {
+    WaitForCondition(TDuration::Seconds(30), [&] {
+        try {
+            if (receiver->GetReceived() != 0
+                    || GetSessionCounter(cluster, 1, 2, "Params.UseExternalDataChannel") != 1
+                    || GetSessionCounter(cluster, 1, 2, "Context->LastProcessedSerial") == 0) {
+                return false;
+            }
+
+            switch (mode) {
+                case EXdcCatchReplayMode::Tcp: {
+                    const ui64 bytesReadFromXdc = GetSessionCounter(cluster, 1, 2, "BytesReadFromXdcSocket");
+                    return bytesReadFromXdc > 0
+                        && bytesReadFromXdc < 16 * 1024
+                        && GetSessionCounter(cluster, 1, 2, "XdcInputQ.size()") > 0
+                        && GetSessionCounter(cluster, 1, 2, "InboundPacketQ.size()") > 0;
+                }
+
+                case EXdcCatchReplayMode::Rdma:
+                    return GetRdmaChecksumStatus(cluster, 1, 2).StartsWith("On")
+                        && GetSessionCounter(cluster, 1, 2, "RdmaBytesReadScheduled") == 0
+                        && GetSessionCounter(cluster, 1, 2, "RdmaWrReadScheduled") == 0;
+            }
+        } catch (const TPatternNotFound&) {
+            return false;
+        } catch (const TFromStringException&) {
+            return false;
+        }
+    }, mode == EXdcCatchReplayMode::Tcp
+        ? "partial TCP XDC payload read before reconnect"
+        : "partial RDMA XDC section replay state before reconnect");
+}
+
+void WaitForRdmaXdcCatchReplayAfterPartialReadScheduled(
+        TTestICCluster& cluster,
+        TXdcCatchReplayReceiverActor* receiver,
+        ui64 totalRdmaBytes) {
+    WaitForCondition(TDuration::Seconds(30), [&] {
+        try {
+            if (receiver->GetReceived() != 0
+                    || GetSessionCounter(cluster, 1, 2, "Params.UseExternalDataChannel") != 1
+                    || GetSessionCounter(cluster, 1, 2, "Context->LastProcessedSerial") == 0
+                    || !GetRdmaChecksumStatus(cluster, 1, 2).StartsWith("On")) {
+                return false;
+            }
+
+            const ui64 rdmaBytesReadScheduled = GetSessionCounter(cluster, 1, 2, "RdmaBytesReadScheduled");
+            return rdmaBytesReadScheduled > 0
+                && rdmaBytesReadScheduled < totalRdmaBytes
+                && GetSessionCounter(cluster, 1, 2, "RdmaWrReadScheduled") > 0;
+        } catch (const TPatternNotFound&) {
+            return false;
+        } catch (const TFromStringException&) {
+            return false;
+        }
+    }, "partial RDMA XDC read scheduling before reconnect");
+}
+
+void CloseXdcCatchReplayInputSession(
+        TTestICCluster& cluster,
+        TXdcCatchReplayReceiverActor* receiver) {
+    UNIT_ASSERT_VALUES_EQUAL(receiver->GetReceived(), 0u);
+
+    // Freeze the old TCP control transport before closing the input session, so callers exercise reconnect behavior
+    // with a partially consumed XDC/RDMA receive context.
+    cluster.StartBlackhole(1);
+    Sleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(receiver->GetReceived(), 0u);
+
+    cluster.GetNode(1)->Send(cluster.InterconnectProxy(2, 1), new TEvInterconnect::TEvCloseInputSession);
+    Sleep(TDuration::MilliSeconds(100));
+    cluster.StopBlackhole(1);
+}
+
+void ReconnectXdcCatchReplayInputSession(
+        TTestICCluster& cluster,
+        TXdcCatchReplayReceiverActor* receiver,
+        TStringBuf description) {
+    const TString handshakeBefore = GetSessionTextMetric(cluster, 1, 2, "LastHandshakeDone");
+    CloseXdcCatchReplayInputSession(cluster, receiver);
+
+    WaitForCondition(TDuration::Seconds(30), [&] {
+        try {
+            return GetSessionTextMetric(cluster, 1, 2, "LastHandshakeDone") != handshakeBefore
+                && GetSessionSocketFd(cluster, 1, 2) >= 0;
+        } catch (const TPatternNotFound&) {
+            return false;
+        } catch (const TFromStringException&) {
+            return false;
+        }
+    }, description);
+}
+
+void CloseXdcCatchReplayPeerSocket(
+        TTestICCluster& cluster,
+        TXdcCatchReplayReceiverActor* receiver) {
+    UNIT_ASSERT_VALUES_EQUAL(receiver->GetReceived(), 0u);
+    cluster.GetNode(2)->Send(cluster.InterconnectProxy(1, 2), new TEvInterconnect::TEvClosePeerSocket);
+}
+
+bool XdcCatchReplaySessionChangedOrGone(
+        TTestICCluster& cluster,
+        ui32 nodeId,
+        ui32 peerNodeId,
+        const TString& createdBefore) {
+    try {
+        return GetSessionTextMetric(cluster, nodeId, peerNodeId, "Created") != createdBefore;
+    } catch (const TPatternNotFound&) {
+        return true;
+    } catch (const TFromStringException&) {
+        return false;
+    }
+}
+
+void WaitForXdcCatchReplayRdmaReceiveSessionReplacement(
+        TTestICCluster& cluster,
+        TXdcCatchReplayReceiverActor* receiver,
+        const TString& receiveSessionCreatedBefore) {
+    WaitForCondition(TDuration::Seconds(30), [&] {
+        return receiver->GetReceived() == 0
+            && XdcCatchReplaySessionChangedOrGone(cluster, 1, 2, receiveSessionCreatedBefore);
+    }, "RDMA XDC receive session replaced instead of graceful reconnect");
+
+    Sleep(TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(receiver->GetReceived(), 0u);
+}
+
+void WaitForXdcCatchReplayDelivery(
+        TTestICCluster& cluster,
+        TXdcCatchReplayReceiverActor* receiver,
+        bool useRdma) {
+    WaitForCondition(TDuration::Seconds(30), [&] {
+        return receiver->GetReceived() == 1;
+    }, "XDC catch replay delivery");
+
+    Sleep(TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(receiver->GetReceived(), 1u);
+    if (useRdma) {
+        UNIT_ASSERT_C(WaitForSessionCounter(cluster, 1, 2, "RdmaBytesReadScheduled") > 0,
+            "replayed session did not schedule RDMA reads");
+    } else {
+        UNIT_ASSERT_C(WaitForSessionCounter(cluster, 1, 2, "XdcRefs") > 0,
+            "replayed session did not parse XDC refs");
+    }
+}
+
+void RunXdcCatchReplayAfterPartialPayloadRead(
+        EXdcCatchReplayMode mode,
+        TVector<ui32> interconnectSessionPoolIds = {0}) {
+    const bool useRdma = mode == EXdcCatchReplayMode::Rdma;
+    const bool verifyPoolPlacement = interconnectSessionPoolIds != TVector<ui32>{0};
+    const TString payload(useRdma ? 4 * 1024 : 32 * 1024, 'x');
+    const ui32 payloadCount = useRdma ? 1400 : 1;
+    const ui32 node1SessionPool = interconnectSessionPoolIds[2 % interconnectSessionPoolIds.size()];
+    const ui32 node2SessionPool = interconnectSessionPoolIds[1 % interconnectSessionPoolIds.size()];
+
+    TTestICCluster::TTrafficInterrupterSettings interrupterSettings{
+        .RejectingTrafficTimeout = TDuration::Zero(),
+        .BandWidth = 8 * 1024,
+        .Disconnect = false,
+    };
+    TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr,
+        useRdma ? TTestICCluster::EMPTY : TTestICCluster::DISABLE_RDMA,
+        {}, TDuration::Seconds(30), useRdma ? 16u << 20 : TNode::DefaultInflight(),
+        {}, {}, /*numThreads=*/1, interconnectSessionPoolIds);
+
+    if (verifyPoolPlacement) {
+        UNIT_ASSERT_VALUES_EQUAL(cluster.InterconnectProxy(2, 1).PoolID(), node1SessionPool);
+        UNIT_ASSERT_VALUES_EQUAL(cluster.InterconnectProxy(1, 2).PoolID(), node2SessionPool);
+    }
+
+    auto* receiverPtr = new TXdcCatchReplayReceiverActor(payload, payloadCount);
+    const TActorId recipient = cluster.RegisterActor(receiverPtr, 1);
+
+    auto* event = MakeXdcCatchReplayEvent(
+        payload,
+        payloadCount,
+        useRdma ? cluster.GetNode(2)->GetRdmaMemPool() : nullptr);
+
+    cluster.RegisterActor(new TXdcCatchReplaySenderActor(recipient, event), 2);
+
+    WaitForXdcCatchReplayPreReconnectState(cluster, receiverPtr, mode);
+    if (verifyPoolPlacement) {
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 1, 2), node1SessionPool);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 2, 1), node2SessionPool);
+    }
+
+    if (useRdma) {
+        const TString receiveSessionCreatedBefore = GetSessionTextMetric(cluster, 1, 2, "Created");
+        CloseXdcCatchReplayInputSession(cluster, receiverPtr);
+        WaitForXdcCatchReplayRdmaReceiveSessionReplacement(cluster, receiverPtr, receiveSessionCreatedBefore);
+    } else {
+        ReconnectXdcCatchReplayInputSession(cluster, receiverPtr,
+            "XDC input session reconnected after partial payload read");
+        WaitForXdcCatchReplayDelivery(cluster, receiverPtr, false);
+        if (verifyPoolPlacement) {
+            UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 1, 2), node1SessionPool);
+            UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 2, 1), node2SessionPool);
+        }
+    }
+}
+
+void RunRdmaXdcCatchReplayAfterPartialRdmaRead(EXdcCatchReplayReconnectAction reconnectAction) {
+    const TString payload(4 * 1024, 'x');
+    const ui32 payloadCount = 1400;
+    const ui64 totalRdmaBytes = ui64(payload.size()) * payloadCount;
+
+    TTestICCluster::TTrafficInterrupterSettings interrupterSettings{
+        .RejectingTrafficTimeout = TDuration::Zero(),
+        .BandWidth = 8 * 1024,
+        .Disconnect = false,
+    };
+    TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr,
+        TTestICCluster::EMPTY, {}, TDuration::Seconds(30), 16u << 20);
+
+    auto* receiverPtr = new TXdcCatchReplayReceiverActor(payload, payloadCount);
+    const TActorId recipient = cluster.RegisterActor(receiverPtr, 1);
+
+    auto* event = MakeXdcCatchReplayEvent(payload, payloadCount, cluster.GetNode(2)->GetRdmaMemPool());
+    cluster.RegisterActor(new TXdcCatchReplaySenderActor(recipient, event), 2);
+
+    WaitForRdmaXdcCatchReplayAfterPartialReadScheduled(cluster, receiverPtr, totalRdmaBytes);
+    const TString receiveSessionCreatedBefore = GetSessionTextMetric(cluster, 1, 2, "Created");
+    switch (reconnectAction) {
+        case EXdcCatchReplayReconnectAction::CloseInputSession:
+            CloseXdcCatchReplayInputSession(cluster, receiverPtr);
+            break;
+
+        case EXdcCatchReplayReconnectAction::ClosePeerSocket:
+            CloseXdcCatchReplayPeerSocket(cluster, receiverPtr);
+            break;
+    }
+    WaitForXdcCatchReplayRdmaReceiveSessionReplacement(cluster, receiverPtr, receiveSessionCreatedBefore);
+}
+
 struct THandshakeFailureLogCounters {
     std::atomic<ui32> Notice = 0;
     std::atomic<ui32> Debug = 0;
@@ -197,7 +661,7 @@ public:
 
     void WriteData(const TLogRecord& rec) override {
         const TStringBuf line(rec.Data, rec.Len);
-        if (line.Contains("ICP25") && line.Contains("outgoing handshake failed")) {
+        if (line.Contains("ICP25") && line.Contains("Outgoing handshake failed")) {
             if (rec.Priority == TLOG_NOTICE) {
                 OutgoingHandshakeFailures->Notice.fetch_add(1, std::memory_order_relaxed);
             } else if (rec.Priority == TLOG_DEBUG) {
@@ -211,6 +675,36 @@ public:
 
 private:
     std::shared_ptr<THandshakeFailureLogCounters> OutgoingHandshakeFailures;
+};
+
+struct TSubscriberLivenessLogState {
+    std::atomic<ui32> Warnings = 0;
+    TMutex Mutex;
+    TString LastWarning;
+};
+
+class TSubscriberLivenessLogBackend : public TLogBackend {
+public:
+    explicit TSubscriberLivenessLogBackend(std::shared_ptr<TSubscriberLivenessLogState> state)
+        : State(std::move(state))
+    {}
+
+    void WriteData(const TLogRecord& rec) override {
+        const TStringBuf line(rec.Data, rec.Len);
+        if (rec.Priority == TLOG_WARNING &&
+                line.Contains("Subscriber liveness check found leaked subscriptions")) {
+            with_lock (State->Mutex) {
+                State->LastWarning = line;
+            }
+            State->Warnings.fetch_add(1, std::memory_order_release);
+        }
+    }
+
+    void ReopenLog() override {
+    }
+
+private:
+    std::shared_ptr<TSubscriberLivenessLogState> State;
 };
 
 } // namespace
@@ -354,6 +848,59 @@ private:
     std::atomic<size_t> Received;
 };
 
+struct TEvTcpEmptyRecordWithPayload
+    : TEventPB<TEvTcpEmptyRecordWithPayload, NInterconnectTest::TEvTestSerialization, 0x10002>
+{};
+
+class TSingleEventSenderActor : public TActorBootstrapped<TSingleEventSenderActor> {
+public:
+    TSingleEventSenderActor(TActorId recipient, IEventBase* event)
+        : Recipient(recipient)
+        , Event(event)
+    {}
+
+    void Bootstrap() {
+        Send(Recipient, Event);
+        PassAway();
+    }
+
+private:
+    const TActorId Recipient;
+    IEventBase* const Event;
+};
+
+class TEmptyRecordWithPayloadReceiverActor : public TActorBootstrapped<TEmptyRecordWithPayloadReceiverActor> {
+public:
+    TEmptyRecordWithPayloadReceiverActor(TString expectedPayload)
+        : ExpectedPayload(std::move(expectedPayload))
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+    }
+
+    void Handle(TEvTcpEmptyRecordWithPayload::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.ByteSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), ExpectedPayload.size());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), ExpectedPayload);
+        Received.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    size_t GetReceived() const noexcept {
+        return Received.load(std::memory_order_relaxed);
+    }
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvTcpEmptyRecordWithPayload, Handle);
+    )
+
+private:
+    const TString ExpectedPayload;
+    std::atomic<size_t> Received = 0;
+};
+
 namespace {
 
 TTestICCluster::Flags GetKernelLivenessFlags(bool withRdma) {
@@ -366,6 +913,50 @@ bool SkipIfRdmaUnavailable(bool withRdma, TStringBuf testName) {
         return true;
     }
     return false;
+}
+
+void WaitForRdmaQpRts(TTestICCluster& cluster, ui32 nodeId, ui32 peerNodeId, TStringBuf description) {
+    WaitForCondition(TDuration::Seconds(30), [&] {
+        try {
+            const auto tokens = SplitString(GetRdmaQpStatus(cluster, nodeId, peerNodeId), ",");
+            return tokens.size() > 2 && tokens[1] == "QPS_RTS";
+        } catch (const TPatternNotFound&) {
+            return false;
+        }
+    }, description);
+}
+
+void RunTcpEmptyProtoRecordWithPayloadRoundTrip(bool enableExternalDataChannel) {
+    const TString payload(5000, 'x');
+    auto settingsCustomizer = [enableExternalDataChannel](ui32, TInterconnectSettings& settings) {
+        settings.EnableExternalDataChannel = enableExternalDataChannel;
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA,
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* receiverPtr = new TEmptyRecordWithPayloadReceiverActor(payload);
+    const TActorId recipient = cluster.RegisterActor(receiverPtr, 1);
+
+    auto* event = new TEvTcpEmptyRecordWithPayload;
+    event->AddPayload(TRope(payload));
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.ByteSize(), 0);
+    UNIT_ASSERT(event->AllowExternalDataChannel());
+
+    cluster.RegisterActor(new TSingleEventSenderActor(recipient, event), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return receiverPtr->GetReceived() == 1;
+    }, "TCP empty protobuf record with payload delivery");
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseExternalDataChannel"),
+        enableExternalDataChannel ? 1ULL : 0ULL);
+    if (enableExternalDataChannel) {
+        UNIT_ASSERT_C(WaitForSessionCounter(cluster, 1, 2, "XdcSections") > 0,
+            "payload was not received through XDC sections");
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "XdcSections"), 0ULL);
+    }
 }
 
 ui64 MeasureIdleGeneratedPackets(bool enableKernelLiveness, bool withRdma) {
@@ -421,6 +1012,28 @@ void RunKernelLivenessMixedConfigAsymmetric(bool withRdma, ui32 kernelLivenessNo
     const ui64 node1Expected = kernelLivenessNodeId == 1 ? 1ULL : 0ULL;
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), node2Expected);
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), node1Expected);
+}
+
+void RunKernelLivenessWithTls() {
+    auto settingsCustomizer = [](ui32, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = true;
+        settings.PingPeriod = TDuration::MilliSeconds(200);
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr,
+        TTestICCluster::Flags(TTestICCluster::USE_TLS | TTestICCluster::DISABLE_RDMA),
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* recipientPtr = new TRecipientActor;
+    const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+    cluster.RegisterActor(new TSenderActor(recipient, 1), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return recipientPtr->GetReceived() >= 1;
+    }, "TLS initial message delivery with kernel liveness");
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 1ULL);
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 1ULL);
 }
 
 void RunKernelLivenessSocketSetupFallback(bool withRdma) {
@@ -617,6 +1230,20 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
 
     waitKernelMode(1ULL, "initial kernel liveness negotiated");
 
+    if (withRdma) {
+        const TString createdBefore = GetSessionTextMetric(cluster, 2, 1, "Created");
+
+        // RDMA sessions must not use same-session continuation. A reconnect request should replace the old session
+        // and negotiate transport params from current local settings through a fresh initial handshake.
+        cluster.GetNode(2)->MutableInterconnectSettings().EnableKernelLiveness = false;
+        reconnectFromNode2("RDMA session recreated with local kernel liveness disabled");
+
+        const TString createdAfter = GetSessionTextMetric(cluster, 2, 1, "Created");
+        UNIT_ASSERT_VALUES_UNEQUAL(createdAfter, createdBefore);
+        UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
+        return;
+    }
+
     bool exercisedSameSessionContinuation = false;
     for (ui32 attempt = 0; attempt < 5; ++attempt) {
         const TString createdBefore = GetSessionTextMetric(cluster, 2, 1, "Created");
@@ -658,14 +1285,140 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
 }
 
+void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
+    if (useSessionV2 && !TUringContext::IsAvailable()) {
+        Cerr << "io_uring not available; skipping" << Endl;
+        return;
+    }
+
+    auto settingsCustomizer = [=](ui32, TInterconnectSettings& settings) {
+        settings.SubscriberLivenessCheckInterval = checkInterval;
+        settings.V2.Enable = useSessionV2;
+    };
+    auto logState = std::make_shared<TSubscriberLivenessLogState>();
+    auto loggerSettings = MakeIntrusive<NLog::TSettings>(
+        TActorId(0, "logger"),
+        static_cast<NLog::EComponent>(NActorsServices::LOGGER),
+        NLog::PRI_DEBUG,
+        NLog::PRI_DEBUG,
+        0U);
+    loggerSettings->Append(
+        NActorsServices::EServiceCommon_MIN,
+        NActorsServices::EServiceCommon_MAX,
+        NActorsServices::EServiceCommon_Name);
+    loggerSettings->SetAllowDrop(false);
+    loggerSettings->SetThrottleDelay(TDuration::Zero());
+    auto logBackendFactory = [logState] {
+        return TAutoPtr<TLogBackend>(new TSubscriberLivenessLogBackend(logState));
+    };
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, loggerSettings,
+        useSessionV2 ? TTestICCluster::EMPTY : TTestICCluster::DISABLE_RDMA,
+        {}, TDuration::Seconds(2), TNode::DefaultInflight(), settingsCustomizer, logBackendFactory);
+
+    auto* subscriber = new TConnectionSubscriberActor(1);
+    const TActorId subscriberId = cluster.RegisterActor(subscriber, 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return subscriber->IsConnected();
+    }, "subscriber connected");
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        try {
+            return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 1;
+        } catch (const TPatternNotFound&) {
+            return false;
+        }
+    }, "live subscriber registered");
+
+    if (checkInterval != TDuration::Zero()) {
+        Sleep(3 * checkInterval);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
+    }
+
+    cluster.KillActor(2, subscriberId);
+    if (checkInterval != TDuration::Zero()) {
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            try {
+                return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, "dead subscriber removed");
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return logState->Warnings.load(std::memory_order_acquire) == 1;
+        }, "leaked subscriber warning");
+        with_lock (logState->Mutex) {
+            UNIT_ASSERT_STRING_CONTAINS(logState->LastWarning, "activity# manual");
+            UNIT_ASSERT_STRING_CONTAINS(logState->LastWarning, "actors# 1");
+        }
+    } else {
+        Sleep(TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(Interconnect) {
+
+    Y_UNIT_TEST(ProcessUndeliveredAfterOversizedTcpEvent) {
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA);
+
+        auto context = std::make_shared<TOversizedTcpEventContext>();
+        const TActorId recipient = cluster.RegisterActor(new TOversizedTcpEventReceiverActor(context), 1);
+
+        auto event = std::make_unique<TEvOversizedTcpEvent>();
+        // TEvTestSerialization.Buffer is encoded as a one-byte field tag, a four-byte varint length at
+        // this payload size, and the payload itself. Therefore its serialized size is:
+        //
+        //   1 + 4 + (EventMaxByteSize - 4) = EventMaxByteSize + 1.
+        //
+        // Exceeding the limit by exactly one byte makes the coroutine request more output after consuming
+        // the complete serialization budget. The size check must terminate the session while the coroutine
+        // is suspended and ProcessUndelivered must abort the pending serialization.
+        event->Record.SetBuffer(TString(EventMaxByteSize - 4, 'x'));
+        UNIT_ASSERT_VALUES_EQUAL(event->CalculateSerializedSize(), EventMaxByteSize + 1);
+
+        cluster.RegisterActor(new TOversizedTcpEventSenderActor(recipient, std::move(event), context), 2);
+
+        WaitForCondition(TDuration::Seconds(60), [&] {
+            return context->Undelivered.load(std::memory_order_acquire)
+                || context->Received.load(std::memory_order_acquire);
+        }, "oversized TCP event result");
+
+        UNIT_ASSERT(context->Undelivered.load(std::memory_order_acquire));
+        UNIT_ASSERT(!context->Received.load(std::memory_order_acquire));
+
+        auto regular = std::make_unique<TEvOversizedTcpEvent>();
+        regular->Record.SetBuffer("after oversized event");
+        cluster.RegisterActor(new TSingleEventSenderActor(recipient, regular.release()), 2);
+
+        WaitForCondition(TDuration::Seconds(60), [&] {
+            return context->Received.load(std::memory_order_acquire);
+        }, "regular TCP event delivery after oversized event");
+    }
 
     Y_UNIT_TEST(ScopeClassCountersRebindPeerLabel) {
         RunScopeClassCounterRebindTest(TScopeId(0, 1), "system");
         RunScopeClassCounterRebindTest(TScopeId(1, 42), "same_tenant");
         RunScopeClassCounterRebindTest(TScopeId(2, 42), "other_tenant");
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheck) {
+        RunSubscriberLivenessCheck(false, TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckV2) {
+        RunSubscriberLivenessCheck(true, TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckDisabled) {
+        RunSubscriberLivenessCheck(false, TDuration::Zero());
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckDisabledV2) {
+        RunSubscriberLivenessCheck(true, TDuration::Zero());
     }
 
     Y_UNIT_TEST(RdmaRetryWatchdogPendingSessionsAggregated) {
@@ -719,6 +1472,51 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         send(new NInterconnectMetricsAggregator::TEvUnregisterPeer("rack-a", "peer-2"));
         waitForPendingSessions(0);
         UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "rack-a", "RdmaRetryWatchdogPendingSessions"), 0);
+    }
+
+    Y_UNIT_TEST(StaticCrossPoolIncomingOutgoingReconnect) {
+        TTestICCluster cluster(
+            2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA,
+            {}, TDuration::Seconds(30), TNode::DefaultInflight(), {}, {}, /*numThreads=*/1,
+            TVector<ui32>{1});
+
+        // Pool 0 remains the listener/base IC pool in TNode; every static proxy/session is placed in pool 1.
+        UNIT_ASSERT_VALUES_EQUAL(cluster.InterconnectProxy(2, 1).PoolID(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cluster.InterconnectProxy(1, 2).PoolID(), 1u);
+
+        auto* recipientPtr = new TRecipientActor;
+        const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+        cluster.RegisterActor(new TSenderActor(recipient), 2);
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientPtr->GetReceived() >= 10;
+        }, "initial cross-pool interconnect delivery");
+
+        // Node 2 initiated the outgoing connection; node 1 accepted it in base IC and handed it to its pool-1 session.
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 2, 1), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 1, 2), 1u);
+
+        const TString handshakeBefore = GetSessionTextMetric(cluster, 1, 2, "LastHandshakeDone");
+        const size_t receivedBefore = recipientPtr->GetReceived();
+        cluster.GetNode(1)->Send(cluster.InterconnectProxy(2, 1), new TEvInterconnect::TEvCloseInputSession);
+
+        WaitForCondition(TDuration::Seconds(20), [&] {
+            try {
+                return GetSessionTextMetric(cluster, 1, 2, "LastHandshakeDone") != handshakeBefore
+                    && GetSessionSocketFd(cluster, 1, 2) >= 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            } catch (const TFromStringException&) {
+                return false;
+            }
+        }, "cross-pool session reconnect");
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientPtr->GetReceived() >= receivedBefore + 100;
+        }, "message delivery after cross-pool reconnect");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 1, 2), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 2, 1), 1u);
     }
 
     Y_UNIT_TEST(SessionContinuation) {
@@ -775,12 +1573,154 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         }, "poller sync operation histogram has samples");
     }
 
+    // Scenario: a TCP XDC payload is partially read, the input session is closed without dropping the output session,
+    // and replay must use the saved XDC catch buffer to finish the event exactly once.
+    Y_UNIT_TEST(TcpXdcCatchReplayAfterPartialPayloadRead) {
+        RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode::Tcp);
+    }
+
+    Y_UNIT_TEST(TcpXdcCatchReplayAfterPartialPayloadReadShardedPools) {
+        RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode::Tcp, {1});
+    }
+
+    // Scenario: RDMA section declarations are already applied to the receive context, but no RDMA_READ has been
+    // scheduled yet. RDMA sessions must not use graceful reconnect here; the old receive session is replaced instead
+    // of replaying serialized RDMA commands across reconnect.
+    Y_UNIT_TEST(RdmaXdcCatchReplayAfterPartialPayloadRead) {
+        if (SkipIfRdmaUnavailable(true, "RdmaXdcCatchReplayAfterPartialPayloadRead")) {
+            return;
+        }
+        RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode::Rdma);
+    }
+
+    // Scenario: at least one RDMA_READ was already scheduled before reconnect, so the pending event's RDMA buffer
+    // cursor may have moved. RDMA sessions must use a fresh session instead of attempting graceful replay with stale
+    // RDMA state.
+    Y_UNIT_TEST(RdmaXdcCatchReplayAfterPartialRdmaRead) {
+        if (SkipIfRdmaUnavailable(true, "RdmaXdcCatchReplayAfterPartialRdmaRead")) {
+            return;
+        }
+        RunRdmaXdcCatchReplayAfterPartialRdmaRead(EXdcCatchReplayReconnectAction::CloseInputSession);
+    }
+
+    // Scenario: at least one RDMA_READ was already scheduled, then the interconnect socket is closed through the
+    // debug API. RDMA sessions must reject graceful continuation and replace the old receive session instead of
+    // replaying stale RDMA state.
+    Y_UNIT_TEST(RdmaXdcCatchReplayAfterPartialRdmaReadOnPeerSocketClose) {
+        if (SkipIfRdmaUnavailable(true, "RdmaXdcCatchReplayAfterPartialRdmaReadOnPeerSocketClose")) {
+            return;
+        }
+        RunRdmaXdcCatchReplayAfterPartialRdmaRead(EXdcCatchReplayReconnectAction::ClosePeerSocket);
+    }
+
+    // Scenario: both peers close the TCP control socket of an established RDMA interconnect session at nearly the
+    // same time. Both old RDMA sessions must be replaced by fresh handshakes instead of bouncing continuation rejects.
+    Y_UNIT_TEST(RdmaSimultaneousReconnectDoesNotLoop) {
+        if (SkipIfRdmaUnavailable(true, "RdmaSimultaneousReconnectDoesNotLoop")) {
+            return;
+        }
+
+        TTestICCluster::TTrafficInterrupterSettings interrupterSettings{
+            .RejectingTrafficTimeout = TDuration::Zero(),
+            .BandWidth = 0.0,
+            .Disconnect = false,
+        };
+        TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings);
+
+        auto* recipientOnNode1Ptr = new TRecipientActor;
+        const TActorId recipientOnNode1 = cluster.RegisterActor(recipientOnNode1Ptr, 1);
+        auto* recipientOnNode2Ptr = new TRecipientActor;
+        const TActorId recipientOnNode2 = cluster.RegisterActor(recipientOnNode2Ptr, 2);
+
+        cluster.RegisterActor(new TSenderActor(recipientOnNode1, 1), 2);
+        cluster.RegisterActor(new TSenderActor(recipientOnNode2, 1), 1);
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientOnNode1Ptr->GetReceived() >= 1
+                && recipientOnNode2Ptr->GetReceived() >= 1;
+        }, "initial bidirectional RDMA delivery");
+
+        WaitForRdmaQpRts(cluster, 1, 2, "initial RDMA session 1->2 is RTS");
+        WaitForRdmaQpRts(cluster, 2, 1, "initial RDMA session 2->1 is RTS");
+
+        const TString created12Before = GetSessionTextMetric(cluster, 1, 2, "Created");
+        const TString created21Before = GetSessionTextMetric(cluster, 2, 1, "Created");
+
+        const TActorId dropRecipientOnNode1 = cluster.RegisterActor(new TDropRecipientActor, 1);
+        const TActorId dropRecipientOnNode2 = cluster.RegisterActor(new TDropRecipientActor, 2);
+
+        auto sessionStaysAliveOnEof = [&](ui32 fromNode, ui32 toNode) {
+            const ui64 numEventsInQueue = GetSessionCounter(cluster, fromNode, toNode, "NumEventsInQueue");
+            const ui64 outputCounter = GetSessionCounter(cluster, fromNode, toNode, "OutputCounter");
+            const ui64 lastConfirmed = GetSessionCounter(cluster, fromNode, toNode, "LastConfirmed");
+            return numEventsInQueue > 0 || outputCounter != lastConfirmed;
+        };
+
+        cluster.StartBlackhole(1);
+        cluster.StartBlackhole(2);
+        cluster.RegisterActor(new TBurstSenderActor(dropRecipientOnNode1, 4096, 4096), 2);
+        cluster.RegisterActor(new TBurstSenderActor(dropRecipientOnNode2, 4096, 4096), 1);
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            try {
+                return sessionStaysAliveOnEof(1, 2) && sessionStaysAliveOnEof(2, 1);
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, "both RDMA sessions have pending traffic while proxy forwarding is frozen");
+
+        cluster.GetNode(1)->Send(cluster.InterconnectProxy(2, 1), new TEvInterconnect::TEvClosePeerSocket);
+        cluster.GetNode(2)->Send(cluster.InterconnectProxy(1, 2), new TEvInterconnect::TEvClosePeerSocket);
+
+        Sleep(TDuration::MilliSeconds(100));
+        cluster.StopBlackhole(1);
+        cluster.StopBlackhole(2);
+
+        WaitForCondition(TDuration::Seconds(30), [&] {
+            try {
+                return GetSessionTextMetric(cluster, 1, 2, "Created") != created12Before
+                    && GetSessionTextMetric(cluster, 2, 1, "Created") != created21Before
+                    && GetSessionSocketFd(cluster, 1, 2) >= 0
+                    && GetSessionSocketFd(cluster, 2, 1) >= 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            } catch (const TFromStringException&) {
+                return false;
+            }
+        }, "simultaneous RDMA reconnect replaced both sessions");
+
+        WaitForRdmaQpRts(cluster, 1, 2, "reconnected RDMA session 1->2 is RTS");
+        WaitForRdmaQpRts(cluster, 2, 1, "reconnected RDMA session 2->1 is RTS");
+
+        const size_t receivedOnNode1Before = recipientOnNode1Ptr->GetReceived();
+        const size_t receivedOnNode2Before = recipientOnNode2Ptr->GetReceived();
+        cluster.RegisterActor(new TSenderActor(recipientOnNode1, 1), 2);
+        cluster.RegisterActor(new TSenderActor(recipientOnNode2, 1), 1);
+
+        WaitForCondition(TDuration::Seconds(20), [&] {
+            return recipientOnNode1Ptr->GetReceived() > receivedOnNode1Before
+                && recipientOnNode2Ptr->GetReceived() > receivedOnNode2Before;
+        }, "bidirectional delivery after simultaneous RDMA reconnect");
+    }
+
+    Y_UNIT_TEST(TcpXdcEmptyProtoRecordWithPayloadRoundTrip) {
+        RunTcpEmptyProtoRecordWithPayloadRoundTrip(true);
+    }
+
+    Y_UNIT_TEST(TcpInlineEmptyProtoRecordWithPayloadRoundTrip) {
+        RunTcpEmptyProtoRecordWithPayloadRoundTrip(false);
+    }
+
     Y_UNIT_TEST(KernelLivenessMixedConfigFallback) {
         RunKernelLivenessMixedConfigAsymmetric(false, 2);
     }
 
     Y_UNIT_TEST(KernelLivenessMixedConfigFallbackReverse) {
         RunKernelLivenessMixedConfigAsymmetric(false, 1);
+    }
+
+    Y_UNIT_TEST(KernelLivenessWithTls) {
+        RunKernelLivenessWithTls();
     }
 
     Y_UNIT_TEST(KernelLivenessSocketSetupFallback) {

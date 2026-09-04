@@ -67,9 +67,10 @@ private:
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
-    virtual void DoAssembleAccessor(
+    virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
+        return TConclusionStatus::Fail("incorrect method usage DoAssembleAccessor");
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
@@ -190,7 +191,10 @@ public:
         UsageClass =
             GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start.BuildSortablePosition(), finish.BuildSortablePosition());
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "portions_for_merge"},
+            {"start", Start.DebugJson()},
+            {"finish", Finish.DebugJson()});
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
         }

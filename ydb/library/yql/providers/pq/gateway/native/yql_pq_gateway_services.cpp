@@ -5,7 +5,7 @@ namespace NYql {
 TPqGatewayServices::TPqGatewayServices(
     NYdb::TDriver driver,
     ::NPq::NConfigurationManager::IConnections::TPtr cmConnections,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     TPqGatewayConfigPtr config,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     IMetricsRegistryPtr metrics,

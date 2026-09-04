@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-
 define subquery $bar() as
     select [1,2] as ks; 
 end define;

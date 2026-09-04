@@ -25,13 +25,15 @@ public:
     [[nodiscard]] EHostRole GetRole(THostIndex host) const;
     void SetRole(THostIndex host, EHostRole assignment);
 
+    void AppendRole(EHostRole assignment);
+
     [[nodiscard]] THostMask GetPrimary() const;
     [[nodiscard]] THostMask GetHandOff() const;
     [[nodiscard]] THostMask GetActive() const;
 
     bool operator==(const THostRoles& other) const = default;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 
 private:
     std::array<EHostRole, MaxHostCount> Assignments{};

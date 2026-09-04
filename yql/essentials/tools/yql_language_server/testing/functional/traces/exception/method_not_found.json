@@ -1,0 +1,15 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "xxx/yyy",
+    "params": {}
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": null,
+    "error": {
+      "code": -32601,
+      "message": "method not found: 'xxx/yyy'"
+    }
+  }
+]

@@ -11,8 +11,10 @@
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -23,6 +25,9 @@
 #include <util/folder/path.h>
 
 #include <iterator>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -45,6 +50,10 @@ namespace NKikimr::NDataStreams::V1 {
         const TRequest* GetRequest(NGRpcService::IRequestOpCtx *request)
         {
             return dynamic_cast<const TRequest*>(request->GetRequest());
+        }
+
+        bool IsKafkaBatchDataChunk(const NKikimrPQClient::TDataChunk& proto) {
+            return proto.HasCodec() && proto.GetCodec() + 1 == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH);
         }
 
         ui32 PartitionWriteSpeedInBytesPerSec(ui32 speedInKbPerSec) {
@@ -329,7 +338,9 @@ namespace NKikimr::NDataStreams::V1 {
                                                 const TActorContext& ctx, const TString& workingDir,
                                                 const TString& name)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "WorkingDir = " << workingDir << ", name = " << name);
+        YDB_LOG_DEBUG_CTX(ctx, "Fill propose request",
+            {"workingDir", workingDir},
+            {"name", name});
         NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
         modifyScheme.SetWorkingDir(workingDir);
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
@@ -786,7 +797,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_ABORT_UNLESS(result->ResultSet.size() == 1); // describe only one topic
+        AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size()); // describe only one topic
         const auto& response = result->ResultSet.front();
         const TString path = JoinSeq("/", response.Path);
 
@@ -794,7 +805,7 @@ namespace NKikimr::NDataStreams::V1 {
             return;
         }
 
-        Y_ABORT_UNLESS(response.PQGroupInfo);
+        AFL_ENSURE(response.PQGroupInfo)("path", path);
 
         PQGroup = response.PQGroupInfo->Description;
         SelfInfo = response.Self->Info;
@@ -1065,7 +1076,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TListStreamConsumersActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_ABORT_UNLESS(result->ResultSet.size() == 1); // describe only one topic
+        AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size()); // describe only one topic
 
         if (ReplyIfNotTopic(ev)) {
             return;
@@ -1501,6 +1512,7 @@ namespace NKikimr::NDataStreams::V1 {
         cmdRead->SetReadTimestampMs(ShardIterator.GetReadTimestamp());
         cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
         cmdRead->SetExternalOperation(true);
+        cmdRead->SetCanReadBatches(true);
 
         TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
         req->Record.Swap(&request);
@@ -1563,7 +1575,7 @@ namespace NKikimr::NDataStreams::V1 {
                         Result.set_millis_behind_latest(0);
 
                         if (IsQuotaRequired()) {
-                            Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
+                            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
                         } else {
                             SendResponse(ctx);
                         }
@@ -1587,9 +1599,25 @@ namespace NKikimr::NDataStreams::V1 {
                         "Partition ended");
             }
 
-            const auto& results = readResult.GetResult();
-            for (auto& r : results) {
+            TMaybe<ui64> nextSequenceNumber;
+            TMaybe<ui64> lastWriteTimestampMs;
+            const ui64 readOffset = ShardIterator.GetSequenceNumber();
+
+            for (const auto& r : readResult.GetResult()) {
+                lastWriteTimestampMs = r.GetWriteTimestampMS();
+                const ui64 nextResultOffset = r.GetOffset() + r.GetLogicalMessageCount();
+                if (nextResultOffset <= readOffset) {
+                    nextSequenceNumber = Max(nextSequenceNumber.GetOrElse(readOffset), nextResultOffset);
+                    continue;
+                }
+                if (Result.records_size() >= Limit) {
+                    break;
+                }
+
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
+                if (IsKafkaBatchDataChunk(proto)) {
+                    NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), r.GetOffset());
+                }
                 auto record = Result.add_records();
                 record->set_data(proto.GetData());
                 record->set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);
@@ -1599,12 +1627,17 @@ namespace NKikimr::NDataStreams::V1 {
                 if (proto.GetCodec() > 0) {
                     record->set_codec(proto.GetCodec() + 1);
                 }
+
+                nextSequenceNumber = nextResultOffset;
+                if (Result.records_size() >= Limit) {
+                    break;
+                }
             }
-            if (!results.empty()) {
-                auto last = results.rbegin();
+
+            if (nextSequenceNumber) {
                 shardIterator.SetReadTimestamp(0);
-                shardIterator.SetSequenceNumber(last->GetOffset() + 1);
-                Result.set_millis_behind_latest(TInstant::Now().MilliSeconds() - last->GetWriteTimestampMS());
+                shardIterator.SetSequenceNumber(*nextSequenceNumber);
+                Result.set_millis_behind_latest(TInstant::Now().MilliSeconds() - *lastWriteTimestampMs);
             } else { // remove else?
                 Result.set_millis_behind_latest(0);
             }
@@ -1614,7 +1647,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
-            Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+            AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
         } else {
             SendResponse(ctx);
         }
@@ -1990,9 +2023,9 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_ABORT_UNLESS(result->ResultSet.size() == 1); // describe only one topic
+        AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size()); // describe only one topic
         const auto& response = result->ResultSet.front();
-        Y_ABORT_UNLESS(response.PQGroupInfo);
+        AFL_ENSURE(response.PQGroupInfo)("path", JoinSeq("/", response.Path));
         const TString path = JoinSeq("/", response.Path);
 
         PQGroup = response.PQGroupInfo->Description;
@@ -2103,7 +2136,7 @@ DECLARE_RPC_NI(StopStreamEncryption);
 
 void DoDataStreamsDecreaseStreamRetentionPeriodRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     auto* req = dynamic_cast<TEvDataStreamsDecreaseStreamRetentionPeriodRequest*>(p.release());
-    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    AFL_ENSURE(req != nullptr)("reason", "Wrong using of TGRpcRequestWrapper");
     TActivationContext::AsActorContext().Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsDecreaseStreamRetentionPeriodRequest>(req, false));
 }
 template<>
@@ -2113,7 +2146,7 @@ IActor* TEvDataStreamsDecreaseStreamRetentionPeriodRequest::CreateRpcActor(NKiki
 
 void DoDataStreamsIncreaseStreamRetentionPeriodRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     auto* req = dynamic_cast<TEvDataStreamsIncreaseStreamRetentionPeriodRequest*>(p.release());
-    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    AFL_ENSURE(req != nullptr)("reason", "Wrong using of TGRpcRequestWrapper");
     TActivationContext::AsActorContext().Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsIncreaseStreamRetentionPeriodRequest>(req, true));
 }
 template<>

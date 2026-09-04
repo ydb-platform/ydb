@@ -8,4 +8,6 @@ JAR_RESOURCE(3096861715)
 
 SRC_RESOURCE(3096861694)
 
+ORIGINAL_SOURCE(https://github.com/google/error-prone)
+
 END()

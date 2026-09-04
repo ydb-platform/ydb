@@ -37,6 +37,10 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    @pytest.mark.skipif(
+        KikimrSqsTestBase._is_topic_migration_stage(),
+        reason='TQueueLeader leader-start inflight test is not applicable in migration compatibility/finished stages',
+    )
     def test_limit_leader_start_inflight(self, is_fifo, tables_format):
         self._init_with_params(is_fifo, tables_format)
 

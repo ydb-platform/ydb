@@ -15,6 +15,8 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
         self.rows_count = 20
         self._use_sql_index_syntax = min(self.versions) >= (26, 1)
 
+        self._describe_shows_olap_indexes = min(self.versions) >= (26, 3)
+
         extra_flags = []
         if self._use_sql_index_syntax:
             extra_flags = ["enable_local_bloom_filter_index", "enable_local_bloom_ngram_filter_index"]
@@ -165,9 +167,10 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
         time.sleep(wait_seconds)
 
     def _do_queries(self, queries):
+        retry_settings = ydb.RetrySettings(idempotent=True)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for is_select, query in queries:
-                result_sets = session_pool.execute_with_retries(query)
+                result_sets = session_pool.execute_with_retries(query, retry_settings=retry_settings)
                 if is_select:
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
                     for row in result_sets[0].rows:
@@ -175,6 +178,8 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
 
     def _assert_describe_indexes(self, table_name, expected):
         if not self._use_sql_index_syntax:
+            return
+        if not self._describe_shows_olap_indexes:
             return
         path = self._table_path(table_name)
 

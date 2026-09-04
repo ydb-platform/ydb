@@ -362,7 +362,7 @@ WITH (
     if (Execute) {
         const auto& colors = NConsoleClient::AutoColors(Cerr);
         Cerr << colors.Green() << "Executing request:" << colors.OldColor() << Endl << Endl << query << Endl << Endl;
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NQuery::TQueryClient client(driver);
         auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Max(), /* isIdempotent */ false)
             .GetValueSync();
@@ -373,10 +373,8 @@ WITH (
             }
         } else {
             Cerr << colors.Red() << "Failed to create a table:" << colors.OldColor() << Endl << "Status: " << result.GetStatus() << Endl << "Issues:" << Endl << Strip(result.GetIssues().ToString()) << Endl;
-            driver.Stop(true);
             return EXIT_FAILURE;
         }
-        driver.Stop(true);
     } else {
         Cout << query << Endl;
     }

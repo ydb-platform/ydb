@@ -1,0 +1,12 @@
+$externalDict = {1: 10, 2: 20, 3: 30};
+
+SELECT Block(($arg)->{
+    $dict = ListFold([1,2,3,2,1], 
+    ToMutDict({0:0}, $arg), 
+    ($item,$state)->{
+        $value = DictLookup($externalDict, $item) ?? 0;
+        RETURN MutDictInsert($state, $item, $value);
+    });
+
+    RETURN ListSort(DictKeys(FromMutDict($dict)));
+});

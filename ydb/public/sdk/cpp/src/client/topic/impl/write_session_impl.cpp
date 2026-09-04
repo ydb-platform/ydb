@@ -1,5 +1,7 @@
 #include "write_session_impl.h"
 
+#include "deferred_publication_ack_tracker.h"
+
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
@@ -29,6 +31,18 @@ const uint64_t WRITE_ERROR_PARTITION_INACTIVE = 500029;
 namespace {
 
 using TTxId = std::pair<std::string_view, std::string_view>;
+
+constexpr std::string_view MESSAGE_ATTRIBUTE_KEY = "__key";
+
+std::optional<std::string> GetMessageKey(const std::vector<std::pair<std::string, std::string>>& messageMeta) {
+    for (const auto& [key, value] : messageMeta) {
+        if (key == MESSAGE_ATTRIBUTE_KEY) {
+            return value;
+        }
+    }
+
+    return std::nullopt;
+}
 
 bool ValidateWriteSessionSettings(const TWriteSessionSettings& settings, NYdb::NIssue::TIssues& issues) {
     if (!settings.BatchInnerCodec_.has_value()) {
@@ -62,13 +76,82 @@ TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& req
     return TTxId(tx.session(), tx.id());
 }
 
-TTxIdOpt GetTransactionId(const std::optional<TTransactionId>& tx)
+void SetWriteContext(
+    Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest,
+    const TWriteContext& writeContext)
 {
-    if (!tx) {
-        return std::nullopt;
+    if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
+        auto* proto = writeRequest.mutable_deferred_publish();
+        proto->set_int_publication_id(deferred->IntPublicationId);
+        if (deferred->ExtPublicationId) {
+            proto->set_ext_publication_id(TStringType{*deferred->ExtPublicationId});
+        }
+        return;
     }
 
-    return TTxId(tx->SessionId, tx->TxId);
+    if (auto* tx = std::get_if<TTransactionId>(&writeContext)) {
+        writeRequest.mutable_tx()->set_id(tx->TxId);
+        writeRequest.mutable_tx()->set_session(tx->SessionId);
+    }
+}
+
+NYdb::NIssue::TIssues ValidateDeferredPublicationMessage(const TWriteMessage& message)
+{
+    if (!message.DeferredPublication_) {
+        return {};
+    }
+
+    NYdb::NIssue::TIssues issues;
+    if (message.GetTxPtr()) {
+        issues.AddIssue("deferred_publish is incompatible with transaction");
+    }
+    if (message.DeferredPublication_->IntPublicationId == 0) {
+        issues.AddIssue("int_publication_id must be greater than zero");
+    }
+    // On Write, ext_publication_id is informational for the server (omit, "" or any string).
+    // Only enforce MaxExtPublicationIdLength so a huge value cannot DoS the request path.
+    // BeginPublication separately requires a non-empty ext id as the client-chosen key.
+    if (message.DeferredPublication_->ExtPublicationId
+        && message.DeferredPublication_->ExtPublicationId->size()
+            > TDeferredPublication::MaxExtPublicationIdLength)
+    {
+        issues.AddIssue("ext_publication_id is too long");
+    }
+    return issues;
+}
+
+TTxIdOpt GetTransactionId(const TWriteContext& writeContext)
+{
+    if (auto* tx = std::get_if<TTransactionId>(&writeContext)) {
+        return TTxId(tx->SessionId, tx->TxId);
+    }
+    return std::nullopt;
+}
+
+bool DeferredPublishIdentityChanged(
+    const Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest,
+    const TWriteContext& messageContext)
+{
+    const auto* messageDeferred = std::get_if<TDeferredPublication>(&messageContext);
+    if (!writeRequest.has_deferred_publish()) {
+        return messageDeferred != nullptr;
+    }
+    if (!messageDeferred) {
+        return true;
+    }
+
+    const auto& requestDeferred = writeRequest.deferred_publish();
+    if (requestDeferred.int_publication_id() != messageDeferred->IntPublicationId) {
+        return true;
+    }
+
+    const bool requestHasExt = requestDeferred.has_ext_publication_id();
+    const bool messageHasExt = messageDeferred->ExtPublicationId.has_value();
+    if (requestHasExt != messageHasExt) {
+        return true;
+    }
+    return requestHasExt
+        && requestDeferred.ext_publication_id() != *messageDeferred->ExtPublicationId;
 }
 
 std::optional<TTransactionId> MakeTransactionId(const TTransactionBase* tx)
@@ -102,7 +185,7 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
+    , PrevToken(DbDriverState->GetCredentialsProvider() ? DbDriverState->GetCredentialsProvider()->GetAuthInfo() : "")
     , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
@@ -569,6 +652,32 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
+NThreading::TFuture<bool> TWriteSessionImpl::Flush() {
+    std::lock_guard guard(Lock);
+    if (Aborting.load()) {
+        return NThreading::MakeFuture(false);
+    }
+
+    if (!CurrentBatch.Empty()) {
+        WriteBatchImpl();
+    }
+
+    TOriginalMessage* message = nullptr;
+    if (!OriginalMessagesToSend.empty()) {
+        message = &OriginalMessagesToSend.back();
+    } else if (!SentOriginalMessages.empty()) {
+        message = &SentOriginalMessages.back();
+    } else {
+        return NThreading::MakeFuture(true);
+    }
+
+    if (!message->FlushPromise.Initialized()) {
+        message->InitFlushPromise(Connections);
+    }
+
+    return message->FlushPromise.GetFuture();
+}
+
 void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransactionBase* tx)
 {
     if (!tx) {
@@ -617,10 +726,26 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
 {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    if (auto deferredIt = WrittenInDeferred.find(seqNo); deferredIt != WrittenInDeferred.end()) {
+        auto& deferred = deferredIt->second;
+        ui64 writeCount = 0;
+        ui64 ackCount = 0;
+        if (deferred.AckState) {
+            std::tie(writeCount, ackCount) = deferred.AckState->OnAck();
+        }
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 MakeOnAckDeferredLogMessage(seqNo, deferred, writeCount, ackCount));
+        Y_ABORT_UNLESS(deferred.UnackedCount > 0);
+        if (--deferred.UnackedCount == 0) {
+            WrittenInDeferred.erase(deferredIt);
+        }
+        return;
+    }
+
     auto p = WrittenInTx.find(seqNo);
     if (p == WrittenInTx.end()) {
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=?");
+                 MakeOnAckPlainLogMessage(seqNo));
         return;
     }
 
@@ -631,7 +756,7 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
         ++txInfo->AckCount;
 
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                 MakeOnAckTxLogMessage(seqNo, txId, txInfo->WriteCount, txInfo->AckCount));
 
         if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
             txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
@@ -662,31 +787,69 @@ void TWriteSessionImpl::DeleteTx(const TTransactionId& txId)
 }
 
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
+    auto issues = ValidateDeferredPublicationMessage(message);
+    if (!issues.Empty()) {
+        with_lock(Lock) {
+            CloseImpl(EStatus::BAD_REQUEST, std::move(issues));
+        }
+        return;
+    }
+
     TInstant createdAtValue = message.CreateTimestamp_.value_or(TInstant::Now());
     bool readyToAccept = false;
     size_t bufferSize = message.Data.size();
+    TWriteContext writeContext = std::monostate{};
+    // After ValidateDeferredPublicationMessage: neither Tx nor DeferredPublication is set, or exactly one of them.
+    if (message.DeferredPublication_) {
+        writeContext = std::move(*message.DeferredPublication_);
+    } else if (auto tx = MakeTransactionId(message.GetTxPtr())) {
+        writeContext = std::move(*tx);
+    }
     {
         std::lock_guard guard(Lock);
+        if (!CurrentBatch.Empty()
+            && CurrentBatch.Messages.front().WriteContext != writeContext) {
+            WriteBatchImpl();
+        }
+
         TrySubscribeOnTransactionCommit(message.GetTxPtr());
 
         ui64 seqNo = GetNextIdImpl(message.SeqNo_);
 
-        if (message.GetTxPtr()) {
-            const auto& txId = MakeTransactionId(*message.GetTxPtr());
-            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+        if (auto* tx = std::get_if<TTransactionId>(&writeContext)) {
+            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(*tx);
             with_lock(txInfo->Lock) {
                 ++txInfo->WriteCount;
 
                 LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << *tx << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
             }
-            WrittenInTx[seqNo] = txId;
+            WrittenInTx[seqNo] = *tx;
+        } else if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
+            auto& ackState = TDeferredPublication::TAccess::AckState(*deferred);
+            if (!ackState->TryOnWrite()) {
+                CloseImpl(
+                    EStatus::BAD_REQUEST,
+                    "Write after Publish/Cancel is not allowed for this deferred publication");
+                return;
+            }
+            auto& inFlight = WrittenInDeferred[seqNo];
+            if (!inFlight.AckState) {
+                inFlight.AckState = ackState;
+                inFlight.IntPublicationId = deferred->IntPublicationId;
+                inFlight.ExtPublicationId = deferred->ExtPublicationId;
+            }
+            ++inFlight.UnackedCount;
+            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                     LogPrefixImpl() << "OnWrite: seqNo=" << seqNo
+                                     << ", intPublicationId=" << deferred->IntPublicationId
+                                     << ", UnackedCount=" << inFlight.UnackedCount);
         }
 
         CurrentBatch.Add(
                 seqNo, createdAtValue, message.Data, message.Codec, message.OriginalSize,
                 message.MessageMeta_,
-                MakeTransactionId(message.GetTxPtr())
+                std::move(writeContext)
         );
 
         readyToAccept = OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk;
@@ -1052,6 +1215,39 @@ TStringBuilder TWriteSessionImpl::LogPrefixImpl() const {
     return ret;
 }
 
+TString TWriteSessionImpl::MakeOnAckPlainLogMessage(ui64 seqNo) const {
+    return TStringBuilder() << LogPrefixImpl() << "OnAck: seqNo=" << seqNo;
+}
+
+TString TWriteSessionImpl::MakeOnAckTxLogMessage(
+    ui64 seqNo,
+    const TTransactionId& txId,
+    ui64 writeCount,
+    ui64 ackCount) const
+{
+    return TStringBuilder()
+        << LogPrefixImpl() << "OnAck: seqNo=" << seqNo
+        << ", txId=" << txId
+        << ", WriteCount=" << writeCount
+        << ", AckCount=" << ackCount;
+}
+
+TString TWriteSessionImpl::MakeOnAckDeferredLogMessage(
+    ui64 seqNo,
+    const TDeferredInFlightWrite& deferred,
+    ui64 writeCount,
+    ui64 ackCount) const
+{
+    TStringBuilder log;
+    log << LogPrefixImpl() << "OnAck: seqNo=" << seqNo
+        << ", int_publication_id=" << deferred.IntPublicationId;
+    if (deferred.ExtPublicationId) {
+        log << ", ext_publication_id=" << *deferred.ExtPublicationId;
+    }
+    log << ", WriteCount=" << writeCount << ", AckCount=" << ackCount;
+    return std::move(log);
+}
+
 template<>
 void TPrintable<TWriteSessionEvent::TAcksEvent>::DebugString(TStringBuilder& res, bool) const {
     const auto* self = static_cast<const TWriteSessionEvent::TAcksEvent*>(this);
@@ -1274,6 +1470,23 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     return result;
 }
 
+void TWriteSessionImpl::AbortFlushPromisesImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    for (auto& message : OriginalMessagesToSend) {
+        message.CompleteFlush(false);
+    }
+
+    std::queue<TOriginalMessage> sentMessages;
+    SentOriginalMessages.swap(sentMessages);
+    while (!sentMessages.empty()) {
+        auto message = std::move(sentMessages.front());
+        sentMessages.pop();
+        message.CompleteFlush(false);
+        SentOriginalMessages.push(std::move(message));
+    }
+}
+
 TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1346,6 +1559,7 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
             .Codec = codec,
             .Payloads = blockPtr->OriginalDataRefs,
             .CreatedAt = blockPtr->CreatedAt,
+            .MessageKeys = blockPtr->MessageKeys,
             .Data = blockPtr->Data,
             .CodecID = blockPtr->CodecID,
             .Compressed = blockPtr->Compressed,
@@ -1508,6 +1722,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             block.OriginalMemoryUsage += datum.size();
             block.OriginalDataRefs.emplace_back(datum);
             block.CreatedAt.emplace_back(createTs);
+            block.MessageKeys.emplace_back(GetMessageKey(currMessage.MessageMeta));
             if (CurrentBatch.Messages[i].Codec.has_value()) {
                 Y_ABORT_UNLESS(CurrentBatch.Messages.size() == 1);
                 block.CodecID = static_cast<ui32>(*currMessage.Codec);
@@ -1525,10 +1740,10 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             if (!currMessage.MessageMeta.empty()) {
                 OriginalMessagesToSend.emplace_back(id, createTs, datum.size(),
                                                std::move(currMessage.MessageMeta),
-                                               std::move(currMessage.Tx));
+                                               std::move(currMessage.WriteContext));
             } else {
                 OriginalMessagesToSend.emplace_back(id, createTs, datum.size(),
-                                               std::move(currMessage.Tx));
+                                               std::move(currMessage.WriteContext));
             }
         }
 
@@ -1572,11 +1787,54 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
+    auto credentialsProvider = DbDriverState->GetCredentialsProvider();
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting) {
         return;
     }
 
-    auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
+    auto authInfo = credentialsProvider->GetAuthInfoAsync();
+    if (authInfo.IsReady()) {
+        UpdateTokenImpl(authInfo);
+        return;
+    }
+    UpdateTokenInProgress = true;
+    try {
+        authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
+            if (auto self = cbContext->LockShared()) try {
+                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
+                    if (auto self = cbContext->LockShared()) {
+                        if (!ok) {
+                            self->UpdateTokenInProgress = false;
+                            return;
+                        }
+                        std::lock_guard guard(self->Lock);
+                        self->UpdateTokenImpl(future);
+                    }
+                });
+            } catch (...) {
+                self->UpdateTokenInProgress = false;
+            }
+        });
+    } catch (...) {
+        UpdateTokenInProgress = false;
+    }
+}
+
+void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& future) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    UpdateTokenInProgress = false;
+    if (!SessionEstablished || Aborting) {
+        return;
+    }
+
+    std::string token;
+    try {
+        token = future.GetValue();
+    } catch (...) {
+        CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
+        return;
+    }
     if (token == PrevToken) {
         return;
     }
@@ -1601,7 +1859,22 @@ bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRe
 
     Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
-    return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().Tx);
+    return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().WriteContext);
+}
+
+bool TWriteSessionImpl::DeferredPublishIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest) const
+{
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    if (!writeRequest.messages_size()) {
+        return false;
+    }
+
+    Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+
+    return DeferredPublishIdentityChanged(
+        writeRequest,
+        OriginalMessagesToSend.front().WriteContext);
 }
 
 void TWriteSessionImpl::SendBatchBlock(
@@ -1626,12 +1899,10 @@ void TWriteSessionImpl::SendBatchBlock(
     }
 
     const auto& firstMessage = batchMessages.front();
-    auto* msgData = writeRequest->add_messages();
-
-    if (firstMessage.Tx) {
-        writeRequest->mutable_tx()->set_id(firstMessage.Tx->TxId);
-        writeRequest->mutable_tx()->set_session(firstMessage.Tx->SessionId);
+    if (writeRequest->messages_size() == 0) {
+        SetWriteContext(*writeRequest, firstMessage.WriteContext);
     }
+    auto* msgData = writeRequest->add_messages();
 
     msgData->set_seq_no(static_cast<i64>(GetSeqNoImpl(batchMessages.back().Id)));
     *msgData->mutable_created_at() =
@@ -1673,12 +1944,10 @@ void TWriteSessionImpl::SendStandardBlock(
         Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
         auto& message = OriginalMessagesToSend.front();
-        auto* msgData = writeRequest->add_messages();
-
-        if (message.Tx) {
-            writeRequest->mutable_tx()->set_id(message.Tx->TxId);
-            writeRequest->mutable_tx()->set_session(message.Tx->SessionId);
+        if (writeRequest->messages_size() == 0) {
+            SetWriteContext(*writeRequest, message.WriteContext);
         }
+        auto* msgData = writeRequest->add_messages();
 
         msgData->set_seq_no(GetSeqNoImpl(message.Id));
         *msgData->mutable_created_at() =
@@ -1723,6 +1992,9 @@ void TWriteSessionImpl::SendImpl() {
                 break;
             }
             if (TxIsChanged(writeRequest)) {
+                break;
+            }
+            if (DeferredPublishIsChanged(*writeRequest)) {
                 break;
             }
 
@@ -1892,8 +2164,15 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
 
-        CancelTransactions();
+        CancelPendingWriteAcks();
+        AbortFlushPromisesImpl();
     }
+}
+
+void TWriteSessionImpl::CancelPendingWriteAcks()
+{
+    CancelTransactions();
+    CancelDeferredPublications();
 }
 
 void TWriteSessionImpl::CancelTransactions()
@@ -1908,6 +2187,21 @@ void TWriteSessionImpl::CancelTransactions()
     }
 
     Txs.clear();
+}
+
+void TWriteSessionImpl::CancelDeferredPublications()
+{
+    std::unordered_map<std::shared_ptr<TDeferredPublicationAckState>, ui64> unackedByState;
+    for (const auto& [_, deferred] : WrittenInDeferred) {
+        if (deferred.AckState) {
+            unackedByState[deferred.AckState] += deferred.UnackedCount;
+        }
+    }
+    WrittenInDeferred.clear();
+
+    for (const auto& [state, unackedCount] : unackedByState) {
+        state->OnUnackedAbort(unackedCount);
+    }
 }
 
 void TWriteSessionImpl::CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues) {

@@ -114,6 +114,9 @@ kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_node_broker_port:+ --node-broker-port ${kikimr_node_broker_port}}"
+if [ ! -z "${kikimr_node_domain}" ]; then
+    kikimr_arg="${kikimr_arg} --node-domain ${kikimr_node_domain}"
+fi
 kikimr_arg="${kikimr_arg}${kikimr_syslog_service_tag:+ --syslog-service-tag ${kikimr_syslog_service_tag}}"
 
 kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
@@ -446,12 +449,14 @@ def ydbd_extra_args(extra_args: str = ""):
 def dynamic_cfg_new_style(
     enable_cores=False,
     extra_args="",
-    use_auth_token_file=False
+    use_auth_token_file=False,
+    domain="",
 ):
     return "\n".join(
         [
             "kikimr_coregen=\"--core\"" if enable_cores else "",
             "kikimr_auth_token_file=${kikimr_home}/token/kikimr.token" if use_auth_token_file else "",
+            f'kikimr_node_domain="{domain}"' if domain else "",
             NEW_STYLE_DYNAMIC_CFG,
         ]
         + ydbd_extra_args(extra_args)

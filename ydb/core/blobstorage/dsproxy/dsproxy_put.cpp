@@ -8,10 +8,13 @@
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY_PUT
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
@@ -470,23 +473,31 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             SendReply(std::move(result), blobIdx);
         }
 
-        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
-            STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",
-                    (LongRequestThreshold, LongRequestThreshold),
-                    (GroupId, Info->GroupID),
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
-                    (RestartCounter, RestartCounter),
-                    (History, PutImpl.PrintHistory()));
+        if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
+            if (PopAllowToken(HandleClass)) {
+                YDB_LOG_WARN("Long TEvPut request detected",
+                    {"marker", "BPP71"},
+                    {"longRequestThreshold", LongRequestThreshold},
+                    {"groupId", Info->GroupID},
+                    {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                    {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                    {"restartCounter", RestartCounter},
+                    {"history", PutImpl.PrintHistory()});
+            }
+            if (ResponsesSent == PutImpl.Blobs.size() && EnableStorageRetroTraceCollectionSlowRequests) {
+                if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->DemandTraceOnEnd();
+                }
+            }
         }
 
         if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
-            STLOG(PutImpl.ResultPriority,
-                    BS_PROXY_PUT, BPP72, "Query history",
-                    (GroupId, Info->GroupID),
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
-                    (History, PutImpl.PrintHistory()));
+            YDB_LOG_COMP(PutImpl.ResultPriority, BS_PROXY_PUT, "Query history",
+                {"marker", "BPP72"},
+                {"groupId", Info->GroupID},
+                {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                {"history", PutImpl.PrintHistory()});
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {
@@ -574,6 +585,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     .HandleClass = HandleClass,
                     .Tactic = Tactic,
                     .WriteSource = item.WriteSource,
+                    .DataKind = item.DataKind,
                     .IssueKeepFlag = item.IssueKeepFlag,
                     .IgnoreBlock = item.IgnoreBlock,
                     .AlreadyEncrypted = item.AlreadyEncrypted,
@@ -604,7 +616,8 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Common.Event, Mon,
                 params.EnableRequestMod3x3ForMinLatency, params.Common.Source,
-                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams)
+                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams,
+                params.Common.EnableChecksumCalcAndValidationOnDsProxy)
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , HandleClass(params.Common.Event->HandleClass)
         , ReportedBytes(0)
@@ -635,7 +648,8 @@ public:
     TBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Events, Mon, params.HandleClass, params.Tactic,
-                params.EnableRequestMod3x3ForMinLatency, params.AccelerationParams)
+                params.EnableRequestMod3x3ForMinLatency, params.AccelerationParams,
+                params.Common.EnableChecksumCalcAndValidationOnDsProxy)
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , IsManyPuts(true)
         , HandleClass(params.HandleClass)
@@ -686,8 +700,14 @@ public:
 
         Become(&TBlobStorageGroupPutRequest::StateWait);
 
+        if (Info->GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
+            BlobsEncrypted = PutImpl.Blobs.size();
+        }
+
         if (ReduceInterpileTraffic) {
-            return InterpileBootstrap();
+            ResumeBootstrap();
+            CheckRequests(TEvents::TSystem::Bootstrap);
+            return;
         }
 
         TInstant now = TActivationContext::Now();
@@ -721,9 +741,6 @@ public:
         for (auto& partSet : PartSets) {
             partSet.resize(Info->Type.TotalPartCount());
         }
-        if (Info->GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
-            BlobsEncrypted = PartSets.size();
-        }
         ResumeBootstrap();
         CheckRequests(TEvents::TSystem::Bootstrap);
     }
@@ -737,7 +754,9 @@ public:
             Y_DEBUG_ABORT_UNLESS(nodeId != SelfId().NodeId());
 
             bool isConnected = false;
-            vdisk->Queues.ForEachQueue([&](auto& queue) { isConnected |= queue.IsConnected; });
+            vdisk->Queues.ForEachQueue([&](auto& queue) {
+                isConnected |= queue.IsConnected.load(std::memory_order_acquire);
+            });
             if (isConnected) {
                 options.push_back(nodeId);
             }
@@ -786,6 +805,38 @@ public:
         }
     }
 
+    void EncryptNextChunk() {
+        auto& blob = PutImpl.Blobs[BlobsEncrypted];
+        if (blob.AlreadyEncrypted || blob.Buffer.empty()) {
+            blob.AlreadyEncrypted = true;
+            ++BlobsEncrypted;
+            Y_ABORT_UNLESS(CurrentEncryptionOffset == 0);
+            return;
+        }
+
+        const ui32 size = Min<ui32>(blob.Buffer.size() - CurrentEncryptionOffset, MaxBytesToEncryptAtOnce);
+        EncryptInplace(blob.Buffer, CurrentEncryptionOffset, size, blob.BlobId, *Info);
+        CurrentEncryptionOffset += size;
+        if (CurrentEncryptionOffset == blob.Buffer.size()) {
+            blob.AlreadyEncrypted = true;
+            ++BlobsEncrypted;
+            CurrentEncryptionOffset = 0;
+        }
+    }
+
+    bool EncryptQuantum() {
+        const ui64 endTime = GetCycleCountFast() + DurationToCycles(MaxQuantumDuration);
+        bool firstIteration = true;
+        while (BlobsEncrypted < PutImpl.Blobs.size()) {
+            if (!firstIteration && endTime <= GetCycleCountFast()) {
+                return false;
+            }
+            firstIteration = false;
+            EncryptNextChunk();
+        }
+        return true;
+    }
+
     bool EncodeQuantum() {
         const ui64 endTime = GetCycleCountFast() + DurationToCycles(MaxQuantumDuration);
         bool firstIteration = true;
@@ -797,19 +848,7 @@ public:
             firstIteration = false;
 
             if (BlobsEncrypted <= BlobsSplit) { // first we encrypt the blob (if encryption is enabled)
-                auto& blob = PutImpl.Blobs[BlobsEncrypted];
-                if (blob.AlreadyEncrypted) {
-                    ++BlobsEncrypted;
-                    Y_ABORT_UNLESS(CurrentEncryptionOffset == 0);
-                    continue;
-                }
-                const ui32 size = Min<ui32>(blob.Buffer.size() - CurrentEncryptionOffset, MaxBytesToEncryptAtOnce);
-                EncryptInplace(blob.Buffer, CurrentEncryptionOffset, size, blob.BlobId, *Info);
-                CurrentEncryptionOffset += size;
-                if (CurrentEncryptionOffset == blob.Buffer.size()) {
-                    ++BlobsEncrypted;
-                    CurrentEncryptionOffset = 0;
-                }
+                EncryptNextChunk();
             } else { // BlobsSplit < BlobsEncrypted -- then we split it
                 auto& blob = PutImpl.Blobs[BlobsSplit];
                 const auto crcMode = static_cast<TErasureType::ECrcMode>(blob.BlobId.CrcMode());
@@ -879,12 +918,15 @@ public:
     }
 
     void ResumeBootstrap() {
-        if (EncodeQuantum()) {
+        const bool done = ReduceInterpileTraffic ? EncryptQuantum() : EncodeQuantum();
+        if (!done) {
+            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvResume, 0, SelfId(), {}, nullptr, 0));
+        } else if (ReduceInterpileTraffic) {
+            InterpileBootstrap();
+        } else {
             PutImpl.GenerateInitialRequests(LogCtx, PartSets);
             Action();
             BootstrapInProgress = false;
-        } else {
-            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvResume, 0, SelfId(), {}, nullptr, 0));
         }
         SanityCheck();
     }

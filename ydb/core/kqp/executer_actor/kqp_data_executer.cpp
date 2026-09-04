@@ -1,6 +1,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
+#include "kqp_pq_topic_resolver.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -31,6 +32,8 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 namespace NKikimr {
 namespace NKqp {
@@ -66,20 +69,18 @@ public:
         const TActorId bufferActorId,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        ui64 generation,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-        bool shrinkTasksGraph,
+        bool useKqpTasksGraphV2,
         TVector<NKikimr::TTableId> tableIdsForSnapshot)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
-            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService, shrinkTasksGraph)
+            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService, useKqpTasksGraphV2)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , TableIdsForSnapshot(std::move(tableIdsForSnapshot))
         , ReadOnlyTx(IsReadOnlyTx())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
-        , Generation(generation)
     {
         TasksGraph.GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
@@ -88,6 +89,7 @@ public:
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
             YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
+                || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
                 || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         }
@@ -106,8 +108,13 @@ public:
                     sb << "CA " << shardId.first << ", ";
                 }
             }
-            KQP_STLOG_D(KQPDATA, sb,
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("Waiting for compute actors to finish",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"details", sb},
+                {"traceId", TraceId()});
         }
         return false;
     }
@@ -161,7 +168,8 @@ public:
                 for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
                     const auto& input = stage.GetInputs(inputIndex);
                     if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup ||
-                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve)
+                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve ||
+                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorSearch)
                     {
                         unknownAffectedShardCount = true;
                     }
@@ -205,11 +213,16 @@ public:
             Become(&TKqpDataExecuter::FinalizeState);
             MakeResponseAndPassAway();
             return;
-        }  else if (Request.LocksOp == ELocksOp::Commit && !ReadOnlyTx) {
+        }  else if (Request.LocksOp == ELocksOp::Commit) {
+            AFL_ENSURE(!ReadOnlyTx);
             Become(&TKqpDataExecuter::FinalizeState);
-            KQP_STLOG_D(KQPDATA, "Send Commit to BufferActor",
-                (buffer_actor_id, BufferActorId),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("Send Commit to BufferActor",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"bufferActorId", BufferActorId},
+                {"traceId", TraceId()});
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
@@ -223,9 +236,13 @@ public:
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
-            KQP_STLOG_D(KQPDATA, "Send Rollback to BufferActor",
-                (buffer_actor_id, BufferActorId),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("Send Rollback to BufferActor",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"bufferActorId", BufferActorId},
+                {"traceId", TraceId()});
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
@@ -236,11 +253,15 @@ public:
                 0,
                 ExecuterSpan.GetTraceId());
             return;
-        } else if (Request.UseImmediateEffects) {
+        } else if (Request.FlushEffects) {
             Become(&TKqpDataExecuter::FinalizeState);
-            KQP_STLOG_D(KQPDATA, "Send Flush to BufferActor",
-                (buffer_actor_id, BufferActorId),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("Send Flush to BufferActor",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"bufferActorId", BufferActorId},
+                {"traceId", TraceId()});
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
@@ -289,9 +310,13 @@ public:
         if (IsCancelAfterAllowed(ev)) {
             TBase::HandleAbortExecution(ev);
         } else {
-            KQP_STLOG_D(KQPDATA, "Got TEvAbortExecution, but cancellation is not allowed",
-                (sender, ev->Sender),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("Got TEvAbortExecution, but cancellation is not allowed",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"sender", ev->Sender},
+                {"traceId", TraceId()});
         }
     }
 
@@ -299,14 +324,19 @@ public:
         if (ev->Get()->Stats && Stats) {
             Stats->AddBufferStats(std::move(*ev->Get()->Stats));
         }
+        ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();
     }
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
         AFL_ENSURE(ev->Sender == BufferActorId);
-        KQP_STLOG_W(KQPDATA, "Got Undelivered from BufferActor",
-            (sender, ev->Sender),
-            (trace_id, TraceId()));
+        YDB_LOG_WARN("Got Undelivered from BufferActor",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"sender", ev->Sender},
+            {"traceId", TraceId()});
     }
 
     void MakeResponseAndPassAway() {
@@ -360,6 +390,7 @@ public:
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
                 hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
+                hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
@@ -435,9 +466,13 @@ private:
         if (IsCancelAfterAllowed(ev)) {
             TBase::HandleAbortExecution(ev);
         } else {
-            KQP_STLOG_D(KQPDATA, "Got TEvAbortExecution, but cancellation is not allowed",
-                (sender, ev->Sender),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("Got TEvAbortExecution, but cancellation is not allowed",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"sender", ev->Sender},
+                {"traceId", TraceId()});
         }
     }
 
@@ -451,13 +486,8 @@ private:
 
 private:
     bool IsReadOnlyTx() const {
-        if (TxManager->GetTopicOperations().HasOperations()) {
-            YQL_ENSURE(!Request.UseImmediateEffects);
-            return false;
-        }
-
-        if (Request.LocksOp == ELocksOp::Commit) {
-            YQL_ENSURE(!Request.UseImmediateEffects);
+        if (Request.LocksOp == ELocksOp::Commit || TxManager->GetTopicOperations().HasOperations()) {
+            YQL_ENSURE(!Request.FlushEffects);
             return false;
         }
 
@@ -469,11 +499,16 @@ private:
             }
         }
 
+        if (Request.FlushEffects) {
+            return false;
+        }
+
         return true;
     }
 
     bool WaitRequired() const {
-        return SecretSnapshotRequired || ResourceSnapshotRequired || SaveScriptExternalEffectRequired;
+        return SecretSnapshotRequired || ResourceSnapshotRequired
+            || SaveScriptExternalEffectRequired || TopicPartitionSnapshotRequired;
     }
 
     void HandleResolve(TEvDescribeSecretsResponse::TPtr& ev) {
@@ -484,6 +519,11 @@ private:
         }
 
         SecretSnapshotRequired = false;
+        // SecureParams is now populated — launch any deferred PQ topic describes
+        // that need the resolved secret token.
+        if (TopicPartitionSnapshotRequired) {
+            StartPqTopicResolver();
+        }
         if (!WaitRequired()) {
             Execute();
         }
@@ -491,12 +531,35 @@ private:
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
-            KQP_STLOG_E(KQPDATA, "Can not find default state storage group for database",
-                (database, Database),
-                (trace_id, TraceId()));
+            YDB_LOG_ERROR("Can not find default state storage group for database",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"database", Database},
+                {"traceId", TraceId()});
         }
         ResourcesSnapshot = std::move(ev->Get()->Snapshot);
         ResourceSnapshotRequired = false;
+        if (!WaitRequired()) {
+            Execute();
+        }
+    }
+
+    void HandleResolve(TEvKqpExecuter::TEvPqTopicResolveStatus::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_ERROR("PQ topic resolver finished with error",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"issues", ev->Get()->Issues.ToOneLineString()},
+                {"traceId", TraceId()});
+            ReplyErrorAndDie(ev->Get()->Status, ev->Get()->Issues);
+            return;
+        }
+
+        TopicPartitionSnapshotRequired = false;
         if (!WaitRequired()) {
             Execute();
         }
@@ -513,10 +576,7 @@ private:
 
     void DoExecute() {
         const auto& requestContext = GetUserRequestContext();
-        auto scriptExternalEffect = std::make_unique<TEvSaveScriptExternalEffectRequest>(
-            requestContext->CurrentExecutionId, requestContext->Database,
-            requestContext->CustomerSuppliedId
-        );
+        auto scriptExternalEffect = std::make_unique<TEvSaveScriptExternalEffectRequest>(requestContext->CustomerSuppliedId);
         for (const auto& transaction : Request.Transactions) {
             for (const auto& secretName : transaction.Body->GetSecretNames()) {
                 SecretSnapshotRequired = true;
@@ -526,6 +586,15 @@ private:
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;
+
+                    if (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
+                        && transaction.Body->GetHasPqSources()
+                        && Request.QueryPhysicalGraph
+                        && FederatedQuerySetup
+                        && FederatedQuerySetup->PqGatewayFactory)
+                    {
+                        TopicPartitionSnapshotRequired = true;
+                    }
                 }
                 if (requestContext->CurrentExecutionId) {
                     for (const auto& sink : stage.GetSinks()) {
@@ -544,6 +613,8 @@ private:
         }
         if (SecretSnapshotRequired) {
             GetSecretsSnapshot();
+        } else if (TopicPartitionSnapshotRequired) {
+            StartPqTopicResolver();
         }
         if (ResourceSnapshotRequired) {
             GetResourcesSnapshot();
@@ -602,8 +673,13 @@ private:
                     }
 
                     if (error) {
-                        KQP_STLOG_E(KQPDATA, *error,
-                            (trace_id, TraceId()));
+                        YDB_LOG_ERROR("Rejected operation on async index table",
+                            {"marker", "KQPDATA"},
+                            {"actorId", SelfId()},
+                            {"txId", TxId},
+                            {"ctx", *GetUserRequestContext()},
+                            {"error", *error},
+                            {"traceId", TraceId()});
                         ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, *error));
                         return;
@@ -613,8 +689,13 @@ private:
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))) {
                     auto error = TStringBuilder()
                         << "Data manipulation queries with column-oriented tables are supported only by API QueryService.";
-                    KQP_STLOG_E(KQPDATA, error,
-                        (trace_id, TraceId()));
+                    YDB_LOG_ERROR("DML on column-oriented table is not supported via this API",
+                        {"marker", "KQPDATA"},
+                        {"actorId", SelfId()},
+                        {"txId", TxId},
+                        {"ctx", *GetUserRequestContext()},
+                        {"error", error},
+                        {"traceId", TraceId()});
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                         YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
                     return;
@@ -629,7 +710,8 @@ private:
         size_t sourceScanPartitionsCount = 0;
 
         if (!graphRestored) {
-            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get());
+            const bool mayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
+            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
         }
 
         TIssue validateIssue;
@@ -646,15 +728,19 @@ private:
 
         for (const auto& task : TasksGraph.GetTasks()) {
             const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-            if (stageInfo.Meta.IsSysView() || !task.Meta.ShardId) {
+            if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);
             }
         }
 
         if (computeTasks.size() > Request.MaxComputeActors) {
-            KQP_STLOG_N(KQPDATA, "Too many compute actors",
-                (count, computeTasks.size()),
-                (trace_id, TraceId()));
+            YDB_LOG_NOTICE("Too many compute actors",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"count", computeTasks.size()},
+                {"traceId", TraceId()});
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Requested too many execution units: " << computeTasks.size()));
@@ -670,10 +756,14 @@ private:
         const size_t shards = sourceScanPartitionsCount;
 
         if (shardsLimit > 0 && shards > shardsLimit) {
-            KQP_STLOG_W(KQPDATA, "Too many affected shards",
-                (datashard_tasks, shards),
-                (limit, shardsLimit),
-                (trace_id, TraceId()));
+            YDB_LOG_WARN("Too many affected shards",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"datashardTasks", shards},
+                {"limit", shardsLimit},
+                {"traceId", TraceId()});
             Counters->TxProxyMon->TxResultError->Inc();
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
@@ -698,7 +788,7 @@ private:
                 break;
         }
 
-        if ((ReadOnlyTx || Request.UseImmediateEffects) && GetSnapshot().IsValid()) {
+        if ((ReadOnlyTx || Request.FlushEffects) && GetSnapshot().IsValid()) {
             // Snapshot reads are always immediate
             // Uncommitted writes are executed without coordinators, so they can be immediate
             ImmediateTx = true;
@@ -815,8 +905,12 @@ private:
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot));
 
-            KQP_STLOG_T(KQPDATA, "Create temporary mvcc snapshot, become WaitSnapshotState",
-                (trace_id, TraceId()));
+            YDB_LOG_TRACE("Create temporary mvcc snapshot, become WaitSnapshotState",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"traceId", TraceId()});
             Become(&TKqpDataExecuter::WaitSnapshotState);
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot, ExecuterSpan.GetTraceId(), "WaitForSnapshot");
 
@@ -845,11 +939,15 @@ private:
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
         auto* msg = ev->Get();
 
-        KQP_STLOG_T(KQPDATA, "Read snapshot result",
-            (status, msg->Status),
-            (step, msg->Snapshot.Step),
-            (tx_id, msg->Snapshot.TxId),
-            (trace_id, TraceId()));
+        YDB_LOG_TRACE("Read snapshot result",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"status", msg->Status},
+            {"step", msg->Snapshot.Step},
+            {"snapshotTxId", msg->Snapshot.TxId},
+            {"traceId", TraceId()});
 
         if (msg->Status != Ydb::StatusIds::SUCCESS) {
             ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds::StatusCode_Name(msg->Status));
@@ -872,21 +970,28 @@ private:
         OnEmptyResult();
 
         StartCheckpointCoordinator();
-        ExecuteTasks();
+
+        if (!ExecuteTasks()) {
+            return;
+        }
 
         if (CheckExecutionComplete()) {
             return;
         }
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-        KQP_STLOG_D(KQPDATA, "become ExecuteState",
-            (current_state, CurrentStateFuncName()),
-            (immediate, true),
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG("Become ExecuteState",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"currentState", CurrentStateFuncName()},
+            {"immediate", true},
+            {"traceId", TraceId()});
         Become(&TKqpDataExecuter::ExecuteState);
     }
 
-    void ExecuteTasks() {
+    [[nodiscard]] bool ExecuteTasks() {
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
@@ -899,42 +1004,62 @@ private:
         TasksGraph.GetMeta().MayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
 
         bool isSubmitSuccessful = BuildPlannerAndSubmitTasks();
-        if (!isSubmitSuccessful)
-            return;
+        if (!isSubmitSuccessful) {
+            return false;
+        }
 
-        KQP_STLOG_I(KQPDATA, "Total tasks",
-            (total_tasks, TasksGraph.GetTasks().size()),
-            (read_only, ReadOnlyTx),
-            (immediate, ImmediateTx),
-            (pending_compute_tasks, Planner ? Planner->GetPendingComputeTasks().size() : 0),
-            (use_followers, GetUseFollowers()),
-            (trace_id, TraceId()));
+        YDB_LOG_INFO("Total tasks",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"totalTasks", TasksGraph.GetTasks().size()},
+            {"readOnly", ReadOnlyTx},
+            {"immediate", ImmediateTx},
+            {"pendingComputeTasks", Planner ? Planner->GetPendingComputeTasks().size() : 0},
+            {"useFollowers", GetUseFollowers()},
+            {"traceId", TraceId()});
 
         // error
-        KQP_STLOG_T(KQPDATA, "Updating channels after the creation of compute actors",
-            (trace_id, TraceId()));
+        YDB_LOG_TRACE("Updating channels after the creation of compute actors",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"traceId", TraceId()});
         Y_ENSURE(Planner);
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {
             const auto& task = TasksGraph.GetTask(taskId);
-            if (task.ComputeActorId)
+            if (task.ComputeActorId) {
                 Planner->CollectTaskChannelsUpdates(task, updates);
+            }
         }
         Planner->PropagateChannelsUpdates(updates);
+
+        return true;
     }
 
     void Shutdown() override {
         if (Planner) {
             if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-                KQP_STLOG_I(KQPDATA, "Shutdown immediately - nothing to wait",
-                    (trace_id, TraceId()));
+                YDB_LOG_INFO("Shutdown immediately - nothing to wait",
+                    {"marker", "KQPDATA"},
+                    {"actorId", SelfId()},
+                    {"txId", TxId},
+                    {"ctx", *GetUserRequestContext()},
+                    {"traceId", TraceId()});
                 PassAway();
             } else {
                 this->Become(&TThis::WaitShutdownState);
-                KQP_STLOG_I(KQPDATA, "Waiting for shutdown",
-                    (pending_tasks, Planner->GetPendingComputeTasks().size()),
-                    (pending_compute_actors, Planner->GetPendingComputeActors().size()),
-                    (trace_id, TraceId()));
+                YDB_LOG_INFO("Waiting for shutdown",
+                    {"marker", "KQPDATA"},
+                    {"actorId", SelfId()},
+                    {"txId", TxId},
+                    {"ctx", *GetUserRequestContext()},
+                    {"pendingTasks", Planner->GetPendingComputeTasks().size()},
+                    {"pendingComputeActors", Planner->GetPendingComputeActors().size()},
+                    {"traceId", TraceId()});
                 TActivationContext::Schedule(WaitCAStatsTimeout, new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
             }
         } else {
@@ -956,16 +1081,6 @@ private:
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
 
-        if (CheckpointCoordinatorId) {
-            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
-            CheckpointCoordinatorId = TActorId{};
-            const auto context = TasksGraph.GetMeta().UserRequestContext;
-            if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && context && !context->StreamingQueryPath.empty()) {
-                auto counters = Counters->Counters->GetKqpCounters();
-                counters = counters->GetSubgroup("host", "");
-                counters->RemoveSubgroup("path", context->StreamingQueryPath);
-            }
-        }
         TBase::PassAway();
     }
 
@@ -977,9 +1092,13 @@ private:
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
             default:
-                KQP_STLOG_E(KQPDATA, "Unexpected event while waiting for shutdown",
-                    (event_type, ev->GetTypeName()), // ignore all other events
-                    (trace_id, TraceId()));
+                YDB_LOG_ERROR("Unexpected event while waiting for shutdown",
+                    {"marker", "KQPDATA"},
+                    {"actorId", SelfId()},
+                    {"txId", TxId},
+                    {"ctx", *GetUserRequestContext()},
+                    {"eventType", ev->GetTypeName()},
+                    {"traceId", TraceId()});
         }
     }
 
@@ -999,15 +1118,19 @@ private:
 
     void HandleShutdown(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const auto nodeId = ev->Get()->NodeId;
-        KQP_STLOG_N(KQPDATA, "Node has disconnected while shutdown",
-            (node_id, nodeId),
-            (trace_id, TraceId()));
+        YDB_LOG_NOTICE("Node has disconnected while shutdown",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"nodeId", nodeId},
+            {"traceId", TraceId()});
 
         YQL_ENSURE(Planner);
 
         for (const auto& task : TasksGraph.GetTasks()) {
             // TODO: is Meta.NodeId assigned real NodeId where task is executed?
-            if (task.Meta.NodeId == nodeId && !task.Meta.Completed) {
+            if (task.Meta.ExpectedNodeId == nodeId && !task.Meta.Completed) {
                 if (task.ComputeActorId) {
                     Planner->CompletedCA(task.Id, task.ComputeActorId);
                 } else {
@@ -1024,9 +1147,13 @@ private:
 
     void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {
         // Self-poison means timeout - don't wait anymore.
-        KQP_STLOG_I(KQPDATA, "Timed out on waiting for Compute Actors to finish - forcing shutdown",
-            (Sender, ev->Sender),
-            (trace_id, TraceId()));
+        YDB_LOG_INFO("Timed out on waiting for Compute Actors to finish - forcing shutdown",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"sender", ev->Sender},
+            {"traceId", TraceId()});
 
         if (ev->Sender == SelfId()) {
             FillLocksFromExtraData();
@@ -1042,16 +1169,24 @@ private:
         // In case of external timeout the response is already sent to the client - no need to wait for stats.
         if (statusCode == Ydb::StatusIds::TIMEOUT) {
             FillLocksFromExtraData();
-            KQP_STLOG_I(KQPDATA, "External timeout while waiting for Compute Actors to finish - forcing shutdown",
-                (Sender, ev->Sender),
-                (trace_id, TraceId()));
+            YDB_LOG_INFO("External timeout while waiting for Compute Actors to finish - forcing shutdown",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"sender", ev->Sender},
+                {"traceId", TraceId()});
             PassAway();
         }
     }
 
     void Handle(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr& ev) {
-        KQP_STLOG_D(KQPDATA, "Coordinator saved zero checkpoint",
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG("Coordinator saved zero checkpoint",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"traceId", TraceId()});
         Send(CheckpointCoordinatorId, new NFq::TEvCheckpointCoordinator::TEvRunGraph());
 
         if (const auto context = GetUserRequestContext()) {
@@ -1060,9 +1195,13 @@ private:
     }
 
     void Handle(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues::TPtr& ev) {
-        KQP_STLOG_N(KQPDATA, "TEvRaiseTransientIssues from checkpoint coordinator",
-            (TransientIssues, ev->Get()->TransientIssues.ToOneLineString()),
-            (trace_id, TraceId()));
+        YDB_LOG_NOTICE("TEvRaiseTransientIssues from checkpoint coordinator",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"transientIssues", ev->Get()->TransientIssues.ToOneLineString()},
+            {"traceId", TraceId()});
     }
 
     void StartCheckpointCoordinator() {
@@ -1117,26 +1256,39 @@ private:
             counters = counters->GetSubgroup("host", "");
             counters = counters->GetSubgroup("path", context->StreamingQueryPath);
         }
+
+        NFq::TCheckpointCoordinatorSettings setting;
+        if (const auto& checkpointInterval = context->CheckpointInterval) {
+            setting.SetCheckpointingPeriod(*checkpointInterval);
+        }
+
         const auto& checkpointId = context->CheckpointId;
+        const auto generation = context->CurrentExecutionGeneration;
+        Y_VALIDATE(generation, "Missing current execution generation");
+
+        TasksGraph.GetMeta().AllowCheckpoints = true;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
-            ::NFq::TCoordinatorId(checkpointId, Generation),
+            ::NFq::TCoordinatorId(checkpointId, generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
-            {},
+            setting,
             counters,
             graphParams,
             stateLoadMode,
-            streamingDisposition).Release());
-        KQP_STLOG_D(KQPDATA, "Created new CheckpointCoordinator",
-            (CheckpointCoordinatorId, CheckpointCoordinatorId),
-            (ExecutionId, context->CurrentExecutionId),
-            (CheckpointId, checkpointId),
-            (Generation, Generation),
-            (StateLoadMode, FederatedQuery::StateLoadMode_Name(stateLoadMode)),
-            (StreamingDisposition, streamingDisposition.ShortDebugString()),
-            (HasQueryPhysicalGraph, Request.QueryPhysicalGraph != nullptr),
-            (EnableWatermarks, Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()),
-            (trace_id, TraceId()));
+            streamingDisposition
+        ).Release());
+
+        YDB_LOG_DEBUG("Created new CheckpointCoordinator",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"checkpointCoordinatorId", CheckpointCoordinatorId},
+            {"stateLoadMode", FederatedQuery::StateLoadMode_Name(stateLoadMode)},
+            {"streamingDisposition", streamingDisposition.ShortDebugString()},
+            {"hasQueryPhysicalGraph", Request.QueryPhysicalGraph != nullptr},
+            {"enableWatermarks", Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()},
+            {"traceId", TraceId()});
     }
 
 private:
@@ -1163,7 +1315,7 @@ private:
                 NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
                 ui64 deferredVictimSpanId = info.HasDeferredVictimQuerySpanId()
                     ? info.GetDeferredVictimQuerySpanId() : 0;
-                for (auto& lock : info.GetLocks()) {
+                for (const auto& lock : info.GetLocks()) {
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
@@ -1197,7 +1349,7 @@ private:
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
-                for (auto& lock : info.GetLocks()) {
+                for (const auto& lock : info.GetLocks()) {
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
@@ -1230,7 +1382,32 @@ private:
         }
     }
 
+    void StartPqTopicResolver() {
+        // Pass a non-const mutable copy of the shared_ptr so the resolver can patch it.
+        auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
+            Request.QueryPhysicalGraph);
+
+        THashMap<TString, TString> resolvedSecureParams;
+        for (const auto& transaction : Request.Transactions) {
+            for (const auto& stage : transaction.Body->GetStages()) {
+                TasksGraph.FillExternalSourceSecureParams(resolvedSecureParams, stage);
+            }
+        }
+
+        auto* resolverActor = CreateKqpPqTopicResolver(
+            SelfId(),
+            TxId,
+            Request.Transactions,
+            Database,
+            std::move(resolvedSecureParams),
+            FederatedQuerySetup->PqGatewayFactory,
+            std::move(mutableGraph));
+
+        RegisterWithSameMailbox(resolverActor);
+    }
+
 private:
+
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     TVector<NKikimr::TTableId> TableIdsForSnapshot;
 
@@ -1238,6 +1415,7 @@ private:
     bool SecretSnapshotRequired = false;
     bool ResourceSnapshotRequired = false;
     bool SaveScriptExternalEffectRequired = false;
+    bool TopicPartitionSnapshotRequired = false;
 
     const bool ReadOnlyTx;
     bool ImmediateTx = false;
@@ -1255,7 +1433,6 @@ private:
     const TDuration WaitCAStatsTimeout;
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    ui64 Generation = 0;
 };
 
 } // namespace
@@ -1267,14 +1444,14 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool shrinkTasksGraph,
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2,
     TVector<NKikimr::TTableId> tableIdsForSnapshot)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-        channelService, shrinkTasksGraph, std::move(tableIdsForSnapshot));
+        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
+        channelService, useKqpTasksGraphV2, std::move(tableIdsForSnapshot));
 }
 
 } // namespace NKqp

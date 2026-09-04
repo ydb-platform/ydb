@@ -52,7 +52,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWrit
         col->SetName(TString(columnName));
         col->SetSetNotNullInProgress(false);
 
-        if (!operationInfo.ValidationFailed) {
+        if (!operationInfo.ValidationFailed && !operationInfo.IsCancelled) {
             col->SetNotNull(true);
         }
     }
@@ -205,45 +205,109 @@ public:
             << ", status# " << NKikimrScheme::EStatus_Name(record.GetStatus()));
 
         NIceDb::TNiceDb db(txc.DB);
-
-        auto replyOnCreation = [&] {
+        bool shouldForget = false;
+        auto replyOnCreation = [&]() -> void {
             auto statusCode = TranslateStatusCode(record.GetStatus());
 
             if (statusCode != Ydb::StatusIds::SUCCESS) {
-                // TODO(flown4qqqq): persist issue
-                // TODO(flown4qqqq): forget operation on error
-                // TODO(flown4qqqq): EraseBuildInfo(operationInfo);
+                shouldForget = true;
             }
 
             ReplyOnCreation(operationInfo, statusCode);
+        };
+
+        // Most modifications of the main table are forbidden while SetColumnConstraint
+        // holds its lock, however copying the table (e.g. for a backup) is allowed to
+        // proceed concurrently (see TCopyTable::Propose: CheckLocks is skipped for
+        // IsBackup copies). While such a copy is in flight the table has
+        // PathStateCopying, and our own internal sub-transactions (which are gated by
+        // NotUnderOperation()) may transiently fail with StatusMultipleModifications.
+        // Just like build_index does, retry the very same proposal once the copy is
+        // done instead of failing the whole operation.
+        // Waiting for the conflicting operation's completion notification, not for
+        // an immediate self-retry - see the comment on shouldRetry() below for why.
+        bool waitingForDependency = false;
+
+        auto shouldRetry = [&]() {
+            if (record.GetStatus() != NKikimrScheme::StatusMultipleModifications) {
+                return false;
+            }
+
+            auto it = Self->PathsById.find(operationInfo.TablePathId);
+            if (it == Self->PathsById.end() || it->second->PathState != NKikimrSchemeOp::EPathStateCopying) {
+                return false;
+            }
+
+            auto copyTxId = it->second->LastTxId;
+            LOG_I("TTxReplyModify : Waiting for txId " << copyTxId << " to retry SetColumnConstraint id# " << BuildId);
+            operationInfo.DependencyTxIds.insert(copyTxId);
+            Self->TxIdToDependentSetColumnConstraint[copyTxId].insert(BuildId);
+            Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
             return true;
         };
 
-        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
-            Y_ENSURE(txId == operationInfo.LockTxId);
-            operationInfo.LockTxStatus = record.GetStatus();
-            Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
-
-            if (!replyOnCreation()) {
-                return false;
+        switch (operationInfo.OperationState) {
+            case TSetColumnConstraintOperationInfo::EOperationState::Locking: {
+                Y_ENSURE(txId == operationInfo.LockTxId);
+                operationInfo.LockTxStatus = record.GetStatus();
+                Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
+                replyOnCreation();
+                break;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites) {
-            Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
-            operationInfo.LockNullWritesTxStatus = record.GetStatus();
-            Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Finishing) {
-            Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
-            operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
-            Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Unlocking) {
-            Y_ENSURE(txId == operationInfo.UnlockTxId);
-            operationInfo.UnlockTxStatus = record.GetStatus();
-            Self->PersistSetColumnConstraintUnlockTxStatus(db, operationInfo);
-        } else {
-            Y_UNREACHABLE();
+            case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
+                Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
+                if (shouldRetry()) {
+                    operationInfo.LockNullWritesTxId = InvalidTxId;
+                    Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                    waitingForDependency = true;
+                } else {
+                    operationInfo.LockNullWritesTxStatus = record.GetStatus();
+                    Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
+                }
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::Finishing: {
+                Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
+                if (shouldRetry()) {
+                    operationInfo.UnlockNullWritesTxId = InvalidTxId;
+                    Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                    waitingForDependency = true;
+                } else {
+                    operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
+                    Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
+                }
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::Unlocking: {
+                Y_ENSURE(txId == operationInfo.UnlockTxId);
+                if (shouldRetry()) {
+                    operationInfo.UnlockTxId = InvalidTxId;
+                    Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                    waitingForDependency = true;
+                } else {
+                    operationInfo.UnlockTxStatus = record.GetStatus();
+                    Self->PersistSetColumnConstraintUnlockTxStatus(db, operationInfo);
+                }
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::Invalid:
+            case TSetColumnConstraintOperationInfo::EOperationState::Validating:
+            case TSetColumnConstraintOperationInfo::EOperationState::Done: {
+                Y_UNREACHABLE();
+            }
         }
 
-        Progress(BuildId);
+        if (!waitingForDependency) {
+            Progress(BuildId);
+        }
+
+        if (shouldForget) {
+            Self->ForgetSetColumnConstraint(db, operationInfo);
+        }
+
         return true;
     }
 
@@ -271,6 +335,23 @@ public:
         const auto txId = CompletedTxId;
 
         auto* operationIdPtr = Self->TxIdToSetColumnConstraintOperations.FindPtr(txId);
+
+        if (Self->TxIdToDependentSetColumnConstraint.contains(txId)) {
+            THashSet<TIndexBuildId> deps = std::move(Self->TxIdToDependentSetColumnConstraint.at(txId));
+            Self->TxIdToDependentSetColumnConstraint.erase(txId);
+            for (auto& dependentBuildId : deps) {
+                LOG_I("TTxReplyCompleted txId: " << txId << " : trying to resume dependent SetColumnConstraint " << dependentBuildId);
+                if (auto* dependentOperationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(dependentBuildId)) {
+                    auto& dependentOperationInfo = **dependentOperationInfoPtr;
+                    dependentOperationInfo.DependencyTxIds.erase(txId);
+                    Progress(dependentBuildId);
+                }
+            }
+            if (!operationIdPtr) {
+                return true;
+            }
+        }
+
         if (!operationIdPtr) {
             LOG_I("TTxReplyCompleted: operation not found, txId# " << txId);
             return true;
@@ -352,6 +433,16 @@ public:
 
         auto& operationInfo = *operationInfoPtr->get();
 
+        if (operationInfo.IsCancelled) {
+            LOG_I("TTxReplyValidateRowCondition: operation is cancelled, ignoring message, id# " << BuildId);
+            return true;
+        }
+
+        if (operationInfo.ValidationFailed) {
+            LOG_I("TTxReplyValidateRowCondition: operation is rejected, ignoring message, id# " << BuildId);
+            return true;
+        }
+
         TShardIdx shardIdx;
         bool found = false;
         for (const auto& [idx, shardStatus] : operationInfo.ValidationShards) {
@@ -378,25 +469,30 @@ public:
             return true;
         }
 
+        auto oldValidationFailedValue = operationInfo.ValidationFailed;
+
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
         shardStatus.ValidateStatus = record.GetStatus();
+
+        if (record.IssuesSize() > 0) {
+            TStringBuilder issuesText;
+            for (size_t i = 0; i < record.IssuesSize(); ++i) {
+                if (i > 0) {
+                    issuesText << "; ";
+                }
+                issuesText << record.GetIssues(i).message();
+            }
+            shardStatus.DebugMessage = issuesText;
+        }
 
         if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
                 operationInfo.ValidationFailed = true;
-
-                for (const auto& issue : record.GetIssues()) {
-                    NIceDb::TNiceDb db(txc.DB);
-                    // todo: persist issue
-                    LOG_N("TTxReplyValidateRowCondition: issue: " << issue.message());
-                }
             }
 
             operationInfo.InProgressValidationShards.erase(shardIdx);
-            operationInfo.DoneValidationShards.emplace_back(shardIdx);
-
-            // todo: persist shard status
+            operationInfo.DoneValidationShards.insert(shardIdx);
 
             Progress(BuildId);
 
@@ -406,23 +502,24 @@ public:
 
             operationInfo.ValidationFailed = true;
 
-            for (const auto& issue : record.GetIssues()) {
-                NIceDb::TNiceDb db(txc.DB);
-                // todo: persist issue
-                LOG_E("TTxReplyValidateRowCondition: error issue: " << issue.message());
-            }
-
             operationInfo.InProgressValidationShards.erase(shardIdx);
-            operationInfo.DoneValidationShards.emplace_back(shardIdx);
-
-            // todo: persist shard status
+            operationInfo.DoneValidationShards.insert(shardIdx);
 
             Progress(BuildId);
 
         } else {
             LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
                 << " still in progress, status# " << record.GetStatus());
-            // todo: persist shard status
+        }
+
+        {
+            NIceDb::TNiceDb db(txc.DB);
+
+            if (oldValidationFailedValue != operationInfo.ValidationFailed) {
+                Self->PersistSetColumnConstraintValidationFailedValue(db, operationInfo);
+            }
+
+            Self->PersistSetColumnConstraintShardDone(db, BuildId, shardIdx, operationInfo);
         }
 
         return true;
@@ -515,13 +612,11 @@ struct TSchemeShard::TIndexBuilder::TTxProgressSetColumnConstraint
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
-    bool InitiateValidationShards([[maybe_unused]] NIceDb::TNiceDb& db, TSetColumnConstraintOperationInfo& operationInfo) {
+    bool InitiateValidationShards(TSetColumnConstraintOperationInfo& operationInfo) {
         LOG_D("InitiateValidationShards, id# " << BuildId);
 
-        Y_ENSURE(operationInfo.ValidationShards.empty());
         Y_ENSURE(operationInfo.ToValidateShards.empty());
         Y_ENSURE(operationInfo.InProgressValidationShards.empty());
-        Y_ENSURE(operationInfo.DoneValidationShards.empty());
 
         TPath path = TPath::Init(operationInfo.TablePathId, Self);
         if (!path.IsLocked()) {
@@ -533,18 +628,21 @@ private:
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
         for (const auto* partition : table->GetPartitions()) {
+            // We can initate shards after schemeshard's reboot.
+            if (operationInfo.DoneValidationShards.contains(partition->ShardIdx)) {
+                continue;
+            }
+
             Y_ENSURE(Self->ShardInfos.contains(partition->ShardIdx));
 
             // For validation, we scan the entire shard, so use empty range and lastKeyAck
-            TIndexBuildShardStatus shardStatus(TSerializedTableRange{}, "");
+            TValidateColumnConstraintShardStatus shardStatus(TSerializedTableRange{}, "");
             shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
             auto [it, emplaced] = operationInfo.ValidationShards.emplace(partition->ShardIdx, std::move(shardStatus));
             Y_ENSURE(emplaced);
 
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
-
-            // todo: persist shard status
             LOG_D("InitiateValidationShards: added shard " << partition->ShardIdx);
         }
 
@@ -589,12 +687,12 @@ private:
         return operationInfo.InProgressValidationShards.empty() && operationInfo.ToValidateShards.empty();
     }
 
-    bool DriveToSendMessageToPartOfShards(TTransactionContext& txc, TSetColumnConstraintOperationInfo& operationInfo) {
+    bool DriveToSendMessageToPartOfShards(TSetColumnConstraintOperationInfo& operationInfo) {
         LOG_D("DriveToSendMessageToPartOfShards Start, id# " << BuildId);
 
-        if (operationInfo.ValidationShards.empty()) {
-            NIceDb::TNiceDb db(txc.DB);
-            if (!InitiateValidationShards(db, operationInfo)) {
+        if (operationInfo.NeedToCalculateValidationShards) {
+            operationInfo.NeedToCalculateValidationShards = false;
+            if (!InitiateValidationShards(operationInfo)) {
                 return false;
             }
         }
@@ -620,7 +718,15 @@ public:
         Y_ENSURE(operationInfoPtr);
         auto& operationInfo = *operationInfoPtr->get();
 
-        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId << "; OperationState = " << ToString(operationInfo.OperationState));
+        if (!operationInfo.DependencyTxIds.empty()) {
+            LOG_N("TTxProgressSetColumnConstraint: " << BuildId << ": waiting for dependencies");
+            return true;
+        }
+
+        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId
+            << "; OperationState = " << ToString(operationInfo.OperationState)
+            << "; IsCancelled = " << operationInfo.IsCancelled
+            << "; ValidationFailed = " << operationInfo.ValidationFailed);
 
         switch (operationInfo.OperationState) {
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
@@ -656,7 +762,21 @@ public:
                 break;
             }
             case TSetColumnConstraintOperationInfo::EOperationState::Validating: {
-                if (DriveToSendMessageToPartOfShards(txc, operationInfo)) {
+                // If cancelled, skip to Finishing to release locks without setting constraint
+                if (operationInfo.IsCancelled || operationInfo.ValidationFailed) {
+                    if (operationInfo.IsCancelled) {
+                        LOG_I("TTxProgressSetColumnConstraint: operation cancelled in Validating, jumping to Finishing, id# " << BuildId);
+                    } else {
+                        LOG_I("TTxProgressSetColumnConstraint: validation failed in Validating, jumping to Finishing, id# " << BuildId);
+                    }
+
+                    NIceDb::TNiceDb db(txc.DB);
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
+                    Progress(BuildId);
+                    break;
+                }
+
+                if (DriveToSendMessageToPartOfShards(operationInfo)) {
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);
                 }
@@ -755,3 +875,4 @@ ITransaction* TSchemeShard::CreateTxReplyValidateRowCondition(
 
 } // namespace NSchemeShard
 } // namespace NKikimr
+

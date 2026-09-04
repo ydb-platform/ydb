@@ -99,7 +99,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         && !copyAlter.HasTTLSettings()
         && !copyAlter.HasReplicationConfig()
         && !copyAlter.HasIncrementalBackupConfig()
-        && !copyAlter.HasDetailedMetricsSettings())
+        && !copyAlter.HasDetailedMetricsSettings()
+        && copyAlter.MultiColumnStatisticsSize() == 0
+        && copyAlter.DropMultiColumnStatisticsSize() == 0)
     {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
@@ -252,6 +254,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
+        .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
+        .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
+        .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
     };
 
 
@@ -874,6 +879,58 @@ static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOper
     }
 }
 
+// A table's detailed metrics level covers its indexes: fan the setting out to every live impl
+// table under the table's index children. Both Configured and NotConfigured propagate - clearing
+// the base table's level must clear the copies too, or an index stays pinned at a stale level.
+static void AppendIndexImplTableMetricsAlters(TVector<ISubOperation::TPtr>& result, TOperationId id,
+        const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    if (!alter.HasDetailedMetricsSettings()
+        || !AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics())
+    {
+        return;
+    }
+
+    for (const auto& [_, childPathId] : tablePath.Base()->GetChildren()) {
+        const auto& child = context.SS->PathsById.at(childPathId);
+        if (child->Dropped() || !child->IsTableIndex()) {
+            continue;
+        }
+
+        const TPath indexPath = TPath::Init(childPathId, context.SS);
+        for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
+            const TPath implTablePath = TPath::Init(implTablePathId, context.SS);
+            const auto checks = implTablePath.Check();
+            checks
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .NotUnderOperation()
+                .IsTable()
+                .IsInsideTableIndexPath();
+            // An impl table busy under another operation is skipped rather than failing the
+            // whole alter; it keeps its previous level until the base table's
+            // DetailedMetricsSettings is set again.
+            if (!checks) {
+                continue;
+            }
+
+            auto scheme = TransactionTemplate(indexPath.PathString(),
+                NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+            // Internal so the sub-operation may alter a private impl table.
+            scheme.SetInternal(true);
+
+            auto& implTableAlter = *scheme.MutableAlterTable();
+            implTableAlter.SetName(implTableName);
+            *implTableAlter.MutableDetailedMetricsSettings() = alter.GetDetailedMetricsSettings();
+
+            result.push_back(CreateAlterTable(NextPartId(id, result), scheme));
+        }
+    }
+}
+
 // Collects the names of the table's live local prefix bloom filter index children.
 static TVector<TString> CollectLocalBloomIndexNames(const TPath& path, TOperationContext& context) {
     TVector<TString> names;
@@ -914,6 +971,7 @@ static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilter
     for (const auto& indexName : bloomIndexNames) {
         AddDropIndex(result, id, path.Child(indexName));
     }
+    AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
     return result;
 }
 
@@ -987,6 +1045,7 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
         result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
     }
 
+    AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
     return result;
 }
 
@@ -1031,6 +1090,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         TVector<ISubOperation::TPtr> result;
         result.push_back(CreateAlterTable(NextPartId(id, result), tx));
         AppendOwnedSequenceDrops(result, id, tx, path, context);
+        AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
         return result;
     }
 

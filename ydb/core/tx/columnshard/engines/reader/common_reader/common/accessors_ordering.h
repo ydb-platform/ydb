@@ -1,9 +1,12 @@
 #pragma once
+#include <ydb/core/tx/columnshard/data_accessor/request.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/comparable.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.h>
+
+#include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -11,7 +14,7 @@ class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TReplaceKeyAdapter Start;
     TReplaceKeyAdapter Finish;
-    bool IsOutOfOrder;
+    bool Conflicting;
     ui32 SourceIdx = 0;
     bool SourceIdxInitialized = false;
 
@@ -39,10 +42,10 @@ public:
         return std::move(Finish);
     }
 
-    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool isOutOfOrder)
+    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool conflicting)
         : Start(std::move(start))
         , Finish(std::move(finish))
-        , IsOutOfOrder(isOutOfOrder)
+        , Conflicting(conflicting)
     {
     }
 
@@ -54,13 +57,17 @@ public:
         return Finish;
     }
 
+    bool IsConflicting() const {
+        return Conflicting;
+    }
+
     virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const = 0;
     virtual ~TDataSourceConstructor() = default;
 
     TDataSourceConstructor(TDataSourceConstructor&& other)
         : Start(std::move(other.Start))
         , Finish(std::move(other.Finish))
-        , IsOutOfOrder(other.IsOutOfOrder)
+        , Conflicting(other.Conflicting)
         , SourceIdx(other.SourceIdx)
         , SourceIdxInitialized(other.SourceIdxInitialized)
     {
@@ -69,7 +76,7 @@ public:
     TDataSourceConstructor& operator=(TDataSourceConstructor&& other) {
         Start = std::move(other.Start);
         Finish = std::move(other.Finish);
-        IsOutOfOrder = other.IsOutOfOrder;
+        Conflicting = other.Conflicting;
         SourceIdx = other.SourceIdx;
         SourceIdxInitialized = other.SourceIdxInitialized;
         return *this;
@@ -123,11 +130,11 @@ public:
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
-            if (l.IsOutOfOrder || r.IsOutOfOrder) {
-                if (!r.IsOutOfOrder) {
+            if (l.Conflicting || r.Conflicting) {
+                if (!r.Conflicting) {
                     return true;
                 }
-                if (!l.IsOutOfOrder) {
+                if (!l.Conflicting) {
                     return false;
                 }
                 return false;
@@ -263,21 +270,28 @@ public:
 
     void StartRequest(std::shared_ptr<TDataAccessorsRequest>&& request, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context);
 
-    void AddRequestedAccessors(TDataAccessorsResult&& accessors) {
+    TConclusionStatus AddRequestedAccessors(TDataAccessorsResult&& accessors) {
         if (Finished) {
-            return;
-        }
-
-        if (accessors.HasErrors()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + accessors.GetErrorMessage());
-        }
-
-        if (accessors.HasRemovedData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
-                "error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
+            return TConclusionStatus::Success();
         }
 
         AFL_VERIFY(InFlightRequests);
+        --InFlightRequests;
+
+        if (accessors.HasErrors()) {
+            const TString errorMessage = TStringBuilder{} << "prefetch accessors fetch failed: " << accessors.GetErrorMessage();
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "", {"error", errorMessage});
+            return TConclusionStatus::Fail(errorMessage);
+        }
+
+        if (accessors.HasRemovedData()) {
+            const TString errorMessage = TStringBuilder{}
+                                         << "prefetch accessors fetch has removed data, count=" << accessors.GetRemovedData().size()
+                                         << ". The reading data snapshot is stale. Please reduce the database load and try again.";
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "", {"error", errorMessage});
+            return TConclusionStatus::Fail(errorMessage);
+        }
+
         if (Accessors.empty()) {
             Accessors = std::move(accessors.ExtractPortions());
         } else {
@@ -285,8 +299,7 @@ public:
                 AFL_VERIFY(Accessors.emplace(i.first, std::move(i.second)).second);
             }
         }
-        AFL_VERIFY(InFlightRequests);
-        --InFlightRequests;
+        return TConclusionStatus::Success();
     }
 };
 
@@ -295,8 +308,8 @@ protected:
     TAccessorsFetcherImpl Accessors;
 
 public:
-    void AddAccessors(TDataAccessorsResult&& accessors) {
-        Accessors.AddRequestedAccessors(std::move(accessors));
+    TConclusionStatus AddAccessors(TDataAccessorsResult&& accessors) {
+        return Accessors.AddRequestedAccessors(std::move(accessors));
     }
 };
 
@@ -331,9 +344,14 @@ private:
 
     virtual std::shared_ptr<IDataSource> DoTryExtractNext(
         const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
+        if (!context->GetCommonContext()->IsActive()) {
+            return nullptr;
+        }
         if (!Accessors.GetSize() && Accessors.HasRequest()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
-                "in_flight", inFlightCurrentLimit);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "SKIP_NO_ACCESSORS"},
+                {"hasRequest", Accessors.HasRequest()},
+                {"inFlight", inFlightCurrentLimit});
             return nullptr;
         }
         if (!Accessors.HasRequest() && (Accessors.GetSize() < Constructors.GetSize() && Accessors.GetSize() < inFlightCurrentLimit)) {
@@ -346,15 +364,20 @@ private:
                     break;
                 }
             }
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "START_FETCH_ACCESSORS")("acc_count", Accessors.GetSize())(
-                "add", request->GetSize())("in_flight", inFlightCurrentLimit);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "START_FETCH_ACCESSORS"},
+                {"accCount", Accessors.GetSize()},
+                {"add", request->GetSize()},
+                {"inFlight", inFlightCurrentLimit});
             request->SetColumnIds(context->GetAllUsageColumns()->GetColumnIds());
             Accessors.StartRequest(std::move(request), context);
         }
         if (!Accessors.GetSize()) {
             AFL_VERIFY(Accessors.HasRequest());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
-                "in_flight", inFlightCurrentLimit);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "SKIP_NO_ACCESSORS"},
+                {"hasRequest", Accessors.HasRequest()},
+                {"inFlight", inFlightCurrentLimit});
             return nullptr;
         }
         return DoExtractNextImpl(context);

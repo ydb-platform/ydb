@@ -844,6 +844,8 @@ struct TEvTablet {
     struct TEvGetCountersResponse : TEventPB<TEvGetCountersResponse, NKikimrTabletBase::TEvGetCountersResponse, EvGetCountersResponse> {};
 
     struct TEvCutTabletHistory : TEventPB<TEvCutTabletHistory, NKikimrTabletBase::TEvCutTabletHistory, EvCutTabletHistory> {
+        using TBase = TEventPB<TEvCutTabletHistory, NKikimrTabletBase::TEvCutTabletHistory, EvCutTabletHistory>;
+        using TBase::TBase;
         TEvCutTabletHistory() = default;
     };
 
@@ -982,13 +984,26 @@ struct TEvTablet {
         EMode Mode;
     };
 
-    struct TEvMoveData : TEventPB<TEvMoveData, NKikimrTabletBase::TEvMoveData, EvMoveData> {};
+    struct TEvMoveData : TEventPB<TEvMoveData, NKikimrTabletBase::TEvMoveData, EvMoveData> {
+        TEvMoveData() = default;
+
+        explicit TEvMoveData(const std::vector<ui32>& groups) {
+            Record.MutableGroups()->Assign(groups.begin(), groups.end());
+        }
+    };
 
     struct TEvMoveDataResponse : TEventPB<TEvMoveDataResponse, NKikimrTabletBase::TEvMoveDataResponse, EvMoveDataResponse> {
+        using EStatus = NKikimrTabletBase::TEvMoveDataResponse::EStatus;
+
         TEvMoveDataResponse() = default;
 
-        TEvMoveDataResponse(ui64 tabletId) {
+        TEvMoveDataResponse(
+                ui64 tabletId,
+                EStatus status,
+                const TString& errorReason = {}) {
             Record.SetTabletId(tabletId);
+            Record.SetStatus(status);
+            Record.SetErrorReason(errorReason);
         }
     };
 };

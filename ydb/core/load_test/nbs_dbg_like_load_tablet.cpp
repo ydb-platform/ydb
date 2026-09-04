@@ -29,9 +29,11 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/http/fetch/httpheader.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
@@ -124,6 +126,8 @@ struct TWriteInfo {
     NActors::TActorId OriginActor;
     ui64              OriginCookie = 0;
     bool              ReplySent = false;
+
+    NWilson::TSpan Span;
 };
 
 // Each worker owns a single DBG, so the PB-write cookie carries only the LSN.
@@ -272,6 +276,8 @@ struct TPerDbgState {
     std::array<TActorId, kHostsPerDbgMax> PBActor;
     std::array<ui64, kHostsPerDbgMax> DDGuid = {};
     std::array<ui64, kHostsPerDbgMax> PBGuid = {};
+    std::array<std::optional<NDDisk::TConnectionToken>, kHostsPerDbgMax> DDToken;
+    std::array<std::optional<NDDisk::TConnectionToken>, kHostsPerDbgMax> PBToken;
     std::bitset<kHostsPerDbgMax> DDConnected;
     std::bitset<kHostsPerDbgMax> PBConnected;
 
@@ -347,6 +353,8 @@ struct TReadInflight {
     // Zero TActorId means "internal read" (none today; reserved for future).
     NActors::TActorId OriginActor;
     ui64              OriginCookie = 0;
+
+    NWilson::TSpan Span;
 };
 
 struct TDecodedAddress {
@@ -553,12 +561,13 @@ private:
     void BestEffortEraseAll(TPerDbgState& dbg);
     void AccountReadRequest(TPerDbgState& dbg, EOp op, ui32 size);
     bool SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
-        const TWriteInfo& info, const TActorId& origin, ui64 originCookie);
+        const TWriteInfo& info, const TActorId& origin, ui64 originCookie,
+        NWilson::TSpan& span);
     bool SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex, ui32 vChunkIndex,
         ui64 offset, ui32 size, std::bitset<kHostsPerDbgMax> flushMask,
-        const TActorId& origin, ui64 originCookie);
+        const TActorId& origin, ui64 originCookie, NWilson::TSpan& span);
     bool CompleteRead(ui64 cookie, bool ok, TActorId& origin, ui64& originCookie,
-        ui32& size);
+        ui32& size, TStringBuf errorReason = {});
     void ReplyWriteErr(const TActorId& origin, ui64 cookie,
         ENbsIoResultStatus status, TString reason = {});
     void ReplyReadErr(const TActorId& origin, ui64 cookie,
@@ -585,6 +594,7 @@ private:
     // Per-DBG connection state for this worker's own peers.
     struct TPeerConnState {
         ui64 Guid = 0;
+        std::optional<NDDisk::TConnectionToken> Token;
         bool Connected = false;
         bool ConnectInFlight = false;
     };
@@ -1250,6 +1260,13 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletAllocateGroups::TPtr
 
     AllocConfig = ev->Get()->Record.GetAllocConfig();
 
+    // Storage namespace owner must be unique per load tablet; the PB dedup key
+    // is {TabletId, Generation, Lsn}. A shared/user-supplied id makes two load
+    // tablets collide ("duplicate record with incorrect data"). Always use our
+    // own (Hive-assigned) TabletID() as the BSC allocation owner and PB/DD
+    // credential TabletId.
+    AllocConfig.SetTabletId(TabletID());
+
     // Input validation (spec §23.10 / Phase 2.6).
     if (AllocConfig.GetNumDirectBlockGroups() == 0) {
         return reply(NBSLT_INTERNAL_ERROR, "NumDirectBlockGroups must be > 0");
@@ -1673,7 +1690,7 @@ void TNbsDbgLikeLoadTablet::RenderHtml(IOutputStream& out) const {
                 TABLER() { TABLED() { out << "Phase"; } TABLED() {
                     out << Phase;
                 } }
-                TABLER() { TABLED() { out << "AllocTabletId"; } TABLED() { out << AllocConfig.GetTabletId(); } }
+                TABLER() { TABLED() { out << "Storage owner (TabletId)"; } TABLED() { out << AllocConfig.GetTabletId(); } }
                 TABLER() { TABLED() { out << "NumDirectBlockGroups"; } TABLED() { out << Dbgs.size(); } }
                 TABLER() { TABLED() { out << "VChunkSizeBytes"; } TABLED() { out << AllocConfig.GetVChunkSizeBytes(); } }
                 TABLER() { TABLED() { out << "BscRetryAttempts"; } TABLED() { out << BscRetryAttempts; } }
@@ -1787,9 +1804,9 @@ void TNbsDbgLikeActor::ConnectPeer(ui32 k, bool isPb) {
         ? MakeBlobStoragePersistentBufferId(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId())
         : MakeBlobStorageDDiskId(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
     auto creds = isPb
-        ? NDDisk::TQueryCredentials::ToPersistentBuffer(AllocConfig.GetTabletId(), Generation(), std::nullopt)
+        ? NDDisk::TQueryCredentials::ToPersistentBuffer(AllocConfig.GetTabletId(), Generation(), std::nullopt, MyDbgIndex)
         : NDDisk::TQueryCredentials::ToDDisk(
-            AllocConfig.GetTabletId(), Generation(), kInitialDDiskSessionSeqNo, std::nullopt);
+            AllocConfig.GetTabletId(), Generation(), kInitialDDiskSessionSeqNo, std::nullopt, MyDbgIndex);
     st.ConnectInFlight = true;
     Send(target, new NDDisk::TEvConnect(creds), 0, PackPeerCookie(k, isPb));
 }
@@ -1810,6 +1827,7 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
     if (rec.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         st.Connected = true;
         st.Guid = rec.GetDDiskInstanceGuid();
+        st.Token.emplace(rec.GetConnectionToken());
         if (RootCnt.ConnectOk) {
             RootCnt.ConnectOk->Inc();
         }
@@ -1828,6 +1846,7 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
     } else {
         st.Connected = false;
         st.Guid = 0;
+        st.Token.reset();
         if (RootCnt.ConnectErr) {
             RootCnt.ConnectErr->Inc();
         }
@@ -1855,6 +1874,7 @@ void TNbsDbgLikeActor::HandlePeerDisconnect(NDDisk::TEvDisconnectResult::TPtr& e
     st.Connected = false;
     st.ConnectInFlight = false;
     st.Guid = 0;
+    st.Token.reset();
     if (RootCnt.DisconnectOk) {
         RootCnt.DisconnectOk->Inc();
     }
@@ -1868,32 +1888,32 @@ void TNbsDbgLikeActor::HandlePeerDisconnect(NDDisk::TEvDisconnectResult::TPtr& e
 
 void TNbsDbgLikeActor::DisconnectAllPeers() {
     const ui32 hostsPerDbg = HostsPerDbg();
-    const ui64 bscTabletId = AllocConfig.GetTabletId();
-    const ui32 generation = Generation();
     for (ui32 k = 0; k < hostsPerDbg; ++k) {
         if (PB[k].Connected) {
-            auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
-                bscTabletId, generation, PB[k].Guid);
+            Y_ABORT_UNLESS(PB[k].Token);
+            auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*PB[k].Token);
             auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-            creds.Serialize(ev->Record.MutableCredentials());
+            creds.SerializeForRequest(ev->Record.MutableCredentials());
             const auto& id = DbgInfo.PBIds[k];
             Send(MakeBlobStoragePersistentBufferId(id.GetNodeId(), id.GetPDiskId(),
                     id.GetDDiskSlotId()),
                 ev.release());
             PB[k].Connected = false;
             PB[k].Guid = 0;
+            PB[k].Token.reset();
         }
         if (DD[k].Connected) {
-            auto creds = NDDisk::TQueryCredentials::ToDDisk(
-                bscTabletId, generation, kInitialDDiskSessionSeqNo, DD[k].Guid);
+            Y_ABORT_UNLESS(DD[k].Token);
+            auto creds = NDDisk::TQueryCredentials::ToDDisk(*DD[k].Token);
             auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-            creds.Serialize(ev->Record.MutableCredentials());
+            creds.SerializeForRequest(ev->Record.MutableCredentials());
             const auto& id = DbgInfo.DDiskIds[k];
             Send(MakeBlobStorageDDiskId(id.GetNodeId(), id.GetPDiskId(),
                     id.GetDDiskSlotId()),
                 ev.release());
             DD[k].Connected = false;
             DD[k].Guid = 0;
+            DD[k].Token.reset();
         }
     }
 }
@@ -1932,10 +1952,12 @@ void TNbsDbgLikeActor::PopulateDbgState() {
         dst.PbIndexById.emplace(pb, k);
         if (DD[k].Connected) {
             dst.DDGuid[k] = DD[k].Guid;
+            dst.DDToken[k] = DD[k].Token;
             dst.DDConnected.set(k);
         }
         if (PB[k].Connected) {
             dst.PBGuid[k] = PB[k].Guid;
+            dst.PBToken[k] = PB[k].Token;
             dst.PBConnected.set(k);
         }
     }
@@ -2140,12 +2162,24 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     const ui64 cookie = ev->Cookie;
     LOG_T("HandleNbsWrite Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
+    auto span = NWilson::TSpan(
+        TWilsonNbs::NbsBasic,
+        ev->TraceId.Clone(),
+        "NbsDbgLike.Write",
+        NWilson::EFlags::NONE,
+        TActivationContext::ActorSystem());
+    span
+        .Attribute("addr", static_cast<i64>(msg.GetAddress()))
+        .Attribute("size", static_cast<i64>(msg.GetSizeBytes()));
+
     if (IoSizeBytes == 0) {
+        span.EndError("IoSizeBytes not set");
         ReplyWriteErr(origin, cookie, NBSIO_NOT_CONFIGURED, "IoSizeBytes not set");
         return;
     }
 
     if (ev->Get()->Payload.IsEmpty()) {
+        span.EndError("Payload absent");
         ReplyWriteErr(origin, cookie, NBSIO_MISSING_PAYLOAD, "Payload absent");
         return;
     }
@@ -2156,10 +2190,11 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
             << " SizeBytes# " << msg.GetSizeBytes()
             << " IoSizeBytes# " << IoSizeBytes
             << " ActiveDbgs# " << ActiveDbgs);
-        ReplyWriteErr(origin, cookie, NBSIO_INVALID_ADDRESS,
-            TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
-                << " SizeBytes# " << msg.GetSizeBytes()
-                << " IoSizeBytes# " << IoSizeBytes);
+        const TString reason = TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
+            << " SizeBytes# " << msg.GetSizeBytes()
+            << " IoSizeBytes# " << IoSizeBytes;
+        span.EndError(reason);
+        ReplyWriteErr(origin, cookie, NBSIO_INVALID_ADDRESS, reason);
         return;
     }
     const ui32 dbgIndex = decoded->DbgIndex;
@@ -2173,9 +2208,10 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
             << " PBConnected# " << pbConnectedCount
             << " need# " << kPrimaryHostsPerDbg
             << "; replying TABLET_NOT_READY");
-        ReplyWriteErr(origin, cookie, NBSIO_TABLET_NOT_READY,
-            TStringBuilder() << "PB peers not ready: " << pbConnectedCount
-                << "/" << kPrimaryHostsPerDbg);
+        const TString reason = TStringBuilder() << "PB peers not ready: " << pbConnectedCount
+            << "/" << kPrimaryHostsPerDbg;
+        span.EndError(reason);
+        ReplyWriteErr(origin, cookie, NBSIO_TABLET_NOT_READY, reason);
         return;
     }
 
@@ -2185,14 +2221,25 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         if (RootCnt.Lsns.BackpressureHits) {
             RootCnt.Lsns.BackpressureHits->Inc();
         }
-        ReplyWriteErr(origin, cookie, NBSIO_BACKPRESSURE,
-            TStringBuilder() << "TotalLsns# " << TotalLsns()
-                << " >= cap# " << Max<ui64>(1, maxInflight / denom));
+        const TString reason = TStringBuilder() << "TotalLsns# " << TotalLsns()
+            << " >= cap# " << Max<ui64>(1, maxInflight / denom);
+        span.EndError(reason);
+        ReplyWriteErr(origin, cookie, NBSIO_BACKPRESSURE, reason);
         return;
     }
 
     auto& dbg = Dbg;
-    const ui64 lsn = ++SequenceGenerator;
+    // LSNs must be unique per {TabletId, Generation}: when PB slots are scarce
+    // the BSC packs several DBGs of this tablet onto the SAME persistent-buffer
+    // slot instance (AllocatePersistentBuffer refcounts and reuses slots; there
+    // is no cross-DBG exclusion). A PB record is deduped by {TabletId,
+    // Generation, Lsn} only -- the per-DBG DDiskInstanceGuid identifies the slot
+    // instance (identical for two DBGs on one slot) and is not part of the key.
+    // Stride the per-worker sequence by DbgIndex so two DBG workers never emit
+    // the same Lsn against a shared PB slot. Single-DBG layout is unchanged
+    // (stride 1, index 0 -> 1, 2, 3, ...).
+    const ui64 lsnStride = Max<ui64>(1, NumDbgsTotal);
+    const ui64 lsn = (SequenceGenerator++) * lsnStride + MyDbgIndex + 1;
     const ui32 coord = ChooseCoordinator(dbg);
 
     TWriteInfo info;
@@ -2204,6 +2251,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     info.CoordinatorIndex = static_cast<ui8>(coord);
     info.OriginActor = origin;
     info.OriginCookie = cookie;
+    info.Span = std::move(span);
     if (TabletConfig.GetDisableReplication()) {
         info.WriteRequested.set(coord);
     } else {
@@ -2220,10 +2268,8 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     ++LsnsTotalAll;
     dbg.InflightLsnAtSlot[vChunkIndex][offset / IoSizeBytes] = lsn;
 
-    const ui64 bscTabletId = AllocConfig.GetTabletId();
-    const ui32 generation = Generation();
-    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
-        bscTabletId, generation, dbg.PBGuid[coord]);
+    Y_ABORT_UNLESS(dbg.PBToken[coord]);
+    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*dbg.PBToken[coord]);
     NDDisk::TBlockSelector selector(vChunkIndex, offset, IoSizeBytes);
     std::vector<NKikimrBlobStorage::NDDisk::TDDiskId> pbIds;
     if (TabletConfig.GetDisableReplication()) {
@@ -2238,9 +2284,9 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         creds, selector, lsn, NDDisk::TWriteInstruction(0), pbIds,
         TabletConfig.GetPBufferReplyTimeoutMicroseconds());
 
-    wireEv->AddPayload(std::move(ev->Get()->Payload));
+    wireEv->AddPayloadThenChecksum(std::move(ev->Get()->Payload));
 
-    Send(dbg.PBActor[coord], wireEv.release(), 0, lsn);
+    Send(dbg.PBActor[coord], wireEv.release(), 0, lsn, it->second.Span.GetTraceId().Clone());
 
     ++dbg.WritesInFlight;
     ++dbg.InFlightTo[coord];
@@ -2275,20 +2321,19 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
 }
 
 bool TNbsDbgLikeActor::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
-    const TWriteInfo& info, const TActorId& origin, ui64 originCookie)
+    const TWriteInfo& info, const TActorId& origin, ui64 originCookie,
+    NWilson::TSpan& span)
 {
     if (!info.WriteConfirmed.any()) {
         return false;
     }
     const ui32 k = PickRandomSetBit(info.WriteConfirmed, Rng.GenRand());
-    const ui64 bscTabletId = AllocConfig.GetTabletId();
-    const ui32 generation = Generation();
-    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
-        bscTabletId, generation, dbg.PBGuid[k]);
+    Y_ABORT_UNLESS(dbg.PBToken[k]);
+    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*dbg.PBToken[k]);
     NDDisk::TBlockSelector selector(info.VChunkIndex,
         static_cast<ui32>(info.OffsetInVChunk), info.Size);
     auto ev = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
-        creds, selector, lsn, generation, NDDisk::TReadInstruction(true));
+        creds, selector, lsn, Generation_, NDDisk::TReadInstruction(true));
     const ui64 cookie = NextBatchCookie++;
     TReadInflight ri;
     ri.DbgIndex = dbgIndex;
@@ -2298,8 +2343,10 @@ bool TNbsDbgLikeActor::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
     ri.SentAt = MonotonicNow();
     ri.OriginActor = origin;
     ri.OriginCookie = originCookie;
+    ri.Span = std::move(span);
+    NWilson::TTraceId traceId = ri.Span.GetTraceId();
     ReadInflight.emplace(cookie, std::move(ri));
-    Send(dbg.PBActor[k], ev.release(), 0, cookie);
+    Send(dbg.PBActor[k], ev.release(), 0, cookie, std::move(traceId));
 
     ++dbg.ReadsInFlight;
     AccountReadRequest(dbg, EOp::ReadPB, info.Size);
@@ -2310,14 +2357,12 @@ bool TNbsDbgLikeActor::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
 bool TNbsDbgLikeActor::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
     ui32 vChunkIndex, ui64 offset, ui32 size,
     std::bitset<kHostsPerDbgMax> flushMask,
-    const TActorId& origin, ui64 originCookie)
+    const TActorId& origin, ui64 originCookie, NWilson::TSpan& span)
 {
     const TPeerBitset& effectiveMask = flushMask.any() ? flushMask : kAllPrimaryHostsMask;
     const ui32 k = PickRandomSetBit(effectiveMask, Rng.GenRand());
-    const ui64 bscTabletId = AllocConfig.GetTabletId();
-    const ui32 generation = Generation();
-    auto creds = NDDisk::TQueryCredentials::ToDDisk(
-        bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.DDGuid[k]);
+    Y_ABORT_UNLESS(dbg.DDToken[k]);
+    auto creds = NDDisk::TQueryCredentials::ToDDisk(*dbg.DDToken[k]);
     NDDisk::TBlockSelector selector(vChunkIndex, static_cast<ui32>(offset), size);
     auto ev = std::make_unique<NDDisk::TEvRead>(
         creds, selector, NDDisk::TReadInstruction(true));
@@ -2330,8 +2375,10 @@ bool TNbsDbgLikeActor::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
     ri.SentAt = MonotonicNow();
     ri.OriginActor = origin;
     ri.OriginCookie = originCookie;
+    ri.Span = std::move(span);
+    NWilson::TTraceId traceId = ri.Span.GetTraceId();
     ReadInflight.emplace(cookie, std::move(ri));
-    Send(dbg.DDiskActor[k], ev.release(), 0, cookie);
+    Send(dbg.DDiskActor[k], ev.release(), 0, cookie, std::move(traceId));
 
     ++dbg.ReadsInFlight;
     AccountReadRequest(dbg, EOp::ReadDDisk, size);
@@ -2347,12 +2394,24 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     const ui64 cookie = ev->Cookie;
     LOG_T("HandleNbsRead Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
+    auto span = NWilson::TSpan(
+        TWilsonNbs::NbsBasic,
+        ev->TraceId.Clone(),
+        "NbsDbgLike.Read",
+        NWilson::EFlags::NONE,
+        TActivationContext::ActorSystem());
+    span
+        .Attribute("addr", static_cast<i64>(msg.GetAddress()))
+        .Attribute("size", static_cast<i64>(msg.GetSizeBytes()));
+
     if (IoSizeBytes == 0) {
+        span.EndError("IoSizeBytes not set");
         ReplyReadErr(origin, cookie, NBSIO_NOT_CONFIGURED, "IoSizeBytes not set");
         return;
     }
 
     if (TabletConfig.GetDisableReplication()) {
+        span.EndError("DisableReplication=true");
         ReplyReadErr(origin, cookie, NBSIO_READS_DISABLED, "DisableReplication=true");
         return;
     }
@@ -2361,9 +2420,10 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     if (!decoded || decoded->DbgIndex != MyDbgIndex) {
         LOG_D("HandleNbsRead invalid Address# " << msg.GetAddress()
             << " SizeBytes# " << msg.GetSizeBytes());
-        ReplyReadErr(origin, cookie, NBSIO_INVALID_ADDRESS,
-            TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
-                << " SizeBytes# " << msg.GetSizeBytes());
+        const TString reason = TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
+            << " SizeBytes# " << msg.GetSizeBytes();
+        span.EndError(reason);
+        ReplyReadErr(origin, cookie, NBSIO_INVALID_ADDRESS, reason);
         return;
     }
     const ui32 dbgIndex = decoded->DbgIndex;
@@ -2377,9 +2437,10 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
             << " DDConnected# " << ddConnectedCount
             << " need# " << kPrimaryHostsPerDbg
             << "; replying TABLET_NOT_READY");
-        ReplyReadErr(origin, cookie, NBSIO_TABLET_NOT_READY,
-            TStringBuilder() << "DDisk peers not ready: " << ddConnectedCount
-                << "/" << kPrimaryHostsPerDbg);
+        const TString reason = TStringBuilder() << "DDisk peers not ready: " << ddConnectedCount
+            << "/" << kPrimaryHostsPerDbg;
+        span.EndError(reason);
+        ReplyReadErr(origin, cookie, NBSIO_TABLET_NOT_READY, reason);
         return;
     }
 
@@ -2396,25 +2457,27 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
         } else {
             const auto& info = lit->second;
             if (ShouldReadFromPBuffer(info.State)) {
-                if (SendPbRead(dbg, dbgIndex, lsn, info, origin, cookie)) {
+                if (SendPbRead(dbg, dbgIndex, lsn, info, origin, cookie, span)) {
                     return;
                 }
             }
             if (SendDDiskRead(dbg, dbgIndex, vChunkIndex, info.OffsetInVChunk,
-                              info.Size, info.FlushConfirmed, origin, cookie)) {
+                              info.Size, info.FlushConfirmed, origin, cookie, span)) {
                 return;
             }
-            ReplyReadErr(origin, cookie, NBSIO_READ_DISPATCH_FAILED,
-                TStringBuilder() << "no PB or DDisk peer for in-flight slot vChunk# "
-                    << vChunkIndex << " slot# " << slot);
+            const TString reason = TStringBuilder() << "no PB or DDisk peer for in-flight slot vChunk# "
+                << vChunkIndex << " slot# " << slot;
+            span.EndError(reason);
+            ReplyReadErr(origin, cookie, NBSIO_READ_DISPATCH_FAILED, reason);
             return;
         }
     }
     if (!SendDDiskRead(dbg, dbgIndex, vChunkIndex, offset, IoSizeBytes,
-                       /*flushMask=*/{}, origin, cookie)) {
-        ReplyReadErr(origin, cookie, NBSIO_READ_DISPATCH_FAILED,
-            TStringBuilder() << "DDisk dispatch failed for cold slot vChunk# "
-                << vChunkIndex << " slot# " << slot);
+                       /*flushMask=*/{}, origin, cookie, span)) {
+        const TString reason = TStringBuilder() << "DDisk dispatch failed for cold slot vChunk# "
+            << vChunkIndex << " slot# " << slot;
+        span.EndError(reason);
+        ReplyReadErr(origin, cookie, NBSIO_READ_DISPATCH_FAILED, reason);
     }
 }
 
@@ -2553,6 +2616,7 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
             dbg.Counters.Request.WriteQuorumMs->Collect(quorumMs);
         }
         if (!info.ReplySent && info.OriginActor) {
+            info.Span.EndOk();
             Send(info.OriginActor, new TEvLoad::TEvNbsWriteResult(NBSIO_OK),
                 0, info.OriginCookie);
             info.ReplySent = true;
@@ -2568,9 +2632,10 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
         if (needed > stillPending.count()) {
             EnterState(dbg, info.State, /*delta=*/-1);
             if (!info.ReplySent && info.OriginActor) {
-                Send(info.OriginActor, new TEvLoad::TEvNbsWriteResult(NBSIO_QUORUM_LOST,
-                    TStringBuilder() << "confirmed# " << info.WriteConfirmed.count()
-                        << " need# " << writeQuorum),
+                const TString reason = TStringBuilder() << "confirmed# " << info.WriteConfirmed.count()
+                    << " need# " << writeQuorum;
+                info.Span.EndError(reason);
+                Send(info.OriginActor, new TEvLoad::TEvNbsWriteResult(NBSIO_QUORUM_LOST, reason),
                     0, info.OriginCookie);
                 info.ReplySent = true;
             }
@@ -2655,14 +2720,12 @@ void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
         dbg.PendingFlush.pop_front();
     }
 
-    const ui64 bscTabletId = AllocConfig.GetTabletId();
-    const ui32 generation = Generation();
     for (ui32 k = 0; k < kPrimaryHostsPerDbg; ++k) {
         if (pending[k].empty()) {
             continue;
         }
-        auto creds = NDDisk::TQueryCredentials::ToDDisk(
-            bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.DDGuid[k]);
+        Y_ABORT_UNLESS(dbg.DDToken[k]);
+        auto creds = NDDisk::TQueryCredentials::ToDDisk(*dbg.DDToken[k]);
         std::tuple<ui32, ui32, ui32> srcId{
             dbg.PBIdsPb[k].GetNodeId(),
             dbg.PBIdsPb[k].GetPDiskId(),
@@ -2674,7 +2737,7 @@ void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
         batchInfo.Lsns.reserve(pending[k].size());
         batchInfo.SentAt = MonotonicNow();
         for (auto& [lsn, sel] : pending[k]) {
-            ev->AddSegmentFromPB(srcId, dbg.PBGuid[k], sel, lsn, generation);
+            ev->AddSegmentFromPB(srcId, dbg.PBGuid[k], sel, lsn, Generation_);
             batchInfo.Lsns.push_back(lsn);
         }
         const ui64 cookie = NextBatchCookie++;
@@ -2913,14 +2976,12 @@ void TNbsDbgLikeActor::DoErase(TPerDbgState& dbg) {
         dbg.PendingErase.pop_front();
     }
 
-    const ui64 bscTabletId = AllocConfig.GetTabletId();
-    const ui32 generation = Generation();
     for (ui32 k = 0; k < hostsPerDbg; ++k) {
         if (pending[k].empty()) {
             continue;
         }
-        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
-            bscTabletId, generation, dbg.PBGuid[k]);
+        Y_ABORT_UNLESS(dbg.PBToken[k]);
+        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*dbg.PBToken[k]);
         auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
         TEraseBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
@@ -2928,7 +2989,7 @@ void TNbsDbgLikeActor::DoErase(TPerDbgState& dbg) {
         batchInfo.Lsns.reserve(pending[k].size());
         batchInfo.SentAt = MonotonicNow();
         for (ui64 lsn : pending[k]) {
-            ev->AddErase(lsn, generation);
+            ev->AddErase(lsn, Generation_);
             batchInfo.Lsns.push_back(lsn);
         }
         const ui64 cookie = NextBatchCookie++;
@@ -3123,21 +3184,19 @@ void TNbsDbgLikeActor::BestEffortEraseAll(TPerDbgState& dbg) {
             pending[k].push_back(lsn);
         }
     }
-    const ui64 bscTabletId = AllocConfig.GetTabletId();
-    const ui32 generation = Generation();
     for (ui32 k = 0; k < hostsPerDbg; ++k) {
         if (pending[k].empty()) {
             continue;
         }
-        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
-            bscTabletId, generation, dbg.PBGuid[k]);
+        Y_ABORT_UNLESS(dbg.PBToken[k]);
+        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*dbg.PBToken[k]);
         auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
         TEraseBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
         batchInfo.Sink = static_cast<ui8>(k);
         batchInfo.Lsns = pending[k];
         batchInfo.SentAt = MonotonicNow();
-        for (ui64 lsn : pending[k]) ev->AddErase(lsn, generation);
+        for (ui64 lsn : pending[k]) ev->AddErase(lsn, Generation_);
         const ui64 cookie = NextBatchCookie++;
         EraseInflight.emplace(cookie, std::move(batchInfo));
         Send(dbg.PBActor[k], ev.release(), 0, cookie);
@@ -3157,14 +3216,21 @@ void TNbsDbgLikeActor::BestEffortEraseAll(TPerDbgState& dbg) {
 }
 
 bool TNbsDbgLikeActor::CompleteRead(ui64 cookie, bool ok, TActorId& origin,
-    ui64& originCookie, ui32& size)
+    ui64& originCookie, ui32& size, TStringBuf errorReason)
 {
     auto rIt = ReadInflight.find(cookie);
     if (rIt == ReadInflight.end()) {
         return false;
     }
-    TReadInflight read = rIt->second;
+    TReadInflight read = std::move(rIt->second);
     ReadInflight.erase(rIt);
+    if (read.Span) {
+        if (ok) {
+            read.Span.EndOk();
+        } else {
+            read.Span.EndError(TString(errorReason));
+        }
+    }
     origin = read.OriginActor;
     originCookie = read.OriginCookie;
     size = read.Size;
@@ -3237,12 +3303,16 @@ void TNbsDbgLikeActor::HandlePbReadResult(
     TActorId origin;
     ui64 originCookie = 0;
     ui32 size = 0;
-    if (CompleteRead(cookie, ok, origin, originCookie, size) && origin) {
+    TString errorReason;
+    if (!ok) {
+        errorReason = TStringBuilder() << "PbRead: "
+            << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+            << ": " << msg.GetErrorReason();
+    }
+    if (CompleteRead(cookie, ok, origin, originCookie, size, errorReason) && origin) {
         TString reason;
         if (!ok) {
-            reason = TStringBuilder() << "PbRead: "
-                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
-                << ": " << msg.GetErrorReason();
+            reason = std::move(errorReason);
         }
         auto resp = std::make_unique<TEvLoad::TEvNbsReadResult>(
             ok ? NBSIO_OK : NBSIO_IO_ERROR, std::move(reason));
@@ -3264,12 +3334,16 @@ void TNbsDbgLikeActor::HandleDDiskReadResult(
     TActorId origin;
     ui64 originCookie = 0;
     ui32 size = 0;
-    if (CompleteRead(cookie, ok, origin, originCookie, size) && origin) {
+    TString errorReason;
+    if (!ok) {
+        errorReason = TStringBuilder() << "DDiskRead: "
+            << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+            << ": " << msg.GetErrorReason();
+    }
+    if (CompleteRead(cookie, ok, origin, originCookie, size, errorReason) && origin) {
         TString reason;
         if (!ok) {
-            reason = TStringBuilder() << "DDiskRead: "
-                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
-                << ": " << msg.GetErrorReason();
+            reason = std::move(errorReason);
         }
         auto resp = std::make_unique<TEvLoad::TEvNbsReadResult>(
             ok ? NBSIO_OK : NBSIO_IO_ERROR, std::move(reason));

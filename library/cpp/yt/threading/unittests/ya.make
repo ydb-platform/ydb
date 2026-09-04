@@ -3,6 +3,8 @@ GTEST()
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
+    atomic_object_ut.cpp
+    copyable_atomic_ut.cpp
     count_down_latch_ut.cpp
     recursive_spin_lock_ut.cpp
     rw_spin_lock_ut.cpp

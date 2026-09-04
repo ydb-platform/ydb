@@ -246,7 +246,16 @@ private:
                         return false;
                     }
 
-                    return NCommon::ValidateCompressionForOutput(format, value.Content(), ctx);
+                    if (!NCommon::ValidateCompressionForOutput(format, value.Content(), ctx)) {
+                        return false;
+                    }
+                    if (value.Content() == "lz4"sv && (format == "raw"sv || format == "json_list"sv)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()),
+                            TStringBuilder() << "Compression '" << value.Content() << "' is not supported for format '" << format
+                                             << "'. Use one of: gzip, zstd, brotli, bzip2, xz"));
+                        return false;
+                    }
+                    return true;
                 }
 
                 if (name == "partitionedby") {

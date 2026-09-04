@@ -7,12 +7,19 @@
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader {
 
 LWTRACE_USING(YDB_CS_SCAN);
 
 void TTxInternalScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("problem", problem)("details", details);
+    YDB_LOG_WARN("",
+        {"event", "TTxScan failed"},
+        {"problem", problem},
+        {"details", details});
     auto& request = *InternalScanEvent->Get();
     auto scanComputeActor = InternalScanEvent->Sender;
 
@@ -36,8 +43,10 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     auto& request = *InternalScanEvent->Get();
     auto scanComputeActor = InternalScanEvent->Sender;
     const TSnapshot snapshot = Self->TablesManager.ResolveReadSnapshot(request.GetPathId().GetSchemeShardLocalPathId(), request.GetSnapshot());
-    const NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build()("tablet", Self->TabletID())("snapshot", snapshot.DebugString())("task_id", request.TaskIdentifier);
+    YDB_LOG_CREATE_CONTEXT(
+        {"tablet", Self->TabletID()},
+        {"snapshot", snapshot.DebugString()},
+        {"taskId", request.TaskIdentifier});
     TReadMetadataPtr readMetadataRange;
     const TReadMetadataBase::ESorting sorting = [&]() {
         return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
@@ -50,7 +59,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         read.SetScanIdentifier(request.TaskIdentifier);
         {
             auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(
-                "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId());
+                "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId(), snapshot);
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
@@ -126,7 +135,10 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}, std::move(orbit)));
 
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
+    YDB_LOG_DEBUG("",
+        {"event", "TTxInternalScan started"},
+        {"actorId", scanActorId},
+        {"traceDetailed", detailedInfo});
 }
 
 }   // namespace NKikimr::NOlap::NReader

@@ -79,19 +79,22 @@ class SqsChangeMessageVisibilityParams(object):
 
 
 class SqsHttpApi(object):
-    def __init__(self, server, port, user, raise_on_error=False, timeout=REQUEST_TIMEOUT, security_token=None, force_private=False, iam_token=None, folder_id=None):
-        self.__auth_headers = auth_headers(user, security_token, iam_token)
+    def __init__(self, server, port, user, raise_on_error=False, timeout=REQUEST_TIMEOUT, security_token=None, force_private=False, iam_token=None, folder_id=None, extra_headers=None):
+        headers = auth_headers(user, security_token, iam_token)
+        if extra_headers is not None:
+            headers.update(extra_headers)
+        self.__auth_headers = headers
         if not server.startswith('http'):
             server = 'http://' + server
         self.__request = requests.Request(
             'POST',
             "{}:{}".format(server, port),
-            headers=auth_headers(user, security_token, iam_token)
+            headers=headers
         )
         self.__private_request = requests.Request(
             'POST',
             "{}:{}/private".format(server, port),
-            headers=auth_headers(user, security_token, iam_token)
+            headers=headers
         )
         self.__session = requests.Session()
         self.__raise_on_error = raise_on_error
@@ -368,8 +371,9 @@ class SqsHttpApi(object):
             delay_seconds=None, attributes=None, deduplication_id=None, group_id=None
     ):
         if not to_bytes(queue_url).endswith(to_bytes('.fifo')):
-            if deduplication_id is not None or group_id is not None:
-                raise ValueError("Deduplication id and Group id parameters may be set for FIFO queues only")
+            if group_id is not None:
+                raise ValueError("Group id parameter may be set for FIFO queues only")
+            # MessageDeduplicationId is accepted for standard queues but ignored by the server.
         params = {
             'QueueUrl': queue_url,
             'MessageBody': message_body,

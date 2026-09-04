@@ -1,5 +1,4 @@
 #include "kqp_opt_phy_rules.h"
-#include "kqp_olap_filter_inspection.h"
 #include "predicate_collector.h"
 #include "kqp_opt_phy_olap_filter.h"
 
@@ -20,6 +19,18 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace {
+
+TString GetOlapColumnName(TStringBuf columnName, bool stripAliasPrefix) {
+    if (!stripAliasPrefix) {
+        return TString(columnName);
+    }
+
+    const auto it = columnName.find('.');
+    if (it == TStringBuf::npos) {
+        return TString(columnName);
+    }
+    return TString(columnName.substr(it + 1));
+}
 
 TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 TFilterOpsLevels NullFilterOpsLevels = TFilterOpsLevels(NullNode, NullNode);
@@ -1048,7 +1059,8 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
 }
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx) {
-    const TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown());
+    const TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown(),
+        /*stripAliasPrefixFromColName=*/false, kqpCtx.Config->GetEnableOlapPushdownRegexp());
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
@@ -1147,7 +1159,8 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             predicate = maybeIf.Cast().Predicate();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            CollectPredicates(predicate, predicateTree, &lArg, lArg.GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
+            CollectPredicates(predicate, predicateTree, &lArg, lArg.GetTypeAnn(),
+                {true, pushdownOptions.PushdownSubstring, pushdownOptions.StripAliasPrefixFromColName, pushdownOptions.PushdownRegexp});
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);

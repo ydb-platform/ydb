@@ -12,11 +12,6 @@ class TAlterTopicActor: public TGrpcProxyActor<TAlterTopicActor, NGRpcService::T
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>;
 
 public:
-    TAlterTopicActor(NGRpcService::TEvAlterTopicRequest* request)
-        : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
-    {
-    }
-
     TAlterTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
     {
@@ -26,7 +21,7 @@ public:
         Become(&TAlterTopicActor::StateWork);
 
         Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
-            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
+            .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .Request = *GetProtoRequest(),
             .UserToken = GetUserToken()

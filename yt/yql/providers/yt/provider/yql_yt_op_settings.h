@@ -52,7 +52,7 @@ struct TSampleParams {
 
 enum class EYtSettingType: ui64 {
     // Table reads
-    Initial           /* "initial" */,
+    Initial                  /* "initial" */,
     InferScheme              /* "infer_scheme" "inferscheme" "infer_schema" "inferschema" */,
     ForceInferScheme         /* "force_infer_schema" "forceinferschema" */,
     DoNotFailOnInvalidSchema /* "do_not_fail_on_invalid_schema" */,
@@ -110,13 +110,15 @@ enum class EYtSettingType: ui64 {
     BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
     BlockOutputReady         /* "blockOutputReady" */,         // hybrid supported
     BlockOutputApplied       /* "blockOutputApplied" */,       // hybrid supported
-    // Out tables
-    UniqueBy                 /* "uniqueBy" */,
-    OpHash                   /* "opHash" */,
-    // Operations
     MapOutputType            /* "mapOutputType" */,            // hybrid supported
     ReduceInputType          /* "reduceInputType" */,          // hybrid supported
     NoDq                     /* "noDq" */,
+    Transparent              /* "transparent" */,
+    PruneUnusedColumns       /* "prune_unused_columns" "pruneunusedcolumns" */,
+    ForceApplyMaxJobCount    /* "forceApplyMaxJobCount" */,    // hybrid supported
+    // Out tables
+    UniqueBy                 /* "uniqueBy" */,
+    OpHash                   /* "opHash" */,
     // Read
     Split                    /* "split" */,
     // Write hints
@@ -184,8 +186,10 @@ EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
 const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
-                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
-                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::SoftTransform;
+                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied |
+                                       EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
+                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType |
+                                       EYtSettingType::Sharded | EYtSettingType::SoftTransform | EYtSettingType::ForceApplyMaxJobCount;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -413,6 +413,7 @@ public:
     void CloseDict();
 
     // Variant
+    uint32_t GetVariantIndex() const;
     void OpenVariant();
     void CloseVariant();
 

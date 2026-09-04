@@ -43,7 +43,7 @@ public:
         , Builder_(HolderFactory_, NUdf::EValidatePolicy::Exception)
         , TypeInfoHelper_(new TTypeInfoHelper())
         , RuntimeSettings_(NYql::MakeRuntimeSettings())
-        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, *RuntimeSettings_, Env_, TypeInfoHelper_, "", nullptr, TSourcePosition())
+        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, *RuntimeSettings_, Env_, TypeInfoHelper_, "", /*countersProvider=*/nullptr, TSourcePosition())
     {
         BoolOid_ = NYql::NPg::LookupType("bool").TypeId;
     }

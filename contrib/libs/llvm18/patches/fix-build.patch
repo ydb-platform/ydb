@@ -1,0 +1,21 @@
+--- a/include/llvm/Analysis/RegionInfoImpl.h
++++ b/include/llvm/Analysis/RegionInfoImpl.h
+@@ -852,10 +852,14 @@ RegionInfoBase<Tr>::getMaxRegionExit(BlockT *BB) const {
+     // Get the single exit of BB.
+     if (R && R->getEntry() == BB)
+       Exit = R->getExit();
+-    else if (++BlockTraits::child_begin(BB) == BlockTraits::child_end(BB))
+-      Exit = *BlockTraits::child_begin(BB);
+-    else // No single exit exists.
+-      return Exit;
++    else {
++      auto next = BlockTraits::child_begin(BB);
++      ++next;
++      if (next == BlockTraits::child_end(BB))
++        Exit = *BlockTraits::child_begin(BB);
++      else // No single exit exists.
++        return Exit;
++    }
+ 
+     // Get largest region that starts at Exit.
+     RegionT *ExitR = getRegionFor(Exit);

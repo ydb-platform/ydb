@@ -153,6 +153,7 @@ public:
         ui64 MkqlMemoryLimit = 0; // old engine compatibility
         ui64 PerShardKeysSizeLimitBytes = 0;
         Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        bool CollectAffectedRows = false;
         TDuration ProgressStatsPeriod;
         TKqpSnapshot Snapshot = TKqpSnapshot();
         std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
@@ -160,7 +161,7 @@ public:
         NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
-        bool UseImmediateEffects = false;
+        bool FlushEffects = false;
         bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
         std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 

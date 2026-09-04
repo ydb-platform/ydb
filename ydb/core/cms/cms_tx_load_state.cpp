@@ -7,6 +7,8 @@
 
 #include <util/system/hostname.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 namespace {
@@ -27,10 +29,10 @@ public:
     {
     }
 
-     TTxType GetTxType() const override { return TXTYPE_LOAD_STATE; } 
+     TTxType GetTxType() const override { return TXTYPE_LOAD_STATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLoadState Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState Execute");
 
         auto state = Self->State;
         NIceDb::TNiceDb db(txc.DB);
@@ -47,6 +49,7 @@ public:
         auto nodeTenantRowset = db.Table<Schema::NodeTenant>().Range().Select<Schema::NodeTenant::TColumns>();
         auto hostMarkersRowset = db.Table<Schema::HostMarkers>().Range().Select<Schema::HostMarkers::TColumns>();
         auto logRowset = db.Table<Schema::LogRecords>().Range().Select<Schema::LogRecords::Timestamp>();
+        auto ddiskInfoRowset = db.Table<Schema::DDiskInfo>().Range().Select<Schema::DDiskInfo::TColumns>();
 
         if (!paramRow.IsReady()
             || !permissionRowset.IsReady()
@@ -55,7 +58,8 @@ public:
             || !maintenanceTasksRowset.IsReady()
             || !notificationRowset.IsReady()
             || !hostMarkersRowset.IsReady()
-            || !logRowset.IsReady())
+            || !logRowset.IsReady()
+            || !ddiskInfoRowset.IsReady())
             return false;
 
         NKikimrCms::TCmsConfig config;
@@ -68,8 +72,8 @@ public:
             state->FirstBootTimestamp = TInstant::MicroSeconds(paramRow.GetValueOrDefault<Schema::Param::FirstBootTimestamp>(0));
             config = paramRow.GetValueOrDefault<Schema::Param::Config>(NKikimrCms::TCmsConfig());
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                        "Loaded config: " << config.ShortDebugString());
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded config",
+                {"config", config.ShortDebugString()});
         } else {
             FirstBoot = true;
 
@@ -78,8 +82,7 @@ public:
             state->NextNotificationId = 1;
             state->FirstBootTimestamp = ctx.Now();
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                        "Using default config");
+            YDB_LOG_DEBUG_CTX(ctx, "Using default config");
         }
         state->ConfigProto = config;
         state->Config.Deserialize(config);
@@ -95,6 +98,19 @@ public:
         state->Permissions.clear();
         state->ScheduledRequests.clear();
         state->Notifications.clear();
+        state->DDiskInfo.clear();
+
+        while (!ddiskInfoRowset.EndOfSet()) {
+            const ui64 tabletId = ddiskInfoRowset.GetValue<Schema::DDiskInfo::TabletId>();
+            state->DDiskInfo.emplace(tabletId, TCmsDDiskInfo{
+                .Revision = ddiskInfoRowset.GetValueOrDefault<Schema::DDiskInfo::Revision>(0),
+                .LastChangedAt = TInstant::MicroSeconds(ddiskInfoRowset.GetValueOrDefault<Schema::DDiskInfo::LastChangedAt>(0)),
+                .State = ddiskInfoRowset.GetValueOrDefault<Schema::DDiskInfo::State>()
+            });
+
+            if (!ddiskInfoRowset.Next())
+                return false;
+        }
 
         while (!requestRowset.EndOfSet()) {
             TString id = requestRowset.GetValue<Schema::Request::ID>();
@@ -110,8 +126,10 @@ public:
             request.Priority = priority;
             ParseFromStringSafe(requestStr, &request.Request);
 
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",
-                      id.data(), owner.data(), requestStr.data());
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded request",
+                {"requestId", id},
+                {"owner", owner},
+                {"request", requestStr});
 
             state->ScheduledRequests.emplace(id, request);
 
@@ -129,8 +147,9 @@ public:
             state->WalleRequests.emplace(requestId, taskId);
             state->WalleTasks.emplace(taskId, task);
 
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded Wall-E task %s mapped to request %s",
-                      taskId.data(), requestId.data());
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded Wall-E task",
+                {"taskId", taskId},
+                {"requestId", requestId});
 
             if (!walleTaskRowset.Next())
                 return false;
@@ -157,8 +176,9 @@ public:
                 .MaxInflightActions = maxInflightActions
             });
 
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded maintenance task %s mapped to request %s",
-                      taskId.data(), requestId.data());
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded maintenance task",
+                {"taskId", taskId},
+                {"requestId", requestId});
 
             if (!maintenanceTasksRowset.Next())
                 return false;
@@ -180,8 +200,11 @@ public:
             permission.Deadline = TInstant::MicroSeconds(deadline);
             permission.Priority = priority;
 
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
-                      id.data(), owner.data(), TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data(), actionStr.data());
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded permission",
+                {"permissionId", id},
+                {"owner", owner},
+                {"deadline", TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds()},
+                {"action", actionStr});
 
             state->Permissions.emplace(id, permission);
 
@@ -189,16 +212,18 @@ public:
                 const auto &taskId = state->WalleRequests[requestId];
                 state->WalleTasks[taskId].Permissions.insert(id);
 
-                LOG_DEBUG(ctx, NKikimrServices::CMS, "Added permission %s to Wall-E task %s",
-                          id.data(), taskId.data());
+                YDB_LOG_DEBUG_CTX(ctx, "Added permission to Wall-E task",
+                    {"permissionId", id},
+                    {"taskId", taskId});
             }
 
             if (state->MaintenanceRequests.contains(requestId)) {
                 const auto &taskId = state->MaintenanceRequests[requestId];
                 state->MaintenanceTasks[taskId].Permissions.insert(id);
 
-                LOG_DEBUG(ctx, NKikimrServices::CMS, "Added permission %s to maintenance task %s",
-                          id.data(), taskId.data());
+                YDB_LOG_DEBUG_CTX(ctx, "Added permission to maintenance task",
+                    {"permissionId", id},
+                    {"taskId", taskId});
             }
 
             if (!permissionRowset.Next())
@@ -215,8 +240,10 @@ public:
             notification.Owner = owner;
             ParseFromStringSafe(notificationStr, &notification.Notification);
 
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded notification %s owned by %s: %s",
-                      id.data(), owner.data(), notificationStr.data());
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded notification",
+                {"notificationId", id},
+                {"owner", owner},
+                {"notification", notificationStr});
 
             state->Notifications.emplace(id, notification);
 
@@ -228,9 +255,9 @@ public:
             ui32 nodeId = nodeTenantRowset.GetValue<Schema::NodeTenant::NodeId>();
             TString tenant = nodeTenantRowset.GetValue<Schema::NodeTenant::Tenant>();
 
-            LOG_DEBUG(ctx, NKikimrServices::CMS,
-                      "Loaded node tenant '%s' for node %" PRIu32,
-                      tenant.data(), nodeId);
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded tenant node",
+                {"tenant", tenant},
+                {"nodeId", nodeId});
             state->InitialNodeTenants[nodeId] = tenant;
 
             if (!nodeTenantRowset.Next())
@@ -264,7 +291,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLoadState Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState Complete");
         Self->Become(&TCms::StateWork);
         Self->SignalTabletActive(ctx);
         Self->SchedulePermissionsCleanup(ctx);
@@ -272,6 +299,7 @@ public:
         Self->ScheduleLogCleanup(ctx);
         Self->ScheduleUpdateClusterInfo(ctx, true);
         Self->ProcessInitQueue(ctx);
+        Self->StartDDiskSync(ctx);
 
         if (FirstBoot) {
             Self->Execute(Self->CreateTxStoreFirstBootTimestamp(), ctx);

@@ -32,6 +32,11 @@ namespace NYdb::NConsoleClient {
         GETTER(NTopic::ECodec, Codec);
         GETTER(ETransformBody, Transform);
         GETTER(TMaybe<TDuration>, MessagesWaitTimeout);
+        GETTER(TMaybe<NTopic::TDeferredPublication>, DeferredPublication);
+
+        void SetDeferredPublication(NTopic::TDeferredPublication deferredPublication) {
+            DeferredPublication_ = std::move(deferredPublication);
+        }
 
     private:
         TMaybe<TString> File_;
@@ -45,6 +50,7 @@ namespace NYdb::NConsoleClient {
         NTopic::ECodec Codec_ = NTopic::ECodec::RAW;
         ETransformBody Transform_ = ETransformBody::None;
         TMaybe<TDuration> MessagesWaitTimeout_;
+        TMaybe<NTopic::TDeferredPublication> DeferredPublication_;
 
         ui64 MessageSizeLimit_ = 0;
     };

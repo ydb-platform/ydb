@@ -27,6 +27,9 @@
             "uri": "file://test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units/results.txt.0"
         }
     ],
+    "test_canonical_requests.Test.test_cluster_balance_skips_not_bsc_ready": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_skips_not_bsc_ready/results.txt"
+    },
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"
@@ -103,6 +106,20 @@
             "uri": "file://test_canonical_requests.Test.test_essential/results.txt.8"
         }
     ],
+    "test_canonical_requests.Test.test_group_add": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.2"
+        }
+    ],
     "test_canonical_requests.Test.test_group_resize": [
         {
             "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt"
@@ -148,6 +165,17 @@
         null,
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.1"
+        }
+    ],
+    "test_canonical_requests.Test.test_pdisk_populate": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/pdisk-populate-snapshot.json"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt.0"
         }
     ],
     "test_canonical_requests.Test.test_pdisk_set_status_inactive": [

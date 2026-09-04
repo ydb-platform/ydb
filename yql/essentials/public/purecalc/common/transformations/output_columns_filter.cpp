@@ -18,7 +18,6 @@ public:
     {
     }
 
-public:
     void Rewind() override {
         Fired_ = false;
     }
@@ -98,7 +97,7 @@ public:
 
         Fired_ = true;
 
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 };
 } // namespace

@@ -166,7 +166,7 @@ private:
                     << "'" << authType << "'" << ","
                     << "'" << peerName << "'" << ","
                     << "'" << requestId << "'" << ","
-                    << "'" << labels << "'" 
+                    << "'" << labels << "'"
                 << ");";
 
             ExecDataQuery(TString(queryBuilder));
@@ -264,11 +264,17 @@ private:
         int updateCount = 0;
         int deleteCount = 0;
 
+        const TString expectedRemoteAddress = TStringBuilder() << "remote_address=" << peerName;
+
         for (const auto& line : *AuditLinesPtr) {
             std::cerr << line << std::endl;
             bool isCreate = line.contains("CreateMessageQueue");
             bool isUpdate = line.contains("UpdateMessageQueue");
             bool isDelete = line.contains("DeleteMessageQueue");
+
+            if (isCreate || isUpdate || isDelete) {
+                UNIT_ASSERT_C(line.contains(expectedRemoteAddress), line);
+            }
 
             createCount += isCreate;
             updateCount += isUpdate;
@@ -381,21 +387,21 @@ Y_UNIT_TEST_SUITE(ProtoTests) {
 
     Y_UNIT_TEST(CreateQueueFiller) {
         TestEventFilling<NCloudEvents::TCreateQueueEvent>(
-            "CreateMessageQueue", 
+            "CreateMessageQueue",
             "ymq.queues.create"
         );
     }
 
     Y_UNIT_TEST(UpdateQueueFiller) {
         TestEventFilling<NCloudEvents::TUpdateQueueEvent>(
-            "UpdateMessageQueue", 
+            "UpdateMessageQueue",
             "ymq.queues.setAttributes"
         );
     }
 
     Y_UNIT_TEST(DeleteQueueFiller) {
         TestEventFilling<NCloudEvents::TDeleteQueueEvent>(
-            "DeleteMessageQueue", 
+            "DeleteMessageQueue",
             "ymq.queues.delete"
         );
     }

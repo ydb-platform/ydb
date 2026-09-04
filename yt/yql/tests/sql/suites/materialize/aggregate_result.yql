@@ -1,0 +1,5 @@
+use plato;
+
+$aggregated = SELECT key, COUNT(*) AS cnt FROM Input GROUP BY key;
+MATERIALIZE $aggregated INTO $result;
+SELECT * FROM $result ORDER BY key;

@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/http_database_param.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -37,6 +38,8 @@
 #include <limits>
 #include <queue>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
+
 namespace NActors {
 
 namespace {
@@ -53,27 +56,39 @@ struct TIssueInfo {
     }
 };
 
-bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
-    if (request->Method == "POST") {
-        const TStringBuf header = request->ContentType.Before(';');
-        return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
-    }
-    return false;
+TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
+    NHttp::THeaders headers(request->Headers);
+    return ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, headers.Get("Content-Type"));
 }
 
-TString GetDatabase(NHttp::THttpIncomingRequest* request) {
-    NHttp::TUrlParameters urlParams(request->URL);
-    TString database = urlParams["database"];
-    if (database) {
-        return database;
-    }
-    if (HasJsonContent(request)) {
-        NJson::TJsonValue requestData;
-        if (NJson::ReadJsonTree(request->Body, &requestData)) {
-            return requestData["database"].GetString(); // empty if not string or no such key
-        }
-    }
-    return {};
+void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
+    event->Database = ExtractMonDatabaseParam(event->Request.Get());
+}
+
+void LogAuthorizedHttpRequest(
+    const TAppData* appData,
+    const NGRpcService::TEvRequestAuthAndCheckResult* result,
+    const NHttp::THttpIncomingRequest& request,
+    const TString& database)
+{
+    const TString address = request.Address ? request.Address->ToString() : "";
+    const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
+    const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
+    const TString accessLevel = ToString(GetHighestAccessLevel(appData, userToken));
+    YDB_LOG_NOTICE(
+        "Send request"
+            << " [" << address << "]"
+            << " " << user
+            << " " << request.Method
+            << " " << request.URL
+            << " highest_access_level=" << accessLevel
+            << " database=" << database,
+        {"address", address},
+        {"user", user},
+        {"method", request.Method},
+        {"url", request.URL},
+        {"highest_access_level", accessLevel},
+        {"database", database});
 }
 
 const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {
@@ -187,17 +202,21 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
     );
 }
 
-NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
+NActors::IEventHandle* SelectAuthorizationScheme(
+    const NActors::TActorId& owner,
+    const TString& database,
+    NHttp::THttpIncomingRequest* request)
+{
     NHttp::THeaders headers(request->Headers);
     NHttp::TCookies cookies(headers["Cookie"]);
     TStringBuf ydbSessionId = cookies["ydb_session_id"];
     TStringBuf authorization = headers["Authorization"];
     if (!authorization.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!ydbSessionId.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!request->MTlsClientCertificate.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
         return nullptr;
     }
@@ -266,13 +285,14 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
     });
 }
 
-NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
-    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
+NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
+    NHttp::THttpIncomingRequest* request = event->Request.Get();
+    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, event->Database, request);
     if (eventHandle != nullptr) {
         return eventHandle;
     }
 
-    return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
+    return GetRequestAuthAndCheckHandle(owner, event->Database, "", NMonitoring::NAudit::ExtractRemoteAddress(request));
 }
 
 // compatibility layer
@@ -438,10 +458,11 @@ public:
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
-            NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get());
             if (handle) {
                 TActivationContext::Send(handle);
                 return;
@@ -592,16 +613,11 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
-            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            ALOG_NOTICE(NActorsServices::HTTP,
-                (request->Address ? request->Address->ToString() : "")
-                << " " << user
-                << " " << request->Method
-                << " " << request->URL);
+            LogAuthorizedHttpRequest(AppData(), result, *request, Event->Get()->Database);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
-            Container, serializedToken), IEventHandle::FlagTrackDelivery);
+            Container, serializedToken, Event->Get()->Database), IEventHandle::FlagTrackDelivery);
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
@@ -1130,10 +1146,11 @@ public:
     }
 
     void Bootstrap() {
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Fields.AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
-            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get());
             if (handle) {
                 Send(handle);
                 Become(&THttpMonAuthorizedActorRequest::StateWork);
@@ -1246,11 +1263,7 @@ public:
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         if (Authorizer) {
-            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            ALOG_NOTICE(NActorsServices::HTTP, (Request->Address ? Request->Address->ToString() : "")
-                << " " << user
-                << " " << Request->Method
-                << " " << Request->URL);
+            LogAuthorizedHttpRequest(AppData(), result, *Request, Event->Get()->Database);
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
@@ -1361,9 +1374,10 @@ public:
     }
 
     void Bootstrap() {
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event, NeedAudit);
         if (Authorizer) {
-            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get());
             if (handle) {
                 Send(handle);
                 Become(&THttpMonAuthorizedPageRequest::StateWork);
@@ -1838,6 +1852,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     addPort->CertificateFile = Config.CertificateFile;
     addPort->PrivateKeyFile = Config.PrivateKeyFile;
     addPort->CaFile = Config.CaFile;
+    addPort->ClientCertificateRequired = Config.ClientCertificateRequired;
     addPort->Secure = !Config.Certificate.empty() || !Config.CertificateFile.empty();
     addPort->MaxRequestsPerSecond = Config.MaxRequestsPerSecond;
 

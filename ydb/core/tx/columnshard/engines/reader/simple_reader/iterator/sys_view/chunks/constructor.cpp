@@ -40,7 +40,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             if (reqSnapshot < portionInfo->RecordSnapshotMin()) {
                 continue;
             }
-            if (portionInfo->IsRemovedFor(reqSnapshot)) {
+            if (!portionInfo->MayGetForScanAt(reqSnapshot)) {
                 continue;
             }
             if (unifiedPathId.HasInternalPathId()) {

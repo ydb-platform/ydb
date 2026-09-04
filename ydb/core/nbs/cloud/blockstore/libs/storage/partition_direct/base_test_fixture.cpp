@@ -89,12 +89,12 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
+         TPBufferKey pBufferKey,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
         Y_UNUSED(traceId);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
@@ -117,14 +117,14 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
+         TPBufferKey pBufferKey,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
         Y_UNUSED(hostIndex);
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -163,15 +163,15 @@ void TBaseFixture::Init()
         UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
+        const ui64 sizeBytes = range.Size() * BlockSize;
         TString copiedData;
-        copiedData.resize(CopyRangeSize);
+        copiedData.resize(sizeBytes);
         SgListCopy(
             guardedSglist.Acquire().Get(),
             TBlockDataRef{copiedData.data(), copiedData.size()});
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
         const ui64 offsetBytes = offsetBlocks * BlockSize;
-        const ui64 sizeBytes = range.Size() * BlockSize;
         TString expectedData =
             TString(RangeData.data() + offsetBytes, sizeBytes);
         UNIT_ASSERT_VALUES_EQUAL(expectedData, copiedData);
@@ -204,12 +204,10 @@ void TBaseFixture::Init()
     };
 
     DirectBlockGroup->BatchEraseFromPBufferHandler = [&]   //
-        (ui32 vChunkIndex,
-         THostIndex hostIndex,
-         const TVector<TPBufferSegment>& segments,
+        (THostIndex hostIndex,
+         const TEraseSegments& segments,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(vChunkIndex);
         Y_UNUSED(hostIndex);
         Y_UNUSED(segments);
         Y_UNUSED(traceId);
@@ -297,6 +295,25 @@ void TBaseFixture::SetEraseResult(TDBGEraseResponse response, bool async)
 bool TBaseFixture::WaitEraseRequests(size_t count, TDuration timeout)
 {
     return Wait(ErasePromises, count, timeout);
+}
+
+size_t TBaseFixture::ReplyUpdateRequests()
+{
+    auto requests = std::move(PartitionDirectService->UpdateConfigRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue(EPersistResult::Success);
+    }
+    return requests.size();
+}
+
+size_t TBaseFixture::ReplyUpdateDirtyMapStateRequests()
+{
+    auto requests =
+        std::move(PartitionDirectService->UpdateDirtyMapStateRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue(EPersistResult::Success);
+    }
+    return requests.size();
 }
 
 template <typename T>

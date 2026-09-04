@@ -318,6 +318,13 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         serverlessComputeResourcesModeChanged = current->GetServerlessComputeResourcesMode() != input.GetServerlessComputeResourcesMode();
     }
 
+    if (input.HasTablesMetricsLevel()) {
+        TString error;
+        if (!CheckTablesMetricsLevel(input.GetTablesMetricsLevel(), /* isRootDomain */ false, error)) {
+            return paramError(error);
+        }
+    }
+
     delta->CoordinatorsAdded = coordinatorsAdded;
     delta->MediatorsAdded = mediatorsAdded;
     delta->TimeCastBucketsPerMediatorAdded = timeCastBucketsPerMediatorAdded;
@@ -398,7 +405,7 @@ public:
     void SendCreateTabletEvent(const TPathId& pathId, TShardIdx shardIdx, TOperationContext& context) {
         auto path = context.SS->PathsById.at(pathId);
 
-        auto ev = CreateEvCreateTablet(path, shardIdx, context);
+        auto ev = CreateEvCreateTablet(path, shardIdx, context.SS);
         auto rootHiveId = context.SS->GetGlobalHive();
 
         LOG_D(DebugHint() << "Send CreateTablet event to Hive: " << rootHiveId << " msg:  "<< ev->Record.DebugString());
@@ -950,6 +957,13 @@ public:
 
         if (inputSettings.HasServerlessComputeResourcesMode()) {
             alter->SetServerlessComputeResourcesMode(inputSettings.GetServerlessComputeResourcesMode());
+        }
+
+        // alter is copy-constructed from the current subdomain info, so the
+        // current level is already carried over; only an explicit request
+        // changes it (already validated in VerifyParams).
+        if (inputSettings.HasTablesMetricsLevel()) {
+            alter->SetTablesMetricsLevel(inputSettings.GetTablesMetricsLevel());
         }
 
         LOG_D("TAlterExtSubDomain Propose"

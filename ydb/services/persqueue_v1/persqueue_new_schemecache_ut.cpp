@@ -70,7 +70,7 @@ namespace NKikimr::NPersQueueTests {
             PrepareForGrpcNoDC(*server.AnnoyingClient);
             server.AnnoyingClient->GrantConnect("topic1@" BUILTIN_ACL_DOMAIN);
 
-            TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
+            TPQDataWriter writer("source1", server, "/Root/PQ/account1/topic1");
 
             writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
             writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);

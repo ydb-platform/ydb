@@ -6,22 +6,26 @@
 
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
+#include <array>
 #include <cstring>
+#include <exception>
 #include <vector>
 #include <cassert>
 #include <cstdlib>
-#include <stdlib.h>
 #include <random>
 
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
 #include <util/system/mem_info.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
+
+namespace {
 
 constexpr bool IsVerbose = false;
 #define CTEST (IsVerbose ? Cerr : Cnull)
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 Y_UNIT_TEST(TestMem1) {
@@ -31,8 +35,8 @@ Y_UNIT_TEST(TestMem1) {
     const ui64 BucketSize = (2 * NTuples * (TupleSize + 1)) / NBuckets;
 
     ui64* bigTuple = (ui64*)malloc(TupleSize * sizeof(ui64));
-    ui64* buckets[NBuckets];
-    ui64 tuplesPos[NBuckets];
+    std::array<ui64*, NBuckets> buckets{};
+    std::array<ui64, NBuckets> tuplesPos{};
 
     std::mt19937_64 rng;
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
@@ -127,8 +131,8 @@ Y_UNIT_TEST(TestMem1) {
     CTEST << "std:memcpy speed = " << (TupleSize * NTuples * sizeof(ui64) * 1000) / (milliseconds * 1024 * 1024) << "MB/sec" << Endl;
     CTEST << Endl;
 
-    for (ui64 i = 0; i < NBuckets; i++) {
-        tuplesPos[i] = 0;
+    for (auto& tuplePos : tuplesPos) {
+        tuplePos = 0;
     }
 
     std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();
@@ -165,8 +169,8 @@ Y_UNIT_TEST(TestMem1) {
     CTEST << "Loop copy speed = " << (TupleSize * NTuples * sizeof(ui64) * 1000) / (milliseconds * 1024 * 1024) << "MB/sec" << Endl;
     CTEST << Endl;
 
-    for (ui64 i = 0; i < NBuckets; i++) {
-        free(buckets[i]);
+    for (auto& bucket : buckets) {
+        free(bucket);
     }
 
     free(b);
@@ -185,44 +189,44 @@ constexpr ui64 BigTupleSize = 40;
 
 Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
     TSetup<false> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     std::mt19937_64 rng; // deterministic PRNG
 
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     ui64 allocationsCount = 0;
@@ -231,45 +235,46 @@ Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
         TlsAllocState->SetIncreaseMemoryLimitCallback([&allocationsCount](ui64, ui64 required) {
             // Preallocate memory for some buckets before fail
             if (allocationsCount++ > 5) {
+                // NOLINTNEXTLINE(hicpp-exception-baseclass)
                 throw TMemoryLimitExceededException();
             }
             TlsAllocState->SetLimit(required);
         });
     }
 
-    bool preallocationResult = joinTable.TryToPreallocateMemoryForJoin(smallTable, bigTable, EJoinKind::Inner, true, true);
+    bool preallocationResult = joinTable.TryToPreallocateMemoryForJoin(smallTable, bigTable, EJoinKind::Inner, /*hasMoreLeftTuples=*/true, /*hasMoreRightTuples=*/true);
     UNIT_ASSERT_EQUAL(preallocationResult, !EXCEPTION);
 }
 
 Y_UNIT_TEST_LLVM(TestImp1) {
     TSetup<LLVM> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
     NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
     CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     std::mt19937_64 rng; // deterministic PRNG
 
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     ui64 milliseconds = 0;
@@ -278,18 +283,18 @@ Y_UNIT_TEST_LLVM(TestImp1) {
 
     std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -306,18 +311,18 @@ Y_UNIT_TEST_LLVM(TestImp1) {
 
     begin03 = std::chrono::steady_clock::now();
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     end03 = std::chrono::steady_clock::now();
@@ -329,10 +334,14 @@ Y_UNIT_TEST_LLVM(TestImp1) {
     mi = NMemInfo::GetMemInfo();
     CTEST << "Mem usage after tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-    std::vector<ui64> vals1, vals2;
-    std::vector<char*> strVals1, strVals2;
-    std::vector<ui32> strSizes1, strSizes2;
-    GraceJoin::TupleData td1, td2;
+    std::vector<ui64> vals1;
+    std::vector<ui64> vals2;
+    std::vector<char*> strVals1;
+    std::vector<char*> strVals2;
+    std::vector<ui32> strSizes1;
+    std::vector<ui32> strSizes2;
+    NGraceJoin::TupleData td1;
+    NGraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -409,33 +418,33 @@ Y_UNIT_TEST_LLVM(TestImp1) {
 
 Y_UNIT_TEST_LLVM(TestImp1Batch) {
     TSetup<LLVM> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
     NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
     CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     std::mt19937_64 rng; // deterministic PRNG
 
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     ui64 millisecondsAdd = 0;
@@ -450,12 +459,12 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
     {
         std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-        smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+        smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
         for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
             tuple[1] = smallDist(rng);
             tuple[2] = tuple[1];
-            smallTable.AddTuple(tuple, strVals, strSizes);
+            smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
         }
 
         std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -468,7 +477,7 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
         for (; pos < limit; ++pos) {
             tuple[1] = smallDist(rng);
             tuple[2] = tuple[1];
-            bigTable.AddTuple(tuple, strVals, strSizes);
+            bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
         }
         bigTable.Clear();
         std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -488,21 +497,25 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
     {
         auto begin03 = std::chrono::steady_clock::now();
 
-        smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+        smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
         for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
             tuple[1] = smallDist(rng);
             tuple[2] = tuple[1];
-            smallTable.AddTuple(tuple, strVals, strSizes);
+            smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
         }
 
         auto end03 = std::chrono::steady_clock::now();
         millisecondsAdd += std::chrono::duration_cast<std::chrono::milliseconds>(end03 - begin03).count();
     }
-    std::vector<ui64> vals1, vals2;
-    std::vector<char*> strVals1, strVals2;
-    std::vector<ui32> strSizes1, strSizes2;
-    GraceJoin::TupleData td1, td2;
+    std::vector<ui64> vals1;
+    std::vector<ui64> vals2;
+    std::vector<char*> strVals1;
+    std::vector<char*> strVals2;
+    std::vector<ui32> strSizes1;
+    std::vector<ui32> strSizes2;
+    NGraceJoin::TupleData td1;
+    NGraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -526,7 +539,7 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
         for (; pos < limit; ++pos) {
             tuple[1] = smallDist(rng);
             tuple[2] = tuple[1];
-            bigTable.AddTuple(tuple, strVals, strSizes);
+            bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
         }
         auto end03 = std::chrono::steady_clock::now();
         millisecondsAdd += std::chrono::duration_cast<std::chrono::milliseconds>(end03 - begin03).count();
@@ -544,7 +557,7 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
 
         std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
 
-        joinTable.Join(smallTable, bigTable, EJoinKind::Inner, false, pos < BigTableTuples);
+        joinTable.Join(smallTable, bigTable, EJoinKind::Inner, /*hasMoreLeftTuples=*/false, pos < BigTableTuples);
 
         std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
         millisecondsJoin += std::chrono::duration_cast<std::chrono::milliseconds>(end05 - begin05).count();
@@ -586,17 +599,17 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
 Y_UNIT_TEST_LLVM(TestImp2) {
     TSetup<LLVM> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, true);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, true);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, true);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
 
     std::mt19937_64 rng;
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
@@ -605,10 +618,10 @@ Y_UNIT_TEST_LLVM(TestImp2) {
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     ui64 milliseconds = 0;
@@ -621,18 +634,18 @@ Y_UNIT_TEST_LLVM(TestImp2) {
 
     std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = i;
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = i % SmallTableTuples;
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -641,10 +654,14 @@ Y_UNIT_TEST_LLVM(TestImp2) {
     CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / (milliseconds * 1024 * 1024) << "MB/sec" << Endl;
     CTEST << Endl;
 
-    std::vector<ui64> vals1, vals2;
-    std::vector<char*> strVals1, strVals2;
-    std::vector<ui32> strSizes1, strSizes2;
-    GraceJoin::TupleData td1, td2;
+    std::vector<ui64> vals1;
+    std::vector<ui64> vals2;
+    std::vector<char*> strVals1;
+    std::vector<char*> strVals2;
+    std::vector<ui32> strSizes1;
+    std::vector<ui32> strSizes2;
+    NGraceJoin::TupleData td1;
+    NGraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -720,29 +737,29 @@ Y_UNIT_TEST_LLVM(TestImp2) {
 Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 Y_UNIT_TEST_LLVM(TestImp3) {
     TSetup<LLVM> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, false);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, false);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, false);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     std::mt19937_64 rng;
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     ui64 milliseconds = 0;
@@ -753,18 +770,18 @@ Y_UNIT_TEST_LLVM(TestImp3) {
 
     std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = i;
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = i % SmallTableTuples;
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -773,10 +790,14 @@ Y_UNIT_TEST_LLVM(TestImp3) {
     CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / (milliseconds * 1024 * 1024) << "MB/sec" << Endl;
     CTEST << Endl;
 
-    std::vector<ui64> vals1, vals2;
-    std::vector<char*> strVals1, strVals2;
-    std::vector<ui32> strSizes1, strSizes2;
-    GraceJoin::TupleData td1, td2;
+    std::vector<ui64> vals1;
+    std::vector<ui64> vals2;
+    std::vector<char*> strVals1;
+    std::vector<char*> strVals2;
+    std::vector<ui32> strSizes1;
+    std::vector<ui32> strSizes2;
+    NGraceJoin::TupleData td1;
+    NGraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -867,7 +888,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceSelfJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -918,7 +939,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDiffKeys) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceSelfJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                            EJoinKind::Inner, {0U}, {1U}, {2U, 0U}, {2U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -974,8 +995,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1027,8 +1048,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerDoubleCondition1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                            EJoinKind::Inner, {0U, 0U}, {0U, 1U}, {1U, 0U}, {2U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1078,8 +1099,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyStrings) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                            EJoinKind::Inner, {0U, 1U}, {1U, 0U}, {1U, 0U}, {2U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1149,8 +1170,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyUuid) {
                                                                 pb.NewDataType(NUdf::TDataType<NUdf::TUuid>::Id)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                            EJoinKind::Inner, {0U, 1U}, {1U, 0U}, {1U, 0U}, {2U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1205,8 +1226,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerStringKey1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1258,8 +1279,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TMiniKQLGraceJoinTestInnerMulti1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1311,8 +1332,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeft1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Left, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1367,8 +1388,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftMulti1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Left, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1424,8 +1445,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemi1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::LeftSemi, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1478,8 +1499,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnly1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::LeftOnly, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1532,8 +1553,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemiWithNullKey1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::LeftSemi, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1586,8 +1607,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnlyWithNullKey1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::LeftOnly, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1638,8 +1659,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRight1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Right, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1692,8 +1713,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnly1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::RightOnly, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1742,8 +1763,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightSemi1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::RightSemi, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1793,8 +1814,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightMulti1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Right, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1851,8 +1872,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightSemiWithNullKey1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::RightSemi, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1904,8 +1925,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnlyWithNullKey1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::RightOnly, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1956,8 +1977,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestFull1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Full, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -2013,8 +2034,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestExclusion1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Exclusion, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -2065,50 +2086,49 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , Params(params)
+            , CompCtx_(compCtx)
+            , Params_(params)
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            ++TotalFetches;
+            ++TotalFetches_;
 
-            UNIT_ASSERT_LE(TotalFetches, Params.MaxAllowedNumberOfFetches);
+            UNIT_ASSERT_LE(TotalFetches_, Params_.MaxAllowedNumberOfFetches);
 
-            if (TotalFetches > Params.StreamSize) {
+            if (TotalFetches_ > Params_.StreamSize) {
                 return NUdf::EFetchStatus::Finish;
             }
 
             NUdf::TUnboxedValue* items = nullptr;
-            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
-            items[0] = NUdf::TUnboxedValuePod(TotalFetches);
-            items[1] = MakeString(ToString(TotalFetches) * 5);
+            result = CompCtx_.HolderFactory.CreateDirectArrayHolder(2, items);
+            items[0] = NUdf::TUnboxedValuePod(TotalFetches_);
+            items[1] = MakeString(ToString(TotalFetches_) * 5);
 
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
-        TComputationContext& CompCtx;
-        TTestStreamParams& Params;
-        ui64 TotalFetches = 0;
+        TComputationContext& CompCtx_;
+        TTestStreamParams& Params_;
+        ui64 TotalFetches_ = 0;
     };
 
     TTestStreamWrapper(TComputationMutables& mutables, TTestStreamParams& params)
         : TBaseComputation(mutables)
-        , Params(params)
+        , Params_(params)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params_);
     }
 
 private:
     void RegisterDependencies() const final {
     }
 
-    TTestStreamParams& Params;
+    TTestStreamParams& Params_;
 };
 
 IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TTestStreamParams& params) {
@@ -2134,7 +2154,7 @@ TRuntimeNode MakeStream(TSetup<false>& setup, bool isRight) {
                                          pb.NewTupleType({NTest::ConvertToMinikqlType<ui32>(pb),
                                                           NTest::ConvertToMinikqlType<TStringBuf>(pb)})));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
@@ -2149,14 +2169,14 @@ void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRig
 
     if (emptyLeft) {
         leftStreamSize = 0;
-        if (GraceJoin::ShouldSkipRightIfLeftEmpty(joinKind)) {
+        if (NGraceJoin::ShouldSkipRightIfLeftEmpty(joinKind)) {
             maxExpectedFetchesFromRightStream = 1;
         }
     }
 
     if (emptyRight) {
         rightStreamSize = 0;
-        if (GraceJoin::ShouldSkipLeftIfRightEmpty(joinKind)) {
+        if (NGraceJoin::ShouldSkipLeftIfRightEmpty(joinKind)) {
             maxExpectedFetchesFromLeftStream = 1;
         }
     }
@@ -2166,17 +2186,17 @@ void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRig
     TSetup<false> setup(GetNodeFactory(leftParams, rightParams));
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto leftStream = MakeStream(setup, false);
-    const auto rightStream = MakeStream(setup, true);
+    const auto leftStream = MakeStream(setup, /*isRight=*/false);
+    const auto rightStream = MakeStream(setup, /*isRight=*/true);
 
     const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
                                                             NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
     const auto joinFlow = pb.GraceJoin(
-        pb.ExpandMap(pb.ToFlow(leftStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        pb.ExpandMap(pb.ToFlow(leftStream, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
             return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
         }),
-        pb.ExpandMap(pb.ToFlow(rightStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        pb.ExpandMap(pb.ToFlow(rightStream, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
             return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
         }),
         joinKind,
@@ -2217,6 +2237,4 @@ ADD_JOIN_TESTS_FOR_KIND(Exclusion)
 
 #undef ADD_JOIN_TESTS_FOR_KIND
 } // Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest)
-} // namespace NMiniKQL
-
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

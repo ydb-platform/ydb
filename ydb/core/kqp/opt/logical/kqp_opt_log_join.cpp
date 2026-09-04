@@ -472,6 +472,10 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     return builtJoin;
 }
 
+bool IsEmptyRanges(const TKqlReadTableRanges& readTableRanges) {
+    return !!readTableRanges.Ranges().Maybe<TCoVoid>();
+}
+
 TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!join.RightLabel().Maybe<TCoAtom>()) {
         // Lookup only in tables
@@ -499,7 +503,26 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     size_t rightPrefixSize;
     TMaybeNode<TExprBase> rightPrefixExpr;
 
-    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
+    auto rightRead = rightReadMatch->Read;
+    if (kqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled()) {
+        // We cannot change the right side, if predicate was pushed.
+        if (auto maybeReadTableRanges = rightRead.Maybe<TKqlReadTableRanges>(); maybeReadTableRanges && IsEmptyRanges(maybeReadTableRanges.Cast())) {
+            const auto readTableRanges = maybeReadTableRanges.Cast();
+            const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readTableRanges.Table().Path());
+            if (mainTableDesc.Metadata->Kind != NYql::EKikimrTableKind::Olap) {
+                THashSet<TString> rightJoinKeys;
+                for (ui32 i = 0; i < join.JoinKeys().Size(); ++i) {
+                    TString key = TString(join.JoinKeys().Item(i).RightColumn().Value());
+                    rightJoinKeys.insert(key);
+                }
+                if (auto idx = ChooseIndexForLookupJoin(mainTableDesc, rightJoinKeys)) {
+                    rightRead = RedirectReadToIndex(rightRead, *idx, ctx);
+                }
+            }
+        }
+    }
+
+    auto prefixLookup = RewriteReadToPrefixLookup(rightRead, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
     if (prefixLookup) {
         lookupTable = prefixLookup->LookupTableName;
         indexName = prefixLookup->IndexName;

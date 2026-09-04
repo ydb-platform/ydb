@@ -14,11 +14,11 @@ from .transaction import QueryTxContext
 from .. import _utilities
 from ... import issues
 from ...settings import BaseRequestSettings
-from ..._grpc.grpcwrapper import common_utils
 from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 from ...query import base
 from ...query.session import BaseQuerySession
+from ...observability.tracing import SpanName, create_ydb_span, set_peer_attributes, span_finish_callback
 
 from ..._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
 
@@ -49,21 +49,23 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
         self._status_stream = None
 
     async def _attach(self) -> None:
-        self._stream = await self._attach_call()
-        self._status_stream = _utilities.AsyncResponseIterator(
-            self._stream,
-            lambda response: common_utils.ServerStatus.from_proto(response),
-        )
-
         try:
+            self._stream = await self._attach_call()
+            self._status_stream = _utilities.AsyncResponseIterator(
+                self._stream,
+                self._attach_stream_wrapper,
+            )
+
             first_response = await _utilities.get_first_message_with_timeout(
                 self._status_stream,
                 DEFAULT_INITIAL_RESPONSE_TIMEOUT,
             )
             issues._process_response(first_response)
-        except Exception as e:
+        except BaseException:
+            # BaseException, not Exception: a cancelled attach must tear the stream
+            # down too, otherwise the half-attached session is orphaned server-side.
             self._close_session(invalidate=True)
-            raise e
+            raise
 
         self._loop.create_task(self._check_session_status_loop(), name="check session status task")
 
@@ -105,8 +107,11 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
         if self._closed:
             raise RuntimeError("Session is already closed")
 
-        await self._create_call(settings=settings)
-        await self._attach()
+        with create_ydb_span(SpanName.CREATE_SESSION, self._driver_config).attach_context() as span:
+            await self._create_call(settings=settings)
+            set_peer_attributes(span, self._peer)
+            await self._attach()
+            self._session_metrics.count_open()
 
         return self
 
@@ -133,6 +138,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -154,25 +160,34 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific resource pool.
 
         :return: Iterator with result sets
         """
         self._check_session_ready_to_use()
 
-        stream_it = await self._execute_call(
-            query=query,
-            parameters=parameters,
-            commit_tx=True,
-            syntax=syntax,
-            exec_mode=exec_mode,
-            stats_mode=stats_mode,
-            schema_inclusion_mode=schema_inclusion_mode,
-            result_set_format=result_set_format,
-            arrow_format_settings=arrow_format_settings,
-            concurrent_result_sets=concurrent_result_sets,
-            settings=settings,
+        span = create_ydb_span(
+            SpanName.EXECUTE_QUERY,
+            self._driver_config,
+            node_id=self._node_id,
+            peer=self._peer,
         )
 
+        with span.attach_context(end_on_exit=False):
+            stream_it = await self._execute_call(
+                query=query,
+                parameters=parameters,
+                commit_tx=True,
+                syntax=syntax,
+                exec_mode=exec_mode,
+                stats_mode=stats_mode,
+                schema_inclusion_mode=schema_inclusion_mode,
+                result_set_format=result_set_format,
+                arrow_format_settings=arrow_format_settings,
+                concurrent_result_sets=concurrent_result_sets,
+                settings=settings,
+                pool_id=pool_id,
+            )
         return AsyncResponseContextIterator(
             it=stream_it,
             wrapper=lambda resp: base.wrap_execute_query_response(
@@ -182,6 +197,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
                 settings=self._settings,
             ),
             on_error=self._on_execute_stream_error,
+            on_finish=span_finish_callback(span),
         )
 
     async def explain(

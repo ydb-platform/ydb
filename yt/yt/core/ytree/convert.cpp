@@ -50,11 +50,11 @@ double ConvertYsonStringBufToDouble(const NYson::TYsonStringBuf& yson)
         default:
             THROW_ERROR_EXCEPTION("Cannot parse \"double\" from %Qlv",
                 token.GetType())
-                << TErrorAttribute("data", yson.AsStringBuf());
+                .With("data", yson.AsStringBuf());
     }
 }
 
-TString ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson)
+std::string ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson)
 {
     using namespace NYT::NYTree;
 
@@ -63,7 +63,7 @@ TString ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson)
     const auto& token = tokenizer.CurrentToken();
     switch (token.GetType()) {
         case NYson::ETokenType::String: {
-            TString result(token.GetStringValue());
+            std::string result(token.GetStringValue());
             tokenizer.ParseNext();
             tokenizer.CurrentToken().ExpectType(NYson::ETokenType::EndOfStream);
             return result;
@@ -71,7 +71,7 @@ TString ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson)
         default:
             THROW_ERROR_EXCEPTION("Cannot parse \"string\" from %Qlv",
                 token.GetType())
-                << TErrorAttribute("data", yson.AsStringBuf());
+                .With("data", yson.AsStringBuf());
     }
 }
 

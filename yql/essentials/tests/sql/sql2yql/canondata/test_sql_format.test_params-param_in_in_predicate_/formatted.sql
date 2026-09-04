@@ -1,4 +1,3 @@
-/* syntax version 1 */
 DECLARE $foo AS List<Int32>;
 
 SELECT

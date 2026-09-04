@@ -35,6 +35,14 @@ def pytest_addoption(parser: Parser) -> None:
     add_ini_option("linelist")
 
     group.addoption(
+        "--typeguard-packages-ignore",
+        action="store",
+        help="comma separated name list of packages and modules to exclude from type "
+        "checking",
+    )
+    add_ini_option("linelist")
+
+    group.addoption(
         "--typeguard-debug-instrumentation",
         action="store_true",
         help="print all instrumented code to stderr",
@@ -82,6 +90,12 @@ def pytest_configure(config: Config) -> None:
     elif packages_ini := config.getini("typeguard-packages"):
         packages = packages_ini
 
+    ignore_packages: list[str] = []
+    if ignore_packages_option := config.getoption("typeguard_packages_ignore"):
+        ignore_packages = [pkg.strip() for pkg in ignore_packages_option.split(",")]
+    elif ignore_packages_ini := config.getini("typeguard-packages-ignore"):
+        ignore_packages = ignore_packages_ini
+
     if packages:
         if packages == [":all:"]:
             packages = None
@@ -97,7 +111,7 @@ def pytest_configure(config: Config) -> None:
                     stacklevel=1,
                 )
 
-        install_import_hook(packages=packages)
+        install_import_hook(packages=packages, ignore_packages=ignore_packages)
 
     debug_option = getoption("typeguard-debug-instrumentation")
     if debug_option:

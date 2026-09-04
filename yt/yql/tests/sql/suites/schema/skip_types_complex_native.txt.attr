@@ -1,0 +1,16 @@
+{
+    "schema"=<strict=%false>[
+        {name=boobee;required=%true;type=int32;type_v3=int32};
+        {name=xx;required=%false;type=any;type_v3={
+            type_name=optional;
+            item={type_name=list;item={type_name=decimal;precision=9;scale=2}}}}
+    ];
+    "_yql_row_spec"={
+        "NativeYtTypeFlags"=65u;
+        "StrictSchema"=%false;
+        "Type"=["StructType";[
+            ["boobee";["DataType";"Int32"]];
+            ["xx";["OptionalType";["ListType";["DataType";"Decimal";"9";"2"]]]]
+        ]]
+    }
+}

@@ -12,11 +12,6 @@ class TDropTopicActor: public TGrpcProxyActor<TDropTopicActor, NGRpcService::TEv
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>;
 
 public:
-    TDropTopicActor(NGRpcService::TEvDropTopicRequest* request)
-        : TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>(request)
-    {
-    }
-
     TDropTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>(request)
     {
@@ -26,7 +21,7 @@ public:
         Become(&TDropTopicActor::StateWork);
 
         Register(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
-            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
+            .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .Path = GetProtoRequest()->path(),
             .UserToken = GetUserToken()

@@ -15,7 +15,7 @@
 /**
  * All macros should be prefixed with either CROARING or ROARING.
  * The library uses both ROARING_...
- * as well as CROAIRING_ as prefixes. The ROARING_ prefix is for
+ * as well as CROARING_ as prefixes. The ROARING_ prefix is for
  * macros that are provided by the build system or that are closely
  * related to the format. The header macros may also use ROARING_.
  * The CROARING_ prefix is for internal macros that a user is unlikely
@@ -64,6 +64,12 @@
 #ifdef __GLIBC__
 #include <malloc.h>  // this should never be needed but there are some reports that it is needed.
 #endif
+// alignas/alignof are keywords in C++ and in C23+, where <stdalign.h> is
+// deprecated. Only include it for C11..C17.
+#if !defined(__cplusplus) && \
+    (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L)
+#include <stdalign.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {  // portability definitions are in global scope, not a namespace
@@ -79,7 +85,14 @@ extern "C" {  // portability definitions are in global scope, not a namespace
 #endif  // __restrict__
 #endif  // CROARING_REGULAR_VISUAL_STUDIO
 
-#if defined(__x86_64__) || defined(_M_X64)
+#if defined(__riscv) || defined(_M_RISCV32) || defined(_M_RISCV64)
+#define CROARING_IS_RISCV 1
+
+#if (defined(__riscv_xlen) && (__riscv_xlen == 64)) || defined(_M_RISCV64)
+#define CROARING_IS_RISCV64 1
+#endif
+
+#elif defined(__x86_64__) || defined(_M_X64)
 // we have an x64 processor
 #define CROARING_IS_X64 1
 
@@ -462,6 +475,55 @@ static inline int roaring_hamming(uint64_t x) {
 #define croaring_be64toh(x) croaring_htobe64(x)
 // End of host <-> big endian conversion.
 
+// Host <-> little-endian conversion helpers.
+//
+// The CRoaring "portable" serialization format (and the regular
+// roaring_bitmap_serialize / Roaring64Map::write formats which build on it)
+// is defined to be little-endian on the wire. Code that reads or writes
+// multi-byte integers to such buffers must convert between host and
+// little-endian byte order. On little-endian hosts these are no-ops; on
+// big-endian hosts they swap bytes.
+//
+// The "frozen" format is intentionally non-portable and uses native byte
+// order; it must not use these helpers.
+#if CROARING_IS_BIG_ENDIAN
+
+static inline uint16_t croaring_bswap16(uint16_t x) {
+    return (uint16_t)((x << 8) | (x >> 8));
+}
+
+static inline uint32_t croaring_bswap32(uint32_t x) {
+    return ((x & 0x000000FFU) << 24) | ((x & 0x0000FF00U) << 8) |
+           ((x & 0x00FF0000U) >> 8) | ((x & 0xFF000000U) >> 24);
+}
+
+static inline uint64_t croaring_bswap64(uint64_t x) {
+    return ((x & 0x00000000000000FFULL) << 56) |
+           ((x & 0x000000000000FF00ULL) << 40) |
+           ((x & 0x0000000000FF0000ULL) << 24) |
+           ((x & 0x00000000FF000000ULL) << 8) |
+           ((x & 0x000000FF00000000ULL) >> 8) |
+           ((x & 0x0000FF0000000000ULL) >> 24) |
+           ((x & 0x00FF000000000000ULL) >> 40) |
+           ((x & 0xFF00000000000000ULL) >> 56);
+}
+
+#define croaring_htole16(x) croaring_bswap16(x)
+#define croaring_htole32(x) croaring_bswap32(x)
+#define croaring_htole64(x) croaring_bswap64(x)
+
+#else  // CROARING_IS_BIG_ENDIAN
+
+#define croaring_htole16(x) (x)
+#define croaring_htole32(x) (x)
+#define croaring_htole64(x) (x)
+
+#endif  // CROARING_IS_BIG_ENDIAN
+
+#define croaring_letoh16(x) croaring_htole16(x)
+#define croaring_letoh32(x) croaring_htole32(x)
+#define croaring_letoh64(x) croaring_htole64(x)
+
 // Defines for the possible CROARING atomic implementations
 #define CROARING_ATOMIC_IMPL_NONE 1
 #define CROARING_ATOMIC_IMPL_CPP 2
@@ -477,13 +539,13 @@ static inline int roaring_hamming(uint64_t x) {
 #define CROARING_ATOMIC_IMPL CROARING_ATOMIC_IMPL_CPP
 #endif  //__has_include(<atomic>)
 #else
-   // We lack __has_include to check:
+// We lack __has_include to check:
 #define CROARING_ATOMIC_IMPL CROARING_ATOMIC_IMPL_CPP
 #endif  //__has_include
 #elif __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_ATOMICS__)
 #define CROARING_ATOMIC_IMPL CROARING_ATOMIC_IMPL_C
 #elif CROARING_REGULAR_VISUAL_STUDIO
-   // https://www.technetworkhub.com/c11-atomics-in-visual-studio-2022-version-17/
+// https://www.technetworkhub.com/c11-atomics-in-visual-studio-2022-version-17/
 #define CROARING_ATOMIC_IMPL CROARING_ATOMIC_IMPL_C_WINDOWS
 #endif
 #endif  // !defined(CROARING_ATOMIC_IMPL)
@@ -573,7 +635,7 @@ static inline void croaring_refcount_inc(croaring_refcount_t *val) {
 static inline bool croaring_refcount_dec(croaring_refcount_t *val) {
     assert(*val > 0);
     *val -= 1;
-    return val == 0;
+    return *val == 0;
 }
 
 static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {

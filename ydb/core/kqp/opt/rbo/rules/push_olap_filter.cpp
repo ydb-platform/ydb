@@ -20,7 +20,7 @@ bool IsSuitableToPushPredicateToColumnTables(const TIntrusivePtr<IOperator>& inp
     }
 
     const auto filter = CastOperator<TOpFilter>(input);
-    const auto predicate = TCoLambda(filter->FilterExpr.Node).Body();
+    const auto predicate = TCoLambda(filter->GetFilterExpression().Node).Body();
     if (predicate.Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
         return false;
     }
@@ -85,6 +85,11 @@ TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, 
 
 } // anonymous namespace
 
+bool TPushOlapFilterRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter &&
+        input->Children.front()->Kind == EOperator::Source;
+}
+
 TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!ctx.KqpCtx.Config->HasOptEnableOlapPushdown()) {
@@ -92,14 +97,14 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     }
 
     const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapSubstringPushdown(),
-                                           /*StripAliasPrefixForColumnName=*/true);
+                                           /*StripAliasPrefixForColumnName=*/true, ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp());
     if (!IsSuitableToPushPredicateToColumnTables(input)) {
         return input;
     }
 
     const auto filter = CastOperator<TOpFilter>(input);
     const auto read = CastOperator<TOpRead>(filter->GetInput());
-    const auto lambda = TCoLambda(filter->FilterExpr.Node);
+    const auto lambda = TCoLambda(filter->GetFilterExpression().Node);
     auto predicate = lambda.Body();
     auto lambdaArg = lambda.Args().Arg(0).Ptr();
 
@@ -136,7 +141,8 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
             auto predicate = lambdaAfterPeephole.Body();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
+            CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(),
+                {true, pushdownOptions.PushdownSubstring, pushdownOptions.StripAliasPrefixFromColName, pushdownOptions.PushdownRegexp});
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
@@ -202,10 +208,10 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newOlapFilterLambda, ctx.ExprCtx);
 
     // Saving original predicate for statistics.
-    std::optional<TExpression> originalPredicate = read->OriginalPredicate.has_value() ? read->OriginalPredicate : filter->FilterExpr;
+    std::optional<TExpression> originalPredicate = read->OriginalPredicate.has_value() ? read->OriginalPredicate : filter->GetFilterExpression();
     const auto newRead =
         MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(), read->Limit,
-                               read->GetRanges(), originalPredicate, read->SortDir, read->Props, read->Pos);
+                               read->RangeInfo, originalPredicate, read->SortDir, read->Props, read->Pos);
     if (IsValidPredicateToKeep(remainingFilter)) {
         // Part of the predicate could not be pushed down and the remaining TOpFilter survives.
         return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(remainingFilter.Cast().Ptr(), &ctx.ExprCtx, &props));
@@ -214,6 +220,4 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     // The whole predicate was pushed in and no TOpFilter remains.
     return newRead;
 }
-
 } // namespace NKikimr::NKqp
-

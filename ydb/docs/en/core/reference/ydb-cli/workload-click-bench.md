@@ -91,7 +91,7 @@ See the command description to run the load:
 
 | Name                                        | Description                                                                                                 | Default value |
 |---------------------------------------------|-------------------------------------------------------------------------------------------------------------|---------------|
-| `--syntax <value>` | Syntax of the queries to use. Available values: `yql`, `pg` (abbreviation of `PostgreSQL`). For more information about working with YQL syntax, see [here](../../yql/reference/index.md), and for PostgreSQL [here](../../postgresql/intro.md). | `yql` |
+| `--syntax <value>` | Syntax of the queries to use. Available values: `yql`. For more information about working with YQL syntax, see [here](../../yql/reference/index.md). | `yql` |
 
 ## Cleanup test data { #cleanup }
 

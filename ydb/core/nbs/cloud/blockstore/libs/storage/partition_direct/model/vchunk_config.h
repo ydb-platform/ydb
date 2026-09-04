@@ -2,7 +2,7 @@
 
 #include "host_roles.h"
 
-#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -12,6 +12,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 class TVChunkConfig
 {
 public:
+    enum class EHostHumanReadableState
+    {
+        Primary,    // DDisk-OK and PBuffer-OK
+        Fresh,      // DDisk-Fresh and PBuffer-OK
+        HandOff,    // PBuffer-OK
+        Rotten,     // DDisk-Rotten and PBuffer-Disabled
+        Disabled,   // PBuffer-Disabled
+        Demoted,    // Not used for DDisk or PBuffer at all
+    };
+
     static TVChunkConfig
     MakeDefault(ui32 vChunkIndex, size_t hostCount, size_t primaryCount);
 
@@ -22,8 +32,14 @@ public:
         THostMask enabledHosts,
         TVector<std::optional<ui64>> watermarks);
 
+    [[nodiscard]] EHostHumanReadableState GetHostHumanReadableState(
+        THostIndex hostIndex) const;
+    [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
+
+    void SetDBGIndex(ui32 dbgIndex);
+    [[nodiscard]] ui32 GetDBGIndex() const;
 
     // Enables the host to work. If the total count of ddisks is not enough to
     // reach the quorum, then can make a promotion for ddisk.
@@ -31,6 +47,9 @@ public:
     // Temporarily disables the host. Does not change the ddisk status for the
     // host.
     void DisableHost(THostIndex hostIndex);
+
+    // Add new host and assign new role for it.
+    void AppendHost();
 
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
@@ -41,6 +60,7 @@ public:
     TString DemoteHost(THostIndex hostIndex);
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
+    TString PromoteHostIfNeeded();
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;
@@ -57,22 +77,34 @@ public:
 
     // Get a list of all DDisks (enabled and disabled).
     [[nodiscard]] THostMask GetDDisks() const;
+    // Get a list of all enabled DDisks.
+    [[nodiscard]] THostMask GetEnabledDDisks() const;
     // Get a list of all DDisks with full data (enabled or not).
     [[nodiscard]] THostMask GetFullDDisks() const;
     // Get a list of all healthy DDisks (enabled and full filed).
     [[nodiscard]] THostMask GetHealthyDDisks() const;
 
-    void SetWatermark(THostIndex hostIndex, std::optional<ui64> watermark);
+    // If std::nullopt is set, it means that the disk is fully filled with data
+    // and the waterline value is higher than the disk size. If the waterline
+    // value is set, it means that disk blocks less than this value can be read,
+    // and those that are equal to or higher than this value are not yet filled.
+    // In other words, if the value is 0, no disk blocks can be read.
+    void SetWatermark(
+        THostIndex hostIndex,
+        std::optional<ui64> watermarkBlockCount);
     [[nodiscard]] std::optional<ui64> GetWatermark(THostIndex hostIndex) const;
 
     [[nodiscard]] THostMask GetDisabledHosts() const;
 
     [[nodiscard]] bool IsValid() const;
 
+    bool operator==(const TVChunkConfig& other) const;
+
     [[nodiscard]] TString DebugPrint() const;
 
 private:
     size_t HostCount = 0;
+    ui32 DBGIndex = 0;
     ui32 VChunkIndex = 0;
     THostRoles PBufferHosts;
     THostRoles DDiskHosts;
@@ -82,9 +114,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Vchunk index -> persisted config override. Vchunks without an entry fall
-// back to TVChunkConfig::Make().
-using TVChunkConfigByIndex = THashMap<ui32, TVChunkConfig>;
+using TVChunkConfigs = TMap<ui32, TVChunkConfig>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString Print(TVChunkConfig::EHostHumanReadableState state, bool brief);
 
 ////////////////////////////////////////////////////////////////////////////////
 

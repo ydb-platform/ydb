@@ -8,6 +8,7 @@ import time
 import pytest
 
 from ydb.tests.functional.secrets.lib.secrets_plugin import (
+    ALTER_SECRET_GRANTS,
     create_secrets,
     create_user,
     DATABASE,
@@ -251,7 +252,7 @@ def test_external_data_table_with_fail(db_fixture, ydb_cluster):
 
     # drop secret in between
     _test_external_data_table_with_fail(
-        get_eds_for_s3(secrets[0], secrets[1], '', 's3_source_with_removed_secret'),
+        get_eds_for_s3(secrets[0], secrets[1], 'my-bucket', 's3_source_with_removed_secret'),
         's3_source_with_removed_secret',
         f"DROP SECRET `{secrets[1]}`;",
         f"secret `{secrets[1]}` not found",
@@ -259,7 +260,7 @@ def test_external_data_table_with_fail(db_fixture, ydb_cluster):
 
     # revoke grant for a secret in between
     _test_external_data_table_with_fail(
-        get_eds_for_s3(secrets[0], secrets[2], '', 's3_source_with_revoked_grant_secret'),
+        get_eds_for_s3(secrets[0], secrets[2], 'my-bucket', 's3_source_with_revoked_grant_secret'),
         's3_source_with_revoked_grant_secret',
         f"REVOKE 'ydb.granular.select_row' ON `{secrets[2]}` FROM {user2};",
         f"secret `{secrets[2]}` not found",
@@ -810,3 +811,40 @@ def test_set_secret_value_with_param(db_fixture, ydb_cluster, secret_setup):
     prepare_secret(user1_config, secret_name, secret_value, secret_setup)
     create_async_replication(replication_name, replica_name, table_name, connection_string, secret_name)
     assert_replication_has_processed_all_changes(user1_config, replica_name, rows_cnt)
+
+
+def test_create_or_replace_secret_permissions(db_fixture, ydb_cluster):
+    """
+    Verify that CREATE OR REPLACE SECRET on an existing secret requires
+    alter_schema permission on the secret, not just create_table on the directory.
+
+    When the secret already exists, CREATE OR REPLACE converts to ALTER internally,
+    so the user must have alter permission on the secret itself.
+    """
+    user1 = unique_user_name("user1")
+    user1_config = create_user(ydb_cluster, db_fixture, user1)
+
+    # Grant create_table on the directory (needed for CREATE SECRET)
+    provide_grants(db_fixture, user1, DATABASE, ["ydb.granular.create_table"])
+
+    # Admin creates a secret that user1 does not own
+    secret_path = f'{DATABASE}/secret_replace'
+    run_with_assert(db_fixture, f"CREATE SECRET `{secret_path}` WITH (value='original');")
+
+    # User1 has create_table on the directory but NOT alter permission on the secret.
+    # CREATE OR REPLACE on the existing secret should fail (converts to ALTER, needs alter_schema).
+    run_with_assert(
+        user1_config,
+        f"CREATE OR REPLACE SECRET `{secret_path}` WITH (value='hacked');",
+        "Access denied",
+    )
+
+    # Grant alter permission on the secret to user1
+    provide_grants(db_fixture, user1, secret_path, ALTER_SECRET_GRANTS)
+
+    # Now user1 should succeed with CREATE OR REPLACE on the existing secret
+    run_with_assert(user1_config, f"CREATE OR REPLACE SECRET `{secret_path}` WITH (value='updated');")
+
+    # User1 should also be able to CREATE OR REPLACE a non-existing secret (acts as CREATE)
+    new_secret_path = f'{DATABASE}/secret_new'
+    run_with_assert(user1_config, f"CREATE OR REPLACE SECRET `{new_secret_path}` WITH (value='new');")

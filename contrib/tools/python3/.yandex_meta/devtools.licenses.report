@@ -435,7 +435,7 @@ BELONGS Lib/ya.make
         Match type      : NOTICE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        Lib/_pydatetime.py [1195:1195]
+        Lib/_pydatetime.py [1196:1196]
 
 KEEP     MIT AND Apache-2.0   451f44d41ca04c35a541c85bdc284bb3
 BELONGS Lib/ya.make
@@ -566,7 +566,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/gary-s-brown.LICENSE
     Files with this license:
-        Modules/binascii.c [633:634]
+        Modules/binascii.c [641:642]
 
 KEEP     Python-2.0           6a19cf8041a37669b2cd07b9cd3eace3
 BELONGS ya.make
@@ -1245,7 +1245,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
     Files with this license:
-        Modules/selectmodule.c [1734:1753]
+        Modules/selectmodule.c [1735:1754]
 
 KEEP     X11-Hanson           fee24880a028f5d50965c0ed93a7a806
 BELONGS ya.make

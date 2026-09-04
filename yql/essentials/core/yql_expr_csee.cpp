@@ -156,8 +156,9 @@ namespace {
             break;
         }
         case TExprNode::Lambda: {
-            if (const ui32 size = node.ChildrenSize())
+            if (const ui32 size = node.ChildrenSize()) {
                 hash = CseeHash(size, hash);
+            }
 
             const auto& args = node.Head();
             hash = CseeHash(args.ChildrenSize(), hash);
@@ -354,8 +355,9 @@ namespace {
             TLambdaFrame newRightFrame(&right, &currRightFrame);
 
             for (ui32 i = 1U; i < left.ChildrenSize(); ++i) {
-                if (!EqualNodes(*left.Child(i), newLeftFrame, *right.Child(i), newRightFrame, visited, coStore))
+                if (!EqualNodes(*left.Child(i), newLeftFrame, *right.Child(i), newRightFrame, visited, coStore)) {
                     return false;
+                }
             }
             return true;
         }
@@ -454,8 +456,9 @@ namespace {
             }
 
             for (ui32 i = 1U; i < left.ChildrenSize(); ++i) {
-                if (const auto c = CompareNodes(*left.Child(i), *right.Child(i), visited))
+                if (const auto c = CompareNodes(*left.Child(i), *right.Child(i), visited)) {
                     return c;
+                }
             }
             return 0;
         }
@@ -479,7 +482,7 @@ namespace {
         TNodeMap<TNodeSet>& visited, TNodeMap<TNodeSet>& visitedInsideDependsOn) {
         switch (node.Type()) {
             case TExprNode::Atom:
-                node.SetDependencyScope(nullptr, nullptr);
+                node.SetDependencyScope(/*outerLambda=*/nullptr, /*innerLambda=*/nullptr);
                 return;
             case TExprNode::Argument:
                 closures.emplace(node.GetDependencyScope()->first);
@@ -581,8 +584,9 @@ namespace {
                     continue;
                 }
 
-                if (iter->second == &node)
+                if (iter->second == &node) {
                     return nullptr;
+                }
 
                 if (!EqualNodes(node, *iter->second, coStore)) {
 #ifndef NDEBUG
@@ -650,7 +654,7 @@ IGraphTransformer::TStatus UpdateCompletness(const TExprNode::TPtr& input, TExpr
     TNodeSet closures;
     TNodeMap<TNodeSet> visited;
     TNodeMap<TNodeSet> visitedInsideDependsOn;
-    CalculateCompletness(*input, false, 0, closures, visited, visitedInsideDependsOn);
+    CalculateCompletness(*input, /*insideDependsOn=*/false, 0, closures, visited, visitedInsideDependsOn);
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -664,7 +668,7 @@ IGraphTransformer::TStatus EliminateCommonSubExpressions(const TExprNode::TPtr& 
     TNodeMap<TExprNode*> renames;
     //Cerr << "INPUT\n" << output->Dump() << "\n";
     std::unordered_multimap<ui64, TExprNode*> incompleteNodes;
-    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable, *output);
+    const auto newNode = VisitNode(*output, /*currentLambda=*/nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable, *output);
     YQL_ENSURE(forSubGraph || !newNode);
     if (!renames.empty()) {
         TNodeSet visited;

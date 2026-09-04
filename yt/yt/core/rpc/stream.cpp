@@ -6,6 +6,8 @@
 #include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/async_stream_helpers.h>
 
+#include <yt/yt/core/misc/finally.h>
+
 #include <yt/yt/core/rpc/service.h>
 
 namespace NYT::NRpc {
@@ -169,7 +171,7 @@ void TAttachmentsInputStream::AbortUnlessClosed(const TError& error, bool fireAb
         return;
     }
 
-    auto FinishedError = TError("Request finished") << GetErrorAttributes();
+    auto FinishedError = TError("Request finished").With(GetErrorAttributes());
     DoAbort(
         guard,
         error.IsOK() ? FinishedError : error,
@@ -200,8 +202,8 @@ void TAttachmentsInputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, cons
 void TAttachmentsInputStream::OnTimeout()
 {
     Abort(TError(NYT::EErrorCode::Timeout, "Attachments stream read timed out")
-        << TErrorAttribute("timeout", *Timeout_)
-        << GetErrorAttributes());
+        .With("timeout", *Timeout_)
+        .With(GetErrorAttributes()));
 }
 
 TStreamingFeedback TAttachmentsInputStream::GetFeedback() const
@@ -277,7 +279,7 @@ void TAttachmentsOutputStream::OnWindowPacketsReady(TMutableRange<TWindowPacket>
 {
     if (ClosePromise_) {
         guard.Release();
-        auto error = TError("Stream is already closed") << GetErrorAttributes();
+        auto error = TError("Stream is already closed").With(GetErrorAttributes());
         for (auto& packet : packets) {
             TDelayedExecutor::CancelAndClear(packet.TimeoutCookie);
             packet.Promise.Set(error);
@@ -294,6 +296,10 @@ void TAttachmentsOutputStream::OnWindowPacketsReady(TMutableRange<TWindowPacket>
         return;
     }
 
+    if (!packets.Empty() && WritePosition_ == ReadPosition_) {
+        WindowDrainedTimer_.Stop();
+    }
+
     std::vector<TPromise<void>> promisesToSet;
     for (auto& packet : packets) {
         WritePosition_ += GetStreamingAttachmentSize(packet.Data);
@@ -306,6 +312,7 @@ void TAttachmentsOutputStream::OnWindowPacketsReady(TMutableRange<TWindowPacket>
                 .Position = WritePosition_
             });
         } else {
+            WriteStallTimer_.StartIfNotActive();
             ConfirmationQueue_.push({
                 .Position = WritePosition_,
                 .Promise = std::move(packet.Promise),
@@ -342,6 +349,10 @@ TFuture<void> TAttachmentsOutputStream::Close()
             *Timeout_);
     }
 
+    if (WritePosition_ == ReadPosition_) {
+        WindowDrainedTimer_.Stop();
+    }
+
     TSharedRef nullAttachment;
     DataQueue_.push(nullAttachment);
     WritePosition_ += GetStreamingAttachmentSize(nullAttachment);
@@ -371,7 +382,7 @@ void TAttachmentsOutputStream::AbortUnlessClosed(const TError& error, bool fireA
     }
 
     auto requestAlreadyCompletedError = TError("Request is already completed")
-        << GetErrorAttributes();
+        .With(GetErrorAttributes());
 
     DoAbort(
         guard,
@@ -386,6 +397,9 @@ void TAttachmentsOutputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, con
     }
 
     Error_ = error;
+
+    WindowDrainedTimer_.Stop();
+    WriteStallTimer_.Stop();
 
     std::vector<TPromise<void>> promises;
     promises.reserve(ConfirmationQueue_.size());
@@ -418,8 +432,8 @@ void TAttachmentsOutputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, con
 void TAttachmentsOutputStream::OnTimeout()
 {
     Abort(TError(NYT::EErrorCode::Timeout, "Attachments stream write timed out")
-        << TErrorAttribute("timeout", *Timeout_)
-        << GetErrorAttributes());
+        .With("timeout", *Timeout_)
+        .With(GetErrorAttributes()));
 }
 
 void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback)
@@ -438,7 +452,7 @@ void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback
         THROW_ERROR_EXCEPTION("Stream read position exceeds write position: %v > %v",
             feedback.ReadPosition,
             WritePosition_)
-            << GetErrorAttributes();
+            .With(GetErrorAttributes());
     }
 
     ReadPosition_ = feedback.ReadPosition;
@@ -455,10 +469,16 @@ void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback
         ConfirmationQueue_.pop();
     }
 
+    if (ConfirmationQueue_.empty() || !ConfirmationQueue_.front().Promise) {
+        WriteStallTimer_.Stop();
+    }
+
     if (ClosePromise_ && ReadPosition_ == WritePosition_) {
         promises.push_back(ClosePromise_);
         TDelayedExecutor::CancelAndClear(CloseTimeoutCookie_);
         Closed_ = true;
+    } else if (ReadPosition_ == WritePosition_) {
+        WindowDrainedTimer_.StartIfNotActive();
     }
 
     MaybeInvokePullCallback(guard);
@@ -521,6 +541,18 @@ bool TAttachmentsOutputStream::CanPullMore(bool first) const
     }
 
     return false;
+}
+
+TDuration TAttachmentsOutputStream::GetWindowDrainedTime()
+{
+    auto guard = Guard(Lock_);
+    return WindowDrainedTimer_.GetElapsedTime();
+}
+
+TDuration TAttachmentsOutputStream::GetWriteStallTime()
+{
+    auto guard = Guard(Lock_);
+    return WriteStallTimer_.GetElapsedTime();
 }
 
 std::vector<TErrorAttribute> TAttachmentsOutputStream::GetErrorAttributes() const

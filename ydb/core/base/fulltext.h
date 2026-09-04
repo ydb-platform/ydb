@@ -23,6 +23,7 @@ bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns,
 bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error);
 
 bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error);
+bool HasSuperLemmer(const Ydb::Table::FulltextIndexSettings& settings);
 bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error);
 
 class TDeltaWriter {
@@ -66,6 +67,7 @@ class TMultiDeltaReader: public IDeltaReader {
     struct TReaderRef {
         TDeltaReader *Reader;
         bool Added = false;
+        bool Owned = false;
     };
     struct TItem {
         ui64 DocId = 0;
@@ -92,7 +94,10 @@ public:
     void Reset(bool withFreq, bool sign);
     void Add(bool added, TDeltaReader* rdr);
     void Add(bool added, TConstArrayRef<ui8> buf);
+    void Pop();
+    void SetMaxId(ui64 maxId);
     void Start();
+    void Stop();
     bool Read(ui64& docId, ui32& freq);
 };
 

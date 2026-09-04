@@ -1,4 +1,10 @@
-/* syntax version 1 */
+$input = AsList(
+    <|key: "1"|>,
+    <|key: "2"|>,
+    <|key: "3"|>,
+    <|key: ""|>,
+);
+
 SELECT
     Digest::Crc32c(key) AS crc32c,
     Digest::Crc64(key) AS crc64,
@@ -32,4 +38,4 @@ SELECT
     Digest::IntHash64(COALESCE(CAST(key AS Uint64), 0)) AS inthash64,
     Digest::XXH3(key) AS xxhash,
     Digest::XXH3_128(key) AS xxhash128
-FROM Input;
+FROM AS_TABLE($input);

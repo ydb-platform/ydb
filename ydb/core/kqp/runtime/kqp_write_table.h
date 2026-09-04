@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -84,6 +85,7 @@ public:
     virtual IDataBatchPtr FlushDocs() = 0;
     virtual IDataBatchPtr FlushDict() = 0;
     virtual IDataBatchPtr FlushStats() = 0;
+    virtual void SetGen(NTableIndex::NFulltext::TGen gen) = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
@@ -94,6 +96,7 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
 
 IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+    ui32 dataColumnCount,
     bool withFreq,
     bool added,
     const Ydb::Table::FulltextIndexSettings& settings,
@@ -113,7 +116,8 @@ bool IsEqual(
     TConstArrayRef<NScheme::TTypeInfo> types);
 
 std::vector<TConstArrayRef<TCell>> GetRows(
-    const NKikimr::NKqp::IDataBatchPtr& batch);
+    const NKikimr::NKqp::IDataBatchPtr& batch,
+    const size_t offset = 0);
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);

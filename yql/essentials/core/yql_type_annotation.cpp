@@ -5,6 +5,7 @@
 #include "yql_type_helpers.h"
 
 #include <yql/essentials/ast/yql_constraint.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
 
@@ -23,6 +24,17 @@ TTypeAnnotationContext::TTypeAnnotationContext()
 }
 
 TTypeAnnotationContext::~TTypeAnnotationContext() = default;
+
+void TTypeAnnotationContext::UpdateDecimalConversionMode(EDecimalConversionMode decimalConversionMode) {
+    DecimalConversionMode_ = decimalConversionMode;
+}
+
+EDecimalConversionMode TTypeAnnotationContext::GetDecimalConversionMode() const {
+    if (IsAvailableOn(LangVer, BackportMode, NFeature::AlwaysWithFixDecimalConversionMode)) {
+        return EDecimalConversionMode::WithCommonTypeFixup;
+    }
+    return DecimalConversionMode_;
+}
 
 bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
     if (!InitializeResult) {
@@ -56,7 +68,7 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
     DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
-    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, std::move(layersIntegrations));
+    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, layersIntegrations);
     return true;
 }
 
@@ -136,13 +148,7 @@ TString TColumnOrder::Find(const TString& name) const {
     return it->second;
 }
 
-TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) {
-    GeneratedToOriginal_ = rhs.GeneratedToOriginal_;
-    Order_ = rhs.Order_;
-    UseCountLcase_ = rhs.UseCountLcase_;
-    UseCount_ = rhs.UseCount_;
-    return *this;
-}
+TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) = default;
 
 TColumnOrder::TColumnOrder(const TVector<TString>& order) {
     Reserve(order.size());
@@ -546,13 +552,13 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
 
     TAstParseResult astRes;
     if (sExpr) {
-        astRes = ParseAst(query, nullptr, fullName);
+        astRes = ParseAst(query, /*externalPool=*/nullptr, fullName);
     } else {
         NSQLTranslation::TTranslationSettings settings;
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         settings.File = fullName;
         settings.ClusterMapping = ClusterMapping_;
-        settings.Flags = SqlFlags_;
+        ParseTranslationSettings(SqlFlags_, settings);
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         settings.FileAliasPrefix = FileAliasPrefix_;
@@ -702,7 +708,7 @@ TString TModuleResolver::SubstParameters(const TString& str) {
         return str;
     }
 
-    return ::NYql::SubstParameters(str, Parameters_, nullptr);
+    return ::NYql::SubstParameters(str, Parameters_, /*usedNames=*/nullptr);
 }
 
 } // namespace NYql

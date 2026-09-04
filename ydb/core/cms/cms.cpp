@@ -16,6 +16,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config_units.pb.h>
 #include <ydb/core/protos/counters_cms.pb.h>
@@ -33,6 +34,11 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/system/hostname.h>
+
+#include <algorithm>
+#include <numeric>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -95,7 +101,7 @@ void TCms::OnActivateExecutor(const TActorContext &ctx)
 
 void TCms::OnDetach(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "TCms::OnDetach");
+    YDB_LOG_DEBUG_CTX(ctx, "TCms::OnDetach");
 
     Die(ctx);
 }
@@ -104,7 +110,8 @@ void TCms::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext 
 {
     Y_UNUSED(ev);
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "OnTabletDead: %" PRIu64, TabletID());
+    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+        {"tabletId", TabletID()});
 
     Die(ctx);
 }
@@ -364,8 +371,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         }
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::CMS,
-                "Check request: " << request.ShortDebugString());
+    YDB_LOG_INFO_CTX(ctx, "Check request",
+        {"request", request.ShortDebugString()});
 
     switch (request.GetAvailabilityMode()) {
     case MODE_MAX_AVAILABILITY:
@@ -422,7 +429,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         TErrorInfo error;
 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Checking action",
+            {"action", action.ShortDebugString()});
 
         bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
@@ -430,7 +438,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         }
 
         if (prepared && CheckAction(action, opts, error, ctx)) {
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
+            YDB_LOG_DEBUG_CTX(ctx, "Result: ALLOW");
 
             auto *permission = response.AddPermissions();
             permission->MutableAction()->CopyFrom(action);
@@ -441,14 +449,14 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             ClusterInfo->AddTempLocks(action, request.GetPriority(), requestId, &ctx);
 
             if (capEnabled && static_cast<ui32>(response.PermissionsSize()) >= maxPermissions) {
-                LOG_DEBUG(ctx, NKikimrServices::CMS,
-                          "MaxPermissionCount cap (%u) reached, deferring remaining actions",
-                          maxPermissions);
+                YDB_LOG_DEBUG_CTX(ctx, "MaxPermissionCount cap reached, deferring remaining actions",
+                    {"maxPermissions", maxPermissions});
                 capHit = true;
             }
         } else {
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
-                      ToString(error.Code).data(), error.Reason.GetMessage().data());
+            YDB_LOG_DEBUG_CTX(ctx, "Result",
+                {"error", ToString(error.Code)},
+                {"reason", error.Reason.GetMessage()});
 
             if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
                 response.MutableStatus()->SetCode(error.Code);
@@ -625,7 +633,7 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
         return false;
     }
 
-    if (State->Config.SentinelConfig.EvictVDisksStatus.Empty()) {
+    if (State->Config.SentinelConfig.EvictVDisksStatus == EEvictVDisksStatus::Disabled) {
         error.Code = TStatus::ERROR;
         error.Reason = "Evict vdisks is disabled in Sentinel (self heal)";
         return false;
@@ -806,9 +814,10 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
-                                                                 << "; State: " << TStateStorageRingInfo::RingStateToString(state));
-        
+        YDB_LOG_DEBUG("Dump ring",
+            {"ring", ringInfo->RingId},
+            {"state", TStateStorageRingInfo::RingStateToString(state)});
+
         if (state == TStateStorageRingInfo::RestartByThisRequest) {
             hasRestartRingsByThisRequest = true;
             state = TStateStorageRingInfo::Restart;
@@ -889,7 +898,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
             if (maxAvailabilityOk) {
                 break;
             }
-            
+
             if (!hasRestartRingsByThisRequest) {
                 limit = keepAvailableLimit;
                 if (keepAvailableOk) {
@@ -930,7 +939,12 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
         return true;
     }
 
-    for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
+    auto it = ClusterInfo->NodeToTabletTypes.find(node.NodeId);
+    if (it == ClusterInfo->NodeToTabletTypes.end()) {
+        return true;
+    }
+
+    for (const auto &tabletType : it->second) {
         TNodeLockContext lockCtx(opts.Priority, opts.RequestId, opts.AvailabilityMode);
         if (!ClusterInfo->SysNodesCheckers[node.PileId.GetOrElse(0)][tabletType]->TryToLockNode(node.NodeId, lockCtx, error.Reason)) {
             error.Code = TStatus::DISALLOW_TEMP;
@@ -940,6 +954,16 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
     }
 
     return true;
+}
+
+void TCms::SortActionsBySysTabletPriority(
+    TPermissionRequest &request) const
+{
+    auto *actions = request.MutableActions();
+    std::partition(actions->begin(), actions->end(),
+        [this](const TAction &action) {
+            return !ClusterInfo->HostHasSysTablet(action.GetHost());
+        });
 }
 
 bool TCms::TryToLockNode(const TAction& action,
@@ -1153,11 +1177,11 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
         auto &permission = *resp.MutablePermissions(i);
         permission.SetId(owner + "-p-" + ToString(State->NextPermissionId++));
         State->Permissions.emplace(permission.GetId(), TPermissionInfo(permission, requestId, owner, priority));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Accepting permission"
-            << ": id# " << permission.GetId()
-            << ", requestId# " << requestId
-            << ", owner# " << owner
-            << ", priority# " << priority);
+        YDB_LOG_DEBUG("Accepting permission",
+            {"permissionId", permission.GetId()},
+            {"requestId", requestId},
+            {"owner", owner},
+            {"priority", priority});
         ClusterInfo->AddLocks(permission, requestId, owner, priority, &ctx);
 
         if (!check) {
@@ -1185,7 +1209,8 @@ void TCms::ScheduleCleanup(TInstant time, const TActorContext &ctx)
         && ScheduledCleanups.top() <= (time + TDuration::Seconds(1)))
         return;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS, "Schedule cleanup at " << time);
+    YDB_LOG_DEBUG_CTX(ctx, "Schedule cleanup",
+        {"time", time});
 
     ScheduledCleanups.push(time);
     ctx.Schedule(time - now, new TEvPrivate::TEvCleanupExpired);
@@ -1269,7 +1294,7 @@ void TCms::DoPermissionsCleanup(const TActorContext &ctx)
 
 void TCms::CleanupWalleTasks(const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS, "Running CleanupWalleTasks");
+    YDB_LOG_DEBUG_CTX(ctx, "Running CleanupWalleTasks");
 
     // Wall-E tasks are updated separately from its request and
     // permissions which means we might have some Wall-E requests
@@ -1313,7 +1338,8 @@ TVector<TString> TCms::FindEmptyTasks(const THashMap<TString, TTaskInfo> &tasks,
     for (const auto &entry : tasks) {
         const auto &task = entry.second;
         if (!State->ScheduledRequests.contains(task.RequestId) && task.Permissions.empty()) {
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Found empty task %s", task.TaskId.data());
+            YDB_LOG_DEBUG_CTX(ctx, "Found empty task",
+                {"taskId", task.TaskId});
             tasksToRemove.push_back(task.TaskId);
         }
     }
@@ -1331,7 +1357,7 @@ void TCms::RemoveEmptyTasks(const TActorContext &ctx)
 
 void TCms::Cleanup(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "TCms::Cleanup");
+    YDB_LOG_DEBUG_CTX(ctx, "TCms::Cleanup");
 
     NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 
@@ -1409,8 +1435,8 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "Get %s permissions for %s",
-              all ? "all" : "selected", user.data());
+    YDB_LOG_INFO_CTX(ctx, TStringBuilder() << "Get " << (all ? "all" : "selected") << " permissions",
+        {"user", user});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1441,8 +1467,9 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
         }
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
+        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1453,8 +1480,10 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "User %s %s permissions %s",
-              user.data(), done ? "is done with" : "rejected", ToString(rec.GetPermissions()).data());
+    YDB_LOG_INFO_CTX(ctx, "User permissions are removed",
+        {"user", user},
+        {"outcome", done ? "done" : "rejected"},
+        {"permissions", ToString(rec.GetPermissions())});
 
     TVector<TString> ids;
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
@@ -1476,8 +1505,9 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
         ids.push_back(id);
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
+        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
@@ -1493,8 +1523,8 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "Get %s requests for %s",
-              all ? "all" : "selected", user.data());
+    YDB_LOG_INFO_CTX(ctx, TStringBuilder() << "Get " << (all ? "all" : "selected") << " requests",
+        {"user", user});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1519,8 +1549,9 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
         }
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
+        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1532,7 +1563,9 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
     const TString &user = rec.GetUser();
     const TString &id = rec.GetRequestId();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "User %s removes request %s", user.data(), id.data());
+    YDB_LOG_INFO_CTX(ctx, "User removes request",
+        {"user", user},
+        {"requestId", id});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     auto it = State->ScheduledRequests.find(id);
@@ -1554,8 +1587,9 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
         }
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
+        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
@@ -1612,8 +1646,8 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvCms::TEvPermissionResponse, Handle);
                 default:
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS,
-                                "Unexpected event type: " << ev->GetTypeName());
+                    YDB_LOG_ERROR("Unexpected event",
+                        {"type", ev->GetTypeName()});
                     break;
             }
         }
@@ -1677,8 +1711,8 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "Get %s notifications for %s",
-              all ? "all" : "selected", user.data());
+    YDB_LOG_INFO_CTX(ctx, TStringBuilder() << "Get " << (all ? "all" : "selected") << " notifications",
+        {"user", user});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1703,8 +1737,9 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
         }
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              ToString(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
+        {"status", ToString(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1846,9 +1881,9 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
         auto row = db.Table<Schema::NodeTenant>().Key(nodeId);
         row.Update(NIceDb::TUpdate<Schema::NodeTenant::Tenant>(tenant));
 
-        LOG_TRACE(ctx, NKikimrServices::CMS,
-                  "Persist node %" PRIu32 " tenant '%s'",
-                  nodeId, tenant.data());
+        YDB_LOG_TRACE_CTX(ctx, "Persist tenant node",
+            {"nodeId", nodeId},
+            {"tenant", tenant});
     }
 }
 
@@ -1943,6 +1978,8 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
         HFuncTraced(TEvCms::TEvResetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvSetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvGetClusterInfoRequest, Handle);
+        HFuncTraced(TEvCms::TEvDDiskTabletListRequest, Handle);
+        HFuncTraced(TEvCms::TEvDDiskDiskListRequest, Handle);
 
     default:
         Y_ABORT("Unexpected request type");
@@ -1951,7 +1988,10 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
 
 void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 {
-    LOG_WARN(ctx, NKikimrServices::CMS, "BS Controller connection error");
+    YDB_LOG_WARN_CTX(ctx, "BS Controller connection error");
+
+    DDiskInfoRequestsInFlight = 0;
+    DDiskInfoRequestQueue = {};
 
     if (State->BSControllerPipe) {
         NTabletPipe::CloseClient(ctx, State->BSControllerPipe);
@@ -1960,6 +2000,447 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 
     if (State->Sentinel)
         ctx.Send(State->Sentinel, new TEvSentinel::TEvBSCPipeDisconnected);
+
+    // Recreate the pipe here as well as on CMS activation. Otherwise a transient
+    // BSC restart leaves DDisk synchronization without a pipe forever. The
+    // ListTablets request sent from here is buffered by the pipe client until
+    // the connection is (re-)established, so we must not send it again from
+    // Handle(TEvClientConnected) once the pipe actually connects.
+    StartDDiskSync(ctx);
+}
+
+void TCms::StartDDiskSync(const TActorContext& ctx) {
+    if (!State->BSControllerPipe) {
+        NTabletPipe::TClientConfig config;
+        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        State->BSControllerPipe = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(), config));
+    }
+
+    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoListTablets>();
+    NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+}
+
+void TCms::Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxPersistDDiskInfo(ev), ctx);
+}
+
+void TCms::QueueDDiskInfoRequest(ui64 tabletId, ui64 knownRevision, const TActorContext& ctx) {
+    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
+    request->Record.SetTabletId(tabletId);
+    request->Record.SetKnownRevision(knownRevision);
+    DDiskInfoRequestQueue.push(std::move(request));
+    SendQueuedDDiskInfoRequests(ctx);
+}
+
+void TCms::SendQueuedDDiskInfoRequests(const TActorContext& ctx) {
+    if (!State->BSControllerPipe) {
+        return;
+    }
+
+    while (DDiskInfoRequestsInFlight < MaxDDiskInfoRequestsInFlight && !DDiskInfoRequestQueue.empty()) {
+        auto request = std::move(DDiskInfoRequestQueue.front());
+        DDiskInfoRequestQueue.pop();
+        NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+        ++DDiskInfoRequestsInFlight;
+    }
+}
+
+void TCms::Handle(TEvCms::TEvDDiskInfoListRequest::TPtr& ev, const TActorContext& ctx) {
+    auto response = MakeHolder<TEvCms::TEvDDiskInfoListResponse>();
+    response->Record.SetStatus(NKikimrProto::OK);
+    for (const auto& [tabletId, info] : State->DDiskInfo) {
+        auto* tablet = response->Record.AddTablets();
+        tablet->SetTabletId(tabletId);
+        tablet->SetRevision(info.Revision);
+        tablet->SetLastChangedAt(info.LastChangedAt.MicroSeconds());
+    }
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext& ctx) {
+    auto response = MakeHolder<TEvCms::TEvDDiskInfoGetResponse>();
+    const auto it = State->DDiskInfo.find(ev->Get()->Record.GetTabletId());
+    if (it == State->DDiskInfo.end()) {
+        response->Record.SetStatus(NKikimrProto::NOT_FOUND);
+        response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
+        response->Record.SetErrorReason("DDisk snapshot is not available");
+    } else if (!response->Record.ParseFromString(it->second.State)) {
+        response->Record.Clear();
+        response->Record.SetStatus(NKikimrProto::ERROR);
+        response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
+        response->Record.SetErrorReason("failed to parse persisted DDisk snapshot");
+    }
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+bool TCms::IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId& id) const {
+    // We treat a DDisk as available unless the underlying PDisk is known to
+    // CMS and is definitely in a state that indicates the disk or its node is
+    // genuinely unreachable/broken (see IsPDiskStateUp() for the exact split;
+    // notably, the initial-startup states are still considered available). If
+    // CMS has no information about this PDisk, or it is registered but its
+    // state has never actually been reported by Whiteboard (e.g. because this
+    // PDisk id isn't covered by Whiteboard PDisk state collection at all), we
+    // conservatively assume it's available to avoid false-positive "problem"
+    // reports.
+    if (!ClusterInfo) {
+        return true;
+    }
+    const TPDiskID pdiskId(id.GetNodeId(), id.GetPDiskId());
+    if (!ClusterInfo->HasPDisk(pdiskId)) {
+        return true;
+    }
+    // The PDisk's own reported state (RawState) is only updated while its
+    // node is actually connected and reporting Whiteboard data; once a node
+    // disconnects, TClusterInfo::ClearNode() marks the node itself DOWN but
+    // leaves any previously reported PDisk state untouched (it may be stale,
+    // e.g. still "Initial" from before the node went down). So a disk on a
+    // known-down/restarting node must be treated as unavailable regardless of
+    // its last reported RawState.
+    if (ClusterInfo->HasNode(id.GetNodeId())) {
+        const auto& node = ClusterInfo->Node(id.GetNodeId());
+        if (node.State == NKikimrCms::DOWN || node.State == NKikimrCms::RESTART) {
+            return false;
+        }
+    }
+    const auto& pdisk = ClusterInfo->PDisk(pdiskId);
+    if (!pdisk.RawState) {
+        return true;
+    }
+    return IsPDiskStateUp(*pdisk.RawState);
+}
+
+TString TCms::GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId& id) const {
+    // Returns the full underlying PDisk state name, as opposed to the coarse
+    // available/unavailable flag from IsDDiskAvailable(). Mirrors the same
+    // node-reachability and "unknown state means available/no info" logic so
+    // the reported name is consistent with IsDDiskAvailable()'s verdict.
+    if (!ClusterInfo) {
+        return "Unknown";
+    }
+    const TPDiskID pdiskId(id.GetNodeId(), id.GetPDiskId());
+    if (!ClusterInfo->HasPDisk(pdiskId)) {
+        return "Unknown";
+    }
+    if (ClusterInfo->HasNode(id.GetNodeId())) {
+        const auto& node = ClusterInfo->Node(id.GetNodeId());
+        if (node.State == NKikimrCms::DOWN) {
+            return "NodeDown";
+        }
+        if (node.State == NKikimrCms::RESTART) {
+            return "NodeRestarting";
+        }
+    }
+    const auto& pdisk = ClusterInfo->PDisk(pdiskId);
+    if (!pdisk.RawState) {
+        return "Unknown";
+    }
+    return NKikimrBlobStorage::TPDiskState::E_Name(*pdisk.RawState);
+}
+
+void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorContext& ctx) {
+    // This request is routed through EnqueueRequest (see StateWork's
+    // FFunc(EvDDiskTabletListRequest, EnqueueRequest)), which triggers a
+    // fresh ClusterInfo collection before ProcessRequest() calls this
+    // handler -- consistent with how TEvClusterStateRequest/TEvPermissionRequest
+    // ensure up-to-date PDisk/node state for IsDDiskAvailable()/
+    // GetDDiskStateName(). If collection failed, bail out instead of
+    // reporting availability computed from stale/missing ClusterInfo.
+    if (ClusterInfo->IsOutdated()) {
+        return ReplyWithError<TEvCms::TEvDDiskTabletListResponse>(
+            ev, TStatus::ERROR_TEMP, "Cannot collect cluster state", ctx);
+    }
+
+    const auto& request = ev->Get()->Record;
+    const TString filter = request.GetFilterTabletId();
+    const auto sortBy = request.GetSortBy();
+    const bool sortDescending = request.GetSortDescending();
+    const bool onlyProblems = request.GetOnlyProblems();
+
+    auto countUnavailable = [&](const NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult& state, bool persistentBuffer) {
+        ui32 count = 0;
+        for (const auto& group : state.GetGroups()) {
+            const auto& ids = persistentBuffer ? group.GetPersistentBufferDDiskId() : group.GetDDiskId();
+            for (const auto& id : ids) {
+                // An unallocated DDisk slot is represented by an empty TDDiskId
+                // (NodeId == 0 && PDiskId == 0, see ddisk_info.cpp), not a real
+                // disk; skip it so it isn't counted as an unavailable disk.
+                if (id.GetNodeId() == 0 && id.GetPDiskId() == 0) {
+                    continue;
+                }
+                if (!IsDDiskAvailable(id)) {
+                    ++count;
+                }
+            }
+        }
+        return count;
+    };
+
+    TVector<const std::pair<const ui64, TCmsDDiskInfo>*> items;
+    items.reserve(State->DDiskInfo.size());
+    for (const auto& kv : State->DDiskInfo) {
+        if (!filter.empty() && !ToString(kv.first).Contains(filter)) {
+            continue;
+        }
+        if (onlyProblems) {
+            NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+            if (!state.ParseFromString(kv.second.State) ||
+                (countUnavailable(state, false) == 0 && countUnavailable(state, true) == 0))
+            {
+                continue;
+            }
+        }
+        items.push_back(&kv);
+    }
+
+    using TItemPtr = const std::pair<const ui64, TCmsDDiskInfo>*;
+    // Precompute the sort key for each item exactly once: computing it inside
+    // the comparator would call ParseFromString() O(N log N) times for
+    // DDISK_TABLET_SORT_BY_GROUPS_COUNT, which is expensive for large
+    // clusters. Use ui64 (rather than i64) for the primary key component so
+    // that tablet ids with the high bit set (e.g. produced by MakeTabletID())
+    // don't wrap to negative values and sort incorrectly.
+    TVector<std::pair<ui64, ui64>> keys;
+    keys.reserve(items.size());
+    for (const auto* item : items) {
+        switch (sortBy) {
+            case NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT:
+                keys.emplace_back(static_cast<ui64>(item->second.LastChangedAt.MicroSeconds()), item->first);
+                break;
+            case NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT: {
+                NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+                Y_PROTOBUF_SUPPRESS_NODISCARD state.ParseFromString(item->second.State);
+                keys.emplace_back(static_cast<ui64>(state.GroupsSize()), item->first);
+                break;
+            }
+            case NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID:
+            default:
+                keys.emplace_back(item->first, item->first);
+                break;
+        }
+    }
+    TVector<ui32> order(items.size());
+    std::iota(order.begin(), order.end(), 0);
+    // Sort by the requested key with tablet id as a deterministic tiebreaker.
+    std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
+        return sortDescending ? keys[b] < keys[a] : keys[a] < keys[b];
+    });
+    TVector<TItemPtr> sortedItems;
+    sortedItems.reserve(items.size());
+    for (ui32 i : order) {
+        sortedItems.push_back(items[i]);
+    }
+    items = std::move(sortedItems);
+
+    auto response = MakeHolder<TEvCms::TEvDDiskTabletListResponse>();
+    response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+    response->Record.SetTotalCount(items.size());
+
+    const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
+    const ui32 limit = request.GetLimit();
+    // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
+    // the ui32 range (e.g. both close to Max<ui32>()).
+    const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
+    for (ui32 i = offset; i < end; ++i) {
+        const auto* kv = items[i];
+        auto* tablet = response->Record.AddTablets();
+        tablet->SetTabletId(kv->first);
+        tablet->SetRevision(kv->second.Revision);
+        tablet->SetLastChangedAt(kv->second.LastChangedAt.MicroSeconds());
+
+        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+        if (state.ParseFromString(kv->second.State)) {
+            tablet->SetGroupsCount(state.GroupsSize());
+            tablet->SetUnavailableDDiskCount(countUnavailable(state, false));
+            tablet->SetUnavailablePersistentBufferCount(countUnavailable(state, true));
+        }
+    }
+
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext& ctx) {
+    // See the comment in the TEvDDiskTabletListRequest handler above: this
+    // request is routed through EnqueueRequest so ClusterInfo is freshly
+    // collected before we get here.
+    if (ClusterInfo->IsOutdated()) {
+        return ReplyWithError<TEvCms::TEvDDiskDiskListResponse>(
+            ev, TStatus::ERROR_TEMP, "Cannot collect cluster state", ctx);
+    }
+
+    const auto& request = ev->Get()->Record;
+    const TString diskFilter = request.GetFilterDiskId();
+    const TString tabletFilter = request.GetFilterTabletId();
+    const auto sortBy = request.GetSortBy();
+    const bool sortDescending = request.GetSortDescending();
+    const bool onlyProblems = request.GetOnlyProblems();
+
+    struct TDiskUsage {
+        NKikimrBlobStorage::NDDisk::TDDiskId DiskId;
+        TVector<ui64> DDiskTabletIds;
+        TVector<ui64> PersistentBufferTabletIds;
+    };
+
+    auto diskKey = [](const NKikimrBlobStorage::NDDisk::TDDiskId& id) {
+        return TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId() << ":" << id.GetDDiskSlotId();
+    };
+
+    THashMap<TString, TDiskUsage> disks;
+    auto addUsage = [&](const NKikimrBlobStorage::NDDisk::TDDiskId& id, ui64 tabletId, bool isPersistentBuffer) {
+        // An unallocated DDisk/PersistentBuffer slot is represented by an
+        // empty TDDiskId (NodeId == 0 && PDiskId == 0, see ddisk_info.cpp's
+        // AddDDiskId() fallback for items without HasDDiskId()); it does not
+        // correspond to a real disk. Without this check, every tablet with an
+        // unallocated slot would be aggregated into a single phantom "0:0:0"
+        // disk row, inflating/corrupting its reported Tablets count.
+        if (id.GetNodeId() == 0 && id.GetPDiskId() == 0) {
+            return;
+        }
+        const TString key = diskKey(id);
+        auto& usage = disks[key];
+        usage.DiskId = id;
+        auto& target = isPersistentBuffer ? usage.PersistentBufferTabletIds : usage.DDiskTabletIds;
+        if (Find(target, tabletId) == target.end()) {
+            target.push_back(tabletId);
+        }
+    };
+
+    for (const auto& [tabletId, info] : State->DDiskInfo) {
+        if (!tabletFilter.empty() && !ToString(tabletId).Contains(tabletFilter)) {
+            continue;
+        }
+        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+        if (!state.ParseFromString(info.State)) {
+            continue;
+        }
+        for (const auto& group : state.GetGroups()) {
+            for (const auto& id : group.GetDDiskId()) {
+                addUsage(id, tabletId, false);
+            }
+            for (const auto& id : group.GetPersistentBufferDDiskId()) {
+                addUsage(id, tabletId, true);
+            }
+        }
+    }
+
+    TVector<const TDiskUsage*> items;
+    items.reserve(disks.size());
+    for (const auto& [key, usage] : disks) {
+        if (!diskFilter.empty() && !key.Contains(diskFilter)) {
+            continue;
+        }
+        if (onlyProblems && IsDDiskAvailable(usage.DiskId)) {
+            continue;
+        }
+        items.push_back(&usage);
+    }
+
+    auto idKey = [](const TDiskUsage* usage) -> std::tuple<ui32, ui32, ui32> {
+        return std::make_tuple(usage->DiskId.GetNodeId(), usage->DiskId.GetPDiskId(), usage->DiskId.GetDDiskSlotId());
+    };
+    // Precompute the unique-tablet count for each disk exactly once: computing
+    // it inside the comparator would build a THashSet and scan both tablet-id
+    // vectors O(N log N) times, which is expensive for large clusters.
+    TVector<size_t> tabletsCounts;
+    tabletsCounts.reserve(items.size());
+    for (const auto* usage : items) {
+        THashSet<ui64> unique;
+        for (auto id : usage->DDiskTabletIds) unique.insert(id);
+        for (auto id : usage->PersistentBufferTabletIds) unique.insert(id);
+        tabletsCounts.push_back(unique.size());
+    }
+    TVector<ui32> order(items.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
+        bool less;
+        if (sortBy == NKikimrCms::DDISK_DISK_SORT_BY_TABLETS_COUNT) {
+            const size_t ca = tabletsCounts[a];
+            const size_t cb = tabletsCounts[b];
+            less = ca != cb ? ca < cb : idKey(items[a]) < idKey(items[b]);
+        } else {
+            less = idKey(items[a]) < idKey(items[b]);
+        }
+        if (!sortDescending) {
+            return less;
+        }
+        return idKey(items[a]) != idKey(items[b]) && !less;
+    });
+    TVector<const TDiskUsage*> sortedItems;
+    sortedItems.reserve(items.size());
+    for (ui32 i : order) {
+        sortedItems.push_back(items[i]);
+    }
+    items = std::move(sortedItems);
+
+    auto response = MakeHolder<TEvCms::TEvDDiskDiskListResponse>();
+    response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+    response->Record.SetTotalCount(items.size());
+
+    const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
+    const ui32 limit = request.GetLimit();
+    // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
+    // the ui32 range (e.g. both close to Max<ui32>()).
+    const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
+    for (ui32 i = offset; i < end; ++i) {
+        const auto* usage = items[i];
+        auto* disk = response->Record.AddDisks();
+        disk->MutableDiskId()->CopyFrom(usage->DiskId);
+        for (auto id : usage->DDiskTabletIds) {
+            disk->AddDDiskTabletIds(id);
+        }
+        for (auto id : usage->PersistentBufferTabletIds) {
+            disk->AddPersistentBufferTabletIds(id);
+        }
+        disk->SetAvailable(IsDDiskAvailable(usage->DiskId));
+        disk->SetState(GetDDiskStateName(usage->DiskId));
+    }
+
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    if (record.GetStatus() != NKikimrProto::OK || !State->BSControllerPipe) {
+        return;
+    }
+
+    for (const auto& tablet : record.GetTablets()) {
+        const auto it = State->DDiskInfo.find(tablet.GetTabletId());
+        const bool isNewTablet = it == State->DDiskInfo.end();
+        const ui64 knownRevision = isNewTablet ? 0 : it->second.Revision;
+        if (isNewTablet || tablet.GetRevision() > knownRevision) {
+            QueueDDiskInfoRequest(tablet.GetTabletId(), knownRevision, ctx);
+        }
+    }
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr& ev, const TActorContext& ctx) {
+    // NOTE: The response arrives with ev->Sender set to the remote BS Controller
+    // tablet actor id (as delivered through the tablet pipe), not to the local
+    // pipe client actor id (State->BSControllerPipe). Do not compare against
+    // State->BSControllerPipe here, otherwise every response would be dropped.
+    if (DDiskInfoRequestsInFlight > 0) {
+        --DDiskInfoRequestsInFlight;
+    }
+    SendQueuedDDiskInfoRequests(ctx);
+
+    if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
+        auto persist = MakeHolder<TEvPrivate::TEvPersistDDiskInfo>();
+        persist->Record.CopyFrom(ev->Get()->Record);
+        ctx.Send(SelfId(), persist.Release());
+    }
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const auto it = State->DDiskInfo.find(record.GetTabletId());
+    const ui64 knownRevision = it == State->DDiskInfo.end() ? 0 : it->second.Revision;
+
+    if (!State->BSControllerPipe || record.GetRevision() <= knownRevision) {
+        return;
+    }
+
+    QueueDDiskInfoRequest(record.GetTabletId(), knownRevision, ctx);
 }
 
 void TCms::Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx) {
@@ -1974,8 +2455,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
     TabletCounters->Percentile()[COUNTER_LATENCY_INFO_COLLECTOR].IncrementFor((ctx.Now() - InfoCollectorStartTime).MilliSeconds());
 
     if (!ev->Get()->Success) {
-        LOG_NOTICE_S(ctx, NKikimrServices::CMS,
-                     "Couldn't collect cluster state.");
+        YDB_LOG_NOTICE_CTX(ctx, "Couldn't collect cluster state");
 
         if (!ClusterInfo) {
             State->ClusterInfo = new TClusterInfo;
@@ -2173,6 +2653,8 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             rec.MutableActions()->Add()->CopyFrom(action);
         }
     }
+
+    SortActionsBySysTabletPriority(rec);
 
     if (rec.GetEvictVDisks()) {
         for (const auto &action : rec.GetActions()) {
@@ -2454,8 +2936,8 @@ bool TCms::CheckNotification(const TNotification &notification,
     for (const auto &action : notification.GetActions()) {
         TErrorInfo error;
 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Processing notification for action: %s",
-                  action.ShortDebugString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Processing notification for action",
+            {"action", action.ShortDebugString()});
 
         if (!IsValidNotificationAction(action, time, error, ctx)) {
             resp.MutableStatus()->SetCode(error.Code);
@@ -2481,8 +2963,8 @@ void TCms::Handle(TEvCms::TEvManageNotificationRequest::TPtr &ev, const TActorCo
 {
     auto &rec = ev->Get()->Record;
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "Notification management request: %s",
-              rec.ShortDebugString().data());
+    YDB_LOG_INFO_CTX(ctx, "Notification management",
+        {"request", rec.ShortDebugString()});
 
     if (!rec.GetUser()) {
         return ReplyWithError<TEvCms::TEvManageNotificationResponse>(
@@ -2629,9 +3111,9 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 {
     auto &rec = ev->Get()->Record;
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-        LOG_ERROR_S(ctx, NKikimrServices::CMS,
-                    "Cannot subscribe for config updates: " << rec.GetStatus().GetCode()
-                    << " " << rec.GetStatus().GetReason());
+        YDB_LOG_ERROR_CTX(ctx, "Cannot subscribe for config updates",
+            {"status", rec.GetStatus().GetCode()},
+            {"reason", rec.GetStatus().GetReason()});
 
         SubscribeForConfig(ctx);
         return;
@@ -2639,8 +3121,8 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 
     ConfigSubscriptionId = rec.GetSubscriptionId();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                "Got config subscription id=" << ConfigSubscriptionId);
+    YDB_LOG_DEBUG_CTX(ctx, "Got config subscription",
+        {"id", ConfigSubscriptionId});
 }
 
 void TCms::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev,
@@ -2655,8 +3137,21 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
                   const TActorContext &ctx)
 {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-    if (msg->ClientId == State->BSControllerPipe && msg->Status != NKikimrProto::OK)
+    if (msg->ClientId != State->BSControllerPipe) {
+        return;
+    }
+
+    if (msg->Status != NKikimrProto::OK) {
         OnBSCPipeDestroyed(ctx);
+    } else {
+        // Do not call StartDDiskSync here: the pipe already exists (it was
+        // created either on CMS activation or in OnBSCPipeDestroyed) and the
+        // ListTablets request was already buffered by the pipe client and
+        // will be delivered now that the connection succeeded. Calling
+        // StartDDiskSync again would send a second, duplicate ListTablets
+        // request for every reconnect.
+        SendQueuedDDiskInfoRequests(ctx);
+    }
 }
 
 void TCms::Handle(::NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx)

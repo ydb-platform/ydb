@@ -77,6 +77,9 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(
     portionMeta.SetColumnBlobBytes(ColumnBlobBytes);
     portionMeta.SetIndexRawBytes(IndexRawBytes);
     portionMeta.SetIndexBlobBytes(IndexBlobBytes);
+    if (BsIndexBlobBytes.has_value()) {
+        portionMeta.SetBsIndexBlobBytes(BsIndexBlobBytes.value());
+    }
     portionMeta.SetNumSlices(NumSlices);
     switch (produced) {
         case NPortion::EProduced::UNSPECIFIED:

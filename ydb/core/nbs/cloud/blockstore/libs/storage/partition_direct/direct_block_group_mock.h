@@ -15,7 +15,11 @@ struct TOracleMock: public IOracle
     TDuration WriteHedgingDelay;
     TDuration WriteRequestTimeout;
     TDuration PBufferReplyTimeout;
-    EWriteMode WriteMode = EWriteMode::DirectPBuffersFilling;
+    EWriteMode WriteMode = EWriteMode::DirectWrite;
+    TDuration FlushRequestCooldown;
+    TDuration FlushRequestTimeout;
+    TDuration EraseRequestTimeout;
+    TVector<THostStat> HostStatistics;
 
     void OnRequestStarted(
         THostIndex hostIndex,
@@ -30,18 +34,41 @@ struct TOracleMock: public IOracle
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) override;
+    void OnRequestCancelled(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+
+    void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskBroken(THostIndex hostIndex) override;
+
+    TDuration GetHostReconnectDelay(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
 
-    [[nodiscard]] TDuration GetReadHedgingDelay() const override;
+    [[nodiscard]] TDuration GetReadHedgingDelay(
+        THostIndex host,
+        EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
-    [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
-    [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
-    [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;
-    [[nodiscard]] EWriteMode GetWriteMode() const override;
 
+    [[nodiscard]] EWriteMode GetWriteMode() const override;
+    [[nodiscard]] TDuration GetWriteHedgingDelay(
+        THostMask hosts,
+        bool indirect) const override;
+    [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
+    [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+
+    [[nodiscard]] TDuration GetFlushRequestCooldown(
+        THostMask hosts) const override;
+    [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+
+    [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
+
+    [[nodiscard]] const THostStat& GetHostStatistics(
+        THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 };
 
@@ -62,7 +89,7 @@ public:
         std::function<NThreading::TFuture<TDBGReadBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
-            ui64 lsn,
+            TPBufferKey pBufferKey,
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
@@ -77,15 +104,15 @@ public:
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
-            ui64 lsn,
+            TPBufferKey pBufferKey,
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToManyPBuffersHandler = std::function<void(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
-        ui64 lsn,
+        THostMask hostIndexes,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
@@ -100,9 +127,8 @@ public:
             const NWilson::TTraceId& traceId)>;
     using TBatchEraseFromPBufferHandler =
         std::function<NThreading::TFuture<TDBGEraseResponse>(
-            ui32 vChunkIndex,
             THostIndex hostIndex,
-            const TVector<TPBufferSegment>& segments,
+            const TEraseSegments& segments,
             const NWilson::TTraceId& traceId)>;
     using TDBGRestoreHandler =
         std::function<NThreading::TFuture<TDBGRestoreResponse>(
@@ -113,6 +139,14 @@ public:
 
     using TDBGDumpHandler =
         std::function<NThreading::TFuture<TDBGDumpResponse>()>;
+
+    using TOnAddHostResultHandler = std::function<void(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)>;
+    using TTakeCopyRangeBudgetHandler =
+        std::function<TDuration(ui64 byteCount)>;
 
     TExecutorPtr Executor;
     TOracleMock Oracle;
@@ -127,6 +161,8 @@ public:
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
+    TOnAddHostResultHandler OnAddHostResultHandler;
+    TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
 
@@ -135,6 +171,9 @@ public:
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+
+    ui32 GetTabletGeneration() const override;
+
     IOraclePtr GetOracle() override;
 
     void Schedule(TDuration delay, TCallback callback) override;
@@ -143,7 +182,9 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -155,7 +196,7 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
@@ -170,7 +211,7 @@ public:
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
@@ -178,8 +219,8 @@ public:
     void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
-        ui64 lsn,
+        THostMask hostIndexes,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
@@ -194,14 +235,13 @@ public:
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
-        ui32 vChunkIndex,
         THostIndex hostIndex,
-        const TVector<TPBufferSegment>& segments,
+        const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;
 
-    NThreading::TFuture<std::optional<ui64>>
+    NThreading::TFuture<std::optional<TPBufferKey>>
     GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
@@ -210,7 +250,22 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
+    void OnAddHostResult(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    TDuration TakeCopyRangeBudget(ui64 byteCount) override;
+
+    ui32 GetNodeId(THostIndex host) const override;
+
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
+
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+
+    NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

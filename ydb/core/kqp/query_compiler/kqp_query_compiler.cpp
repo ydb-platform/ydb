@@ -220,16 +220,16 @@ NKqpProto::EKqpPhyTableKind GetPhyTableKind(EKikimrTableKind kind) {
     }
 }
 
-void FillTablesMap(const TStringBuf path, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
-    tablesMap.emplace(path, THashSet<TStringBuf>{});
+void FillTablesMap(const TStringBuf path, THashMap<TString, THashSet<TString>>& tablesMap) {
+    tablesMap.emplace(path, THashSet<TString>{});
 }
 
-void FillTablesMap(const TKqpTable& table, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
+void FillTablesMap(const TKqpTable& table, THashMap<TString, THashSet<TString>>& tablesMap) {
     FillTablesMap(table.Path().Value(), tablesMap);
 }
 
 void FillTablesMap(const TStringBuf& path, const TVector<TStringBuf>& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(path, tablesMap);
 
@@ -239,7 +239,7 @@ void FillTablesMap(const TStringBuf& path, const TVector<TStringBuf>& columns,
 }
 
 void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
 
@@ -249,7 +249,7 @@ void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
 }
 
 void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
 
@@ -258,7 +258,7 @@ void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
     }
 }
 
-void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& columns,
+void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TString>&& columns,
     NKqpProto::TKqpPhyTable& tableProto)
 {
     FillTableId(tableMeta, *tableProto.MutableId());
@@ -320,7 +320,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
 }
 
 void FillExternalSource(const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyTable& tableProto) {
-    THashSet<TStringBuf> columns;
+    THashSet<TString> columns;
     columns.reserve(tableMeta.Columns.size());
     for (const auto& [col, _] : tableMeta.Columns){
         columns.emplace(col);
@@ -561,7 +561,8 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
 
 template <class T>
 void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
-    const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx)
+    const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx,
+    TTypeAnnotationContext& typesCtx)
 {
     if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
@@ -573,7 +574,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
         }
     }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx);
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx);
 }
 
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
@@ -725,7 +726,10 @@ public:
         , FuncRegistry(funcRegistry)
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
-        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry)
+        // 1 == StreamLookupJoinCookieVersionV1 (see kqp_stream_lookup_join_helpers.h);
+        // kept as a literal to avoid a runtime PEERDIR from the compiler.
+        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry,
+            config->GetEnableStreamLookupJoinCookieV2() ? 1u : 0u)
         , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
         , TypesCtx(typesCtx)
         , OptimizeCtx(optimizeCtx)
@@ -747,8 +751,6 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
-        AFL_ENSURE(Config->GetEnableOltpSink());
-        queryProto.SetEnableOltpSink(Config->GetEnableOltpSink());
         queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
@@ -961,11 +963,9 @@ private:
         TExprContext& ctx,
         const TMap<ui64, ui32>& stagesMap,
         TRequestPredictor& rPredictor,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<TString, THashSet<TString>>& tablesMap,
         THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
     ) {
-        const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
-
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
 
@@ -1009,29 +1009,6 @@ private:
                 } else if (tableMeta->RecordsCount) {
                     tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
                 }
-            } else if (auto maybeUpsertRows = node.Maybe<TKqpUpsertRows>()) {
-                auto upsertRows = maybeUpsertRows.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, upsertRows.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
-                YQL_ENSURE(hasEffects);
-
-                auto settings = TKqpUpsertRowsSettings::Parse(upsertRows);
-
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTablesMap(upsertRows.Table(), upsertRows.Columns(), tablesMap);
-                FillTableId(upsertRows.Table(), *tableOp.MutableTable());
-                FillColumns(upsertRows.Columns(), *tableMeta, tableOp, false);
-                FillEffectRows(upsertRows, *tableOp.MutableUpsertRows(), settings.Inplace);
-            } else if (auto maybeDeleteRows = node.Maybe<TKqpDeleteRows>()) {
-                auto deleteRows = maybeDeleteRows.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, deleteRows.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
-                YQL_ENSURE(hasEffects);
-
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTablesMap(deleteRows.Table(), tablesMap);
-                FillTableId(deleteRows.Table(), *tableOp.MutableTable());
-                FillEffectRows(deleteRows, *tableOp.MutableDeleteRows(), false);
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1058,7 +1035,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
                     tableOp.SetEstimatedRows(stats->Nrows);
@@ -1076,7 +1053,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
                 if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
@@ -1179,7 +1156,7 @@ private:
             }
         }
 
-        stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
+        stageProto.SetIsEffectsStage(hasTxTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
         NDq::TSpillingSettings spillingSettings{Config->GetEnabledSpillingNodes()};
@@ -1192,6 +1169,9 @@ private:
         programProto.SetLangVer(Config->GetDefaultLangVer());
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
+        for (const auto& module : stagePredictor.GetWasmUdfModules()) {
+            stageProto.AddWasmUdfModules(module);
+        }
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());
@@ -1212,10 +1192,11 @@ private:
         txProto.SetType(GetPhyTxType(*txSettings.Type));
 
         bool hasEffectStage = false;
+        bool hasPqSources = false;
 
         TMap<ui64, ui32> stagesMap;
         THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
-        THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
+        THashMap<TString, THashSet<TString>> tablesMap;
 
         TRequestPredictor rPredictor;
         for (const auto& stage : tx.Stages()) {
@@ -1223,13 +1204,24 @@ private:
             CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap, physicalStageByID);
             hasEffectStage |= physicalStageByID[stage.Ref().UniqueId()]->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
+            const auto* compiledStage = physicalStageByID[stage.Ref().UniqueId()];
+            for (const auto& src : compiledStage->GetSources()) {
+                if (src.HasExternalSource() && src.GetExternalSource().GetType() == "PqSource") {
+                    hasPqSources = true;
+                    break;
+                }
+            }
         }
         for (auto&& i : *txProto.MutableStages()) {
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
-        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination()));
+        // Map connections produced by either optimization need partition-preserving task layout.
+        const bool enableShuffleElimination = Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination())
+            || Config->OptShuffleEliminationForAggregation.Get().GetOrElse(Config->GetDefaultEnableShuffleEliminationForAggregation());
+        txProto.SetEnableShuffleElimination(enableShuffleElimination);
         txProto.SetHasEffects(hasEffectStage);
+        txProto.SetHasPqSources(hasPqSources);
         txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
@@ -1335,7 +1327,7 @@ private:
     }
 
     void FillKqpSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+        THashMap<TString, THashSet<TString>>& tablesMap)
     {
         if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>()) {
             NKqpProto::TKqpReadRangesSource& readProto = *protoSource->MutableReadRangesSource();
@@ -1691,7 +1683,7 @@ private:
     }
 
     void FillSource(const TDqSource& source, NKqpProto::TKqpPhyStage& stageProto, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
+        THashMap<TString, THashSet<TString>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
         if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
@@ -1829,13 +1821,50 @@ private:
         return columnToOrder;
     }
 
-    void FillKqpSinkSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage) {
-        settingsProto.SetDatabase(Database);
+    // The parsed shape of the write stream input row (one StructType from the stage program)
+    struct TSinkInputShape {
+        TVector<TStringBuf> Columns;
+        // True for INPUT_ROW_FORMAT_STRUCT_OF_ROWS (UPDATE WHERE with new/old structs).
+        bool IsStructOfNewAndOldValues = false;
+        const TStructExprType* NewStructType = nullptr;
+        const TStructExprType* OldStructType = nullptr;
+    };
 
+    static void SetSinkOperationType(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto) {
+        const auto mode = settings.Mode().StringValue();
+        if (mode == "replace") {
+            settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);
+        } else if (mode == "upsert" || mode.empty() /* for compatibility, will be removed */) {
+            settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
+        } else if (mode == "insert") {
+            settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+        } else if (mode == "delete") {
+            settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+        } else if (mode == "update") {
+            settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
+        } else if (mode == "upsert_increment") {
+            settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT);
+        } else {
+            YQL_ENSURE(false, "Unexpected sink mode");
+        }
+    }
+
+    static void FillColumnProto(TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
+        columnProto->SetId(column->Id);
+        columnProto->SetName(TString(columnName));
+        columnProto->SetTypeId(column->TypeInfo.GetTypeId());
+
+        if (NScheme::NTypeIds::IsParametrizedType(column->TypeInfo.GetTypeId())) {
+            ProtoFromTypeInfo(column->TypeInfo, column->TypeMod, *columnProto->MutableTypeInfo());
+        }
+    }
+
+    TSinkInputShape DetermineInputRowFormat(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, const TDqPhyStage& stage) {
         const auto* structType = GetSeqItemType(stage.Program().Ref().GetTypeAnn())->Cast<TStructExprType>();
         YQL_ENSURE(structType);
 
-        const bool isStructOfNewAndOldValues = (structType->GetSize() == 2) && [&]() {
+        TSinkInputShape shape;
+        shape.IsStructOfNewAndOldValues = (structType->GetSize() == 2) && [&]() {
             THashSet<TStringBuf> names;
             for (const auto& item : structType->GetItems()) {
                 names.insert(item->GetName());
@@ -1848,11 +1877,7 @@ private:
             return true;
         }();
 
-        TVector<TStringBuf> columns;
-        const TStructExprType* newStructType = nullptr;
-        const TStructExprType* oldStructType = nullptr;
-
-        if (isStructOfNewAndOldValues) {
+        if (shape.IsStructOfNewAndOldValues) {
             AFL_ENSURE(Config->GetEnableIndexStreamWrite());
             AFL_ENSURE(settings.Mode().StringValue() == "update_conditional");
 
@@ -1861,506 +1886,615 @@ private:
             AFL_ENSURE(structType->GetSize() == 2);
             for (const auto& item : structType->GetItems()) {
                 if (item->GetName() == "new") {
-                    newStructType = item->GetItemType()->Cast<TStructExprType>();
+                    shape.NewStructType = item->GetItemType()->Cast<TStructExprType>();
                 } else if (item->GetName() == "old") {
-                    oldStructType = item->GetItemType()->Cast<TStructExprType>();
+                    shape.OldStructType = item->GetItemType()->Cast<TStructExprType>();
                 }
             }
 
-            YQL_ENSURE(newStructType, "StructOfRows: missing 'new' struct");
-            YQL_ENSURE(oldStructType, "StructOfRows: missing 'old' struct");
+            YQL_ENSURE(shape.NewStructType, "StructOfRows: missing 'new' struct");
+            YQL_ENSURE(shape.OldStructType, "StructOfRows: missing 'old' struct");
 
             // column -- updated columns
-            for (const auto& item : newStructType->GetItems()) {
-                columns.emplace_back(item->GetName());
+            for (const auto& item : shape.NewStructType->GetItems()) {
+                shape.Columns.emplace_back(item->GetName());
             }
         } else {
             settingsProto.SetInputRowFormat(NKikimrKqp::INPUT_ROW_FORMAT_FLAT);
-            columns.reserve(structType->GetSize());
+            shape.Columns.reserve(structType->GetSize());
             for (const auto& item : structType->GetItems()) {
-                columns.emplace_back(item->GetName());
+                shape.Columns.emplace_back(item->GetName());
             }
         }
 
-        auto setOperationType = [&]() {
-            if (settings.Mode().StringValue() == "replace") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);
-            } else if (settings.Mode().StringValue() == "upsert" || settings.Mode().StringValue().empty() /* for compatibility, will be removed */) {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
-            } else if (settings.Mode().StringValue() == "insert") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-            } else if (settings.Mode().StringValue() == "delete") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
-            } else if (settings.Mode().StringValue() == "update") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
-            } else if (settings.Mode().StringValue() == "upsert_increment") {
-                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT);
-            } else {
-                YQL_ENSURE(false, "Unexpected sink mode");
+        return shape;
+    }
+
+    // DEFAULT columns that are processed at datashard
+    struct TLocalDefaultColumns {
+        THashSet<ui32> Ids;
+        THashSet<TStringBuf> Names;
+    };
+
+    // Collects DEFAULT columns that are processed locally (shards DefaultColumnsCount feature).
+    TLocalDefaultColumns CollectLocalDefaultColumns(const TKqpTableSinkSettings& settings, const TKikimrTableMetadataPtr& tableMeta) {
+        TLocalDefaultColumns result;
+        for (const auto& columnNameAtom : settings.DefaultColumns()) {
+            const auto columnName = TStringBuf(columnNameAtom);
+            const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+            YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+            const bool isDefault = columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
+                            ||  columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+            if (isDefault) {
+                result.Ids.insert(columnMeta->Id);
+                result.Names.insert(columnName);
             }
-        };
+        }
+        return result;
+    }
 
-        if (settings.Mode().StringValue() != "fill_table") {
-            AFL_ENSURE(settings.Table().PathId() != "");
-            FillTableId(settings.Table(), *settingsProto.MutableTable());
-            FillTablesMap(settings.Table(), columns, tablesMap);
+    // The secondary indexes affected by a write: those needing maintenance (Affected)
+    // and those whose key columns change (AffectedKeys).
+    struct TAffectedIndexes {
+        std::vector<size_t> Affected;
+        THashSet<size_t> AffectedKeys;
+    };
 
-            const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Path()).Metadata;
+    static bool AnyColumnAffected(TConstArrayRef<TString> columns, const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet) {
+        for (auto& col: columns) {
+            if (columnsSet.contains(col) && !mainKeyColumnsSet.contains(col)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-            auto fillColumnProto = [] (TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
-                columnProto->SetId(column->Id);
-                columnProto->SetName(TString(columnName));
-                columnProto->SetTypeId(column->TypeInfo.GetTypeId());
+    TAffectedIndexes ComputeAffectedIndexes(const TKqpTableSinkSettings& settings, const TKikimrTableMetadataPtr& tableMeta,
+            const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet) {
+        const auto mode = settings.Mode().StringValue();
 
-                if(NScheme::NTypeIds::IsParametrizedType(column->TypeInfo.GetTypeId())) {
-                    ProtoFromTypeInfo(column->TypeInfo, column->TypeMod, *columnProto->MutableTypeInfo());
-                }
-            };
+        TAffectedIndexes result;
+        for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+            const auto& indexDescription = tableMeta->Indexes[index];
 
-            THashSet<ui32> defaultColumnsIds;
-            THashSet<TStringBuf> localDefaultColumns; // for shards DefaultColumnsCount feature
-            if (Config->GetEnableIndexStreamWrite()) {
-                for (const auto& columnNameAtom : settings.DefaultColumns()) {
-                    const auto columnName = TStringBuf(columnNameAtom);
-                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                    const bool isDefault = columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
-                                    ||  columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
-                    if (isDefault) {
-                        defaultColumnsIds.insert(columnMeta->Id);
-                        localDefaultColumns.insert(columnName);
+            if (indexDescription.Type == TIndexDescription::EType::GlobalSync ||
+                indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                if (mode == "update" || mode == "update_conditional") {
+                    const auto& implTable = tableMeta->ImplTables[index];
+                    if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
+                            return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
+                        })) {
+                        result.Affected.push_back(index);
                     }
-                }
-                AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
-
-                std::vector<size_t> affectedIndexes;
-                THashSet<size_t> affectedKeysIndexes;
-                TVector<TStringBuf> lookupColumns;
-
-                THashSet<TStringBuf> columnsSet;
-                THashSet<TStringBuf> mainKeyColumnsSet;
-
-                {
-                    for (const auto& columnName : columns) {
-                        columnsSet.insert(columnName);
+                    if (AnyColumnAffected(implTable->KeyColumnNames, columnsSet, mainKeyColumnsSet)) {
+                        result.AffectedKeys.insert(index);
                     }
-                    for (const auto& columnName : tableMeta->KeyColumnNames) {
-                        mainKeyColumnsSet.insert(columnName);
-                        AFL_ENSURE(columnsSet.contains(columnName));
-                    }
-
-                    for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
-                        const auto& indexDescription = tableMeta->Indexes[index];
-
-                        if (indexDescription.Type == TIndexDescription::EType::GlobalSync ||
-                            indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
-                            const auto& implTable = tableMeta->ImplTables[index];
-
-                            if (settings.Mode().StringValue() == "update" || settings.Mode().StringValue() == "update_conditional") {
-                                if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
-                                        return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
-                                    })) {
-                                        affectedIndexes.push_back(index);
-                                }
-                                if (std::any_of(implTable->KeyColumnNames.begin(), implTable->KeyColumnNames.end(), [&](const auto& column) {
-                                        return columnsSet.contains(column) && !mainKeyColumnsSet.contains(column);
-                                    })) {
-                                        affectedKeysIndexes.insert(index);
-                                }
-                            } else {
-                                affectedIndexes.push_back(index);
-                                affectedKeysIndexes.insert(index);
-                            }
-                        } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
-                            indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
-                            indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
-                            if (settings.Mode().StringValue() != "update" &&
-                                settings.Mode().StringValue() != "update_conditional" ||
-                                columnsSet.contains(indexDescription.KeyColumns[0])) {
-                                affectedIndexes.push_back(index);
-                            }
-                        }
-                    }
-
-                    const bool needOldValues = std::any_of(affectedIndexes.begin(), affectedIndexes.end(), [&](size_t index) {
-                            const auto& indexDescription = tableMeta->Indexes[index];
-
-                            if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
-                                indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
-                                indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
-                                // Need to lookup old row version for update
-                                return settings.Mode().StringValue() != "insert";
-                            }
-
-                            if (indexDescription.Type != TIndexDescription::EType::GlobalSync
-                                && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
-                                return false;
-                            }
-                            const auto& implTable = tableMeta->ImplTables[index];
-
-                            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
-
-                            for (const auto& columnName : implTable->KeyColumnNames) {
-                                if (settings.Mode().StringValue() == "insert") {
-                                    // In case of INSERT we assume that row doesn't exist (otherwise, query will fail),
-                                    // so we don't need to lookup existing rows.
-                                    AFL_ENSURE(columnsSet.contains(columnName));
-                                } else if (settings.Mode().StringValue() == "delete" && columnsSet.contains(columnName)) {
-                                    // In case of DELETE we assume that forwarded rows are from WHERE
-                                } else if (!mainKeyColumnsSet.contains(columnName)) {
-                                    // Need to lookup index key for update.
-                                    // Secondary key is not a subset of primary key here.
-                                    return true;
-                                }
-                            }
-
-                            return false;
-                        }) || std::any_of(settings.ReturningColumns().begin(), settings.ReturningColumns().end(), [&](const auto& columnName) {
-                            // Need to lookup missing columns from RETURNING
-                            return !columnsSet.contains(columnName.StringValue());
-                        }) || (!settings.ReturningColumns().Empty() // Need to check if row exists for RETURNING
-                            && (settings.Mode().StringValue() == "update" || settings.Mode().StringValue() == "delete"));
-
-                    const bool needLookup = needOldValues && !isStructOfNewAndOldValues;
-                    settingsProto.SetNeedLookup(needLookup);
-
-                    if (needOldValues) {
-                        AFL_ENSURE(settings.Mode().StringValue() != "insert");
-
-                        THashSet<TStringBuf> lookupColumnsSet;
-                        for (const auto& columnName : settings.ReturningColumns()) {
-                            if (!columnsSet.contains(columnName)) {
-                                lookupColumnsSet.insert(columnName);
-                            }
-                        }
-
-                        for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
-                            const auto& indexDescription = tableMeta->Indexes[index];
-
-                            if (indexDescription.Type == TIndexDescription::EType::GlobalSync
-                                    || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
-                                const auto& implTable = tableMeta->ImplTables[index];
-
-                                for (const auto& columnName : implTable->KeyColumnNames) {
-                                    lookupColumnsSet.insert(columnName);
-                                }
-                                if (settings.Mode().StringValue() != "delete") {
-                                    for (const auto& [columnName, columnMeta] : implTable->Columns) {
-                                        // We can avoid lookup for columns that are already in columnsSet,
-                                        // but currently lookup them all, because it's consistent with old indexes execution.
-                                        lookupColumnsSet.insert(columnName);
-                                    }
-                                }
-                            } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
-                                indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
-                                indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
-                                for (const auto& col: indexDescription.KeyColumns) {
-                                    lookupColumnsSet.insert(col);
-                                }
-                            }
-                        }
-
-                        if (isStructOfNewAndOldValues) {
-                            for (const auto& item : oldStructType->GetItems()) {
-                                const auto& columnName = item->GetName();
-                                AFL_ENSURE(!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName));
-
-                                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                                lookupColumns.push_back(columnName);
-                                localDefaultColumns.erase(columnName);
-                                auto columnProto = settingsProto.AddLookupColumns();
-                                fillColumnProto(columnName, columnMeta, columnProto);
-                            }
-                        } else {
-                            for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
-                                if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName)) {
-                                    lookupColumns.push_back(columnName);
-                                    localDefaultColumns.erase(columnName);
-                                    auto columnProto = settingsProto.AddLookupColumns();
-                                    fillColumnProto(columnName, &columnMeta, columnProto);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Fill indexes write settings
-                for (size_t index : affectedIndexes) {
-                    const auto& indexDescription = tableMeta->Indexes[index];
-                    YQL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync ||
-                        indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique ||
-                        indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
-                        indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
-                        indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact);
-                    auto implTable = tableMeta->ImplTables[index];
-                    if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
-                        // Alphabetically impl (posting) is the last table, after Dict, Docs and Stats
-                        YQL_ENSURE(implTable->Next && implTable->Next->Next && implTable->Next->Next->Next);
-                        implTable = implTable->Next->Next->Next;
-                        YQL_ENSURE(implTable->Name.EndsWith(NTableIndex::ImplTable));
-                    }
-
-                    AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
-
-                    auto indexSettings = settingsProto.AddIndexes();
-                    indexSettings->SetIndexName(indexDescription.Name);
-                    FillTableId(*implTable, *indexSettings->MutableTable());
-
-                    indexSettings->SetIsUniq(
-                        indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique
-                        && settings.Mode().StringValue() != "delete"
-                        && affectedKeysIndexes.contains(index));
-
-                    for (const auto& columnName : implTable->KeyColumnNames) {
-                        const auto columnMeta = implTable->Columns.FindPtr(columnName);
-                        YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                        auto keyColumnProto = indexSettings->AddKeyColumns();
-                        fillColumnProto(columnName, columnMeta, keyColumnProto);
-                    }
-
-                    // FIXME: Should be unified but it needs refactoring
-                    if (indexDescription.Type == TIndexDescription::EType::GlobalSync ||
-                        indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
-                        indexSettings->SetKeyPrefixSize(indexDescription.KeyColumns.size());
-
-                        TVector<TStringBuf> indexColumns;
-                        THashSet<TStringBuf> indexColumnsSet;
-                        indexColumns.reserve(implTable->Columns.size());
-
-                        for (const auto& columnsList : {columns, lookupColumns}) {
-                            for (const auto& columnName : columnsList) {
-                                const auto columnMeta = implTable->Columns.FindPtr(columnName);
-                                if (columnMeta && indexColumnsSet.insert(columnName).second) {
-                                    indexColumns.emplace_back(columnName);
-
-                                    auto columnProto = indexSettings->AddColumns();
-                                    fillColumnProto(columnName, columnMeta, columnProto);
-                                }
-                            }
-                        }
-
-                        const auto indexColumnToOrder = CreateColumnToOrder(
-                            indexColumns,
-                            implTable,
-                            localDefaultColumns,
-                            true);
-                        for (const auto& columnName: indexColumns) {
-                            indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
-                        }
-
-                        FillTablesMap(implTable->Name, indexColumns, tablesMap);
-                    } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
-                        indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
-                        indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
-
-                        if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact) {
-                            indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact);
-                            *indexSettings->MutableFulltextSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDescription.SpecializedIndexDescription).GetSettings();
-                        } else if (indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
-                            indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact);
-                        } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
-                            indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
-                            *indexSettings->MutableFulltextSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDescription.SpecializedIndexDescription).GetSettings();
-                            // Get dict, docs, stats tables
-                            auto dictTable = tableMeta->ImplTables[index];
-                            YQL_ENSURE(dictTable->Name.EndsWith(NTableIndex::NFulltext::DictTable));
-                            auto docsTable = dictTable->Next;
-                            YQL_ENSURE(docsTable->Name.EndsWith(NTableIndex::NFulltext::DocsTable));
-                            auto statsTable = docsTable->Next;
-                            YQL_ENSURE(statsTable->Name.EndsWith(NTableIndex::NFulltext::StatsTable));
-                            // And pass their metadata
-                            FillTableId(*dictTable, *indexSettings->MutableDictTable());
-                            FillTablesMap(dictTable->Name, tablesMap);
-                            for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::FreqColumn}) {
-                                const auto& columnMeta = dictTable->Columns.at(columnName);
-                                fillColumnProto(columnName, &columnMeta, indexSettings->AddDictColumns());
-                                tablesMap[dictTable->Name].emplace(columnName);
-                            }
-                            FillTableId(*statsTable, *indexSettings->MutableStatsTable());
-                            FillTablesMap(statsTable->Name, tablesMap);
-                            for (const auto& columnName: {NTableIndex::NFulltext::IdColumn,
-                                NTableIndex::NFulltext::DocCountColumn, NTableIndex::NFulltext::SumDocLengthColumn}) {
-                                const auto& columnMeta = statsTable->Columns.at(columnName);
-                                fillColumnProto(columnName, &columnMeta, indexSettings->AddStatsColumns());
-                                tablesMap[statsTable->Name].emplace(columnName);
-                            }
-                            FillTableId(*docsTable, *indexSettings->MutableDocsTable());
-                            FillTablesMap(docsTable->Name, tablesMap);
-                            TVector<TStringBuf> docsColumns;
-                            YQL_ENSURE(docsTable->KeyColumnNames.size() == 1);
-                            docsColumns.emplace_back(docsTable->KeyColumnNames[0]);
-                            docsColumns.emplace_back(NTableIndex::NFulltext::DocLengthColumn);
-                            for (const auto& columnName : indexDescription.DataColumns) {
-                                if (columnName != docsTable->KeyColumnNames[0]) {
-                                    docsColumns.emplace_back(columnName);
-                                }
-                            }
-                            for (const auto& columnName: docsColumns) {
-                                const auto& columnMeta = docsTable->Columns.at(TString(columnName));
-                                fillColumnProto(columnName, &columnMeta, indexSettings->AddDocsColumns());
-                                tablesMap[docsTable->Name].emplace(columnName);
-                            }
-                        }
-
-                        FillTablesMap(implTable->Name, tablesMap);
-                        for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
-                            NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
-                            NTableIndex::NFulltext::SegmentColumn}) {
-                            const auto& columnMeta = implTable->Columns.at(columnName);
-                            auto keyColumnProto = indexSettings->AddImplColumns();
-                            fillColumnProto(columnName, &columnMeta, keyColumnProto);
-                            tablesMap[implTable->Name].emplace(columnName);
-                        }
-
-                        THashSet<TStringBuf> updateColumnSet;
-                        for (const auto& columnsList : {columns, lookupColumns}) {
-                            for (const auto& columnName : columnsList) {
-                                updateColumnSet.insert(columnName);
-                            }
-                        }
-
-                        // FIXME: Do not pass index column descriptions at all, pass index settings + main column descriptions
-                        // main table key + index key
-                        THashSet<TStringBuf> indexColumnsSet;
-                        for (const auto& columnName : indexDescription.KeyColumns) {
-                            if (updateColumnSet.contains(columnName)) {
-                                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-                                // FIXME: Remove WriteIndexes and do not pass it at all
-                                indexSettings->AddWriteIndexes(indexSettings->columns_size());
-                                fillColumnProto(columnName, columnMeta, indexSettings->AddColumns());
-                            }
-                            indexColumnsSet.emplace(columnName);
-                        }
-                        for (const auto& columnName : tableMeta->KeyColumnNames) {
-                            YQL_ENSURE(!indexColumnsSet.contains(columnName));
-                            if (updateColumnSet.contains(columnName)) {
-                                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-                                // FIXME: Remove WriteIndexes and do not pass it at all
-                                indexSettings->AddWriteIndexes(indexSettings->columns_size());
-                                fillColumnProto(columnName, columnMeta, indexSettings->AddColumns());
-                            }
-                            indexColumnsSet.emplace(columnName);
-                        }
-                        for (const auto& columnName : indexDescription.DataColumns) {
-                            if (updateColumnSet.contains(columnName) && !indexColumnsSet.contains(columnName)) {
-                                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-                                // FIXME: Remove WriteIndexes and do not pass it at all
-                                indexSettings->AddWriteIndexes(indexSettings->columns_size());
-                                fillColumnProto(columnName, columnMeta, indexSettings->AddColumns());
-                                indexColumnsSet.emplace(columnName);
-                            }
-                        }
-                    }
-
-                    if (settings.Mode().StringValue() == "delete") {
-                        indexSettings->SetOperationType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
-                    } else if (settings.Mode().StringValue() == "update" && !settingsProto.GetNeedLookup() && !isStructOfNewAndOldValues) {
-                        // Special case for UPDATE table where secondary key is a subset of primary key.
-                        // Query will be executed without lookups.
-                        indexSettings->SetOperationType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
-                    } else {
-                        indexSettings->SetOperationType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
-                    }
-
-                    indexSettings->SetNeedDeleteOldRows(
-                        // Secondary key is not a subset of primary key.
-                        std::any_of(
-                            indexDescription.KeyColumns.begin(),
-                            indexDescription.KeyColumns.end(),
-                            [&mainKeyColumnsSet](const TStringBuf& keyColumnName) {
-                                return !mainKeyColumnsSet.contains(keyColumnName);
-                            })
-                        && settings.Mode().StringValue() != "delete"
-                        && settings.Mode().StringValue() != "insert");
-                }
-
-                settingsProto.SetSkipMissingRows(
-                    // Rows are filtered using where, so all rows exist.
-                    settings.Mode().StringValue() == "update_conditional"
-                    // In this case KqpBufferWriteActor does lookup, so it will skip missing rows.
-                    || (settings.Mode().StringValue() == "update" && (settingsProto.GetNeedLookup() || isStructOfNewAndOldValues))
-                    || (settings.Mode().StringValue() == "delete" && (settingsProto.GetNeedLookup() || isStructOfNewAndOldValues)));
-
-                for (const auto& columnName : settings.ReturningColumns()) {
-                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-                    auto columnProto = settingsProto.AddReturningColumns();
-                    fillColumnProto(columnName, columnMeta, columnProto);
-                }
-
-                if (settingsProto.GetSkipMissingRows()
-                        && (settings.Mode().StringValue() == "update_conditional"
-                            || settings.Mode().StringValue() == "update")) {
-                    settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
                 } else {
-                    setOperationType();
+                    result.Affected.push_back(index);
+                    result.AffectedKeys.insert(index);
                 }
-            } else {
-                AFL_ENSURE(localDefaultColumns.empty());
-                AFL_ENSURE(defaultColumnsIds.empty());
-                setOperationType();
+            } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
+                indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
+                indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
+                if (mode == "update" || mode == "update_conditional") {
+                    if (AnyColumnAffected(indexDescription.KeyColumns, columnsSet, mainKeyColumnsSet)) {
+                        result.Affected.push_back(index);
+                        result.AffectedKeys.insert(index);
+                    } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance &&
+                        AnyColumnAffected(indexDescription.DataColumns, columnsSet, mainKeyColumnsSet)) {
+                        result.Affected.push_back(index);
+                    }
+                } else {
+                    result.Affected.push_back(index);
+                    result.AffectedKeys.insert(index);
+                }
+            }
+        }
+        return result;
+    }
+
+    // Whether old row values must be read before the write (for index maintenance or to satisfy RETURNING).
+    bool ComputeNeedOldValues(const TKqpTableSinkSettings& settings, const TKikimrTableMetadataPtr& tableMeta,
+            const std::vector<size_t>& affectedIndexes, const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet,
+            const THashSet<TStringBuf>& localDefaultColumns) {
+        const auto mode = settings.Mode().StringValue();
+
+        const bool indexNeedsOldValues = std::any_of(affectedIndexes.begin(), affectedIndexes.end(), [&](size_t index) {
+            const auto& indexDescription = tableMeta->Indexes[index];
+
+            if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
+                indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
+                indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
+                // Need to lookup old row version for update
+                return mode != "insert";
             }
 
-            for (const auto& columnName : tableMeta->KeyColumnNames) {
-                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+            if (indexDescription.Type != TIndexDescription::EType::GlobalSync
+                && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
+                return false;
+            }
+            const auto& implTable = tableMeta->ImplTables[index];
 
-                auto keyColumnProto = settingsProto.AddKeyColumns();
-                fillColumnProto(columnName, columnMeta, keyColumnProto);
+            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
+            for (const auto& columnName : implTable->KeyColumnNames) {
+                if (mode == "insert") {
+                    // In case of INSERT we assume that row doesn't exist (otherwise, query will fail),
+                    // so we don't need to lookup existing rows.
+                    AFL_ENSURE(columnsSet.contains(columnName));
+                } else if (mode == "delete" && columnsSet.contains(columnName)) {
+                    // In case of DELETE we assume that forwarded rows are from WHERE
+                } else if (!mainKeyColumnsSet.contains(columnName)) {
+                    // Need to lookup index key for update.
+                    // Secondary key is not a subset of primary key here.
+                    return true;
+                }
             }
 
-            for (const auto& columnName : columns) {
-                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+            return false;
+        });
 
-                auto columnProto = settingsProto.AddColumns();
-                fillColumnProto(columnName, columnMeta, columnProto);
+        // Need to lookup missing columns from RETURNING, including default columns
+        // that were injected into the input (those are not genuine user input).
+        const bool returningNeedsLookup = std::any_of(settings.ReturningColumns().begin(), settings.ReturningColumns().end(), [&](const auto& columnName) {
+            return !columnsSet.contains(columnName.StringValue()) || localDefaultColumns.contains(columnName.StringValue());
+        });
+
+        // Need to check if row exists for RETURNING
+        const bool returningNeedsExistenceCheck = !settings.ReturningColumns().Empty()
+            && (mode == "update" || mode == "delete");
+
+        return indexNeedsOldValues || returningNeedsLookup || returningNeedsExistenceCheck;
+    }
+
+    // Fills the set of columns that must be looked up (returns lookupColumns + proto
+    // LookupColumns). Removes any looked-up column from localDefaultColumns.
+    TVector<TStringBuf> FillLookupColumns(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto,
+            const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape,
+            const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet, THashSet<TStringBuf>& localDefaultColumns) {
+        AFL_ENSURE(settings.Mode().StringValue() != "insert");
+
+        THashSet<TStringBuf> lookupColumnsSet;
+        for (const auto& columnName : settings.ReturningColumns()) {
+            if (!columnsSet.contains(columnName) || localDefaultColumns.contains(columnName)) {
+                lookupColumnsSet.insert(columnName);
             }
-
-            AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
-            const auto columnToOrder = CreateColumnToOrder(
-                columns,
-                tableMeta,
-                localDefaultColumns,
-                tableMeta->Kind == EKikimrTableKind::Datashard);
-            for (const auto& columnName : columns) {
-                settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
-            }
-
-            AFL_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
-                        || defaultColumnsIds.empty());
-            for (const auto& defaultColumnId : defaultColumnsIds) { // from plan!!!
-                settingsProto.AddDefaultColumnsIds(defaultColumnId);
-            }
-
-            settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
-
-            const bool inconsistentWrite = settings.InconsistentWrite().Value() == "true"sv;
-            AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
-            settingsProto.SetInconsistentTx(inconsistentWrite);
-        } else {
-            // CREATE TABLE AS
-            settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
-            // Table info will be filled during execution after resolving table by name.
-            settingsProto.MutableTable()->SetPath(TString(settings.Table().Path()));
-            for (const auto& column : columns) {
-                settingsProto.AddInputColumns(TString(column));
-            }
-
-            AFL_ENSURE(settings.InconsistentWrite().StringValue() == "true");
-            settingsProto.SetInconsistentTx(true);
-
-            AFL_ENSURE(settings.Priority().StringValue() == "0");
-            AFL_ENSURE(settings.StreamWrite().StringValue() == "true");
         }
 
+        for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+            const auto& indexDescription = tableMeta->Indexes[index];
+
+            if (indexDescription.Type == TIndexDescription::EType::GlobalSync
+                    || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                const auto& implTable = tableMeta->ImplTables[index];
+
+                for (const auto& columnName : implTable->KeyColumnNames) {
+                    lookupColumnsSet.insert(columnName);
+                }
+                if (settings.Mode().StringValue() != "delete") {
+                    for (const auto& [columnName, columnMeta] : implTable->Columns) {
+                        // We can avoid lookup for columns that are already in columnsSet,
+                        // but currently lookup them all, because it's consistent with old indexes execution.
+                        lookupColumnsSet.insert(columnName);
+                    }
+                }
+            } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
+                indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
+                indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
+                for (const auto& col: indexDescription.KeyColumns) {
+                    lookupColumnsSet.insert(col);
+                }
+                if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                    for (const auto& col: indexDescription.DataColumns) {
+                        lookupColumnsSet.insert(col);
+                    }
+                }
+                // In rowid mode the doc_id is the synthetic __ydb_row_id column, which for UPSERT/UPDATE
+                // must be read back from the existing row (it is not part of the user-supplied columns).
+                const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDescription.SpecializedIndexDescription);
+                if (ftDesc && ftDesc->GetUseRowIdAsDocId()) {
+                    lookupColumnsSet.insert(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+                }
+            }
+        }
+
+        TVector<TStringBuf> lookupColumns;
+        if (shape.IsStructOfNewAndOldValues) {
+            for (const auto& item : shape.OldStructType->GetItems()) {
+                const auto& columnName = item->GetName();
+                AFL_ENSURE(!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName));
+
+                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                lookupColumns.push_back(columnName);
+                localDefaultColumns.erase(columnName);
+                auto columnProto = settingsProto.AddLookupColumns();
+                FillColumnProto(columnName, columnMeta, columnProto);
+            }
+        } else {
+            for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
+                if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName)) {
+                    lookupColumns.push_back(columnName);
+                    localDefaultColumns.erase(columnName);
+                    auto columnProto = settingsProto.AddLookupColumns();
+                    FillColumnProto(columnName, &columnMeta, columnProto);
+                }
+            }
+        }
+        return lookupColumns;
+    }
+
+    // Fills indexSettings for a GlobalSync / GlobalSyncUnique secondary index.
+    void FillSyncIndexSettings(const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TString, THashSet<TString>>& tablesMap,
+            const TVector<TStringBuf>& columns, const TVector<TStringBuf>& lookupColumns, const THashSet<TStringBuf>& localDefaultColumns) {
+        indexSettings->SetKeyPrefixSize(indexDescription.KeyColumns.size());
+
+        TVector<TStringBuf> indexColumns;
+        THashSet<TStringBuf> indexColumnsSet;
+        indexColumns.reserve(implTable->Columns.size());
+
+        for (const auto& columnsList : {columns, lookupColumns}) {
+            for (const auto& columnName : columnsList) {
+                const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                if (columnMeta && indexColumnsSet.insert(columnName).second) {
+                    indexColumns.emplace_back(columnName);
+
+                    auto columnProto = indexSettings->AddColumns();
+                    FillColumnProto(columnName, columnMeta, columnProto);
+                }
+            }
+        }
+
+        const auto indexColumnToOrder = CreateColumnToOrder(
+            indexColumns,
+            implTable,
+            localDefaultColumns,
+            true);
+        for (const auto& columnName: indexColumns) {
+            indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
+        }
+
+        FillTablesMap(implTable->Name, indexColumns, tablesMap);
+    }
+
+    // Fills indexSettings for a fulltext / json compact index (and its dict/docs/stats
+    // sub-tables for the relevance variant).
+    void FillFulltextIndexSettings(size_t index, const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TString, THashSet<TString>>& tablesMap,
+            const TKikimrTableMetadataPtr& tableMeta, const TVector<TStringBuf>& columns, const TVector<TStringBuf>& lookupColumns) {
+        YQL_ENSURE(indexDescription.KeyColumns.size() > 0);
+        if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact) {
+            indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact);
+            *indexSettings->MutableFulltextSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDescription.SpecializedIndexDescription).GetSettings();
+        } else if (indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
+            indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact);
+        } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+            indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
+            *indexSettings->MutableFulltextSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDescription.SpecializedIndexDescription).GetSettings();
+            // Get dict, docs, stats tables
+            auto dictTable = tableMeta->ImplTables[index];
+            if (!dictTable->Name.EndsWith(NTableIndex::NFulltext::DictTable)) {
+                dictTable = nullptr;
+            }
+            auto docsTable = dictTable ? dictTable->Next : tableMeta->ImplTables[index];
+            YQL_ENSURE(docsTable->Name.EndsWith(NTableIndex::NFulltext::DocsTable));
+            auto statsTable = docsTable->Next;
+            YQL_ENSURE(statsTable->Name.EndsWith(NTableIndex::NFulltext::StatsTable));
+            // And pass their metadata
+            if (dictTable) {
+                FillTableId(*dictTable, *indexSettings->MutableDictTable());
+                FillTablesMap(dictTable->Name, tablesMap);
+                for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::FreqColumn}) {
+                    const auto& columnMeta = dictTable->Columns.at(columnName);
+                    FillColumnProto(columnName, &columnMeta, indexSettings->AddDictColumns());
+                    tablesMap[dictTable->Name].emplace(columnName);
+                }
+            }
+            FillTableId(*statsTable, *indexSettings->MutableStatsTable());
+            FillTablesMap(statsTable->Name, tablesMap);
+            TVector<TString> statsCols = {indexDescription.KeyColumns.begin(),
+                indexDescription.KeyColumns.end()-1};
+            if (!statsCols.size()) {
+                statsCols.push_back(NTableIndex::NFulltext::IdColumn);
+            }
+            statsCols.push_back(NTableIndex::NFulltext::DocCountColumn);
+            statsCols.push_back(NTableIndex::NFulltext::SumDocLengthColumn);
+            for (const auto& columnName: statsCols) {
+                const auto& columnMeta = statsTable->Columns.at(columnName);
+                FillColumnProto(columnName, &columnMeta, indexSettings->AddStatsColumns());
+                tablesMap[statsTable->Name].emplace(columnName);
+            }
+            FillTableId(*docsTable, *indexSettings->MutableDocsTable());
+            FillTablesMap(docsTable->Name, tablesMap);
+            TVector<TStringBuf> docsColumns;
+            YQL_ENSURE(docsTable->KeyColumnNames.size() == 1); // real PK or __ydb_row_id
+            docsColumns.emplace_back(docsTable->KeyColumnNames[0]);
+            docsColumns.emplace_back(NTableIndex::NFulltext::DocLengthColumn);
+            for (const auto& columnName : indexDescription.DataColumns) {
+                if (columnName != docsTable->KeyColumnNames[0]) {
+                    docsColumns.emplace_back(columnName);
+                }
+            }
+            for (const auto& columnName: docsColumns) {
+                const auto& columnMeta = docsTable->Columns.at(TString(columnName));
+                FillColumnProto(columnName, &columnMeta, indexSettings->AddDocsColumns());
+                tablesMap[docsTable->Name].emplace(columnName);
+            }
+        }
+
+        FillTablesMap(implTable->Name, tablesMap);
+        for (size_t i = 0; i < indexDescription.KeyColumns.size()-1; i++) {
+            // Add prefix columns
+            const auto& columnName = indexDescription.KeyColumns[i];
+            const auto& columnMeta = implTable->Columns.at(columnName);
+            FillColumnProto(columnName, &columnMeta, indexSettings->AddImplColumns());
+            tablesMap[implTable->Name].emplace(columnName);
+        }
+        for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn,
+            NTableIndex::NFulltext::GenColumn,
+            NTableIndex::NFulltext::MaxIdColumn,
+            NTableIndex::NFulltext::AddedColumn,
+            NTableIndex::NFulltext::SegmentColumn}) {
+            const auto& columnMeta = implTable->Columns.at(columnName);
+            auto keyColumnProto = indexSettings->AddImplColumns();
+            FillColumnProto(columnName, &columnMeta, keyColumnProto);
+            tablesMap[implTable->Name].emplace(columnName);
+        }
+
+        THashSet<TStringBuf> updateColumnSet;
+        for (const auto& columnsList : {columns, lookupColumns}) {
+            for (const auto& columnName : columnsList) {
+                updateColumnSet.insert(columnName);
+            }
+        }
+
+        // FIXME: Do not pass index column descriptions at all, pass index settings + main column descriptions
+        // main table key + index key
+        // In rowid mode the doc_id is the synthetic __ydb_row_id (Uint64) column, not the main-table PK,
+        // so a non-integer/composite PK is supported. Feed __ydb_row_id as the doc_id column (position 1
+        // in the projection input) instead of the PK columns below.
+        const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDescription.SpecializedIndexDescription);
+        const bool useRowId = ftDesc && ftDesc->GetUseRowIdAsDocId();
+
+        THashSet<TStringBuf> indexColumnsSet;
+        for (const auto& columnName : indexDescription.KeyColumns) {
+            if (updateColumnSet.contains(columnName)) {
+                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+                // FIXME: Remove WriteIndexes and do not pass it at all
+                indexSettings->AddWriteIndexes(indexSettings->columns_size());
+                FillColumnProto(columnName, columnMeta, indexSettings->AddColumns());
+            }
+            indexColumnsSet.emplace(columnName);
+        }
+        const TVector<TStringBuf> docIdColumns = useRowId
+            ? TVector<TStringBuf>{NKikimr::NTableIndex::NFulltext::RowIdColumn}
+            : TVector<TStringBuf>(tableMeta->KeyColumnNames.begin(), tableMeta->KeyColumnNames.end());
+        for (const auto& columnName : docIdColumns) {
+            YQL_ENSURE(!indexColumnsSet.contains(columnName));
+            if (updateColumnSet.contains(columnName)) {
+                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+                // FIXME: Remove WriteIndexes and do not pass it at all
+                indexSettings->AddWriteIndexes(indexSettings->columns_size());
+                FillColumnProto(columnName, columnMeta, indexSettings->AddColumns());
+            }
+            indexColumnsSet.emplace(columnName);
+        }
+        ui32 dataColumns = 0;
+        for (const auto& columnName : indexDescription.DataColumns) {
+            if (updateColumnSet.contains(columnName) && !indexColumnsSet.contains(columnName)) {
+                dataColumns++;
+                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+                // FIXME: Remove WriteIndexes and do not pass it at all
+                indexSettings->AddWriteIndexes(indexSettings->columns_size());
+                FillColumnProto(columnName, columnMeta, indexSettings->AddColumns());
+                indexColumnsSet.emplace(columnName);
+            }
+        }
+        indexSettings->SetDataColumnCount(dataColumns);
+    }
+
+    // Sets per-index OperationType and NeedDeleteOldRows.
+    void SetIndexOperationType(const TKqpTableSinkSettings& settings, const TIndexDescription& indexDescription, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, const NKikimrKqp::TKqpTableSinkSettings& settingsProto,
+            bool isStructOfNewAndOldValues, const THashSet<TStringBuf>& mainKeyColumnsSet) {
+        const auto mode = settings.Mode().StringValue();
+
+        if (mode == "delete") {
+            indexSettings->SetOperationType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+        } else if (mode == "update" && !settingsProto.GetNeedLookup() && !isStructOfNewAndOldValues) {
+            // Special case for UPDATE table where secondary key is a subset of primary key.
+            // Query will be executed without lookups.
+            indexSettings->SetOperationType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
+        } else {
+            indexSettings->SetOperationType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
+        }
+
+        indexSettings->SetNeedDeleteOldRows(
+            // Secondary key is not a subset of primary key.
+            std::any_of(
+                indexDescription.KeyColumns.begin(),
+                indexDescription.KeyColumns.end(),
+                [&mainKeyColumnsSet](const TStringBuf& keyColumnName) {
+                    return !mainKeyColumnsSet.contains(keyColumnName);
+                })
+            && mode != "delete"
+            && mode != "insert");
+    }
+
+    // Fills all per-index settings for the EnableIndexStreamWrite feature.
+    void FillIndexesSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap,
+            const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape, const TAffectedIndexes& affectedIndexes,
+            const TVector<TStringBuf>& lookupColumns, const THashSet<TStringBuf>& localDefaultColumns, const THashSet<TStringBuf>& mainKeyColumnsSet) {
+        for (size_t index : affectedIndexes.Affected) {
+            const auto& indexDescription = tableMeta->Indexes[index];
+            YQL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync ||
+                indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique ||
+                indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
+                indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
+                indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact);
+            auto implTable = tableMeta->ImplTables[index];
+            if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                // Alphabetically impl (posting) is the last table, after Docs and Stats
+                YQL_ENSURE(implTable->Next && implTable->Next->Next);
+                implTable = implTable->Next->Next;
+                YQL_ENSURE(implTable->Name.EndsWith(NTableIndex::ImplTable));
+            }
+
+            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
+            auto indexSettings = settingsProto.AddIndexes();
+            indexSettings->SetIndexName(indexDescription.Name);
+            FillTableId(*implTable, *indexSettings->MutableTable());
+
+            indexSettings->SetIsUniq(
+                indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique
+                && settings.Mode().StringValue() != "delete"
+                && affectedIndexes.AffectedKeys.contains(index));
+
+            for (const auto& columnName : implTable->KeyColumnNames) {
+                const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                auto keyColumnProto = indexSettings->AddKeyColumns();
+                FillColumnProto(columnName, columnMeta, keyColumnProto);
+            }
+
+            if (indexDescription.Type == TIndexDescription::EType::GlobalSync ||
+                indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                FillSyncIndexSettings(indexDescription, implTable, indexSettings, tablesMap, shape.Columns, lookupColumns, localDefaultColumns);
+            } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
+                indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
+                indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
+                FillFulltextIndexSettings(index, indexDescription, implTable, indexSettings, tablesMap, tableMeta, shape.Columns, lookupColumns);
+            }
+
+            SetIndexOperationType(settings, indexDescription, indexSettings, settingsProto, shape.IsStructOfNewAndOldValues, mainKeyColumnsSet);
+        }
+    }
+
+    // The EnableIndexStreamWrite path: computes lookup/index requirements and fills
+    // index settings + returning columns + final operation type.
+    // Returns the locally-processed DEFAULT columns (consumed by FillMainTableColumnsAndOrder).
+    TLocalDefaultColumns BuildStreamIndexWrite(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap,
+            const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape) {
+        const auto mode = settings.Mode().StringValue();
+
+        TLocalDefaultColumns localDefaultColumns = CollectLocalDefaultColumns(settings, tableMeta);
+
+        AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
+
+        THashSet<TStringBuf> columnsSet;
+        for (const auto& columnName : shape.Columns) {
+            columnsSet.insert(columnName);
+        }
+        THashSet<TStringBuf> mainKeyColumnsSet;
+        for (const auto& columnName : tableMeta->KeyColumnNames) {
+            mainKeyColumnsSet.insert(columnName);
+            AFL_ENSURE(columnsSet.contains(columnName));
+        }
+
+        const auto affectedIndexes = ComputeAffectedIndexes(settings, tableMeta, columnsSet, mainKeyColumnsSet);
+
+        const bool needOldValues = ComputeNeedOldValues(settings, tableMeta, affectedIndexes.Affected, columnsSet, mainKeyColumnsSet, localDefaultColumns.Names);
+        const bool needLookup = needOldValues && !shape.IsStructOfNewAndOldValues;
+        settingsProto.SetNeedLookup(needLookup);
+
+        TVector<TStringBuf> lookupColumns;
+        if (needOldValues) {
+            lookupColumns = FillLookupColumns(settings, settingsProto, tableMeta, shape, columnsSet, mainKeyColumnsSet, localDefaultColumns.Names);
+        }
+
+        FillIndexesSettings(settings, settingsProto, tablesMap, tableMeta, shape, affectedIndexes, lookupColumns, localDefaultColumns.Names, mainKeyColumnsSet);
+
+        settingsProto.SetSkipMissingRows(
+            // Rows are filtered using where, so all rows exist.
+            mode == "update_conditional"
+            // In this case KqpBufferWriteActor does lookup, so it will skip missing rows.
+            || (mode == "update" && (settingsProto.GetNeedLookup() || shape.IsStructOfNewAndOldValues))
+            || (mode == "delete" && (settingsProto.GetNeedLookup() || shape.IsStructOfNewAndOldValues)));
+
+        for (const auto& columnName : settings.ReturningColumns()) {
+            const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+            YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+            auto columnProto = settingsProto.AddReturningColumns();
+            FillColumnProto(columnName, columnMeta, columnProto);
+        }
+
+        if (settingsProto.GetSkipMissingRows()
+                && (mode == "update_conditional"
+                    || mode == "update")) {
+            settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
+        } else {
+            SetSinkOperationType(settings, settingsProto);
+        }
+
+        return localDefaultColumns;
+    }
+
+    // Fills key columns, columns, write order and default column ids for the main table.
+    void FillMainTableColumnsAndOrder(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto,
+            const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape,
+            const TLocalDefaultColumns& localDefaultColumns) {
+        for (const auto& columnName : tableMeta->KeyColumnNames) {
+            const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+            YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+            auto keyColumnProto = settingsProto.AddKeyColumns();
+            FillColumnProto(columnName, columnMeta, keyColumnProto);
+        }
+
+        for (const auto& columnName : shape.Columns) {
+            const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+            YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+            auto columnProto = settingsProto.AddColumns();
+            FillColumnProto(columnName, columnMeta, columnProto);
+        }
+
+        AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
+        const auto columnToOrder = CreateColumnToOrder(
+            shape.Columns,
+            tableMeta,
+            localDefaultColumns.Names,
+            tableMeta->Kind == EKikimrTableKind::Datashard);
+        for (const auto& columnName : shape.Columns) {
+            settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
+        }
+
+        AFL_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                    || localDefaultColumns.Ids.empty());
+        for (const auto& defaultColumnId : localDefaultColumns.Ids) { // from plan!!!
+            settingsProto.AddDefaultColumnsIds(defaultColumnId);
+        }
+
+        settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
+
+        const bool inconsistentWrite = settings.InconsistentWrite().Value() == "true"sv;
+        AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+        settingsProto.SetInconsistentTx(inconsistentWrite);
+    }
+
+    // The CREATE TABLE AS (fill_table) path.
+    void FillCreateTableAs(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, const TSinkInputShape& shape) {
+        settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+        // Table info will be filled during execution after resolving table by name.
+        settingsProto.MutableTable()->SetPath(TString(settings.Table().Path()));
+        for (const auto& column : shape.Columns) {
+            settingsProto.AddInputColumns(TString(column));
+        }
+
+        AFL_ENSURE(settings.InconsistentWrite().StringValue() == "true");
+        settingsProto.SetInconsistentTx(true);
+
+        AFL_ENSURE(settings.Priority().StringValue() == "0");
+        AFL_ENSURE(settings.StreamWrite().StringValue() == "true");
+    }
+
+    // Trailing flags common to all sink modes (priority, stream-write, batch, impl-table).
+    void FillTrailingSinkFlags(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto) {
         settingsProto.SetPriority(FromString<i64>(settings.Priority().StringValue()));
 
         if (const auto streamWrite = settings.StreamWrite(); streamWrite.StringValue() == "true") {
@@ -2376,13 +2510,42 @@ private:
         }
     }
 
+    void FillKqpSinkSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage) {
+        settingsProto.SetDatabase(Database);
+
+        const TSinkInputShape shape = DetermineInputRowFormat(settings, settingsProto, stage);
+
+        if (settings.Mode().StringValue() != "fill_table") {
+            AFL_ENSURE(settings.Table().PathId() != "");
+            FillTableId(settings.Table(), *settingsProto.MutableTable());
+            FillTablesMap(settings.Table(), shape.Columns, tablesMap);
+
+            const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Path()).Metadata;
+
+            // Default columns processed locally (filled by the stream-write path only).
+            TLocalDefaultColumns localDefaultColumns;
+
+            if (Config->GetEnableIndexStreamWrite()) {
+                localDefaultColumns = BuildStreamIndexWrite(settings, settingsProto, tablesMap, tableMeta, shape);
+            } else {
+                SetSinkOperationType(settings, settingsProto);
+            }
+
+            FillMainTableColumnsAndOrder(settings, settingsProto, tableMeta, shape, localDefaultColumns);
+        } else {
+            FillCreateTableAs(settings, settingsProto, shape);
+        }
+
+        FillTrailingSinkFlags(settings, settingsProto);
+    }
+
     bool IsTableSink(const TStringBuf dataSinkCategory) const {
         return dataSinkCategory == NYql::KikimrProviderName
             || dataSinkCategory == NYql::YdbProviderName
             || dataSinkCategory == NYql::KqpTableSinkName;
     }
 
-    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
+    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
         if (IsTableSink(dataSinkCategory)) {
@@ -2477,7 +2640,7 @@ private:
         const TMap<ui64, ui32>& stagesMap,
         NKqpProto::TKqpPhyConnection& connectionProto,
         TExprContext& ctx,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<TString, THashSet<TString>>& tablesMap,
         THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID,
         const TDqPhyStage* stage,
         ui32 inputIndex
@@ -2707,6 +2870,11 @@ private:
             auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(settings.Strategy));
             streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
+            if (Config->GetEnableStreamLookupJoinCookieV2()) {
+                // 1 == StreamLookupJoinCookieVersionV1 (see kqp_stream_lookup_join_helpers.h);
+                // kept as a literal to avoid a runtime PEERDIR from the compiler.
+                streamLookupProto.SetCookieFormatVersion(1);
+            }
             if (settings.AllowNullKeysPrefixSize) {
                 streamLookupProto.SetAllowNullKeysPrefixSize(*settings.AllowNullKeysPrefixSize);
             }
@@ -2825,7 +2993,7 @@ private:
             auto levelTableMeta = TablesData->ExistingTable(Cluster, levelTablePath).Metadata;
             YQL_ENSURE(levelTableMeta);
 
-            tablesMap.emplace(levelTablePath, THashSet<TStringBuf>{});
+            tablesMap.emplace(levelTablePath, THashSet<TString>{});
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::ParentColumn);
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::IdColumn);
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);
@@ -2905,6 +3073,110 @@ private:
             return;
         }
 
+        if (auto maybeVectorSearch = connection.Maybe<TKqpCnVectorSearch>()) {
+            TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
+            auto& proto = *connectionProto.MutableVectorSearch();
+            auto vectorSearch = maybeVectorSearch.Cast();
+
+            auto tableMeta = TablesData->ExistingTable(Cluster, vectorSearch.Table().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            const auto* indexDesc = tableMeta->GetIndex(vectorSearch.Index().Value()).second;
+            YQL_ENSURE(indexDesc);
+
+            // Index settings
+            const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
+            *proto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
+            proto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            proto.SetLevels(std::max<ui32>(1, kmeansDesc.GetSettings().levels()));
+
+            const bool withOverlap = kmeansDesc.GetSettings().overlap_clusters() > 1;
+            proto.SetLevelTop(Config->KMeansTreeSearchTopSize.Get().GetOrElse(withOverlap ? 4 : 10));
+
+            // Main table
+            FillTablesMap(vectorSearch.Table(), tablesMap);
+            FillTableId(vectorSearch.Table(), *proto.MutableTable());
+
+            auto fillImplTable = [&](const char* implName, NKqpProto::TKqpPhyTableId& tableIdProto) {
+                TString path = TStringBuilder()
+                    << vectorSearch.Table().Path().Value()
+                    << "/" << vectorSearch.Index().Value()
+                    << "/" << implName;
+                auto implMeta = TablesData->ExistingTable(Cluster, path).Metadata;
+                YQL_ENSURE(implMeta);
+                tablesMap.emplace(path, THashSet<TString>{});
+                tableIdProto.SetPath(path);
+                tableIdProto.SetOwnerId(implMeta->PathId.OwnerId());
+                tableIdProto.SetTableId(implMeta->PathId.TableId());
+                tableIdProto.SetVersion(implMeta->SchemaVersion);
+                return implMeta;
+            };
+
+            // Index level table
+            fillImplTable(NTableIndex::NKMeans::LevelTable, *proto.MutableLevelTable());
+            const TString levelTablePath = proto.GetLevelTable().GetPath();
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::ParentColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::IdColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);
+
+            // Index posting table
+            auto postingTableMeta = fillImplTable(NTableIndex::NKMeans::PostingTable, *proto.MutablePostingTable());
+            const TString postingTablePath = proto.GetPostingTable().GetPath();
+            for (const auto& keyColumn : postingTableMeta->KeyColumnNames) {
+                tablesMap[postingTablePath].emplace(keyColumn);
+            }
+
+            // Input and output types
+            const auto inputType = vectorSearch.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(inputType, "Empty vector search input type");
+            YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List, "Unexpected vector search input type");
+            const auto inputItemType = inputType->Cast<TListExprType>()->GetItemType();
+            proto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
+
+            const auto outputType = vectorSearch.Ref().GetTypeAnn();
+            YQL_ENSURE(outputType, "Empty vector search output type");
+            YQL_ENSURE(outputType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected vector search output type");
+            const auto outputItemType = outputType->Cast<TStreamExprType>()->GetItemType();
+            YQL_ENSURE(outputItemType->GetKind() == ETypeAnnotationKind::Struct);
+            proto.SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *outputItemType), TypeEnv));
+
+            // Output columns, in the same order as the (canonical) output struct type so that
+            // the actor emits rows matching OutputType. The embedding column must be present
+            // (the logical optimizer includes it) so the actor can rank rows by distance.
+            const auto& embeddingColumn = indexDesc->KeyColumns.back();
+            ui32 vectorColumnIndex = 0;
+            bool hasEmbedding = false;
+            ui32 columnIndex = 0;
+            for (const auto& item : outputItemType->Cast<TStructExprType>()->GetItems()) {
+                const auto name = TString(item->GetName());
+                proto.AddColumns(name);
+                tablesMap[vectorSearch.Table().Path()].emplace(name);
+                // Covered index: the actor reads output columns straight from the
+                // posting table, so register them there too (not just main table).
+                if (postingTableMeta->Columns.contains(name)) {
+                    tablesMap[postingTablePath].emplace(name);
+                }
+                if (name == embeddingColumn) {
+                    vectorColumnIndex = columnIndex;
+                    hasEmbedding = true;
+                }
+                ++columnIndex;
+            }
+            YQL_ENSURE(hasEmbedding, "Vector search output columns must contain the embedding column: " << embeddingColumn);
+            proto.SetVectorColumnIndex(vectorColumnIndex);
+
+            // Search parameters. TopK (LIMIT) may be a literal or a query parameter;
+            // a parameter is resolved to an actual value at execution time.
+            SetVectorTopKLimit(proto.MutableTopK(), vectorSearch.TopK().Ptr());
+
+            // Prefixed index: the transform input carries the per-group root __ydb_parent.
+            if (vectorSearch.HasPrefix().IsValid()) {
+                proto.SetHasPrefix(vectorSearch.HasPrefix().Cast().Value() == "true");
+            }
+
+            return;
+        }
+
         if (auto maybeDqSourceStreamLookup = connection.Maybe<TDqCnStreamLookup>()) {
             const auto streamLookup = maybeDqSourceStreamLookup.Cast();
             const auto lookupSourceWrap = streamLookup.RightInput().Cast<TDqLookupSourceWrap>();
@@ -2958,6 +3230,21 @@ private:
 
             if (const auto maybeFullscanLimit = streamLookup.FullscanLimit().Maybe<TCoAtom>()) {
                 dqSourceLookupCn.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast().StringValue()));
+            }
+
+            if (const auto maybeShuffleMode = streamLookup.ShuffleMode().Maybe<TCoAtom>()) {
+                switch (FromString<NDq::EShuffleMode>(maybeShuffleMode.Cast().StringValue())) {
+#define TRANSLATE(Id, PROTO) \
+                    case NDq::EShuffleMode::Id: \
+                        static_assert(static_cast<ui32>(NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_##PROTO) == static_cast<ui32>(NDq::EShuffleMode::Id)); \
+                        dqSourceLookupCn.SetShuffleMode(NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_##PROTO); \
+                        break
+                    TRANSLATE(Default, DEFAULT);
+                    TRANSLATE(Off, OFF);
+                    TRANSLATE(Map, MAP);
+                    TRANSLATE(Hash, HASH);
+#undef TRANSLATE
+                }
             }
 
             for (const auto& key : streamLookup.LeftJoinKeyNames()) {

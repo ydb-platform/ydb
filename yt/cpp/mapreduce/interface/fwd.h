@@ -33,6 +33,8 @@ namespace NYT {
 
     struct TStartTransactionOptions;
 
+    struct TCommitTransactionOptions;
+
     struct TLockOptions;
 
     template <class TDerived>

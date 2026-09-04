@@ -51,13 +51,15 @@ function useVirtualizedDisplayRefresh() {
 }
 
 function updateAllDisplays(options) {
+    options = options || {};
     if (useVirtualizedDisplayRefresh()) {
         markCollapsedSearchIndicatorsDirty();
         invalidateTraceMeasuredWidthCache();
-        if (!options || !options.deferVirtualRefresh) {
-            refreshVirtualRowsNow();
+        if (!options.deferVirtualRefresh) {
+            refreshVirtualRowsNow({ skipSearchStateRefresh: true });
             scheduleVisibleRuleRenderScan();
         }
+        if (!options.skipSearchStateRefresh) refreshDirtySearchStateForCurrentLayout();
         scheduleTraceAnchorLineUpdate();
         updateCycleButtonLabel();
         scheduleDiffMoveArrows();
@@ -75,10 +77,11 @@ function updateAllDisplays(options) {
     forEachRule(function(si, gi, ri) {
         updateRuleDisplay(si, gi, ri);
     });
-    if (!options || !options.deferVirtualRefresh) {
-        refreshVirtualRowsNow();
+    if (!options.deferVirtualRefresh) {
+        refreshVirtualRowsNow({ skipSearchStateRefresh: true });
         scheduleVisibleRuleRenderScan();
     }
+    if (!options.skipSearchStateRefresh) refreshDirtySearchStateForCurrentLayout();
     scheduleTraceAnchorLineUpdate();
     updateCycleButtonLabel();
     scheduleDiffMoveArrows();
@@ -124,13 +127,12 @@ function refreshLayoutTransition(change, options) {
 
 function refreshLayoutTransitionDisplays(change, options) {
     options = options || {};
-    refreshLayoutTransition(change, options);
-    if (!options || !options.deferVirtualRefresh) {
-        refreshVirtualRowsNow({
-            skipSearchStateRefresh: !!options.skipSearchStateRefresh
-        });
+    var changed = refreshLayoutTransition(change, options);
+    if (!options.deferVirtualRefresh) {
+        refreshVirtualRowsNow({ skipSearchStateRefresh: true });
         scheduleVisibleRuleRenderScan();
     }
+    if (changed && !options.skipSearchStateRefresh) refreshDirtySearchStateForCurrentLayout();
     if (options.deferExpensiveVisuals) {
         updateCycleButtonLabel();
         return;

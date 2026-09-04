@@ -20,11 +20,11 @@ struct TSettings {
     bool Pretty = false;
 };
 
-TString Run(const TString& query, TSettings settings = {}) {
+TString Run(const TString& query, TSettings settings = {}, TString* statistics = nullptr) {
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetPureDataProviderInitializer());
-    TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
+    TProgramFactory factory(/*useRepeatableRandomAndTimeProviders=*/true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     TProgramPtr program = factory.Create("-stdin-", query);
     program->ConfigureYsonResultFormat(settings.Pretty ? NYson::EYsonFormat::Pretty : NYson::EYsonFormat::Text);
     bool parseRes;
@@ -51,6 +51,12 @@ TString Run(const TString& query, TSettings settings = {}) {
         TStringStream err;
         program->PrintErrorsTo(err);
         UNIT_FAIL(err.Str());
+    }
+
+    if (statistics) {
+        auto stats = program->GetStatistics(/*totalOnly=*/true);
+        UNIT_ASSERT(stats);
+        *statistics = *stats;
     }
 
     return program->ResultsAsString();
@@ -202,6 +208,82 @@ Y_UNIT_TEST(Sql2Rows) {
         )";
     auto res = Run(s, TSettings{.Pretty = true});
     UNIT_ASSERT_NO_DIFF(res, Strip(expectedRes));
+}
+
+Y_UNIT_TEST(EvaluateExprStatistics) {
+    const auto cacheEnabledQuery = R"sql(
+        PRAGMA EvaluateExprCache;
+
+        $v1 = EvaluateExpr(10 + 20);
+        $v2 = EvaluateExpr(10 + 20);
+
+        SELECT AsList($v1, $v2);
+    )sql";
+
+    TString statistics;
+    Run(cacheEnabledQuery, {}, &statistics);
+
+    auto statisticsNode = NYT::NodeFromYsonString(statistics);
+    auto evaluation = statisticsNode["ExecutionStatistics"]["Evaluation"];
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["Count"]["count"].AsInt64(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["CacheHits"]["count"].AsInt64(), 1);
+    // Calc provider may finish within one microsecond, so its duration can be zero.
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["CalcProviderCalls"]["count"].AsInt64(), 1);
+    UNIT_ASSERT(evaluation["CalcProviderDurationUs"].HasKey("sum"));
+
+    const auto cacheDisabledByDefaultQuery = R"sql(
+        $v1 = EvaluateExpr(10 + 20);
+        $v2 = EvaluateExpr(10 + 20);
+
+        SELECT AsList($v1, $v2);
+    )sql";
+
+    Run(cacheDisabledByDefaultQuery, {}, &statistics);
+
+    statisticsNode = NYT::NodeFromYsonString(statistics);
+    evaluation = statisticsNode["ExecutionStatistics"]["Evaluation"];
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["Count"]["count"].AsInt64(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["CacheHits"]["count"].AsInt64(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["CalcProviderCalls"]["count"].AsInt64(), 2);
+    UNIT_ASSERT(evaluation["CalcProviderDurationUs"].HasKey("sum"));
+}
+
+Y_UNIT_TEST(EvaluateExprCacheSurvivesTransformCalls) {
+    // EvaluateCode adds the second EvaluateExpr after the current transform call.
+    const auto query = R"sql(
+        PRAGMA EvaluateExprCache;
+
+        SELECT EvaluateExpr(10 + 20);
+        SELECT EvaluateCode(FuncCode("EvaluateExpr", QuoteCode(10 + 20)));
+    )sql";
+
+    TString statistics;
+    Run(query, {}, &statistics);
+
+    const auto statisticsNode = NYT::NodeFromYsonString(statistics);
+    const auto evaluation = statisticsNode["ExecutionStatistics"]["Evaluation"];
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["Count"]["count"].AsInt64(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["CacheHits"]["count"].AsInt64(), 1);
+}
+
+Y_UNIT_TEST(InnerEvaluateExprUsesSharedCache) {
+    // The inner type annotation turns EvaluateExprIfPure into EvaluateExpr.
+    const auto query = R"sql(
+        PRAGMA EvaluateExprCache;
+
+        SELECT EvaluateCode(
+            FuncCode("EvaluateExprIfPure", QuoteCode(10 + 20)));
+        SELECT EvaluateExpr(
+            EvaluateCode(FuncCode("EvaluateExprIfPure", QuoteCode(10 + 20))));
+    )sql";
+
+    TString statistics;
+    Run(query, {}, &statistics);
+
+    const auto statisticsNode = NYT::NodeFromYsonString(statistics);
+    const auto evaluation = statisticsNode["ExecutionStatistics"]["Evaluation"];
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["Count"]["count"].AsInt64(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(evaluation["CacheHits"]["count"].AsInt64(), 2);
 }
 
 Y_UNIT_TEST(TruncateRows) {

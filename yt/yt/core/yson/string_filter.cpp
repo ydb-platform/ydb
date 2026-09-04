@@ -7,6 +7,8 @@
 #include <yt/yt/core/ypath/stack.h>
 #include <yt/yt/core/ytree/convert.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/mem.h>
 
 namespace NYT::NYson {
@@ -58,9 +60,8 @@ public:
     }
 
 private:
-    // TODO(babenko): migrate to std::string
-    TString Result_;
-    TStringOutput Output_{Result_};
+    std::string Result_;
+    TStdStringOutput Output_{Result_};
     TCheckedInDebugYsonTokenWriter Writer_ = TCheckedInDebugYsonTokenWriter(&Output_);
     TYPathStack Stack_;
     bool IsFirstStack_ = true;
@@ -356,9 +357,8 @@ TYsonString FilterYsonStringFallback(TYsonStringBuf yson)
         case EYsonItemType::BooleanValue:
         case EYsonItemType::EntityValue: {
             // Copy the value to a new YSON string and return it.
-            // TODO(babenko): migrate to std::string
-            TString result;
-            TStringOutput output(result);
+            std::string result;
+            TStdStringOutput output(result);
             TCheckedInDebugYsonTokenWriter writer(&output);
             cursor.TransferComplexValue(&writer);
             writer.Flush();

@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 namespace {
@@ -14,8 +16,9 @@ bool IsSupportedColumnType(const NSchemeShard::TOlapColumnSchema& columnInfo, co
     const auto extractorProto = dataExtractor.SerializeToProto();
     const auto typeId = columnInfo.GetType().GetTypeId();
     const bool isUtf8Column = typeId == NScheme::NTypeIds::Utf8;
+    const bool isStringColumn = typeId == NScheme::NTypeIds::String;
     const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn();
-    return isUtf8Column || isJsonSubColumn;
+    return isUtf8Column || isJsonSubColumn || isStringColumn;
 }
 
 }   // namespace
@@ -106,7 +109,8 @@ void TIndexConstructor::FillRequestFromProtoFilter(const NKikimrSchemeOp::TReque
 NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
     if (!proto.HasBloomNGrammFilter()) {
         const TString errorMessage = "not found BloomNGrammFilter section in proto: \"" + proto.DebugString() + "\"";
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
+        YDB_LOG_ERROR("",
+            {"problem", errorMessage});
         return TConclusionStatus::Fail(errorMessage);
     }
 

@@ -27,7 +27,6 @@ PEERDIR(
     library/cpp/yson
     library/cpp/yson/node
     ydb/core/base
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/checkpointing
     ydb/core/fq/libs/checkpointing_common
     ydb/core/fq/libs/common
@@ -46,7 +45,6 @@ PEERDIR(
     ydb/core/fq/libs/result_formatter
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
-    ydb/core/kqp/federated_query
     ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/protos
     ydb/core/util
@@ -96,10 +94,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE(
-    logging
-)
 
 RECURSE_FOR_TESTS(
     ut

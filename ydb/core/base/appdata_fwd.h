@@ -54,15 +54,18 @@ namespace NKikimrStream {
 
 namespace NKikimrConfig {
     class TAppConfig;
+    class TStateStorageConfig;
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
     class TKafkaProxyConfig;
+    class THttpProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
     class TDataShardConfig;
     class TColumnShardConfig;
+    class TSmallBlobsQuotaConfig;
     class TSchemeShardConfig;
     class TMeteringConfig;
     class TAuditConfig;
@@ -248,6 +251,7 @@ struct TAppData {
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
     NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
+    NKikimrConfig::THttpProxyConfig& HttpProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;
@@ -258,6 +262,7 @@ struct TAppData {
     NKikimrConfig::THiveConfig& HiveConfig;
     NKikimrConfig::TDataShardConfig& DataShardConfig;
     NKikimrConfig::TColumnShardConfig& ColumnShardConfig;
+    NKikimrConfig::TSmallBlobsQuotaConfig& SmallBlobsQuotaConfig;
     NKikimrConfig::TSchemeShardConfig& SchemeShardConfig;
     NKikimrConfig::TMeteringConfig& MeteringConfig;
     NKikimr::NAudit::TAuditConfig& AuditConfig;
@@ -287,6 +292,7 @@ struct TAppData {
     NKikimrConfig::TLongTxServiceConfig& LongTxServiceConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
+    bool AlwaysSetSystemOwner = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
     bool AllowShadowDataInSchemeShardForTests = false;
@@ -337,6 +343,7 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
+    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> UserFacingTracingConfigurator;
 
     // Immutable snapshot registry for fast snapshot queries
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;

@@ -30,6 +30,7 @@ $bugs_raw = (
         $normalize(t.area) AS area,
         t.project_item_id AS project_item_id,
         t.created_date AS created_date,
+        t.sla_start_date AS sla_start_date,
         t.priority AS priority
     FROM `test_results/analytics/github_issues_timeline` AS t
     WHERE t.date >= CurrentUtcDate() - $window_days * Interval("P1D")
@@ -73,7 +74,7 @@ $bugs = (
         b.project_item_id AS project_item_id,
         b.priority AS priority,
         o.owner_team AS owner_team,
-        DateTime::ToDays(Cast(b.date AS Date) - Cast(b.created_date AS Date)) AS days_open
+        DateTime::ToDays(Cast(b.date AS Date) - Cast(COALESCE(b.sla_start_date, b.created_date) AS Date)) AS days_open
     FROM $bugs_raw AS b
     LEFT JOIN $owner AS o ON b.area = o.area
 );

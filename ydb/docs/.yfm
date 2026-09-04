@@ -1,4 +1,6 @@
 allowHTML: true
+llms: 
+  enabled: true
 langs: ['en','ru']
 pdf:
   enabled: true
@@ -51,3 +53,11 @@ docs-viewer:
     title: YDB Open Source
     description: Горизонтально масштабируемая распределённая отказоустойчивая СУБД
     hidden: true
+
+crawlerManifest: true
+
+crawler:
+  notifications:
+    interval: weekly
+    emailReceivers:
+      - iuriisintiaev@yandex-team.ru

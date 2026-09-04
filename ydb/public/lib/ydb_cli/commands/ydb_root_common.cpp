@@ -1,4 +1,5 @@
 #include "ydb_root_common.h"
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 #include "ydb_config.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
@@ -215,9 +216,8 @@ int TClientCommandRootCommon::Process(TConfig& config) {
             TClientCommand::Prepare(config);
             ExtractParams(config);
             config.BuildInfoCommandTag = "completion-scheme";
-            TDriver driver(config.CreateDriverConfigWithBuildInfo());
+            TScopedDriver driver(TDriver(config.CreateDriverConfigWithBuildInfo()));
             RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
-            driver.Stop(true);
         } catch (...) {
         }
         return EXIT_SUCCESS;
@@ -584,7 +584,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
         if (config.HelpCommandVerbosityLevel >= 2) {
             TStringBuilder additionalHelp;
-            additionalHelp << "Detailed information about OAuth 2.0 token exchange protocol: https://www.rfc-editor.org/rfc/rfc8693" << Endl << Endl;
+            additionalHelp << "Detailed information about OAuth 2.0 token exchange protocol: " << HttpsLink("www.rfc-editor.org/rfc/rfc8693", colors) << Endl << Endl;
 
             TStringBuilder supportedJwtAlgorithms;
             for (const std::string& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
@@ -618,7 +618,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                 << "Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (FIXED):" << Endl
                 << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "FIXED" << colors.OldColor() << Endl
                 << FIELD("token") "               " TYPE("string") "Token value" << Endl
-                << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (https://www.rfc-editor.org/rfc/rfc8693)" << Endl
+                << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (" << HttpsLink("www.rfc-editor.org/rfc/rfc8693", colors) << ")" << Endl
                 << Endl;
 
             additionalHelp

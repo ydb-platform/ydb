@@ -1,9 +1,12 @@
 #include "kqp_rbo_physical_query_builder.h"
+#include "kqp_rbo_compatibility.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_context.h>
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_convertion_utils.h>
+#include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_yql_ast_trace.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
@@ -12,6 +15,8 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
+#include <cctype>
+#include <optional>
 #include <sstream>
 
 namespace NKikimr::NKqp {
@@ -22,6 +27,14 @@ using namespace NKikimr;
 
 namespace {
 
+std::string TraceRootId(const std::string& title) {
+    std::string id = "physical-ast";
+    for (const char ch : title) {
+        id += (std::isalnum(static_cast<unsigned char>(ch)) ? ch : '-');
+    }
+    return id;
+}
+
 std::string ToStdString(TStringBuf value) {
     return std::string(value.data(), value.size());
 }
@@ -31,7 +44,7 @@ std::string FormatExprForTrace(const TExprNode::TPtr& node, TExprContext& ctx) {
         return {};
     }
 
-    return ToStdString(KqpExprToPrettyString(TExprBase(node), ctx));
+    return ToStdString(KqpExprToPrettyString(*node, ctx));
 }
 
 std::string FormatPhysicalStagesForTrace(const TVector<TExprNode::TPtr>& stages, TExprContext& ctx) {
@@ -48,12 +61,28 @@ std::string FormatPhysicalStagesForTrace(const TVector<TExprNode::TPtr>& stages,
     return out.str();
 }
 
-void SubmitPhysicalAstTrace(TRBOContext& rboCtx, const std::string& title, std::string body) {
-    if (!rboCtx.NeedToLog() || body.empty()) {
+void AddAstInfoTabs(
+    optimizer_trace::Trace::Tile& tile,
+    const std::optional<optimizer_trace::Widget>& linkGraph,
+    const std::string& text)
+{
+    if (linkGraph) {
+        tile.info().tab("dag-links", "DAG links")
+            .widget(*linkGraph);
+    }
+    if (!text.empty()) {
+        tile.info().tab("yql-ast-text", "YQL AST text")
+            .widget(optimizer_trace::Widget::unwrappedText("Regular YQL AST", text, true));
+    }
+}
+
+void SubmitPhysicalAstTrace(TRBOContext& rboCtx, const std::string& title, NYqlAstTrace::TBuildResult astTrace, std::string text) {
+    if (!rboCtx.NeedToLog()) {
         return;
     }
 
-    auto& tile = rboCtx.TraceLog.currentStage().text(title, body);
+    auto& tile = rboCtx.TraceLog.currentStage().tree(title, astTrace.Root);
+    AddAstInfoTabs(tile, astTrace.LinkGraph, text);
     rboCtx.TraceLog.Submit(tile);
 }
 
@@ -62,15 +91,23 @@ void SubmitPhysicalStagesTrace(TRBOContext& rboCtx, const std::string& title, co
         return;
     }
 
-    SubmitPhysicalAstTrace(rboCtx, title, FormatPhysicalStagesForTrace(stages, rboCtx.ExprCtx));
+    SubmitPhysicalAstTrace(
+        rboCtx,
+        title,
+        NYqlAstTrace::BuildStageListTreeWithInfo(stages, TraceRootId(title)),
+        FormatPhysicalStagesForTrace(stages, rboCtx.ExprCtx));
 }
 
 void SubmitPhysicalExprTrace(TRBOContext& rboCtx, const std::string& title, const TExprNode::TPtr& node) {
-    if (!rboCtx.NeedToLog()) {
+    if (!rboCtx.NeedToLog() || !node) {
         return;
     }
 
-    SubmitPhysicalAstTrace(rboCtx, title, FormatExprForTrace(node, rboCtx.ExprCtx));
+    SubmitPhysicalAstTrace(
+        rboCtx,
+        title,
+        NYqlAstTrace::BuildExprTreeWithInfo(node, TraceRootId(title)),
+        FormatExprForTrace(node, rboCtx.ExprCtx));
 }
 
 } // anonymous namespace
@@ -88,13 +125,57 @@ TPhysicalQueryBuilder::TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph,
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     auto phyStages = BuildPhysicalStageGraph();
     SubmitPhysicalStagesTrace(RBOCtx, "After physical stage graph build", phyStages);
-    phyStages = EnableWideChannelsPhysicalStages(std::move(phyStages));
-    SubmitPhysicalStagesTrace(RBOCtx, "After wide channel rewrite", phyStages);
-    phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
-    SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    const bool fullPeephole = RBOCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
+    phyStages = PreparePhysicalStages(std::move(phyStages), fullPeephole);
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical stage preparation", phyStages);
+    if (!fullPeephole) {
+        phyStages = LowerPhysicalStageCompatibility(std::move(phyStages));
+        SubmitPhysicalStagesTrace(RBOCtx, "After compatibility lowering", phyStages);
+    } else {
+        phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
+        SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    }
     auto physicalQuery = BuildPhysicalQuery(std::move(phyStages));
     SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
     return physicalQuery;
+}
+
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::LowerPhysicalStageCompatibility(TVector<TExprNode::TPtr>&& physicalStages) {
+    Y_ENSURE(!physicalStages.empty());
+    auto root = physicalStages.back();
+    if (!NeedsRboCompatibilityLowering(root)) {
+        return std::move(physicalStages);
+    }
+
+    TOptimizeExprSettings settings(&RBOCtx.TypeCtx);
+    settings.CustomInstantTypeTransformer = RBOCtx.TypeCtx.CustomInstantTypeTransformer.Get();
+    constexpr size_t MaxPasses = 64;
+    for (size_t pass = 0; pass < MaxPasses && NeedsRboCompatibilityLowering(root); ++pass) {
+        TExprNode::TPtr output;
+        const auto status = OptimizeExpr(
+            root,
+            output,
+            [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+                return RewriteRboCompatibilityNode(node, ctx, RBOCtx.TypeCtx);
+            },
+            RBOCtx.ExprCtx,
+            settings);
+        YQL_ENSURE(status != IGraphTransformer::TStatus::Error,
+            "Failed to lower execution-incompatible callables in new RBO physical stages");
+        if (status == IGraphTransformer::TStatus::Ok) {
+            break;
+        }
+
+        YQL_ENSURE(status == IGraphTransformer::TStatus::Repeat);
+        YQL_ENSURE(output != root, "RBO compatibility lowering made no progress");
+        root = std::move(output);
+        TypeAnnotate(root);
+    }
+
+    EnsureRboCompatibilityLowered(root);
+    TVector<TExprNode::TPtr> stagesTopSorted;
+    TopologicalSort(TDqPhyStage(root), stagesTopSorted);
+    return stagesTopSorted;
 }
 
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
@@ -129,6 +210,26 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
         TExprNode::TPtr stage;
         if (Graph.IsSourceStageRowType(id)) {
             stage = Stages.at(id);
+            // Want to build materialize for ranges.
+            // TODO: Actually old optimizer has some machinery to compute ranges during compilation for some cases, for
+            // example when `LiteralRange` is defined, but currenlty we put any case in separate tx. Performance improvement is possible here.
+            auto rowSettingsPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadRangesSourceSettings>(node); });
+            if (rowSettingsPtr) {
+                auto rowSettings = TExprBase(rowSettingsPtr).Cast<TKqpReadRangesSourceSettings>();
+                if (!rowSettings.RangesExpr().Maybe<TCoVoid>()) {
+                    const auto materializeResult = BuildMaterialize(rowSettings.RangesExpr().Ptr());
+                    // clang-fomrat off
+                    const auto newRowSettings = Build<TKqpReadRangesSourceSettings>(ctx, rowSettingsPtr->Pos())
+                        .Table(rowSettings.Table())
+                        .Columns(rowSettings.Columns())
+                        .Settings(rowSettings.Settings())
+                        .RangesExpr(materializeResult)
+                        .ExplainPrompt(rowSettings.ExplainPrompt())
+                    .Done().Ptr();
+                    // clang-format on
+                    stage = ctx.ReplaceNode(std::move(stage), rowSettings.Ref(), newRowSettings);
+                }
+            }
         } else {
             TVector<TExprNode::TPtr> stageInputConnections;
             TVector<TExprNode::TPtr> stageInputArgs;
@@ -582,7 +683,7 @@ void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhy
     }
 }
 
-TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages(TVector<TExprNode::TPtr>&& physicalStages) {
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages, bool enableWideChannels) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
     if (!root->GetTypeAnn()) {
@@ -604,12 +705,14 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages
         // clang-format on
 
         TypeAnnotate(newStage);
-        rootStage = NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr();
+        rootStage = enableWideChannels
+            ? NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr()
+            : newStage;
         replaces[dqPhyStage.Raw()] = rootStage;
     }
 
     TypeAnnotate(rootStage);
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Wide channels] " << KqpExprToPrettyString(TExprBase(rootStage), ctx);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical stages] " << KqpExprToPrettyString(TExprBase(rootStage), ctx);
 
     TVector<TExprNode::TPtr> stagesTopSorted;
     TopologicalSort(TDqPhyStage(rootStage), stagesTopSorted);
@@ -703,14 +806,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
         programsMap[program.Raw()] = newProgram;
     }
 
-    TVector<TExprNode::TPtr> newStages;
-    newStages.reserve(physicalStages.size());
-    for (ui32 i = 0, e = physicalStages.size(); i < e; ++i) {
-        newStages.push_back(ctx.ReplaceNodes(std::move(physicalStages[i]), programsMap));
-    }
-
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO After peephole] " << KqpExprToPrettyString(TExprBase(newStages.back()), ctx);
-    return newStages;
+    auto rootStage = ctx.ReplaceNodes(std::move(physicalStages.back()), programsMap);
+    TVector<TExprNode::TPtr> stagesTopSorted;
+    TopologicalSort(TDqPhyStage(rootStage), stagesTopSorted);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO After peephole] " << KqpExprToPrettyString(TExprBase(stagesTopSorted.back()), ctx);
+    return stagesTopSorted;
 }
 
 bool TPhysicalQueryBuilder::IsSuitableToPropagateWideBlocksThroughHashShuffleConnections(const TDqPhyStage& stage) const {

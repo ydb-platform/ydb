@@ -104,6 +104,7 @@ struct TPartitionBlobEncoder {
     ui64 FirstUncompactedOffset = 0;
 
     void pop_front();
+    void PopFrontHeadKey();
     void ScheduleDelete(TDataKey& key);
 
     struct TDeletedKey {

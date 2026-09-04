@@ -124,7 +124,8 @@ std::optional<TTypeError> ValidateParquetIoType(const TTypeAnnotationNode* type,
             if (IsDataTypeNumeric(dataSlot) || IsDataTypeDateOrTzDate(dataSlot) || IsDataTypeDecimal(dataSlot) || IsDataTypeBigDate(dataSlot)) {
                 return std::nullopt;
             }
-            if (IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Json, EDataSlot::Uuid}, dataSlot)) {
+            if (IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Json, EDataSlot::Uuid,
+                      EDataSlot::Interval, EDataSlot::Interval64, EDataSlot::DyNumber}, dataSlot)) {
                 return std::nullopt;
             }
             return TTypeError{type};

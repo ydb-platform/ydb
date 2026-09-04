@@ -2,7 +2,7 @@ from ymake import macro, Unit
 
 
 @macro
-def LJ_ARCHIVE(unit: Unit, *args: tuple[str, ...]):
+def LJ_ARCHIVE(unit: Unit, *args: str):
     """
     @usage: LJ_ARCHIVE(NAME Name LuaFiles...)
     Precompile .lua files using LuaJIT and archive both sources and results using sources names as keys
@@ -27,7 +27,7 @@ def LJ_ARCHIVE(unit: Unit, *args: tuple[str, ...]):
 
 
 @macro
-def LJ_21_ARCHIVE(unit: Unit, *args: tuple[str, ...]):
+def LJ_21_ARCHIVE(unit: Unit, *args: str):
     """
     @usage: LJ_21_ARCHIVE(NAME Name LuaFiles...) # deprecated
     Precompile .lua files using LuaJIT 2.1 and archive both sources and results using sources names as keys

@@ -14,6 +14,8 @@
 #include <util/generic/string.h>
 #include <util/generic/list.h>
 
+#include <cstring>
+
 #define XXH_INLINE_ALL
 #include <contrib/libs/xxhash/xxhash.h>
 
@@ -57,7 +59,9 @@ struct TTcpPacketBuf {
     static constexpr ui64 PingResponseMask = 0x4000000000000000ULL;
     static constexpr ui64 ClockMask = 0x2000000000000000ULL;
 
-    static constexpr size_t PacketDataLen = 4096 * 2 - 96 - sizeof(TTcpPacketHeader_v2);
+    // Maximum serialized size of one main-channel IC packet, including its header.
+    static constexpr size_t FullPacketSize = 4096 * 2 - 96;
+    static constexpr size_t PacketDataLen = FullPacketSize - sizeof(TTcpPacketHeader_v2);
 };
 
 struct TEventData {
@@ -148,6 +152,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     const TSessionParams& Params;
     NInterconnect::TOutgoingStream& OutgoingStream;
     NInterconnect::TOutgoingStream& XdcStream;
+    const bool UsePreallocatedInternalStream = false;
     NInterconnect::TOutgoingStream::TBookmark HeaderBookmark;
 
     ui32 InternalSize = 0;
@@ -163,7 +168,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     ui32 RdmaPayloadSize = 0;
 
     TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
-        NInterconnect::TOutgoingStream& xdcStream);
+        NInterconnect::TOutgoingStream& xdcStream, bool usePreallocatedInternalStream = false);
 
     // Preallocate some space to fill it later.
     NInterconnect::TOutgoingStream::TBookmark Bookmark(size_t len) {
@@ -175,7 +180,7 @@ struct TTcpPacketOutTask : TNonCopyable {
         }
         Y_DEBUG_ABORT_UNLESS(len <= GetInternalFreeAmount());
         InternalSize += len;
-        return OutgoingStream.Bookmark(len);
+        return BookmarkStream(OutgoingStream, len, UsePreallocatedInternalStream);
     }
 
     // Write previously bookmarked space.
@@ -192,20 +197,34 @@ struct TTcpPacketOutTask : TNonCopyable {
     // Acquire raw pointer to write some data.
     template<bool External>
     TMutableContiguousSpan AcquireSpanForWriting() {
-        if (External) {
+        if constexpr (External) {
             return XdcStream.AcquireSpanForWriting(GetExternalFreeAmount());
         } else {
-            return OutgoingStream.AcquireSpanForWriting(GetInternalFreeAmount());
+            return UsePreallocatedInternalStream
+                ? OutgoingStream.AcquireSpanForWritingNoAlloc(GetInternalFreeAmount())
+                : OutgoingStream.AcquireSpanForWriting(GetInternalFreeAmount());
         }
     }
 
     // Append reference to some data (acquired previously or external pointer).
     template<bool External>
-    void Append(const void *buffer, size_t len, ui32* const zcHandle) {
+    void Append(const void *buffer, size_t len, ui32* const zcHandle, bool disableChecksum) {
         Y_DEBUG_ABORT_UNLESS(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
         (External ? ExternalSize : InternalSize) += len;
         (External ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len}, zcHandle);
-        ProcessChecksum<External>(buffer, len);
+        if (! disableChecksum) {
+            ProcessChecksum<External>(buffer, len);
+        }
+    }
+
+    void AppendRdma(const void *buffer, size_t len, const NInterconnect::NRdma::TMemRegion* memRegion,
+            bool disableChecksum) {
+        Y_DEBUG_ABORT_UNLESS(len <= GetInternalFreeAmount());
+        InternalSize += len;
+        OutgoingStream.Append({static_cast<const char*>(buffer), len}, memRegion);
+        if (!disableChecksum) {
+            ProcessChecksum<false>(buffer, len);
+        }
     }
 
     // Write some data with copying.
@@ -213,7 +232,11 @@ struct TTcpPacketOutTask : TNonCopyable {
     void Write(const void *buffer, size_t len) {
         Y_DEBUG_ABORT_UNLESS(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
         (External ? ExternalSize : InternalSize) += len;
-        (External ? XdcStream : OutgoingStream).Write({static_cast<const char*>(buffer), len});
+        if constexpr (External) {
+            XdcStream.Write({static_cast<const char*>(buffer), len});
+        } else {
+            WriteStream(OutgoingStream, {static_cast<const char*>(buffer), len}, UsePreallocatedInternalStream);
+        }
         ProcessChecksum<External>(buffer, len);
     }
 
@@ -280,6 +303,39 @@ struct TTcpPacketOutTask : TNonCopyable {
     ui32 GetExternalFreeAmount() const { return 16384 - ExternalSize; }
     ui32 GetExternalSize() const { return ExternalSize; }
     ui32 GetRdmaPayloadSize() const { return RdmaPayloadSize; }
+
+private:
+    static NInterconnect::TOutgoingStream::TBookmark BookmarkStream(NInterconnect::TOutgoingStream& stream, size_t len,
+            bool noAlloc) {
+        if (!noAlloc) {
+            return stream.Bookmark(len);
+        }
+
+        NInterconnect::TOutgoingStream::TBookmark bookmark;
+        while (len) {
+            auto span = stream.AcquireSpanForWritingNoAlloc(len);
+            Y_ABORT_UNLESS(span.size());
+            stream.Append({span.data(), span.size()}, static_cast<ui32*>(nullptr));
+            bookmark.push_back(span);
+            len -= span.size();
+        }
+        return bookmark;
+    }
+
+    static void WriteStream(NInterconnect::TOutgoingStream& stream, TContiguousSpan in, bool noAlloc) {
+        if (!noAlloc) {
+            stream.Write(in);
+            return;
+        }
+
+        while (in.size()) {
+            auto out = stream.AcquireSpanForWritingNoAlloc(in.size());
+            Y_ABORT_UNLESS(out.size());
+            memcpy(out.data(), in.data(), out.size());
+            stream.Append({out.data(), out.size()}, static_cast<ui32*>(nullptr));
+            in = in.SubSpan(out.size(), Max<size_t>());
+        }
+    }
 };
 
 namespace NInterconnect::NDetail {

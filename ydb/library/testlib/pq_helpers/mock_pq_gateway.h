@@ -46,19 +46,23 @@ public:
 
     virtual NYdb::NTopic::TPartitionSession::TPtr GetPartitionSession() const = 0;
 
+    virtual ui64 GetInflightEventsCount() const = 0;
+
     virtual void SetEventProvider(TEvGen evGen) = 0;
 
     virtual void AddEvent(NYdb::NTopic::TReadSessionEvent::TEvent&& ev) = 0;
 
     virtual void AddStartSessionEvent(ui64 endOffset = 0) = 0;
 
-    virtual void AddDataReceivedEvent(ui64 offset, const TString& data) = 0;
+    virtual void AddDataReceivedEvent(ui64 offset, TString data) = 0;
 
-    virtual void AddDataReceivedEvent(ui64 offset, const TString& data, TInstant messageTime) = 0;
+    virtual void AddDataReceivedEvent(ui64 offset, TString data, TInstant messageTime) = 0;
 
     virtual void AddDataReceivedEvent(const std::vector<TMessage>& messages) = 0;
 
     virtual void AddCloseSessionEvent(NYdb::EStatus status, NYdb::NIssue::TIssues issues = {}) = 0;
+
+    virtual void ExpectSessionClosed(std::optional<TDuration> timeout = std::nullopt) = 0;
 };
 
 class IMockPqWriteSession {
@@ -67,15 +71,48 @@ public:
 
     virtual ~IMockPqWriteSession() = default;
 
+    virtual void AddCloseSessionEvent(NYdb::EStatus status, NYdb::NIssue::TIssues issues = {}) = 0;
+
     virtual std::vector<TString> ExtractData() = 0;
 
     virtual void ExpectMessage(const TString& message) = 0;
 
     virtual void ExpectMessages(std::vector<TString> messages, bool sort = false) = 0;
 
+    virtual void ExpectSessionClosed() = 0;
+
+    virtual void EnsureEmpty() = 0;
+
     virtual void Lock() = 0;
 
+    virtual void LockAcks() = 0;
+
     virtual void Unlock() = 0;
+
+    virtual void UnlockAcks(NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState status = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN) = 0;
+
+    // Acks management. Must be called after LockAcks()
+
+    virtual void WaitAcks(ui64 count) = 0;
+};
+
+class IMockPqDeferredPublishClient {
+public:
+    virtual ~IMockPqDeferredPublishClient() = default;
+
+    virtual void EnsureOpenedPublications(ui64 count, const TString& nameSubstring) = 0;
+
+    virtual void LockCommits() = 0;
+
+    virtual void UnlockCommits() = 0;
+
+    // Pending commits management. Must be called after LockCommits()
+
+    virtual void WaitCommits(ui64 count) = 0;
+
+    virtual void ClearCommits() = 0;
+
+    virtual void AcceptCommits(NYdb::EStatus status, NYdb::NIssue::TIssues issues = {}) = 0;
 };
 
 // Limitations:
@@ -88,6 +125,7 @@ public:
     virtual IMockPqReadSession::TPtr ExtractReadSession(const TString& topic) = 0;
 
     // Get read session for a specific partition (multi-partition topics). Returns nullptr if not created.
+    // Topics with multiple partitions must be registered in TMockPqGatewaySettings.
     virtual IMockPqReadSession::TPtr GetReadSession(const TString& topic, ui64 partitionId) = 0;
 
     // Wait for read session creation
@@ -98,13 +136,20 @@ public:
 
     // Wait for write session creation
     virtual IMockPqWriteSession::TPtr WaitWriteSession(const TString& topic) = 0;
+
+    virtual IMockPqDeferredPublishClient& GetDeferredPublishClientController() = 0;
 };
 
 struct TMockPqGatewaySettings {
+    struct TTopicInfo {
+        ui32  PartitionCount = 1;
+    };
+
     bool LockWritingByDefault = false;
     TDuration OperationTimeout = TDuration::Seconds(10);
     NActors::TTestActorRuntimeBase* Runtime = nullptr;
     NActors::TActorId Notifier;
+    std::unordered_map<TString, TTopicInfo> Topics;
 };
 
 TIntrusivePtr<IMockPqGateway> CreateMockPqGateway(const TMockPqGatewaySettings& settings = {});

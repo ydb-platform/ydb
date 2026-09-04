@@ -38,6 +38,7 @@ enum ESimpleCounters {
     COUNTER_NODES_FROZEN = 28 [(CounterOpts) = {Name: "NodesFrozen"}];
     COUNTER_DELETE_TABLET_QUEUE_SIZE = 29 [(CounterOpts) = {Name: "DeleteTabletQueueSize"}];
     COUNTER_TABLETS_DELETING = 30 [(CounterOpts) = {Name: "TabletsDeleting"}];
+    COUNTER_TABLETS_REASSIGNING = 31 [(CounterOpts) = {Name: "TabletsMarkedForReassign"}];
 }
 
 enum ECumulativeCounters {
@@ -57,6 +58,7 @@ enum ECumulativeCounters {
     COUNTER_TABLETS_STORAGE_REASSIGNED = 13 [(CounterOpts) = {Name: "TabletsStorageReassigned"}];
     COUNTER_HISTORY_CUT = 14 [(CounterOpts) = {Name: "TabletHistoryCut"}];
     COUNTER_HISTORY_RESTORED = 15 [(CounterOpts) = {Name: "TabletHistoryRestored"}];
+    COUNTER_REASSIGN_EXECUTED = 16 [(CounterOpts) = {Name: "ReassignExecuted"}];
 }
 
 enum EPercentileCounters {

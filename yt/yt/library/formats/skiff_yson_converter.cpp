@@ -13,6 +13,8 @@
 #include <library/cpp/skiff/skiff.h>
 #include <library/cpp/skiff/skiff_schema.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/zerocopy.h>
 #include <util/stream/mem.h>
 
@@ -127,12 +129,12 @@ struct TOptionalTypesMatch
 [[noreturn]] void RethrowCannotMatchField(
     const TComplexTypeFieldDescriptor& descriptor,
     const std::shared_ptr<TSkiffSchema>& skiffSchema,
-    const std::exception& ex)
+    const TError& error)
 {
     THROW_ERROR_EXCEPTION("Cannot match field %Qv to Skiff schema",
         descriptor.GetDescription())
-        << SkiffYsonErrorAttributes(descriptor, skiffSchema)
-        << ex;
+        .With(SkiffYsonErrorAttributes(descriptor, skiffSchema))
+        .With(error);
 }
 
 template <typename... TArgs>
@@ -143,7 +145,7 @@ template <typename... TArgs>
 {
     THROW_ERROR_EXCEPTION("Yson to Skiff conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(format, std::forward<TArgs>(args)...);
+        .With(TError(format, std::forward<TArgs>(args)...));
 }
 
 [[noreturn]] void ThrowBadYsonToken(
@@ -151,7 +153,7 @@ template <typename... TArgs>
     const std::vector<EYsonItemType>& expected,
     const EYsonItemType actual)
 {
-    TStringStream expectationString;
+    TStdStringStream expectationString;
     if (expected.size() > 1) {
         expectationString << "one of ";
         bool first = true;
@@ -180,7 +182,7 @@ template <typename... TArgs>
 {
     THROW_ERROR_EXCEPTION("Skiff to Yson conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(format, std::forward<TArgs>(args)...);
+        .With(TError(format, std::forward<TArgs>(args)...));
 }
 
 TOptionalTypesMatch MatchOptionalTypes(
@@ -555,7 +557,7 @@ public:
         if constexpr (wireType == EWireType::Yson32) {
             TmpString_.clear();
             {
-                TStringOutput output(TmpString_);
+                TStdStringOutput output(TmpString_);
                 TBufferedBinaryYsonWriter ysonWriter(&output);
                 cursor->TransferComplexValue(&ysonWriter);
                 ysonWriter.Flush();
@@ -617,7 +619,7 @@ public:
 
 private:
     TComplexTypeFieldDescriptor Descriptor_;
-    TString TmpString_;
+    std::string TmpString_;
 };
 
 template <EYsonItemType ExpectedTokenType, typename TFunction>
@@ -1316,6 +1318,7 @@ TYsonToSkiffConverter CreateYsonToSkiffConverterImpl(
             return CreateVariantYsonToSkiffConverter(std::move(descriptor), skiffSchema, innerContext, config);
         case ELogicalMetatype::Dict:
             return CreateDictYsonToSkiffConverter(std::move(descriptor), skiffSchema, innerContext, config);
+        case ELogicalMetatype::AggregateState:
         case ELogicalMetatype::Tagged:
             // We have detagged our type previously.
             YT_ABORT();
@@ -1687,8 +1690,7 @@ TSkiffToYsonConverter CreateOptionalSkiffToYsonConverter(
     auto match = MatchOptionalTypes(descriptor, skiffSchema, allowOmitOptional);
     if (match.LogicalNesting != match.SkiffNesting) {
         if (!config.AllowOmitTopLevelOptional || context.NestingLevel > 0) {
-            RethrowCannotMatchField(descriptor, skiffSchema, TErrorException()
-                <<= TError("Optional nesting mismatch"));
+            RethrowCannotMatchField(descriptor, skiffSchema, TError("Optional nesting mismatch"));
         }
     }
 
@@ -1756,7 +1758,7 @@ TSkiffToYsonConverter CreateStructSkiffToYsonConverter(
             RethrowCannotMatchField(
                 descriptor,
                 skiffSchema,
-                TErrorException() <<= TError(
+                TError(
                     "Non optional struct field %Qv is missing in Skiff schema",
                     fieldDescriptor.GetDescription()));
         }
@@ -1952,6 +1954,7 @@ TSkiffToYsonConverter CreateSkiffToYsonConverterImpl(
         case ELogicalMetatype::Dict:
             return CreateDictSkiffToYsonConverter(std::move(descriptor), skiffSchema, innerContext, config);
         case ELogicalMetatype::Tagged:
+        case ELogicalMetatype::AggregateState:
             // We have detagged our type previously.
             break;
     }
@@ -2080,7 +2083,9 @@ void CheckTzType(const std::shared_ptr<TSkiffSchema>& skiffSchema, ESimpleLogica
         auto error = TError(
             "TzType cannot be represented with Skiff schema %Qv",
             GetShortDebugString(skiffSchema));
-        error <<= ex.Error();
+        if (auto addedError = ex.Error(); !addedError.IsOK()) {
+            error.Add(std::move(addedError));
+        }
         THROW_ERROR(error);
     }
 }

@@ -13,6 +13,7 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -225,6 +226,39 @@ const TCompactionOperation::TMetadata& TCompactionOperation::Metadata() const {
     return Metadata_;
 }
 
+TAnalyzeOperation::TAnalyzeOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::AnalyzeMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<EAnalyzeState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Paths.assign(metadata.paths().begin(), metadata.paths().end());
+    Metadata_.InProgressPaths.assign(metadata.in_progress_paths().begin(),
+                                     metadata.in_progress_paths().end());
+    Metadata_.DonePaths.assign(metadata.done_paths().begin(),
+                               metadata.done_paths().end());
+}
+
+const TAnalyzeOperation::TMetadata& TAnalyzeOperation::Metadata() const {
+    return Metadata_;
+}
+
+TSetNotNullOperation::TSetNotNullOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::SetNotNullMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<ESetNotNullState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Path = metadata.path();
+    Metadata_.Columns.assign(metadata.columns().begin(), metadata.columns().end());
+}
+
+const TSetNotNullOperation::TMetadata& TSetNotNullOperation::Metadata() const {
+    return Metadata_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitioningSettings::TImpl {
@@ -371,6 +405,12 @@ class TTableDescription::TImpl {
             Indexes_.emplace_back(TProtoAccessor::FromProto(index));
         }
 
+        // statistics
+        MultiColumnStatistics_.reserve(proto.statistics_size());
+        for (const auto& statistics : proto.statistics()) {
+            MultiColumnStatistics_.emplace_back(TProtoAccessor::FromProto(statistics));
+        }
+
         if constexpr (std::is_same_v<TProto, Ydb::Table::DescribeTableResult>) {
             // changefeeds
             Changefeeds_.reserve(proto.changefeeds_size());
@@ -426,6 +466,7 @@ public:
         Proto_ = std::move(desc);
 
         Owner_ = Proto_.self().owner();
+        InterruptInheritance_ = Proto_.self().interrupt_permission_inheritance();
         PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
         PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_);
 
@@ -508,6 +549,10 @@ public:
 
     void AddSecondaryIndex(const TIndexDescription& indexDescription) {
         Indexes_.emplace_back(indexDescription);
+    }
+
+    void AddMultiColumnStatistics(const TMultiColumnStatisticsDescription& statisticsDescription) {
+        MultiColumnStatistics_.emplace_back(statisticsDescription);
     }
 
     void AddVectorKMeansTreeIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
@@ -609,6 +654,10 @@ public:
         return Indexes_;
     }
 
+    const std::vector<TMultiColumnStatisticsDescription>& GetMultiColumnStatisticsDescriptions() const {
+        return MultiColumnStatistics_;
+    }
+
     const std::vector<TChangefeedDescription>& GetChangefeedDescriptions() const {
         return Changefeeds_;
     }
@@ -631,6 +680,10 @@ public:
 
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const {
         return EffectivePermissions_;
+    }
+
+    bool GetInterruptInheritance() const {
+        return InterruptInheritance_;
     }
 
     const std::vector<TKeyRange>& GetKeyRanges() const {
@@ -704,9 +757,11 @@ private:
     std::vector<std::string> PrimaryKey_;
     std::vector<TTableColumn> Columns_;
     std::vector<TIndexDescription> Indexes_;
+    std::vector<TMultiColumnStatisticsDescription> MultiColumnStatistics_;
     std::vector<TChangefeedDescription> Changefeeds_;
     std::optional<TTtlSettings> TtlSettings_;
     std::string Owner_;
+    bool InterruptInheritance_ = false;
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
     std::vector<TKeyRange> Ranges_;
@@ -765,6 +820,10 @@ std::vector<TIndexDescription> TTableDescription::GetIndexDescriptions() const {
     return Impl_->GetIndexDescriptions();
 }
 
+std::vector<TMultiColumnStatisticsDescription> TTableDescription::GetMultiColumnStatisticsDescriptions() const {
+    return Impl_->GetMultiColumnStatisticsDescriptions();
+}
+
 std::vector<TChangefeedDescription> TTableDescription::GetChangefeedDescriptions() const {
     return Impl_->GetChangefeedDescriptions();
 }
@@ -793,6 +852,10 @@ const std::vector<NScheme::TPermissions>& TTableDescription::GetEffectivePermiss
     return Impl_->GetEffectivePermissions();
 }
 
+bool TTableDescription::GetInterruptInheritance() const {
+    return Impl_->GetInterruptInheritance();
+}
+
 const std::vector<TKeyRange>& TTableDescription::GetKeyRanges() const {
     return Impl_->GetKeyRanges();
 }
@@ -815,6 +878,10 @@ void TTableDescription::AddSecondaryIndex(const std::string& indexName, EIndexTy
 
 void TTableDescription::AddSecondaryIndex(const TIndexDescription& indexDescription) {
     Impl_->AddSecondaryIndex(indexDescription);
+}
+
+void TTableDescription::AddMultiColumnStatistics(const TMultiColumnStatisticsDescription& statisticsDescription) {
+    Impl_->AddMultiColumnStatistics(statisticsDescription);
 }
 
 void TTableDescription::AddSyncSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
@@ -1015,6 +1082,10 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     for (const auto& index : Impl_->GetIndexDescriptions()) {
         index.SerializeTo(*request.add_indexes());
+    }
+
+    for (const auto& statistics : Impl_->GetMultiColumnStatisticsDescriptions()) {
+        statistics.SerializeTo(*request.add_statistics());
     }
 
     if (const auto& ttl = Impl_->GetTtlSettings()) {
@@ -1298,6 +1369,11 @@ TTableBuilder& TTableBuilder::SetPrimaryKeyColumn(const std::string& primaryKeyC
 
 TTableBuilder& TTableBuilder::AddSecondaryIndex(const TIndexDescription& indexDescription) {
     TableDescription_.AddSecondaryIndex(indexDescription);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddMultiColumnStatistics(const TMultiColumnStatisticsDescription& statisticsDescription) {
+    TableDescription_.AddMultiColumnStatistics(statisticsDescription);
     return *this;
 }
 
@@ -2974,6 +3050,8 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
             return ETokenizer::Standard;
         case Ydb::Table::FulltextIndexSettings::KEYWORD:
             return ETokenizer::Keyword;
+        case Ydb::Table::FulltextIndexSettings::ALPHANUMERIC:
+            return ETokenizer::Alphanumeric;
         default:
             return ETokenizer::Unspecified;
         }
@@ -3012,6 +3090,12 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
     if (proto.has_filter_length_max()) {
         result.FilterLengthMax = proto.filter_length_max();
     }
+    if (proto.has_use_filter_snowball()) {
+        result.UseFilterSnowball = proto.use_filter_snowball();
+    }
+    if (proto.has_use_filter_superlemmer()) {
+        result.UseFilterSuperLemmer = proto.use_filter_superlemmer();
+    }
 
     return result;
 }
@@ -3027,6 +3111,8 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
             return Ydb::Table::FulltextIndexSettings::STANDARD;
         case ETokenizer::Keyword:
             return Ydb::Table::FulltextIndexSettings::KEYWORD;
+        case ETokenizer::Alphanumeric:
+            return Ydb::Table::FulltextIndexSettings::ALPHANUMERIC;
         case ETokenizer::Unspecified:
             return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
         }
@@ -3067,8 +3153,42 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
     if (analyzers.FilterLengthMax.has_value()) {
         proto.set_filter_length_max(*analyzers.FilterLengthMax);
     }
+    if (analyzers.UseFilterSnowball.has_value()) {
+        proto.set_use_filter_snowball(*analyzers.UseFilterSnowball);
+    }
+    if (analyzers.UseFilterSuperLemmer.has_value()) {
+        proto.set_use_filter_superlemmer(*analyzers.UseFilterSuperLemmer);
+    }
 
     return proto;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Standard() {
+    TAnalyzers result;
+    result.Tokenizer = ETokenizer::Standard;
+    result.UseFilterLowercase = true;
+    result.UseFilterStopwords = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Snowball(std::string language) {
+    TAnalyzers result = Standard();
+    result.Language = std::move(language);
+    result.UseFilterSnowball = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::SuperLemmer(std::string language) {
+    TAnalyzers result = Standard();
+    result.Language = std::move(language);
+    result.UseFilterSuperLemmer = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Keyword() {
+    TAnalyzers result;
+    result.Tokenizer = ETokenizer::Keyword;
+    return result;
 }
 
 TFulltextIndexSettings::TColumnAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) {
@@ -3364,6 +3484,88 @@ bool operator==(const TIndexDescription& lhs, const TIndexDescription& rhs) {
 }
 
 bool operator!=(const TIndexDescription& lhs, const TIndexDescription& rhs) {
+    return !(lhs == rhs);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TMultiColumnStatisticsDescription::TMultiColumnStatisticsDescription(
+        const std::string& name,
+        const std::vector<std::string>& columns,
+        const std::vector<EMultiColumnStatisticsType>& types)
+    : Name_(name)
+    , Columns_(columns)
+    , Types_(types)
+{}
+
+TMultiColumnStatisticsDescription::TMultiColumnStatisticsDescription(const Ydb::Table::TableMultiColumnStatistics& proto)
+    : TMultiColumnStatisticsDescription(FromProto(proto))
+{}
+
+TMultiColumnStatisticsDescription::TMultiColumnStatisticsDescription(const Ydb::Table::TableMultiColumnStatisticsDescription& proto)
+    : TMultiColumnStatisticsDescription(FromProto(proto))
+{}
+
+template <typename TProto>
+TMultiColumnStatisticsDescription TMultiColumnStatisticsDescription::FromProto(const TProto& proto) {
+    std::vector<std::string> columns(proto.columns().begin(), proto.columns().end());
+    std::vector<EMultiColumnStatisticsType> types;
+    types.reserve(proto.types_size());
+    for (const auto type : proto.types()) {
+        switch (type) {
+        case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
+            types.push_back(EMultiColumnStatisticsType::CountMinSketch);
+            break;
+        case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+            types.push_back(EMultiColumnStatisticsType::EqHeightHistogram);
+            break;
+        default:
+            types.push_back(EMultiColumnStatisticsType::Unknown);
+            break;
+        }
+    }
+    return TMultiColumnStatisticsDescription(proto.name(), columns, types);
+}
+
+const std::string& TMultiColumnStatisticsDescription::GetName() const {
+    return Name_;
+}
+
+const std::vector<std::string>& TMultiColumnStatisticsDescription::GetColumns() const {
+    return Columns_;
+}
+
+const std::vector<EMultiColumnStatisticsType>& TMultiColumnStatisticsDescription::GetTypes() const {
+    return Types_;
+}
+
+void TMultiColumnStatisticsDescription::SerializeTo(Ydb::Table::TableMultiColumnStatistics& proto) const {
+    proto.set_name(TStringType{Name_});
+    for (const auto& column : Columns_) {
+        proto.add_columns(TStringType{column});
+    }
+    for (const auto type : Types_) {
+        switch (type) {
+        case EMultiColumnStatisticsType::CountMinSketch:
+            proto.add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+            break;
+        case EMultiColumnStatisticsType::EqHeightHistogram:
+            proto.add_types(Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM);
+            break;
+        case EMultiColumnStatisticsType::Unknown:
+            proto.add_types(Ydb::Table::TableMultiColumnStatistics::STATISTIC_TYPE_UNSPECIFIED);
+            break;
+        }
+    }
+}
+
+bool operator==(const TMultiColumnStatisticsDescription& lhs, const TMultiColumnStatisticsDescription& rhs) {
+    return lhs.GetName() == rhs.GetName()
+        && lhs.GetColumns() == rhs.GetColumns()
+        && lhs.GetTypes() == rhs.GetTypes();
+}
+
+bool operator!=(const TMultiColumnStatisticsDescription& lhs, const TMultiColumnStatisticsDescription& rhs) {
     return !(lhs == rhs);
 }
 
@@ -4211,6 +4413,11 @@ TMetricsSettings::EMetricsLevel TMetricsSettings::GetMetricsLevel() const {
 
 TBulkUpsertResult::TBulkUpsertResult(TStatus&& status)
     : TStatus(std::move(status))
+{}
+
+TReadRowsResult::TReadRowsResult(TStatus&& status)
+    : TStatus(std::move(status))
+    , ResultSet(Ydb::ResultSet{})
 {}
 
 TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)

@@ -1,8 +1,0 @@
-PROTO_LIBRARY()
-PROTOC_FATAL_WARNINGS()
-
-SRCS(
-    config.proto
-)
-
-END()

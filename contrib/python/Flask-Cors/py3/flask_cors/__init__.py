@@ -1,6 +1,12 @@
+from importlib.metadata import PackageNotFoundError, version
+
 from .decorator import cross_origin
 from .extension import CORS
-from .version import __version__
+
+try:
+    __version__ = version("flask-cors")
+except PackageNotFoundError:  # pragma: no cover - package is not installed
+    __version__ = "unknown"
 
 __all__ = ["CORS", "__version__", "cross_origin"]
 

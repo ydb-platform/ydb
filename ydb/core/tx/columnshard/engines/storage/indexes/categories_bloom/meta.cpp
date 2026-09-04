@@ -12,6 +12,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
 class TCategoryBuilder {
@@ -119,7 +121,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                         NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
                     }
                 },
-                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui64 hashBase) {
+                [&](const NArrow::NAccessor::TJsonValueView& data, const ui64 hashBase) {
                     auto view = data.GetScalarOptional();
                     if (!view.has_value()) {
                         return;
@@ -210,7 +212,8 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+            YDB_LOG_ERROR("",
+                {"indexParsing", conclusion.GetErrorMessage()});
             return false;
         }
     }

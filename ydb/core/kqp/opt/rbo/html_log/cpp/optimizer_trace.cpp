@@ -5,9 +5,13 @@
 
 #include <library/cpp/json/writer/json.h>
 
+#include <algorithm>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/system/file.h>
+#include <util/system/file_lock.h>
+#include <util/system/fstat.h>
+#include <util/system/guard.h>
 #include <util/system/types.h>
 
 #include <cstdint>
@@ -23,6 +27,8 @@
 
 namespace optimizer_trace {
 namespace {
+
+constexpr std::size_t TraceHtmlSniffBytes = 4 * 1024 * 1024;
 
 char lowerHexDigit(unsigned value) {
     return static_cast<char>(value < 10 ? '0' + value : 'a' + (value - 10));
@@ -79,6 +85,11 @@ TStringBuf stringBuf(const std::string& value) {
 
 std::string toStdString(const TString& value) {
     return std::string(value.data(), value.size());
+}
+
+bool LooksLikeOptimizerTraceHtml(const std::string& content) {
+    return content.find("optimizer-trace-app") != std::string::npos ||
+        content.find("optimizer-trace-data") != std::string::npos;
 }
 
 template <class TEmit>
@@ -1022,6 +1033,15 @@ void Trace::definePinnedFieldPresets(
     pinnedFieldPresets_ = presets;
 }
 
+void Trace::addDiffFieldPreset(const std::string& label, const std::vector<std::string>& keys) {
+    diffFieldPresets_.push_back({label, keys});
+}
+
+void Trace::defineDiffFieldPresets(
+    const std::vector<std::pair<std::string, std::vector<std::string>>>& presets) {
+    diffFieldPresets_ = presets;
+}
+
 Trace::Stage& Trace::stage(const std::string& name) {
     stages_.emplace_back(name);
     return stages_.back();
@@ -1030,52 +1050,10 @@ Trace::Stage& Trace::stage(const std::string& name) {
 namespace detail {
 
 class Emitter {
-    struct GroupInfo {
-        std::string name;
-        std::vector<std::size_t> tileIndices;
-    };
-
-    using StageGroups = std::vector<std::vector<GroupInfo>>;
-
 public:
-    GenerateResult writeTrace(const Trace& trace,
-                              const std::string& filename,
-                              const GenerateOptions& options) const {
-        std::vector<Trace> traces;
-        traces.push_back(trace);
-        return writePage(traces, filename, options);
-    }
-
-    GenerateResult writePage(const std::vector<Trace>& traces,
-                             const std::string& filename,
-                             const GenerateOptions& options) const {
-        std::vector<Trace> fallbackTraces;
-        const std::vector<Trace>* pageTraces = &traces;
-        if (pageTraces->empty()) {
-            fallbackTraces.emplace_back("Trace");
-            pageTraces = &fallbackTraces;
-        }
-
-        GenerateResult validation = validateTraces(*pageTraces);
-        if (!validation) return validation;
-
-        std::ofstream out(filename);
-        if (!out.is_open()) {
-            return GenerateResult::failure("Failed to open output file: " + filename);
-        }
-
-        GenerateResult result = emitDocument(out, *pageTraces, options);
-        if (!result) return result;
-        out.close();
-        if (!out) {
-            return GenerateResult::failure("Failed to write output file: " + filename);
-        }
-        return GenerateResult::success();
-    }
-
     GenerateResult buildLogShell(const TracePageOptions& options, std::string& content) const {
         (void)options;
-        if (!compressionAvailable(GenerateOptions::Compression::Brotli)) {
+        if (!brotliAvailable()) {
             return GenerateResult::failure("Brotli compression is required for streaming trace payloads");
         }
 
@@ -1095,7 +1073,8 @@ public:
     std::string traceMetadataSignature(const Trace& trace) const {
         return fieldDefinitionsJson(trace) + "|" +
             pinnedFieldsJson(trace) + "|" +
-            nodeColumnPresetsJson(trace);
+            pinnedFieldPresetsJson(trace) + "|" +
+            diffFieldPresetsJson(trace);
     }
 
     std::size_t nodeCount(const Node& node) const {
@@ -1206,8 +1185,10 @@ public:
             emitFieldDefinitionsData(out, trace);
             out.WriteKey("pinnedFields");
             emitPinnedFieldsData(out, trace);
-            out.WriteKey("nodeColumnPresets");
-            emitNodeColumnPresetsData(out, trace);
+            out.WriteKey("pinnedFieldPresets");
+            emitPinnedFieldPresetsData(out, trace);
+            out.WriteKey("diffFieldPresets");
+            emitDiffFieldPresetsData(out, trace);
             out.EndObject();
         }
         if (context.emitStage) {
@@ -1236,7 +1217,7 @@ public:
                                  std::string& content) const {
         if (records.empty()) return GenerateResult::success();
 
-        if (!compressionAvailable(GenerateOptions::Compression::Brotli)) {
+        if (!brotliAvailable()) {
             return GenerateResult::failure("Brotli compression is required for streaming trace payloads");
         }
 
@@ -1294,35 +1275,6 @@ public:
     }
 
 private:
-    GenerateResult validateTraces(const std::vector<Trace>& traces) const {
-        for (const auto& trace : traces) {
-            GenerateResult result = validateTrace(trace);
-            if (!result) return result;
-        }
-        return GenerateResult::success();
-    }
-
-    GenerateResult validateTrace(const Trace& trace) const {
-        for (const auto& stage : trace.stages_) {
-            for (const auto& tile : stage.tiles_) {
-                if (tile.payloadReleased()) {
-                    return GenerateResult::failure(
-                        "Cannot generate a full snapshot after submitted tile '" +
-                        tile.title_ + "' released its payload; use the streaming artifact"
-                    );
-                }
-                if (tile.isText()) continue;
-
-                std::unordered_set<std::string> nodeIds;
-                const std::string context = "trace '" + trace.title_ + "', stage '" +
-                    stage.name_ + "', tile '" + tile.title_ + "'";
-                GenerateResult result = validateTreeNode(tile.tree_, nodeIds, context);
-                if (!result) return result;
-            }
-        }
-        return GenerateResult::success();
-    }
-
     GenerateResult validateTreeNode(const Node& node,
                                     std::unordered_set<std::string>& nodeIds,
                                     const std::string& context) const {
@@ -1354,62 +1306,6 @@ private:
             if (!result) return result;
         }
         return GenerateResult::success();
-    }
-
-    StageGroups buildStageGroups(const Trace& trace) const {
-        StageGroups stageGroups;
-        stageGroups.reserve(trace.stages_.size());
-
-        for (const auto& stage : trace.stages_) {
-            std::vector<GroupInfo> groups;
-            for (std::size_t j = 0; j < stage.tiles_.size(); ) {
-                GroupInfo group;
-                group.name = stage.tiles_[j].title_;
-                group.tileIndices.push_back(j);
-
-                std::size_t k = j + 1;
-                while (k < stage.tiles_.size() && stage.tiles_[k].title_ == group.name) {
-                    group.tileIndices.push_back(k);
-                    k++;
-                }
-
-                groups.push_back(group);
-                j = k;
-            }
-            stageGroups.push_back(groups);
-        }
-
-        return stageGroups;
-    }
-
-    bool traceHasAnyFields(const Trace& trace) const {
-        for (const auto& stage : trace.stages_) {
-            for (const auto& tile : stage.tiles_) {
-                if (tile.isText()) continue;
-                if (tile.tree_.hasAnyFields()) return true;
-            }
-        }
-        return false;
-    }
-
-    bool traceHasPinnedValues(const Trace& trace) const {
-        if (trace.pinnedFields_.empty()) return false;
-        for (const auto& stage : trace.stages_) {
-            for (const auto& tile : stage.tiles_) {
-                if (tile.isText()) continue;
-                if (tile.tree_.hasAnyFieldValues()) return true;
-            }
-        }
-        return false;
-    }
-
-    bool traceHasAnyInfo(const Trace& trace) const {
-        for (const auto& stage : trace.stages_) {
-            for (const auto& tile : stage.tiles_) {
-                if (!tile.infoPanel_.empty()) return true;
-            }
-        }
-        return false;
     }
 
     void emitDocumentHead(std::ostream& out) const {
@@ -1455,9 +1351,11 @@ private:
         });
     }
 
-    void emitNodeColumnPresetsData(NJsonWriter::TBuf& out, const Trace& trace) const {
+    void emitFieldPresetsData(
+        NJsonWriter::TBuf& out,
+        const std::vector<std::pair<std::string, std::vector<std::string>>>& presets) const {
         out.BeginList();
-        for (const auto& preset : trace.pinnedFieldPresets_) {
+        for (const auto& preset : presets) {
             out.BeginObject();
             writeKeyString(out, "label", preset.first);
             out.WriteKey("keys").BeginList();
@@ -1470,148 +1368,32 @@ private:
         out.EndList();
     }
 
-    std::string nodeColumnPresetsJson(const Trace& trace) const {
+    void emitPinnedFieldPresetsData(NJsonWriter::TBuf& out, const Trace& trace) const {
+        emitFieldPresetsData(out, trace.pinnedFieldPresets_);
+    }
+
+    void emitDiffFieldPresetsData(NJsonWriter::TBuf& out, const Trace& trace) const {
+        emitFieldPresetsData(out, trace.diffFieldPresets_);
+    }
+
+    std::string pinnedFieldPresetsJson(const Trace& trace) const {
         return buildJson([&](NJsonWriter::TBuf& out) {
-            emitNodeColumnPresetsData(out, trace);
+            emitPinnedFieldPresetsData(out, trace);
         });
     }
 
-    void emitTileData(NJsonWriter::TBuf& out, const Trace::Tile& tile) const {
-        out.BeginObject();
-        writeKeyString(out, "id", tile.id_);
-        writeKeyString(out, "title", tile.title_);
-        if (tile.isText()) {
-            out.WriteKey("type").WriteString("text");
-            writeKeyString(out, "text", tile.text_);
-        } else {
-            out.WriteKey("type").WriteString("tree");
-            out.WriteKey("tree");
-            emitTreeData(out, tile.tree_);
-            if (!tile.infoPanel_.empty()) {
-                out.WriteKey("infoPanel");
-                emitInfoPanelData(out, tile.infoPanel_);
-            }
-        }
-        out.EndObject();
-    }
-
-    void emitTraceDataObject(NJsonWriter::TBuf& out, const Trace& trace) const {
-        const StageGroups stageGroups = buildStageGroups(trace);
-        out.BeginObject();
-        out.WriteKey("schemaVersion").WriteInt(2);
-        writeKeyString(out, "title", trace.title_);
-        out.WriteKey("fieldDefinitions");
-        emitFieldDefinitionsData(out, trace);
-        out.WriteKey("pinnedFields");
-        emitPinnedFieldsData(out, trace);
-        out.WriteKey("nodeColumnPresets");
-        emitNodeColumnPresetsData(out, trace);
-
-        out.WriteKey("featureAvailability").BeginObject();
-        writeKeyBool(out, "fields", traceHasAnyFields(trace));
-        writeKeyBool(out, "pinned", traceHasPinnedValues(trace));
-        writeKeyBool(out, "info", traceHasAnyInfo(trace));
-        out.EndObject();
-
-        out.WriteKey("stages").BeginList();
-        for (std::size_t i = 0; i < trace.stages_.size(); i++) {
-            out.BeginObject();
-            writeKeyString(out, "name", trace.stages_[i].name_);
-            out.WriteKey("groups").BeginList();
-            for (const auto& group : stageGroups[i]) {
-                out.BeginObject();
-                writeKeyString(out, "name", group.name);
-                out.WriteKey("tileIndices").BeginList();
-                for (const auto tileIndex : group.tileIndices) {
-                    out.WriteULongLong(static_cast<unsigned long long>(tileIndex));
-                }
-                out.EndList();
-                out.EndObject();
-            }
-            out.EndList();
-            out.WriteKey("tiles").BeginList();
-            for (const auto& tile : trace.stages_[i].tiles_) {
-                emitTileData(out, tile);
-            }
-            out.EndList();
-            out.EndObject();
-        }
-        out.EndList();
-        out.EndObject();
-    }
-
-    void emitTraceDataJson(NJsonWriter::TBuf& out, const std::vector<Trace>& traces) const {
-        out.BeginObject();
-        out.WriteKey("schemaVersion").WriteInt(2);
-        out.WriteKey("traces").BeginList();
-        for (const auto& trace : traces) {
-            emitTraceDataObject(out, trace);
-        }
-        out.EndList();
-        out.EndObject();
-    }
-
-    std::string traceDataJson(const std::vector<Trace>& traces) const {
-        std::string json = buildJson([&](NJsonWriter::TBuf& out) {
-            emitTraceDataJson(out, traces);
+    std::string diffFieldPresetsJson(const Trace& trace) const {
+        return buildJson([&](NJsonWriter::TBuf& out) {
+            emitDiffFieldPresetsData(out, trace);
         });
-        json += "\n";
-        return json;
     }
 
-    bool compressionAvailable(GenerateOptions::Compression compression) const {
-        if (compression == GenerateOptions::Compression::Auto) return true;
-        if (compression == GenerateOptions::Compression::Identity) return true;
+    bool brotliAvailable() const {
 #if OPTIMIZER_TRACE_HTML_HAS_BROTLI
-        if (compression == GenerateOptions::Compression::Brotli) return true;
-#endif
-        return false;
-    }
-
-    GenerateOptions::Compression resolvedCompression(
-        GenerateOptions::Compression compression
-    ) const {
-        if (compression != GenerateOptions::Compression::Auto) return compression;
-#if OPTIMIZER_TRACE_HTML_HAS_BROTLI
-        return GenerateOptions::Compression::Brotli;
+        return true;
 #else
-        return GenerateOptions::Compression::Identity;
+        return false;
 #endif
-    }
-
-    GenerateResult emitScriptData(std::ostream& out,
-                                  const std::vector<Trace>& traces,
-                                  const GenerateOptions& options,
-                                  bool& includesBrotliDecoder) const {
-        includesBrotliDecoder = false;
-        const GenerateOptions::Compression compression = resolvedCompression(options.compression);
-        if (!compressionAvailable(compression)) {
-            return GenerateResult::failure("Requested Brotli compression is not available in this build");
-        }
-        const std::string json = traceDataJson(traces);
-
-        if (compression == GenerateOptions::Compression::Brotli) {
-            bool compressed = false;
-            std::string payload = brotliCompress(json, options.compressionLevel, &compressed);
-            if (!compressed) {
-                return GenerateResult::failure("Brotli compression failed");
-            }
-            includesBrotliDecoder = true;
-            out << "<script id=\"optimizer-trace-data\" type=\"application/octet-stream\" "
-                << "data-compression=\"brotli\" data-encoding=\"base64url\">\n"
-                << base64UrlEncode(payload)
-                << "\n</script>\n";
-            return static_cast<bool>(out)
-                ? GenerateResult::success()
-                : GenerateResult::failure("Failed to write compressed trace data");
-        }
-
-        out << "<script id=\"optimizer-trace-data\" type=\"application/json\">\n";
-        out << json;
-        out << "</script>\n";
-        return static_cast<bool>(out)
-            ? GenerateResult::success()
-            : GenerateResult::failure("Failed to write trace data");
     }
 
     void emitBrotliDecoderRuntime(std::ostream& out) const {
@@ -1654,22 +1436,6 @@ private:
 
     void emitAppMount(std::ostream& out) const {
         out << "<div id=\"optimizer-trace-app\"></div>\n";
-    }
-
-    GenerateResult emitDocument(std::ostream& out,
-                                const std::vector<Trace>& traces,
-                                const GenerateOptions& options) const {
-        emitDocumentHead(out);
-        bool includesBrotliDecoder = false;
-        GenerateResult dataResult = emitScriptData(out, traces, options, includesBrotliDecoder);
-        if (!dataResult) return dataResult;
-        if (includesBrotliDecoder) emitBrotliDecoderRuntime(out);
-        emitScriptRuntime(out);
-        emitAppMount(out);
-        out << "</body></html>\n";
-        return static_cast<bool>(out)
-            ? GenerateResult::success()
-            : GenerateResult::failure("Failed to write HTML document");
     }
 
     void emitTargetData(NJsonWriter::TBuf& out, const Target& target) const {
@@ -1945,28 +1711,74 @@ private:
 
 }  // namespace detail
 
-GenerateResult Trace::generateHTML(const std::string& filename,
-                                   const GenerateOptions& options) const {
-    return detail::Emitter().writeTrace(*this, filename, options);
-}
-
 class TFileTracePageSink final : public ITracePageSink {
 public:
     explicit TFileTracePageSink(std::string filename)
         : Filename_(std::move(filename))
+        , LockFilename_(Filename_ + ".lock")
     {
     }
 
     GenerateResult Reset(const std::string& content) override {
-        return WriteBlock(content, CreateAlways | WrOnly, "write");
+        TFileLock lock{TString(LockFilename_)};
+        TGuard<TFileLock> guard(lock);
+        return WriteBlockLocked(content, CreateAlways | WrOnly, "write");
     }
 
     GenerateResult Append(const std::string& content) override {
-        return WriteBlock(content, OpenAlways | WrOnly | ForAppend, "append");
+        TFileLock lock{TString(LockFilename_)};
+        TGuard<TFileLock> guard(lock);
+        return WriteBlockLocked(content, OpenAlways | WrOnly | ForAppend, "append");
+    }
+
+    GenerateResult WriteInitial(const std::string& shell, const std::string& firstBlock) override {
+        TFileLock lock{TString(LockFilename_)};
+        TGuard<TFileLock> guard(lock);
+
+        const ExistingFileState state = ExistingStateLocked();
+        if (state == ExistingFileState::TraceHtml) {
+            return WriteBlockLocked(firstBlock, OpenAlways | WrOnly | ForAppend, "append");
+        }
+        if (state == ExistingFileState::OtherContent) {
+            return GenerateResult::failure(
+                "Refusing to append optimizer trace output to a non-trace file: " + Filename_
+            );
+        }
+
+        return WriteBlockLocked(shell + firstBlock, CreateAlways | WrOnly, "write");
     }
 
 private:
-    GenerateResult WriteBlock(const std::string& content, EOpenMode mode, const char* action) const {
+    enum class ExistingFileState {
+        EmptyOrMissing,
+        TraceHtml,
+        OtherContent
+    };
+
+    ExistingFileState ExistingStateLocked() const {
+        const TFileStat stat{TString(Filename_)};
+        if (!stat.IsFile() || stat.Size == 0) {
+            return ExistingFileState::EmptyOrMissing;
+        }
+
+        std::ifstream in(Filename_, std::ios::binary);
+        if (!in.is_open()) {
+            return ExistingFileState::OtherContent;
+        }
+
+        const std::size_t bytesToRead = static_cast<std::size_t>(
+            std::min<ui64>(stat.Size, static_cast<ui64>(TraceHtmlSniffBytes))
+        );
+        std::string prefix(bytesToRead, '\0');
+        in.read(prefix.data(), static_cast<std::streamsize>(prefix.size()));
+        prefix.resize(static_cast<std::size_t>(in.gcount()));
+
+        return LooksLikeOptimizerTraceHtml(prefix)
+            ? ExistingFileState::TraceHtml
+            : ExistingFileState::OtherContent;
+    }
+
+    GenerateResult WriteBlockLocked(const std::string& content, EOpenMode mode, const char* action) const {
         if (content.size() > std::numeric_limits<ui32>::max()) {
             return GenerateResult::failure(
                 std::string("Failed to ") + action + " output file " + Filename_ +
@@ -1995,7 +1807,12 @@ private:
     }
 
     std::string Filename_;
+    std::string LockFilename_;
 };
+
+GenerateResult ITracePageSink::WriteInitial(const std::string& shell, const std::string& firstBlock) {
+    return Reset(shell + firstBlock);
+}
 
 struct TracePage::StreamState {
     StreamState(
@@ -2175,8 +1992,7 @@ GenerateResult TracePage::flush() {
     if (!result) return result;
 
     if (!stream_->shellWritten) {
-        shell += block;
-        result = stream_->sink->Reset(shell);
+        result = stream_->sink->WriteInitial(shell, block);
         if (!result) return result;
         stream_->shellWritten = true;
     } else {
@@ -2188,11 +2004,6 @@ GenerateResult TracePage::flush() {
     stream_->pendingPayloadBytes = 0;
     stream_->pendingRecords.clear();
     return GenerateResult::success();
-}
-
-GenerateResult TracePage::generateHTML(const std::string& filename,
-                                       const GenerateOptions& options) const {
-    return detail::Emitter().writePage(traces_, filename, options);
 }
 
 }  // namespace optimizer_trace

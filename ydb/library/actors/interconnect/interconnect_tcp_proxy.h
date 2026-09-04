@@ -15,6 +15,7 @@
 
 namespace NActors {
 
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept;
 
     /* WARNING: all proxy actors should be alive during actorsystem activity */
     class TInterconnectProxyTCP
@@ -82,11 +83,23 @@ namespace NActors {
 
     private:
         friend class TInterconnectSessionTCP;
-        friend class TInterconnectSessionTCPv0;
+        friend class TInterconnectSessionRdma;
+        friend class TInterconnectSessionTCPv2;
         friend class THandshake;
         friend class TInputSessionTCP;
 
-        void UnregisterSession(TInterconnectSessionTCP* session);
+        void UnregisterSession(IInterconnectSession* session);
+
+        // Forwards a synchronous call to the current session through the IInterconnectSession interface,
+        // while setting up the session's actor recurse-context (as IActor::InvokeOtherActor would do for a
+        // concrete actor type).
+        template <typename TMethod, typename... TArgs>
+        decltype(auto) InvokeSession(TMethod&& method, TArgs&&... args) {
+            return IActor::InvokeOtherActor(Session->SessionActor(),
+                [&](auto&&) -> decltype(auto) {
+                    return std::invoke(std::forward<TMethod>(method), Session, std::forward<TArgs>(args)...);
+                });
+        }
 
 #define SESSION_EVENTS(HANDLER)                                \
     fFunc(TEvInterconnect::EvForward, HANDLER)                 \
@@ -137,6 +150,7 @@ namespace NActors {
                 cFunc(EvPassAwayIfNeeded, HandlePassAwayIfNeeded)                               \
                 hFunc(TEvSubscribeForConnection, Handle);                                       \
                 hFunc(TEvReportConnection, Handle);                                             \
+                hFunc(TEvProxyCall, Handle);                                                    \
                 fFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
                 default:                                                                        \
                     Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                       \
@@ -145,7 +159,9 @@ namespace NActors {
         if (profiled) {                                                                         \
             if (TProfiled::Duration() >= TDuration::MilliSeconds(16)) {                         \
                 const TString report = TProfiled::Format();                                     \
-                LOG_ERROR_IC("ICP35", "event processing took too much time %s", report.data()); \
+                YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Event processing took too much time", \
+                    {"marker", "ICP35"},                                                        \
+                    {"report", report.data()});                                                 \
             }                                                                                   \
             TProfiled::Finish();                                                                \
         }                                                                                       \
@@ -183,7 +199,11 @@ namespace NActors {
         void SwitchToState(int line, const char* name, TArgs&&... args) {
             ICPROXY_PROFILED;
 
-            LOG_DEBUG_IC("ICP77", "@%d %s -> %s", line, State, name);
+            YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "@ ->",
+                {"marker", "ICP77"},
+                {"line", line},
+                {"state", State},
+                {"name", name});
             State = name;
             StateSwitchTime = TActivationContext::Now();
             Become(std::forward<TArgs>(args)...);
@@ -395,7 +415,8 @@ namespace NActors {
                     " from Sender# %s sent to the proxy for the node itself via Interconnect;"
                     " THIS IS NOT A BUG IN INTERCONNECT, check the event sender instead",
                     ev->Type, ev->GetTypeRewrite(), ev->Sender.ToString().data());
-                LOG_ERROR_IC("ICP03", "%s", msg.data());
+                YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, msg,
+                    {"marker", "ICP03"});
                 Y_DEBUG_ABORT_UNLESS(false, "%s", msg.data());
             }
 
@@ -436,6 +457,7 @@ namespace NActors {
         void RegisterRdmaFailure();
         void ScheduleDelayedRdmaHandshake();
         void SetRdmaRetryWatchdogPending(bool pending);
+        void Handle(TEvProxyCall::TPtr& ev);
 
         // hold all events before connection is established
         struct TPendingSessionEvent {
@@ -454,7 +476,7 @@ namespace NActors {
         void ProcessPendingSessionEvents();
         void DropSessionEvent(STATEFN_SIG);
 
-        TInterconnectSessionTCP* Session = nullptr;
+        IInterconnectSession* Session = nullptr;
         TActorId SessionID;
 
         // virtual ids used during handshake to check if it is the connection
@@ -477,8 +499,10 @@ namespace NActors {
             ICPROXY_PROFILED;
 
             if (const TActorId& actorId = std::exchange(IncomingHandshakeActor, TActorId())) {
-                LOG_DEBUG_IC("ICP111", "dropped incoming handshake: %s poison: %s", actorId.ToString().data(),
-                             poison ? "true" : "false");
+                YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Dropped incoming",
+                    {"marker", "ICP111"},
+                    {"handshake", actorId},
+                    {"poison", poison ? "true" : "false"});
                 if (poison) {
                     Send(actorId, new TEvents::TEvPoisonPill);
                 }
@@ -492,8 +516,10 @@ namespace NActors {
             ICPROXY_PROFILED;
 
             if (const TActorId& actorId = std::exchange(OutgoingHandshakeActor, TActorId())) {
-                LOG_DEBUG_IC("ICP052", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(),
-                             poison ? "true" : "false");
+                YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Dropped outgoing",
+                    {"marker", "ICP052"},
+                    {"handshake", actorId},
+                    {"poison", poison ? "true" : "false"});
                 if (poison) {
                     Send(actorId, new TEvents::TEvPoisonPill);
                 }
@@ -513,8 +539,9 @@ namespace NActors {
 
             // drop existing session if we have one
             if (Session) {
-                LOG_INFO_IC("ICP04", "terminating current session as we are negotiating a new one");
-                IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::NewSession());
+                YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Terminating current session as we are negotiating a new one",
+                    {"marker", "ICP04"});
+                InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
             }
 
             // ensure we have no current session

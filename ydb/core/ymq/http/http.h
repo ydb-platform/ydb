@@ -54,6 +54,13 @@ private:
         }
     }
 
+    template<typename T>
+    void SetupAuth(T* const request) {
+        auto* auth = request->MutableAuth();
+        auth->SetUserName(UserName_);
+        auth->SetSourceAddress(SourceAddress_);
+    }
+
     TString GetRequestPathPart(TStringBuf path, size_t partIdx) const;
     TString ExtractQueueNameFromPath(const TStringBuf path);
 

@@ -94,7 +94,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
   # YDB
   ydb_version: "версия_системы"
-  ydb_archive: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/ydbd.tar.gz"
+  ydb_archive: "not_var{{ ansible_config_file | dirname }}/files/ydbd.tar.gz"
 
   # Дополнительные параметры
   ydb_allow_format_drives: true
@@ -307,11 +307,11 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 ## Дополнительные шаги {# additional-steps}
 
-Самый простой способ исследовать только что развёрнутый кластер — использовать [Embedded UI](../../../../reference/embedded-ui/index.md), работающий на порту 8765 каждого сервера. Если нет прямого доступа к порту из браузера, можно настроить SSH-туннелирование. Для этого выполните команду `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` на локальной машине (при необходимости добавьте дополнительные опции). После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765) через браузер. Браузер может попросить принять исключение безопасности. Пример того, как это может выглядеть:
+Самый простой способ исследовать только что развёрнутый кластер — использовать [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md), работающий на порту 8765 каждого сервера. Если нет прямого доступа к порту из браузера, можно настроить SSH-туннелирование. Для этого выполните команду `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` на локальной машине (при необходимости добавьте дополнительные опции). После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765) через браузер. Браузер может попросить принять исключение безопасности. Пример того, как это может выглядеть:
 
 ![ydb-web-ui](../../../../_assets/ydb-web-console.png)
 
-После успешного создания кластера {{ ydb-short-name }} проверьте его состояние, используя следующую страницу Embedded UI: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). Это может выглядеть так:
+После успешного создания кластера {{ ydb-short-name }} проверьте его состояние, используя следующую страницу {{ ydb-ui-name }}: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). Это может выглядеть так:
 
 ![ydb-cluster-check](../../../../_assets/ydb-cluster-check.png)
 
@@ -326,7 +326,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 ![ydb-storage-gr-check](../../../../_assets/ydb-storage-gr-check.png)
 
-Индикаторы `VDisks` должны быть зелёными, а статус `state` (находится в подсказке при наведении на индикатор Vdisk) должен быть `Ok`. Больше об индикаторах состояния кластера и мониторинге можно прочитать в статье [{#T}](../../../../reference/embedded-ui/ydb-monitoring.md).
+Индикаторы `VDisks` должны быть зелёными, а статус `state` (находится в подсказке при наведении на индикатор Vdisk) должен быть `Ok`. Больше об индикаторах состояния кластера и мониторинге можно прочитать в статье [{#T}](../../../../reference/ydb-ui/ydb-monitoring.md).
 
 ### Тестирование кластера {#testing}
 

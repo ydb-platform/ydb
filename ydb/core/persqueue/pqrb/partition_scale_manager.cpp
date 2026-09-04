@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <ranges>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -35,9 +37,13 @@ void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKi
     TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants,
     TMaybe<TString> splitBoundary,
     const TActorContext& ctx) {
-    PQ_LOG_D("Handle HandleScaleStatusChange. Scale status: " << NKikimrPQ::EScaleStatus_Name(scaleStatus));
+    YDB_LOG_DEBUG("Handle HandleScaleStatusChange. Scale",
+        {"logPrefix", LogPrefix()},
+        {"status", NKikimrPQ::EScaleStatus_Name(scaleStatus)});
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-        PQ_LOG_D("::HandleScaleStatusChange need to split partition " << partitionId);
+        YDB_LOG_DEBUG("::HandleScaleStatusChange need to split partition",
+            {"logPrefix", LogPrefix()},
+            {"partitionId", partitionId});
         TPartitionScaleOperationInfo op{
             .PartitionId = partitionId,
             .PartitionScaleParticipants = std::move(participants),
@@ -58,13 +64,14 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
 
     auto splitMergeRequest = BuildScaleRequest(ctx);
     if (splitMergeRequest.Empty()) {
-        PQ_LOG_D("splitMergeRequest empty");
+        YDB_LOG_DEBUG("SplitMergeRequest empty",
+            {"logPrefix", LogPrefix()});
         return;
     }
 
     RequestInflight = true;
-    RootPartitionsResetRequestInflight = !splitMergeRequest.SetBoundary.empty();
-    PQ_LOG_D("send split request");
+    YDB_LOG_DEBUG("Send split request",
+        {"logPrefix", LogPrefix()});
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
         TopicPath,
@@ -91,10 +98,10 @@ struct TPartitionScaleManager::TBuildSplitScaleRequestResult {
     bool Remove = false;
 };
 
-std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> TPartitionScaleManager::ReorderSplits() const {
+std::vector<ui32> TPartitionScaleManager::ReorderSplits() const {
     // try to avoid gaps by using partitions with smaller children id
-    auto proj = [](const auto& it) {
-        const TPartitionScaleOperationInfo& info = it->second;
+    auto proj = [this](ui32 partitionId) {
+        const TPartitionScaleOperationInfo& info = PartitionsToSplit.at(partitionId);
         if (info.PartitionScaleParticipants.Defined()) {
             const auto& childPartitionIds = info.PartitionScaleParticipants->GetChildPartitionIds();
             if (!childPartitionIds.empty()) {
@@ -104,10 +111,10 @@ std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> TPart
         }
         return std::make_tuple(info.PartitionId, info.PartitionId);
     };
-    std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> result;
+    std::vector<ui32> result;
     result.reserve(PartitionsToSplit.size());
-    for (auto it = PartitionsToSplit.begin(); it != PartitionsToSplit.end(); ++it) {
-        result.push_back(it);
+    for (const auto& [partitionId, _] : PartitionsToSplit) {
+        result.push_back(partitionId);
     }
     std::ranges::sort(result, {}, proj);
     return result;
@@ -129,12 +136,12 @@ TPartitionScaleManager::TScaleRequest TPartitionScaleManager::BuildScaleRequest(
     auto mergesToApply = BuildMergeRequest(allowedSplitsCount);
     auto splitsToApply = BuildSplitRequest(allowedSplitsCount);
 
-    PQ_LOG_D(fmt::format("Scale request: #splits={}, #unprocessed={}, splitsLimit={}, #merges={}",
-        splitsToApply.Requests.size(),
-        splitsToApply.Unprocessed,
-        allowedSplitsCountLimit,
-        mergesToApply.Requests.size()
-    ));
+    YDB_LOG_DEBUG("Scale request",
+        {"logPrefix", LogPrefix()},
+        {"splits", splitsToApply.Requests.size()},
+        {"unprocessed", splitsToApply.Unprocessed},
+        {"splitsLimit", allowedSplitsCountLimit},
+        {"merges", mergesToApply.Requests.size()});
 
     return {
         .Split = std::move(splitsToApply.Requests),
@@ -166,19 +173,20 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TP
                 allowedSplitsCount -= cost;
                 boundsToApply.push_back(std::move(part));
             } else {
-                PQ_LOG_W(fmt::format("MaxActivePartitions ({}) is too low to recreate {} root partitions from the mirror source topic",
-                                     BalancerConfig.MaxActivePartitions,
-                                     RootPartitionsToCreate->size()));
+                YDB_LOG_WARN("MaxActivePartitions is too low to recreate root partitions from the mirror source topic",
+                    {"logPrefix", LogPrefix()},
+                    {"maxActivePartitions", BalancerConfig.MaxActivePartitions},
+                    {"createPartitions", RootPartitionsToCreate->size()});
                 // don't send request at all, if there is not enough quota
                 return {
                     .Unprocessed = RootPartitionsToCreate->size(),
                 };
             }
         }
-        PQ_LOG_D(fmt::format("Set partition boundaries requsts: #modify={}, #create{}",
-            modifyPartitions,
-            createPartitions
-        ));
+        YDB_LOG_DEBUG("Set partition boundaries requsts",
+            {"logPrefix", LogPrefix()},
+            {"modify", modifyPartitions},
+            {"create", createPartitions});
     }
     return {
         .Requests = std::move(boundsToApply),
@@ -190,19 +198,22 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionSplit> TPart
     std::vector<TPartitionSplit> splitsToApply;
     const std::vector splitCandidates = ReorderSplits();
     size_t checkedSplits = 0;
-    for (const auto& partitionIt : splitCandidates) {
+    for (const ui32 partitionId : splitCandidates) {
         if (allowedSplitsCount <= 0) {
             break;
         }
         ++checkedSplits;
-        const auto& [_, splitParameters] = *partitionIt;
-        TBuildSplitScaleRequestResult req = BuildSplitScaleRequest(splitParameters);
+        auto it = PartitionsToSplit.find(partitionId);
+        if (it == PartitionsToSplit.end()) {
+            continue;
+        }
+        TBuildSplitScaleRequestResult req = BuildSplitScaleRequest(it->second);
         if (req.Split) {
             splitsToApply.push_back(std::move(*req.Split));
             --allowedSplitsCount;
         }
         if (req.Remove) {
-            PartitionsToSplit.erase(partitionIt);
+            PartitionsToSplit.erase(partitionId);
         }
     }
     return {
@@ -221,21 +232,29 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
     const ui32 partitionId = splitParameters.PartitionId;
     if (MirroredFromSomewhere)  {
         if (!AppData()->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
-            PQ_LOG_D("split request for mirrored topic is disabled. Partition# " << partitionId);
+            YDB_LOG_DEBUG("Split request for mirrored topic is disabled",
+                {"logPrefix", LogPrefix()},
+                {"partition", partitionId});
             return {.Split = Nothing(), .Remove = false};
         }
         if (!splitParameters.PartitionScaleParticipants.Defined()) {
-            PQ_LOG_NOTICE("split request for mirrored topic doesn't have prescribed partition ids. Partition# " << partitionId);
+            YDB_LOG_NOTICE("Split request for mirrored topic doesn't have prescribed partition ids",
+                {"logPrefix", LogPrefix()},
+                {"partition", partitionId});
             return {.Split = Nothing(), .Remove = true};
         }
     }
     const auto* node = PartitionGraph.GetPartition(partitionId);
     if (node == nullptr) {
         if (splitParameters.PartitionScaleParticipants.Defined()) {
-            PQ_LOG_NOTICE("attempt to split partition that was not created yet. Partition# " << partitionId);
+            YDB_LOG_NOTICE("Attempt to split partition that was not created yet",
+                {"logPrefix", LogPrefix()},
+                {"partition", partitionId});
             return {.Split = Nothing(), .Remove = false};
         } else {
-            PQ_LOG_ERROR("partition not found. Partition# " << partitionId);
+            YDB_LOG_ERROR("Partition not found",
+                {"logPrefix", LogPrefix()},
+                {"partition", partitionId});
             return {.Split = Nothing(), .Remove = true};
         }
     }
@@ -244,18 +263,25 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
         auto to = node->To;
         auto mid = splitParameters.SplitBoundary.GetOrElse(MiddleOf(from, to));
         if (mid.empty()) {
-            PQ_LOG_ERROR("wrong partition key range. Can't get mid. Partition# " << partitionId);
+            YDB_LOG_ERROR("Wrong partition key range. Can't get mid",
+                {"logPrefix", LogPrefix()},
+                {"partition", partitionId});
             return {.Split = Nothing(), .Remove = true};
         }
 
         if (splitParameters.PartitionScaleParticipants.Defined() && splitParameters.PartitionScaleParticipants->AdjacentPartitionIdsSize() != 0) {
-            PQ_LOG_ERROR("split request cannot have adjacent partitions. Partition# " << partitionId);
+            YDB_LOG_ERROR("Split request cannot have adjacent partitions",
+                {"logPrefix", LogPrefix()},
+                {"partition", partitionId});
             return {.Split = Nothing(), .Remove = true};
         }
 
-        PQ_LOG_D("partition split ranges. From# '" << ToHex(from)
-                << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
-                << "'. Partition# " << partitionId);
+        YDB_LOG_DEBUG("Partition split ranges",
+            {"logPrefix", LogPrefix()},
+            {"fromHex", ToHex(from)},
+            {"toHex", ToHex(to)},
+            {"midHex", ToHex(mid)},
+            {"partition", partitionId});
 
         TPartitionSplit split;
         split.set_partition(partitionId);
@@ -264,7 +290,10 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
             for (const auto& childPartitionId : splitParameters.PartitionScaleParticipants->GetChildPartitionIds()) {
                 split.add_childpartitionids(childPartitionId);
                 if (const auto* childNode = PartitionGraph.GetPartition(childPartitionId); childNode != nullptr) {
-                    PQ_LOG_NOTICE(fmt::format("Child partition# {} already exists. Performing unordered split. Partition# {}", childPartitionId, partitionId));
+                    YDB_LOG_NOTICE("Child partition already exists. Performing unordered split",
+                        {"logPrefix", LogPrefix()},
+                        {"childPartition", childPartitionId},
+                        {"partition", partitionId});
                     split.set_createrootlevelsibling(true);
                 }
             }
@@ -276,7 +305,10 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
             const auto& prescribedChildrenIds = splitParameters.PartitionScaleParticipants->GetChildPartitionIds();
             if (!std::ranges::is_permutation(nodeChildrenIds, prescribedChildrenIds)) {
                 const std::string mappingStr = fmt::format("([{}]->[{}])", fmt::join(nodeChildrenIds, ","), fmt::join(prescribedChildrenIds, ","));
-                PQ_LOG_ERROR("trying to split partition into different set of children partitions " << mappingStr << ". Partition# " << partitionId);
+                YDB_LOG_ERROR("Trying to split partition into different set of children partitions",
+                    {"logPrefix", LogPrefix()},
+                    {"mappingStr", mappingStr},
+                    {"partition", partitionId});
             }
         }
         return {.Split = Nothing(), .Remove = true};
@@ -285,9 +317,12 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
 
 void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
     RequestInflight = false;
+    CurrentScaleRequest = {};
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
-    PQ_LOG_D("HandleScaleRequestResult scale request result: " << result->Status);
+    YDB_LOG_DEBUG("HandleScaleRequestResult scale request",
+        {"logPrefix", LogPrefix()},
+        {"result", result->Status});
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
         RequestTimeout = TDuration::Zero();
         Backoff.Reset();
@@ -295,6 +330,14 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     } else {
         RequestTimeout = Backoff.Next();
         ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup(TRY_SCALE_REQUEST_WAKE_UP_TAG));
+    }
+}
+
+void TPartitionScaleManager::AbortInflightScaleRequest(const TActorContext& ctx) {
+    RequestInflight = false;
+    if (CurrentScaleRequest) {
+        ctx.Send(CurrentScaleRequest, new TEvents::TEvPoisonPill());
+        CurrentScaleRequest = {};
     }
 }
 
@@ -312,24 +355,27 @@ void TPartitionScaleManager::UpdateMirrorRootPartitionsSet() {
 
     NMirror::TMirrorGraphComparisonResult cmp = NMirror::ComparePartitionGraphs(PartitionGraph, MirrorTopicDescription->GetPartitions());
     if (!cmp.RootPartitionsMismatch.has_value()) {
-        PQ_LOG_D("Topic has all root partitions from the source topic");
+        YDB_LOG_DEBUG("Topic has all root partitions from the source topic",
+            {"logPrefix", LogPrefix()});
         RootPartitionsToCreate.reset();
         MirrorTopicError.reset();
         return;
     }
     auto& rootPartitionsMismatch = cmp.RootPartitionsMismatch.value();
     if (rootPartitionsMismatch.Error.has_value()) {
-        std::string msg = TStringBuilder() << "Incompatable configuration of root partitions between source and target topics:" << rootPartitionsMismatch.Error.value();
-        PQ_LOG_ERROR(msg);
+        YDB_LOG_ERROR("Incompatable configuration of root partitions between source and target topics",
+            {"logPrefix", LogPrefix()},
+            {"topics", rootPartitionsMismatch.Error.value()});
         RootPartitionsToCreate.reset();
         MirrorTopicError = std::move(*rootPartitionsMismatch.Error);
         return;
     }
     const size_t existingPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Modify, &NMirror::TPartitionWithBounds::Action);
     const size_t newPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Create, &NMirror::TPartitionWithBounds::Action);
-    PQ_LOG_I(fmt::format("Topic has less root partitions than the mirror source. New configuration has {}+{} partitions.",
-                         existingPartitions,
-                         newPartitions));
+    YDB_LOG_INFO("Topic has less root partitions than the mirror source",
+        {"logPrefix", LogPrefix()},
+        {"existing", existingPartitions},
+        {"new", newPartitions});
 
     RootPartitionsToCreate = std::move(rootPartitionsMismatch.AlterRootPartitions);
     MirrorTopicError.reset();
@@ -341,7 +387,8 @@ std::expected<void, std::string> TPartitionScaleManager::HandleMirrorTopicDescri
     } else {
         auto& description = ev->Get()->Description;
         if (!description.has_value() || !description.value().IsSuccess()) {
-            PQ_LOG_W("Ignoring invalid mirror source description");
+            YDB_LOG_WARN("Ignoring invalid mirror source description",
+                {"logPrefix", LogPrefix()});
             return {};
         }
         MirrorTopicDescription.emplace(std::move(description->GetTopicDescription()));
@@ -370,8 +417,9 @@ void TPartitionScaleManager::UpdateBalancerConfig(ui64 pathId, int version, cons
     }
 }
 
-void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
+void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath, const TActorContext& ctx) {
     DatabasePath = dbPath;
+    TrySendScaleRequest(ctx);
 }
 
 } // namespace NPQ

@@ -876,6 +876,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         auto tableClient = kikimr.GetTableClient();
@@ -893,26 +895,31 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         const ui64 freshBaseTs = (now + TDuration::Days(10)).MicroSeconds();
 
         for (ui32 i = 0; i < 6; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, expiredBaseTs + i * 10'000'000ULL, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, expiredBaseTs + i * 10'000'000ULL, 2000);
         }
         for (ui32 i = 0; i < 6; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, freshBaseTs + i * 10'000'000ULL, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, freshBaseTs + i * 10'000'000ULL, 2000);
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(SelectPortionCount(tableClient, "/Root/olapStore/olapTable"), 12);
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
 
         csController->WaitCompactions(TDuration::Seconds(10));
         csController->WaitActualization(TDuration::Seconds(10));
-        csController->WaitTtl(TDuration::Seconds(20));
-        UNIT_ASSERT_LE(SelectRowCount(tableClient, "/Root/olapStore/olapTable"), 12'000);
+        csController->WaitTtl(TDuration::Seconds(10));
+        UNIT_ASSERT_EQUAL(SelectRowCount(tableClient, "/Root/olapStore/olapTable"), 12'000);
         auto optimizerBefore = SelectOptimizerLevelStats(tableClient, "/Root/olapStore/olapTable");
         UNIT_ASSERT_C(!optimizerBefore.empty(), "expected optimizer to track surviving portions after TTL deletion");
 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, (now + TDuration::Days(20)).MicroSeconds(), 1000, false, 2'000'000'000ULL);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, (now + TDuration::Days(20)).MicroSeconds(), 2000, false, 2'000'000'000ULL);
         csController->WaitCompactions(TDuration::Seconds(15));
         csController->WaitActualization(TDuration::Seconds(10));
         csController->WaitTtl(TDuration::Seconds(10));
 
-        UNIT_ASSERT_VALUES_EQUAL(SelectRowCount(tableClient, "/Root/olapStore/olapTable"), 7'000);
-        UNIT_ASSERT_VALUES_EQUAL(SelectPortionCount(tableClient, "/Root/olapStore/olapTable"), 4);
+        UNIT_ASSERT_VALUES_EQUAL(SelectRowCount(tableClient, "/Root/olapStore/olapTable"), 14'000);
+        UNIT_ASSERT_VALUES_EQUAL(SelectPortionCount(tableClient, "/Root/olapStore/olapTable"), 7);
 
         auto optimizerAfter = SelectOptimizerLevelStats(tableClient, "/Root/olapStore/olapTable");
         UNIT_ASSERT_C(!optimizerAfter.empty(), "expected optimizer levels to stay readable after TTL deletion");

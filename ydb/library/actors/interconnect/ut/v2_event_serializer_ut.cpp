@@ -1,0 +1,1104 @@
+#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/interconnect/v2_event_serializer.h>
+#include <ydb/library/actors/protos/unittests.pb.h>
+
+#include <contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord.h>
+#include <contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord_test_helpers.h>
+
+#include <util/string/cast.h>
+#include <array>
+#include <cstring>
+
+using namespace NActors;
+
+struct TEvPrivate {
+    enum {
+        EvTest = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvProto : public TEventPB<TEvProto, TMessageWithPayload, EvTest> {};
+};
+
+struct TEventProcessor : TEventDeserializer::IEventProcessor {
+    std::deque<std::unique_ptr<IEventHandle>> Events;
+
+    void PushEvent(std::unique_ptr<IEventHandle> event) override {
+        Events.push_back(std::move(event));
+    }
+
+    void Process(NActorsInterconnect::TSystemPayloadV2&) override {}
+};
+
+// deterministic payload for the event with the given index, so that the receiver can validate consistency
+TString MakeSomeData(ui64 index, size_t len) {
+    return TString(len, static_cast<char>('A' + index % 26));
+}
+
+TString MakePayloadData(ui64 index, size_t len) {
+    return TString(len, static_cast<char>('a' + index % 26));
+}
+
+std::unique_ptr<IEventHandle> MakeIndexedEvent(ui16 channel, ui64 index, size_t dataLen, bool withPayload) {
+    auto ev = std::make_unique<TEvPrivate::TEvProto>();
+    ev->Record.SetMeta(ToString(index));
+    ev->Record.AddSomeData(MakeSomeData(index, dataLen));
+    if (withPayload) {
+        ev->AddPayload(TRope(MakePayloadData(index, dataLen)));
+    }
+    TActorId sender(1, 2, 3, static_cast<ui32>(index));
+    TActorId recipient(2, 3, 4, 5);
+    // the cookie carries the event index so we can restore delivery order on the receiving side
+    return std::make_unique<IEventHandle>(recipient, sender, ev.release(),
+        IEventHandle::MakeFlags(channel, 0), index /*cookie*/);
+}
+
+void CheckIndexedEvent(IEventHandle& outEv, ui16 channel, size_t dataLen, bool withPayload) {
+    const ui64 index = outEv.Cookie;
+    UNIT_ASSERT_VALUES_EQUAL(outEv.GetChannel(), channel);
+    UNIT_ASSERT_VALUES_EQUAL(outEv.Type, static_cast<ui32>(TEvPrivate::EvTest));
+    UNIT_ASSERT(outEv.Sender == TActorId(1, 2, 3, static_cast<ui32>(index)));
+    UNIT_ASSERT(outEv.Recipient == TActorId(2, 3, 4, 5));
+    auto& out = *outEv.Get<TEvPrivate::TEvProto>();
+    UNIT_ASSERT(out.Record.HasMeta());
+    UNIT_ASSERT_VALUES_EQUAL(out.Record.GetMeta(), ToString(index));
+    UNIT_ASSERT_VALUES_EQUAL(out.Record.SomeDataSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(out.Record.GetSomeData(0), MakeSomeData(index, dataLen));
+    UNIT_ASSERT_VALUES_EQUAL(out.GetPayloadCount(), withPayload ? 1 : 0);
+    if (withPayload) {
+        UNIT_ASSERT_VALUES_EQUAL(out.GetPayload(0).ConvertToString(), MakePayloadData(index, dataLen));
+    }
+}
+
+std::vector<TContiguousSpan> Serialize(TEventSerializer& ser, std::vector<TRcBuf>& bufs) {
+    std::vector<TContiguousSpan> spans;
+
+    for (;;) {
+        if (bufs.empty() || bufs.back().size() < 1024) {
+            bufs.push_back(TRcBuf::Uninitialized(65536));
+        }
+        const size_t produced = ser.ProduceOutputStream(bufs.back(), &spans);
+        if (!produced) {
+            break;
+        }
+    }
+
+    return spans;
+}
+
+void CheckSerializeThenDeserialize(bool withPayload, bool buffer, ui32 metaLength) {
+    auto ev = std::make_unique<TEvPrivate::TEvProto>();
+    ev->Record.SetMeta(TString(metaLength, 'X'));
+    ev->Record.AddSomeData("world");
+    TActorId sender(1, 2, 3, 4);
+    TActorId recipient(2, 3, 4, 5);
+    ui64 cookie = 12387134;
+    if (withPayload) {
+        ev->AddPayload(TRope(TString("hello, world")));
+    }
+    auto h = std::make_unique<IEventHandle>(recipient, sender, ev.release(), 0, cookie);
+    if (buffer) {
+        h = std::make_unique<IEventHandle>(h->Type, h->Flags, h->Recipient, h->Sender, h->ReleaseChainBuffer(),
+            h->Cookie, nullptr, std::move(h->TraceId));
+    }
+
+    TEventSerializer ser(true);
+    ser.Push(std::move(h));
+
+    std::vector<TRcBuf> bufs;
+    std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+
+    TEventDeserializer deser(TScopeId{});
+    TEventProcessor processor;
+    for (TContiguousSpan span : spans) {
+        UNIT_ASSERT(processor.Events.empty());
+        deser.Push(TRcBuf::Copy(span), &processor, {});
+    }
+    UNIT_ASSERT(processor.Events.size() == 1);
+    auto& outEv = *processor.Events.front();
+    UNIT_ASSERT(outEv.Sender == sender);
+    UNIT_ASSERT(outEv.Recipient == recipient);
+    UNIT_ASSERT(outEv.Cookie == cookie);
+    UNIT_ASSERT(outEv.Type == TEvPrivate::EvTest);
+    auto& out = *outEv.Get<TEvPrivate::TEvProto>();
+    UNIT_ASSERT(out.Record.HasMeta());
+    UNIT_ASSERT_VALUES_EQUAL(out.Record.GetMeta(), TString(metaLength, 'X'));
+    UNIT_ASSERT_VALUES_EQUAL(out.Record.SomeDataSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(out.Record.GetSomeData(0), "world");
+    UNIT_ASSERT_VALUES_EQUAL(out.GetPayloadCount(), withPayload ? 1 : 0);
+    if (withPayload) {
+        UNIT_ASSERT_VALUES_EQUAL(out.GetPayload(0).ConvertToString(), "hello, world");
+    }
+}
+
+Y_UNIT_TEST_SUITE(EventSerializerV2) {
+
+    Y_UNIT_TEST(CheckSerializeThenDeserializeProtoWithoutPayload) {
+        CheckSerializeThenDeserialize(false, false, 10);
+    }
+
+    Y_UNIT_TEST(CheckSerializeThenDeserializeProtoWithPayload) {
+        CheckSerializeThenDeserialize(true, false, 10);
+    }
+
+    Y_UNIT_TEST(CheckSerializeThenDeserializeBufferWithoutPayload) {
+        CheckSerializeThenDeserialize(false, true, 10);
+    }
+
+    Y_UNIT_TEST(CheckSerializeThenDeserializeBufferWithPayload) {
+        CheckSerializeThenDeserialize(true, true, 10);
+    }
+
+    Y_UNIT_TEST(CheckSerializeThenDeserializeProtoWithoutPayloadLong) {
+        CheckSerializeThenDeserialize(false, false, 1000);
+    }
+
+    Y_UNIT_TEST(CheckSerializeThenDeserializeProtoWithPayloadLong) {
+        CheckSerializeThenDeserialize(true, false, 1000);
+    }
+
+    Y_UNIT_TEST(CheckSerializeThenDeserializeBufferWithoutPayloadLong) {
+        CheckSerializeThenDeserialize(false, true, 1000);
+    }
+
+    Y_UNIT_TEST(CheckSerializeThenDeserializeBufferWithPayloadLong) {
+        CheckSerializeThenDeserialize(true, true, 1000);
+    }
+
+    // 0-byte live events must still FeedBuf so the coroutine clears Event; otherwise the next event
+    // on the same channel hits SetSerializingEvent()'s Event == nullptr VERIFY.
+    Y_UNIT_TEST(EmptyLiveEventThenAnotherOnSameChannel) {
+        TActorId sender(1, 2, 3, 4);
+        TActorId recipient(2, 3, 4, 5);
+        auto makeEmpty = [&](ui64 cookie) {
+            auto ev = std::make_unique<TEvPrivate::TEvProto>();
+            return std::make_unique<IEventHandle>(recipient, sender, ev.release(), 0, cookie);
+        };
+        auto makeBody = [&](ui64 cookie) {
+            auto ev = std::make_unique<TEvPrivate::TEvProto>();
+            ev->Record.SetMeta("after-empty");
+            return std::make_unique<IEventHandle>(recipient, sender, ev.release(), 0, cookie);
+        };
+
+        for (bool useXdc : {false, true}) {
+            TEventSerializer ser(true, useXdc);
+            ser.Push(makeEmpty(1));
+            ser.Push(makeBody(2));
+
+            std::vector<TRcBuf> bufs;
+            std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+
+            TEventDeserializer deser(TScopeId{});
+            TEventProcessor processor;
+            for (TContiguousSpan span : spans) {
+                deser.Push(TRcBuf::Copy(span), &processor, {});
+            }
+            UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(processor.Events[0]->Cookie, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(processor.Events[1]->Cookie, 2u);
+            auto& second = *processor.Events[1]->Get<TEvPrivate::TEvProto>();
+            UNIT_ASSERT_VALUES_EQUAL(second.Record.GetMeta(), "after-empty");
+        }
+    }
+
+    // Feed the serialized stream to the deserializer in tiny fragments (1..3 bytes), so chunk headers and
+    // bodies straddle buffer boundaries exactly as they do with real TCP segmentation (which loopback,
+    // delivering big buffers, never triggers). Every event must still round-trip intact and in order.
+    Y_UNIT_TEST(DeserializeFromFragmentedStream) {
+        constexpr size_t numEvents = 300;
+        constexpr ui16 numChannels = 4;
+
+        auto channelOf = [](ui64 i) -> ui16 { return i % numChannels; };
+        auto dataLenOf = [](ui64 i) -> size_t { return (i % 11) * 37 + 1; };
+        auto withPayloadOf = [](ui64 i) -> bool { return i % 2; };
+
+        TEventSerializer ser(false);
+        for (ui64 i = 0; i < numEvents; ++i) {
+            ser.Push(MakeIndexedEvent(channelOf(i), i, dataLenOf(i), withPayloadOf(i)));
+        }
+
+        std::vector<TRcBuf> bufs;
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+
+        TString stream;
+        for (const TContiguousSpan& s : spans) {
+            stream.append(s.data(), s.size());
+        }
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        std::vector<std::pair<ui16, ui64>> delivered;
+
+        size_t pos = 0;
+        while (pos < stream.size()) {
+            const size_t frag = Min<size_t>(1 + (pos % 3), stream.size() - pos);
+            deser.Push(TRcBuf::Copy(TContiguousSpan(stream.data() + pos, frag)), &processor, TActorId());
+            pos += frag;
+            while (!processor.Events.empty()) {
+                auto ev = std::move(processor.Events.front());
+                processor.Events.pop_front();
+                const ui64 index = ev->Cookie;
+                CheckIndexedEvent(*ev, channelOf(index), dataLenOf(index), withPayloadOf(index));
+                delivered.push_back({ev->GetChannel(), index});
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(delivered.size(), numEvents);
+        std::array<ui64, numChannels> nextPerChannel{};
+        for (const auto& [channel, index] : delivered) {
+            UNIT_ASSERT_VALUES_EQUAL(channelOf(index), channel);
+            UNIT_ASSERT_VALUES_EQUAL(index, nextPerChannel[channel] * numChannels + channel);
+            ++nextPerChannel[channel];
+        }
+    }
+
+    // A large event on one channel interleaves with many small events on another, so their serialized bytes
+    // end up scattered across many pipelined batches. Acknowledging (committing) the batches one at a time
+    // must never release an event whose bytes still live in a not-yet-committed batch -- otherwise the
+    // aliased payload memory is freed while a later batch still references it. That is a use-after-free that
+    // only manifests once the network actually sends those later bytes (loopback sends inline, so it hides
+    // it). We surface it by reading every not-yet-committed batch's spans after each commit -- under ASAN a
+    // premature release fails here; it also corrupts the round-trip which we verify at the end.
+    Y_UNIT_TEST(CommitDoesNotReleaseEventsWithBytesStillInFlight) {
+        auto channelOf = [](ui64 i) -> ui16 { return i == 0 ? 1 : 2; };
+        auto dataLenOf = [](ui64 i) -> size_t { return i == 0 ? 60000 : 1000; };
+
+        TEventSerializer ser(false);
+        constexpr ui64 numEvents = 41;
+        ser.Push(MakeIndexedEvent(channelOf(0), 0, dataLenOf(0), /*withPayload=*/true));
+        for (ui64 i = 1; i < numEvents; ++i) {
+            ser.Push(MakeIndexedEvent(channelOf(i), i, dataLenOf(i), /*withPayload=*/true));
+        }
+
+        struct TBatch {
+            TRcBuf Scratch;
+            std::vector<TContiguousSpan> Spans;
+            size_t Bytes;
+        };
+        std::vector<TBatch> batches;
+        for (;;) {
+            TRcBuf scratch = TRcBuf::Uninitialized(4096); // small scratch -> many pipelined batches
+            std::vector<TContiguousSpan> spans;
+            size_t total = 0;
+            for (;;) {
+                const size_t produced = ser.ProduceOutputStream(scratch, &spans);
+                total += produced;
+                if (produced == 0 || scratch.size() < sizeof(TEventSerializer::TChunkHeader) + sizeof(ui32)) {
+                    break;
+                }
+            }
+            if (total == 0) {
+                break;
+            }
+            batches.push_back({std::move(scratch), std::move(spans), total});
+        }
+
+        // gather the full stream up front (all spans still reference live memory here) for a round-trip check
+        TString stream;
+        for (const TBatch& b : batches) {
+            for (const TContiguousSpan& s : b.Spans) {
+                stream.append(s.data(), s.size());
+            }
+        }
+
+        // commit the batches one at a time; after each commit, touch every span that has not been committed
+        // yet -- these must all still point to live memory
+        volatile ui64 acc = 0;
+        for (size_t i = 0; i < batches.size(); ++i) {
+            ser.CommitProducedBytes(batches[i].Bytes);
+            for (size_t j = i + 1; j < batches.size(); ++j) {
+                for (const TContiguousSpan& s : batches[j].Spans) {
+                    for (size_t k = 0; k < s.size(); ++k) {
+                        acc += static_cast<ui8>(s.data()[k]);
+                    }
+                }
+            }
+        }
+        Y_UNUSED(acc);
+
+        // the stream captured before any commit must still round-trip to the original events
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(stream.data(), stream.size())), &processor, TActorId());
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), numEvents);
+        while (!processor.Events.empty()) {
+            auto ev = std::move(processor.Events.front());
+            processor.Events.pop_front();
+            const ui64 index = ev->Cookie;
+            CheckIndexedEvent(*ev, channelOf(index), dataLenOf(index), /*withPayload=*/true);
+        }
+    }
+
+    // Push a lot of events into one channel and only a few into another one, then serialize the whole thing into a
+    // stream and deserialize it back. Verifies that:
+    //   * every event is delivered exactly once, in FIFO order within each channel;
+    //   * every event survives the round-trip unchanged (consistency);
+    //   * the flooded channel does not starve the other one -- its few events are delivered early instead of being
+    //     stuck behind the whole flood (equal bandwidth distribution).
+    Y_UNIT_TEST(FairBandwidthDistributionAcrossChannels) {
+        constexpr ui16 floodChannel = 3;
+        constexpr ui16 otherChannel = 7;
+        constexpr size_t numFlood = 1000;
+        constexpr size_t numOther = 30;
+        constexpr size_t floodDataLen = 512;
+        constexpr size_t otherDataLen = 8;
+
+        TEventSerializer ser(true);
+        for (ui64 i = 0; i < numFlood; ++i) {
+            ser.Push(MakeIndexedEvent(floodChannel, i, floodDataLen, true /*withPayload*/));
+        }
+        for (ui64 i = 0; i < numOther; ++i) {
+            ser.Push(MakeIndexedEvent(otherChannel, i, otherDataLen, false /*withPayload*/));
+        }
+
+        std::vector<TRcBuf> bufs;
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+
+        // feed the produced stream to the deserializer chunk by chunk and record the exact delivery order
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+
+        struct TDelivered {
+            ui16 Channel;
+            ui64 Cookie;
+        };
+        std::vector<TDelivered> delivered;
+
+        for (TContiguousSpan span : spans) {
+            deser.Push(TRcBuf::Copy(span), &processor, {});
+            while (!processor.Events.empty()) {
+                auto ev = std::move(processor.Events.front());
+                processor.Events.pop_front();
+                const ui16 channel = ev->GetChannel();
+                const bool withPayload = channel == floodChannel;
+                const size_t dataLen = channel == floodChannel ? floodDataLen : otherDataLen;
+                CheckIndexedEvent(*ev, channel, dataLen, withPayload);
+                delivered.push_back({channel, ev->Cookie});
+            }
+        }
+
+        // every event must be delivered exactly once, preserving FIFO order within each channel
+        UNIT_ASSERT_VALUES_EQUAL(delivered.size(), numFlood + numOther);
+        ui64 nextFlood = 0;
+        ui64 nextOther = 0;
+        size_t lastOtherPos = 0;
+        size_t floodBeforeLastOther = 0;
+        for (size_t pos = 0; pos < delivered.size(); ++pos) {
+            const TDelivered& d = delivered[pos];
+            if (d.Channel == floodChannel) {
+                UNIT_ASSERT_VALUES_EQUAL(d.Cookie, nextFlood++);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(d.Channel, otherChannel);
+                UNIT_ASSERT_VALUES_EQUAL(d.Cookie, nextOther++);
+                lastOtherPos = pos;
+                floodBeforeLastOther = nextFlood;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(nextFlood, numFlood);
+        UNIT_ASSERT_VALUES_EQUAL(nextOther, numOther);
+
+        // fairness: by the time the last small-channel event is delivered, only a small fraction of the flood must have
+        // been delivered -- otherwise the flood would be blocking the other channel's receivers
+        Cerr << "lastOtherPos# " << lastOtherPos << " floodBeforeLastOther# " << floodBeforeLastOther << Endl;
+        UNIT_ASSERT_C(floodBeforeLastOther < numFlood / 4,
+            "the flooded channel blocks the other one: floodBeforeLastOther# " << floodBeforeLastOther);
+    }
+
+    // Mock event whose body is emitted solely via WriteCord. The Cord is temporary — built inside
+    // SerializeToArcadiaStream from MakeCordFromExternal and destroyed when that returns — so only
+    // WriteCord's GetCords() (drained into RefcountItems::Cords) keeps the aliased backing alive.
+    // Keeping a Cord member on the event would hide a missing RefcountItems::Cords push, because the
+    // Event itself is retained until CommitProducedBytes.
+    //
+    // The external releaser poisons the backing with 0xAB before freeing it, so a premature Cord
+    // release is visible in still-aliased output spans without relying on ASAN or allocator churn.
+    struct TCordEvent: public IEventBase {
+        static constexpr char Poison = char(0xAB);
+
+        char Fill = 'X';
+        size_t Size = 0;
+        bool Fragmented = false;
+
+        TCordEvent(char fill, size_t size, bool fragmented = false)
+            : Fill(fill)
+            , Size(size)
+            , Fragmented(fragmented)
+        {}
+
+        static y_absl::Cord MakePoisoningCord(char fill, size_t size) {
+            auto* heap = new TString(size, fill);
+            return y_absl::MakeCordFromExternal(
+                y_absl::string_view(heap->data(), heap->size()),
+                [heap](y_absl::string_view) {
+                    if (!heap->empty()) {
+                        memset(heap->Detach(), static_cast<unsigned char>(Poison), heap->size());
+                    }
+                    delete heap;
+                });
+        }
+
+        y_absl::Cord MakeTemporaryCord() const {
+            if (Fragmented) {
+                const size_t part = Size / 3;
+                y_absl::Cord cord = MakePoisoningCord(Fill, part);
+                cord.Append(MakePoisoningCord(static_cast<char>(Fill + 1), part));
+                cord.Append(MakePoisoningCord(static_cast<char>(Fill + 2), Size - 2 * part));
+                return cord;
+            }
+            return MakePoisoningCord(Fill, Size);
+        }
+
+        bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
+            y_absl::Cord tmp = MakeTemporaryCord();
+            return chunker->WriteCord(tmp);
+        }
+        bool IsSerializable() const override {
+            return true;
+        }
+        TString ToStringHeader() const override {
+            return TString();
+        }
+        ui32 Type() const override {
+            return TEvPrivate::EvTest + 100;
+        }
+        ui32 CalculateSerializedSize() const override {
+            return Size;
+        }
+    };
+
+    std::unique_ptr<IEventHandle> MakeCordEventHandle(ui16 channel, ui64 cookie, char fill, size_t size,
+            bool fragmented = false)
+    {
+        auto* ev = new TCordEvent(fill, size, fragmented);
+        TActorId sender(1, 2, 3, 4);
+        TActorId recipient(2, 3, 4, 5);
+        return std::make_unique<IEventHandle>(recipient, sender, ev,
+            IEventHandle::MakeFlags(channel, 0), cookie);
+    }
+
+    Y_UNIT_TEST(WriteCordBytesAppearInOutputStream) {
+        constexpr size_t cordSize = 4096 + 27;
+        TEventSerializer ser(true);
+        ser.Push(MakeCordEventHandle(/*channel=*/1, /*cookie=*/7, /*fill=*/'Z', /*size=*/cordSize));
+
+        std::vector<TRcBuf> bufs;
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+
+        TString stream;
+        for (const TContiguousSpan& s : spans) {
+            stream.append(s.data(), s.size());
+        }
+
+        // Event body is raw Cord bytes interleaved with chunk headers, so long runs may be split —
+        // check a short run and that enough Z bytes made it into the stream.
+        UNIT_ASSERT(stream.Contains(TString(64, 'Z')));
+        size_t zCount = 0;
+        for (char c : stream) {
+            if (c == 'Z') {
+                ++zCount;
+            }
+        }
+        UNIT_ASSERT_GE(zCount, cordSize);
+        UNIT_ASSERT_GE(stream.size(), cordSize);
+    }
+
+    // Same UAF pattern as CommitDoesNotReleaseEventsWithBytesStillInFlight, but the aliased memory comes
+    // from a temporary WriteCord Cord / RefcountItems::Cords — not from an Event-owned Cord member.
+    Y_UNIT_TEST(CommitDoesNotReleaseCordBytesStillInFlight) {
+        TEventSerializer ser(true);
+
+        // One large fragmented Cord-backed event plus many smaller ones so serialization pipelines
+        // across batches. External releasers poison with 0xAB when the Cord is dropped.
+        constexpr size_t largeSize = 60000;
+        ser.Push(MakeCordEventHandle(/*channel=*/1, /*cookie=*/0, /*fill=*/'A', largeSize, /*fragmented=*/true));
+
+        constexpr ui64 numSmall = 40;
+        for (ui64 i = 1; i <= numSmall; ++i) {
+            ser.Push(MakeCordEventHandle(/*channel=*/2, i, static_cast<char>('a' + (i % 26)), 1000));
+        }
+
+        struct TBatch {
+            TRcBuf Scratch;
+            std::vector<TContiguousSpan> Spans;
+            size_t Bytes;
+        };
+        // One ProduceOutputStream call per batch: Cord aliasing barely consumes scratch, so draining
+        // a large scratch in an inner loop would collapse everything into a single batch.
+        std::vector<TBatch> batches;
+        for (;;) {
+            TRcBuf scratch = TRcBuf::Uninitialized(512);
+            std::vector<TContiguousSpan> spans;
+            const size_t produced = ser.ProduceOutputStream(scratch, &spans);
+            if (!produced) {
+                break;
+            }
+            batches.push_back({std::move(scratch), std::move(spans), produced});
+        }
+
+        TString stream;
+        for (const TBatch& b : batches) {
+            for (const TContiguousSpan& s : b.Spans) {
+                stream.append(s.data(), s.size());
+            }
+        }
+        // Fragmented large event is Fill/'A', Fill+1/'B', Fill+2/'C' thirds. If RefcountItems::Cords
+        // was skipped, the external releaser already poisoned those aliases with 0xAB.
+        UNIT_ASSERT(stream.Contains(TString(64, 'A')));
+        UNIT_ASSERT(stream.Contains(TString(64, 'B')));
+        UNIT_ASSERT(stream.Contains(TString(64, 'C')));
+        UNIT_ASSERT(!stream.Contains(TString(64, TCordEvent::Poison)));
+
+        volatile ui64 acc = 0;
+        for (size_t i = 0; i < batches.size(); ++i) {
+            ser.CommitProducedBytes(batches[i].Bytes);
+            for (size_t j = i + 1; j < batches.size(); ++j) {
+                for (const TContiguousSpan& s : batches[j].Spans) {
+                    for (size_t k = 0; k < s.size(); ++k) {
+                        acc += static_cast<ui8>(s.data()[k]);
+                    }
+                }
+            }
+            // After committing earlier batches, in-flight Cord aliases must still be unpoisoned.
+            TString rest;
+            for (size_t j = i + 1; j < batches.size(); ++j) {
+                for (const TContiguousSpan& s : batches[j].Spans) {
+                    rest.append(s.data(), s.size());
+                }
+            }
+            if (!rest.empty()) {
+                UNIT_ASSERT_C(!rest.Contains(TString(64, TCordEvent::Poison)),
+                    "Cord backing was released while bytes still in flight (missing RefcountItems::Cords?)");
+            }
+        }
+        Y_UNUSED(acc);
+        UNIT_ASSERT_GT(batches.size(), 1);
+    }
+
+    std::pair<std::vector<TContiguousSpan>, std::vector<TContiguousSpan>> SerializeXdc(
+            TEventSerializer& ser, std::vector<TRcBuf>& mainBufs, std::vector<TRcBuf>& xdcBufs) {
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        for (;;) {
+            if (mainBufs.empty() || mainBufs.back().size() < 1024) {
+                mainBufs.push_back(TRcBuf::Uninitialized(65536));
+            }
+            if (xdcBufs.empty() || xdcBufs.back().size() < 1024) {
+                xdcBufs.push_back(TRcBuf::Uninitialized(65536));
+            }
+            const size_t produced = ser.ProduceOutputStream(mainBufs.back(), &mainSpans,
+                &xdcBufs.back(), &xdcSpans);
+            if (!produced) {
+                break;
+            }
+        }
+        return {std::move(mainSpans), std::move(xdcSpans)};
+    }
+
+    TString ConcatSpans(const std::vector<TContiguousSpan>& spans) {
+        TString out;
+        for (const TContiguousSpan& s : spans) {
+            out.append(s.data(), s.size());
+        }
+        return out;
+    }
+
+    void FeedXdc(TEventDeserializer& deser, TStringBuf xdc, size_t& xdcPos, TEventProcessor& processor) {
+        while (deser.HasXdcReadPending() && xdcPos < xdc.size()) {
+            TIoVec iov[64];
+            const size_t n = deser.PrepareXdcReadv(iov, 64, 1 << 20);
+            if (!n) {
+                break;
+            }
+            size_t total = 0;
+            for (size_t i = 0; i < n; ++i) {
+                const size_t take = Min(iov[i].Size, xdc.size() - xdcPos);
+                if (!take) {
+                    break;
+                }
+                memcpy(iov[i].Data, xdc.data() + xdcPos, take);
+                xdcPos += take;
+                total += take;
+                if (take < iov[i].Size) {
+                    break;
+                }
+            }
+            if (!total) {
+                break;
+            }
+            deser.CommitXdcBytes(total, &processor, {});
+        }
+    }
+
+    void CheckSerializeThenDeserializeXdc(bool buffer, size_t payloadLen) {
+        auto ev = std::make_unique<TEvPrivate::TEvProto>();
+        ev->Record.SetMeta("xdc-meta");
+        ev->Record.AddSomeData("world");
+        TActorId sender(1, 2, 3, 4);
+        TActorId recipient(2, 3, 4, 5);
+        ui64 cookie = 42;
+        ev->AddPayload(TRope(TString(payloadLen, 'P')));
+        auto h = std::make_unique<IEventHandle>(recipient, sender, ev.release(), 0, cookie);
+        if (buffer) {
+            h->Preserialize(/*allowExternalDataChannel=*/true);
+        }
+
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        ser.Push(std::move(h));
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        UNIT_ASSERT_C(!xdcSpans.empty(), "expected XDC traffic for payloadLen# " << payloadLen);
+
+        TString main = ConcatSpans(mainSpans);
+        TString xdc = ConcatSpans(xdcSpans);
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(main)), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+
+        auto& outEv = *processor.Events.front();
+        UNIT_ASSERT(outEv.Sender == sender);
+        UNIT_ASSERT(outEv.Recipient == recipient);
+        UNIT_ASSERT_VALUES_EQUAL(outEv.Cookie, cookie);
+        auto& out = *outEv.Get<TEvPrivate::TEvProto>();
+        UNIT_ASSERT_VALUES_EQUAL(out.Record.GetMeta(), "xdc-meta");
+        UNIT_ASSERT_VALUES_EQUAL(out.GetPayloadCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(out.GetPayload(0).ConvertToString(), TString(payloadLen, 'P'));
+    }
+
+    Y_UNIT_TEST(XdcRoundTripLiveEvent) {
+        CheckSerializeThenDeserializeXdc(false, 8192);
+    }
+
+    Y_UNIT_TEST(XdcRoundTripPreserialized) {
+        CheckSerializeThenDeserializeXdc(true, 8192);
+    }
+
+    Y_UNIT_TEST(XdcDoesNotConsumeBytesBeforeCommands) {
+        auto h = MakeIndexedEvent(1, 7, 8192, true);
+        TEventSerializer ser(true, true);
+        ser.Push(std::move(h));
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        UNIT_ASSERT(!xdcSpans.empty());
+
+        TString xdc = ConcatSpans(xdcSpans);
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        size_t xdcPos = 0;
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT(processor.Events.empty());
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, 0u);
+
+        deser.Push(TRcBuf::Copy(TContiguousSpan(ConcatSpans(mainSpans))), &processor, {});
+        UNIT_ASSERT(processor.Events.empty());
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), 1u);
+        CheckIndexedEvent(*processor.Events.front(), 1, 8192, true);
+    }
+
+    Y_UNIT_TEST(XdcFragmentedMainAndXdc) {
+        constexpr ui64 numEvents = 40;
+        TEventSerializer ser(true, true);
+        for (ui64 i = 0; i < numEvents; ++i) {
+            ser.Push(MakeIndexedEvent(i % 3, i, 8192, true));
+        }
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        TString main = ConcatSpans(mainSpans);
+        TString xdc = ConcatSpans(xdcSpans);
+        UNIT_ASSERT(!xdc.empty());
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        size_t xdcPos = 0;
+        size_t pos = 0;
+        while (pos < main.size()) {
+            const size_t frag = Min<size_t>(1 + (pos % 5), main.size() - pos);
+            deser.Push(TRcBuf::Copy(TContiguousSpan(main.data() + pos, frag)), &processor, {});
+            pos += frag;
+            if (xdcPos < xdc.size()) {
+                const size_t xdcFragEnd = Min(xdc.size(), xdcPos + 1 + (pos % 7));
+                TStringBuf slice(xdc.data(), xdcFragEnd);
+                FeedXdc(deser, slice, xdcPos, processor);
+            }
+        }
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), numEvents);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+        std::array<ui64, 3> next{};
+        for (auto& ev : processor.Events) {
+            const ui16 ch = ev->GetChannel();
+            CheckIndexedEvent(*ev, ch, 8192, true);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, next[ch] * 3 + ch);
+            ++next[ch];
+        }
+    }
+
+    Y_UNIT_TEST(XdcCommitDoesNotReleaseEventsWithBytesStillInFlight) {
+        TEventSerializer ser(false, true);
+        constexpr ui64 numEvents = 21;
+        ser.Push(MakeIndexedEvent(1, 0, 60000, true));
+        for (ui64 i = 1; i < numEvents; ++i) {
+            ser.Push(MakeIndexedEvent(2, i, 1000, false));
+        }
+
+        struct TBatch {
+            TRcBuf MainScratch;
+            TRcBuf XdcScratch;
+            std::vector<TContiguousSpan> MainSpans;
+            std::vector<TContiguousSpan> XdcSpans;
+            size_t MainBytes = 0;
+            size_t XdcBytes = 0;
+        };
+        std::vector<TBatch> batches;
+        for (;;) {
+            TBatch b;
+            b.MainScratch = TRcBuf::Uninitialized(4096);
+            b.XdcScratch = TRcBuf::Uninitialized(4096);
+            const ui64 mainBefore = ser.GetCumulativeProducedMain();
+            const ui64 xdcBefore = ser.GetCumulativeProducedXdc();
+            const size_t produced = ser.ProduceOutputStream(b.MainScratch, &b.MainSpans,
+                &b.XdcScratch, &b.XdcSpans);
+            if (!produced) {
+                break;
+            }
+            b.MainBytes = ser.GetCumulativeProducedMain() - mainBefore;
+            b.XdcBytes = ser.GetCumulativeProducedXdc() - xdcBefore;
+            batches.push_back(std::move(b));
+        }
+
+        // Spans may alias event payloads, which the serializer is free to drop once the bytes behind
+        // them are committed. Snapshot the wire while nothing has been committed yet.
+        TString main;
+        TString xdc;
+        for (const auto& b : batches) {
+            main += ConcatSpans(b.MainSpans);
+            xdc += ConcatSpans(b.XdcSpans);
+        }
+
+        volatile ui64 acc = 0;
+        ui64 committedMain = 0;
+        ui64 committedXdc = 0;
+        for (size_t i = 0; i < batches.size(); ++i) {
+            committedMain += batches[i].MainBytes;
+            committedXdc += batches[i].XdcBytes;
+            ser.CommitProducedBytes(batches[i].MainBytes, batches[i].XdcBytes);
+            for (size_t j = i + 1; j < batches.size(); ++j) {
+                for (const TContiguousSpan& s : batches[j].MainSpans) {
+                    for (size_t k = 0; k < s.size(); ++k) {
+                        acc += static_cast<ui8>(s.data()[k]);
+                    }
+                }
+                for (const TContiguousSpan& s : batches[j].XdcSpans) {
+                    for (size_t k = 0; k < s.size(); ++k) {
+                        acc += static_cast<ui8>(s.data()[k]);
+                    }
+                }
+            }
+        }
+        Y_UNUSED(acc);
+        UNIT_ASSERT_GT(batches.size(), 1);
+        UNIT_ASSERT_GT(committedMain, 0u);
+        UNIT_ASSERT_GT(committedXdc, 0u);
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(main)), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), numEvents);
+    }
+
+    Y_UNIT_TEST(FairBandwidthDistributionXdcVsInline) {
+        constexpr ui16 floodChannel = 3;
+        constexpr ui16 otherChannel = 7;
+        constexpr size_t numFlood = 200;
+        constexpr size_t numOther = 30;
+
+        TEventSerializer ser(true, true);
+        for (ui64 i = 0; i < numFlood; ++i) {
+            ser.Push(MakeIndexedEvent(floodChannel, i, 8192, true));
+        }
+        for (ui64 i = 0; i < numOther; ++i) {
+            ser.Push(MakeIndexedEvent(otherChannel, i, 8, false));
+        }
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        TString xdc = ConcatSpans(xdcSpans);
+        size_t xdcPos = 0;
+        size_t lastOtherPos = 0;
+        size_t floodBeforeLastOther = 0;
+        ui64 nextFlood = 0;
+        ui64 nextOther = 0;
+        size_t delivered = 0;
+
+        for (TContiguousSpan span : mainSpans) {
+            deser.Push(TRcBuf::Copy(span), &processor, {});
+            FeedXdc(deser, xdc, xdcPos, processor);
+            while (!processor.Events.empty()) {
+                auto ev = std::move(processor.Events.front());
+                processor.Events.pop_front();
+                const ui16 channel = ev->GetChannel();
+                if (channel == floodChannel) {
+                    CheckIndexedEvent(*ev, floodChannel, 8192, true);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, nextFlood++);
+                } else {
+                    CheckIndexedEvent(*ev, otherChannel, 8, false);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, nextOther++);
+                    lastOtherPos = delivered;
+                    floodBeforeLastOther = nextFlood;
+                }
+                ++delivered;
+            }
+        }
+        FeedXdc(deser, xdc, xdcPos, processor);
+        while (!processor.Events.empty()) {
+            auto ev = std::move(processor.Events.front());
+            processor.Events.pop_front();
+            if (ev->GetChannel() == floodChannel) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, nextFlood++);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, nextOther++);
+                lastOtherPos = delivered;
+                floodBeforeLastOther = nextFlood;
+            }
+            ++delivered;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(nextFlood, numFlood);
+        UNIT_ASSERT_VALUES_EQUAL(nextOther, numOther);
+        Cerr << "lastOtherPos# " << lastOtherPos << " floodBeforeLastOther# " << floodBeforeLastOther << Endl;
+        UNIT_ASSERT_C(floodBeforeLastOther < numFlood / 4,
+            "the flooded XDC channel blocks the other one: floodBeforeLastOther# " << floodBeforeLastOther);
+    }
+
+    // Round-trips one event over both media and checks every payload came back byte-identical. Used to
+    // cover section-table shapes the single-payload tests above never produce.
+    void CheckXdcPayloads(const std::vector<TString>& payloads, bool setRecordFields, bool preserialize,
+            ui32 extraFlags = 0) {
+        auto ev = std::make_unique<TEvPrivate::TEvProto>();
+        if (setRecordFields) {
+            ev->Record.SetMeta("sections");
+        }
+        for (const TString& p : payloads) {
+            ev->AddPayload(TRope(p));
+        }
+        auto h = std::make_unique<IEventHandle>(TActorId(2, 3, 4, 5), TActorId(1, 2, 3, 4), ev.release(),
+            extraFlags, 777);
+        if (preserialize) {
+            h->Preserialize(/*allowExternalDataChannel=*/true);
+        }
+
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        ser.Push(std::move(h));
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        TString xdc = ConcatSpans(xdcSpans);
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(ConcatSpans(mainSpans))), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+        auto& out = *processor.Events.front()->Get<TEvPrivate::TEvProto>();
+        UNIT_ASSERT_VALUES_EQUAL(out.GetPayloadCount(), payloads.size());
+        for (size_t i = 0; i < payloads.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(out.GetPayload(i).ConvertToString(), payloads[i]);
+        }
+    }
+
+    Y_UNIT_TEST(XdcMultiplePayloads) {
+        CheckXdcPayloads({TString(2000, 'a'), TString(2000, 'b'), TString(2000, 'c')}, true, false);
+    }
+
+    // A zero-size rope produces a zero-size external section, which must not consume a PUSH or a buffer.
+    Y_UNIT_TEST(XdcEmptyPayloadAmongLarge) {
+        CheckXdcPayloads({TString(), TString(8192, 'x'), TString()}, true, false);
+    }
+
+    // An empty protobuf record leaves a zero-size inline section last, so the section table runs out
+    // while the coroutine still has to be driven to completion.
+    Y_UNIT_TEST(XdcEmptyRecordWithPayload) {
+        CheckXdcPayloads({TString(8192, 'z')}, /*setRecordFields=*/false, false);
+        CheckXdcPayloads({TString(8192, 'z')}, /*setRecordFields=*/false, /*preserialize=*/true);
+    }
+
+    // More sections than fit one kXdcDeclare chunk, so DECLARE has to be split and reassembled.
+    Y_UNIT_TEST(XdcDeclareSpansSeveralChunks) {
+        std::vector<TString> payloads;
+        for (size_t i = 0; i < 5000; ++i) {
+            payloads.push_back(TString(4, static_cast<char>('a' + i % 26)));
+        }
+        CheckXdcPayloads(payloads, true, false);
+    }
+
+    // FlagDisablePayloadChecksums leaves the external sections out of the digest; sender and receiver
+    // must agree on exactly which bytes are covered or delivery aborts on a checksum mismatch.
+    Y_UNIT_TEST(XdcPayloadChecksumsDisabled) {
+        CheckXdcPayloads({TString(8192, 'q')}, true, false, IEventHandle::FlagDisablePayloadChecksums);
+        CheckXdcPayloads({TString(4000, 'q'), TString(4000, 'r')}, true, true,
+            IEventHandle::FlagDisablePayloadChecksums);
+    }
+
+    // Pulls the event header out of the main stream so the transmitted checksum can be inspected.
+    TEventSerializer::TEventHeader ExtractEventHeader(TStringBuf main) {
+        using TChunkHeader = TEventSerializer::TChunkHeader;
+        TEventSerializer::TEventHeader header{};
+        size_t headerOffset = 0;
+        size_t pos = 0;
+        while (pos + sizeof(TChunkHeader) <= main.size()) {
+            TChunkHeader chunk;
+            memcpy(&chunk, main.data() + pos, sizeof(chunk));
+            pos += sizeof(chunk);
+            UNIT_ASSERT(pos + chunk.Length <= main.size());
+            if (chunk.GetType() == TChunkHeader::kEventHeader) {
+                UNIT_ASSERT(headerOffset + chunk.Length <= sizeof(header));
+                memcpy(reinterpret_cast<char*>(&header) + headerOffset, main.data() + pos, chunk.Length);
+                headerOffset += chunk.Length;
+            }
+            pos += chunk.Length;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(headerOffset, sizeof(header));
+        return header;
+    }
+
+    ui64 SerializeOneAndGetChecksum(const TString& payload, ui32 flags) {
+        auto ev = std::make_unique<TEvPrivate::TEvProto>();
+        ev->Record.SetMeta("digest");
+        ev->AddPayload(TRope(payload));
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        ser.Push(std::make_unique<IEventHandle>(TActorId(2, 3, 4, 5), TActorId(1, 2, 3, 4), ev.release(),
+            flags, 5));
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        UNIT_ASSERT(!xdcSpans.empty());
+        const TString main = ConcatSpans(mainSpans);
+        return ExtractEventHeader(main).Checksum;
+    }
+
+    // Two events differing only in the bytes that travel over XDC: with the flag set those bytes are
+    // outside the digest, so the transmitted checksum is identical; without it, it must differ.
+    Y_UNIT_TEST(XdcPayloadChecksumsDisabledActuallySkipsPayload) {
+        const TString a(8192, 'a');
+        const TString b(8192, 'b');
+
+        const ui64 skippedA = SerializeOneAndGetChecksum(a, IEventHandle::FlagDisablePayloadChecksums);
+        const ui64 skippedB = SerializeOneAndGetChecksum(b, IEventHandle::FlagDisablePayloadChecksums);
+        UNIT_ASSERT(skippedA);
+        UNIT_ASSERT_VALUES_EQUAL_C(skippedA, skippedB,
+            "external payload still contributes to the digest despite FlagDisablePayloadChecksums");
+
+        const ui64 coveredA = SerializeOneAndGetChecksum(a, 0);
+        const ui64 coveredB = SerializeOneAndGetChecksum(b, 0);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(coveredA, coveredB,
+            "external payload must be covered by the digest by default");
+    }
+
+    // Drives production through tiny scratch buffers and quota slices so DECLARE, PUSH and event-header
+    // framing all straddle call boundaries.
+    void CheckXdcWithBuffers(size_t bufSize, size_t maxPerCall, size_t payloadLen, size_t numEvents,
+            bool preserialize) {
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        for (size_t i = 0; i < numEvents; ++i) {
+            auto ev = std::make_unique<TEvPrivate::TEvProto>();
+            ev->Record.SetMeta(ToString(i));
+            ev->AddPayload(TRope(MakePayloadData(i, payloadLen)));
+            auto h = std::make_unique<IEventHandle>(TActorId(2, 3, 4, 5), TActorId(1, 2, 3, 4),
+                ev.release(), IEventHandle::MakeFlags(1, 0), i);
+            if (preserialize) {
+                h->Preserialize(/*allowExternalDataChannel=*/true);
+            }
+            ser.Push(std::move(h));
+        }
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        for (;;) {
+            if (mainBufs.empty() || mainBufs.back().size() < bufSize) {
+                mainBufs.push_back(TRcBuf::Uninitialized(bufSize));
+            }
+            if (xdcBufs.empty() || xdcBufs.back().size() < bufSize) {
+                xdcBufs.push_back(TRcBuf::Uninitialized(bufSize));
+            }
+            if (!ser.ProduceOutputStream(mainBufs.back(), &mainSpans, &xdcBufs.back(), &xdcSpans, maxPerCall)) {
+                break;
+            }
+        }
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        TString xdc = ConcatSpans(xdcSpans);
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(ConcatSpans(mainSpans))), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), numEvents);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+        for (size_t i = 0; i < numEvents; ++i) {
+            auto& out = *processor.Events[i]->Get<TEvPrivate::TEvProto>();
+            UNIT_ASSERT_VALUES_EQUAL(out.Record.GetMeta(), ToString(i));
+            UNIT_ASSERT_VALUES_EQUAL(out.GetPayload(0).ConvertToString(), MakePayloadData(i, payloadLen));
+        }
+    }
+
+    Y_UNIT_TEST(XdcTinyBuffersAndSlices) {
+        CheckXdcWithBuffers(/*bufSize=*/64, /*maxPerCall=*/64, /*payloadLen=*/8192, /*numEvents=*/5, false);
+        CheckXdcWithBuffers(64, 64, 8192, 5, /*preserialize=*/true);
+        CheckXdcWithBuffers(/*bufSize=*/128, /*maxPerCall=*/37, /*payloadLen=*/5000, /*numEvents=*/8, false);
+    }
+
+    // A payload well past the ui16 PUSH limit has to be split across many PUSH commands.
+    Y_UNIT_TEST(XdcLargePayloadManyPushes) {
+        CheckXdcWithBuffers(65536, Max<size_t>(), 1 << 20, 2, false);
+        CheckXdcWithBuffers(65536, Max<size_t>(), 1 << 20, 2, /*preserialize=*/true);
+    }
+
+    // A main-only event must not be held hostage by an unrelated earlier event's XDC bytes: it produced
+    // nothing on that socket, so committing the main stream alone has to release it.
+    Y_UNIT_TEST(XdcMainOnlyEventReleasedWhileXdcInFlight) {
+        TEventSerializer ser(false, /*useExternalDataChannel=*/true);
+        ser.Push(MakeIndexedEvent(1, 0, 8192, true));  // goes on both media
+        ser.Push(MakeIndexedEvent(2, 1, 8, false));    // main only
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        const ui64 producedMain = ser.GetCumulativeProducedMain();
+        const ui64 producedXdc = ser.GetCumulativeProducedXdc();
+        UNIT_ASSERT_GT(producedXdc, 0u);
+
+        // Main drained, XDC still entirely in flight.
+        std::vector<std::unique_ptr<IEventBase>> events;
+        std::vector<TIntrusivePtr<TEventSerializedData>> buffers;
+        ser.CommitProducedBytes(producedMain, 0, nullptr, &events, &buffers);
+        UNIT_ASSERT_VALUES_EQUAL_C(events.size(), 1u,
+            "the main-only event should be released as soon as the main stream is committed");
+
+        ser.CommitProducedBytes(0, producedXdc, nullptr, &events, &buffers);
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 2u);
+    }
+}

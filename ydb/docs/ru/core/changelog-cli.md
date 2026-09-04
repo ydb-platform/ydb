@@ -1,5 +1,13 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.33.0 {#2-33-0}
+
+Дата выхода 23 июня 2026. Для обновления до версии **2.33.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* AI-ассистент в [интерактивном режиме](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}` теперь умеет искать информацию в документации {{ ydb-short-name }}, что делает ответы более точными.
+
 ## Версия 2.32.0 {#2-32-0}
 
 Дата выхода 22 июня 2026. Для обновления до версии **2.32.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -452,7 +460,7 @@
 ### Исправления ошибок
 
 * Исправлена ошибка вывода таблиц в `pretty` формате с [Unicode](https://ru.wikipedia.org/wiki/Юникод) символами.
-* Исправлена ошибка подстановки неправильного первичного ключа в команде [ydb tools pg-convert](postgresql/import.md#pg-convert).
+* Исправлена ошибка подстановки неправильного первичного ключа в команде `ydb tools pg-convert`.
 
 ## Версия 2.7.0 {#2-7-0}
 
@@ -460,7 +468,7 @@
 
 ### Функциональность
 
-* Добавлена команда [ydb tools pg-convert](postgresql/import.md#pg-convert), выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
+* Добавлена команда `ydb tools pg-convert`, выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
 * Добавлена команда нагрузочного тестирования `{{ ydb-cli }} workload query`, которая нагружает базу [запросами выполнения скрипта](reference/ydb-cli/yql.md) в несколько потоков.
 * Добавлена команда для просмотра списка разрешений `{{ ydb-cli }} scheme permissions list`.
 * В командах [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) добавлена опция `--flame-graph`, задающая путь до файла, в котором необходимо сохранить визуализацию статистики выполнения запросов.

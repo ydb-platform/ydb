@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/public/udf
+    yql/essentials/core/langver
     library/cpp/ipmath
     library/cpp/ipv6_address
 )

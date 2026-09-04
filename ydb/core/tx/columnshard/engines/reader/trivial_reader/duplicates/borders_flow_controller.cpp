@@ -151,6 +151,17 @@ void TBordersFlowController::OnReadyMergeBorders() {
     DrainQueue();
 }
 
+void TBordersFlowController::ClearInflightOnAbort() {
+    if (IsInflight) {
+        IsInflight = false;
+        Counters->OnMergeInflight(-1);
+    }
+    if (!BordersQueue.empty()) {
+        Counters->OnMergeQueue(-1 * static_cast<i64>(BordersQueue.size()));
+        BordersQueue.clear();
+    }
+}
+
 void TBordersFlowController::Enqueue(const TEvBordersConstructionResult::TPtr& event) {
     Counters->OnMergeQueue(1);
     BordersQueue.push_back(event);

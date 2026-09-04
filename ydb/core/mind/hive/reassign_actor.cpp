@@ -108,7 +108,7 @@ public:
                     TSideEffects sideEffects;
                     sideEffects.Reset(SelfId());
                     tablet->InitiateBlockStorage(sideEffects);
-                    sideEffects.Complete(TActivationContext::AsActorContext());
+                    sideEffects.Complete(TActivationContext::AsActorContext(), Hive->Requests);
                     break;
                 }
                 case ETabletState::GroupAssignment: {
@@ -141,6 +141,7 @@ public:
 
     void Bootstrap() {
         ++Hive->ReassignsRunning;
+        Hive->TabletCounters->Cumulative()[NHive::COUNTER_REASSIGN_EXECUTED].Increment(1);
         Become(&TThis::StateWork);
         ReassignNextTablet();
         return CheckCompletion();

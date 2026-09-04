@@ -140,6 +140,10 @@ void TEndpointPool::BanEndpoint(const std::string& endpoint) {
     Elector_.PessimizeEndpoint(endpoint);
 }
 
+void TEndpointPool::BanNodeId(std::uint64_t nodeId) {
+    Elector_.PessimizeNode(nodeId);
+}
+
 int TEndpointPool::GetPessimizationRatio() {
     return Elector_.GetPessimizationRatio();
 }

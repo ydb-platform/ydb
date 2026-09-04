@@ -19,12 +19,38 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <util/system/env.h>
 
 namespace NYql {
 
 const TString LineageComponent = "Lineage";
 const TString LineageResultLabel = "LineageResult";
 const TString StandaloneLineageLabel = "StandaloneLineage";
+
+namespace {
+
+bool IsLineageResourceLimitError(const std::exception& error) {
+    const TStringBuf message = error.what();
+    return message == "Out of memory" || message == "Lineage is too large";
+}
+
+void EnsureLineageCalculated(const std::exception_ptr& lineageError, bool resourceLimitExceeded) {
+    if (lineageError && !resourceLimitExceeded && GetEnv("YQL_LINEAGE_CHECK")) {
+        std::rethrow_exception(lineageError);
+    }
+}
+
+TString MakeLineageErrorYson(TStringBuf message) {
+    TStringStream s;
+    NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Binary);
+    writer.OnBeginMap();
+    writer.OnKeyedItem("Error");
+    writer.OnStringScalar(message);
+    writer.OnEndMap();
+    return s.Str();
+}
+
+} // namespace
 
 TTransformationPipeline::TTransformationPipeline(
     TIntrusivePtr<TTypeAnnotationContext> ctx,
@@ -68,14 +94,11 @@ TTransformationPipeline& TTransformationPipeline::AddParametersEvaluation(const 
 }
 
 TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-                                                                          IGraphTransformer* calcTransfomer, EYqlIssueCode issueCode) {
-    auto& typeCtx = *TypeAnnotationContext_;
-    auto& funcReg = functionRegistry;
-    auto typeAnnCallableFactory = TypeAnnCallableFactory_;
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-                                                [&typeCtx, &funcReg, calcTransfomer, typeAnnCallableFactory](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                                                    return EvaluateExpression(input, output, typeCtx, ctx, funcReg, calcTransfomer, typeAnnCallableFactory);
-                                                }), "EvaluateExpression", issueCode));
+                                                                          IGraphTransformer* calcTransformer, EYqlIssueCode issueCode) {
+    Transformers_.push_back(TTransformStage(
+        CreateEvaluateExpressionTransformer(*TypeAnnotationContext_, functionRegistry, calcTransformer, TypeAnnCallableFactory_),
+        "EvaluateExpression",
+        issueCode));
 
     return *this;
 }
@@ -137,7 +160,7 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotation(EYqlIssueCod
 
 TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool forSubGraph, bool disableConstraintCheck, EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
-        CreateConstraintTransformer(*TypeAnnotationContext_, false, forSubGraph, disableConstraintCheck), "Constraints", issueCode));
+        CreateConstraintTransformer(*TypeAnnotationContext_, /*instantOnly=*/false, forSubGraph, disableConstraintCheck), "Constraints", issueCode));
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -177,7 +200,7 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
 }
 
 TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(bool enableLineage, bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
-    AddCommonOptimization(false, issueCode);
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
     if (enableLineage) {
         Transformers_.push_back(TTransformStage(
             CreateChoiceGraphTransformer(
@@ -200,6 +223,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 }
                             }
                             std::exception_ptr lineageError;
+                            bool lineageResourceLimitExceeded = false;
                             typeCtx->LineageStats.Correct = true;
                             try {
                                 TLineageRunOptions lineageOptions;
@@ -211,6 +235,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                                 typeCtx->LineageStats.Correct = false;
                                 lineageError = std::current_exception();
+                                lineageResourceLimitExceeded = IsLineageResourceLimitError(e);
                             }
                             if (!loadedLineage.empty()) {
                                 // if lineage calculation is failed, but loaded lineage exists, rethrow exception for replay mode
@@ -226,6 +251,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                     throw yexception() << "Lineage in replay is different";
                                 }
                             }
+                            EnsureLineageCalculated(lineageError, lineageResourceLimitExceeded);
                             if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->LineageStats.Correct) {
                                 typeCtx->QContext.GetWriter()->Put({.Component = LineageComponent, .Label = LineageResultLabel}, calculatedLineage).GetValueSync();
                                 YQL_LOG(INFO) << "Lineage is saved to QStorage";
@@ -296,7 +322,7 @@ TTransformationPipeline& TTransformationPipeline::AddProviderOptimization(EYqlIs
 }
 
 TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
-    AddCommonOptimization(false, issueCode);
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
     AddProviderOptimization(issueCode);
     if (withFinalOptimization) {
         AddFinalCommonOptimization(issueCode);
@@ -306,7 +332,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
 }
 
 TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<TString>& lineageOut, EYqlIssueCode issueCode) {
-    AddCommonOptimization(false, issueCode);
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
     Transformers_.push_back(TTransformStage(
         CreateSinglePassFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -339,13 +365,8 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                 } catch (const std::exception& e) {
                     YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                     typeCtx->LineageStats.CorrectStandalone = false;
-                    TStringStream s;
-                    NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Binary);
-                    writer.OnBeginMap();
-                    writer.OnKeyedItem("Error");
-                    writer.OnStringScalar(e.what());
-                    writer.OnEndMap();
-                    lineageOut = s.Str();
+                    EnsureLineageCalculated(std::current_exception(), IsLineageResourceLimitError(e));
+                    lineageOut = MakeLineageErrorYson(e.what());
                 }
                 if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
                     auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = StandaloneLineageLabel}).GetValueSync();

@@ -1,4 +1,5 @@
 #include "server.h"
+#include "config.h"
 #include "helpers.h"
 
 #include <yt/yt/core/net/address.h>
@@ -7,6 +8,8 @@
 #include <yt/yt/core/http/private.h>
 #include <yt/yt/core/http/helpers.h>
 #include <yt/yt/core/http/server.h>
+
+#include <yt/yt/core/https/server.h>
 
 #include <yt/yt/core/rpc/message.h>
 #include <yt/yt/core/rpc/service.h>
@@ -150,7 +153,8 @@ public:
     TFuture<void> ReplySent(IServicePtr underlying, TRequestId requestId)
     {
         ReplySent_.OnCanceled(BIND([underlying, requestId, Logger = this->Logger] (const TError&) {
-            YT_LOG_INFO("Request cancelled (RequestId: %v)", requestId);
+            YT_TLOG_INFO("Request cancelled")
+                .With("RequestId", requestId);
             underlying->HandleRequestCancellation(requestId);
         }));
         return ReplySent_.ToFuture();
@@ -250,7 +254,7 @@ private:
             auto decodedType = FromHttpContentType(*contentTypeString);
             if (!decodedType) {
                 return TError("Invalid \"Content-Type\" header value")
-                    << TErrorAttribute("value", *contentTypeString);
+                    .With("value", *contentTypeString);
             }
             rpcHeader->set_request_format(ToProto(*decodedType));
         }
@@ -263,7 +267,7 @@ private:
             auto decodedType = FromHttpContentType(*acceptString);
             if (!decodedType) {
                 return TError("Invalid \"Accept\" header value")
-                    << TErrorAttribute("value", *acceptString);
+                    .With("value", *acceptString);
             }
             rpcHeader->set_response_format(ToProto(*decodedType));
         }
@@ -275,12 +279,21 @@ private:
         if (const auto* requestIdString = httpHeaders->Find(RequestIdHeaderName)) {
             if (!TRequestId::FromString(*requestIdString, requestId)) {
                 return TError("Invalid %Qv header value", RequestIdHeaderName)
-                    << TErrorAttribute("value", *requestIdString);
+                    .With("value", *requestIdString);
             }
         } else {
             *requestId = TRequestId::Create();
         }
         ToProto(rpcHeader->mutable_request_id(), *requestId);
+
+        if (const auto* startTimeString = httpHeaders->Find(StartTimeHeaderName)) {
+            i64 startTime;
+            if (!TryFromString(*startTimeString, startTime)) {
+                return TError("Invalid %Qv header value", StartTimeHeaderName)
+                    .With("value", *startTimeString);
+            }
+            rpcHeader->set_start_time(startTime);
+        }
 
         auto getCredentialsExt = [&] {
             return rpcHeader->MutableExtension(NRpc::NProto::TCredentialsExt::credentials_ext);
@@ -385,7 +398,7 @@ class TServer
 {
 public:
     explicit TServer(NYT::NHttp::IServerPtr httpServer)
-        : TServerBase(HttpLogger().WithTag("ServerId: %v", TGuid::Create()))
+        : TServerBase(HttpLogger().WithTag("ServerId", TGuid::Create()))
         , HttpServer_(std::move(httpServer))
     { }
 
@@ -426,6 +439,14 @@ private:
 
 NRpc::IServerPtr CreateServer(NYT::NHttp::IServerPtr httpServer)
 {
+    return New<TServer>(std::move(httpServer));
+}
+
+NRpc::IServerPtr CreateServer(TServerConfigPtr config)
+{
+    auto httpServer = config->Credentials
+        ? NYT::NHttps::CreateServer(config, config->PollerThreadCount)
+        : NYT::NHttp::CreateServer(config, config->PollerThreadCount);
     return New<TServer>(std::move(httpServer));
 }
 

@@ -27,10 +27,10 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
 
     if (params.HasContentBasedDeduplication) {
         request.set_content_based_deduplication(params.ContentBasedDeduplication);
-        if (params.ContentBasedDeduplication) {
-            request.set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
-            request.set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
-        }
+    }
+    if (isFifo) {
+        request.set_partition_write_speed_messages_per_second(NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+        request.set_partition_write_burst_messages(NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES);
     }
 
     auto* partitioningSettings = request.mutable_partitioning_settings();
@@ -69,6 +69,23 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
             consumerType->mutable_dead_letter_policy()->mutable_delete_action();
         }
     }
+
+    if (!params.QueueName.empty()) {
+        (*request.mutable_attributes())["_sqs_queue_name"] = params.QueueName;
+    }
+    if (!params.AccountName.empty()) {
+        (*request.mutable_attributes())["_sqs_account_name"] = params.AccountName;
+    }
+    if (!params.CloudId.empty()) {
+        (*request.mutable_attributes())["_sqs_cloud_id"] = params.CloudId;
+    }
+    if (!params.FolderId.empty()) {
+        (*request.mutable_attributes())["_sqs_folder_id"] = params.FolderId;
+    }
+    if (params.ReadRequestAttemptIdPeriodMs) {
+        (*consumer->mutable_attributes())["_sqs_read_request_attempt_id_period_ms"] = ToString(params.ReadRequestAttemptIdPeriodMs);
+    }
+    (*request.mutable_attributes())["_sqs_export_metrics"] = "true";
 
     return request;
 }

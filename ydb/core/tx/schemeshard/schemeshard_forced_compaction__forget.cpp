@@ -58,9 +58,7 @@ struct TSchemeShard::TForcedCompaction::TTxForget: public TRwTxBase {
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistForcedCompactionForget(db, forcedCompactionInfo);
-        Self->ForcedCompactionsByTime.erase(std::make_pair(forcedCompactionInfo.StartTime, forcedCompactionInfo.Id));
-        Self->ForcedCompactions.erase(forcedCompactionInfo.Id);
+        Self->ForgetForcedCompaction(db, forcedCompactionInfo);
 
         Reply(std::move(response));
 

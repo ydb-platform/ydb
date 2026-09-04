@@ -79,6 +79,12 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::FULL_BACKUP:
             res << "ydb://fullbackup";
             break;
+        case Ydb::TOperationId::ANALYZE:
+            res << "ydb://analyze";
+            break;
+        case Ydb::TOperationId::SET_NOT_NULL:
+            res << "ydb://setnotnull";
+            break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
     }
@@ -193,6 +199,11 @@ public:
         return Proto;
     }
 
+    void AddOptionalValue(const std::string& key, const std::string& value) {
+        NKikimr::NOperationId::AddOptionalValue(Proto, key, value);
+        AddToIndex(Proto.data(Proto.data_size() - 1));
+    }
+
     const std::vector<const std::string*>& GetValue(const std::string& key) const {
         auto it = Index.find(key);
         if (it != Index.end()) {
@@ -215,13 +226,17 @@ public:
     }
 
 private:
+    void AddToIndex(const Ydb::TOperationId::TData& data) {
+#ifdef YDB_SDK_OSS
+        Index[data.key()].push_back(&data.value());
+#else
+        Index[data.key()].push_back(&data.value().ConstRef());
+#endif
+    }
+
     void BuildIndex() {
         for (const auto& data : Proto.data()) {
-#ifdef YDB_SDK_OSS
-            Index[data.key()].push_back(&data.value());
-#else
-            Index[data.key()].push_back(&data.value().ConstRef());
-#endif
+            AddToIndex(data);
         }
     }
 
@@ -276,7 +291,7 @@ std::vector<TOperationId::TData> TOperationId::GetData() const {
 }
 
 void TOperationId::AddOptionalValue(const std::string& key, const std::string& value) {
-    NKikimr::NOperationId::AddOptionalValue(Impl->GetProto(), key, value);
+    Impl->AddOptionalValue(key, value);
 }
 
 const std::vector<const std::string*>& TOperationId::GetValue(const std::string& key) const {
@@ -336,6 +351,14 @@ TOperationId::EKind ParseKind(const std::string_view value) {
 
     if (value.starts_with("fullbackup")) {
         return TOperationId::FULL_BACKUP;
+    }
+
+    if (value.starts_with("analyze")) {
+        return TOperationId::ANALYZE;
+    }
+
+    if (value.starts_with("setnotnull")) {
+        return TOperationId::SET_NOT_NULL;
     }
 
     return TOperationId::UNUSED;

@@ -1,6 +1,7 @@
 PY3TEST()
 
 PEERDIR(
+    contrib/python/hypothesis
     contrib/python/yarl
 )
 

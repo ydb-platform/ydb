@@ -829,6 +829,16 @@ public:
     virtual int Run(TConfig& config) override;
 };
 
+class TCommandDeleteSession : public TYdbSimpleCommand {
+public:
+    TCommandDeleteSession();
+    virtual void Config(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    TString SessionId;
+};
+
 // Avoid class name collision with public client
 namespace NExperimentalConsoleClient {
 

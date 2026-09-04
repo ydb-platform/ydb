@@ -425,10 +425,10 @@ public:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:
-                return true;
             case EType::GlobalFulltextCompact:
             case EType::GlobalFulltextCompactRelevance:
             case EType::GlobalJsonCompact:
+                return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
             case EType::LocalMinMax:
@@ -455,6 +455,34 @@ public:
                 return {};
         }
         return {};
+    }
+};
+
+struct TMultiColumnStatisticsDescription {
+    TString Name;
+    TVector<TString> Columns;
+    TVector<TString> Types;
+
+    TMultiColumnStatisticsDescription() = default;
+
+    explicit TMultiColumnStatisticsDescription(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& message)
+        : Name(message.GetName())
+    {
+        for (const auto& column : message.GetColumnNames()) {
+            Columns.push_back(column);
+        }
+        for (const auto type : message.GetTypes()) {
+            switch (type) {
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                    Types.push_back("COUNT_MIN_SKETCH");
+                    break;
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                    Types.push_back("EQ_HEIGHT_HISTOGRAM");
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 };
 
@@ -578,6 +606,14 @@ struct TColumnEncoding {
 
 using TColumnEncodingsList = TVector<TColumnEncoding>;
 
+struct TDefaultExpressionColumnInfo {
+    TString ExprText;
+    NYql::TExprNode::TPtr Expr; // Compiled ExprText
+    TString Context;
+    TVector<TString> Dependencies;
+    bool Stored = false;
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -595,6 +631,7 @@ struct TKikimrColumnMetadata {
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
     TMaybe<TColumnEncodingsList> Encoding;
+    TMaybe<TDefaultExpressionColumnInfo> DefaultExpression;
 
     TKikimrColumnMetadata() = default;
 
@@ -660,6 +697,15 @@ struct TKikimrColumnMetadata {
                     break;
             }
         }
+
+        if (IsDefaultFromExpression()) {
+            const auto& defaultExpression = message->GetDefaultExpression();
+            DefaultExpression = TDefaultExpressionColumnInfo{};
+            DefaultExpression->ExprText = defaultExpression.GetExprText();
+            DefaultExpression->Context = defaultExpression.GetContext();
+            DefaultExpression->Stored = defaultExpression.GetStored();
+            DefaultExpression->Dependencies.assign(defaultExpression.GetDependencies().begin(), defaultExpression.GetDependencies().end());
+        }
     }
 
     void SetDefaultFromSequence() {
@@ -670,12 +716,21 @@ struct TKikimrColumnMetadata {
         DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
     }
 
+
+    void SetDefaultFromExpression() {
+        DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
+    }
+
     bool IsDefaultFromSequence() const {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE;
     }
 
     bool IsDefaultFromLiteral() const {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+    }
+
+    bool IsDefaultFromExpression() const {
+        return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
     }
 
     bool IsDefaultKindDefined() const {
@@ -695,6 +750,15 @@ struct TKikimrColumnMetadata {
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
+        if (DefaultExpression) {
+            auto& defaultExpression = *message->MutableDefaultExpression();
+            defaultExpression.SetExprText(DefaultExpression->ExprText);
+            defaultExpression.SetContext(DefaultExpression->Context);
+            defaultExpression.SetStored(DefaultExpression->Stored);
+            for (const auto& dep : DefaultExpression->Dependencies) {
+                defaultExpression.AddDependencies(dep);
+            }
+        }
         if (columnType.TypeInfo) {
             *message->MutableTypeInfo() = *columnType.TypeInfo;
         }
@@ -787,6 +851,7 @@ struct TExternalSource {
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
     TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
+    ui64 WriteOperations = 0;
 };
 
 enum EMetaSerializationType : ui64 {
@@ -837,6 +902,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     // Indexes and ImplTables must be in same order
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
+
+    TVector<TMultiColumnStatisticsDescription> MultiColumnStatistics;
 
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
@@ -1382,7 +1449,10 @@ struct TSecretSettings {
     TString Name;
     TString Value;
     TString ValueParamName; // when set, the value is taken from parameter at execution
-    bool InheritPermissions = false;
+    std::optional<bool> InheritPermissions; // Not set means the option is not specified explicitly
+    bool ReplaceIfExists = false; // CREATE OR REPLACE
+    bool ExistingOk = false; // CREATE IF NOT EXISTS
+    bool MissingOk = false; // ALTER/DROP IF EXISTS
 };
 
 struct TKikimrListPathItem {
@@ -1551,8 +1621,6 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 

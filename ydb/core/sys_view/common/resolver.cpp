@@ -102,34 +102,6 @@ public:
     }
 
 private:
-    void RegisterPgTablesSystemViews() {
-        auto registerView = [&](TStringBuf tableName, ESysViewType type, const TVector<Schema::PgColumn>& columns) {
-            DomainSystemViewsTypes[tableName] = type;
-            SubDomainSystemViewsTypes[tableName] = type;
-            auto& sv = SystemViews[type];
-            for (const auto& column : columns) {
-                sv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
-                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
-                );
-            }
-        };
-        registerView(
-            PgTablesName,
-            ESysViewType::EPgTables,
-            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgTablesName)
-        );
-        registerView(
-            InformationSchemaTablesName,
-            ESysViewType::EInformationSchemaTables,
-            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(InformationSchemaTablesName)
-        );
-        registerView(
-            PgClassName,
-            ESysViewType::EPgClass,
-            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgClassName)
-        );
-    }
-
     void RegisterSystemViews() {
         for (const auto& registryRecord : SysViewsRegistry::SysViews) {
             registryRecord.FillSchemaFunc(SystemViews[registryRecord.Type]);
@@ -156,7 +128,6 @@ private:
             }
         }
 
-        RegisterPgTablesSystemViews();
     }
 
 private:

@@ -1,6 +1,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
+#include <ydb/core/testlib/common_helper.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -674,6 +679,509 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             FROM `/Root/Test`;
         )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW())).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(StrictSerializable_Basic) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[100u];["Strict"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(StrictSerializable_RequiresFeatureFlag) {
+        TKikimrSettings settings;
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Strict Serializable mode is disabled");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_UsesEvWritePrepare) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        bool foundEvWriteWithPrepareMode = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                if (evWrite->Record.OperationsSize() == 1
+                        && evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
+                        && evWrite->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
+                    foundEvWriteWithPrepareMode = true;
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(foundEvWriteWithPrepareMode);
+    }
+
+    Y_UNIT_TEST(StrictSerializable_SnapshotTaken) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        bool foundReadWithSnapshot = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                if (record.HasSnapshot()
+                        && record.GetSnapshot().GetStep() != 0
+                        && record.GetSnapshot().GetTxId() != 0) {
+                    foundReadWithSnapshot = true;
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(foundReadWithSnapshot);
+    }
+
+    Y_UNIT_TEST(StrictSerializable_UpdateUsesEvWritePrepare) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+
+        bool foundUpdateWithPrepare = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                if (evWrite->Record.OperationsSize() == 1
+                        && evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
+                        && evWrite->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE
+                        && evWrite->Record.GetMvccSnapshot().GetStep() == 0
+                        && evWrite->Record.GetMvccSnapshot().GetTxId() == 0) {
+                    foundUpdateWithPrepare = true;
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
+                UPDATE `/Root/KeyValue` ON (Key, Value) VALUES (100u, "Updated");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(foundUpdateWithPrepare);
+    }
+
+    Y_UNIT_TEST(StrictSerializable_InsertUsesEvWritePrepare) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        bool foundInsertWithImmediate = false;
+        bool foundPrepare = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                if (evWrite->Record.OperationsSize() == 0
+                        && evWrite->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE
+                        && evWrite->Record.GetMvccSnapshot().GetStep() == 0
+                        && evWrite->Record.GetMvccSnapshot().GetTxId() == 0) {
+                    foundPrepare = true;
+                } else if (evWrite->Record.OperationsSize() == 1
+                        && evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                        && evWrite->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+                        && evWrite->Record.GetMvccSnapshot().GetStep() == 0
+                        && evWrite->Record.GetMvccSnapshot().GetTxId() == 0) {
+                    foundInsertWithImmediate = true;
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
+                INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (200u, "Inserted");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(foundInsertWithImmediate);
+        UNIT_ASSERT(foundPrepare);
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ExecuteQuery) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (200u, "Commit1");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetCommitTimestamp().has_value(), "Commit timestamp should be present for StrictSerializableRW write commit");
+        const auto& ts1 = *result.GetCommitTimestamp();
+        UNIT_ASSERT_C(ts1.PlanStep > 0, "PlanStep should be nonzero");
+        UNIT_ASSERT_C(ts1.TxId > 0, "TxId should be nonzero");
+
+        auto result2 = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (201u, "Commit2");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+        UNIT_ASSERT_C(result2.GetCommitTimestamp().has_value(), "Commit timestamp should be present for StrictSerializableRW write commit");
+        const auto& ts2 = *result2.GetCommitTimestamp();
+        UNIT_ASSERT_C(ts2.PlanStep > 0, "PlanStep should be nonzero");
+        UNIT_ASSERT_C(ts2.TxId > 0, "TxId should be nonzero");
+
+        UNIT_ASSERT_C(ts1 < ts2, "Second commit timestamp should be greater than first (lexicographic order)");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ExplicitCommit) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto beginResult = session.BeginTransaction(NYdb::NQuery::TTxSettings::StrictSerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginResult.GetStatus(), EStatus::SUCCESS, beginResult.GetIssues().ToString());
+        auto tx = beginResult.GetTransaction();
+
+        auto execResult = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (300u, "Explicit");
+        )", NYdb::NQuery::TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+        auto commitResult = tx.Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+        UNIT_ASSERT_C(commitResult.GetCommitTimestamp().has_value(), "Commit timestamp should be present for StrictSerializableRW write commit");
+        const auto& ts = *commitResult.GetCommitTimestamp();
+        UNIT_ASSERT_C(ts.PlanStep > 0, "PlanStep should be nonzero");
+        UNIT_ASSERT_C(ts.TxId > 0, "TxId should be nonzero");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ReadOnly) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(!result.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for read-only query");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ReadOnly_ExplicitCommit) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto beginResult = session.BeginTransaction(NYdb::NQuery::TTxSettings::StrictSerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginResult.GetStatus(), EStatus::SUCCESS, beginResult.GetIssues().ToString());
+        auto tx = beginResult.GetTransaction();
+
+        auto execResult = session.ExecuteQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
+        )", NYdb::NQuery::TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+        auto commitResult = tx.Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+        UNIT_ASSERT_C(!commitResult.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for read-only explicit commit");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_SerializableRW) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (400u, "Serializable");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(!result.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for non-StrictSerializableRW isolation");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_SnapshotRW) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (450u, "Snapshot");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(!result.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for non-StrictSerializableRW isolation");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_Order) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result1 = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (500u, "Distinct1");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+        UNIT_ASSERT_C(result1.GetCommitTimestamp().has_value(), "Commit timestamp should be present");
+        const auto& ts1 = *result1.GetCommitTimestamp();
+
+        auto result2 = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (501u, "Distinct2");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+        UNIT_ASSERT_C(result2.GetCommitTimestamp().has_value(), "Commit timestamp should be present");
+        const auto& ts2 = *result2.GetCommitTimestamp();
+
+        UNIT_ASSERT_C(ts1 < ts2, "Commit timestamps must be ordered and distinct");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_OlapTable_CommitTimestamp) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        settings.SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto ddlResult = session.ExecuteQuery(R"(
+            CREATE TABLE `/Root/OlapTest` (
+                Key Uint64 not null,
+                Value Text,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(ddlResult.GetStatus(), EStatus::SUCCESS, ddlResult.GetIssues().ToString());
+
+        auto writeResult = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/OlapTest` (Key, Value) VALUES (1u, "olap_value");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResult.GetStatus(), EStatus::SUCCESS, writeResult.GetIssues().ToString());
+        UNIT_ASSERT_C(writeResult.GetCommitTimestamp().has_value(),
+            "Commit timestamp should be present for StrictSerializableRW write on OLAP table");
+        const auto& writeTs = *writeResult.GetCommitTimestamp();
+        UNIT_ASSERT_C(writeTs.PlanStep > 0, "PlanStep should be nonzero for OLAP write commit");
+        UNIT_ASSERT_C(writeTs.TxId > 0, "TxId should be nonzero for OLAP write commit");
+
+        auto readResult = session.ExecuteQuery(R"(
+            SELECT * FROM `/Root/OlapTest` WHERE Key = 1u;
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(readResult.GetStatus(), EStatus::SUCCESS, readResult.GetIssues().ToString());
+        CompareYson(R"([[1u;["olap_value"]]])", FormatResultSetYson(readResult.GetResultSet(0)));
+
+        auto writeResult2 = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/OlapTest` (Key, Value) VALUES (2u, "second");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResult2.GetStatus(), EStatus::SUCCESS, writeResult2.GetIssues().ToString());
+        UNIT_ASSERT_C(writeResult2.GetCommitTimestamp().has_value(), "Commit timestamp should be present");
+        const auto& writeTs2 = *writeResult2.GetCommitTimestamp();
+
+        UNIT_ASSERT_C(writeTs < writeTs2, "OLAP commit timestamps must be ordered and distinct");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_ReadOnlySingleShard_SnapshotInEvRead) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        bool foundReadWithSnapshot = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                UNIT_ASSERT_C(record.HasSnapshot(),
+                    "EvRead should have snapshot for StrictSerializable read-only single-shard tx");
+                UNIT_ASSERT_C(record.GetSnapshot().GetStep() != 0,
+                    "EvRead snapshot Step should be nonzero for StrictSerializable");
+                UNIT_ASSERT_C(record.GetSnapshot().GetTxId() != 0,
+                    "EvRead snapshot TxId should be nonzero for StrictSerializable");
+                foundReadWithSnapshot = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery(R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Key = 1u;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(foundReadWithSnapshot,
+            "Expected EvRead with non-zero snapshot for StrictSerializable single-key read-only tx");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_CrossSessionOrdering) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+
+        auto session1 = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto session2 = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto session3 = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto writeResult1 = kikimr.RunCall([&] {
+            return session1.ExecuteQuery(R"(
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (600u, "session1");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResult1.GetStatus(), EStatus::SUCCESS, writeResult1.GetIssues().ToString());
+        UNIT_ASSERT_C(writeResult1.GetCommitTimestamp().has_value(), "Commit timestamp should be present for tx1");
+        const auto& commitTs1 = *writeResult1.GetCommitTimestamp();
+        UNIT_ASSERT_C(commitTs1.PlanStep > 0, "tx1 PlanStep should be nonzero");
+        UNIT_ASSERT_C(commitTs1.TxId > 0, "tx1 TxId should be nonzero");
+
+        auto writeResult2 = kikimr.RunCall([&] {
+            return session2.ExecuteQuery(R"(
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (601u, "session2");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResult2.GetStatus(), EStatus::SUCCESS, writeResult2.GetIssues().ToString());
+        UNIT_ASSERT_C(writeResult2.GetCommitTimestamp().has_value(), "Commit timestamp should be present for tx2");
+        const auto& commitTs2 = *writeResult2.GetCommitTimestamp();
+        UNIT_ASSERT_C(commitTs2.PlanStep > 0, "tx2 PlanStep should be nonzero");
+        UNIT_ASSERT_C(commitTs2.TxId > 0, "tx2 TxId should be nonzero");
+
+        UNIT_ASSERT_C(commitTs1 < commitTs2,
+            "Commit timestamps from different sessions must be ordered: tx1 (strictly before tx2) < tx2");
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        std::optional<NYdb::NScheme::TVirtualTimestamp> readSnapshot;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                if (record.HasSnapshot()
+                        && record.GetSnapshot().GetStep() != 0
+                        && record.GetSnapshot().GetTxId() != 0) {
+                    readSnapshot = NYdb::NScheme::TVirtualTimestamp(
+                        record.GetSnapshot().GetStep(),
+                        record.GetSnapshot().GetTxId());
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto readResult = kikimr.RunCall([&] {
+            return session3.ExecuteQuery(R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Key IN (600u, 601u);
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(readResult.GetStatus(), EStatus::SUCCESS, readResult.GetIssues().ToString());
+
+        UNIT_ASSERT_C(readSnapshot.has_value(),
+            "Read tx should have captured a snapshot timestamp from EvRead");
+        const auto& snapTs = *readSnapshot;
+
+        UNIT_ASSERT_C(commitTs2 <= snapTs,
+            "Read snapshot timestamp must be >= both commit timestamps of preceding writes: "
+            << "commitTs2=(" << commitTs2.PlanStep << "," << commitTs2.TxId << ") "
+            << "snapTs=(" << snapTs.PlanStep << "," << snapTs.TxId << ")");
+
+        CompareYsonUnordered(R"([[[600u];["session1"]];[[601u];["session2"]]])",
+            FormatResultSetYson(readResult.GetResultSet(0)));
     }
 }
 

@@ -1,0 +1,9 @@
+items:
+- name: JSON-индекс — быстрый старт
+  href: json-index-quickstart.md
+- name: Каталог со вложенными атрибутами
+  href: json-index-catalog.md
+- name: Параметризованные запросы и переменные JsonPath
+  href: json-index-parameters.md
+- name: Проверка типа поля и наличия пути
+  href: json-index-typecheck.md

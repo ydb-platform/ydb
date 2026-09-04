@@ -11,6 +11,7 @@
 #include <util/system/types.h>
 
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -43,6 +44,7 @@ struct TWriteBlockCompression {
     ECodec Codec = ECodec::RAW;
     std::vector<std::string_view>& Payloads;
     const std::vector<TInstant>& CreatedAt;
+    const std::vector<std::optional<std::string>>& MessageKeys;
     TBuffer& Data;
     ui32& CodecID;
     bool& Compressed;

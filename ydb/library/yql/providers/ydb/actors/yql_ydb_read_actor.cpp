@@ -248,7 +248,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateYdbReadActor(
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
     ::NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory)
 {
     TString keyFrom, keyTo;
     if (const auto taskParamsIt = taskParams.find("ydb"); taskParamsIt != taskParams.cend()) {
@@ -260,7 +260,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateYdbReadActor(
     }
 
     auto token = secureParams.Value(params.GetToken(), TString{});
-    auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, params.GetAddBearerToToken());
+    auto credentialsProviderFactory = credentialsFactory->Create(token, params.GetAddBearerToToken());
     TVector<TString> columns;
     columns.reserve(params.GetColumns().size());
     for (auto i = 0; i < params.GetColumns().size(); ++i)

@@ -188,6 +188,80 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         }
     }
 
+    Y_UNIT_TEST(DropRowTableAfterUpsertSelectIntoColumnTable) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                CREATE TABLE `/Root/SrcRowTable` (
+                    id Uint64 NOT NULL,
+                    ts Timestamp,
+                    PRIMARY KEY (id)
+                )
+                WITH (STORE = ROW);
+
+                CREATE TABLE `/Root/DstColumnTable` (
+                    id Uint64 NOT NULL,
+                    ts Timestamp,
+                    PRIMARY KEY (id)
+                )
+                WITH (STORE = COLUMN);
+            )",
+                                  NYdb::NQuery::TTxControl::NoTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                UPSERT INTO `/Root/SrcRowTable` (id, ts) VALUES
+                    (1u, Timestamp("2020-01-01T00:00:00Z"));
+            )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                UPSERT INTO `/Root/DstColumnTable` SELECT id, ts FROM `/Root/SrcRowTable`;
+            )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                SELECT id FROM `/Root/SrcRowTable`;
+            )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        auto dropSession = tableClient.CreateSession().GetValueSync().GetSession();
+        auto dropFuture = dropSession.ExecuteSchemeQuery(R"(DROP TABLE `/Root/SrcRowTable`;)");
+
+        const bool completed = dropFuture.Wait(TDuration::Seconds(30));
+        UNIT_ASSERT_C(completed,
+            "DROP TABLE on the source row table did not complete within timeout: "
+            "reproduces the reported hang after UPSERT ... SELECT into a column table");
+
+        auto dropResult = dropFuture.GetValueSync();
+        UNIT_ASSERT_C(dropResult.GetStatus() == NYdb::EStatus::SUCCESS, dropResult.GetIssues().ToString());
+    }
+
     void TestDeleteAbsent(const size_t shardCount, bool reboot) {
         //This test tries to DELETE from a table when there is no rows to delete at some shard
         //It corresponds to a SCAN, then NO write then COMMIT on that shard
@@ -241,7 +315,7 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         const auto resultSets = resultSelect.GetResultSets();
         UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
         const auto resultSet = resultSets[0];
-        if (shardCount > 1 && reboot) {
+        if (reboot) {
             const auto deleteUnavailiable = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNAVAILABLE;
             const auto deleteUndetermined = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNDETERMINED;
             UNIT_ASSERT_C(
@@ -254,13 +328,14 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
                 resultDelete.GetStatus()
             );
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
+            // without a reboot the commit always goes through, so the row is deleted
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
         }
 
         //DELETE 0 rows from every shard
         const auto resultDelete2 =
             client.ExecuteQuery("DELETE from `/Root/ttt` WHERE id < 100", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        if (shardCount > 1 && reboot) {
+        if (reboot) {
             UNIT_ASSERT_C(
                 (!resultDelete2.IsSuccess() && resultSet.RowsCount() == 1) ||
 

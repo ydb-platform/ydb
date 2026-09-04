@@ -5,6 +5,7 @@ SRCS(
     inflight_limiter.cpp
     pq_database.cpp
     pq_rl_helpers.cpp
+    pqdata_transaction_compat.cpp
     utils.cpp
     write_id.cpp
 )
@@ -24,11 +25,13 @@ END()
 RECURSE(
     cluster_tracker
     codecs
+    dataplane
     counters
     describer
     fetcher
     list_topics
     mlp
+    nameresolver
     partition_index_generator
     partition_key_range
     schema

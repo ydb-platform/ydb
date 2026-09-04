@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/operations/manager.h>
 #include <ydb/core/tx/program/program.h>
 
@@ -46,14 +47,31 @@ public:
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
+    EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<NLWTrace::TOrbit> Orbit;
     bool readNonconflictingPortions;
     bool readConflictingPortions;
     // portions that the current tx has written
     std::optional<THashSet<TInsertWriteId>> ownPortions;
 
+    bool NeedDuplicateFiltering() const {
+        AFL_VERIFY(TableMetadataAccessor);
+        return DeduplicationPolicy == EDeduplicationPolicy::PREVENT_DUPLICATES && TableMetadataAccessor->NeedDuplicateFiltering();
+    }
+
     bool IsReverseSort() const {
         return Sorting == ERequestSorting::DESC;
+    }
+
+    TString GetLockName() const {
+        if (TxId != 0 && ScanId != 0) {
+            // proper kqp scan
+            return TStringBuilder() << "scan:" << TxId << ":" << ScanId;
+        } else {
+            // internal scan
+            AFL_VERIFY(!ScanIdentifier.empty());
+            return TStringBuilder() << "scan:" << GetScanIdentifier();
+        }
     }
 
     // List of columns

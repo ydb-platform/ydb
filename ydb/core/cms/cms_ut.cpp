@@ -6,6 +6,7 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/svnversion/svnversion.h>
@@ -95,6 +96,453 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 5, 0)));
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 6, 0)));
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 7, 0)));
+        }
+    }
+
+    Y_UNIT_TEST(DDiskInfoReadApiEmptyState)
+    {
+        TCmsTestEnv env(8);
+
+        const auto list = env.RequestDDiskInfoList();
+        UNIT_ASSERT_VALUES_EQUAL(list.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(list.TabletsSize(), 0);
+
+        const auto snapshot = env.RequestDDiskInfo(42);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetTabletId(), 42);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncOnCmsActivation)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1001;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+
+        const auto bscSnapshot = env.RequestBSControllerDDiskInfo(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL_C(bscSnapshot.GetStatus(), NKikimrProto::OK,
+            bscSnapshot.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId, bscSnapshot.GetRevision());
+
+        env.RestartCms();
+
+        const auto snapshot = env.WaitForDDiskInfo(tabletId, bscSnapshot.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetTabletId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetRevision(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GroupsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncOnBscUpdate)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(2);
+
+        const ui64 tabletId = 1002;
+        const auto first = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrProto::OK,
+            first.ShortDebugString());
+        const auto initial = env.WaitForDDiskInfo(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(initial.GroupsSize(), 1);
+
+        const auto second = env.AllocateDDiskBlockGroup(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), NKikimrProto::OK,
+            second.ShortDebugString());
+        const auto updated = env.WaitForDDiskInfo(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetRevision(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(0).GetDirectBlockGroupId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(1).GetDirectBlockGroupId(), 2);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSurvivesBscRestart)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1003;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+        const auto before = env.WaitForDDiskInfo(tabletId, 1);
+
+        env.RestartBSController();
+
+        const auto after = env.WaitForDDiskInfo(tabletId, before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetRevision(), before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GroupsSize(), before.GroupsSize());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncContinuesAfterBscRestart)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(2);
+
+        const ui64 tabletId = 1005;
+        const auto first = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrProto::OK,
+            first.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId, 1);
+
+        env.RestartBSController();
+
+        const auto second = env.AllocateDDiskBlockGroup(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), NKikimrProto::OK,
+            second.ShortDebugString());
+        const auto updated = env.WaitForDDiskInfo(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetRevision(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(0).GetDirectBlockGroupId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(1).GetDirectBlockGroupId(), 2);
+    }
+
+    Y_UNIT_TEST(DDiskInfoPersistsWhenBscIsUnavailable)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1004;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+        const auto before = env.WaitForDDiskInfo(tabletId, 1);
+
+        env.SendRestartBSController();
+        env.RestartCms();
+
+        const auto after = env.RequestDDiskInfo(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetTabletId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetRevision(), before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GroupsSize(), before.GroupsSize());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncLimitsInFlightRequests)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(1);
+
+        const TActorId cmsActorId = ResolveTablet(env, env.CmsId);
+
+        TVector<TAutoPtr<IEventHandle>> delayedResults;
+        ui32 getRequests = 0;
+        ui32 capturedResults = 0;
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTablet) {
+                ++getRequests;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult
+                    && ev->Recipient == cmsActorId
+                    && capturedResults < 16) {
+                ++capturedResults;
+                delayedResults.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (ui64 tabletId = 1; tabletId <= 17; ++tabletId) {
+            const auto allocation = env.AllocateDDiskBlockGroup(tabletId, tabletId);
+            UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+                allocation.ShortDebugString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(getRequests, 16);
+        UNIT_ASSERT_VALUES_EQUAL(delayedResults.size(), 16);
+
+        env.Send(delayedResults.front().Release(), 0, true);
+        delayedResults.erase(delayedResults.begin());
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back([&getRequests] (IEventHandle&) {
+            return getRequests == 17;
+        });
+        env.DispatchEvents(options);
+
+        UNIT_ASSERT_VALUES_EQUAL(getRequests, 17);
+    }
+
+    Y_UNIT_TEST(DDiskTabletListEmptyState)
+    {
+        TCmsTestEnv env(8);
+
+        const auto tablets = env.RequestDDiskTabletList();
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTotalCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.TabletsSize(), 0);
+
+        const auto disks = env.RequestDDiskDiskList();
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetTotalCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(disks.DisksSize(), 0);
+    }
+
+    Y_UNIT_TEST(DDiskTabletListFilterSortAndPage)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(4);
+
+        // tabletId 2001 gets a single group.
+        const ui64 tabletId1 = 2001;
+        const auto a1 = env.AllocateDDiskBlockGroup(tabletId1, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a1.GetStatus(), NKikimrProto::OK, a1.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId1, 1);
+
+        // tabletId 2002 gets two groups (revision 2).
+        const ui64 tabletId2 = 2002;
+        const auto a2 = env.AllocateDDiskBlockGroup(tabletId2, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a2.GetStatus(), NKikimrProto::OK, a2.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId2, 1);
+        const auto a3 = env.AllocateDDiskBlockGroup(tabletId2, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(a3.GetStatus(), NKikimrProto::OK, a3.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId2, 2);
+
+        // tabletId 2003 gets a single group.
+        const ui64 tabletId3 = 2003;
+        const auto a4 = env.AllocateDDiskBlockGroup(tabletId3, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a4.GetStatus(), NKikimrProto::OK, a4.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId3, 1);
+
+        // No filter, default sort (by tablet id ascending), no paging.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetTabletId(), tabletId1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetTabletId(), tabletId2);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetTabletId(), tabletId3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetGroupsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetGroupsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetGroupsCount(), 1);
+            // No PDisk cluster info is available for the dynamically allocated
+            // DDisk pool disks in this test environment, so CMS conservatively
+            // treats them as available and reports zero unavailable disks.
+            for (const auto &tablet : resp.GetTablets()) {
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskCount(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferCount(), 0);
+            }
+        }
+
+        // Filter by tablet id substring.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetFilterTabletId(ToString(tabletId2));
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetTabletId(), tabletId2);
+        }
+
+        // Sort by groups count ascending.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT);
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetGroupsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetGroupsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetGroupsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetTabletId(), tabletId2);
+            // Tablets with equal groups count preserve tablet id ordering as a tiebreaker.
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetTabletId(), tabletId1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetTabletId(), tabletId3);
+        }
+
+        // Sort by tablet id descending.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetSortDescending(true);
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetTabletId(), tabletId3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetTabletId(), tabletId2);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetTabletId(), tabletId1);
+        }
+
+        // Paging: page size 2, verify both pages reconstruct full ascending order.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetLimit(2);
+            request.SetOffset(0);
+            const auto page1 = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(page1.TabletsSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetTablets(0).GetTabletId(), tabletId1);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetTablets(1).GetTabletId(), tabletId2);
+
+            request.SetOffset(2);
+            const auto page2 = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page2.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(page2.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page2.GetTablets(0).GetTabletId(), tabletId3);
+        }
+
+        // Offset beyond available items returns an empty page but a correct total count.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetOffset(100);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 0);
+        }
+
+        // OnlyProblems: with no unavailable disks known, everything is filtered out.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetOnlyProblems(true);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(DDiskDiskListAggregationFilterSortAndPage)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(4);
+
+        const ui64 tabletId1 = 3001;
+        const auto a1 = env.AllocateDDiskBlockGroup(tabletId1, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a1.GetStatus(), NKikimrProto::OK, a1.ShortDebugString());
+        const auto info1 = env.WaitForDDiskInfo(tabletId1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info1.GroupsSize(), 1);
+
+        const ui64 tabletId2 = 3002;
+        const auto a2 = env.AllocateDDiskBlockGroup(tabletId2, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a2.GetStatus(), NKikimrProto::OK, a2.ShortDebugString());
+        const auto info2 = env.WaitForDDiskInfo(tabletId2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info2.GroupsSize(), 1);
+
+        // Expected disk usage derived directly from the BS Controller snapshots.
+        THashSet<TString> expectedDiskKeys;
+        auto collectKeys = [&](const NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult &info) {
+            for (const auto &group : info.GetGroups()) {
+                for (const auto &id : group.GetDDiskId()) {
+                    expectedDiskKeys.insert(TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId() << ":" << id.GetDDiskSlotId());
+                }
+                for (const auto &id : group.GetPersistentBufferDDiskId()) {
+                    expectedDiskKeys.insert(TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId() << ":" << id.GetDDiskSlotId());
+                }
+            }
+        };
+        collectKeys(info1);
+        collectKeys(info2);
+        UNIT_ASSERT(!expectedDiskKeys.empty());
+
+        // No filter, no paging: total count matches the number of distinct disks used.
+        NKikimrCms::TDDiskDiskListResponse full;
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetLimit(0);
+            full = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(full.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(full.GetTotalCount(), expectedDiskKeys.size());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(full.DisksSize()), expectedDiskKeys.size());
+
+            THashSet<TString> actualDiskKeys;
+            for (const auto &disk : full.GetDisks()) {
+                actualDiskKeys.insert(TStringBuilder() << disk.GetDiskId().GetNodeId() << ":"
+                    << disk.GetDiskId().GetPDiskId() << ":" << disk.GetDiskId().GetDDiskSlotId());
+                // No cluster info is available for these disks in this environment,
+                // so they must be conservatively reported as available.
+                UNIT_ASSERT(disk.GetAvailable());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(actualDiskKeys, expectedDiskKeys);
+
+            // Results must be sorted ascending by (NodeId, PDiskId, DDiskSlotId) by default.
+            for (size_t i = 1; i < static_cast<size_t>(full.DisksSize()); ++i) {
+                const auto &prev = full.GetDisks(i - 1).GetDiskId();
+                const auto &cur = full.GetDisks(i).GetDiskId();
+                const auto prevKey = std::make_tuple(prev.GetNodeId(), prev.GetPDiskId(), prev.GetDDiskSlotId());
+                const auto curKey = std::make_tuple(cur.GetNodeId(), cur.GetPDiskId(), cur.GetDDiskSlotId());
+                UNIT_ASSERT(prevKey < curKey);
+            }
+        }
+
+        // Filter by tablet id: only disks used by tabletId1 must be returned.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetFilterTabletId(ToString(tabletId1));
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskDiskList(request);
+            for (const auto &disk : resp.GetDisks()) {
+                bool foundInDDisk = false;
+                for (auto id : disk.GetDDiskTabletIds()) {
+                    foundInDDisk = foundInDDisk || (id == tabletId1);
+                }
+                bool foundInBuffer = false;
+                for (auto id : disk.GetPersistentBufferTabletIds()) {
+                    foundInBuffer = foundInBuffer || (id == tabletId1);
+                }
+                UNIT_ASSERT(foundInDDisk || foundInBuffer);
+            }
+            UNIT_ASSERT(resp.DisksSize() > 0);
+        }
+
+        // Filter by disk id substring: pick the first disk's key from the full list.
+        {
+            UNIT_ASSERT(full.DisksSize() > 0);
+            const auto &sample = full.GetDisks(0).GetDiskId();
+            const TString key = TStringBuilder() << sample.GetNodeId() << ":" << sample.GetPDiskId() << ":" << sample.GetDDiskSlotId();
+
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetFilterDiskId(key);
+            const auto resp = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.DisksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetDisks(0).GetDiskId().GetNodeId(), sample.GetNodeId());
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetDisks(0).GetDiskId().GetPDiskId(), sample.GetPDiskId());
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetDisks(0).GetDiskId().GetDDiskSlotId(), sample.GetDDiskSlotId());
+        }
+
+        // Sort descending must return the exact reverse of the ascending order.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetSortDescending(true);
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.DisksSize(), full.DisksSize());
+            for (size_t i = 0; i < static_cast<size_t>(resp.DisksSize()); ++i) {
+                const auto &a = resp.GetDisks(i).GetDiskId();
+                const auto &b = full.GetDisks(full.DisksSize() - 1 - i).GetDiskId();
+                UNIT_ASSERT_VALUES_EQUAL(a.GetNodeId(), b.GetNodeId());
+                UNIT_ASSERT_VALUES_EQUAL(a.GetPDiskId(), b.GetPDiskId());
+                UNIT_ASSERT_VALUES_EQUAL(a.GetDDiskSlotId(), b.GetDDiskSlotId());
+            }
+        }
+
+        // Paging reconstructs the full ascending list.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetLimit(1);
+            request.SetOffset(0);
+            const auto page1 = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetTotalCount(), full.GetTotalCount());
+            UNIT_ASSERT_VALUES_EQUAL(page1.DisksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetDisks(0).GetDiskId().GetNodeId(), full.GetDisks(0).GetDiskId().GetNodeId());
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetDisks(0).GetDiskId().GetPDiskId(), full.GetDisks(0).GetDiskId().GetPDiskId());
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetDisks(0).GetDiskId().GetDDiskSlotId(), full.GetDisks(0).GetDiskId().GetDDiskSlotId());
+        }
+
+        // OnlyProblems: no known unavailable disks, so the result must be empty.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetOnlyProblems(true);
+            const auto resp = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.DisksSize(), 0);
         }
     }
 
@@ -581,7 +1029,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             for (const auto& req : reqs) {
                 UNIT_ASSERT_VALUES_UNEQUAL(req.GetRequestId(), "user-r-1");
             }
-         
+
             // Check that manually approved permission was cleaned up
             env.CheckGetPermission("user", permissionId, false, TStatus::WRONG_REQUEST);
         }
@@ -639,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), rec1.GetPermissions(0).GetId());
 
         auto rid1 = rec1.GetRequestId();
-        
+
         // Manual approval
         auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 2);
@@ -649,7 +1097,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT_VALUES_EQUAL(rec3.PermissionsSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rec3.GetPermissions(0).GetId(), permissionId);
         }
-        
+
         // Check that request is now allowed
         env.CheckRequest("user", rid1, false, TStatus::ALLOW);
     }
@@ -686,9 +1134,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         {
             auto pdiskId = env.PDiskId(0, 0);
-    
+
             TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
-    
+
             env.CheckPermissionRequest(
                 MakePermissionRequest(TRequestOptions("user", false, false, false),
                         MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
@@ -699,9 +1147,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         {
             auto pdiskId = env.PDiskId(1, 0);
-    
+
             TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
-    
+
             env.CheckPermissionRequest(
                 MakePermissionRequest(TRequestOptions("user", false, false, false),
                         MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
@@ -718,9 +1166,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         for (ui32 i = 0; i < 8; ++i) {
             auto pdiskId = env.PDiskId(i, 0);
-    
+
             TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
-    
+
             auto rec = env.CheckPermissionRequest(
                 MakePermissionRequest(TRequestOptions("user", false, false, false),
                         MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
@@ -925,7 +1373,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000),
              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
         UNIT_ASSERT_VALUES_EQUAL(rec.PermissionsSize(), 0);
-    
+
         auto rid = rec.GetRequestId();
 
         // Get scheduled request
@@ -983,7 +1431,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(scheduledRec.GetRequests(0).ActionsSize(), 1);
         auto action = scheduledRec.GetRequests(0).GetActions(0);
         UNIT_ASSERT_VALUES_EQUAL(action.GetIssue().GetType(), TAction::TIssue::TOO_MANY_UNAVAILABLE_VDISKS);
-        
+
         // Try to check request
         env.CheckRequest("user", rid, false, TStatus::DISALLOW_TEMP);
 
@@ -2230,7 +2678,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             ),
             TStatus::DISALLOW_TEMP // ok, waiting for move VDisks
         );
-     
+
         // Check that FAULTY BSC request is sent
         env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
 
@@ -2270,7 +2718,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto emergency = env.CheckPermissionRequest
             ("user", true, false, true, true, -100, TStatus::ALLOW,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    
+
         // Rolling restart is blocked by emergency request
         env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::DISALLOW_TEMP, 0);
 
@@ -2296,7 +2744,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto emergency = env.CheckPermissionRequest
             ("user", true, false, true, true, -100, TStatus::DISALLOW_TEMP,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    
+
         // Done with restarting first node
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
 
@@ -2329,7 +2777,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Wall-E task is blocked by rolling restart
         env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
-    
+
         // Rolling restart is not blocked
         rollingRestart = env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
         UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
@@ -2400,7 +2848,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto samePriorityRequest = env.CheckPermissionRequest
             ("user", true, false, true, true, -80, TStatus::DISALLOW_TEMP,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    
+
         // Done with restarting first node
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
 
@@ -2430,7 +2878,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto samePriorityRequest = env.CheckPermissionRequest
             ("user", true, false, true, true, -80, TStatus::DISALLOW_TEMP,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    
+
         // Done with restarting first node
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
 
@@ -2450,14 +2898,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(8);
 
         const TString expectedReason = "Priority value is out of range";
-        
+
         // Out of range priority
         auto request = env.CheckPermissionRequest
             ("user", true, false, true, true, -101, TStatus::WRONG_REQUEST,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
         UNIT_ASSERT_VALUES_EQUAL(request.GetStatus().GetReason(), expectedReason);
-        
+
         // Out of range priority
         request = env.CheckPermissionRequest
             ("user", true, false, true, true, 101, TStatus::WRONG_REQUEST,
@@ -2485,7 +2933,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Done with restarting first node
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
-    
+
         // Rolling restart is continue
         rollingRestart = env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
         UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
@@ -2726,14 +3174,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
         env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
-        
+
         // Pile #1: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 3, down: 0, limit: 3
         env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
         // Pile #2: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 3, down: 0, limit: 3
         env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
-        
+
         // Locking 5 nodes in each pile (MODE_KEEP_AVAILABLE)
         env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
@@ -2744,14 +3192,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8), 60000000, "storage"));
         env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
-        
+
         // Pile #1: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
         env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "storage"));
         // Pile #0: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
         env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
-        
+
     }
 
     Y_UNIT_TEST(CheckSysTabletsOnNodesWithPDisks) {
@@ -2940,6 +3388,174 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Works as max availability
         env.CheckRequest("user", res1.first, false, MODE_SMART_AVAILABILITY, TStatus::ALLOW_PARTIAL, 1);
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeSortOrder)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        // Nodes 0-3: sys tablet candidates. Nodes 4-7: no sys tablets.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 4; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        addTablet(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
+        addTablet(NKikimrConfig::TBootstrap::CMS);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        THashSet<TString> sysNodeHosts;
+        for (ui32 id : sysNodes) {
+            sysNodeHosts.insert(ToString(id));
+        }
+
+        // Request: interleaved sys / non-sys nodes.
+        auto resp = env.CheckPermissionRequest("user", true, true, false, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 4);
+        // First 2 permissions must be non-sys-tablet nodes
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
+        // Last 2 permissions must be sys-tablet nodes
+        UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(2).GetAction().GetHost()));
+        UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(3).GetAction().GetHost()));
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeSortOrderPartialWithLimit)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        // Nodes 0-5: sys tablet candidates. Nodes 6-7: no sys tablets.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 6; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        THashSet<TString> sysNodeHosts;
+        for (ui32 id : sysNodes) {
+            sysNodeHosts.insert(ToString(id));
+        }
+
+        // Request restart of all 8 nodes: 6 sys-tablet + 2 non-sys-tablet.
+        // In MODE_MAX_AVAILABILITY, limit is ~N/2 = 3 sys-tablet nodes can be locked.
+        // Non-sys-tablet nodes (6, 7) should get permission first,
+        // then 3 sys-tablet nodes get permission, remaining 3 get scheduled.
+        auto resp = env.CheckPermissionRequest("user", true, false, true, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        // 2 non-sys-tablet + 3 sys-tablet = 5 permissions
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 5);
+        // First 2 permissions must be non-sys-tablet nodes
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
+        // Remaining 3 permissions must be sys-tablet nodes
+        for (int i = 2; i < 5; ++i) {
+            UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(i).GetAction().GetHost()));
+        }
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeSortOrderScheduledRequest)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        // Nodes 0-5: sys tablet candidates. Nodes 6-7: no sys tablets.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 6; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        THashSet<TString> sysNodeHosts;
+        for (ui32 id : sysNodes) {
+            sysNodeHosts.insert(ToString(id));
+        }
+
+        // Request restart of all 8 nodes with schedule + partial.
+        // First round: non-sys-tablet nodes + some sys-tablet nodes get permission.
+        // Remaining sys-tablet nodes get scheduled.
+        auto resp = env.CheckPermissionRequest("user", true, false, true, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 5);
+        UNIT_ASSERT(!resp.GetRequestId().empty());
+
+        // First 2 must be non-sys-tablet, next 3 must be sys-tablet
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
+        for (int i = 2; i < 5; ++i) {
+            UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(i).GetAction().GetHost()));
+        }
+
+        // Mark all granted permissions as done
+        for (size_t i = 0; i < resp.PermissionsSize(); ++i) {
+            env.CheckDonePermission("user", resp.GetPermissions(i).GetId());
+        }
+
+        // Now check the scheduled request: the remaining 3 sys-tablet nodes
+        // should all get permission since the previous locks are released.
+        auto resp2 = env.CheckRequest("user", resp.GetRequestId(), false,
+                                      MODE_MAX_AVAILABILITY, TStatus::ALLOW, 3);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.PermissionsSize(), 3);
+        for (size_t i = 0; i < resp2.PermissionsSize(); ++i) {
+            UNIT_ASSERT(sysNodeHosts.contains(resp2.GetPermissions(i).GetAction().GetHost()));
+        }
     }
 }
 

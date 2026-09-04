@@ -84,8 +84,8 @@ std::pair<typename TSummaryMap::iterator, bool> CheckedEmplaceStatistic(
         }
 
         THROW_ERROR_EXCEPTION("Statistic path cannot be a prefix of another statistic path")
-            << TErrorAttribute("prefix_path", prefixPath)
-            << TErrorAttribute("contained_in_path", conflictPath);
+            .With("prefix_path", prefixPath)
+            .With("contained_in_path", conflictPath);
     }
     auto emplacedIt = existingStatistics.emplace_hint(hintIt, path, std::forward<Ts>(args)...);
     return {emplacedIt, true};

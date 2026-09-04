@@ -12,6 +12,9 @@
 
 #include <util/stream/file.h>
 #include <util/string/ascii.h>
+#include <util/system/error.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 namespace NKikimr::NHttpProxy {
 
@@ -40,6 +43,7 @@ namespace NKikimr::NHttpProxy {
         THolder<THttpRequestProcessors> Processors;
         THolder<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
+        TIntrusivePtr<NHttp::TSocketDescriptor> PreboundSocket;
     };
 
     THttpProxyActor::THttpProxyActor(const THttpProxyConfig& cfg)
@@ -59,6 +63,13 @@ namespace NKikimr::NHttpProxy {
             }
             Driver = MakeHolder<NYdb::TDriver>(std::move(config));
         }
+        const ui16 httpPort = Config.GetHttpConfig().GetPort();
+        PreboundSocket = NHttp::TryBindListeningSocket({}, httpPort);
+        if (!PreboundSocket) {
+            Cerr << "HttpProxy: failed to pre-bind port " << httpPort
+                 << " (LastSystemError=" << LastSystemError() << "); acceptor will retry asynchronously"
+                 << Endl;
+        }
     }
 
     TStringBuilder THttpProxyActor::LogPrefix() const {
@@ -74,6 +85,7 @@ namespace NKikimr::NHttpProxy {
         ev->Secure = config.GetSecure();
         ev->CertificateFile = config.GetCert();
         ev->PrivateKeyFile = config.GetKey();
+        ev->PreboundSocket = std::move(PreboundSocket);
 
         ctx.Send(new NActors::IEventHandle(MakeHttpServerServiceID(), TActorId(),
                                            ev.Release(), 0, true));
@@ -95,12 +107,13 @@ namespace NKikimr::NHttpProxy {
                                     Driver.Get(),
                                     ServiceAccountCredentialsProvider);
 
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                      " incoming request from [" << context.SourceAddress << "]" <<
-                      " request [" << context.MethodName << "]" <<
-                      " url [" << context.Request->URL << "]" <<
-                      " database [" << context.DatabasePath << "]" <<
-                      " requestId: " << context.RequestId);
+        YDB_LOG_INFO_CTX(ctx, "Incoming request from request url database",
+            {"logPrefix", LogPrefix()},
+            {"sourceAddress", context.SourceAddress},
+            {"methodName", context.MethodName},
+            {"url", context.Request->URL},
+            {"databasePath", context.DatabasePath},
+            {"requestId", context.RequestId});
 
         auto contentType = context.ContentType;
         try {

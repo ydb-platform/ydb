@@ -1,10 +1,9 @@
 #pragma once
 
 #include "events.h"
-#include "partition_writer.h"
+#include "helpers.h"
 #include "persqueue_utils.h"
 #include "write_request_info.h"
-#include "partition_writer_cache_actor.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -21,7 +20,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/aliases.h>
 #include <ydb/services/metadata/service.h>
-
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -29,29 +28,29 @@ inline TActorId GetPQWriteServiceActorID() {
     return TActorId(0, "PQWriteSvc");
 }
 
-template<bool UseMigrationProtocol>
+template <EProtocol Protocol>
 class TWriteSessionActor
-    : public NActors::TActorBootstrapped<TWriteSessionActor<UseMigrationProtocol>>
+    : public NActors::TActorBootstrapped<TWriteSessionActor<Protocol>>
     , private NPQ::TRlHelpers
     , public NActors::IActorExceptionHandler
 {
-    using TSelf = TWriteSessionActor<UseMigrationProtocol>;
-    using TClientMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage,
+    using TSelf = TWriteSessionActor<Protocol>;
+    using TClientMessage = std::conditional_t<Protocol == EProtocol::PQv1, PersQueue::V1::StreamingWriteClientMessage,
                                               Topic::StreamWriteMessage::FromClient>;
-    using TServerMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteServerMessage,
+    using TServerMessage = std::conditional_t<Protocol == EProtocol::PQv1, PersQueue::V1::StreamingWriteServerMessage,
                                               Topic::StreamWriteMessage::FromServer>;
 
     using TInitRequest =
-        std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage::InitRequest,
+        std::conditional_t<Protocol == EProtocol::PQv1, PersQueue::V1::StreamingWriteClientMessage::InitRequest,
                            Topic::StreamWriteMessage::InitRequest>;
 
     using TEvWriteInit =
-        std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvWriteInit, TEvPQProxy::TEvTopicWriteInit>;
-    using TEvWrite = std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvWrite, TEvPQProxy::TEvTopicWrite>;
+        std::conditional_t<Protocol == EProtocol::PQv1, TEvPQProxy::TEvWriteInit, TEvPQProxy::TEvTopicWriteInit>;
+    using TEvWrite = std::conditional_t<Protocol == EProtocol::PQv1, TEvPQProxy::TEvWrite, TEvPQProxy::TEvTopicWrite>;
     using TEvUpdateToken =
-        std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvUpdateToken, TEvPQProxy::TEvTopicUpdateToken>;
+        std::conditional_t<Protocol == EProtocol::PQv1, TEvPQProxy::TEvUpdateToken, TEvPQProxy::TEvTopicUpdateToken>;
     using TEvStreamWriteRequest =
-        std::conditional_t<UseMigrationProtocol, NKikimr::NGRpcService::TEvStreamPQWriteRequest,
+        std::conditional_t<Protocol == EProtocol::PQv1, NKikimr::NGRpcService::TEvStreamPQWriteRequest,
                            NKikimr::NGRpcService::TEvStreamTopicWriteRequest>;
 
     using IContext = NGRpcServer::IGRpcStreamingContext<TClientMessage, TServerMessage>;
@@ -64,9 +63,9 @@ class TWriteSessionActor
     // Codec ID size in bytes
     static constexpr ui32 CODEC_ID_SIZE = 1;
 
-    TString UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
+    TString UserAgent = Protocol == EProtocol::PQv1 ? "pqv1 server" : "topic server";
     TString SdkBuildInfo;
-    static constexpr auto ProtoName = UseMigrationProtocol ? "v1" : "topic";
+    static constexpr auto ProtoName = Protocol == EProtocol::PQv1 ? "v1" : "topic";
 
 public:
     TWriteSessionActor(TEvStreamWriteRequest* request, const ui64 cookie,
@@ -156,7 +155,8 @@ private:
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
-    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
+    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx,
+                      std::optional<Ydb::StatusIds::StatusCode> statusOverride = std::nullopt);
 
     void CheckFinish(const NActors::TActorContext& ctx);
 
@@ -266,7 +266,7 @@ private:
     TInstant LastACLCheckTimestamp;
     TInstant LogSessionDeadline;
 
-    NKikimrSchemeOp::TPersQueueGroupDescription Config;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
     std::shared_ptr<NPQ::IPartitionChooser> Chooser;
@@ -277,6 +277,8 @@ private:
     TString ClientDC;
 
     TInstant LastSourceIdUpdate;
+
+    THashMap<ui64, TString> DeferredPublicationExtByInt;
 
     TVector<NPersQueue::TPQLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;

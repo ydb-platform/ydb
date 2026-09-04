@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -22,7 +24,12 @@ TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
 {}
 
 void TNodeInfo::ChangeVolatileState(EVolatileState state) {
-    BLOG_W("Node(" << Id << ", " << ResourceValues << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
+    YDB_LOG_WARN("TNodeInfo::ChangeVolatileState changing volatile state",
+        {"logPrefix", GetLogPrefix()},
+        {"nodeId", Id},
+        {"resourceValues", ResourceValues},
+        {"volatileState", EVolatileStateName(VolatileState)},
+        {"newVolatileState", EVolatileStateName(state)});
 
     if (VolatileState != state) {
         if (VolatileState == EVolatileState::Connected) {
@@ -74,7 +81,11 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
             }
         } else {
             if (oldState != newState) {
-                BLOG_W("Node(" << Id << ") could not delete tablet " << tablet->ToString() << " from state " << TTabletInfo::EVolatileStateName(oldState));
+                YDB_LOG_WARN("TNodeInfo::OnTabletChangeVolatileState failed to remove tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", Id},
+                    {"tablet", tablet->ToString()},
+                    {"oldVolatileState", TTabletInfo::EVolatileStateName(oldState)});
             }
         }
     }
@@ -91,11 +102,22 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         if (Tablets[newState].insert(tablet).second) {
             UpdateResourceValues(tablet, {}, tablet->GetResourceValues());
             if (!IsResourceDrainingState(oldState)) {
-                LastScheduledTablet = {.TabletId = tablet->GetFullTabletId(), .UsageBefore = NodeTotalUsage};
+                LastScheduledTablet = {
+                    .TabletId = tablet->GetFullTabletId(),
+                    .UsageBefore = NodeTotalUsage,
+                    .PriorImpact = tablet->GetUsageImpact(),
+                };
             }
         } else {
-            BLOG_W("Node(" << Id << ") could not insert tablet " << tablet->ToString() << " to state " << TTabletInfo::EVolatileStateName(newState));
+            YDB_LOG_WARN("TNodeInfo::OnTabletChangeVolatileState failed to insert tablet",
+                {"logPrefix", GetLogPrefix()},
+                {"nodeId", Id},
+                {"tablet", tablet->ToString()},
+                {"newVolatileState", TTabletInfo::EVolatileStateName(newState)});
         }
+        UpdateHighImpactTablet(tablet);
+    } else {
+        HighImpactTablets.erase(tablet);
     }
     if (IsAliveState(newState)) {
         TabletsRunningByType[tablet->GetTabletType()].emplace(tablet);
@@ -109,13 +131,44 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
     return true;
 }
 
+void TNodeInfo::UpdateHighImpactTablet(TTabletInfo* tablet) {
+    if (tablet->IsHighImpact()) {
+        HighImpactTablets.insert(tablet);
+    } else {
+        HighImpactTablets.erase(tablet);
+    }
+}
+
+double TNodeInfo::GetMaxTabletImpact(const TTabletInfo* exclude) const {
+    double result = 0;
+    for (const TTabletInfo* tablet : HighImpactTablets) {
+        if (tablet != exclude) {
+            result = std::max(result, tablet->GetUsageImpact());
+        }
+    }
+    return result;
+}
+
+const TTabletInfo* TNodeInfo::GetPinnedTablet() const {
+    for (const TTabletInfo* tablet : HighImpactTablets) {
+        if (tablet->IsPinnedToNode()) {
+            return tablet;
+        }
+    }
+    return nullptr;
+}
+
 void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& before, const TMetrics& after) {
     TResourceRawValues delta = ResourceRawValuesFromMetrics(after) - ResourceRawValuesFromMetrics(before);
     auto oldResourceValues = ResourceValues;
     auto oldNormalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     ResourceValues += delta;
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
-    BLOG_TRACE("Node(" << Id << ", " << oldResourceValues << "->" << ResourceValues << ")");
+    YDB_LOG_TRACE("TNodeInfo::UpdateResourceValues updated resource values",
+        {"logPrefix", GetLogPrefix()},
+        {"nodeId", Id},
+        {"oldResourceValues", oldResourceValues},
+        {"resourceValues", ResourceValues});
     Hive.UpdateTotalResourceValues(this, tablet, before, after, ResourceValues - oldResourceValues, normalizedValues - oldNormalizedValues);
 }
 
@@ -228,7 +281,9 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriori
     }
 
     priority += dcPriority[GetDataCenter()];
-    priority -= GetRestartsPerPeriod() / Hive.GetNodeRestartsForPenalty();
+    if (GetRestartsPerPeriod() >= Hive.GetNodeRestartsForPenalty()) {
+        --priority;
+    }
 
     return priority;
 }
@@ -366,12 +421,18 @@ void TNodeInfo::DeregisterInDomains() {
 
 void TNodeInfo::Ping() {
     Y_ABORT_UNLESS((bool)Local);
-    BLOG_D("Node(" << Id << ") Ping(" << Local << ")");
+    YDB_LOG_DEBUG("TNodeInfo::Ping queueing ping",
+        {"logPrefix", GetLogPrefix()},
+        {"nodeId", Id},
+        {"local", Local});
     Hive.QueuePing(Local);
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {
-    BLOG_D("Node(" << Id << ") Reconnect(" << local << ")");
+    YDB_LOG_DEBUG("TNodeInfo::SendReconnect sending reconnect",
+        {"logPrefix", GetLogPrefix()},
+        {"nodeId", Id},
+        {"local", local});
     Hive.SendReconnect(local);
 }
 
@@ -430,14 +491,22 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     TResourceRawValues nodeValues = GetResourceCurrentValues();
     TResourceRawValues tabletValues = tablet.GetResourceCurrentValues();
     if (Hive.GetUseTabletUsageEstimate()) {
-        auto estimateUsageValues = cast_like(maximum * tablet.UsageImpact, tabletValues);
+        auto estimateUsageValues = cast_like(maximum * tablet.GetUsageImpact(), tabletValues);
         tabletValues = piecewise_max(tabletValues, estimateUsageValues);
     }
     tablet.FilterRawValues(nodeValues);
     tablet.FilterRawValues(tabletValues);
-    auto current = tablet.IsAliveOnLocal(Local) ? nodeValues : nodeValues + tabletValues;
+    bool alreadyHere = tablet.IsAliveOnLocal(Local);
+    auto current = alreadyHere ? nodeValues : nodeValues + tabletValues;
     // basically, this is: return max(a / b);
     double usage = TTabletInfo::GetUsage(current, maximum);
+    double reserved = GetMaxTabletImpact(&tablet);
+    if (reserved > 0 && Hive.GetUseTabletUsageEstimate()) {
+        if (!alreadyHere) {
+            reserved += TTabletInfo::GetUsage(tabletValues, maximum);
+        }
+        usage = std::max(usage, reserved);
+    }
     if (Hive.GetSpreadNeighbours() && usage < 1 && neighbourPenalty) {
         auto neighbours = GetTabletNeighboursCount(tablet);
         if (neighbours > 0) {
@@ -498,6 +567,22 @@ bool TNodeInfo::CanBeDeleted(TInstant now) const {
     }
 }
 
+void TNodeInfo::UpdateUsageImpacts(NIceDb::TNiceDb& db) {
+    // Simple logic: a tablet's usage impact cannot be bigger than total node usage
+    // We need this because we try not to move high-impact tablets, so we need a way to lower the estimate w/o moving the tablet
+    // If a low-impact tablet became high-impact, we will move it and notice it then
+    std::vector<TTabletInfo*> overestimated;
+    for (TTabletInfo* tablet : HighImpactTablets) {
+        if (tablet->GetUsageImpact() > NodeTotalUsage) {
+            overestimated.push_back(tablet);
+        }
+    }
+    for (TTabletInfo* tablet : overestimated) {
+        tablet->SetUsageImpact(NodeTotalUsage); // updates HighImpactTablets, hence the copy above
+        db.Table<Schema::Metrics>().Key(tablet->GetFullTabletId()).Update<Schema::Metrics::UsageImpact>(NodeTotalUsage);
+    }
+}
+
 void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics, NIceDb::TNiceDb& db) {
     if (metrics.HasTotalResourceUsage()) {
         AveragedResourceTotalValues.Push(ResourceRawValuesFromMetrics(metrics.GetTotalResourceUsage()));
@@ -506,21 +591,33 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
     if (metrics.HasTotalNodeUsage()) {
         AveragedNodeTotalUsage.Push(metrics.GetTotalNodeUsage());
         if (LastScheduledTablet) {
-            if (LastScheduledTablet->UsageSince.Push(metrics.GetTotalNodeUsage())) {
-                // we kept enough stats for this tablet
+            // we kept enough stats for this tablet once Push reports a shrink
+            bool measurementComplete = LastScheduledTablet->UsageSince.Push(metrics.GetTotalNodeUsage());
+            double measured = LastScheduledTablet->UsageSince.GetValue() - LastScheduledTablet->UsageBefore;
+            measured = std::max<double>(measured, 0);
+            // Until the measurement completes, the estimate carried over from the previous node acts as a
+            // floor, so a tablet already known to be heavy is not treated as free while its load ramps up
+            // here. Once it completes we take the measurement as is, so a tablet that got lighter can
+            // correct downwards.
+            double usageImpact = measurementComplete ? measured : std::max(measured, LastScheduledTablet->PriorImpact);
+            auto* tablet = Hive.FindTablet(LastScheduledTablet->TabletId);
+            if (tablet) {
+                YDB_LOG_DEBUG("TNodeInfo::UpdateResourceTotalUsage estimated tablet usage impact on node",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletId", LastScheduledTablet->TabletId},
+                    {"nodeId", Id},
+                    {"usageImpact", usageImpact});
+                tablet->SetUsageImpact(usageImpact);
+                db.Table<Schema::Metrics>().Key(LastScheduledTablet->TabletId).Update<Schema::Metrics::UsageImpact>(usageImpact);
+            }
+            if (measurementComplete) {
                 LastScheduledTablet.reset();
-            } else {
-                double usageImpact = LastScheduledTablet->UsageSince.GetValue() - LastScheduledTablet->UsageBefore;
-                usageImpact = std::max<double>(usageImpact, 0);
-                auto* tablet = Hive.FindTablet(LastScheduledTablet->TabletId);
-                if (tablet) {
-                    BLOG_D("Estimate impact of tablet " << LastScheduledTablet->TabletId << " on usage of node " << Id << " as " << usageImpact);
-                    tablet->UsageImpact = usageImpact;
-                    db.Table<Schema::Metrics>().Key(LastScheduledTablet->TabletId).Update<Schema::Metrics::UsageImpact>(usageImpact);
-                }
             }
         }
         NodeTotalUsage = AveragedNodeTotalUsage.GetValue();
+        if (!LastScheduledTablet) {
+            UpdateUsageImpacts(db);
+        }
     }
     if (metrics.HasTotalNodeCpuUsage()) {
         AveragedNodeTotalCpuUsage.Push(metrics.GetTotalNodeCpuUsage());

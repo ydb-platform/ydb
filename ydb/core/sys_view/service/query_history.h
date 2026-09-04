@@ -113,6 +113,9 @@ inline void CopyQueryStatsNoText(NKikimrSysView::TQueryStats* to, const NKikimrS
     to->SetTotalCpuTimeUs(from.GetTotalCpuTimeUs());
     to->SetType(from.GetType());
     to->SetRequestUnits(from.GetRequestUnits());
+    if (from.HasTraceId()) {
+        to->SetTraceId(from.GetTraceId());
+    }
 }
 
 template <typename TGreater>

@@ -2,7 +2,13 @@
 #include "writer.h"
 #include "local.h"
 
+#include <ranges>
+
 namespace NKikimr::NKqp {
+
+const std::string AGG_OPERATOR_NAMES { "DqPhyHashCombine|WideCombiner" };
+
+bool CheckOperatorPresentInAst(const std::string_view ast, const std::string_view operatorName);
 
 class TExpectedLimitChecker {
 private:
@@ -81,7 +87,7 @@ private:
     bool UseLlvm = true;
 public:
     void FillExpectedAggregationGroupByPlanOptions() {
-        AddExpectedPlanOptions("DqPhyHashCombine");
+        AddExpectedPlanOptions(AGG_OPERATOR_NAMES);
     }
     TString GetFixedQuery() const {
         TStringBuilder queryFixed;
@@ -184,7 +190,7 @@ void CheckPlanForAggregatePushdown(
     Cerr << "AST:" << Endl;
     Cerr << ast << Endl;
     for (auto planNode : expectedPlanNodes) {
-        UNIT_ASSERT_C(ast.find(planNode) != std::string::npos,
+        UNIT_ASSERT_C(CheckOperatorPresentInAst(ast, planNode),
             TStringBuilder() << planNode << " was not found. Query: " << query);
     }
     UNIT_ASSERT_C(ast.find("SqueezeToDict") == std::string::npos, TStringBuilder() << "SqueezeToDict denied for aggregation requests. Query: " << query);

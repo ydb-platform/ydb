@@ -25,6 +25,11 @@
 namespace NKikimr {
 namespace NNodeBroker {
 
+enum class ENodeLiveness : ui8 {
+    Alive = 0,
+    Dead = 1,
+};
+
 struct TEpochInfo {
     ui64 Id = 0;
     ui64 Version = 0;

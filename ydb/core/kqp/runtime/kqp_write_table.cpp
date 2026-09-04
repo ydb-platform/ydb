@@ -501,6 +501,7 @@ public:
             unpreparedBatch.TotalDataSize += shardBatchMemory;
             Memory += shardBatchMemory;
             unpreparedBatch.Batches.emplace_back(shardBatch);
+            UnpreparedBatchedCount++;
 
             FlushUnpreparedBatch(shardId, unpreparedBatch, force);
         }
@@ -513,6 +514,8 @@ public:
             while (!unpreparedBatch.Batches.empty()) {
                 auto batch = unpreparedBatch.Batches.front();
                 unpreparedBatch.Batches.pop_front();
+                AFL_ENSURE(UnpreparedBatchedCount > 0);
+                UnpreparedBatchedCount--;
                 AFL_ENSURE(batch->num_rows() > 0);
                 const auto batchDataSize = NArrow::GetBatchDataSize(batch);
                 unpreparedBatch.TotalDataSize -= batchDataSize;
@@ -530,6 +533,7 @@ public:
                     if (toPrepareSize + nextRowSize >= (i64)ColumnShardMaxOperationBytes) {
                         toPrepare.push_back(batch->Slice(0, index));
                         unpreparedBatch.Batches.push_front(batch->Slice(index, batch->num_rows() - index));
+                        UnpreparedBatchedCount++;
 
                         const auto newBatchDataSize = NArrow::GetBatchDataSize(unpreparedBatch.Batches.front());
 
@@ -588,7 +592,7 @@ public:
     }
 
     bool IsEmpty() override {
-        return Batches.empty();
+        return UnpreparedBatchedCount == 0 && Batches.empty();
     }
 
     bool IsFinished() override {
@@ -643,7 +647,7 @@ private:
     THashSet<ui64> ShardIds;
 
     i64 Memory = 0;
-
+    ui64 UnpreparedBatchedCount = 0;
     bool Closed = false;
 };
 
@@ -1022,6 +1026,7 @@ private:
 
     bool Closed = false;
 };
+
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -1072,26 +1077,32 @@ private:
 
 template<class TDocId>
 class TFulltextTokenizeProjection : public IFulltextTokenizeProjection {
+    struct TPrefixBuffer {
+        ui64 DocCount = 0;
+        ui64 TotalDocLength = 0;
+        THashMap<TString, THashMap<ui64, ui32>> Tokens;
+    };
 public:
     TFulltextTokenizeProjection(
         TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+        ui32 dataColumnCount,
         bool withFreq,
         bool added,
         const Ydb::Table::FulltextIndexSettings& settings,
         TConstArrayRef<ui32> indexes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
-        : TextTypeId(columnTypes.at(0).GetTypeId())
-        , DocsColumns(columnTypes.size())
+        : DataColumnCount(dataColumnCount)
+        , PrefixSize(columnTypes.size() - 2 - dataColumnCount)
+        , TextTypeId(columnTypes.at(PrefixSize).GetTypeId())
         , WithFreq(withFreq)
         , Added(added)
         , Indexes(indexes.begin(), indexes.end())
         , Alloc(std::move(alloc))
-        , RowBatcher(5, std::nullopt, Alloc)
-        , DocsBatcher(Added ? columnTypes.size() : 1, std::nullopt, Alloc)
+        , RowBatcher(PrefixSize + 5, std::nullopt, Alloc)
+        , DocsBatcher(Added ? 2 + DataColumnCount : 1, std::nullopt, Alloc)
         , DictBatcher(2, std::nullopt, Alloc)
-        , StatsBatcher(3, std::nullopt, Alloc) {
-        // Always at least 2 columns: text and id + optional data columns
-        AFL_ENSURE(Indexes.size() == columnTypes.size() && Indexes.size() >= 2);
+        , StatsBatcher(PrefixSize ? 2 + PrefixSize : 3, std::nullopt, Alloc) {
+        AFL_ENSURE(Indexes.size() == columnTypes.size());
         // Settings/Analyzers are required for fulltext indexes, but not for json
         AFL_ENSURE(settings.columns_size() == 1 ||
             TextTypeId == NScheme::NTypeIds::Json ||
@@ -1102,8 +1113,12 @@ public:
     }
 
     void AddRow(TConstArrayRef<TCell> row) override {
-        ui64 docId = (ui64)row[Indexes[1]].AsValue<TDocId>();
-        auto text = row[Indexes[0]].AsBuf();
+        TVector<TCell> prefixCells(PrefixSize);
+        for (ui32 i = 0; i < PrefixSize; i++) {
+            prefixCells[i] = row[Indexes[i]];
+        }
+        ui64 docId = (ui64)row[Indexes[PrefixSize+1]].AsValue<TDocId>();
+        auto text = row[Indexes[PrefixSize]].AsBuf();
         TVector<TString> tokens;
         switch (TextTypeId) {
             case NScheme::NTypeIds::String:
@@ -1113,7 +1128,7 @@ public:
             case NScheme::NTypeIds::Json: {
                 TString error;
                 tokens = NJsonIndex::TokenizeJson(text, error);
-                YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                // Ignore errors, JSON is already validated
                 break;
             }
             case NScheme::NTypeIds::JsonDocument:
@@ -1122,21 +1137,22 @@ public:
             default:
                 YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
         }
+        auto& prefix = PrefixBuffers[TSerializedCellVec::Serialize(prefixCells)];
         ui32 docLength = 0;
         for (auto& token: tokens) {
-            TokenLists[token][docId]++;
+            prefix.Tokens[token][docId]++;
             docLength++;
         }
-        DocCount++;
-        TotalDocLength += docLength;
+        prefix.DocCount++;
+        prefix.TotalDocLength += docLength;
         if (WithFreq) {
             // indexImplDocsTable columns: document ID, __ydb_length, data columns
-            TVector<TCell> docsCells(Added ? DocsColumns : 1);
+            TVector<TCell> docsCells(Added ? 2 + DataColumnCount : 1);
             docsCells[0] = TCell::Make(docId);
             if (Added) {
                 docsCells[1] = TCell::Make(docLength);
-                for (size_t i = 2; i < DocsColumns; i++) {
-                    docsCells[i] = row[Indexes[i]];
+                for (ui32 i = 0; i < DataColumnCount; i++) {
+                    docsCells[2 + i] = row[Indexes[PrefixSize + 2 + i]];
                 }
             }
             DocsBatcher.AddRow(docsCells);
@@ -1144,26 +1160,38 @@ public:
     }
 
     IDataBatchPtr Flush() override {
+        for (auto& [prefix, prefixTokens]: PrefixBuffers) {
+            FlushPrefix(prefix, prefixTokens);
+        }
+        PrefixBuffers.clear();
+        auto result = RowBatcher.Flush(true);
+        YQL_ENSURE(RowBatcher.IsEmpty());
+        return result;
+    }
+
+    void FlushPrefix(const TString& prefix, const TPrefixBuffer& prefixBuffer) {
         TVector<TStringBuf> sortedTokens;
-        for (const auto& [token, docFreqs]: TokenLists) {
+        for (const auto& [token, docFreqs]: prefixBuffer.Tokens) {
             sortedTokens.push_back(token);
         }
         std::sort(sortedTokens.begin(), sortedTokens.end());
-        // Fixed column order: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
-        TVector<TCell> cells(5);
-        cells[1] = TCell::Make((TDocId)0);
-        cells[2] = TCell::Make((NTableIndex::NFulltext::TGen)0);
-        cells[3] = TCell::Make(Added);
+        // Fixed column order: <prefix columns>, __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+        auto prefixCells = TSerializedCellVec(prefix);
+        TVector<TCell> cells(PrefixSize + 5);
+        for (size_t i = 0; i < PrefixSize; i++) {
+            cells[i] = prefixCells.GetCells().at(i);
+        }
+        cells[PrefixSize + 3] = TCell::Make(Added);
         // indexImplDictTable columns: __ydb_token, __ydb_freq
         TVector<TCell> dictCells(2);
         NFulltext::TDeltaWriter wr;
         for (const auto& token: sortedTokens) {
-            auto docFreqs = std::move(TokenLists.at(token));
+            const auto& docFreqs = prefixBuffer.Tokens.at(token);
             TVector<ui64> docIds;
             ui64 totalFreq = 0;
             for (const auto& [docId, freq]: docFreqs) {
                 docIds.push_back(docId);
-                totalFreq += freq;
+                totalFreq++;
             }
             std::sort(docIds.begin(), docIds.end(), [](ui64 a, ui64 b) {
                 return (TDocId)a < TDocId(b);
@@ -1171,15 +1199,17 @@ public:
             wr.Reset(WithFreq, std::is_signed<TDocId>::value);
             if (WithFreq) {
                 for (const auto& docId: docIds) {
-                    wr.Add(docId, docFreqs[docId]);
+                    wr.Add(docId, docFreqs.at(docId));
                 }
             } else {
                 for (const auto& docId: docIds) {
                     wr.Add(docId, 1);
                 }
             }
-            cells[0] = TCell(token);
-            cells[4] = TCell(TConstArrayRef<const char>((const char*)wr.GetBuf().data(), wr.GetBuf().size()));
+            cells[PrefixSize + 0] = TCell(token);
+            cells[PrefixSize + 1] = TCell::Make(Gen);
+            cells[PrefixSize + 2] = TCell::Make((TDocId)wr.GetMaxId());
+            cells[PrefixSize + 4] = TCell(TConstArrayRef<const char>((const char*)wr.GetBuf().data(), wr.GetBuf().size()));
             RowBatcher.AddRow(cells);
             if (WithFreq) {
                 dictCells[0] = TCell(token);
@@ -1187,18 +1217,21 @@ public:
                 DictBatcher.AddRow(dictCells);
             }
         }
-        TokenLists.clear();
         if (WithFreq) {
-            // indexImplStatsTable columns: __ydb_id (always ui32 0), __ydb_doc_count, __ydb_total_doc_length
-            TVector<TCell> statsCells(3);
-            statsCells[0] = TCell::Make((ui32)0);
-            statsCells[1] = TCell::Make(Added ? DocCount : -DocCount);
-            statsCells[2] = TCell::Make(Added ? TotalDocLength : -TotalDocLength);
+            // indexImplStatsTable columns: __ydb_id (always ui32 0) or key prefix,
+            // __ydb_doc_count, __ydb_total_doc_length
+            TVector<TCell> statsCells(PrefixSize ? 2 + PrefixSize : 3);
+            if (!PrefixSize) {
+                statsCells[0] = TCell::Make((ui32)0);
+            } else {
+                for (size_t i = 0; i < PrefixSize; i++) {
+                    statsCells[i] = prefixCells.GetCells().at(i);
+                }
+            }
+            statsCells[PrefixSize ? 0 + PrefixSize : 1] = TCell::Make(Added ? prefixBuffer.DocCount : -prefixBuffer.DocCount);
+            statsCells[PrefixSize ? 1 + PrefixSize : 2] = TCell::Make(Added ? prefixBuffer.TotalDocLength : -prefixBuffer.TotalDocLength);
             StatsBatcher.AddRow(statsCells);
         }
-        auto result = RowBatcher.Flush(true);
-        YQL_ENSURE(RowBatcher.IsEmpty());
-        return result;
     }
 
     IDataBatchPtr FlushDocs() override {
@@ -1219,15 +1252,19 @@ public:
         return result;
     }
 
+    void SetGen(NTableIndex::NFulltext::TGen gen) override {
+        Gen = gen;
+    }
+
 private:
+    NTableIndex::NFulltext::TGen Gen = 0;
+    ui32 DataColumnCount = 0;
+    ui32 PrefixSize = 0;
     NScheme::TTypeId TextTypeId = 0;
-    ui64 TotalDocLength = 0;
-    ui64 DocCount = 0;
-    ui32 DocsColumns = 0;
     bool WithFreq = false;
     bool Added = false;
     Ydb::Table::FulltextIndexSettings::Analyzers Analyzers;
-    THashMap<TString, THashMap<ui64, ui32>> TokenLists;
+    THashMap<TString, TPrefixBuffer> PrefixBuffers;
     TVector<ui32> Indexes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TRowsBatcher RowBatcher;
@@ -1323,29 +1360,33 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
 
 IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+    ui32 dataColumnCount,
     bool withFreq,
     bool added,
     const Ydb::Table::FulltextIndexSettings& settings,
     TConstArrayRef<ui32> indexes,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    switch (columnTypes[1].GetTypeId()) {
+    // columnTypes: <prefix columns>, text, id, <optional data columns>
+    AFL_ENSURE(columnTypes.size() >= 2 + dataColumnCount);
+    const ui32 prefixSize = columnTypes.size() - 2 - dataColumnCount;
+    switch (columnTypes[prefixSize + 1].GetTypeId()) {
     case NScheme::NTypeIds::Uint64:
-        return MakeIntrusive<TFulltextTokenizeProjection<ui64>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+        return MakeIntrusive<TFulltextTokenizeProjection<ui64>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
     case NScheme::NTypeIds::Uint32:
-        return MakeIntrusive<TFulltextTokenizeProjection<ui32>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+        return MakeIntrusive<TFulltextTokenizeProjection<ui32>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
     case NScheme::NTypeIds::Int64:
-        return MakeIntrusive<TFulltextTokenizeProjection<i64>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+        return MakeIntrusive<TFulltextTokenizeProjection<i64>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
     case NScheme::NTypeIds::Int32:
-        return MakeIntrusive<TFulltextTokenizeProjection<i32>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+        return MakeIntrusive<TFulltextTokenizeProjection<i32>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
     }
-    AFL_ENSURE(false)("Unsupported primary key type", columnTypes[1].GetTypeId());
+    AFL_ENSURE(false)("Unsupported primary key type", columnTypes[prefixSize + 1].GetTypeId());
 }
 
-std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {
+std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch, const size_t offset) {
     auto* data = dynamic_cast<TRowBatch*>(batch.Get());
     AFL_ENSURE(data);
     const auto& batchRows = data->GetRows();
-    return std::vector<TConstArrayRef<TCell>>(batchRows.begin(), batchRows.end());
+    return std::vector<TConstArrayRef<TCell>>(batchRows.begin() + offset, batchRows.end());
 }
 
 std::vector<TConstArrayRef<TCell>> CutColumns(

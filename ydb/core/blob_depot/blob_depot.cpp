@@ -144,6 +144,10 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
                 cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);
 
+                hFunc(TEvTablet::TEvMoveData, Handle);
+                cFunc(TEvPrivate::EvMoveDataContinue, ContinueMoveData);
+                hFunc(TEvMoveDataBlobCopied, Handle);
+
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
 
@@ -173,7 +177,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId}) {
+        for (const TActorId& actorId : {GroupAssimilatorId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
@@ -269,6 +273,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
             if (kindv.GroupAccumWeights.empty()) {
+                TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_PICK_CHANNELS_FAILURES] += 1;
                 return false; // no allocation possible
             }
         }

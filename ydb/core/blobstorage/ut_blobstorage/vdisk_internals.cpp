@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_events.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+
 #include <util/random/random.h>
 #include <util/stream/null.h>
 

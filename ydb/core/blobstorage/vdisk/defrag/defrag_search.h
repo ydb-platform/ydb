@@ -182,12 +182,16 @@ namespace NKikimr {
         struct TChunkInfo {
             ui32 UsefulSlots = 0; // slots which are used by blobs within the barrier and not obselete
             ui32 OccupiedSlots = 0; // slots which are used by blobs within and behind the barrier or by obsolete blobs
+            ui64 UsefulBytes = 0;
+            ui64 OccupiedBytes = 0;
             const ui32 SlotSize;
             const ui32 NumberOfSlotsInChunk;
+            const bool IsStripe;
 
-            TChunkInfo(ui32 slotSize, ui32 numberOfSlotsInChunk)
+            TChunkInfo(ui32 slotSize, ui32 numberOfSlotsInChunk, bool isStripe = false)
                 : SlotSize(slotSize)
                 , NumberOfSlotsInChunk(numberOfSlotsInChunk)
+                , IsStripe(isStripe)
             {}
 
             TString ToString() const {
@@ -214,12 +218,18 @@ namespace NKikimr {
             using TPerChunkMap = THashMap<ui32, TChunkInfo>; // chunkIdx -> TChunkInfo
             using TAggrBySlotSize = THashMap<ui32, TAggrSlotInfo>; // slotSize -> TAggrSlotInfo
             const std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
+            // immutable snapshot taken from the huge keeper before the scan; chunk ownership may change while the scan
+            // is running, but a single pass must classify every chunk consistently
+            const THashSet<TChunkIdx> StripeChunks;
             TPerChunkMap PerChunkMap;
 
         private:
             TAggrBySlotSize AggregatePerSlotSize() const {
                 TAggrBySlotSize aggrSlots;
                 for (const auto& [chunkIdx, chunk] : PerChunkMap) {
+                    if (chunk.IsStripe) {
+                        continue;
+                    }
                     auto it = aggrSlots.try_emplace(chunk.SlotSize, chunk.NumberOfSlotsInChunk).first;
                     TAggrSlotInfo& aggr = it->second;
                     if (chunk.UsefulSlots > 0) { // we don't want to count chunks with no useful slots (they are already free and will be freed via compaction anyway)
@@ -232,20 +242,33 @@ namespace NKikimr {
             }
 
         public:
-            TChunksMap(const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx)
+            TChunksMap(const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, THashSet<TChunkIdx> stripeChunks)
                 : HugeBlobCtx(hugeBlobCtx)
+                , StripeChunks(std::move(stripeChunks))
             {}
+
+            bool IsStripeChunk(TChunkIdx chunkIdx) const {
+                return StripeChunks.contains(chunkIdx);
+            }
 
             void Add(TDiskPart part, const TLogoBlobID& /*id*/, bool useful) {
                 auto it = PerChunkMap.find(part.ChunkIdx);
                 if (it == PerChunkMap.end()) {
-                    const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
-                    Y_VERIFY_S(slotInfo, HugeBlobCtx->VDiskLogPrefix << "size# " << part.Size);
-                    it = PerChunkMap.emplace(std::piecewise_construct, std::make_tuple(part.ChunkIdx),
-                        std::make_tuple(slotInfo->SlotSize, slotInfo->NumberOfSlotsInChunk)).first;
+                    const bool isStripe = IsStripeChunk(part.ChunkIdx);
+                    if (isStripe) {
+                        it = PerChunkMap.emplace(std::piecewise_construct, std::make_tuple(part.ChunkIdx),
+                            std::make_tuple(0u, 0u, true)).first;
+                    } else {
+                        const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
+                        Y_VERIFY_S(slotInfo, HugeBlobCtx->VDiskLogPrefix << "size# " << part.Size);
+                        it = PerChunkMap.emplace(std::piecewise_construct, std::make_tuple(part.ChunkIdx),
+                            std::make_tuple(slotInfo->SlotSize, slotInfo->NumberOfSlotsInChunk, false)).first;
+                    }
                 }
                 it->second.UsefulSlots += useful;
                 it->second.OccupiedSlots++;
+                it->second.UsefulBytes += useful ? part.Size : 0;
+                it->second.OccupiedBytes += part.Size;
             }
 
             TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag) const {
@@ -257,6 +280,12 @@ namespace NKikimr {
                     chunks.push_back(&kv);
                 }
                 auto cmpByMoveSize = [](const auto *left, const auto *right) {
+                    if (left->second.IsStripe != right->second.IsStripe) {
+                        return left->second.IsStripe < right->second.IsStripe; // slot chunks first
+                    }
+                    if (left->second.IsStripe) {
+                        return left->second.UsefulBytes < right->second.UsefulBytes;
+                    }
                     return left->second.UsefulSlots < right->second.UsefulSlots;
                 };
                 std::sort(chunks.begin(), chunks.end(), cmpByMoveSize);
@@ -264,10 +293,36 @@ namespace NKikimr {
                 TChunksToDefrag result;
                 result.Chunks.reserve(maxChunksToDefrag);
 
+                ui64 stripeLiveBytes = 0;
+                ui32 stripeUsedChunks = 0;
+                for (const auto& [chunkIdx, chunk] : PerChunkMap) {
+                    if (chunk.IsStripe && chunk.UsefulBytes) {
+                        stripeLiveBytes += chunk.UsefulBytes;
+                        ++stripeUsedChunks;
+                    }
+                }
+                const ui32 chunkSize = HugeBlobCtx->ChunkSize ? HugeBlobCtx->ChunkSize : 1;
+                ui32 stripeMinChunks = stripeLiveBytes
+                    ? (stripeLiveBytes + chunkSize - 1) / chunkSize
+                    : 0;
+
                 for (const auto *kv : chunks) {
                     const auto& [chunkIdx, chunk] = *kv;
-                    if (chunk.UsefulSlots == 0) {
+                    if (chunk.UsefulSlots == 0 && chunk.UsefulBytes == 0) {
                         continue; // we don't want to defrag chunks with no useful slots (they are already "free" and will be freed via next compaction anyway)
+                    }
+                    if (chunk.IsStripe) {
+                        if (stripeUsedChunks > stripeMinChunks) {
+                            --stripeUsedChunks;
+                            ++result.FoundChunksToDefrag;
+                            if (result.Chunks.size() < maxChunksToDefrag) {
+                                result.Chunks.emplace_back(chunkIdx, 0);
+                                result.EstimatedSlotsCount += chunk.UsefulSlots ? chunk.UsefulSlots : 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        continue;
                     }
                     auto it = aggrSlots.find(chunk.SlotSize);
                     Y_VERIFY_S(it != aggrSlots.end(), HugeBlobCtx->VDiskLogPrefix);
@@ -292,7 +347,16 @@ namespace NKikimr {
 
             ui64 GetTotalSpaceCouldBeFreedViaCompaction() const {
                 ui64 totalSpaceCouldBeFreed = 0;
+                const ui64 stripeChunkSize = HugeBlobCtx->ChunkSize;
                 for (const auto& [chunkIdx, chunk] : PerChunkMap) {
+                    if (chunk.IsStripe) {
+                        if (chunk.UsefulBytes == 0) {
+                            totalSpaceCouldBeFreed += stripeChunkSize;
+                        } else if (chunk.OccupiedBytes > chunk.UsefulBytes) {
+                            totalSpaceCouldBeFreed += chunk.OccupiedBytes - chunk.UsefulBytes;
+                        }
+                        continue;
+                    }
                     if (chunk.UsefulSlots == 0) {
                         // this chunk has no useful slots, so we can free all its slots
                         totalSpaceCouldBeFreed += chunk.NumberOfSlotsInChunk * chunk.SlotSize;
@@ -308,6 +372,12 @@ namespace NKikimr {
             ui64 GetFreedChunks() const {
                 ui64 res = 0;
                 for (const auto& [_, chunk] : PerChunkMap) {
+                    if (chunk.IsStripe) {
+                        if (chunk.UsefulBytes == 0) {
+                            ++res;
+                        }
+                        continue;
+                    }
                     if (chunk.UsefulSlots == 0) {
                         ++res; // this chunk has no useful slots, so it can be freed
                     }
@@ -339,9 +409,13 @@ namespace NKikimr {
         TChunksMap ChunksMap;
 
     public:
-        TDefragQuantumChunkFinder(const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx)
-            : ChunksMap(hugeBlobCtx)
+        TDefragQuantumChunkFinder(const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, THashSet<TChunkIdx> stripeChunks)
+            : ChunksMap(hugeBlobCtx, std::move(stripeChunks))
         {}
+
+        bool IsStripeChunk(TChunkIdx chunkIdx) const {
+            return ChunksMap.IsStripeChunk(chunkIdx);
+        }
 
         TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag) {
             return ChunksMap.GetChunksToDefrag(maxChunksToDefrag);
@@ -365,8 +439,9 @@ namespace NKikimr {
         , public TDefragScanner<TDefragQuantumFindChunks>
     {
     public:
-        TDefragQuantumFindChunks(THullDsSnap&& snap, const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx)
-            : TDefragQuantumChunkFinder(hugeBlobCtx)
+        TDefragQuantumFindChunks(THullDsSnap&& snap, const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx,
+                THashSet<TChunkIdx> stripeChunks)
+            : TDefragQuantumChunkFinder(hugeBlobCtx, std::move(stripeChunks))
             , TDefragScanner(std::move(snap))
         {}
 
@@ -468,20 +543,26 @@ namespace NKikimr {
         std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
         std::unordered_set<ui32> Chunks;
         std::unordered_map<ui32, ui32> Map; // numberOfSlotsInChunk -> usefulSlots
+        ui64 StripeUsefulBytes = 0;
 
     public:
-        TDefragCalcStat(THullDsSnap&& fullSnap, const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx)
+        TDefragCalcStat(THullDsSnap&& fullSnap, const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx,
+                THashSet<TChunkIdx> stripeChunks)
             : TDefragScanner(std::move(fullSnap))
-            , TDefragQuantumChunkFinder(hugeBlobCtx)
+            , TDefragQuantumChunkFinder(hugeBlobCtx, std::move(stripeChunks))
             , HugeBlobCtx(hugeBlobCtx)
         {}
 
         void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const TLevelSegment *sst) {
             Chunks.insert(part.ChunkIdx);
             if (useful) {
-                const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
-                Y_VERIFY_S(slotInfo, HugeBlobCtx->VDiskLogPrefix << "size# " << part.Size);
-                ++Map[slotInfo->NumberOfSlotsInChunk];
+                if (TDefragQuantumChunkFinder::IsStripeChunk(part.ChunkIdx)) {
+                    StripeUsefulBytes += part.Size;
+                } else {
+                    const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
+                    Y_VERIFY_S(slotInfo, HugeBlobCtx->VDiskLogPrefix << "size# " << part.Size);
+                    ++Map[slotInfo->NumberOfSlotsInChunk];
+                }
             }
             TDefragQuantumChunkFinder::Add(part, id, useful, sst);
         }
@@ -494,6 +575,10 @@ namespace NKikimr {
             ui32 res = 0;
             for (const auto& [numberOfSlotsInChunk, usefulSlots] : Map) {
                 res += (usefulSlots + numberOfSlotsInChunk - 1) / numberOfSlotsInChunk;
+            }
+            if (StripeUsefulBytes) {
+                const ui32 chunkSize = HugeBlobCtx->ChunkSize ? HugeBlobCtx->ChunkSize : 1;
+                res += (StripeUsefulBytes + chunkSize - 1) / chunkSize;
             }
             return res;
         }

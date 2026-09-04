@@ -236,6 +236,7 @@ function resetSearchRuntime() {
     search.searchTimingHistory = [];
     search.lastSearchQuery = '';
     search.searchMatches = [];
+    search.restoredSearchIndicatorMatches = null;
     search.searchExpandableMatchCount = 0;
     search.searchNavigationLocationCache = null;
     search.currentSearchMatchIndex = -1;
@@ -275,14 +276,14 @@ function resetFullscreenRuntime() {
 function resetRuleResizeRuntime() {
     var resize = resizeRuntime();
     var drag = resize.ruleResizeDrag;
-    var columnDrag = resize.nodeColumnResizeDrag;
-    resize.nodeColumnResizeDrag = null;
+    var fieldDrag = resize.pinnedFieldResizeDrag;
+    resize.pinnedFieldResizeDrag = null;
     if (hasDOM() && document.body) {
-        document.body.classList.remove('node-column-resizing');
+        document.body.classList.remove('pinned-field-resizing');
     }
     if (!drag) {
         if (typeof clearResizeDeferredFrameWork === 'function') clearResizeDeferredFrameWork();
-        if (columnDrag) bumpRuntimeEpoch('resize');
+        if (fieldDrag) bumpRuntimeEpoch('resize');
         return;
     }
     if (drag.frame !== null) cancelScheduledFrame(drag.frame);
@@ -339,6 +340,7 @@ function resetTraceAnchorRuntime() {
 }
 
 function traceSessionKey(index) {
+    if (Array.isArray(index)) return traceSelectionKey(index);
     index = Math.max(0, Number(index) || 0);
     return String(index);
 }
@@ -394,7 +396,39 @@ function cloneTraceSessionSearchMatch(match) {
     if (match.gi !== undefined) copy.gi = match.gi;
     if (match.ri !== undefined) copy.ri = match.ri;
     if (match.rawIdx !== undefined) copy.rawIdx = match.rawIdx;
+    if (match.path !== undefined) copy.path = match.path;
+    if (match.recordOccurrence !== undefined) copy.recordOccurrence = match.recordOccurrence;
+    if (match.fieldOrdinal !== undefined) copy.fieldOrdinal = match.fieldOrdinal;
+    if (match.ruleHandle !== undefined) copy.ruleHandle = match.ruleHandle;
+    if (match.stageHandle !== undefined) copy.stageHandle = match.stageHandle;
+    if (match.groupHandle !== undefined) copy.groupHandle = match.groupHandle;
     return copy;
+}
+
+function cloneTraceSessionSearchMatches(matches) {
+    matches = matches || [];
+    var cloned = [];
+    for (var i = 0; i < matches.length; i++) {
+        var match = cloneTraceSessionSearchMatch(matches[i]);
+        if (match) cloned.push(match);
+    }
+    return cloned;
+}
+
+function cloneTraceSessionCollapsedIndicators(indicators) {
+    indicators = indicators || {};
+    var clone = emptyCollapsedSearchIndicators();
+    var buckets = ['stages', 'groups', 'rules'];
+    for (var b = 0; b < buckets.length; b++) {
+        var bucket = buckets[b];
+        var source = indicators[bucket] || {};
+        for (var key in source) {
+            if (Object.prototype.hasOwnProperty.call(source, key) && source[key]) {
+                clone[bucket][key] = true;
+            }
+        }
+    }
+    return clone;
 }
 
 function currentTraceSessionSearchQuery() {
@@ -407,13 +441,25 @@ function currentTraceSessionSearchQuery() {
 function captureTraceSessionSearchIntent() {
     var query = currentTraceSessionSearchQuery();
     if (!query && !currentUiState().searchActive) return null;
+    var scope = hasDOM() ? currentSearchScope() : 'tree-rules';
+    var mode = hasDOM() ? currentSearchMode() : 'find';
+    var indicatorMatches = query
+        ? knownSearchMatchesForCollapsedIndicators(query, scope)
+        : [];
 
     return {
         query: query,
-        mode: hasDOM() ? currentSearchMode() : 'find',
-        scope: hasDOM() ? currentSearchScope() : 'tree-rules',
+        mode: mode,
+        scope: scope,
         currentMatchIndex: searchRuntime().currentSearchMatchIndex,
         activeMatch: cloneTraceSessionSearchMatch(activeSearchMatch()),
+        matches: cloneTraceSessionSearchMatches(searchRuntime().searchMatches),
+        indicatorMatches: cloneTraceSessionSearchMatches(indicatorMatches),
+        collapsedIndicators: cloneTraceSessionCollapsedIndicators(
+            searchRuntime().collapsedSearchIndicators
+        ),
+        expandableMatchCount: normalizeSearchCount(searchRuntime().searchExpandableMatchCount),
+        resultState: searchRuntime().searchResultState || '',
         layoutApplied: !!searchRuntime().searchLayoutApplied,
         navigationCommitted: !!searchRuntime().searchNavigationCommitted,
         savedState: cloneTraceSessionLayout(searchRuntime().savedSearchState),
@@ -442,10 +488,42 @@ function cloneTraceSessionSearchIntent(intent) {
         scope: intent.scope || 'tree-rules',
         currentMatchIndex: intent.currentMatchIndex,
         activeMatch: cloneTraceSessionSearchMatch(intent.activeMatch),
+        matches: cloneTraceSessionSearchMatches(intent.matches),
+        indicatorMatches: cloneTraceSessionSearchMatches(intent.indicatorMatches),
+        collapsedIndicators: cloneTraceSessionCollapsedIndicators(intent.collapsedIndicators),
+        expandableMatchCount: normalizeSearchCount(intent.expandableMatchCount),
+        resultState: intent.resultState || '',
         layoutApplied: !!intent.layoutApplied,
         navigationCommitted: !!intent.navigationCommitted,
         savedState: cloneTraceSessionLayout(intent.savedState),
         savedViewport: cloneTraceSessionViewport(intent.savedViewport)
+    };
+}
+
+function restoredTraceSessionSearchState(intent, scope, mode) {
+    if (!intent) return null;
+    var indicatorMatches = cloneTraceSessionSearchMatches(
+        intent.indicatorMatches && intent.indicatorMatches.length
+            ? intent.indicatorMatches
+            : intent.matches
+    );
+    var savedIndicators = cloneTraceSessionCollapsedIndicators(intent.collapsedIndicators);
+    if (!indicatorMatches.length && !collapsedSearchIndicatorTotal(savedIndicators)) return null;
+
+    var allMatches = filterSearchMatchesForVisibleStages(
+        filterUnavailableSearchMatches(indicatorMatches)
+    );
+    setRestoredSearchIndicatorMatches(intent.query, scope, allMatches);
+    var indicators = allMatches.length
+        ? collectCollapsedSearchIndicatorsFromMatches(intent.query, allMatches)
+        : savedIndicators;
+    return {
+        matches: filterSearchMatchesForMode(allMatches, mode),
+        expandableMatchCount: Math.max(
+            allMatches.length,
+            normalizeSearchCount(intent.expandableMatchCount)
+        ),
+        collapsedIndicators: indicators
     };
 }
 
@@ -483,11 +561,15 @@ function captureTraceSession() {
 function saveActiveTraceSession() {
     var trace = traceRuntime();
     if (!trace.activeTraceLoaded) return;
-    trace.traceSessions[traceSessionKey(trace.activeTraceIndex)] = captureTraceSession();
+    trace.traceSessions[traceSessionKey(activeTraceSelection())] = captureTraceSession();
 }
 
 function traceSessionForIndex(index) {
     return cloneTraceSession(traceRuntime().traceSessions[traceSessionKey(index)]);
+}
+
+function traceSessionForSelection(selection) {
+    return cloneTraceSession(traceRuntime().traceSessions[traceSessionKey(selection)]);
 }
 
 function traceSessionHasViewport(session) {
@@ -588,7 +670,8 @@ function restoreTraceSessionSearch(intent) {
 
     ensureSearchIndex();
 
-    var collectedSearch = collectSearchStateForCurrentSearch(intent.query, scope);
+    var collectedSearch = restoredTraceSessionSearchState(intent, scope, mode) ||
+        collectSearchStateForCurrentSearch(intent.query, scope);
     var owner = createSearchTransactionResultOwner(
         transactionToken,
         'trace-session-search-restore',
@@ -668,7 +751,8 @@ function restoreTraceSessionAfterRender(session) {
 }
 
 function resetTraceSwitchRuntime(toTraceIndex) {
-    markTraceLayoutDirtyTraceSwitch(traceRuntime().activeTraceIndex, toTraceIndex);
+    var fromSelection = activeTraceSelection();
+    markTraceLayoutDirtyTraceSwitch(fromSelection[0] || 0, Array.isArray(toTraceIndex) ? toTraceIndex[0] : toTraceIndex);
     bumpRuntimeEpoch('trace');
     closeTopBarPopovers();
     resetRenderFrameRuntime();

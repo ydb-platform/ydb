@@ -4,6 +4,8 @@
 #include <yt/yt/core/rpc/private.h>
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/helpers.h>
+#include <yt/yt/core/bus/message_handler.h>
 #include <yt/yt/core/bus/server.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
@@ -30,7 +32,7 @@ class TBusServer
 {
 public:
     explicit TBusServer(IBusServerPtr busServer)
-        : TServerBase(RpcServerLogger().WithTag("BusServerId: %v", TGuid::Create()))
+        : TServerBase(RpcServerLogger().WithTag("BusServerId", TGuid::Create()))
         , BusServer_(std::move(busServer))
     { }
 
@@ -56,12 +58,31 @@ private:
             }));
     }
 
-    void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept override
+    void HandleMessage(
+        TSharedRefArray message,
+        IBusPtr replyBus,
+        NYT::NBus::IDirectPlacementTransferPtr transfer,
+        NYT::NBus::TPacketId packetId) noexcept override
     {
         auto messageType = GetMessageType(message);
+
+        // Only request attachments may arrive via direct placement transfer; the
+        // transfer is handed to the service, which decides (per method) whether to
+        // expose it lazily or materialize it inline. Any other message type carrying
+        // a transfer is unexpected; fall back to materializing it inline.
+        if (transfer && messageType != EMessageType::Request) {
+            MaterializeTransferAndReinvoke(
+                MakeStrong(this),
+                std::move(message),
+                std::move(replyBus),
+                std::move(transfer),
+                packetId);
+            return;
+        }
+
         switch (messageType) {
             case EMessageType::Request:
-                OnRequestMessage(std::move(message), std::move(replyBus));
+                OnRequestMessage(std::move(message), std::move(replyBus), std::move(transfer), packetId);
                 break;
 
             case EMessageType::RequestCancelation:
@@ -79,19 +100,20 @@ private:
             default:
                 // Unable to reply, no request id is known.
                 // Let's just drop the message.
-                YT_LOG_ERROR("Incoming message has invalid type, ignored (Type: %x)",
-                    static_cast<ui32>(messageType));
+                YT_TLOG_ERROR("Incoming message has invalid type, ignored")
+                    .WithFormat("Type", "%x", static_cast<ui32>(messageType));
                 break;
         }
     }
 
-    void OnRequestMessage(TSharedRefArray message, IBusPtr replyBus)
+    void OnRequestMessage(TSharedRefArray message, IBusPtr replyBus, NYT::NBus::IDirectPlacementTransferPtr transfer, NYT::NBus::TPacketId packetId)
     {
         auto header = std::make_unique<NProto::TRequestHeader>();
         if (!TryParseRequestHeader(message, header.get())) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
-            YT_LOG_ERROR("Error parsing request header");
+            YT_TLOG_ERROR("Error parsing request header")
+                .With("PacketId", packetId);
             return;
         }
 
@@ -101,18 +123,20 @@ private:
         auto tosLevel = header->tos_level();
 
         if (message.Size() < 2) {
-            YT_LOG_ERROR("Too few request parts: expected >= 2, actual %v (RequestId: %v)",
-                message.Size(),
-                requestId);
+            YT_TLOG_ERROR("Too few request parts: expected >= 2")
+                .With("ActualPartCount", message.Size())
+                .With("RequestId", requestId);
             return;
         }
 
-        YT_LOG_DEBUG("Request received (RequestId: %v, Endpoint: %v)",
-            requestId,
-            replyBus->GetEndpointDescription());
+        YT_TLOG_DEBUG("Request received")
+            .With("RequestId", requestId)
+            .With("PacketId", packetId)
+            .With("Endpoint", replyBus->GetEndpointDescription());
 
         auto replyWithError = [&] (const TError& error) {
-            YT_LOG_DEBUG(error);
+            YT_TLOG_DEBUG("Request failed")
+                .With(error);
             auto response = CreateErrorResponseMessage(requestId, error);
             YT_UNUSED_FUTURE(replyBus->Send(std::move(response)));
         };
@@ -121,8 +145,8 @@ private:
             replyWithError(TError(
                 NRpc::EErrorCode::Unavailable,
                 "Server is not started")
-                << TErrorAttribute("realm_id", realmId)
-                << TErrorAttribute("endpoint", replyBus->GetEndpointDescription()));
+                .With("realm_id", realmId)
+                .With("endpoint", replyBus->GetEndpointDescription()));
             return;
         }
 
@@ -141,7 +165,8 @@ private:
         service->HandleRequest(
             std::move(header),
             std::move(message),
-            std::move(replyBus));
+            std::move(replyBus),
+            std::move(transfer));
     }
 
     void OnRequestCancelationMessage(TSharedRefArray message)
@@ -150,7 +175,7 @@ private:
         if (!TryParseRequestCancelationHeader(message, &header)) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
-            YT_LOG_ERROR("Error parsing request cancelation header");
+            YT_TLOG_ERROR("Error parsing request cancelation header");
             return;
         }
 
@@ -162,18 +187,17 @@ private:
         TServiceId serviceId(serviceName, realmId);
         auto service = FindService(serviceId);
         if (!service) {
-            YT_LOG_DEBUG("Service is not registered (Service: %v, RealmId: %v, RequestId: %v)",
-                serviceName,
-                realmId,
-                requestId);
+            YT_TLOG_DEBUG("Service is not registered")
+                .With("Service", serviceName)
+                .With("RealmId", realmId)
+                .With("RequestId", requestId);
             return;
         }
 
-        YT_LOG_DEBUG("Request cancelation received (Method: %v.%v, RealmId: %v, RequestId: %v)",
-            serviceName,
-            methodName,
-            realmId,
-            requestId);
+        YT_TLOG_DEBUG("Request cancelation received")
+            .WithFormat("Method", "%v.%v", serviceName, methodName)
+            .With("RealmId", realmId)
+            .With("RequestId", requestId);
 
         service->HandleRequestCancellation(requestId);
     }
@@ -184,7 +208,7 @@ private:
         if (!TryParseStreamingPayloadHeader(message, &header)) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
-            YT_LOG_ERROR("Error parsing request streaming payload header");
+            YT_TLOG_ERROR("Error parsing request streaming payload header");
             return;
         }
 
@@ -197,38 +221,37 @@ private:
         TServiceId serviceId(serviceName, realmId);
         auto service = FindService(serviceId);
         if (!service) {
-            YT_LOG_DEBUG("Service is not registered (Service: %v, RealmId: %v, RequestId: %v)",
-                serviceName,
-                realmId,
-                requestId);
+            YT_TLOG_DEBUG("Service is not registered")
+                .With("Service", serviceName)
+                .With("RealmId", realmId)
+                .With("RequestId", requestId);
             return;
         }
 
         if (attachments.empty()) {
-            YT_LOG_WARNING("Streaming payload without attachments; canceling request (RequestId: %v)",
-                requestId);
+            YT_TLOG_WARNING("Streaming payload without attachments; canceling request")
+                .With("RequestId", requestId);
             service->HandleRequestCancellation(requestId);
             return;
         }
 
         auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
         if (!codecId) {
-            YT_LOG_WARNING("Streaming payload codec is not supported; canceling request (RequestId: %v, Codec: %v)",
-                requestId,
-                header.codec());
+            YT_TLOG_WARNING("Streaming payload codec is not supported; canceling request")
+                .With("RequestId", requestId)
+                .With("Codec", header.codec());
             service->HandleRequestCancellation(requestId);
             return;
         }
 
-        YT_LOG_DEBUG("Request streaming payload received (RequestId: %v, SequenceNumber: %v, Sizes: %v, "
-            "Codec: %v, Closed: %v)",
-            requestId,
-            sequenceNumber,
-            MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
+        YT_TLOG_DEBUG("Request streaming payload received")
+            .With("RequestId", requestId)
+            .With("SequenceNumber", sequenceNumber)
+            .With("Sizes", MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                 builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
-            }),
-            *codecId,
-            !attachments.back());
+            }))
+            .With("Codec", *codecId)
+            .With("Closed", !attachments.back());
 
         TStreamingPayload payload{
             *codecId,
@@ -244,7 +267,7 @@ private:
         if (!TryParseStreamingFeedbackHeader(message, &header)) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
-            YT_LOG_ERROR("Error parsing request streaming feedback header");
+            YT_TLOG_ERROR("Error parsing request streaming feedback header");
             return;
         }
 
@@ -257,16 +280,16 @@ private:
         TServiceId serviceId(serviceName, realmId);
         auto service = FindService(serviceId);
         if (!service) {
-            YT_LOG_DEBUG("Service is not registered (Service: %v, RealmId: %v, RequestId: %v)",
-                serviceName,
-                realmId,
-                requestId);
+            YT_TLOG_DEBUG("Service is not registered")
+                .With("Service", serviceName)
+                .With("RealmId", realmId)
+                .With("RequestId", requestId);
             return;
         }
 
-        YT_LOG_DEBUG("Request streaming feedback received (RequestId: %v, ReadPosition: %v)",
-            requestId,
-            readPosition);
+        YT_TLOG_DEBUG("Request streaming feedback received")
+            .With("RequestId", requestId)
+            .With("ReadPosition", readPosition);
 
         TStreamingFeedback feedback{
             readPosition

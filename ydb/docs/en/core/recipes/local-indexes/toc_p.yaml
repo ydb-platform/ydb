@@ -1,0 +1,5 @@
+items:
+- name: Bloom skip index quickstart
+  href: ../bloom-skip-indexes/bloom-skip-index-quickstart.md
+- name: min_max index — quick start
+  href: ../min_max-skip-index/min_max-skip-index-quickstart.md

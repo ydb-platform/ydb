@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 -- Basic cases
 $bool_json = CAST(
     @@{

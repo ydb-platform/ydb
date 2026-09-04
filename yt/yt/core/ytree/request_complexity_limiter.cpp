@@ -24,8 +24,8 @@ TError TReadRequestComplexityLimiter::CheckOverdraught() const noexcept
         if (limit < usage) {
             error.SetCode(NYT::EErrorCode::Generic);
             error = error
-                << TErrorAttribute(Format("%v_usage", fieldName), usage)
-                << TErrorAttribute(Format("%v_limit", fieldName), limit);
+                .With(Format("%v_usage", fieldName), usage)
+                .With(Format("%v_limit", fieldName), limit);
             error.SetMessage("Read request complexity limits exceeded");
         }
     };

@@ -8,6 +8,25 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+char PrintBrief(EHostRole role)
+{
+    switch (role) {
+        case EHostRole::Primary:
+            return 'P';
+        case EHostRole::HandOff:
+            return 'H';
+        case EHostRole::None:
+            return 'N';
+    }
+    Y_ABORT_UNLESS(false);
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 THostRoles::THostRoles(size_t hostCount)
     : Count(hostCount)
 {
@@ -56,6 +75,13 @@ void THostRoles::SetRole(THostIndex host, EHostRole assignment)
     Assignments[host] = assignment;
 }
 
+void THostRoles::AppendRole(EHostRole assignment)
+{
+    Y_ABORT_UNLESS(Count < MaxHostCount);
+
+    Assignments[Count++] = assignment;
+}
+
 THostMask THostRoles::GetPrimary() const
 {
     THostMask result;
@@ -83,8 +109,16 @@ THostMask THostRoles::GetActive() const
     return GetPrimary().Include(GetHandOff());
 }
 
-TString THostRoles::DebugPrint() const
+TString THostRoles::DebugPrint(bool brief) const
 {
+    if (brief) {
+        TString result(Count, ' ');
+        for (size_t i = 0; i < Count; ++i) {
+            result[i] = PrintBrief(Assignments[i]);
+        }
+        return result;
+    }
+
     TStringBuilder result;
     for (size_t i = 0; i < Count; ++i) {
         if (i) {

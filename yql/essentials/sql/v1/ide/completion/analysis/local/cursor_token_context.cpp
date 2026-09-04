@@ -7,7 +7,7 @@ namespace NSQLComplete {
 
 namespace {
 
-bool Tokenize(ILexer::TPtr& lexer, TCompletionInput input, TParsedTokenList& tokens) {
+bool Tokenize(const ILexer::TPtr& lexer, TCompletionInput input, TParsedTokenList& tokens) {
     NYql::TIssues issues;
     return NSQLTranslation::Tokenize(
         *lexer, TString(input.Text), /* queryName = */ "",
@@ -137,10 +137,11 @@ TMaybe<TRichParsedToken> TCursorTokenContext::MatchCursorPrefix(const TVector<TS
 }
 
 bool GetStatement(
-    ILexer::TPtr& lexer,
+    const ILexer::TPtr& lexer,
     const TMaterializedInput& input,
     TCompletionInput& output,
-    size_t& output_position) {
+    size_t& output_position)
+{
     TVector<TString> statements;
     NYql::TIssues issues;
     if (!NSQLTranslationV1::SplitQueryToStatements(
@@ -168,7 +169,7 @@ bool GetStatement(
     return true;
 }
 
-bool GetCursorTokenContext(ILexer::TPtr& lexer, TCompletionInput input, TCursorTokenContext& context) {
+bool GetCursorTokenContext(const ILexer::TPtr& lexer, TCompletionInput input, TCursorTokenContext& context) {
     TParsedTokenList tokens;
     if (!Tokenize(lexer, input, tokens)) {
         return false;

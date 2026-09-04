@@ -20,6 +20,7 @@ int TTopicWriteScenario::DoRun(const TClientCommand::TConfig& config)
 
     std::vector<std::future<void>> threads;
 
+    StatsCollector->Init();
     StartConsumerThreads(threads, config.Database);
     StartProducerThreads(threads, partitionCount, partitionSeed, generatedMessages, config.Database);
     StartConfiguratorThread(threads, config.Database);

@@ -40,7 +40,7 @@ private:
         ui64 limit) const {
         THashMap<TTableId, TVector<TString>> aliasesByTable;
         for (TAliased<TTableId> table : std::move(tables)) {
-            aliasesByTable[std::move(static_cast<TTableId&>(table))]
+            aliasesByTable[static_cast<TTableId&>(table)]
                 .emplace_back(std::move(table.Alias));
         }
 
@@ -67,7 +67,7 @@ private:
         auto futuresIt = IterateValues(futuresByTable);
         TVector<NThreading::TFuture<TDescribeTableResponse>> futures(begin(futuresIt), end(futuresIt));
 
-        return NThreading::WaitAll(std::move(futures))
+        return NThreading::WaitAll(futures)
             .Apply([aliasesByTable = std::move(aliasesByTable),
                     futuresByTable = std::move(futuresByTable),
                     withoutByTableAlias = std::move(withoutByTableAlias)](auto) mutable {

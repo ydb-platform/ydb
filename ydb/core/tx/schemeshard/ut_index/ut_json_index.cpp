@@ -241,9 +241,14 @@ Y_UNIT_TEST_SUITE(TJsonIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(CreateTableMultiplePrimaryKeys) {
+    // A custom (non single-integer) PK has no usable doc_id, so a JSON index over a multi-column PK
+    // auto-provisions the __ydb_row_id column + unique index and runs in rowid mode - just like the
+    // build-index path for ALTER TABLE ADD INDEX.
+    Y_UNIT_TEST(CreateTableMultipleKeyPkAutoProvisionsRowId) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -259,17 +264,29 @@ Y_UNIT_TEST_SUITE(TJsonIndexTests) {
                 KeyColumnNames: ["data"]
                 Type: EIndexTypeGlobalJson
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/table/idx_json"), {
-            NLs::PathNotExist,
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/table/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({TString(NTableIndex::NFulltext::RowIdColumn)}),
         });
+
+        auto idxDesc = DescribePrivatePath(runtime, "/MyRoot/table/idx_json");
+        UNIT_ASSERT(idxDesc.GetPathDescription().GetTableIndex()
+            .GetFulltextIndexDescription().GetUseRowIdAsDocId());
     }
 
-    Y_UNIT_TEST(CreateTableWrongPrimaryKeyType) {
+    // A String PK is not a single integer either, so the JSON index auto-provisions __ydb_row_id
+    // rather than being rejected for a "wrong" PK type.
+    Y_UNIT_TEST(CreateTableStringPkAutoProvisionsRowId) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -284,11 +301,34 @@ Y_UNIT_TEST_SUITE(TJsonIndexTests) {
                 KeyColumnNames: ["data"]
                 Type: EIndexTypeGlobalJson
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/table/idx_json"), {
-            NLs::PathNotExist,
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/table");
+            bool found = false;
+            for (const auto& column : tableDesc.GetPathDescription().GetTable().GetColumns()) {
+                if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                    found = true;
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "Uint64");
+                    UNIT_ASSERT(column.GetNotNull());
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(),
+                        NTableIndex::NFulltext::RowIdSequenceName);
+                }
+            }
+            UNIT_ASSERT_C(found, "auto-provisioned __ydb_row_id column not found on the main table");
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/table/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({TString(NTableIndex::NFulltext::RowIdColumn)}),
         });
+
+        auto idxDesc = DescribePrivatePath(runtime, "/MyRoot/table/idx_json");
+        UNIT_ASSERT(idxDesc.GetPathDescription().GetTableIndex()
+            .GetFulltextIndexDescription().GetUseRowIdAsDocId());
     }
 }

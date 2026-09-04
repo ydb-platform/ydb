@@ -3,6 +3,6 @@
 
 namespace NCloud {
 
-NActors::IActor* CreateMockAccessServiceWithCache(); // for compatibility with older code
+NActors::IActor* CreateMockAccessServiceWithCache(bool enableV2Interface); // for compatibility with older code
 
 }

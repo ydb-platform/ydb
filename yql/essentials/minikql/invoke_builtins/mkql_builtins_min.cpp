@@ -3,8 +3,7 @@
 
 #include <cmath>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -31,7 +30,8 @@ struct TMin: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMin<TLeft, 
         if constexpr (std::is_floating_point<TOutput>()) {
             auto& context = ctx.Codegen.GetContext();
             auto& module = ctx.Codegen.GetModule();
-            const auto fnType = FunctionType::get(GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, false);
+            const auto fnType = FunctionType::get(
+                GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, /*isVarArg=*/false);
             const auto& name = GetFuncNameForType<TOutput>("llvm.minnum");
             const auto func = module.getOrInsertFunction(name, fnType).getCallee();
             const auto res = CallInst::Create(fnType, func, {left, right}, "minnum", block);
@@ -207,6 +207,8 @@ void RegisterMin(IBuiltinFunctionRegistry& registry) {
 
     RegisterCustomSameTypesFunction<NUdf::TDataType<char*>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
     RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
+    RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TDyNumber>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
+    RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
 }
 
 void RegisterAggrMin(IBuiltinFunctionRegistry& registry) {
@@ -220,7 +222,8 @@ void RegisterAggrMin(IBuiltinFunctionRegistry& registry) {
 
     RegisterCustomAggregateFunction<NUdf::TDataType<char*>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
     RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TDyNumber>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

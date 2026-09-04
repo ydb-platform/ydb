@@ -11,12 +11,30 @@ from ydb.tests.stress.common.common import WorkloadBase
 
 
 class WorkloadCacheMiss(WorkloadBase):
+    THREADS = 10
+
     def __init__(self, client, mon_endpoint, stop):
         super().__init__(client, "", "cache_miss", stop)
         self.mon_endpoint = mon_endpoint
         self.cache_misses = 0
         self.nonexistent_node_id = 300000
         self.lock = threading.Lock()
+        # Reuse a single Session with a connection pool sized for all worker
+        # threads. Without connection reuse every request opens (and quickly
+        # closes) a fresh local socket, exhausting ephemeral ports under load
+        # ("[Errno 99] Cannot assign requested address").
+        self.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=self.THREADS,
+            pool_maxsize=self.THREADS,
+            max_retries=requests.adapters.Retry(
+                total=3,
+                backoff_factor=0.1,
+                status_forcelist=(500, 502, 503, 504),
+            ),
+        )
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
     def get_stat(self):
         with self.lock:
@@ -24,7 +42,7 @@ class WorkloadCacheMiss(WorkloadBase):
 
     def _cache_miss(self):
         url = f"{self.mon_endpoint}/viewer/json/sysinfo?node_id={self.nonexistent_node_id}"
-        r = requests.get(url)
+        r = self.session.get(url, timeout=30)
         r.raise_for_status()
 
     def _cache_miss_loop(self):
@@ -34,7 +52,13 @@ class WorkloadCacheMiss(WorkloadBase):
                 self.cache_misses += 1
 
     def get_workload_thread_funcs(self):
-        return [self._cache_miss_loop for x in range(0, 10)]
+        return [self._cache_miss_loop for x in range(0, self.THREADS)]
+
+    def _post_stop(self):
+        # Close the shared requests.Session to release pooled connections
+        # and avoid a resource leak after the workload finishes.
+        self.session.close()
+        return True
 
 
 class WorkloadRegisterNode(WorkloadBase):
@@ -119,5 +143,5 @@ class WorkloadRunner:
         stop.set()
         print("Waiting for stop...")
         for w in workloads:
-            w.join()
+            w.wait_stop()
         print("Stopped")

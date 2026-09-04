@@ -1,0 +1,69 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "struct";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+        {
+            "name" = "timestamp";
+            "required" = %false;
+            "type" = "timestamp";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "timestamp";
+            };
+        };
+    ];
+    "_yql_row_spec" = {
+        "NativeYtTypeFlags" = 2u;
+        "StrictSchema" = %true;
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "struct";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "key";
+                                [
+                                    "DataType";
+                                    "Uint64";
+                                ];
+                            ];
+                            [
+                                "value";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String";
+                                    ];
+                                ];
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "timestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Timestamp";
+                        ];
+                    ];
+                ];
+            ];
+        ];
+    };
+}

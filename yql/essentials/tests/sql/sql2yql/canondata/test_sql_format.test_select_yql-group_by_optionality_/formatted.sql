@@ -1,0 +1,184 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    Ensure(c, c == 'Optional<Int64>', c)
+FROM (
+    SELECT
+        FormatType(TypeOf(Sum(c))) AS c
+    FROM (
+        VALUES
+            (1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+);
+
+SELECT
+    Ensure(c, c == 'Int64', c)
+FROM (
+    SELECT
+        a,
+        FormatType(TypeOf(Sum(c))) AS c
+    FROM (
+        VALUES
+            (1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        a
+);
+
+SELECT
+    Ensure(c, c == 'Optional<Int64>', c)
+FROM (
+    SELECT
+        a,
+        FormatType(TypeOf(Sum(c))) AS c
+    FROM (
+        VALUES
+            (1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        ROLLUP (a)
+);
+
+SELECT
+    Ensure(c, c == 'Optional<Int64>', c)
+FROM (
+    SELECT
+        a,
+        b,
+        FormatType(TypeOf(Sum(c))) AS c
+    FROM (
+        VALUES
+            (1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        ROLLUP (a, b)
+);
+
+SELECT
+    Ensure(c, c == 'Int64', c)
+FROM (
+    SELECT
+        a,
+        b,
+        FormatType(TypeOf(Sum(c))) AS c
+    FROM (
+        VALUES
+            (1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        GROUPING SETS (
+            a,
+            b
+        )
+);
+
+SELECT
+    Ensure(c, c == 'Int64', c)
+FROM (
+    SELECT
+        a,
+        b,
+        FormatType(TypeOf(Sum(c))) AS c
+    FROM (
+        VALUES
+            (1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        GROUPING SETS (
+            (a, b),
+            (b)
+        )
+);
+
+SELECT
+    Ensure(c, c == 'Optional<Int64>', c)
+FROM (
+    SELECT
+        a,
+        b,
+        FormatType(TypeOf(Sum(c))) AS c
+    FROM (
+        VALUES
+            (1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        GROUPING SETS (
+            (a, b),
+            (b),
+            ()
+        )
+);
+
+SELECT
+    Ensure(d, d == 'Int64', d)
+FROM (
+    SELECT
+        FormatType(TypeOf(Sum(d))) AS d
+    FROM (
+        VALUES
+            (1, 1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c,
+        d
+    )
+    GROUP BY
+        a,
+        GROUPING SETS (
+            (b, c),
+            (c),
+            ()
+        )
+);
+
+SELECT
+    Ensure(d, d == 'Int64', d)
+FROM (
+    SELECT
+        FormatType(TypeOf(Sum(d))) AS d
+    FROM (
+        VALUES
+            (1, 1, 1, 1)
+    ) AS x (
+        a,
+        b,
+        c,
+        d
+    )
+    GROUP BY
+        GROUPING SETS (
+            (b, c),
+            (c),
+            ()
+        ),
+        a
+);

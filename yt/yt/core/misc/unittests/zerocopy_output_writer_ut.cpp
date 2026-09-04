@@ -14,8 +14,8 @@ TEST(TZeroCopyOutputStreamWriterTest, TestBasic)
 {
     constexpr int GrowthSize = 7;
     std::string string;
-    auto buffer1 = TString("abcdef");
-    auto buffer2 = TString("kinda long buffer");
+    auto buffer1 = std::string("abcdef");
+    auto buffer2 = std::string("kinda long buffer");
 
     TFixedGrowthStringOutput stream(&string, GrowthSize);
     {

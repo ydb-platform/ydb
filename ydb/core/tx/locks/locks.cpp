@@ -4,6 +4,8 @@
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/base/appdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -113,6 +115,11 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , BreakerQuerySpanId_(row.BreakerQuerySpanId)
     , BreakerNodeId_(row.BreakerNodeId)
 {
+    for (const auto& state : row.WriteSeqNumStates) {
+        if (state.WriteSeqNum) {
+            WriteSeqNumStates[state.WriterIndex] = state;
+        }
+    }
     if (row.BreakVersion != TRowVersion::Max()) {
         BreakVersion.emplace(row.BreakVersion);
     } else if (Counter == Max<ui64>()) {
@@ -194,7 +201,9 @@ void TLockInfo::SetBroken(TRowVersion at) {
     }
 
     if (!IsBroken(at)) {
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "Lock " << LockId << " marked broken at " << at);
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "Lock marked broken",
+            {"lockId", LockId},
+            {"at", at});
 
         BreakVersion = at;
         Locker->ScheduleRemoveBrokenRanges(LockId, at);
@@ -282,6 +291,12 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
         db->PersistRemoveRange(LockId, range.Id);
     }
     PersistentRanges.clear();
+
+    // Remove write seq nums
+    for (const auto& pr : WriteSeqNumStates) {
+        db->PersistRemoveLockWriteSeqNum(LockId, pr.first);
+    }
+    WriteSeqNumStates.clear();
 
     // Remove the lock itself
     db->PersistRemoveLock(LockId);
@@ -453,6 +468,16 @@ bool TLockInfo::RestoreInMemoryState(const ILocksDb::TLockRow& lockRow) {
         }
     }
 
+    for (const auto& incoming : lockRow.WriteSeqNumStates) {
+        if (incoming.SerializedResult.empty() || incoming.WriteSeqNum == 0) {
+            continue;
+        }
+        auto it = WriteSeqNumStates.find(incoming.WriterIndex);
+        if (it != WriteSeqNumStates.end() && it->second.WriteSeqNum == incoming.WriteSeqNum) {
+            SetWriteSeqNumResult(incoming.WriterIndex, incoming.SerializedResult);
+        }
+    }
+
     return true;
 }
 
@@ -543,6 +568,28 @@ void TLockInfo::SetFrozen(ILocksDb* db) {
     if (db) {
         db->PersistLockFlags(LockId, ui64(Flags & ELockFlags::PersistentMask));
         AddWaitPersistentCallback(db);
+    }
+}
+
+bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db) {
+    auto& state = WriteSeqNumStates[writerIndex];
+    state.WriterIndex = writerIndex;
+    state.WriteSeqNum = writeSeqNum;
+    state.SerializedResult.clear();
+    if (db && IsPersistent()) {
+        db->PersistLockWriteSeqNum(LockId, writerIndex, writeSeqNum, {});
+        return true;
+    }
+    return false;
+}
+
+void TLockInfo::SetWriteSeqNumResult(ui64 writerIndex, TString serializedResult, ILocksDb* db) {
+    auto it = WriteSeqNumStates.find(writerIndex);
+    Y_ENSURE(it != WriteSeqNumStates.end() && it->second.WriteSeqNum,
+        "Result of an uncommitted write imply its position in the chain");
+    it->second.SerializedResult = std::move(serializedResult);
+    if (db && IsPersistent()) {
+        db->PersistLockWriteSeqNum(LockId, writerIndex, it->second.WriteSeqNum, it->second.SerializedResult);
     }
 }
 
@@ -1222,7 +1269,10 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         // Adding read/write conflicts implies locking
         Y_ENSURE(!Update->ReadConflictLocks);
         Y_ENSURE(!Update->WriteConflictLocks);
-        return {TVector<TLock>(), brokenLocks};
+        if (!Update->SetWriteSeqNum) {
+            return {TVector<TLock>(), brokenLocks};
+        }
+        // Seq num is still consumed when no ranges were taken (e.g. INCREMENT of a missing row).
     }
 
     TLockInfo::TPtr lock;
@@ -1295,13 +1345,19 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 }
             }
 
-            if (lock->GetWriteTables() && !lock->IsPersistent()) {
-                // We need to persist a new lock
+            if (!lock->IsPersistent() && (lock->GetWriteTables() || Update->SetWriteSeqNum)) {
                 lock->PersistLock(Db);
                 // Persistent locks cannot expire
                 Locker.ExpireQueue.Remove(lock.Get());
                 // Make sure it tracks persistence progress
                 waitPersistent = true;
+            }
+
+            if (Update->SetWriteSeqNum) {
+                // Advance even if no rows were applied (e.g. UPDATE of a missing row).
+                if (lock->SetWriteSeqNum(Update->SetWriteSeqNum->WriterIndex, Update->SetWriteSeqNum->WriteSeqNum, Db)) {
+                    waitPersistent = true;
+                }
             }
 
             if (waitPersistent) {
@@ -1321,7 +1377,8 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     TVector<TLock> out;
     for (auto& table : Update->AffectedTables) {
         out.emplace_back(MakeLock(Update->LockTxId, lock ? lock->GetGeneration() : Self->Generation(), counter,
-            table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock()));
+            table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock(),
+            Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
     }
     return {out, brokenLocks};
 }
@@ -1388,7 +1445,8 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         auto it = Cache->Locks.find(lockTxId);
         if (it != Cache->Locks.end())
             return it->second;
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found in cache");
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock not found in cache",
+            {"lockTxId", lockTxId});
         return TLock();
     }
 
@@ -1400,7 +1458,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         if (key.size() == 2) { // locks v1
             const auto& tableIds = txLock->GetReadTables();
             Y_ENSURE(tableIds.size() == 1);
-            return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock());
+            return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock(), txLock->GetLockWriteSeqNum());
         } else { // locks v2
             Y_ENSURE(key.size() == 4);
             TPathId tableId;
@@ -1408,18 +1466,20 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId);
             if (ok && tableId) {
                 if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
-                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock());
+                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock(), txLock->GetLockWriteSeqNum());
                 } else {
-                    LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
-                            "TSysLocks::GetLock: lock " << lockTxId << " exists, but not set for table " << tableId);
+                    YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock exists, but not set for table",
+                        {"lockTxId", lockTxId},
+                        {"tableId", tableId});
                 }
             } else {
-                LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
-                        "TSysLocks::GetLock: bad request for lock " << lockTxId);
+                YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: bad request for lock",
+                    {"lockTxId", lockTxId});
             }
         }
     } else {
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found");
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock not found",
+            {"lockTxId", lockTxId});
     }
 
     Self->IncCounter(COUNTER_LOCKS_LOST);
@@ -1680,7 +1740,9 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     return EEnsureCurrentLock::Success;
 }
 
-TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const {
+TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
+    TLockWriteSeqNum writeSeqNum) const
+{
     TLock lock;
     lock.LockId = lockTxId;
     lock.DataShard = Self->TabletID();
@@ -1689,11 +1751,16 @@ TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counte
     lock.SchemeShard = pathId.OwnerId;
     lock.PathId = pathId.LocalPathId;
     lock.HasWrites = hasWrites;
+    lock.WriteSeqNumKnown = true;
+    lock.WriterIndex = writeSeqNum.WriterIndex;
+    lock.WriteSeqNum = writeSeqNum.WriteSeqNum;
     return lock;
 }
 
-TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const {
-    TLock lock = MakeLock(lockTxId, generation, counter, pathId, hasWrites);
+TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
+    TLockWriteSeqNum writeSeqNum) const
+{
+    TLock lock = MakeLock(lockTxId, generation, counter, pathId, hasWrites, writeSeqNum);
     if (AccessLog)
         AccessLog->Locks[lockTxId] = lock;
     return lock;

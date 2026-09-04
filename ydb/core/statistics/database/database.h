@@ -7,6 +7,8 @@
 
 namespace NKikimr::NStat {
 
+inline constexpr TStringBuf StatisticsTablePath = ".metadata/statistics_v2";
+
 NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> event, const TString& database);
 
 NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
@@ -14,7 +16,7 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 
 void DispatchLoadStatisticsQuery(
     const NActors::TActorId& replyActorId, ui64 queryId,
-    const TString& database, const TPathId& pathId, EStatType statType, std::optional<ui32> columnTag);
+    const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags);
 
 NActors::IActor* CreateDeleteStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
     const TPathId& pathId);

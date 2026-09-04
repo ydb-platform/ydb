@@ -15,11 +15,16 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)
 
 IF (NOT OS_WINDOWS)
     PEERDIR(
+        contrib/libs/apache/arrow
         library/cpp/getopt
         library/cpp/regex/pcre
         library/cpp/svnversion
         ydb/core/testlib/default
+        ydb/library/testlib/parquet_helpers
         ydb/core/tx
+        ydb/core/tx/columnshard
+        ydb/core/tx/columnshard/hooks/testing
+        ydb/core/tx/columnshard/test_helper
         ydb/core/tx/schemeshard/ut_helpers
         ydb/core/util
         ydb/core/wrappers/ut_helpers

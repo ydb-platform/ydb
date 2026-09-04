@@ -1,3 +1,4 @@
+#include "yql_yt_helpers.h"
 #include "yql_yt_provider.h"
 #include "yql_yt_dq_integration.h"
 #include "yql_yt_ytflow_integration.h"
@@ -9,6 +10,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/activation/yql_activation.h>
+#include <yql/essentials/providers/common/config/yql_activation_policy.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yt/yql/providers/yt/gateway/qplayer/yql_yt_qplayer_gateway.h>
 
@@ -308,7 +310,9 @@ void TYtState::Reset() {
     LoadEpochMetadata.Clear();
     EpochDependencies.clear();
     Configuration->ClearVersions();
-    TablesData = MakeIntrusive<TYtTablesData>();
+    if (TablesData) {
+        *TablesData = {};
+    }
     AnonymousLabels.clear();
     NodeHash.clear();
     Checkpoints.clear();
@@ -374,7 +378,10 @@ std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway
             return RecordActivationStat(attrName, *ytState);
         };
 
-        ytState->Configuration->Init(*ytGatewayConfig, NConfig::MakeActivationFilter<TAttr>(userName, typeCtx->Credentials, onActivated), *typeCtx);
+        auto activationPolicy = NCommon::TActivationSelectionPolicy(
+            NConfig::MakeActivationFilter<TAttr>(userName, typeCtx->Credentials),
+            std::move(onActivated));
+        ytState->Configuration->Init(*ytGatewayConfig, activationPolicy, *typeCtx);
     }
 
     TYtState::TWeakPtr weakState = ytState;
@@ -544,6 +551,8 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtPublish::CallableName());
         Names.insert(TYtEquiJoin::CallableName());
         Names.insert(TYtStatOut::CallableName());
+        Names.insert(TYtMaterialize::CallableName());
+        Names.insert(TYtPersist::CallableName());
     }
 };
 
@@ -563,15 +572,21 @@ bool TYtState::IsHybridEnabled() const {
 }
 
 bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const {
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
     return Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true);
+}
+
+TDuration TYtState::GetHybridDqTimeSpentLimit() const {
+    return Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
 }
 
 bool TYtState::HybridTakesTooLong() const {
     return TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
-            > Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+            > GetHybridDqTimeSpentLimit();
 }
 
 TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
     // todo: get token by cluster name from Auth when it will be implemented
     if (auto token = Configuration->Auth.Get()) {
         return *token;
@@ -585,7 +600,11 @@ TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
         }
 
         if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
-            return ytTokenResolver->ResolveClusterToken(cluster);
+            auto ytName = Gateway->GetClusterYtName(cluster);
+            if (!ytName) {
+                ythrow yexception() << "Unknown cluster name: " << cluster;
+            }
+            return ytTokenResolver->ResolveClusterToken(ytName);
         }
     }
 

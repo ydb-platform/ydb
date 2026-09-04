@@ -1,4 +1,6 @@
 """Python grapheme, emoji, and sequence-aware ljust, rjust, center()."""
+from __future__ import annotations
+
 from typing import Literal
 
 # local
@@ -12,6 +14,7 @@ def ljust(
     *,
     control_codes: Literal['parse', 'strict', 'ignore'] = 'parse',
     ambiguous_width: int = 1,
+    term_program: bool | str = False,
 ) -> str:
     r"""
     Return text left-justified in a string of given display width.
@@ -25,6 +28,13 @@ def ljust(
         Passed to :func:`width` for measurement.
     :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts.
+    :param term_program: Terminal software identifier for table correction.
+        ``False`` (default) disables override lookup.  ``True`` reads the
+        ``TERM_PROGRAM`` or ``TERM`` environment variable for auto-detection.
+        Accepts a canonical terminal name matching :func:`list_term_programs`,
+        such as from XTVERSION_, ENQ_, or ``TERM_PROGRAM``.
+
+        .. versionadded:: 0.8.0
     :returns: Text padded on the right to reach ``dest_width``.
 
     .. versionadded:: 0.3.0
@@ -41,7 +51,8 @@ def ljust(
     if text.isascii() and text.isprintable():
         text_width = len(text)
     else:
-        text_width = width(text, control_codes=control_codes, ambiguous_width=ambiguous_width)
+        text_width = width(text, control_codes=control_codes, ambiguous_width=ambiguous_width,
+                           term_program=term_program)
     padding_cells = max(0, dest_width - text_width)
     return text + fillchar * padding_cells
 
@@ -53,6 +64,7 @@ def rjust(
     *,
     control_codes: Literal['parse', 'strict', 'ignore'] = 'parse',
     ambiguous_width: int = 1,
+    term_program: bool | str = False,
 ) -> str:
     r"""
     Return text right-justified in a string of given display width.
@@ -66,6 +78,13 @@ def rjust(
         Passed to :func:`width` for measurement.
     :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts.
+    :param term_program: Terminal software identifier for table correction.
+        ``False`` (default) disables override lookup.  ``True`` reads the
+        ``TERM_PROGRAM`` or ``TERM`` environment variable for auto-detection.
+        Accepts a canonical terminal name matching :func:`list_term_programs`,
+        such as from XTVERSION_, ENQ_, or ``TERM_PROGRAM``.
+
+        .. versionadded:: 0.8.0
     :returns: Text padded on the left to reach ``dest_width``.
 
     .. versionadded:: 0.3.0
@@ -82,7 +101,8 @@ def rjust(
     if text.isascii() and text.isprintable():
         text_width = len(text)
     else:
-        text_width = width(text, control_codes=control_codes, ambiguous_width=ambiguous_width)
+        text_width = width(text, control_codes=control_codes, ambiguous_width=ambiguous_width,
+                           term_program=term_program)
     padding_cells = max(0, dest_width - text_width)
     return fillchar * padding_cells + text
 
@@ -94,6 +114,7 @@ def center(
     *,
     control_codes: Literal['parse', 'strict', 'ignore'] = 'parse',
     ambiguous_width: int = 1,
+    term_program: bool | str = False,
 ) -> str:
     r"""
     Return text centered in a string of given display width.
@@ -107,6 +128,13 @@ def center(
         Passed to :func:`width` for measurement.
     :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts.
+    :param term_program: Terminal software identifier for table correction.
+        ``False`` (default) disables override lookup.  ``True`` reads the
+        ``TERM_PROGRAM`` or ``TERM`` environment variable for auto-detection.
+        Accepts a canonical terminal name matching :func:`list_term_programs`,
+        such as from XTVERSION_, ENQ_, or ``TERM_PROGRAM``.
+
+        .. versionadded:: 0.8.0
     :returns: Text padded on both sides to reach ``dest_width``.
 
     For odd-width padding, the extra cell fills in the same cell position as
@@ -128,7 +156,8 @@ def center(
     if text.isascii() and text.isprintable():
         text_width = len(text)
     else:
-        text_width = width(text, control_codes=control_codes, ambiguous_width=ambiguous_width)
+        text_width = width(text, control_codes=control_codes, ambiguous_width=ambiguous_width,
+                           term_program=term_program)
     total_padding = max(0, dest_width - text_width)
     # matching https://jazcap53.github.io/pythons-eccentric-strcenter.html
     left_pad = total_padding // 2 + (total_padding & dest_width & 1)

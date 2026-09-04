@@ -1206,10 +1206,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "KeyColumnNames: [\"RowId\"]"
                         );
 
-        env.TestWaitNotification(runtime, {100, 101});
+        env.TestWaitNotification(runtime, {txId - 2, txId - 1});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {LsCheckSubDomainParamsInMassiveCase("USER_0", subdomainPathId),
-                            NLs::PathVersionEqual(4),
+                            NLs::PathVersionEqual(5),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(7)});
 
@@ -1309,10 +1309,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "KeyColumnNames: [\"RowId\"]"
                         );
 
-        env.TestWaitNotification(runtime, {100, 101, 102});
+        env.TestWaitNotification(runtime, {txId - 3, txId - 2, txId - 1});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {LsCheckSubDomainParamsInMassiveCase("USER_0", subdomainPathId),
-                            NLs::PathVersionEqual(5),
+                            NLs::PathVersionEqual(6),
                             NLs::PathsInsideDomain(2),
                             NLs::ShardsInsideDomain(7)});
 
@@ -1320,7 +1320,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {NLs::InSubdomain});
 
         TestForceDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
-        env.TestWaitNotification(runtime, 103);
+        env.TestWaitNotification(runtime, txId - 1);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathNotExist});
@@ -4164,6 +4164,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
                            {LsCheckDiskQuotaExceeded(false, "Topic1 was deleted")});
+    }
+
+    Y_UNIT_TEST(ConnectRightNotInheritedIntoSubDomain) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Grant connect on the root database.
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "connector@builtin",
+                NACLib::DefaultInheritanceType);
+            TestModifyACL(runtime, ++txId, "/", "MyRoot", diffACL.SerializeAsString(), "");
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot",
+            "PlanResolution: 50 "
+            "Coordinators: 1 "
+            "Mediators: 1 "
+            "TimeCastBucketsPerMediator: 2 "
+            "Name: \"USER_0\"");
+        env.TestWaitNotification(runtime, txId);
+
+
+        TestMkDir(runtime, ++txId, "/MyRoot/USER_0", "InsideDir");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString connectRight = "+(ConnDB):connector@builtin";
+        const TString readRight = "+R:reader@builtin";
+
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot"), {
+            NLs::PathExist,
+            NLs::HasEffectiveRight(connectRight),
+        });
+
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::HasEffectiveRight(connectRight),
+        });
+
+        // Connect must NOT leak into objects inside the subdomain.
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/USER_0/InsideDir"), {
+            NLs::PathExist,
+            NLs::HasNoEffectiveRight(connectRight),
+        });
     }
 }
 

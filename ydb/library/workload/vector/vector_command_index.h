@@ -8,7 +8,7 @@ namespace NYdbWorkload {
 
 class TWorkloadCommandIndexBase : public NYdb::NConsoleClient::TYdbCommand {
 private:
-    THolder<NYdb::TDriver> Driver;
+    THolder<NYdb::NConsoleClient::TScopedDriver> Driver;
     THolder<NYdb::NQuery::TQueryClient> QueryClient;
 
 protected:

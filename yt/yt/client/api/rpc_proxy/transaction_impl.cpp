@@ -12,6 +12,7 @@
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/iterator/zip.h>
 
@@ -29,6 +30,7 @@ using namespace NYTree;
 using namespace NYPath;
 using namespace NYson;
 using namespace NQueueClient;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,7 +49,7 @@ TTransaction::TTransaction(
     std::optional<TDuration> pingPeriod,
     std::optional<TStickyTransactionParameters> stickyParameters,
     i64 sequenceNumberSourceId,
-    TStringBuf capitalizedCreationReason)
+    TStringBuf creationReason)
     : Connection_(std::move(connection))
     , Client_(std::move(client))
     , Channel_(std::move(channel))
@@ -62,9 +64,9 @@ TTransaction::TTransaction(
     , PingPeriod_(pingPeriod)
     , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
-    , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
-        Id_,
-        Connection_->GetLoggingTag()))
+    , Logger(RpcProxyClientLogger()
+        .WithTag("TransactionId", Id_)
+        .WithTags(Connection_->GetLoggingTags()))
     , Proxy_(Channel_)
 {
     const auto& config = Connection_->GetConfig();
@@ -73,19 +75,18 @@ TTransaction::TTransaction(
     Proxy_.SetDefaultResponseCodec(config->ResponseCodec);
     Proxy_.SetDefaultEnableLegacyRpcCodecs(config->EnableLegacyRpcCodecs);
 
-    YT_LOG_DEBUG("%v (Type: %v, StartTimestamp: %v, Atomicity: %v, "
-        "Durability: %v, Timeout: %v, PingAncestors: %v, PingerAddress: %v, PingPeriod: %v, Sticky: %v, StickyProxyAddress: %v)",
-        capitalizedCreationReason,
-        GetType(),
-        GetStartTimestamp(),
-        GetAtomicity(),
-        GetDurability(),
-        GetTimeout(),
-        PingAncestors_,
-        PingerAddress_,
-        PingPeriod_,
-        /*sticky*/ stickyParameters.has_value(),
-        StickyProxyAddress_);
+    YT_TLOG_DEBUG("Transaction created")
+        .With("Reason", creationReason)
+        .With("Type", GetType())
+        .With("StartTimestamp", GetStartTimestamp())
+        .With("Atomicity", GetAtomicity())
+        .With("Durability", GetDurability())
+        .With("Timeout", GetTimeout())
+        .With("PingAncestors", PingAncestors_)
+        .With("PingerAddress", PingerAddress_)
+        .With("PingPeriod", PingPeriod_)
+        .With("Sticky", stickyParameters.has_value())
+        .With("StickyProxyAddress", StickyProxyAddress_);
 }
 
 void TTransaction::Initialize()
@@ -166,8 +167,8 @@ void TTransaction::RegisterAlienTransaction(const ITransactionPtr& transaction)
         AlienTransactions_.push_back(transaction);
     }
 
-    YT_LOG_DEBUG("Alien transaction registered (AlienConnection: {%v})",
-        transaction->GetConnection()->GetLoggingTag());
+    YT_TLOG_DEBUG("Alien transaction registered")
+        .With("AlienCluster", transaction->GetConnection()->GetClusterName());
 }
 
 TFuture<void> TTransaction::Ping(const NApi::TPrerequisitePingOptions& /*options*/)
@@ -187,13 +188,27 @@ void TTransaction::Detach()
         State_ = ETransactionState::Detached;
     }
 
-    YT_LOG_DEBUG("Transaction detached");
+    YT_TLOG_DEBUG("Transaction detached");
 
     auto req = Proxy_.DetachTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
     SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
     // Fire-and-forget.
     YT_UNUSED_FUTURE(req->Invoke());
+}
+
+void TTransaction::Abandon(TGuard<NThreading::TSpinLock>* /*guard*/)
+{
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
+
+    if (State_ == ETransactionState::Abandoned) {
+        return;
+    }
+
+    // Like Detach, but sends no request: the server tx is left to expire on its own.
+    State_ = ETransactionState::Abandoned;
+
+    YT_TLOG_DEBUG("Transaction abandoned");
 }
 
 void TTransaction::SubscribeCommitted(const TCommittedHandler& handler)
@@ -242,7 +257,7 @@ TFuture<TTransactionFlushResult> TTransaction::Flush()
         futures = FlushModifyRowsRequests();
     }
 
-    YT_LOG_DEBUG("Flushing transaction");
+    YT_TLOG_DEBUG("Flushing transaction");
 
     return AllSucceeded(futures)
         .Apply(
@@ -258,11 +273,12 @@ TFuture<TTransactionFlushResult> TTransaction::Flush()
                     if (rspOrError.IsOK() && State_ == ETransactionState::Flushing) {
                         State_ = ETransactionState::Flushed;
                     } else if (!rspOrError.IsOK()) {
-                        YT_LOG_DEBUG(rspOrError, "Error flushing transaction");
+                        YT_TLOG_DEBUG("Error flushing transaction")
+                            .With(rspOrError);
                         YT_UNUSED_FUTURE(DoAbort(&guard));
                         THROW_ERROR_EXCEPTION("Error flushing transaction %v",
                             GetId())
-                            << rspOrError;
+                            .With(rspOrError);
                     }
                 }
 
@@ -275,9 +291,9 @@ TFuture<TTransactionFlushResult> TTransaction::Flush()
                 // Pad with FinalTransactionSignature so lengths match ParticipantCellIds
                 result.ExpectedPrepareSignatures.resize(result.ParticipantCellIds.size(), FinalTransactionSignature);
 
-                YT_LOG_DEBUG("Transaction flushed (ParticipantCellIds: %v, ExpectedPrepareSignatures: %v)",
-                    result.ParticipantCellIds,
-                    result.ExpectedPrepareSignatures);
+                YT_TLOG_DEBUG("Transaction flushed")
+                    .With("ParticipantCellIds", result.ParticipantCellIds)
+                    .With("ExpectedPrepareSignatures", result.ExpectedPrepareSignatures);
 
                 return result;
             }));
@@ -303,8 +319,8 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
         alienTransactions = std::move(AlienTransactions_);
     }
 
-    YT_LOG_DEBUG("Committing transaction (AlienTransactionCount: %v)",
-        alienTransactions.size());
+    YT_TLOG_DEBUG("Committing transaction")
+        .With("AlienTransactionCount", alienTransactions.size());
 
     for (const auto& transaction : alienTransactions) {
         futures.push_back(
@@ -314,9 +330,9 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
 
                     const auto& result = resultOrError.Value();
 
-                    YT_LOG_DEBUG("Alien transaction flushed (ParticipantCellIds: %v, AlienConnection: {%v})",
-                        result.ParticipantCellIds,
-                        transaction->GetConnection()->GetLoggingTag());
+                    YT_TLOG_DEBUG("Alien transaction flushed")
+                        .With("ParticipantCellIds", result.ParticipantCellIds)
+                        .With("AlienCluster", transaction->GetConnection()->GetClusterName());
 
                     for (auto [cellId, signature] : Zip(result.ParticipantCellIds, result.ExpectedPrepareSignatures)) {
                         EmplaceOrCrash(AdditionalParticipantCellIds_, cellId, signature);
@@ -335,7 +351,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 }
                 ToProto(req->mutable_prerequisite_options(), options);
                 ToProto(req->mutable_mutating_options(), options);
-                req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
+                req->set_max_allowed_commit_timestamp(ToProto(options.MaxAllowedCommitTimestamp));
                 SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
                 return req->Invoke();
             }))
@@ -346,10 +362,18 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                     if (rspOrError.IsOK() && State_ == ETransactionState::Committing) {
                         State_ = ETransactionState::Committed;
                     } else if (!rspOrError.IsOK()) {
-                        YT_UNUSED_FUTURE(DoAbort(&guard));
+                        if (Type_ == ETransactionType::Master &&
+                            Client_->GetOptions().AbandonMasterTransactionsOnFailedCommit)
+                        {
+                            // Keep the (possibly transient/ambiguous) failed commit's
+                            // transaction alive for a retrier instead of aborting it.
+                            Abandon(&guard);
+                        } else {
+                            YT_UNUSED_FUTURE(DoAbort(&guard));
+                        }
                         THROW_ERROR_EXCEPTION("Error committing transaction %v",
                             GetId())
-                            << rspOrError;
+                            .With(rspOrError);
                     }
                 }
 
@@ -359,12 +383,12 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
 
                 const auto& rsp = rspOrError.Value();
                 TTransactionCommitResult result{
-                    .PrimaryCommitTimestamp = rsp->primary_commit_timestamp(),
+                    .PrimaryCommitTimestamp = FromProto<NTransactionClient::TTimestamp>(rsp->primary_commit_timestamp()),
                     .CommitTimestamps = FromProto<NHiveClient::TTimestampMap>(rsp->commit_timestamps())
                 };
 
-                YT_LOG_DEBUG("Transaction committed (CommitTimestamps: %v)",
-                    result.CommitTimestamps);
+                YT_TLOG_DEBUG("Transaction committed")
+                    .With("CommitTimestamps", result.CommitTimestamps);
 
                 Committed_.Fire();
 
@@ -387,10 +411,10 @@ TFuture<void> TTransaction::Abort(const TTransactionAbortOptions& options)
     return DoAbort(&guard, options);
 }
 
-void TTransaction::FutureModifyRows(
+void TTransaction::ModifyRows(
     const TYPath& path,
     TNameTablePtr nameTable,
-    TSharedRange<NFuture::TRowModification> modifications,
+    TSharedRange<TRowModification> modifications,
     const TModifyRowsOptions& options)
 {
     ValidateTabletTransactionId(GetId());
@@ -398,10 +422,10 @@ void TTransaction::FutureModifyRows(
     for (const auto& modification : modifications) {
         // TODO(sandello): handle versioned rows
         Visit(modification,
-            [] (const NFuture::NRowModifications::TWriteRow&) { },
-            [] (const NFuture::NRowModifications::TDeleteRow&) { },
-            [] (const NFuture::NRowModifications::TWriteAndLockRow&) { },
-            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+            [] (const NRowModifications::TWriteRow&) { },
+            [] (const NRowModifications::TDeleteRow&) { },
+            [] (const NRowModifications::TWriteAndLockRow&) { },
+            [] (const NRowModifications::TVersionedWriteRow&) {
                 YT_ABORT();
             });
     }
@@ -423,14 +447,19 @@ void TTransaction::FutureModifyRows(
     std::vector<TUnversionedRow> rows;
     rows.reserve(modifications.Size());
 
+    const auto& config = Connection_->GetConfig();
+
+    bool usedAnyLocks = false;
     bool usedStrongLocks = false;
     bool usedWideLocks = false;
     for (const auto& modification : modifications) {
-        if (!std::holds_alternative<NFuture::NRowModifications::TWriteAndLockRow>(modification)) {
+        if (!std::holds_alternative<NRowModifications::TWriteAndLockRow>(modification)) {
             continue;
         }
 
-        auto mask = std::get<NFuture::NRowModifications::TWriteAndLockRow>(modification).Locks;
+        usedAnyLocks = true;
+
+        auto mask = std::get<NRowModifications::TWriteAndLockRow>(modification).Locks;
         usedWideLocks |= mask.GetSize() > TLegacyLockMask::MaxCount;
         if (usedWideLocks) {
             break;
@@ -439,15 +468,15 @@ void TTransaction::FutureModifyRows(
         for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
             usedWideLocks |= mask.Get(index) > MaxOldLockType;
             usedStrongLocks |= mask.Get(index) == ELockType::SharedStrong;
+
+            // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
+            // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
+            // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
+            if (config->DoNotDropPureExclusiveLocks) {
+                usedStrongLocks |= mask.Get(index) == ELockType::Exclusive;
+            }
         }
     }
-
-    const auto& config = Connection_->GetConfig();
-
-    // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
-    // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
-    // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
-    usedStrongLocks |= config->DoNotDropPureExclusiveLocks;
 
     if (usedStrongLocks) {
         req->Header().set_protocol_version_minor(YTRpcModifyRowsStrongLocksVersion);
@@ -458,13 +487,13 @@ void TTransaction::FutureModifyRows(
     }
 
     // NB: Should be called for every modification to keep index correspondence.
-    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks] (const TLockMask& locks) {
+    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks, usedAnyLocks] (const TLockMask& locks) {
         if (usedWideLocks) {
             ToProto(req->add_row_locks(), locks);
         } else if (usedStrongLocks) {
             YT_VERIFY(!locks.HasNewLocks());
             req->add_row_legacy_locks(locks.ToLegacyMask().GetBitmap());
-        } else {
+        } else if (usedAnyLocks) {
             TLegacyLockBitmap bitmap = 0;
             for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
                 if (locks.Get(index) == ELockType::SharedWeak) {
@@ -477,22 +506,22 @@ void TTransaction::FutureModifyRows(
 
     for (const auto& modification : modifications) {
         Visit(modification,
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteRow& modification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteRow& modification) {
                 rows.emplace_back(modification.Row);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_WRITE);
                 fillCorrespondingLock(TLockMask{});
             },
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TDeleteRow& modification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TDeleteRow& modification) {
                 rows.emplace_back(modification.Key);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_DELETE);
                 fillCorrespondingLock(TLockMask{});
             },
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteAndLockRow& writeAndLockModification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteAndLockRow& writeAndLockModification) {
                 rows.emplace_back(writeAndLockModification.Row);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_MODIFY);
                 fillCorrespondingLock(writeAndLockModification.Locks);
             },
-            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+            [] (const NRowModifications::TVersionedWriteRow&) {
                 // NB: Checked above.
                 YT_ABORT();
             });
@@ -500,7 +529,8 @@ void TTransaction::FutureModifyRows(
 
     YT_VERIFY(modifications.size() == static_cast<size_t>(req->row_legacy_read_locks_size()) ||
         modifications.size() == static_cast<size_t>(req->row_legacy_locks_size()) ||
-        modifications.size() == static_cast<size_t>(req->row_locks_size()));
+        modifications.size() == static_cast<size_t>(req->row_locks_size()) ||
+        (req->row_legacy_read_locks_size() == 0 && req->row_legacy_locks_size() == 0 && req->row_locks_size() == 0));
 
     req->Attachments() = SerializeRowset(
         nameTable,
@@ -512,8 +542,8 @@ void TTransaction::FutureModifyRows(
         ValidateActive();
         future = req->Invoke().As<void>();
     } else {
-        YT_LOG_DEBUG("Pushing a subrequest into a batch modify rows request (SubrequestAttachmentCount: 1+%v)",
-            req->Attachments().size());
+        YT_TLOG_DEBUG("Pushing a subrequest into a batch modify rows request")
+            .With("SubrequestAttachmentCount", req->Attachments().size() + 1);
 
         auto reqBody = SerializeProtoToRef(*req);
 
@@ -544,7 +574,8 @@ void TTransaction::FutureModifyRows(
         future
             .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
-                    YT_LOG_DEBUG(error, "Error sending row modifications");
+                    YT_TLOG_DEBUG("Error sending row modifications")
+                        .With(error);
                     YT_UNUSED_FUTURE(ITransaction::Abort());
                 }
             }));
@@ -571,14 +602,13 @@ TFuture<void> TTransaction::AdvanceQueueConsumer(
     // COMPAT(nadya73): Use AdvaceConsumer (not AdvanceQueueConsumer) for compatibility with old clusters.
     auto req = Proxy_.AdvanceConsumer();
 
-    YT_LOG_DEBUG(
-        "Advancing queue consumer (RequestId: %v, ConsumerPath: %v, QueuePath: %v, PartitionIndex: %v, OldOffset: %v, NewOffset: %v)",
-        req->GetRequestId(),
-        consumerPath,
-        queuePath,
-        partitionIndex,
-        oldOffset,
-        newOffset);
+    YT_TLOG_DEBUG("Advancing queue consumer")
+        .With("RequestId", req->GetRequestId())
+        .With("ConsumerPath", consumerPath)
+        .With("QueuePath", queuePath)
+        .With("PartitionIndex", partitionIndex)
+        .With("OldOffset", oldOffset)
+        .With("NewOffset", newOffset);
 
     SetTimeoutOptions(*req, options);
 
@@ -618,14 +648,13 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
 
     auto req = Proxy_.PushQueueProducer();
 
-    YT_LOG_DEBUG(
-        "Pushing queue producer (RequestId: %v, ProducerPath: %v, QueuePath: %v, SessionId: %v, Epoch: %v, RowCount: %v)",
-        req->GetRequestId(),
-        producerPath,
-        queuePath,
-        sessionId,
-        epoch,
-        serializedRows.size());
+    YT_TLOG_DEBUG("Pushing queue producer")
+        .With("RequestId", req->GetRequestId())
+        .With("ProducerPath", producerPath)
+        .With("QueuePath", queuePath)
+        .With("SessionId", sessionId)
+        .With("Epoch", epoch)
+        .With("RowCount", serializedRows.size());
 
     SetTimeoutOptions(*req, options);
     if (options.SequenceNumber) {
@@ -646,7 +675,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     ToProto(req->mutable_queue_path(), queuePath);
 
     ToProto(req->mutable_session_id(), sessionId);
-    req->set_epoch(epoch.Underlying());
+    req->set_epoch(ToProto(epoch));
 
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
@@ -683,16 +712,15 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
 
             const auto& result = resultOrError.Value();
 
-            YT_LOG_DEBUG(
-                "Pushed queue producer (RequestId: %v, ProducerPath: %v, QueuePath: %v, SessionId: %v, Epoch: %v, RowCount: %v, LastSequenceNumber: %v, SkippedRowCount: %v)",
-                requestId,
-                producerPath,
-                queuePath,
-                sessionId,
-                epoch,
-                rowCount,
-                result.LastSequenceNumber,
-                result.SkippedRowCount);
+            YT_TLOG_DEBUG("Pushed queue producer")
+                .With("RequestId", requestId)
+                .With("ProducerPath", producerPath)
+                .With("QueuePath", queuePath)
+                .With("SessionId", sessionId)
+                .With("Epoch", epoch)
+                .With("RowCount", rowCount)
+                .With("LastSequenceNumber", result.LastSequenceNumber)
+                .With("SkippedRowCount", result.SkippedRowCount);
         }));
 
     return resultFuture;
@@ -1098,7 +1126,7 @@ TFuture<void> TTransaction::DoAbort(
         return AbortPromise_.ToFuture();
     }
 
-    YT_LOG_DEBUG("Aborting transaction");
+    YT_TLOG_DEBUG("Aborting transaction");
 
     State_ = ETransactionState::Aborting;
 
@@ -1119,20 +1147,22 @@ TFuture<void> TTransaction::DoAbort(
                 auto guard = Guard(SpinLock_);
 
                 if (!AbortPromise_) {
-                    YT_LOG_DEBUG(rspOrError, "Transaction is no longer aborting, abort response ignored");
+                    YT_TLOG_DEBUG("Transaction is no longer aborting, abort response ignored")
+                        .With(rspOrError);
                     return;
                 }
 
                 TError abortError;
                 if (rspOrError.IsOK()) {
-                    YT_LOG_DEBUG("Transaction aborted");
+                    YT_TLOG_DEBUG("Transaction aborted");
                 } else if (rspOrError.FindMatching(NTransactionClient::EErrorCode::NoSuchTransaction)) {
-                    YT_LOG_DEBUG("Transaction has expired or was already aborted");
+                    YT_TLOG_DEBUG("Transaction has expired or was already aborted");
                 } else {
-                    YT_LOG_DEBUG(rspOrError, "Error aborting transaction");
+                    YT_TLOG_DEBUG("Error aborting transaction")
+                        .With(rspOrError);
                     abortError = TError("Error aborting transaction %v",
                         GetId())
-                        << rspOrError;
+                        .With(rspOrError);
                 }
 
                 if (abortError.IsOK()) {
@@ -1162,7 +1192,7 @@ TFuture<void> TTransaction::DoAbort(
 
 TFuture<void> TTransaction::SendPing()
 {
-    YT_LOG_DEBUG("Pinging transaction");
+    YT_TLOG_DEBUG("Pinging transaction");
 
     auto req = Proxy_.PingTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
@@ -1172,10 +1202,10 @@ TFuture<void> TTransaction::SendPing()
     return req->Invoke().Apply(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspPingTransactionPtr& rspOrError) {
             if (rspOrError.IsOK()) {
-                YT_LOG_DEBUG("Transaction pinged");
+                YT_TLOG_DEBUG("Transaction pinged");
             } else if (rspOrError.FindMatching(NTransactionClient::EErrorCode::NoSuchTransaction)) {
                 // Hard error.
-                YT_LOG_DEBUG("Transaction has expired or was aborted");
+                YT_TLOG_DEBUG("Transaction has expired or was aborted");
 
                 bool fireAborted = false;
                 {
@@ -1184,7 +1214,8 @@ TFuture<void> TTransaction::SendPing()
                         State_ != ETransactionState::Flushed &&
                         State_ != ETransactionState::FlushedModifications &&
                         State_ != ETransactionState::Aborted &&
-                        State_ != ETransactionState::Detached)
+                        State_ != ETransactionState::Detached &&
+                        State_ != ETransactionState::Abandoned)
                     {
                         State_ = ETransactionState::Aborted;
                         fireAborted = true;
@@ -1203,10 +1234,11 @@ TFuture<void> TTransaction::SendPing()
                 THROW_ERROR(error);
             } else {
                 // Soft error.
-                YT_LOG_DEBUG(rspOrError, "Error pinging transaction");
+                YT_TLOG_DEBUG("Error pinging transaction")
+                    .With(rspOrError);
                 THROW_ERROR_EXCEPTION("Error pinging transaction %v",
                     GetId())
-                    << rspOrError;
+                    .With(rspOrError);
             }
         }));
 }
@@ -1231,7 +1263,7 @@ void TTransaction::RunPeriodicPings()
             return;
         }
 
-        YT_LOG_DEBUG("Transaction ping scheduled");
+        YT_TLOG_DEBUG("Transaction ping scheduled");
 
         TDelayedExecutor::Submit(
             BIND(&TTransaction::RunPeriodicPings, MakeWeak(this)),
@@ -1265,7 +1297,7 @@ void TTransaction::DoValidateActive()
             NTransactionClient::EErrorCode::InvalidTransactionState,
             "Transaction %v is not active",
             GetId())
-            << TErrorAttribute("state", State_);
+            .With("state", State_);
     }
 }
 
@@ -1287,8 +1319,8 @@ TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
         return OKFuture;
     }
 
-    YT_LOG_DEBUG("Invoking a batch modify rows request (Subrequests: %v)",
-        batchRequest->part_counts_size());
+    YT_TLOG_DEBUG("Invoking a batch modify rows request")
+        .With("SubrequestCount", batchRequest->part_counts_size());
 
     return batchRequest->Invoke().As<void>();
 }
@@ -1344,7 +1376,7 @@ TFuture<void> TTransaction::FlushModifications()
         futures = FlushModifyRowsRequests();
     }
 
-    YT_LOG_DEBUG("Flushing transaction modifications");
+    YT_TLOG_DEBUG("Flushing transaction modifications");
 
     return AllSucceeded(futures)
         .Apply(BIND([this, this_ = MakeStrong(this)] (const TError& rspOrError) {
@@ -1353,15 +1385,16 @@ TFuture<void> TTransaction::FlushModifications()
                 if (rspOrError.IsOK() && State_ == ETransactionState::FlushingModifications) {
                     State_ = ETransactionState::FlushedModifications;
                 } else if (!rspOrError.IsOK()) {
-                    YT_LOG_DEBUG(rspOrError, "Error flushing transaction modifications");
+                    YT_TLOG_DEBUG("Error flushing transaction modifications")
+                        .With(rspOrError);
                     YT_UNUSED_FUTURE(DoAbort(&guard));
                     THROW_ERROR_EXCEPTION("Error flushing transaction %v modifications",
                         GetId())
-                        << rspOrError;
+                        .With(rspOrError);
                 }
             }
 
-            YT_LOG_DEBUG("Transaction modifications flushed");
+            YT_TLOG_DEBUG("Transaction modifications flushed");
 
             ModificationsFlushed_.Fire();
 

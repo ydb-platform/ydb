@@ -112,6 +112,7 @@ private:
     std::set<ui32> ColumnIdsSet;
 
 public:
+    std::optional<ui64> SchemaVersion;
     TString TaskIdentifier;
     std::shared_ptr<NOlap::TPKRangesFilter> RangesFilter;
 

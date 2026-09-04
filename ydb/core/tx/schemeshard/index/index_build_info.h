@@ -20,6 +20,13 @@ struct TIndexBuildShardStatus {
     NTableIndex::NFulltext::TDocCount FirstTokenRows = 0;
     NTableIndex::NFulltext::TDocCount LastTokenRows = 0;
 
+    TString FirstPrefix;
+    NTableIndex::NFulltext::TDocCount FirstPrefixDocCount = 0;
+    NTableIndex::NFulltext::TDocCount FirstPrefixSumDocLength = 0;
+    TString LastPrefix;
+    NTableIndex::NFulltext::TDocCount LastPrefixDocCount = 0;
+    NTableIndex::NFulltext::TDocCount LastPrefixSumDocLength = 0;
+
     NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
     Ydb::StatusIds::StatusCode UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
@@ -50,6 +57,7 @@ struct TIndexBuildShardStatus {
 };
 
 struct TValidateColumnConstraintShardStatus : TIndexBuildShardStatus {
+    using TIndexBuildShardStatus::TIndexBuildShardStatus;
     NKikimrSetColumnConstraint::EValidateStatus ValidateStatus = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
 };
 
@@ -110,6 +118,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         FulltextIndexStats = 200,
         FulltextIndexDictionary = 201,
         FulltextIndexBorders = 202,
+        // Compact rowid-mode prepass: build the transient "row-id source" table (main re-keyed by the
+        // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
+        FulltextRowIdSrc = 203,
+        FulltextIndexPrefixBorders = 204,
     };
 
     struct TColumnBuildInfo {
@@ -190,6 +202,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeInvalid;
 
     EBuildKind BuildKind = EBuildKind::BuildKindUnspecified;
+    bool IsRebuild = false;
 
     TString IndexName;
     TVector<TString> IndexColumns;
@@ -226,6 +239,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Recompute,
             Filter,
             FilterBorders,
+            RebuildDrop,    // dropping old impl tables for rebuild
+            RebuildCreate,  // creating new impl tables for rebuild
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -347,6 +362,8 @@ public:
     THashSet<TShardIdx> InProgressShards;
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
+
+    THashSet<TTxId> DependencyTxIds; // volatile set of concurrent tx(s)
 
     TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
     TMeteringStats Billed = TMeteringStatsHelper::ZeroValue();
@@ -669,6 +686,9 @@ public:
             row.template GetValueOrDefault<Schema::IndexBuild::ParentBuildId>(
                 indexInfo->ParentBuildId);
 
+        indexInfo->IsRebuild =
+            row.template GetValueOrDefault<Schema::IndexBuild::IsRebuild>(false);
+
         indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
         indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
         indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
@@ -777,6 +797,13 @@ public:
         shardStatus.FirstTokenRows = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstTokenRows>();
         shardStatus.LastToken = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastToken>();
         shardStatus.LastTokenRows = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastTokenRows>();
+
+        shardStatus.FirstPrefix = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstPrefix>();
+        shardStatus.FirstPrefixDocCount = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstPrefixDocCount>();
+        shardStatus.FirstPrefixSumDocLength = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstPrefixSumDocLength>();
+        shardStatus.LastPrefix = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastPrefix>();
+        shardStatus.LastPrefixDocCount = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastPrefixDocCount>();
+        shardStatus.LastPrefixSumDocLength = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastPrefixSumDocLength>();
     }
 
     bool IsCancellationRequested() const {
@@ -814,11 +841,25 @@ public:
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
     }
 
+    bool IsBuildFulltextPrefixedRelevance() const {
+        return IsBuildFulltextRelevance() && IndexColumns.size() > 1;
+    }
+
     bool IsBuildFulltextCompact() const {
         return BuildKind == EBuildKind::BuildFulltext && (
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+    }
+
+    // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the
+    // transient row-id source table, then the posting scan reads that (__ydb_row_id-ordered) table.
+    bool IsBuildFulltextCompactRowId() const {
+        if (!IsBuildFulltextCompact()) {
+            return false;
+        }
+        const auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+        return desc && desc->GetUseRowIdAsDocId();
     }
 
     bool IsBuildIndex() const {
@@ -880,7 +921,7 @@ public:
         return State == EState::Cancelled || State == EState::Rejected;
     }
 
-    bool IsFinished() const {
+    virtual bool IsFinished() const {
         return IsDone() || IsCancelled();
     }
 
@@ -981,7 +1022,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     };
 
     EOperationState OperationState = EOperationState::Invalid;
-    std::vector<std::string> SetNotNullColumns;
+    std::vector<TString> SetNotNullColumns;
 
     TTxId LockNullWritesTxId = TTxId();
     NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
@@ -991,25 +1032,42 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
     bool UnlockNullWritesTxDone = false;
 
+    bool NeedToCalculateValidationShards = true;
     THashMap<TShardIdx, TValidateColumnConstraintShardStatus> ValidationShards;
 
     TDeque<TShardIdx> ToValidateShards;
     THashSet<TShardIdx> InProgressValidationShards;
-    TVector<TShardIdx> DoneValidationShards;
-
-    TTxId ValidationSnapshotTxId = TTxId();
-    TStepId ValidationSnapshotStep = TStepId();
+    THashSet<TShardIdx> DoneValidationShards;
 
     constexpr static ui32 MaxInProgressValidationShards = 10;
 
     bool ValidationFailed = false;  // true if any shard found NULL values
+    bool IsCancelled = false;
+    TString CancellationReason;
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
     }
 
+    bool IsFinished() const override {
+        return IsDone();
+    }
+
+    bool IsCloseToCompletion() const {
+        return OperationState == EOperationState::Done
+            || OperationState == EOperationState::Unlocking
+            || OperationState == EOperationState::Finishing;
+    }
+
     bool IsSetColumnConstraint() const override {
         return true;
+    }
+
+    void MarkAsCancelled(TString&& reason) {
+        if (!IsCancelled) {
+            IsCancelled = true;
+            CancellationReason = std::move(reason);
+        }
     }
 };
 

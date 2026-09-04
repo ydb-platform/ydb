@@ -12,11 +12,11 @@
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
@@ -31,8 +31,8 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
+#include <yql/essentials/providers/common/config/yql_activation_groups.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
-#include <yql/essentials/providers/common/activation/yql_activation.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
 #include <yql/essentials/core/qplayer/url_lister/qplayer_url_lister_manager.h>
 
@@ -134,16 +134,57 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
 }
 
 TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
-    const auto& list = node["SqlFlags"].AsList();
+    TGatewaySQLFlags flags;
 
-    THashSet<TString> flags(list.size());
-    for (const auto& f : list) {
-        flags.insert(f.AsString());
+    for (const auto& f : node["SqlFlags"].AsList()) {
+        if (f.IsString()) {
+            flags.Set(f.AsString());
+            continue;
+        }
+
+        const auto& name = f["name"].AsString();
+
+        const auto& argList = f["args"].AsList();
+        TVector<TString> args(Reserve(argList.size()));
+        for (const auto& arg : argList) {
+            args.emplace_back(arg.AsString());
+        }
+
+        flags.Set(name, std::move(args));
     }
 
-    return {
-        .Unconditional = std::move(flags),
-    };
+    return flags;
+}
+
+void WriteEvaluationStatistics(NYson::TYsonWriter& writer, const TEvaluationStats& stats) {
+    writer.OnKeyedItem("Evaluation");
+    writer.OnBeginMap();
+
+    writer.OnKeyedItem("Count");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.Count);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CacheHits");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CacheHits);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderCalls");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CalcProviderCalls);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderDurationUs");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("sum");
+    writer.OnInt64Scalar(stats.CalcProviderDurationSum.MicroSeconds());
+    writer.OnEndMap();
+
+    writer.OnEndMap();
 }
 
 } // namespace
@@ -202,6 +243,10 @@ void TProgramFactory::UnrepeatableRandom() {
 
 void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
+}
+
+void TProgramFactory::EnableAutoUseYqlLibs() {
+    AutoUseYqlLibs_ = true;
 }
 
 void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
@@ -303,15 +348,12 @@ TProgramPtr TProgramFactory::Create(
         udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
     }
 
-    if (udfIndex) {
-        udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
-    }
-
     // make UserDataTable_ copy here
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
-                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
+                        GatewaysConfig_ ? MakeHolder<TGatewaysConfig>(*GatewaysConfig_) : nullptr,
+                        filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
                         qContext, RemoteLayersProviders_);
 }
 
@@ -337,12 +379,13 @@ TProgram::TProgram(
     TUdfIndexPackageSet::TPtr udfIndexPackageSet,
     const TFileStoragePtr& fileStorage,
     const IUrlPreprocessing::TPtr& urlPreprocessing,
-    const TGatewaysConfig* gatewaysConfig,
+    THolder<TGatewaysConfig> gatewaysConfig,
     TString filename,
     TString sourceCode,
     TString sessionId,
     const TString& runner,
     bool enableRangeComputeFor,
+    bool autoUseYqlLibs,
     IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
@@ -364,8 +407,9 @@ TProgram::TProgram(
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(std::move(udfIndexPackageSet))
     , FileStorage_(fileStorage)
+    , UrlPreprocessing_(urlPreprocessing)
     , SavedUserDataTable_(std::move(userDataTable))
-    , GatewaysConfig_(gatewaysConfig)
+    , GatewaysConfig_(std::move(gatewaysConfig))
     , Filename_(std::move(filename))
     , SourceCode_(std::move(sourceCode))
     , SourceSyntax_(ESourceSyntax::Unknown)
@@ -434,6 +478,12 @@ TProgram::TProgram(
         }
     }
 
+    for (auto& [key, block] : SavedUserDataTable_) {
+        if (autoUseYqlLibs && key.Alias().StartsWith(NYql::GetDefaultFilePrefix() + "yql_libs/")) {
+            block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
+        }
+    }
+
     UserDataStorage_ = MakeIntrusive<TUserDataStorage>(fileStorage, SavedUserDataTable_, udfResolver, udfIndex);
     if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
         modules->AttachUserData(UserDataStorage_);
@@ -456,7 +506,6 @@ TProgram::TProgram(
         if (UrlListerManager_) {
             UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
         }
-        UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanWrite() && GatewaysConfig_) {
             auto data = GatewaysConfig_->SerializeAsString();
             QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
@@ -499,6 +548,21 @@ void TProgram::SetUseTableMetaFromGraph(bool use) {
     UseTableMetaFromGraph_ = use;
 }
 
+void TProgram::SetBridgeBinaryPath(const TString& path) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    BridgeBinaryPath_ = path;
+}
+
+void TProgram::SetOperationTitle(const TString& title) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    if (title.Contains("YQL")) {
+        OperationOptions_.Title = title;
+        return;
+    }
+
+    OperationOptions_.Title = (title.empty() ? "" : title + " ") + "[Powered by YQL]";
+}
+
 TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const {
     Y_ENSURE(TypeCtx_, "TypeCtx_ is not created");
     return TypeCtx_;
@@ -511,6 +575,7 @@ TTypeAnnotationContextPtr TProgram::ProvideAnnotationContext(const TString& user
         TypeCtx_->ValidateMode = ValidateMode_;
         TypeCtx_->DisableNativeUdfSupport = DisableNativeUdfSupport_;
         TypeCtx_->UseTableMetaFromGraph = UseTableMetaFromGraph_;
+        TypeCtx_->BridgeBinaryPath = BridgeBinaryPath_;
     }
 
     return TypeCtx_;
@@ -873,8 +938,14 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -891,7 +962,7 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
 
     TIssues issues;
     auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
-        return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
     },
                                     /*typeParser=*/{}, /*typeWriter=*/{})
                    ? TProgram::TStatus::Ok
@@ -1026,7 +1097,7 @@ TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
             ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
             return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
         }
-        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, false);
+        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, /*applyAsyncChanges=*/false);
     });
 }
 
@@ -1051,7 +1122,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .AddPostTypeAnnotation()
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
                        .AddLineageOptimization(LineageStr_)
@@ -1114,7 +1185,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
                        .Build();
 
@@ -1189,7 +1260,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .AddPostTypeAnnotation()
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
                        .AddOptimizationWithLineage(EnableLineage_)
@@ -1258,7 +1329,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1318,7 +1389,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1399,7 +1470,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
     pipeline.AddOptimizationWithLineage(EnableLineage_);
@@ -1476,7 +1547,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1828,6 +1899,10 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->EvaluationStats.Count > 0) {
+        WriteEvaluationStatistics(writer, TypeCtx_->EvaluationStats);
+    }
+
     if (TypeCtx_->Modules) {
         writer.OnKeyedItem("moduleResolver");
             writer.OnBeginMap();
@@ -1966,11 +2041,11 @@ void TProgram::FinalizeIssues() {
         constexpr size_t TopCount = 10;
         auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(TopCount);
         if (!noBlockTypes.empty()) {
-            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, true));
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, /*isTypes=*/true));
         }
         auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(TopCount);
         if (!noBlockCallables.empty()) {
-            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, false));
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, /*isTypes=*/false));
         }
     }
 }
@@ -2069,6 +2144,10 @@ TString TProgram::ResultsAsString() const {
 TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& username) {
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
+    const auto activatedGroups = GatewaysConfig_
+                                     ? NCommon::ApplyActivationGroupsInplace(*GatewaysConfig_, username, Credentials_, QContext_)
+                                     : TVector<TString>{};
+
     typeAnnotationContext->LangVer = LangVer_;
     typeAnnotationContext->UseTypeDiffForConvertToError = true;
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
@@ -2107,7 +2186,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         auto dp = dpi(
             username,
             SessionId_,
-            GatewaysConfig_,
+            GatewaysConfig_.Get(),
             FunctionRegistry_,
             RandomProvider_,
             typeAnnotationContext,
@@ -2188,7 +2267,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     {
-        auto configProvider = CreateConfigProvider(*typeAnnotationContext, GatewaysConfig_, username);
+        auto configProvider = CreateConfigProvider(
+            *typeAnnotationContext,
+            GatewaysConfig_.Get(),
+            username,
+            {},
+            /*forPartialTypeCheck=*/false,
+            activatedGroups);
         typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider);
     }
 
@@ -2196,6 +2281,19 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     auto tokenResolver = BuildCompositeTokenResolver(std::move(tokenResolvers));
 
     typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
+
+    if (UdfIndex_) {
+        typeAnnotationContext->UdfResolver = NCommon::CreateUdfResolverWithIndex(
+            UdfIndex_,
+            typeAnnotationContext->UdfResolver,
+            FileStorage_,
+            UrlPreprocessing_,
+            tokenResolver);
+    }
+
+    if (QContext_) {
+        typeAnnotationContext->UdfResolver = NCommon::WrapUdfResolverWithQContext(typeAnnotationContext->UdfResolver, QContext_);
+    }
 
     if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
         urlListerManager->SetTokenResolver(std::move(tokenResolver));
@@ -2239,7 +2337,7 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
             issueCode));
     }
 
-    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, false);
+    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, /*useIssueScopes=*/false);
     InstantTransform(*compositeTransformer, ExprRoot_, *ExprCtx_);
 }
 

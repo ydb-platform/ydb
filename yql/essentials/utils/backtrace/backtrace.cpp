@@ -112,7 +112,7 @@ void SignalHandler(int signum) {
         }
 
         UnlockAllMemory();
-        DoBacktrace(&Cerr, nullptr);
+        DoBacktrace(&Cerr, /*data=*/nullptr);
     }
 
     CallCallbacks(After, signum);
@@ -181,7 +181,7 @@ void DisableBacktraceUnwinding() {
 void KikimrBackTraceFormatImpl(IOutputStream* out) {
     KikimrSymbolize = true;
     UnlockAllMemory();
-    DoBacktrace(out, nullptr);
+    DoBacktrace(out, /*data=*/nullptr);
 }
 
 void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t stackSize) {

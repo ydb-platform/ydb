@@ -8,12 +8,82 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+
+#include <util/generic/guid.h>
+#include <util/generic/serialized_enum.h>
+
+#include <cstring>
+
+#include "scalar_layout_converter_test_enums.h"
 #include "scalar_layout_converter_utils.h"
 using namespace NYql::NUdf;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
 constexpr int TestSize = 128;
+
+namespace {
+
+constexpr ui8 DecimalPrecision = 22;
+constexpr ui8 DecimalScale = 9;
+
+NKikimr::NMiniKQL::TType* MakeFixedSizeScalarType(TProgramBuilder& builder, EFixedSizeScalarType type, bool optional) {
+    NKikimr::NMiniKQL::TType* dataType = nullptr;
+    switch (type) {
+        case EFixedSizeScalarType::INT64:
+            dataType = builder.NewDataType(NUdf::EDataSlot::Int64, false);
+            break;
+        case EFixedSizeScalarType::UUID:
+            dataType = builder.NewDataType(NUdf::EDataSlot::Uuid, false);
+            break;
+        case EFixedSizeScalarType::DECIMAL:
+            dataType = builder.NewDecimalType(DecimalPrecision, DecimalScale);
+            break;
+    }
+
+    return optional ? builder.NewOptionalType(dataType) : dataType;
+}
+
+TGUID MakeTestGuid(ui8 byte) {
+    TGUID guid;
+    std::memset(&guid, byte, sizeof(guid));
+    return guid;
+}
+
+NYql::NUdf::TUnboxedValue MakeFixedSizeTestValue(EFixedSizeScalarType type, size_t index) {
+    switch (type) {
+        case EFixedSizeScalarType::INT64:
+            return NYql::NUdf::TUnboxedValuePod(static_cast<i64>(index));
+        case EFixedSizeScalarType::UUID: {
+            const auto guid = MakeTestGuid(static_cast<ui8>(index));
+            return MakeString(NUdf::TStringRef(reinterpret_cast<const char*>(&guid), sizeof(TGUID)));
+        }
+        case EFixedSizeScalarType::DECIMAL:
+            return NYql::NUdf::TUnboxedValuePod(static_cast<NYql::NDecimal::TInt128>(index));
+    }
+}
+
+void AssertFixedSizeValuesEqual(EFixedSizeScalarType type, const NYql::NUdf::TUnboxedValue& actual, const NYql::NUdf::TUnboxedValue& expected) {
+    switch (type) {
+        case EFixedSizeScalarType::INT64:
+            UNIT_ASSERT(actual.Get<i64>() == expected.Get<i64>());
+            return;
+        case EFixedSizeScalarType::UUID: {
+            const auto actualRef = actual.AsStringRef();
+            const auto expectedRef = expected.AsStringRef();
+            UNIT_ASSERT(actualRef.Size() == sizeof(TGUID));
+            UNIT_ASSERT(expectedRef.Size() == sizeof(TGUID));
+            UNIT_ASSERT(std::memcmp(actualRef.Data(), expectedRef.Data(), sizeof(TGUID)) == 0);
+            return;
+        }
+        case EFixedSizeScalarType::DECIMAL:
+            UNIT_ASSERT(actual.GetInt128() == expected.GetInt128());
+            return;
+    }
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     Y_UNIT_TEST(TestFixedSize) {
@@ -591,5 +661,118 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
                     "Bucket " << bucketIdx << ", tuple " << tupleIdx << ": payload mismatch");
             }
         }
+    }
+
+    Y_UNIT_TEST(TestFixedSizePackUnpack, EFixedSizeScalarType, EFixedSizePackMode) {
+        const auto scalarType = Arg<0>();
+        const auto packMode = Arg<1>();
+
+        TScalarLayoutConverterTestData data;
+        const auto mkqlType = MakeFixedSizeScalarType(data.PgmBuilder, scalarType, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{mkqlType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        testValues.reserve(TestSize);
+        for (size_t i = 0; i < TestSize; ++i) {
+            testValues.push_back(MakeFixedSizeTestValue(scalarType, i));
+        }
+
+        TPackResult packRes;
+        if (packMode == EFixedSizePackMode::SINGLE) {
+            for (size_t i = 0; i < TestSize; ++i) {
+                converter->Pack(testValues.data() + i, packRes);
+            }
+        } else {
+            converter->PackBatch(testValues.data(), TestSize, packRes);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, TestSize, "Expected all tuples to be packed");
+
+        for (size_t i = 0; i < TestSize; ++i) {
+            NYql::NUdf::TUnboxedValue unpacked[1];
+            converter->Unpack(packRes, i, unpacked);
+            AssertFixedSizeValuesEqual(scalarType, unpacked[0], testValues[i]);
+        }
+    }
+
+    Y_UNIT_TEST(TestFixedSizeOptional, EFixedSizeScalarType) {
+        const auto scalarType = Arg<0>();
+
+        TScalarLayoutConverterTestData data;
+        const auto mkqlType = MakeFixedSizeScalarType(data.PgmBuilder, scalarType, true);
+        TVector<NKikimr::NMiniKQL::TType*> types{mkqlType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        for (size_t i = 0; i < TestSize; ++i) {
+            if (i % 2 == 0) {
+                testValues.push_back(MakeFixedSizeTestValue(scalarType, i));
+            } else {
+                testValues.push_back(NYql::NUdf::TUnboxedValuePod());
+            }
+        }
+
+        TPackResult packRes;
+        for (size_t i = 0; i < TestSize; ++i) {
+            converter->Pack(testValues.data() + i, packRes);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, TestSize, "Expected all tuples to be packed");
+
+        for (size_t i = 0; i < TestSize; ++i) {
+            NYql::NUdf::TUnboxedValue unpacked[1];
+            converter->Unpack(packRes, i, unpacked);
+
+            const bool expectedHasValue = (i % 2 == 0);
+            UNIT_ASSERT_VALUES_EQUAL_C(unpacked[0].HasValue(), expectedHasValue,
+                "Expected the same optionality after pack/unpack");
+
+            if (expectedHasValue) {
+                AssertFixedSizeValuesEqual(scalarType, unpacked[0], testValues[i]);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+        TScalarLayoutConverterTestData data;
+
+        auto* const nullType = data.Env.GetTypeOfNullLazy();
+        TVector<NKikimr::NMiniKQL::TType*> types{nullType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        constexpr size_t testSize = 17;
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        NYql::NUdf::TUnboxedValue nullValue;
+        TPackResult packRes;
+        for (size_t i = 0; i < testSize; ++i) {
+            converter->Pack(&nullValue, packRes);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(packRes.NTuples, testSize);
+
+        const auto* layout = converter->GetTupleLayout();
+        UNIT_ASSERT_VALUES_EQUAL(layout->KeyColumnsNum, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(layout->Columns[0].DataSize, 0u);
+
+        for (size_t row = 0; row < testSize; ++row) {
+            const ui8* tuple = packRes.PackedTuples.data() + row * layout->TotalRowSize;
+            const ui8 bit = (tuple[layout->BitmaskOffset] >> 0) & 1u;
+            UNIT_ASSERT_VALUES_EQUAL_C(bit, 0u, "Null key column must be packed as NULL");
+
+            NYql::NUdf::TUnboxedValue unpacked[1];
+            converter->Unpack(packRes, row, unpacked);
+            UNIT_ASSERT_C(!unpacked[0].HasValue(), "Unpack must restore Null, not Void");
+        }
+
+        const ui8* row0 = packRes.PackedTuples.data();
+        const ui8* row1 = packRes.PackedTuples.data() + layout->TotalRowSize;
+        UNIT_ASSERT_C(
+            !layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
+            "Null keys must not compare equal");
     }
 }

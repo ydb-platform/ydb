@@ -18,7 +18,8 @@
 
 #include <util/system/hp_timer.h>
 
-#include <unordered_map>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -29,6 +30,39 @@ namespace NBalancing {
 class TBalancer;
 class TMLPBalancer;
 }
+
+struct TReceiveAttemptPartitionKey {
+    TString Consumer;
+    TString ReceiveAttemptId;
+
+    auto operator<=>(const TReceiveAttemptPartitionKey&) const = default;
+};
+
+struct TReceiveAttemptPartitionUpsert {
+    TReceiveAttemptPartitionKey Key;
+    ui32 PartitionId = 0;
+    ui64 ExpirySeconds = 0;
+};
+
+struct TReceiveAttemptPartitionDelete {
+    TReceiveAttemptPartitionKey Key;
+};
+
+struct TMLPGetPartitionPendingResponse {
+    TActorId Sender;
+    ui64 Cookie = 0;
+    ui32 PartitionId = 0;
+    ui64 TabletId = 0;
+    bool IsError = false;
+    Ydb::StatusIds::StatusCode ErrorStatus = Ydb::StatusIds::SUCCESS;
+    TString ErrorMessage;
+};
+
+struct TReceiveAttemptPartitionsWriteBatch {
+    std::vector<TMLPGetPartitionPendingResponse> Responses;
+    std::vector<TReceiveAttemptPartitionUpsert> Upserts;
+    std::vector<TReceiveAttemptPartitionDelete> Deletes;
+};
 
 class TTopicMetricsHandler;
 
@@ -67,6 +101,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     struct TTxPreInit;
     struct TTxInit;
     struct TTxWrite;
+    struct TTxWriteReceiveAttemptPartitions;
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
 
@@ -86,6 +121,16 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void EnqueuePartitionsLocationRequest(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void ProcessPartitionsLocationQueue(const TActorContext& ctx);
+    bool TryRespondPartitionsLocation(
+        const TActorId& sender,
+        const NKikimrPQ::TGetPartitionsLocation& request,
+        const TActorContext& ctx,
+        ui64 cookie);
+    bool AllPartitionPipesReady() const;
+    void SchedulePartitionsLocationWakeup(const TActorContext& ctx);
+    void SendPartitionsLocationError(const TActorId& sender, const TActorContext& ctx, ui64 cookie);
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
 
@@ -130,7 +175,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void GetStat(const TActorContext&);
     TEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
-    void AnswerWaitingRequests(const TActorContext& ctx);
 
     void BroadcastPartitionError(const TString& message, NKikimrServices::EServiceKikimr service, const TActorContext& ctx);
 
@@ -144,7 +188,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr&);
-    void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
+    void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&, const TActorContext&);
+    void Handle(TEvPQ::TEvTopicSqsActionMetrics::TPtr&, const TActorContext&);
 
     ui64 PartitionReserveSize() {
         return TopicPartitionReserveSize(TabletConfig);
@@ -157,6 +202,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void StartWatchingSubDomainPathId();
 
     void ProcessPendingMLPRequests(const TActorContext& ctx);
+    void ProcessMLPGetPartitionRequests(const TActorContext& ctx);
+    void TryStartNextReceiveAttemptPartitionsWrite(const TActorContext& ctx);
+    void OnReceiveAttemptPartitionsWriteComplete(TReceiveAttemptPartitionsWriteBatch batch, const TActorContext& ctx);
+    void SendMLPGetPartitionResponses(const std::vector<TMLPGetPartitionPendingResponse>& responses, const TActorContext& ctx);
+    void CleanupReceiveAttemptPartitions(const TActorContext& ctx);
     void UpdateActivePartitions();
 
     bool Inited;
@@ -180,14 +230,14 @@ public:
     };
 
 private:
-    std::unordered_map<ui32, TPartitionInfo> PartitionsInfo;
+    absl::flat_hash_map<ui32, TPartitionInfo> PartitionsInfo;
 
     struct TTabletInfo {
         ui64 Owner;
         ui64 Idx;
     };
 
-    std::unordered_map<ui64, TTabletInfo> TabletsInfo;
+    absl::flat_hash_map<ui64, TTabletInfo> TabletsInfo;
     ui64 MaxIdx;
 
     ui32 NextPartitionId;
@@ -214,17 +264,19 @@ private:
         TActorId PipeActor;
         TMaybe<ui64> NodeId;
         TMaybe<ui32> Generation;
+        bool Ready = false;
     };
 
-    std::unordered_map<ui64, TPipeLocation> TabletPipes;
-    std::unordered_set<ui64> PipesRequested;
+    absl::flat_hash_map<ui64, TPipeLocation> TabletPipes;
+    absl::flat_hash_set<ui64> PipesRequested;
+    ui32 ReadyPartitionTablets = 0;
 
     TDatabaseInfo DatabaseInfo;
 
     std::unique_ptr<TTopicMetricsHandler> TopicMetricsHandler;
 
     struct TStatsRequestTracker {
-        std::unordered_map<ui64, ui64> Cookies;
+        absl::flat_hash_map<ui64, ui64> Cookies;
 
         ui64 Round = 0;
         ui64 NextCookie = 0;
@@ -240,11 +292,25 @@ private:
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
 
+    static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
+    static constexpr TDuration PARTITIONS_LOCATION_WAKEUP_QUANTUM = TDuration::MilliSeconds(25);
+
+    struct TPartitionsLocationRequest {
+        TActorId Sender;
+        NKikimrPQ::TGetPartitionsLocation Record;
+        TInstant Deadline;
+        ui64 Cookie = 0;
+    };
+    std::deque<TPartitionsLocationRequest> PartitionsLocationQueue;
+    bool PartitionsLocationWakeupScheduled = false;
+
     using TMLPRequests = std::variant<
-        TEvPQ::TEvMLPGetPartitionRequest::TPtr,
         TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr
     >;
     std::deque<TMLPRequests> PendingMLPRequests;
+    std::deque<TEvPQ::TEvMLPGetPartitionRequest::TPtr> PendingMLPGetPartitionRequests;
+    std::deque<TReceiveAttemptPartitionsWriteBatch> PendingReceiveAttemptPartitionsWrites;
+    bool ReceiveAttemptPartitionsWriteInProgress = false;
 
     TActorId FindSubDomainPathIdActor;
 

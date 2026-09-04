@@ -228,7 +228,8 @@ void TCommandFederatedQueryCreateQuery::PrintResult(NYdb::NFq::TClient& client, 
 }
 
 int TCommandFederatedQueryCreateQuery::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
 
     FederatedQuery::CreateQueryRequest request;
 
@@ -387,7 +388,8 @@ void TCommandFederatedQueryListQueries::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryListQueries::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
 
     FederatedQuery::ListQueriesRequest request;
 
@@ -426,7 +428,8 @@ void TCommandFederatedQueryDescribeQuery::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryDescribeQuery::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
 
     FederatedQuery::DescribeQueryRequest request;
     request.set_query_id(QueryId);
@@ -453,7 +456,8 @@ void TCommandFederatedQueryGetQueryStatus::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryGetQueryStatus::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
 
     FederatedQuery::GetQueryStatusRequest request;
     request.set_query_id(QueryId);
@@ -524,7 +528,8 @@ void TCommandFederatedQueryModifyQuery::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryModifyQuery::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
 
     FederatedQuery::ModifyQueryRequest request;
 
@@ -694,7 +699,8 @@ void TCommandFederatedQueryDeleteQuery::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryDeleteQuery::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
 
     FederatedQuery::DeleteQueryRequest request;
     request.set_query_id(QueryId);
@@ -727,7 +733,8 @@ void TCommandFederatedQueryControlQuery::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryControlQuery::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
 
     FederatedQuery::ControlQueryRequest request;
     request.set_query_id(QueryId);
@@ -770,7 +777,8 @@ void TCommandFederatedQueryGetResultData::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryGetResultData::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::GetResultDataRequest request;
     request.set_query_id(QueryId);
     request.set_result_set_index(ResultSetIndex);
@@ -847,7 +855,8 @@ void TCommandFederatedQueryQueryListJobs::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryQueryListJobs::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ListJobsRequest request;
     request.mutable_filter()->set_query_id(QueryId);
     request.set_page_token(PageToken);
@@ -881,7 +890,8 @@ void TCommandFederatedQueryListJobs::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryListJobs::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ListJobsRequest request;
     request.set_page_token(PageToken);
     request.set_limit(Limit);
@@ -912,7 +922,8 @@ void TCommandFederatedQueryDescribeJob::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryDescribeJob::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::DescribeJobRequest request;
     request.set_job_id(JobId);
 
@@ -961,7 +972,8 @@ void TCommandFederatedQueryCreateConnectionYdb::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryCreateConnectionYdb::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::CreateConnectionRequest request;
 
     if (Name) {
@@ -1051,7 +1063,8 @@ void TCommandFederatedQueryCreateConnectionIceberg::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryCreateConnectionIceberg::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::CreateConnectionRequest request;
     auto& content = *request.mutable_content();
 
@@ -1185,7 +1198,8 @@ constexpr bool has_set_secure_v = has_set_secure<std::remove_pointer_t<T>>::valu
 
 template <typename TDataSource>
 int TCommandFederatedQueryCreateConnectionGeneric<TDataSource>::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::CreateConnectionRequest request;
 
     if (Name) {
@@ -1275,7 +1289,8 @@ void TCommandFederatedQueryCreateConnectionDataStreams::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryCreateConnectionDataStreams::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::CreateConnectionRequest request;
 
     if (Name) {
@@ -1359,7 +1374,8 @@ void TCommandFederatedQueryCreateConnectionObjectStorage::Parse(TConfig& config)
 }
 
 int TCommandFederatedQueryCreateConnectionObjectStorage::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::CreateConnectionRequest request;
 
     if (Name) {
@@ -1426,7 +1442,8 @@ void TCommandFederatedQueryCreateConnectionMonitoring::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryCreateConnectionMonitoring::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::CreateConnectionRequest request;
 
     if (Name) {
@@ -1507,7 +1524,8 @@ void TCommandFederatedQueryTestConnectionYdb::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryTestConnectionYdb::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::TestConnectionRequest request;
 
     ::FederatedQuery::YdbDatabase* const ydb = request.mutable_setting()->mutable_ydb_database();
@@ -1572,7 +1590,8 @@ void TCommandFederatedQueryTestConnectionGeneric<TDataSource>::Parse(TConfig& co
 
 template <typename TDataSource>
 int TCommandFederatedQueryTestConnectionGeneric<TDataSource>::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::TestConnectionRequest request;
 
     auto cluster = TDataSource::GetCluster(request.mutable_setting());
@@ -1637,7 +1656,8 @@ void TCommandFederatedQueryTestConnectionDataStreams::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryTestConnectionDataStreams::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::TestConnectionRequest request;
 
     ::FederatedQuery::DataStreams* const data_stream = request.mutable_setting()->mutable_data_streams();
@@ -1689,7 +1709,8 @@ void TCommandFederatedQueryTestConnectionObjectStorage::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryTestConnectionObjectStorage::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::TestConnectionRequest request;
 
     ::FederatedQuery::ObjectStorageConnection* const object_storage = request.mutable_setting()->mutable_object_storage();
@@ -1732,7 +1753,8 @@ void TCommandFederatedQueryTestConnectionMonitoring::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryTestConnectionMonitoring::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::TestConnectionRequest request;
 
     ::FederatedQuery::Monitoring* const monitoring = request.mutable_setting()->mutable_monitoring();
@@ -1777,7 +1799,8 @@ void TCommandFederatedQueryConnectionListBindings::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryConnectionListBindings::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ListBindingsRequest request;
     request.set_page_token(PageToken);
     request.set_limit(Limit);
@@ -1818,7 +1841,8 @@ void TCommandFederatedQueryListConnections::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryListConnections::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ListConnectionsRequest request;
     request.set_page_token(PageToken);
     request.set_limit(Limit);
@@ -1853,7 +1877,8 @@ void TCommandFederatedQueryDescribeConnection::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryDescribeConnection::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::DescribeConnectionRequest request;
     request.set_connection_id(ConnectionId);
 
@@ -1903,7 +1928,8 @@ void TCommandFederatedQueryModifyConnectionYdb::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryModifyConnectionYdb::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ModifyConnectionRequest request;
 
     if (ConnectionId) {
@@ -2001,7 +2027,8 @@ void TCommandFederatedQueryModifyConnectionGeneric<TDataSource>::Parse(TConfig& 
 
 template <typename TDataSource>
 int TCommandFederatedQueryModifyConnectionGeneric<TDataSource>::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ModifyConnectionRequest request;
 
     if (ConnectionId) {
@@ -2099,7 +2126,8 @@ void TCommandFederatedQueryModifyConnectionDataStreams::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryModifyConnectionDataStreams::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ModifyConnectionRequest request;
 
     if (ConnectionId) {
@@ -2184,7 +2212,8 @@ void TCommandFederatedQueryModifyConnectionObjectStorage::Parse(TConfig& config)
 }
 
 int TCommandFederatedQueryModifyConnectionObjectStorage::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ModifyConnectionRequest request;
 
     if (ConnectionId) {
@@ -2260,7 +2289,8 @@ void TCommandFederatedQueryModifyConnectionMonitoring::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryModifyConnectionMonitoring::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ModifyConnectionRequest request;
 
     if (ConnectionId) {
@@ -2329,7 +2359,8 @@ void TCommandFederatedQueryDeleteConnection::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryDeleteConnection::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::DeleteConnectionRequest request;
     request.set_connection_id(ConnectionId);
     request.set_previous_revision(PreviousRevision);
@@ -2361,7 +2392,8 @@ void TCommandFederatedQueryCreateBinding::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryCreateBinding::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::CreateBindingRequest request;
 
     if (JsonFile) {
@@ -2414,7 +2446,8 @@ void TCommandFederatedQueryListBindings::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryListBindings::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ListBindingsRequest request;
     request.set_page_token(PageToken);
     request.set_limit(Limit);
@@ -2449,7 +2482,8 @@ void TCommandFederatedQueryDescribeBinding::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryDescribeBinding::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::DescribeBindingRequest request;
     request.set_binding_id(BindingId);
 
@@ -2481,7 +2515,8 @@ void TCommandFederatedQueryModifyBinding::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryModifyBinding::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::ModifyBindingRequest request;
 
     if (JsonFile) {
@@ -2541,7 +2576,8 @@ void TCommandFederatedQueryDeleteBinding::Parse(TConfig& config) {
 }
 
 int TCommandFederatedQueryDeleteBinding::Run(TConfig& config) {
-    NFq::TClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NFq::TClient client(driver);
     FederatedQuery::DeleteBindingRequest request;
     request.set_binding_id(BindingId);
     request.set_previous_revision(PreviousRevision);

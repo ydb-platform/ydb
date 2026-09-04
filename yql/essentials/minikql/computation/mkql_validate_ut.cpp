@@ -716,8 +716,8 @@ void ProcessSimpleUdfFunc(const char* udfFuncName, BuildArgsFunc argsFunc = Buil
         TStringBuf typeConfig;
         auto runtimeSettings = MakeRuntimeSettings();
         TStatus status = functionRegistry->FindFunctionTypeInfo(
-            NYql::UnknownLangVersion, *runtimeSettings, env, typeInfoHelper, nullptr, udfFuncName,
-            userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
+            NYql::UnknownLangVersion, *runtimeSettings, env, typeInfoHelper, /*countersProvider=*/nullptr, udfFuncName,
+            userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, &funcInfo);
         MKQL_ENSURE(status.IsOk(), status.GetError());
         auto type = funcInfo.FunctionType->GetReturnType();
         fullValidateFunc(value, builder, type);
@@ -771,8 +771,8 @@ std::vector<TRuntimeNode> MakeCallableInArgs(ui32 testVal, TProgramBuilder& pgmB
     NUdf::ITypeInfoHelper::TPtr typeInfoHelper(new TTypeInfoHelper);
     auto runtimeSettings = MakeRuntimeSettings();
     TStatus status = functionRegistry.FindFunctionTypeInfo(
-        NYql::UnknownLangVersion, *runtimeSettings, pgmBuilder.GetTypeEnvironment(), typeInfoHelper, nullptr,
-        udfFuncName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
+        NYql::UnknownLangVersion, *runtimeSettings, pgmBuilder.GetTypeEnvironment(), typeInfoHelper, /*countersProvider=*/nullptr,
+        udfFuncName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
     auto callable = pgmBuilder.Udf(udfFuncName);
     return std::vector<TRuntimeNode>{callable, NKikimr::NMiniKQL::NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(testVal))};
@@ -1110,7 +1110,7 @@ void ValidateDictOfPersonStructFunc(const NUdf::TUnboxedValuePod& value, ui32 lo
     NUdf::TUnboxedValue payload;
     for (ui32 index = 0; index < broken_index && dictIter.NextPair(key, payload); ++index) {
         UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), index);
-        auto person = payload;
+        const auto& person = payload;
         auto firstName = person.GetElement(NUdf::TPersonStructWithOptList::MetaIndexes[0]);
         UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), LIST_OF_STRUCT_PERSON[index].FirstName);
         auto lastName = person.GetElement(NUdf::TPersonStructWithOptList::MetaIndexes[1]);
@@ -1180,7 +1180,7 @@ Y_UNIT_TEST(TestUdfResultCheckDictOfPerson) {
         NUdf::TUnboxedValue payload;
         for (ui32 index = 0; dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MakeDictDigiT2Person()[index].first);
-            auto person = payload;
+            const auto& person = payload;
             auto firstName = person.GetElement(NUdf::TPersonStruct::MetaIndexes[0]);
             UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->FirstName);
             auto lastName = person.GetElement(NUdf::TPersonStruct::MetaIndexes[1]);
@@ -1198,7 +1198,7 @@ Y_UNIT_TEST(TestUdfResultCheckDictOfPersonBroken) {
         NUdf::TUnboxedValue payload;
         for (ui32 index = 0; index < DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX && dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MakeDictDigiT2PersonBroken()[index].first);
-            auto person = payload;
+            const auto& person = payload;
             auto firstName = person.GetElement(NUdf::TPersonStruct::MetaIndexes[0]);
             UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->FirstName);
             auto lastName = person.GetElement(NUdf::TPersonStruct::MetaIndexes[1]);

@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/statistics/ut_common
     ydb/library/yql/udfs/statistics_internal
     ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/operation
     ydb/core/kqp
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy

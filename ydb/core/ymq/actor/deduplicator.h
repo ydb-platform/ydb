@@ -53,6 +53,12 @@ public:
             0 // dlq tables format
         );
 
+        // Shared tables (TablesFormat == 1) store deduplication data for all queues in
+        // a single table keyed by (QueueIdNumberHash, QueueIdNumber, DedupId). Per-queue
+        // tables (TablesFormat == 0) have no QueueIdNumber* columns, so they must be
+        // queried by DedupId only.
+        const bool sharedTables = Settings_.TablesFormat == 1;
+
         TStringBuilder declareIds;
         TStringBuilder listIds;
         for (size_t i = 0; i < messageIds.size(); ++i) {
@@ -63,12 +69,14 @@ public:
             }
             listIds << "$DeduplicationId" << i;
         }
-    
-        TString query = Sprintf(R"__(
+
+        TString query;
+        if (sharedTables) {
+            query = Sprintf(R"__(
             DECLARE $QueueIdNumber as Uint64;
             DECLARE $QueueIdNumberHash as Uint64;
             %s
-    
+
             SELECT
                 DedupId,
                 MessageId,
@@ -77,23 +85,38 @@ public:
             WHERE QueueIdNumberHash = $QueueIdNumberHash
               AND QueueIdNumber = $QueueIdNumber
               AND DedupId IN (%s);
-    
+
         )__", declareIds.c_str(), queryMaker.GetQueueTablesFolder().c_str(), listIds.c_str());
+        } else {
+            query = Sprintf(R"__(
+            %s
+
+            SELECT
+                DedupId,
+                MessageId,
+                Offset
+            FROM `%s/Deduplication`
+            WHERE DedupId IN (%s);
+
+        )__", declareIds.c_str(), queryMaker.GetQueueTablesFolder().c_str(), listIds.c_str());
+        }
 
         RLOG_SQS_DEBUG(TLogQueueName(Settings_.UserName, Settings_.QueueName, -1) << " Query: " << query);
-    
+
         auto builder = NYdb::TParamsBuilder();
-        builder.AddParam("$QueueIdNumberHash")
-                .Uint64(GetKeysHash(Settings_.QueueVersion))
-                .Build();
-        builder.AddParam("$QueueIdNumber")
-                .Uint64(Settings_.QueueVersion)
-                .Build();
+        if (sharedTables) {
+            builder.AddParam("$QueueIdNumberHash")
+                    .Uint64(GetKeysHash(Settings_.QueueVersion))
+                    .Build();
+            builder.AddParam("$QueueIdNumber")
+                    .Uint64(Settings_.QueueVersion)
+                    .Build();
+        }
 
         for (size_t i = 0; i < messageIds.size(); ++i) {
             builder.AddParam(TStringBuilder() << "$DeduplicationId" << i).String(messageIds[i]).Build();
         }
-    
+
         auto params = builder.Build();
 
         RunYqlQuery(query, std::move(params), true, TDuration::Zero(), TActivationContext::AsActorContext());

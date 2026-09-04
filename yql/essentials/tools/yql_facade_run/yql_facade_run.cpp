@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
@@ -44,7 +45,7 @@
 #include <yql/essentials/sql/v1/ide/completion/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/format/check/check_format.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -130,8 +131,7 @@ private:
 
 class TPeepHolePipelineConfigurator: public NYql::IPipelineConfigurator {
 public:
-    TPeepHolePipelineConfigurator() {
-    }
+    TPeepHolePipelineConfigurator() = default;
 
     void AfterCreate(NYql::TTransformationPipeline* pipeline) const final {
         Y_UNUSED(pipeline);
@@ -151,11 +151,9 @@ public:
 
 namespace NYql {
 
-TFacadeRunOptions::TFacadeRunOptions() {
-}
+TFacadeRunOptions::TFacadeRunOptions() = default;
 
-TFacadeRunOptions::~TFacadeRunOptions() {
-}
+TFacadeRunOptions::~TFacadeRunOptions() = default;
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
@@ -203,6 +201,8 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             }
         }
     }
+
+    THashSet<TString> sqlFlags;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
@@ -270,10 +270,11 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").RequiredArgument("DIR").Handler1T<TString>([this](const TString& dir) {
         NKikimr::NMiniKQL::FindUdfsInDir(dir, &UdfsPaths);
     });
-    opts.AddLongOption("udf-resolver", "Path to udf-resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
-    opts.AddLongOption("udf-resolver-log", "Path to udf resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
-    opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
-    opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf-resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
+    opts.AddLongOption("udf-resolver", "Path to udf_resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
+    opts.AddLongOption("udf-resolver-log", "Path to udf_resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
+    opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf_resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
+    opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf_resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
+    opts.AddLongOption("udf-bridge", "Path to udf_bridge").Optional().RequiredArgument("PATH").StoreResult(&UdfBridgePath);
 
     opts.AddLongOption("parse-only", "Parse program and exit").NoArgument().StoreValue(&Mode, ERunMode::Parse);
     opts.AddLongOption("compile-only", "Compile program and exit").NoArgument().StoreValue(&Mode, ERunMode::Compile);
@@ -359,9 +360,10 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("full-stat", "Output full execution statistics").Optional().NoArgument().SetFlag(&FullStatistics);
     opts.AddLongOption("diagnostics", "Output diagnostics").Optional().NoArgument().SetFlag(&PrintDiagnostics);
 
-    opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&SqlFlags, ',');
+    opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
     opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").NoArgument().SetFlag(&AnsiLexer);
+    opts.AddLongOption("auto-use-yql-libs", "Implicitly mark yql_libs/* files as libraries").NoArgument().SetFlag(&AutoUseYqlLibs);
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument().SetFlag(&AssumeYdbOnClusterWithSlash);
 
     opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument().SetFlag(&WithFinalIssues);
@@ -508,15 +510,21 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    if (QPlayerContext.CanRead()) {
-        auto sqlFlags = SQLFlagsFromQContext(QPlayerContext);
-        if (GatewaysPatch) {
-            // Gateways Patch is used for experimental features
-            sqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysPatch));
+    StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    SyncWithStaticGateways(*StaticGatewaysConfig, *GatewaysConfig);
+
+    {
+        TGatewaySQLFlags gatewaySqlFlags;
+        for (const auto& flag : sqlFlags) {
+            gatewaySqlFlags.Set(flag);
         }
-        sqlFlags.CollectAllTo(SqlFlags);
-    } else if (GatewaysConfig) {
-        TGatewaySQLFlags::FromTesting(*GatewaysConfig).CollectAllTo(SqlFlags);
+        if (QPlayerContext.CanRead()) {
+            gatewaySqlFlags.ExtendWith(SQLFlagsFromQContext(QPlayerContext));
+        }
+        if (GatewaysConfig) {
+            gatewaySqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysConfig));
+        }
+        SqlFlags = std::move(gatewaySqlFlags).ToMap();
     }
 
     if (!FsConfig) {
@@ -543,8 +551,7 @@ TFacadeRunner::TFacadeRunner(TString name)
 {
 }
 
-TFacadeRunner::~TFacadeRunner() {
-}
+TFacadeRunner::~TFacadeRunner() = default;
 
 TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegistry() {
     return FuncRegistry_;
@@ -592,19 +599,29 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     }
 
     auto funcRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace,
-                                                                  NKikimr::NMiniKQL::CreateBuiltinRegistry(), true, RunOptions_.UdfsPaths)
+                                                                  NKikimr::NMiniKQL::CreateBuiltinRegistry(), /*allowUdfPatch=*/true, RunOptions_.UdfsPaths)
                             ->Clone();
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     FuncRegistry_ = funcRegistry;
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
-        /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities);
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
-        /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities);
+    NSQLTranslation::TTranslationSettings settings;
+    NSQLTranslation::ParseTranslationSettings(RunOptions_.SqlFlags, settings);
+
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities,
+            /*isAmbiguityDebugging=*/false,
+            /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities,
+            /*isAmbiguityDebugging=*/false,
+            /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+    };
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -615,6 +632,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     if (RunOptions_.PgSupport) {
         ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     }
+
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
     if (RunOptions_.TestLexers ||
@@ -649,6 +667,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
                 settings.ClusterMapping = clusters;
                 settings.SyntaxVersion = 1;
                 settings.AlwaysAllowExports = true;
+                settings.MaxParseTreeDepth = NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH;
 
                 auto ast = NSQLTranslationV1::SqlToYql(lexers, parsers, query, settings);
                 if (!ast.IsOk()) {
@@ -733,7 +752,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         if (EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
             THoldingFileStorage storage(FileStorage_);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << RunOptions_.UdfsPaths.size() << " udfs ...");
-            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
+            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, /*isTrusted=*/false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done.");
         }
 
@@ -746,7 +765,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     } else {
         udfResolver = FileStorage_ && RunOptions_.UdfResolverPath
                           ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {})
-                          : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, true);
+                          : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, /*useFakeMD5=*/true);
         if (RunOptions_.UdfResolverLog) {
             udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
         }
@@ -781,6 +800,10 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     factory.SetGatewaysConfig(RunOptions_.GatewaysConfig.Get());
     factory.SetCredentials(RunOptions_.Credentials);
     factory.EnableRangeComputeFor();
+
+    if (RunOptions_.AutoUseYqlLibs) {
+        factory.EnableAutoUseYqlLibs();
+    }
 
     if (!urlListers.empty()) {
         factory.SetUrlListerManager(MakeUrlListerManager(urlListers));
@@ -819,6 +842,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
     program->SetUseTableMetaFromGraph(RunOptions_.UseMetaFromGrpah);
     program->SetValidateOptions(RunOptions_.ValidateMode);
+    program->SetBridgeBinaryPath(RunOptions_.UdfBridgePath);
     if (RunOptions_.EnableLineage) {
         program->SetEnableLineage();
     }
@@ -842,7 +866,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         settings.Arena = &arena;
         settings.PgParser = EProgramType::Pg == RunOptions_.ProgramType;
         settings.ClusterMapping = ClusterMapping_;
-        settings.Flags = RunOptions_.SqlFlags;
+        ParseTranslationSettings(RunOptions_.SqlFlags, settings);
         settings.SyntaxVersion = RunOptions_.SyntaxVersion;
         settings.AnsiLexer = RunOptions_.AnsiLexer;
         settings.TestAntlr4 = RunOptions_.TestAntlr4;
@@ -889,9 +913,13 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
             NSQLTranslationV1::TParsers parsers = {
                 .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
-                    /*isAmbiguityError=*/true),
+                    /*isAmbiguityError=*/true,
+                    /*isAmbiguityDebugging=*/false,
+                    /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
                 .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
-                    /*isAmbiguityError=*/true),
+                    /*isAmbiguityError=*/true,
+                    /*isAmbiguityDebugging=*/false,
+                    /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
             };
 
             NSQLTranslation::TTranslators translators(
@@ -947,7 +975,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
 
     if (RunOptions_.TraceOptStream) {
-        program->Print(RunOptions_.TraceOptStream, nullptr);
+        program->Print(RunOptions_.TraceOptStream, /*planOut=*/nullptr);
     }
     if (fail) {
         return -1;
@@ -955,7 +983,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
     if (ERunMode::Compile == RunOptions_.Mode) {
         if (RunOptions_.ExprStream) {
-            auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), NYql::TExprAnnotationFlags::None, true);
+            auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), NYql::TExprAnnotationFlags::None, /*refAtoms=*/true);
             baseAst.Root->PrettyPrintTo(*RunOptions_.ExprStream, PRETTY_FLAGS);
         }
 
@@ -973,7 +1001,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     TProgram::TStatus status = DoRunProgram(program);
 
     if (ERunMode::Peephole == RunOptions_.Mode && RunOptions_.ExprStream && program->ExprRoot()) {
-        auto ast = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), RunOptions_.WithTypes ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, true);
+        auto ast = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), RunOptions_.WithTypes ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, /*refAtoms=*/true);
         ui32 prettyFlags = TAstPrintFlags::ShortQuote;
         if (!RunOptions_.WithTypes) {
             prettyFlags |= TAstPrintFlags::PerLine;
@@ -992,7 +1020,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     program->PrintErrorsTo(*RunOptions_.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (RunOptions_.TraceOptStream) {
-            program->Print(RunOptions_.TraceOptStream, nullptr);
+            program->Print(RunOptions_.TraceOptStream, /*planOut=*/nullptr);
         }
         return -1;
     }

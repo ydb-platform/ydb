@@ -2,7 +2,11 @@
 
 namespace NKikimr {
 namespace NKqp {
-    
+
+bool TInlineCBOTreeRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::CBOTree;
+}
+
 /**
  * Convert unoptimized CBOTrees back into normal operators
  */

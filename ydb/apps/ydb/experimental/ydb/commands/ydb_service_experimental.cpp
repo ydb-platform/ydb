@@ -2,6 +2,7 @@
 #include "generate.h"
 #include "ydb_service_experimental.h"
 #include "ydb_sql.h"
+#include "ydb_topic_deferred_publish.h"
 
 #include <memory>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
@@ -9,6 +10,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -39,6 +41,8 @@ TCommandExperimental::TCommandExperimental()
     AddCommand(std::make_unique<TCommandJson2Svg>());
     AddCommand(std::make_unique<TCommandSqlExperimental>());
     AddCommand(std::make_unique<TCommandSqlOperation>());
+    AddCommand(std::make_unique<TCommandDeleteSession>());
+    AddCommand(std::make_unique<TCommandExperimentalTopic>());
 }
 
 TCommandStreamQuery::TCommandStreamQuery()
@@ -119,7 +123,8 @@ int TCommandStreamQuery::Run(TConfig& config) {
         Query = TFileInput(FileName).ReadAll();
     }
 
-    NTable::TTableClient db(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient db(driver);
     NTable::TStreamExecScanQuerySettings settings;
 
     if (ProfileFileName) {
@@ -197,6 +202,34 @@ int TCommandGetConnection::Run(TConfig& config) {
             Cout << "  password: " << ReplaceWithAsterisks(TString{config.StaticCredentials.Password}) << Endl;
         }
     }
+    return EXIT_SUCCESS;
+}
+
+TCommandDeleteSession::TCommandDeleteSession()
+    : TYdbSimpleCommand("delete-session", {}, "Delete query session")
+{
+}
+
+void TCommandDeleteSession::Config(TConfig& config) {
+    TYdbSimpleCommand::Config(config);
+
+    config.SetFreeArgsNum(0);
+
+    config.Opts->AddLongOption("id", "Session ID to delete")
+        .Required()
+        .RequiredArgument("ID")
+        .StoreResult(&SessionId);
+}
+
+int TCommandDeleteSession::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    NQuery::TQueryClient queryClient(driver);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
+        queryClient.DeleteSession(
+            SessionId,
+            FillSettings(NQuery::TDeleteSessionSettings())
+        ).GetValueSync()
+    );
     return EXIT_SUCCESS;
 }
 
@@ -360,8 +393,8 @@ void TCommandExplain::DotPrintPlan(IOutputStream* out, const TString& planJson) 
 }
 
 void TCommandExplain::SvgPrintPlan(IOutputStream* out, const TString& planJson) {
-    TPlanVisualizer planviz;
-    planviz.LoadPlans(planJson);
+    NPlan2Svg::TPlanVisualizer planviz;
+    planviz.LoadPlansSafe(planJson);
     *out << planviz.PrintSvgSafe();
 }
 
@@ -372,7 +405,8 @@ int TCommandExplain::Run(TConfig& config) {
     TString ast;
     std::optional<NTable::TQueryStats> stats;
     if (QueryType == "scan") {
-        NTable::TTableClient client(CreateDriver(config));
+        auto driver = CreateDriver(config);
+        NTable::TTableClient client(driver);
         NTable::TStreamExecScanQuerySettings settings;
 
         if (Analyze) {
@@ -406,10 +440,11 @@ int TCommandExplain::Run(TConfig& config) {
         }
 
     } else if (QueryType == "data" && Analyze) {
+        auto driver = CreateDriver(config);
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
 
-        auto result = GetSession(config).ExecuteDataQuery(
+        auto result = GetSession(driver).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
             settings
@@ -422,7 +457,8 @@ int TCommandExplain::Run(TConfig& config) {
             ast = proto.query_ast();
         }
     } else if (QueryType == "data" && !Analyze) {
-        NTable::TExplainQueryResult result = GetSession(config).ExplainDataQuery(
+        auto driver = CreateDriver(config);
+        NTable::TExplainQueryResult result = GetSession(driver).ExplainDataQuery(
             Query,
             FillSettings(NTable::TExplainDataQuerySettings())
         ).GetValueSync();
@@ -531,7 +567,8 @@ int TCommandGenerateNumbers::Run(TConfig& config) {
     settings.RowsPerRequest(RowsPerRequest);
     settings.Threads(Threads);
 
-    TGenerateClient client(CreateDriver(config), config);
+    auto driver = CreateDriver(config);
+    TGenerateClient client(driver, config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Generate(Path, settings));
 
     return EXIT_SUCCESS;
@@ -554,7 +591,7 @@ int TCommandJson2Svg::Run(TConfig&) {
         planJson = Cin.ReadAll();
     }
 
-    TPlanVisualizer planviz;
+    NPlan2Svg::TPlanVisualizer planviz;
 
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue jsonNode;
@@ -565,7 +602,7 @@ int TCommandJson2Svg::Run(TConfig&) {
             topNode = jsonNode.GetValueByPath("plan.Plan");
         }
         if (topNode) {
-            planviz.LoadPlans(*topNode);
+            planviz.LoadPlansSafe(*topNode);
         }
     }
 

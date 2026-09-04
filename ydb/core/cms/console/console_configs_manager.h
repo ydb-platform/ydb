@@ -18,6 +18,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -96,6 +97,7 @@ public:
 
     void ReplaceDatabaseConfigMetadata(const TString &config, bool force, TUpdateDatabaseConfigOpContext& opCtx);
     void ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx);
+    bool IsDatabaseConfigSelectorsAllowed(const TString& database) const;
 
     void SendInReply(const TActorId& sender, const TActorId& icSession, std::unique_ptr<IEventBase> ev, ui64 cookie = 0);
 
@@ -227,7 +229,7 @@ private:
         };
 
         constexpr bool HasBypassAuth = std::is_same_v<
-            std::decay_t<T>, 
+            std::decay_t<T>,
             typename TEvConsole::TEvGetAllConfigsRequest::TPtr
         > || std::is_same_v<
             std::decay_t<T>,
@@ -306,7 +308,7 @@ private:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
-            break; 
+            break;
         }
     }
 

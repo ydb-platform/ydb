@@ -1,4 +1,3 @@
-/* postgres can not */
 use plato;
 
 insert into @f1 select * from Input order by key || "1";

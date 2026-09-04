@@ -100,6 +100,9 @@ public:
     // Move endpoint to the end
     void PessimizeEndpoint(const std::string& endpoint);
 
+    // Move all endpoints of a certain node to the end
+    void PessimizeNode(const std::uint64_t nodeId);
+
     // Returns % of pessimized endpoints
     int GetPessimizationRatio() const;
 
@@ -113,6 +116,9 @@ public:
 
     class TObjRegistry;
 private:
+    // Move endpoint to the end
+    bool PessimizeEndpointUnlocked(const std::string& endpoint);
+
     using TTaggedObjRegistry = std::unordered_map<const void*, std::shared_ptr<TObjRegistry>>;
 
     struct TKnownEndpoint {

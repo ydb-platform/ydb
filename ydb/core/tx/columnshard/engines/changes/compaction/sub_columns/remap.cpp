@@ -1,5 +1,7 @@
 #include "remap.h"
 
+#include <ydb/core/formats/arrow/accessor/sub_columns/types.h>
+
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
@@ -17,7 +19,8 @@ TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
         }
         builder.Add(i.first, statsByKeyIndex[i.second].GetRecordsCount(), statsByKeyIndex[i.second].GetDataSize(),
             settings.IsSparsed(statsByKeyIndex[i.second].GetRecordsCount(), recordsCount) ? NArrow::NAccessor::IChunkedArray::EType::SparsedArray
-                                                                                          : NArrow::NAccessor::IChunkedArray::EType::Array);
+                                                                                          : NArrow::NAccessor::IChunkedArray::EType::Array,
+            NArrow::NAccessor::NSubColumns::OthersExplicitBinaryJson);
         remap[i.second] = idx++;
     }
     return TOthersData::TFinishContext(builder.Finish(), remap);

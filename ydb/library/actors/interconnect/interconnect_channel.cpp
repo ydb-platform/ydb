@@ -19,7 +19,7 @@ static void AddFakeCredRecord(NActorsInterconnect::TRdmaCreds& creds) noexcept {
     // fixed64, fixed32 - any value
     cred->SetAddress(0);
     cred->SetRkey(12345);
-    // uint64 - protobuf uses VLC - max possible value 
+    // uint64 - protobuf uses VLC - max possible value
     cred->SetSize(Max<ui64>());
 }
 
@@ -62,20 +62,19 @@ namespace NActors {
                         auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
                         if (memReg.Empty()) {
                             if (NActors::TlsActivationContext) {
-                                LOG_WARN_S(*NActors::TlsActivationContext, NActorsServices::INTERCONNECT_SESSION,
-                                    TStringBuilder() << "IsRdmaSectionLayoutConsistentWithData: RDMA preflight failed,"
-                                        << " eventType# " << event.Descr.Type
-                                        << " eventSerializedSize# " << event.EventSerializedSize
-                                        << " bufferSize# " << event.Buffer->GetSize()
-                                        << " sectionIndex# " << sectionIndex
-                                        << " sectionSize# " << section.Size
-                                        << " bytesLeft# " << bytesLeft
-                                        << " chunkIndex# " << chunkIndex
-                                        << " chunkOffset# " << offset
-                                        << " chunkSize# " << chunkSize
-                                        << " chunkBufSize# " << buf.GetSize()
-                                        << " rdmaDeviceIndex# " << rdmaDeviceIndex
-                                        << " sections# " << SerializeEventSections(event.Buffer->GetSerializationInfo()));
+                                YDB_LOG_WARN_COMP(NActorsServices::INTERCONNECT_SESSION, "IsRdmaSectionLayoutConsistentWithData: RDMA preflight failed",
+                                    {"eventType", event.Descr.Type},
+                                    {"eventSerializedSize", event.EventSerializedSize},
+                                    {"bufferSize", event.Buffer->GetSize()},
+                                    {"sectionIndex", sectionIndex},
+                                    {"sectionSize", section.Size},
+                                    {"bytesLeft", bytesLeft},
+                                    {"chunkIndex", chunkIndex},
+                                    {"chunkOffset", offset},
+                                    {"chunkSize", chunkSize},
+                                    {"chunkBufSize", buf.GetSize()},
+                                    {"rdmaDeviceIndex", rdmaDeviceIndex},
+                                    {"sections", SerializeEventSections(event.Buffer->GetSerializationInfo())});
                             }
                             return false;
                         }
@@ -103,8 +102,9 @@ namespace NActors {
         event.Span.EndOk();
 
         Y_ABORT_UNLESS(SerializationInfo);
-        const ui32 flags = (event.Descr.Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession)) |
-            (SerializationInfo->IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
+        const ui32 flags = (event.Descr.Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession))
+            | (SerializationInfo->IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0)
+            | event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums;
 
         // prepare descriptor record
         TEventDescr2 descr{
@@ -138,7 +138,8 @@ namespace NActors {
     }
 
     void TEventOutputChannel::DropConfirmed(ui64 confirm, TEventHolderPool& pool) {
-        LOG_DEBUG_IC_SESSION("ICOCH98", "Dropping confirmed messages");
+        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Dropping confirmed messages",
+            {"marker", "ICOCH98"});
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
             pool.Release(NotYetConfirmed, it++);
         }
@@ -173,7 +174,7 @@ namespace NActors {
                         State = EState::BODY;
                         IEventBase *base = event.Event.Get();
                         if (event.EventSerializedSize) {
-                            Chunker.SetSerializingEvent(base);
+                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true, /*withCord=*/ false);
                         }
                         SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
@@ -196,7 +197,7 @@ namespace NActors {
                         for (const auto& section : SerializationInfo->Sections) {
                             hasRdmaSections |= section.IsRdmaCapable;
                         }
-                        if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdma && RdmaMemPool && rdmaDeviceIndex >= 0) {
+                        if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdmaRead && RdmaMemPool && rdmaDeviceIndex >= 0) {
                             if (SerializeEventRdma(event)) {
                                 SerializationInfo = &event.Buffer->GetSerializationInfo();
                                 UseRdmaForCurrentEvent = IsRdmaSectionLayoutConsistentWithData(event, rdmaDeviceIndex);
@@ -288,13 +289,24 @@ namespace NActors {
     }
 
     template<bool External>
-    bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized) {
-        auto addChunk = [&](const void *data, size_t len, bool allowCopy) {
+    bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool disableChecksums, size_t *bytesSerialized) {
+        const bool useRdmaForMainChannelPacket = !External && task.UsePreallocatedInternalStream;
+        auto addChunk = [&](const void *data, size_t len, bool allowCopy, const NInterconnect::NRdma::TMemRegion* memRegion = nullptr) {
             event.UpdateChecksum(data, len);
-            if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
-                task.Write<External>(data, len);
+            if (useRdmaForMainChannelPacket) {
+                if (memRegion) {
+                    task.AppendRdma(data, len, memRegion, disableChecksums);
+                } else if (allowCopy) {
+                    task.Write<External>(data, len);
+                } else {
+                    task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                }
             } else {
-                task.Append<External>(data, len, &event.ZcTransferId);
+                if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
+                    task.Write<External>(data, len);
+                } else {
+                    task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                }
             }
             *bytesSerialized += len;
             Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
@@ -309,12 +321,22 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
+                Y_ABORT_UNLESS(event.EventActuallySerialized <= MaxSerializedEventSize);
+                const size_t limitRemain = MaxSerializedEventSize - event.EventActuallySerialized;
+                if (!limitRemain) {
+                    throw TExSerializedEventTooLarge(event.Descr.Type);
+                }
+
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>()
+                    .SubSpan(0, Min(PartLenRemain, limitRemain));
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(buffer, size, false);
+                const auto aliasedMode = useRdmaForMainChannelPacket
+                    ? TCoroutineChunkSerializer::EAliasedMode::CopyToBuffer
+                    : TCoroutineChunkSerializer::EAliasedMode::PassThrough;
+                for (const auto& chunk : Chunker.FeedBuf(out.data(), out.size(), aliasedMode)) {
+                    addChunk(chunk.Buf, chunk.Size, false, chunk.MemRegion);
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {
@@ -325,7 +347,11 @@ namespace NActors {
             while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize(), PartLenRemain)) {
                 const char *obuf = Iter.ContiguousData();
-                addChunk(obuf, numb, true);
+                NInterconnect::NRdma::TMemRegionSlice memRegion;
+                if (useRdmaForMainChannelPacket) {
+                    memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(Iter.GetChunk());
+                }
+                addChunk(obuf, numb, true, memRegion.GetMemRegion());
                 Iter += numb;
             }
             complete = !Iter.Valid();
@@ -360,10 +386,10 @@ namespace NActors {
                 } else {
                     Y_ABORT_UNLESS(SectionIndex < sections.size());
                     IsPartInline = sections[SectionIndex].IsInline;
-                    IsPartRdma = sections[SectionIndex].IsRdmaCapable;
+                    IsPartRdma = UseRdmaForCurrentEvent && sections[SectionIndex].IsRdmaCapable;
                     while (SectionIndex < sections.size()
                             && IsPartInline == sections[SectionIndex].IsInline
-                            && IsPartRdma == sections[SectionIndex].IsRdmaCapable) {
+                            && IsPartRdma == (UseRdmaForCurrentEvent && sections[SectionIndex].IsRdmaCapable)) {
                         PartLenRemain += sections[SectionIndex].Size;
                         ++SectionIndex;
                     }
@@ -395,7 +421,7 @@ namespace NActors {
         auto partBookmark = task.Bookmark(sizeof(TChannelPart));
 
         size_t bytesSerialized = 0;
-        const bool complete = SerializeEvent<false>(task, event, &bytesSerialized);
+        const bool complete = SerializeEvent<false>(task, event, false /*disableChecksums*/, &bytesSerialized);
 
         Y_DEBUG_ABORT_UNLESS(bytesSerialized);
         Y_ABORT_UNLESS(bytesSerialized <= Max<ui16>());
@@ -428,8 +454,12 @@ namespace NActors {
 
     std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex, bool checksumming) {
         Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
-
         Y_ABORT_UNLESS(event.Buffer);
+
+        const bool checksumsDisabledForEvent = Params.AllowDisablingPayloadChecksums &&
+            (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
+        const bool checksumsDisabled = !checksumming || checksumsDisabledForEvent;
+
         if (RdmaCredsBuffer.CredsSize() == 0) {
             for (; Iter.Valid() && PartLenRemain; ) {
                 TRcBuf buf = Iter.GetChunk();
@@ -444,7 +474,7 @@ namespace NActors {
                 const size_t leftInChunk = buf.GetSize() - offset;
                 const size_t chunkSize = Min(leftInChunk, PartLenRemain);
 
-                if (checksumming) {
+                if (!checksumsDisabled) {
                     XXH3_64bits_update(&RdmaCumulativeChecksumState, data, chunkSize);
                 }
                 auto cred = RdmaCredsBuffer.AddCreds();
@@ -537,7 +567,10 @@ namespace NActors {
             .Size = static_cast<ui16>(partSize - sizeof(TChannelPart))
         };
         char *ptr = reinterpret_cast<char*>(part + 1);
-        *ptr++ = static_cast<ui8>(EXdcCommand::RDMA_READ);
+
+        // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
+        //  \todo replace with checksumsDisabled
+        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ); 
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
 
@@ -548,7 +581,14 @@ namespace NActors {
 
         Y_ABORT_UNLESS(rdmaCreds->SerializePartialToArray(ptr, credsSerializedSize));
         ptr += credsSerializedSize;
-        WriteUnaligned<ui32>(ptr, checksumming ? XXH3_64bits_digest(&RdmaCumulativeChecksumState) : 0);
+
+        if (checksumsDisabled) {
+            WriteUnaligned<ui32>(ptr, 0);
+        }
+        else {
+            WriteUnaligned<ui32>(ptr, XXH3_64bits_digest(&RdmaCumulativeChecksumState));
+        }
+
         OutputQueueSize -= payloadSz;
 
         task.Write<false>(buffer, partSize);
@@ -565,18 +605,22 @@ namespace NActors {
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
-        const size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
+        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums 
+            && (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
+        const bool disableChecksums = Params.Encryption || disableChecksumsForEvent;
+
+        const size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + (disableChecksums ? 0 : sizeof(ui32));
         if (task.GetInternalFreeAmount() < partSize || task.GetExternalFreeAmount() == 0) {
             return std::nullopt;
         }
 
-        // clear external checksum for this chunk
+        // clear external crc checksum for this chunk, it will be written to in SerializeEvent() below
         task.ExternalChecksum = 0;
 
         auto partBookmark = task.Bookmark(partSize);
 
         size_t bytesSerialized = 0;
-        const bool complete = SerializeEvent<true>(task, event, &bytesSerialized);
+        const bool complete = SerializeEvent<true>(task, event, disableChecksums, &bytesSerialized);
 
         Y_ABORT_UNLESS(0 < bytesSerialized && bytesSerialized <= Max<ui16>());
 
@@ -587,20 +631,27 @@ namespace NActors {
             .Size = static_cast<ui16>(partSize - sizeof(TChannelPart))
         };
         char *ptr = reinterpret_cast<char*>(part + 1);
-        *ptr++ = static_cast<ui8>(EXdcCommand::PUSH_DATA);
+
+        // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
+        //  \todo replace with checksumsDisabled
+        *ptr++ = static_cast<ui8>(disableChecksumsForEvent ? EXdcCommand::PUSH_DATA_NO_CHECKSUMS : EXdcCommand::PUSH_DATA);
 
         WriteUnaligned<ui16>(ptr, bytesSerialized);
         ptr += sizeof(ui16);
-        if (task.ChecksummingXxhash()) {
-            XXH3_state_t state;
-            XXH3_64bits_reset(&state);
-            task.XdcStream.ScanLastBytes(bytesSerialized, [&state](TContiguousSpan span) {
-                XXH3_64bits_update(&state, span.data(), span.size());
-            });
-            const ui32 cs = XXH3_64bits_digest(&state);
-            WriteUnaligned<ui32>(ptr, cs);
-        } else if (task.ChecksummingCrc32c()) {
-            WriteUnaligned<ui32>(ptr, task.ExternalChecksum);
+
+        if (!disableChecksums)
+        {
+            if (task.ChecksummingXxhash()) {
+                XXH3_state_t state;
+                XXH3_64bits_reset(&state);
+                task.XdcStream.ScanLastBytes(bytesSerialized, [&state](TContiguousSpan span) {
+                    XXH3_64bits_update(&state, span.data(), span.size());
+                });
+                const ui32 cs = XXH3_64bits_digest(&state);
+                WriteUnaligned<ui32>(ptr, cs);
+            } else if (task.ChecksummingCrc32c()) {
+                WriteUnaligned<ui32>(ptr, task.ExternalChecksum);
+            }
         }
 
         task.WriteBookmark(std::move(partBookmark), buffer, partSize);
@@ -610,7 +661,10 @@ namespace NActors {
     }
 
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
-        LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
+        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notyfying about Undelivered messages!",
+            {"marker", "ICOCH89"},
+            {"notYetConfirmed", NotYetConfirmed.size()},
+            {"queue", Queue.size()});
         if (State == EState::BODY && Queue.front().Event) {
             Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
             Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue

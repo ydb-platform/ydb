@@ -18,6 +18,13 @@ CFG_DIR = os.getenv('YQL_CONFIG_DIR') or 'yql/essentials/cfg/tests'
 RUNNER_FACTORY = facade_runner(prov='pure', cfg_dir=CFG_DIR, binary=MINIRUN_PATH)
 
 
+def udf_bridge_path():
+    # Resolved lazily (not at module scope like MINIRUN_PATH) since only test
+    # projects that opt in via 'udf_bridge' in their .cfg need the udf_bridge
+    # binary at all -- most YQL_UDF_MINITEST projects don't DEPENDS() on it.
+    return yql_utils.yql_binary_path('yql/essentials/tools/udf_bridge/udf_bridge')
+
+
 def pytest_generate_tests(metafunc):
     params = []
     for case in discover_cases():
@@ -46,10 +53,11 @@ def test(case, mode):
         scan_udfs=spec.scan_udfs,
     )
 
-    RUNNER_FACTORY = facade_runner(prov='pure', cfg_dir=CFG_DIR, binary=MINIRUN_PATH, secure_params=spec.secure_params)
+    RUNNER_FACTORY = facade_runner(prov='pure', cfg_dir=CFG_DIR, binary=MINIRUN_PATH, secure_params=spec.secure_params, patch_cfg_file=spec.patch_cfg_file)
 
     if mode == 'Results':
-        runner = RUNNER_FACTORY(spec.langver)
+        extra_args = ['--udf-bridge', udf_bridge_path()] if spec.udf_bridge else []
+        runner = RUNNER_FACTORY(spec.langver, extra_args=extra_args)
         scalar_res = runner.yql_exec(check_error=not spec.xfail, **exec_args)
 
         if spec.xfail:

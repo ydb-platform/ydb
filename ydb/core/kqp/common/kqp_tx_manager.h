@@ -44,6 +44,9 @@ public:
     virtual void AddTopicsToShards() = 0;
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock, ui64 querySpanId = 0, ui64 deferredVictimQuerySpanId = 0) = 0;
 
+    // Next 1-based uncommitted write seq num for (writerIndex, shardId).
+    virtual ui64 NextWriteSeqNum(ui64 writerIndex, ui64 shardId) = 0;
+
     virtual void BreakLock(ui64 shardId) = 0;
     virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;
     virtual TVector<NKikimrDataEvents::TLock> GetLocks(ui64 shardId) const = 0;
@@ -92,6 +95,11 @@ public:
 
     virtual bool HasSnapshot() const = 0;
     virtual void SetHasSnapshot(bool hasSnapshot) = 0;
+
+    virtual void SetIsolationLevel(NKqpProto::EIsolationLevel level) = 0;
+    virtual NKqpProto::EIsolationLevel GetIsolationLevel() const = 0;
+
+    virtual bool CanUseImmediateCommit() const = 0;
 
     virtual bool BrokenLocks() const = 0;
     virtual ui64 GetBrokenLocksCount() const = 0;

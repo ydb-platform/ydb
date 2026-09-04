@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 SELECT
     LambdaArgumentsCount(() -> (1)),
     LambdaArgumentsCount(($x) -> ($x + 1)),

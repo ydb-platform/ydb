@@ -17,7 +17,8 @@ public:
 
     virtual void SetLockSettings(
         ui64 cookie,
-        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) = 0;
+        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+        bool skipAbsent) = 0;
 
     virtual void AddLockTask(
         ui64 cookie,
@@ -39,6 +40,7 @@ struct TKqpBufferLockSettings {
     IKqpBufferTableLookupCallbacks* Callbacks = nullptr;
     TTableId TableId;
     TString TablePath;
+    TString Database;
 
     ui64 LockTxId;
     ui64 LockNodeId;

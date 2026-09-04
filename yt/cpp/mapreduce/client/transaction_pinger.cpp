@@ -28,14 +28,13 @@ class TSharedTransactionPinger
 {
 public:
     TSharedTransactionPinger(int poolThreadCount, IRawClientPtr rawClient)
-        : ThreadPool_(NConcurrency::CreateThreadPool(poolThreadCount, "tx_pinger_pool"))
-        , Invoker_(ThreadPool_->GetInvoker())
+        : PingerPool_(NConcurrency::CreateThreadPool(poolThreadCount, "tx_pinger_pool"))
         , RawClient_(std::move(rawClient))
     { }
 
     ~TSharedTransactionPinger() override
     {
-        ThreadPool_->Shutdown();
+        PingerPool_->Shutdown();
     }
 
     ITransactionPingerPtr GetChildTxPinger() override
@@ -64,7 +63,7 @@ public:
             }
             DoPingTransaction(rawClient, transactionId, *strong_ptr);
         });
-        *periodic = New<NConcurrency::TPeriodicExecutor>(ThreadPool_->GetInvoker(), pingRoutine, opts);
+        *periodic = New<NConcurrency::TPeriodicExecutor>(PingerPool_->GetInvoker(), pingRoutine, opts);
         (*periodic)->Start();
 
         auto guard = Guard(SpinLock_);
@@ -92,19 +91,7 @@ public:
             periodic = std::move(it->second);
             Transactions_.erase(it);
         }
-        YT_UNUSED_FUTURE((*periodic)->Stop());
-    }
-
-    TFuture<void> AsyncAbortTransaction(const TTransactionId& transactionId) override
-    {
-        auto result = BIND([rawClient = RawClient_, transactionId = transactionId] {
-            TMutationId mutationId;
-            rawClient->AbortTransaction(mutationId, transactionId);
-        })
-            .AsyncVia(ThreadPool_->GetInvoker())
-            .Run();
-
-        return result;
+        NConcurrency::WaitUntilSet((*periodic)->Stop());
     }
 
 private:
@@ -131,8 +118,7 @@ private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     THashMap<TTransactionId, std::shared_ptr<NConcurrency::TPeriodicExecutorPtr>> Transactions_;
 
-    NConcurrency::IThreadPoolPtr ThreadPool_;
-    IInvokerPtr Invoker_;
+    NConcurrency::IThreadPoolPtr PingerPool_;
     IRawClientPtr RawClient_;
 };
 

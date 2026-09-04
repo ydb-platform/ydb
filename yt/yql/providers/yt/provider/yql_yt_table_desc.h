@@ -3,7 +3,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/yql_udf_resolver.h>
-#include <yql/essentials/sql/settings/translation_sql_flags.h>
+#include <yql/essentials/sql/settings/flags/flags.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 

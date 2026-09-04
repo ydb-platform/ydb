@@ -479,5 +479,41 @@ TEST(TValidateLogicalTypeTest, TestTaggedType)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TValidateLogicalTypeTest, TestAggregateStateType)
+{
+    using namespace NLogicalTypeShortcuts;
+
+    // avg(int8) is struct{sum: int64, count: int64}.
+    const auto avgInt = AggregateStateLogicalType(EAggregateFunction::Avg, SimpleLogicalType(ESimpleLogicalValueType::Int8));
+    EXPECT_GOOD_TYPE(avgInt, " [256; 2] ");
+    EXPECT_GOOD_TYPE(avgInt, " [0; 0] ");
+    EXPECT_GOOD_TYPE(avgInt, " [-1; 0] ");
+    EXPECT_GOOD_TYPE(avgInt, " [-1; -1] ");
+    EXPECT_BAD_TYPE(avgInt, " [foo; 2] ");
+    EXPECT_BAD_TYPE(avgInt, " [100] ");
+
+    // avg(uint8) is struct{sum: uint64, count: int64}.
+    const auto avgUint = AggregateStateLogicalType(EAggregateFunction::Avg, SimpleLogicalType(ESimpleLogicalValueType::Uint8));
+    EXPECT_GOOD_TYPE(avgUint, " [256u; 2] ");
+    EXPECT_GOOD_TYPE(avgUint, " [0u; 0] ");
+    EXPECT_BAD_TYPE(avgUint, " [1; 0] ");
+    EXPECT_BAD_TYPE(avgUint, " [-1; 1] ");
+    EXPECT_BAD_TYPE(avgUint, " [foo; 2] ");
+    EXPECT_BAD_TYPE(avgUint, " [100] ");
+
+    // sum(double) is double.
+    const auto sumDouble = AggregateStateLogicalType(EAggregateFunction::Sum, SimpleLogicalType(ESimpleLogicalValueType::Double));
+    EXPECT_GOOD_TYPE(sumDouble, " 3.14 ");
+    EXPECT_BAD_TYPE(sumDouble, " foo ");
+
+    // min(int64) is Optional<int64>.
+    const auto minInt64 = AggregateStateLogicalType(EAggregateFunction::Min, SimpleLogicalType(ESimpleLogicalValueType::Int64));
+    EXPECT_GOOD_TYPE(minInt64, " 42 ");
+    EXPECT_GOOD_TYPE(minInt64, " # ");
+    EXPECT_BAD_TYPE(minInt64, " foo ");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NTableClient

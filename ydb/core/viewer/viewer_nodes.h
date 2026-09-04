@@ -1,5 +1,6 @@
 #pragma once
 #include "json_pipe_req.h"
+#include "log.h"
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "wb_group.h"
@@ -129,6 +130,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::vector<TString> FilterStoragePools;
     std::vector<std::pair<ui64, ui64>> FilterStoragePoolsIds;
     std::unordered_set<TNodeId> RestrictedNodeIds; // due to access rights
+    bool RestrictToDatabaseNodes = false; // the filter by RestrictedNodeIds is required, even if the set is empty
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterGroupIds;
     std::optional<std::size_t> Offset;
@@ -410,6 +412,7 @@ class TJsonNodes : public TViewerPipeClient {
                     pDiskState.SetTotalSize(pdisk.GetTotalSize());
                     pDiskState.SetAvailableSize(pdisk.GetAvailableSize());
                     pDiskState.SetExpectedSlotCount(pdisk.GetExpectedSlotCount());
+                    pDiskState.SetExpectedSlotSize(pdisk.GetExpectedSlotSize());
                 }
             }
             if (VDisks.empty() && !SysViewVDisks.empty()) {
@@ -429,9 +432,17 @@ class TJsonNodes : public TViewerPipeClient {
                     NKikimrBlobStorage::EVDiskStatus vDiskStatus;
                     if (NKikimrBlobStorage::EVDiskStatus_Parse(vdisk.GetStatusV2(), &vDiskStatus)) {
                         switch(vDiskStatus) {
-                            case NKikimrBlobStorage::EVDiskStatus::ERROR:
-                                vDiskState.SetVDiskState(NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                            case NKikimrBlobStorage::EVDiskStatus::ERROR: {
+                                NKikimrWhiteboard::EVDiskState realVDiskState = NKikimrWhiteboard::EVDiskState::Initial;
+                                if (vdisk.HasState()
+                                        && NKikimrWhiteboard::EVDiskState_Parse(vdisk.GetState(), &realVDiskState)
+                                        && (realVDiskState == NKikimrWhiteboard::EVDiskState::LocalRecoveryError
+                                            || realVDiskState == NKikimrWhiteboard::EVDiskState::SyncGuidRecoveryError
+                                            || realVDiskState == NKikimrWhiteboard::EVDiskState::PDiskError)) {
+                                    vDiskState.SetVDiskState(realVDiskState);
+                                }
                                 break;
+                            }
                             case NKikimrBlobStorage::EVDiskStatus::INIT_PENDING:
                                 vDiskState.SetVDiskState(NKikimrWhiteboard::EVDiskState::Initial);
                                 break;
@@ -1161,6 +1172,9 @@ public:
         if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
             auto nodes = GetDatabaseNodes();
             RestrictedNodeIds = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());
+            // The filter must be applied even when the database has no nodes at all,
+            // otherwise a database user would get the nodes of the whole cluster.
+            RestrictToDatabaseNodes = true;
             NeedFilter = true;
         }
 
@@ -1249,6 +1263,15 @@ public:
             return itNode->second;
         }
         return nullptr;
+    }
+
+    void SetNodeDisconnected(TNodeId nodeId) {
+        if (TNode* node = FindNode(nodeId)) {
+            node->DisconnectNode();
+            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
+                node->RemapDisks();
+            }
+        }
     }
 
     bool PreFilterDone() const {
@@ -1349,7 +1372,12 @@ public:
             InvalidateNodes();
             AddEvent("Type Filter Applied");
         }
-        if (!RestrictedNodeIds.empty() && FieldsAvailable.test(+ENodeFields::NodeId)) {
+        if (RestrictToDatabaseNodes && FieldsAvailable.test(+ENodeFields::NodeId)) {
+            if (RestrictedNodeIds.empty()) {
+                YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Empty response: the database has no nodes to show",
+                    {"logPrefix", GetLogPrefix()},
+                    {"database", Database});
+            }
             TNodeView nodeView;
             for (TNode* node : NodeView) {
                 if (RestrictedNodeIds.count(node->GetNodeId()) > 0) {
@@ -1360,6 +1388,7 @@ public:
             FoundNodes = TotalNodes = NodeView.size();
             InvalidateNodes();
             RestrictedNodeIds.clear();
+            RestrictToDatabaseNodes = false;
             AddEvent("Restricted Filter Applied");
         }
 
@@ -1472,7 +1501,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || !RestrictedNodeIds.empty();
+            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
             FoundNodes = NodeView.size();
         }
     }
@@ -2288,6 +2317,7 @@ public:
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kNormalizedOccupancyFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskRawUsageFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kGroupSizeInUnitsFieldNumber);
         }
     }
 
@@ -2298,6 +2328,8 @@ public:
         } else {
             request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
             request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskUsageFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kSlotSizeInUnitsFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskCapacityAlertFieldNumber);
         }
     }
 
@@ -2570,16 +2602,10 @@ public:
                         hasMemoryDetailed |= systemInfo.HasMemoryStats();
                     }
                     for (auto nodeId : nodesWithoutData) {
-                        TNode* node = FindNode(nodeId);
-                        if (node) {
-                            node->DisconnectNode();
-                        }
+                        SetNodeDisconnected(nodeId);
                     }
                 } else {
-                    TNode* node = FindNode(responseNodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(responseNodeId);
                 }
             }
             for (const auto& [nodeId, response] : SystemStateResponse) {
@@ -2601,10 +2627,7 @@ public:
                         hasMemoryDetailed |= systemState.GetSystemStateInfo(0).HasMemoryStats();
                     }
                 } else {
-                    TNode* node = FindNode(nodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(nodeId);
                 }
             }
             if (!removeNodes.empty()) {
@@ -3054,13 +3077,7 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
-        TNode* node = FindNode(nodeId);
-        if (node) {
-            node->DisconnectNode();
-            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
-                node->RemapDisks();
-            }
-        }
+        SetNodeDisconnected(nodeId);
         TString error("NodeDisconnected");
         {
             auto itSystemStateResponse = SystemStateResponse.find(nodeId);

@@ -4,6 +4,8 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/export/actor/export_actor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NExport {
 
 NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(const NBackground::TStartContext &context) const {
@@ -35,8 +37,10 @@ bool TSession::IsAborted() const {
 
 void TSession::Abort(const TString &errorMessage) {
     if (Status == EStatus::Finished || Status == EStatus::Aborted) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "export_session_abort_ignored")("status", (ui64)Status)(
-            "message", "export session is already in terminal state");
+        YDB_LOG_DEBUG("",
+            {"event", "export_session_abort_ignored"},
+            {"status", (ui64)Status},
+            {"message", "export session is already in terminal state"});
         return;
     }
     Status = EStatus::Aborted;

@@ -14,8 +14,8 @@ namespace NPQ {
 class TBlobSerializer;
 
 static constexpr ui32 MESSAGE_METADATA_RESERVED_BITS = 1;
-static constexpr ui32 MESSAGE_COUNT_BITS = 32 - MESSAGE_METADATA_RESERVED_BITS;
-static constexpr ui32 MAX_MESSAGE_COUNT = (1u << MESSAGE_COUNT_BITS) - 1;
+static constexpr ui32 LOGICAL_MESSAGE_COUNT_BITS = 32 - MESSAGE_METADATA_RESERVED_BITS;
+static constexpr ui32 MAX_LOGICAL_MESSAGE_COUNT = (1u << LOGICAL_MESSAGE_COUNT_BITS) - 1;
 
 // Large messages are split into small 512KB parts, and stored in separate parts.
 // This structure stores information about the saved part of a large message.
@@ -45,14 +45,14 @@ struct TClientBlob {
     ui32 UncompressedSize;
     TString PartitionKey;
     TString ExplicitHashKey;
-    ui32 MessageCount = 1;
+    ui32 LogicalMessageCount = 1;
     bool IsBatch = false;
 
     TClientBlob();
     TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp,
         const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey,
-        ui32 messageCount = 1, bool isBatch = false);
+        ui32 logicalMessageCount = 1, bool isBatch = false);
 
     ui32 GetSerializedSize() const;
     ui16 GetPartNo() const;

@@ -2,6 +2,8 @@
 
 PY3_LIBRARY()
 
+SUBSCRIBER(g:python-contrib)
+
 VERSION(0.8.1)
 
 LICENSE(ZPL-2.1)

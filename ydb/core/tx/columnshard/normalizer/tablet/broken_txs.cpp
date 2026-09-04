@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TBrokenTxsNormalizer::DoInit(
@@ -17,7 +19,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TBrokenTxsNormalizer::DoInit(
     while (!rowset.EndOfSet()) {
         const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
         if (!rowset.HaveValue<Schema::TxInfo::TxKind>()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId)("event", "removed_by_normalizer")("condition", "no_kind");
+            YDB_LOG_WARN("",
+                {"txId", txId},
+                {"event", "removed_by_normalizer"},
+                {"condition", "no_kind"});
             Schema::EraseTxInfo(db, txId);
         }
 

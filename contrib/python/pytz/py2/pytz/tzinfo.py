@@ -323,7 +323,12 @@ class DstTzInfo(BaseTzInfo):
         # Find the two best possibilities.
         possible_loc_dt = set()
         for delta in [timedelta(days=-1), timedelta(days=1)]:
-            loc_dt = dt + delta
+            try:
+                loc_dt = dt + delta
+            except OverflowError:
+                # dt is close to datetime.min or datetime.max; skip this
+                # direction rather than raising an OverflowError to the caller.
+                continue
             idx = max(0, bisect_right(
                 self._utc_transition_times, loc_dt) - 1)
             inf = self._transition_info[idx]

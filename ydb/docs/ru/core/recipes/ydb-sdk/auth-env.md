@@ -1,5 +1,7 @@
 # Аутентификация при помощи переменных окружения
 
+Аутентификация через переменные окружения позволяет не зашивать учётные данные в код: SDK или JDBC-драйвер сам определяет режим по переменным `YDB_*` в окружении процесса. Этот способ удобен для контейнеров, CI/CD и деплоя в облако, где секреты передаются через окружение. Типичные шаги: задать нужные переменные окружения, создать провайдер аутентификации (или подключиться через JDBC без явных свойств) и выполнить запрос. Подробности о порядке выбора режима — в разделе [Аутентификация](../../reference/ydb-sdk/auth.md#env); базовое подключение — в рецепте [инициализации драйвера](./init.md). Другие способы: [токен](./auth-access-token.md), [анонимная](./auth-anonymous.md), [метаданные](./auth-metadata.md), [сервисный аккаунт](./auth-service-account.md), [логин и пароль](./auth-static.md).
+
 При использовании данного метода режим аутентификации и его параметры будут определены окружением, в котором запускается приложение, в [описанном здесь порядке](../../reference/ydb-sdk/auth.md#env).
 
 Установив одну из следующих переменных окружения, можно управлять способом аутентификации:
@@ -110,27 +112,66 @@
   - Native SDK
 
     ```java
-    public void work(String connectionString) {
-        AuthProvider authProvider = new EnvironAuthProvider();
+    import tech.ydb.auth.iam.CloudAuthHelper;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(authProvider)
-                .build();
-             QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    public class EnvironAuthExample {
+        public static void main(String[] args) throws Exception {
+            // Строка подключения из переменной окружения или локальный {{ ydb-short-name }} по умолчанию
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-            doWork(queryClient);
+            // Режим аутентификации определяется переменными окружения YDB_*
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                QueryReader reader = retryCtx.supplyResult(
+                        session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+                ).join().getValue();
+
+                // Проверка подключения: выводим результат SELECT 1
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn(0).getInt32());
+                }
+            }
         }
     }
     ```
 
   - JDBC
 
+    JDBC-драйвер читает переменные окружения `YDB_*` в порядке, описанном в разделе [Аутентификация](../../reference/ydb-sdk/auth.md#env). Явно передавать учётные данные не нужно — достаточно пустого объекта `Properties`.
+
     ```java
-    public void work() throws SQLException {
-        // Подключение без явных учётных данных: драйвер читает переменные окружения YDB_* в порядке,
-        // описанном в разделе [Аутентификация](../../reference/ydb-sdk/auth.md#env)
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", new Properties())) {
-            doWork(connection);
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.Properties;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class EnvironAuthJdbcExample {
+        public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            // Пустые свойства: драйвер сам выберет способ аутентификации по переменным окружения
+            try (Connection connection = DriverManager.getConnection(jdbcUrl, new Properties());
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1")) {
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt(1));
+                }
+            }
         }
     }
     ```

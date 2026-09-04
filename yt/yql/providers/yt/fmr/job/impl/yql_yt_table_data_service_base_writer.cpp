@@ -3,6 +3,7 @@
 #include <util/string/join.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <util/generic/yexception.h>
 
 
 namespace NYql::NFmr {

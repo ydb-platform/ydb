@@ -309,6 +309,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot/DirA", Sprintf(R"(
                 Name: "MyExternalDataSource"
                 SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
                 Installation: "%s"
                 Auth {
                     None {

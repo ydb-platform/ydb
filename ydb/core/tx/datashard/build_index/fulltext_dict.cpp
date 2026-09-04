@@ -19,34 +19,41 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NDataShard {
 using namespace NTableIndex::NFulltext;
 using namespace NKikimr::NFulltext;
 
 /*
- * TBuildFulltextDictScan aggregates rows from the fulltext posting table and does two things:
+ * TBuildFulltextDictScan aggregates rows from the fulltext posting table and does 3 things:
  * 1) calculates token frequencies, i.e. the number of documents containing each token.
+ *    (optional, unused in new versions because DictTable is removed).
  * 2) compacts fulltext segments generated during initial build process for compact index formats
  *    (FulltextCompact/FulltextCompactRelevance/JsonCompact).
+ * 3) calculates per-prefix document counts and total lengths.
  *
  * For simple index formats:
- * - This scan takes the indexImplTable and writes output to indexImplDictTable.
+ * - This scan takes the indexImplTable and writes output to indexImplDictTable (optionally).
  * - Source columns: __ydb_token, <PK columns>, __ydb_freq
  * For compact index formats:
  * - This scan takes the indexImplTable0build and writes output to indexImplTable and indexImplDictTable.
- * - Source columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
- * - Destination columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
- * - All source segments are expected to be unique, but with random __ydb_generation
- * - Output __ydb_generation is always UINT32_MAX
+ * - Source columns: __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+ * - Destination columns: __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+ * - All source segments are expected to be unique with __ydb_generation = MAX
+ * - Output __ydb_generation is always MAX
  * For both:
  * - indexImplDictTable destination columns: __ydb_token, __ydb_freq
  *
  * Request:
  * - The client sends TEvBuildFulltextDictRequest with:
+ *   - Index type
+ *   - Prefix columns
  *   - Name of the target dictionary table
  *   - Name of the target compacted posting table
- *   - Index type
+ *   - Name of the target stats table
  *   - SkipFirstToken, SkipLastToken
+ *   - SkipFirstPrefix, SkipLastPrefix (for stats)
  *
  * Execution Flow:
  * - TBuildFulltextDictScan scans the whole input shard
@@ -81,6 +88,7 @@ protected:
     bool Signed = false;
 
     TBufferData* DictBuf = nullptr;
+    TBufferData* StatsBuf = nullptr;
     TBufferData* PostingBuf = nullptr;
 
     bool SkipFirstToken = false;
@@ -90,11 +98,21 @@ protected:
     ui64 FirstTokenRows = 0;
     ui64 LastTokenRows = 0;
 
+    bool SkipFirstPrefix = false;
+    bool SkipLastPrefix = false;
+    TString FirstPrefix;
+    TString LastPrefix;
+    ui64 FirstPrefixDocCount = 0;
+    ui64 LastPrefixDocCount = 0;
+    ui64 FirstPrefixSumDocLength = 0;
+    ui64 LastPrefixSumDocLength = 0;
+
     // Number of leading prefix key columns in the posting table key [prefix..., token, max_id, gen].
     // Zero for non-prefixed indexes. Used to locate the token and to group segments per (prefix, token).
     ui32 NumPrefixColumns = 0;
     // Current group's key cells [prefix..., token] and its serialized form for group boundary detection.
     TOwnedCellVec LastGroupKey;
+    TString FirstGroupKeySerialized;
     TString LastGroupKeySerialized;
 
     bool WithFreq = false;
@@ -127,20 +145,16 @@ public:
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , SkipFirstToken(request.GetSkipFirstToken())
         , SkipLastToken(request.GetSkipLastToken())
+        , SkipFirstPrefix(request.GetSkipFirstPrefix())
+        , SkipLastPrefix(request.GetSkipLastPrefix())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId(responseActorId)
         , Response(std::move(response))
     {
-        LOG_I("Create " << Debug());
+        YDB_LOG_INFO("Scan actor created",
+            {"debug", Debug()});
 
         NumPrefixColumns = request.PrefixColumnsSize();
-
-        // For compact formats the key is [prefix..., token, __ydb_max_id, __ydb_generation];
-        // __ydb_max_id (the doc-id) determines the integer key encoding. For non-prefixed indexes
-        // this is at(1) (token at 0), preserving the previous behavior.
-        auto keyTypeId = table.KeyColumnTypes.at(NumPrefixColumns + 1).GetTypeId();
-        KeyIs32 = (keyTypeId == NScheme::NTypeIds::Uint32 || keyTypeId == NScheme::NTypeIds::Int32);
-        Signed = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
 
         auto types = GetAllTypes(table);
         auto addType = [&](auto& uploadTypes, const auto& column) {
@@ -150,8 +164,9 @@ public:
             uploadTypes->emplace_back(column, type);
         };
 
-        if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance ||
-            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance)
+        if ((request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance ||
+            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) &&
+            request.GetDictTableName())
         {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
             addType(uploadTypes, TokenColumn);
@@ -163,22 +178,49 @@ public:
             DictBuf = Uploader.AddDestination(request.GetDictTableName(), uploadTypes);
         }
 
+        if (request.GetStatsTableName())
+        {
+            // Pre-prefix document count and total length stats
+            auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+            for (const auto& prefixColumn : request.GetPrefixColumns()) {
+                addType(uploadTypes, prefixColumn);
+            }
+            {
+                Ydb::Type type;
+                type.set_type_id(DocCountType);
+                uploadTypes->emplace_back(DocCountColumn, type);
+            }
+            {
+                Ydb::Type type;
+                type.set_type_id(DocCountType);
+                uploadTypes->emplace_back(SumDocLengthColumn, type);
+            }
+            StatsBuf = Uploader.AddDestination(request.GetStatsTableName(), uploadTypes);
+        }
+
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance)
         {
+            // For compact formats the key is [prefix..., token, __ydb_generation, __ydb_max_id];
+            // __ydb_max_id (the doc-id) determines the integer key encoding. For non-prefixed indexes
+            // this is at(2) (token at 0), preserving the previous behavior.
+            auto keyTypeId = table.KeyColumnTypes.at(NumPrefixColumns + 2).GetTypeId();
+            KeyIs32 = (keyTypeId == NScheme::NTypeIds::Uint32 || keyTypeId == NScheme::NTypeIds::Int32);
+            Signed = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
             // Posting key is [prefix..., token, max_id, gen]; the prefix columns lead the key.
             for (const auto& prefixColumn : request.GetPrefixColumns()) {
                 addType(uploadTypes, prefixColumn);
             }
             addType(uploadTypes, TokenColumn);
-            addType(uploadTypes, MaxIdColumn);
             {
                 Ydb::Type type;
                 type.set_type_id(NTableIndex::NFulltext::GenType);
                 uploadTypes->emplace_back(GenColumn, type);
             }
+            addType(uploadTypes, MaxIdColumn);
             addType(uploadTypes, AddedColumn);
             addType(uploadTypes, SegmentColumn);
             PostingBuf = Uploader.AddDestination(request.GetPostingTableName(), std::move(uploadTypes));
@@ -191,15 +233,19 @@ public:
             }
 
             auto tags = GetAllTags(table);
-            ScanTags.push_back(tags.at("__ydb_added"));
-            ScanTags.push_back(tags.at("__ydb_segment"));
+            ScanTags.push_back(tags.at(AddedColumn));
+            ScanTags.push_back(tags.at(SegmentColumn));
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
+            auto tags = GetAllTags(table);
+            ScanTags.push_back(tags.at(FreqColumn));
         }
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_I("Prepare " << Debug());
+        YDB_LOG_INFO("Scan actor prepared",
+            {"debug", Debug()});
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
@@ -220,17 +266,28 @@ public:
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
-        record.SetFirstToken(FirstToken);
-        record.SetLastToken(LastToken);
+        record.SetFirstToken(NumPrefixColumns > 0 ? FirstGroupKeySerialized : FirstToken);
+        record.SetLastToken(NumPrefixColumns > 0 ? LastGroupKeySerialized : LastToken);
         record.SetFirstTokenRows(FirstTokenRows);
         record.SetLastTokenRows(LastTokenRows);
+
+        record.SetFirstPrefix(FirstPrefix);
+        record.SetLastPrefix(LastPrefix);
+        record.SetFirstPrefixDocCount(FirstPrefixDocCount);
+        record.SetLastPrefixDocCount(LastPrefixDocCount);
+        record.SetFirstPrefixSumDocLength(FirstPrefixSumDocLength);
+        record.SetLastPrefixSumDocLength(LastPrefixSumDocLength);
 
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            YDB_LOG_NOTICE("Scan completed successfully",
+                {"debug", Debug()},
+                {"responseRecord", Response->Record.ShortDebugString()});
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            YDB_LOG_ERROR("Scan failed",
+                {"debug", Debug()},
+                {"responseRecord", Response->Record.ShortDebugString()});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -255,13 +312,16 @@ public:
 
     EScan PageFault() final
     {
-        LOG_T("PageFault " << Debug());
+        YDB_LOG_TRACE("Page fault",
+            {"debug", Debug()});
         return EScan::Feed;
     }
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_T("Seek " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seekSequence", seq},
+            {"debug", Debug()});
 
         if (IsExhausted) {
             return Uploader.CanFinish()
@@ -276,8 +336,6 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // LOG_T("Feed " << Debug());
-
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
@@ -288,11 +346,15 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_T("Exhausted " << Debug());
+        YDB_LOG_TRACE("Scan range exhausted",
+            {"debug", Debug()});
 
         IsExhausted = true;
         if (LastTokenRows > 0) {
             FinishToken(true);
+        }
+        if (LastPrefixDocCount > 0) {
+            FinishPrefix(true);
         }
 
         // call Seek to wait uploads
@@ -306,22 +368,26 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString() << " " << Debug());
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
+                    {"debug", Debug()});
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_D("Retry upload " << Debug());
+        YDB_LOG_DEBUG("Retrying row upload",
+            {"debug", Debug()});
 
         Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_D("Handle TEvUploadRowsResponse " << Debug()
-            << " ev->Sender: " << ev->Sender.ToString());
+        YDB_LOG_DEBUG("Received row upload response",
+            {"debug", Debug()},
+            {"senderActorId", ev->Sender});
 
         if (!Driver) {
             return;
@@ -335,12 +401,16 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            YDB_LOG_NOTICE("Row upload failed with retriable error",
+                {"debug", Debug()},
+                {"uploadStatus", Uploader.GetUploadStatus()});
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+        YDB_LOG_NOTICE("Row upload failed, aborting scan",
+            {"debug", Debug()},
+            {"uploadStatus", Uploader.GetUploadStatus()});
 
         Driver->Touch(EScan::Final);
     }
@@ -349,11 +419,40 @@ protected:
     {
         return TStringBuilder() << "TBuildFulltextDictScan TabletId: " << TabletId << " Id: " << BuildId
             << " SkipFirstToken: " << SkipFirstToken << " SkipLastToken: " << SkipLastToken
+            << " SkipFirstPrefix: " << SkipFirstPrefix << " SkipLastPrefix: " << SkipLastPrefix
             << " " << Uploader.Debug();
     }
 
     void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
+        if (!key[NumPrefixColumns].Size()) {
+            // Empty token is only used to count per-prefix document statistics
+            if (!StatsBuf) {
+                return;
+            }
+            auto curPrefix = TSerializedCellVec::Serialize(key.Slice(0, NumPrefixColumns));
+            if (LastPrefix != curPrefix) {
+                if (LastPrefixDocCount > 0) {
+                    FinishPrefix(false);
+                }
+                LastPrefix = curPrefix;
+            }
+            if (!PostingBuf) {
+                LastPrefixDocCount++;
+                LastPrefixSumDocLength += row[0].AsValue<TTokenCount>();
+            } else {
+                Y_ENSURE(row[0].AsValue<bool>());
+                TConstArrayRef<ui8> inBuf((ui8*)row[1].AsBuf().data(), row[1].AsBuf().size());
+                TDeltaReader rdr(inBuf, WithFreq, Signed);
+                ui64 docId = 0;
+                ui32 freq = 0;
+                while (rdr.Read(docId, freq)) {
+                    LastPrefixDocCount++;
+                    LastPrefixSumDocLength += freq - 1;
+                }
+            }
+            return;
+        }
         // Segments are grouped and compacted per (prefix..., token). The token sits at
         // key[NumPrefixColumns]; the prefix cells precede it. With prefix columns as the leading
         // sort key, the same token may appear under different prefixes (non-adjacent), so the group
@@ -400,8 +499,8 @@ protected:
             for (const auto& cell : LastGroupKey) {
                 uploadKey.push_back(cell);
             }
-            uploadKey.push_back(KeyIs32 ? TCell::Make((ui32)maxId) : TCell::Make(maxId));
             uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
+            uploadKey.push_back(KeyIs32 ? TCell::Make((ui32)maxId) : TCell::Make(maxId));
             TVector<TCell> uploadValue = {
                 TCell::Make(true),
                 TCell((const char*)buf.data(), buf.size()),
@@ -417,8 +516,9 @@ protected:
         if (last && SkipLastToken) {
             return;
         }
-        if (SkipFirstToken && !FirstToken) {
+        if (SkipFirstToken && !FirstTokenRows) {
             FirstToken = LastToken;
+            FirstGroupKeySerialized = LastGroupKeySerialized;
             FirstTokenRows = LastTokenRows;
         } else if (DictBuf) {
             TVector<TCell> pk = {TCell(LastToken)};
@@ -429,6 +529,28 @@ protected:
         LastGroupKey = TOwnedCellVec();
         LastGroupKeySerialized.clear();
         LastTokenRows = 0;
+    }
+
+    void FinishPrefix(bool last)
+    {
+        if (last && SkipLastPrefix) {
+            return;
+        }
+        if (SkipFirstPrefix && FirstPrefixDocCount == 0) {
+            FirstPrefix = LastPrefix;
+            FirstPrefixDocCount = LastPrefixDocCount;
+            FirstPrefixSumDocLength = LastPrefixSumDocLength;
+        } else if (LastPrefixDocCount > 0) {
+            TSerializedCellVec uploadKey(LastPrefix);
+            TVector<TCell> uploadValue = {
+                TCell::Make(LastPrefixDocCount),
+                TCell::Make(LastPrefixSumDocLength),
+            };
+            StatsBuf->AddRow(uploadKey.GetCells(), uploadValue);
+        }
+        LastPrefix.clear();
+        LastPrefixDocCount = 0;
+        LastPrefixSumDocLength = 0;
     }
 };
 
@@ -472,9 +594,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
         auto response = MakeHolder<TEvDataShard::TEvBuildFulltextDictResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TBuildFulltextDictScan TabletId: " << TabletID()
-            << " " << request.ShortDebugString()
-            << " row version " << rowVersion);
+        YDB_LOG_NOTICE("Starting fulltext dictionary build scan",
+            {"tabletId", TabletID()},
+            {"request", request.ShortDebugString()},
+            {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -490,9 +613,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TBuildFulltextDictScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
-                    << " with response " << response->Record.ShortDebugString());
+                YDB_LOG_ERROR("Rejecting invalid fulltext dictionary build scan request",
+                    {"tabletId", TabletID()},
+                    {"request", request.ShortDebugString()},
+                    {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {
@@ -546,8 +670,16 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             }
         }
 
-        if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance ||
-            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
+        bool requiresStats = request.PrefixColumnsSize() > 0 &&
+            (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance ||
+            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
+        if (requiresStats && !request.GetStatsTableName()) {
+            badRequest(TStringBuilder() << "Empty output statistics table name");
+        } else if (!requiresStats && request.GetStatsTableName()) {
+            badRequest(TStringBuilder() << "Output statistics table name is set for a non-prefixed-relevance index");
+        }
+
+        if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             if (!request.GetDictTableName()) {
                 badRequest(TStringBuilder() << "Empty output dictionary table name");
             }
@@ -573,3 +705,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

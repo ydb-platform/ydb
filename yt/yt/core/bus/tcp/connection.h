@@ -17,7 +17,6 @@
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/atomic_ptr.h>
 
 #include <yt/yt/core/net/public.h>
@@ -25,6 +24,8 @@
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
 #include <yt/yt/core/misc/memory_usage_tracker.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/blob.h>
 
@@ -100,7 +101,7 @@ public:
     TBusNetworkStatistics GetBusStatistics() const;
 
     // IPollable implementation.
-    const std::string& GetLoggingTag() const override;
+    const NLogging::TLoggingTagList& GetLoggingTags() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;
 
@@ -136,6 +137,7 @@ private:
             , PayloadSize(GetByteSize(Message))
             , Options(options)
             , PacketId(TPacketId::Create())
+            , RequestId(options.RequestId)
         { }
 
         TPromise<void> Promise;
@@ -143,6 +145,7 @@ private:
         size_t PayloadSize;
         TSendOptions Options;
         TPacketId PacketId;
+        TRequestId RequestId;
     };
 
     struct TPacket final
@@ -197,7 +200,6 @@ private:
     const IMessageHandlerPtr Handler_;
     const NConcurrency::IPollerPtr Poller_;
 
-    const std::string LoggingTag_;
     const NLogging::TLogger Logger;
 
     const TPromise<void> ReadyPromise_ = NewPromise<void>();

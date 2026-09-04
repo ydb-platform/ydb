@@ -1,12 +1,14 @@
 #pragma once
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/compute/events/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/ptr.h>
@@ -140,6 +142,8 @@ struct IDqComputeActorAsyncInput {
 // 6. Checkpoints actor builds state for all task node as sum of the state of CA and all its sinks and saves it.
 // 7. ...
 // 8. When checkpoint is written into database, checkpoints actor calls IDqComputeActorAsyncOutput::CommitState() to apply all side effects.
+// 9. When all side effects were applied Sink/transform run callback ICallbacks::OnAsyncOutputStateCommitted()
+// 10. After receiving all commits checkpoint will be marked as completed
 struct IDqComputeActorAsyncOutput {
     struct ICallbacks { // Compute actor
         virtual void ResumeExecution(EResumeSource source = EResumeSource::Default) = 0;
@@ -147,6 +151,7 @@ struct IDqComputeActorAsyncOutput {
 
         // Checkpointing
         virtual void OnAsyncOutputStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+        virtual void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
 
         // Finishing
         virtual void OnAsyncOutputFinished(ui64 outputIndex) = 0; // Signal that async output has successfully written its finish flag and so compute actor is ready to finish.
@@ -169,14 +174,25 @@ struct IDqComputeActorAsyncOutput {
         const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) = 0;
 
     // Checkpointing.
-    virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
-    virtual void LoadState(const TSinkState& state) = 0;
+
+    // Apply side effects related to this checkpoint. Should call ICallbacks::OnAsyncOutputStateCommitted() when state was committed.
+    // Function CommitState() must be idempotent, and may be called multiple times, in case of checkpoint restoration, for same sink.
+    virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
+
+    // Load state from specific checkpoint.
+    // If checkpoint used for restoration was in pending commit state, next will be called CommitState() on the same checkpoint.
+    virtual void LoadState(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint) = 0;
 
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
 
     virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */, const NYql::NDq::TDqMeteringStats*) { }
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
+
+    // Called by compute actor when the output consumer (TransformOutput) has been
+    // drained and can accept more data. Only meaningful for output transforms that
+    // push data into an IDqOutputConsumer.
+    virtual void OnOutputConsumerReady() {}
 
     // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
     // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
@@ -266,6 +282,8 @@ public:
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
+        NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
+        IDqSchedulerContextPtr SchedulerContext;
     };
 
     struct TLookupSourceArguments {
@@ -298,6 +316,7 @@ public:
         IRandomProvider *const RandomProvider;
         NWilson::TTraceId TraceId;
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
+        bool HasCheckpoints = false;
     };
 
     struct TInputTransformArguments {

@@ -826,8 +826,14 @@ class Viewer(App):
 
         if tab_id in self._opened_tab_order:
             tabs = self.query_one("#tabs", TabbedContent)
+            tab_index = self._opened_tab_order.index(tab_id)
             self._created_tabs.discard(tab_id)
             self._opened_tab_order.remove(tab_id)
+            if tabs.active == tab_id and self._opened_tab_order:
+                self._bump_navigation_generation()
+                next_tab = self._opened_tab_order[min(tab_index, len(self._opened_tab_order) - 1)]
+                tabs.active = next_tab
+                self._focus_active_tab_content(next_tab)
             await tabs.remove_pane(tab_id)
 
         await self._open_tab(

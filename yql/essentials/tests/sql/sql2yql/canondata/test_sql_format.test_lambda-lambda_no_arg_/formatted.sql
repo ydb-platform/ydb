@@ -1,4 +1,3 @@
-/* postgres can not */
 $modVal = () -> {
     RETURN 2;
 };

@@ -1,0 +1,24 @@
+--- contrib/python/numpy/py3/numpy/_core/tests/test_multiarray.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_multiarray.py	(working tree)
+@@ -1756,11 +1756,9 @@ class TestBool:
+     def test_cast_from_void(self):
+         self._test_cast_from_flexible(np.void)
+ 
+-    @pytest.mark.xfail(reason="See gh-9847")
+     def test_cast_from_unicode(self):
+         self._test_cast_from_flexible(np.str_)
+ 
+-    @pytest.mark.xfail(reason="See gh-9847")
+     def test_cast_from_bytes(self):
+         self._test_cast_from_flexible(np.bytes_)
+ 
+--- contrib/python/numpy/py3/numpy/lib/tests/test_arraypad.py	(index)
++++ contrib/python/numpy/py3/numpy/lib/tests/test_arraypad.py	(working tree)
+@@ -713,7 +713,6 @@ class TestLinearRamp:
+              [0.,   0.,   0.,   0.,   0.,   0.,   0.,    0.,   0.]])
+         assert_allclose(test, expected)
+ 
+-    @pytest.mark.xfail(exceptions=(AssertionError,))
+     def test_object_array(self):
+         from fractions import Fraction
+         arr = np.array([Fraction(1, 2), Fraction(-1, 2)])

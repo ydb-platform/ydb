@@ -32,9 +32,7 @@ struct TDownloadLink {
     TString Path;
     TString Md5;
 
-    TDownloadLink() {
-
-    }
+    TDownloadLink() = default;
 
     TDownloadLink(bool isUrl, TString path, TString md5)
         : IsUrl(isUrl)
@@ -47,11 +45,11 @@ struct TDownloadLink {
     TDownloadLink& operator=(const TDownloadLink&) = default;
 
     static TDownloadLink Url(const TString& path, const TString& md5 = "") {
-        return { true, path, md5 };
+        return { /*isUrl=*/true, path, md5 };
     }
 
     static TDownloadLink File(const TString& path, const TString& md5 = "") {
-        return { false, path, md5 };
+        return { /*isUrl=*/false, path, md5 };
     }
 
     bool operator==(const TDownloadLink& other) const {
@@ -95,7 +93,7 @@ class TUdfIndex : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TUdfIndex>;
 
-public:
+
     // todo: trusted resources should not be replaceble regardless of specified mode
     enum class EOverrideMode {
         PreserveExisting,
@@ -109,7 +107,7 @@ public:
         Ambigious
     };
 
-public:
+
     TUdfIndex();
     void SetCaseSentiveSearch(bool caseSensitive);
     bool CanonizeModule(TString& moduleName) const;
@@ -136,7 +134,7 @@ private:
     TSet<TResourceInfo::TPtr> FindResourcesByModules(const TSet<TString>& modules) const;
     void UnregisterResource(TResourceInfo::TPtr resource);
 
-private:
+
     // module => Resource
     TMap<TString, TResourceInfo::TPtr> Resources_;
     bool CaseSensitive_ = true;

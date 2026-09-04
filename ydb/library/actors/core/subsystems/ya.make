@@ -29,4 +29,3 @@ IF (SANITIZER_TYPE == "thread")
 ENDIF()
 
 END()
-

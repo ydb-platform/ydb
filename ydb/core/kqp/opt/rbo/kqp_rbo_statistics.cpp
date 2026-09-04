@@ -108,9 +108,8 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
         }
     }
 
-
-    return TOptimizerStatistics(props.Metadata->Type, 
-        withStatsAndCosts ? props.Statistics->EBytes : 0.0,
+    TOptimizerStatistics stats(props.Metadata->Type,
+        withStatsAndCosts ? props.Statistics->ERows : 0.0,
         props.Metadata->ColumnsCount,
         withStatsAndCosts ? props.Statistics->EBytes : 0.0,
         withStatsAndCosts ? cost : 0.0,
@@ -118,6 +117,12 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
             new TOptimizerStatistics::TKeyColumns(keyColumnNames)),
         ColumnStatistics
         );
+
+    if (withStatsAndCosts && props.Statistics.has_value()) {
+        stats.Selectivity = props.Statistics->Selectivity;
+    }
+
+    return stats;
 }
 
 TString TRBOMetadata::ToString(ui32 printOptions) {
@@ -135,6 +140,9 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
                 break;
             case EStatisticsType::ManyManyJoin:
                 metadataType = "ManyManyJoin";
+                break;
+            case EStatisticsType::Constant:
+                metadataType = "Constant";
                 break;
         default:
             Y_ENSURE(false,"Unknown EStatisticsType");

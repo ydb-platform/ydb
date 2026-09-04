@@ -397,7 +397,7 @@ public:
             ui64 totalMetricsCount;
             YQL_ENSURE(TryFromString(settings.TotalMetricsCount(), totalMetricsCount));
 
-            auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
+            auto providerFactory = State_->CredentialsFactory->Create(State_->Configuration->Tokens.at(cluster));
             auto credentialsProvider = providerFactory->CreateProvider();
 
             NDq::TDqSolomonReadParams readParams{ .Source = source };

@@ -10,6 +10,10 @@
 #include <library/cpp/json/writer/json.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <optional>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_REQUEST
+
 namespace NKikimr::NKqp {
 namespace {
 
@@ -17,17 +21,15 @@ namespace {
 // Part-1 budget: 64 B log prefix + 950 B envelope/completed fields + 6 KB data + 1 KB issues = 8182 B.
 constexpr size_t RSYSLOG_MAX_MESSAGE_SIZE = 8_KB;
 constexpr size_t LOG_LINE_OVERHEAD = 64;
-constexpr size_t PART1_JSON_OVERHEAD = 950;
+constexpr size_t PART1_JSON_OVERHEAD = 982;
 
-constexpr size_t QUERY_TEXT_LIMIT = 6_KB;
-constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB;
+constexpr size_t QUERY_TEXT_LIMIT = 6_KB - 32;
+constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB - 32;
 constexpr size_t ISSUES_CHUNK_WITH_DATA = 1_KB;
 constexpr size_t ISSUES_CHUNK_SOLO = SQL_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA;
 constexpr size_t ISSUES_TEXT_MAX_TOTAL = 64_KB;
 static_assert(SQL_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA + LOG_LINE_OVERHEAD + PART1_JSON_OVERHEAD
               <= RSYSLOG_MAX_MESSAGE_SIZE);
-#define _KQP_REQ_LOG_AT(prio, stream) \
-    LOG_LOG_S(*TlsActivationContext, (prio), NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << stream)
 
 // BUILTIN_ACL_METADATA traffic dominates KQP_REQUEST volume — silence SUCCESS, keep failures.
 bool IsMetadataServiceQuery(const TKqpQueryState& state) {
@@ -35,11 +37,14 @@ bool IsMetadataServiceQuery(const TKqpQueryState& state) {
 }
 
 TString SafeExtractQueryText(const TKqpQueryState& state) {
-    if (state.CompileResult) {
-        if (state.CompileResult->Query) {
-            return state.CompileResult->Query->Text;
-        }
-        return {};
+    if (state.CompileResult && state.CompileResult->Query) {
+        return state.CompileResult->Query->Text;
+    }
+    if (state.PreparedQuery) {
+        return state.PreparedQuery->GetText();
+    }
+    if (!state.QueryTextForLogging.empty()) {
+        return state.QueryTextForLogging;
     }
     if (state.RequestEv) {
         return state.RequestEv->GetQuery();
@@ -57,6 +62,8 @@ struct TCompletedFields {
     ui64 QueryLen = 0;
     TInstant StartedAt;
     TString Status;
+    std::optional<bool> QueryTextExpected;
+    bool IsStreamingQuery = false;
     ui64 DurationUs = 0;
     ui64 ResultsSize = 0;
     ui64 QueuedTimeUs = 0;
@@ -91,6 +98,10 @@ void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
     if (!f.Status.empty()) {
         json.WriteKey("status").WriteString(TStringBuf(f.Status));
     }
+    if (f.QueryTextExpected) {
+        json.WriteKey("query_text_expected").WriteBool(*f.QueryTextExpected);
+    }
+    json.WriteKey("is_streaming").WriteBool(f.IsStreamingQuery);
     json.WriteKey("duration_us").WriteULongLong(f.DurationUs);
     json.WriteKey("results_size").WriteULongLong(f.ResultsSize);
     if (f.QueuedTimeUs) {
@@ -208,7 +219,8 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.EndObject();
         json.EndObject();
 
-        _KQP_REQ_LOG_AT(prio, ss.Str());
+        YDB_LOG((prio), "[REQ_JSON]",
+            {"requestJson", ss.Str()});
     }
 }
 
@@ -228,6 +240,12 @@ NActors::NLog::EPriority PickCompletedPriority(Ydb::StatusIds::StatusCode status
     return IsLogPriorityEnabled(NActors::NLog::PRI_TRACE)
         ? NActors::NLog::PRI_TRACE
         : NActors::NLog::PRI_DEBUG;
+}
+
+bool IsTransactionControlAction(NKikimrKqp::EQueryAction action) {
+    return action == NKikimrKqp::QUERY_ACTION_BEGIN_TX
+        || action == NKikimrKqp::QUERY_ACTION_COMMIT_TX
+        || action == NKikimrKqp::QUERY_ACTION_ROLLBACK_TX;
 }
 
 } // anonymous namespace
@@ -281,6 +299,10 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
         fields.QueryLen = origQueryLen;
         fields.StartedAt = state.StartTime;
         fields.Status = TString{Ydb::StatusIds::StatusCode_Name(status)};
+        fields.IsStreamingQuery = userCtx && userCtx->IsStreamingQuery;
+        if (queryText.empty() && IsTransactionControlAction(state.GetAction())) {
+            fields.QueryTextExpected = false;
+        }
         fields.DurationUs = state.QueryStats.DurationUs;
         fields.ResultsSize = responseByteSize;
         fields.QueuedTimeUs = state.QueryStats.QueuedTimeUs;

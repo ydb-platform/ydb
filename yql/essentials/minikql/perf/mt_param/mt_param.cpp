@@ -49,7 +49,7 @@ int main(int, char**) {
                     auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &runAlloc.Ref()));
                     TBindTerminator terminator(graph->GetTerminator());
 
-                    auto param = graph->GetEntryPoint(0, false);
+                    auto param = graph->GetEntryPoint(0, /*require=*/false);
                     auto& ctx = graph->GetContext();
 
                     TString s = ToString(i);

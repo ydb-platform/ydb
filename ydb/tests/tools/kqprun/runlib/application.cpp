@@ -321,7 +321,7 @@ void TMainBase::SetupLogsConfig(NKikimrConfig::TLogConfig& config) const {
 
     setupLogPriority({
         "TOKEN_", "KAFKA_PROXY", "YDB_SDK", "TICKET_PARSER", "BLACKBOX_VALIDATOR", "LDAP_AUTH_PROVIDER", "RPC_REQUEST", "HEALTH",
-        "DB_METADATA_CACHE", "HTTP_PROXY", "PGWIRE", "LOCAL_PGWIRE", "PGYDB", "AUDIT_LOG_WRITER", "METERING_WRITER", "VIEWER",
+        "DB_METADATA_CACHE", "HTTP_PROXY", "AUDIT_LOG_WRITER", "METERING_WRITER", "VIEWER",
         "MSGBUS_", "GRPC_"
     }, ServerIoLogPriority);
 

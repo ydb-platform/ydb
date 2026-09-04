@@ -62,7 +62,17 @@ namespace NPQRBPrivate {
             using TColumns = TableColumns<Idx, State>;
         };
 
-        using TTables = SchemaTables<Data, Partitions, Groups, Tablets, Operations>;
+        struct ReceiveAttemptPartitions : Table<37> {
+            struct Consumer : Column<32, NScheme::NTypeIds::Utf8> {};
+            struct ReceiveAttemptId : Column<33, NScheme::NTypeIds::Utf8> {};
+            struct PartitionId : Column<34, NScheme::NTypeIds::Uint32> {};
+            struct Expiry : Column<35, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<Consumer, ReceiveAttemptId>;
+            using TColumns = TableColumns<Consumer, ReceiveAttemptId, PartitionId, Expiry>;
+        };
+
+        using TTables = SchemaTables<Data, Partitions, Groups, Tablets, Operations, ReceiveAttemptPartitions>;
     };
 
 }

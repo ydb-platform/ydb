@@ -1,3 +1,4 @@
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -89,12 +90,15 @@ class TGrabActor: public TActorBootstrapped<TGrabActor> {
     std::deque<TAutoPtr<IEventHandle>> Inputs;
     TMutex Mutex;
     std::unique_ptr<NColumnShard::NBackup::TExportDriver> Driver;
-    std::unique_ptr<NTable::IScan> Exporter;
+
+    // non-owning pointer to the exporter actor
+    NTable::IScan* Exporter = nullptr;
 
 public:
-    TRuntimePtr Runtime;
+    // Non-owning pointer to the actor runtime
+    TTestActorRuntime* Runtime;
 
-    TGrabActor(TRuntimePtr runtime)
+    TGrabActor(TTestActorRuntime* runtime)
         : Runtime(runtime)
     {
     }
@@ -106,12 +110,14 @@ public:
 
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
 
-        Exporter =
+        std::unique_ptr<NTable::IScan> exporter =
             NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), MakeBackupTask("test"), exportFactory.get(), columns, 0).DetachResult();
-        UNIT_ASSERT(Exporter);
+        UNIT_ASSERT(exporter);
+        Exporter = exporter.get();
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
         auto initialState = Exporter->Prepare(Driver.get(), MakeSchema());
         UNIT_ASSERT_VALUES_EQUAL(initialState.Scan, NTable::EScan::Feed);
+        Y_UNUSED(exporter.release());
 
         NTable::TLead lead;
         auto seekState = Exporter->Seek(lead, 0);
@@ -188,11 +194,11 @@ Y_UNIT_TEST_SUITE(IScan) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
         NTestUtils::CreateBucket("test", s3Client);
 
-        TRuntimePtr runtime(new TTestBasicRuntime(1, true));
+        TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
 
-        auto grabActor = new TGrabActor(runtime);
+        auto grabActor = new TGrabActor(runtime.get());
         runtime->Register(grabActor);
 
         while (true) {
@@ -293,6 +299,28 @@ Y_UNIT_TEST_SUITE(IScan) {
         auto data = NTestUtils::GetObject("test2", "data_00.csv", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(
             data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
+    }
+
+    Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
+        TRuntimePtr runtime(new TTestBasicRuntime());
+        SetupTabletServices(*runtime);
+        runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+
+        NDataShard::IExport::TTableColumns columns;
+        columns[0] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "key", true);
+        columns[1] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "value", false);
+
+        auto backupTask = MakeBackupTask("test");
+        backupTask.MutableS3Settings()->MutableExportDataSettings()->MutableParquet();
+        backupTask.MutableEncryptionSettings()->SetEncryptionAlgorithm("AES-256-GCM");
+
+        auto exportFactory = std::make_shared<TDataShardExportFactory>();
+        auto result = runtime->RunCall([&] {
+            return NColumnShard::NBackup::CreateIScanExportUploader(runtime->AllocateEdgeActor(), backupTask, exportFactory.get(), columns, 0);
+        });
+
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetErrorMessage(), "Encryption is not supported for parquet files");
     }
 }
 

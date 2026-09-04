@@ -112,24 +112,26 @@ public:
     }
     void * construct(unsigned int count, ...) const BOOST_OVERRIDE {
         // count up the arguments
+        void * r = NULL;
         std::va_list ap;
         va_start(ap, count);
         switch(count){
         case 0:
-            return factory<typename boost::remove_const< T >::type, 0>(ap);
+            r = factory<typename boost::remove_const< T >::type, 0>(ap); break;
         case 1:
-            return factory<typename boost::remove_const< T >::type, 1>(ap);
+            r = factory<typename boost::remove_const< T >::type, 1>(ap); break;
         case 2:
-            return factory<typename boost::remove_const< T >::type, 2>(ap);
+            r = factory<typename boost::remove_const< T >::type, 2>(ap); break;
         case 3:
-            return factory<typename boost::remove_const< T >::type, 3>(ap);
+            r = factory<typename boost::remove_const< T >::type, 3>(ap); break;
         case 4:
-            return factory<typename boost::remove_const< T >::type, 4>(ap);
+            r = factory<typename boost::remove_const< T >::type, 4>(ap); break;
         default:
             BOOST_ASSERT(false); // too many arguments
             // throw exception here?
-            return NULL;
         }
+        va_end(ap);
+        return r;
     }
     void destroy(void const * const p) const BOOST_OVERRIDE {
         boost::serialization::access::destroy(

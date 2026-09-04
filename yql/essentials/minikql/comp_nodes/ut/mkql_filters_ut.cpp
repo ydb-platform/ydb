@@ -6,8 +6,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
 Y_UNIT_TEST_LLVM(TestSkipNullMembers) {
@@ -60,8 +59,6 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptional) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto justNothing = pb.NewOptional(pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<i32>::Id));
-
     using TOpt = TMaybe<TMaybe<i32>>;
     using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TOpt>,
                                       NTest::TStructMember<"Payload", TOpt>>;
@@ -95,7 +92,8 @@ Y_UNIT_TEST_LLVM(TestSkipNullMembersOverFlow) {
                                                                {{{3}, {}}},
                                                            });
 
-    const auto pgmReturn = pb.FromFlow(pb.SkipNullMembers(pb.ToFlow(list), {"Payload"}));
+    const auto pgmReturn = pb.FromFlow(pb.SkipNullMembers(pb.ToFlow(list, {}), {"Payload"}));
+
     const auto graph = setup.BuildGraph(pgmReturn);
 
     using TOutRow = std::tuple<TMaybe<i32>, i32>;
@@ -118,7 +116,8 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersOverFlow) {
                                                                {{{3}, {}}},
                                                            });
 
-    const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list), {"Payload"}));
+    const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list, {}), {"Payload"}));
+
     const auto graph = setup.BuildGraph(pgmReturn);
 
     using TOutRow = std::tuple<TMaybe<i32>, i32>;
@@ -141,7 +140,8 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptionalOverFlow) {
                                                                {{{}, {{TMaybe<i32>{2}}}}},
                                                                {{{{TMaybe<i32>{}}}, {{TMaybe<i32>{}}}}}});
 
-    const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list), {"Payload"}));
+    const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list, {}), {"Payload"}));
+
     const auto graph = setup.BuildGraph(pgmReturn);
 
     using TOutRow = std::tuple<TOpt, TMaybe<i32>>;
@@ -254,7 +254,7 @@ Y_UNIT_TEST_LLVM(TestSkipNullElementsOverOverFlow) {
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
 
-    const auto pgmReturn = pb.FromFlow(pb.SkipNullElements(pb.ToFlow(list), {1U, 2U}));
+    const auto pgmReturn = pb.FromFlow(pb.SkipNullElements(pb.ToFlow(list, {}), {1U, 2U}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
@@ -281,7 +281,7 @@ Y_UNIT_TEST_LLVM(TestFilterNullElementsOverOverFlow) {
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
 
-    const auto pgmReturn = pb.FromFlow(pb.FilterNullElements(pb.ToFlow(list), {1U, 2U}));
+    const auto pgmReturn = pb.FromFlow(pb.FilterNullElements(pb.ToFlow(list, {}), {1U, 2U}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
@@ -309,7 +309,7 @@ Y_UNIT_TEST_LLVM(TestFilterNullElementsOverMultiOptionalOverFlow) {
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
 
-    const auto pgmReturn = pb.FromFlow(pb.FilterNullElements(pb.ToFlow(list), {1U, 2U}));
+    const auto pgmReturn = pb.FromFlow(pb.FilterNullElements(pb.ToFlow(list, {}), {1U, 2U}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
@@ -390,7 +390,7 @@ Y_UNIT_TEST_LLVM(TestFilterOverFlow) {
     const auto data5 = pb.NewDataLiteral<ui32>(5);
     const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5});
-    const auto pgmReturn = pb.FromFlow(pb.Filter(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.Filter(pb.ToFlow(list, {}),
                                                  [&](TRuntimeNode item) {
                                                      return pb.Greater(pb.Unwrap(pb.Mod(item, data3), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0), data1);
                                                  }));
@@ -518,7 +518,7 @@ Y_UNIT_TEST_LLVM(TestSkipWhileOverFlow) {
     const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
-    const auto pgmReturn = pb.FromFlow(pb.SkipWhile(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.SkipWhile(pb.ToFlow(list, {}),
                                                     [&](TRuntimeNode item) {
                                                         return pb.NotEquals(item, data2);
                                                     }));
@@ -545,7 +545,7 @@ Y_UNIT_TEST_LLVM(TestTakeWhileOverFlow) {
     const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
-    const auto pgmReturn = pb.FromFlow(pb.TakeWhile(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.TakeWhile(pb.ToFlow(list, {}),
                                                     [&](TRuntimeNode item) {
                                                         return pb.NotEquals(item, data2);
                                                     }));
@@ -664,7 +664,7 @@ Y_UNIT_TEST_LLVM(TestSkipWhileInclusiveOverFlow) {
     const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
-    const auto pgmReturn = pb.FromFlow(pb.SkipWhileInclusive(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.SkipWhileInclusive(pb.ToFlow(list, {}),
                                                              [&](TRuntimeNode item) {
                                                                  return pb.NotEquals(item, data2);
                                                              }));
@@ -689,7 +689,7 @@ Y_UNIT_TEST_LLVM(TestTakeWhileInclusiveOverFlow) {
     const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
-    const auto pgmReturn = pb.FromFlow(pb.TakeWhileInclusive(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.TakeWhileInclusive(pb.ToFlow(list, {}),
                                                              [&](TRuntimeNode item) {
                                                                  return pb.NotEquals(item, data2);
                                                              }));
@@ -712,7 +712,7 @@ Y_UNIT_TEST_LLVM(TestDateToStringCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
     const auto pgmReturn = pb.Not(pb.HasItems(pb.Filter(list,
                                                         [&](TRuntimeNode item) {
                                                             const auto date = pb.ToIntegral(item, dateType);
@@ -730,8 +730,8 @@ Y_UNIT_TEST_LLVM(TestTzDateToStringCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
-    const auto dateTypeTz = pb.NewDataType(NUdf::EDataSlot::TzDate, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
+    const auto dateTypeTz = pb.NewDataType(NUdf::EDataSlot::TzDate, /*optional=*/true);
     const auto canada = pb.NewDataLiteral<ui16>(375U);
     const auto europe = pb.NewDataLiteral<ui16>(459U);
     const auto pgmReturn = pb.Not(pb.HasItems(pb.Filter(list,
@@ -784,8 +784,8 @@ Y_UNIT_TEST_LLVM(TestDateToDatetimeCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
-    const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
+    const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
     const auto pgmReturn = pb.Not(pb.HasItems(pb.Filter(list,
                                                         [&](TRuntimeNode item) {
                                                             const auto date = pb.ToIntegral(item, dateType);
@@ -802,7 +802,7 @@ Y_UNIT_TEST_LLVM(TestTzDateToDatetimeCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
     const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime);
     const auto canada = pb.NewDataLiteral<ui16>(375U);
     const auto europe = pb.NewDataLiteral<ui16>(459U);
@@ -824,7 +824,7 @@ Y_UNIT_TEST_LLVM(TestDateAddTimezoneAndCastOrderCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
     const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime);
     const auto datetimeTypeTz = pb.NewDataType(NUdf::EDataSlot::TzDatetime);
     const auto canada = pb.NewDataLiteral<ui16>(375U);
@@ -1092,5 +1092,4 @@ Y_UNIT_TEST_LLVM(TestFilterWithLimitOverFlow) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

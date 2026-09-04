@@ -2,6 +2,8 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -60,7 +62,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxGetYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGetYamlConfig Complete");
 
         ctx.Send(Request->Sender, Response.Release());
 

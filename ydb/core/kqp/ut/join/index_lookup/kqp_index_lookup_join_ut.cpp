@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
@@ -1113,7 +1114,24 @@ Y_UNIT_TEST(StreamLookupJoin_RowSeqNoCollision_Repro) {
     // - stream index lookup join enabled (cookie-based sequencing)
     // - many DQ tasks (>= 17) producing overlapping RowSeqNo after Encode/Decode truncation
     // - LEFT join over a non-unique index producing multi-row sequences per left row
+    // Force the stream lookup actor to flush results in tiny fetches so that the
+    // First/middle/Last markers of different left-row sequences interleave heavily.
+    // This is what surfaces the RowSeqNo cookie collision as the crash in
+    // OmitRowLeftJoin (kqp_compute.cpp): Y_ENSURE(it != state.AllRowsAreNull.end()).
+    // The backoff settings are a process-global singleton, so restore the defaults
+    // when the test finishes to avoid leaking the tiny-fetch setting into other tests.
+    {
+        auto backoff = MakeIntrusive<TIteratorReadBackoffSettings>();
+        backoff->MaxRowsProcessingStreamLookup = 1;
+        SetReadIteratorBackoffSettings(backoff);
+    }
+    Y_DEFER {
+        SetReadIteratorBackoffSettings(MakeIntrusive<TIteratorReadBackoffSettings>());
+    };
+
     TKikimrSettings settings;
+    // Enable the fixed (v1) cookie format so RowSeqNo no longer overflows for taskId >= 16.
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableStreamLookupJoinCookieV2(true);
     TKikimrRunner kikimr(settings);
     auto tableClient = kikimr.GetTableClient();
     auto session = tableClient.CreateSession().GetValueSync().GetSession();

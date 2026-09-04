@@ -3,6 +3,7 @@ items:
 - { name: Lexical structure,            href: lexer.md }
 - { name: Expressions,                  href: expressions.md }
 - { name: ACTION,                       href: action.md }
+- { name: COMBINE,                      href: combine.md }
 - { name: COMMIT,                       href: commit.md }
 - { name: DECLARE,                      href: declare.md }
 - { name: DISCARD,                      href: discard.md }
@@ -20,4 +21,5 @@ items:
 - { name: USE,                          href: use.md }
 - { name: VALUES,                       href: values.md }
 - { name: WINDOW,                       href: window.md }
+- { name: MATERIALIZE,                  href: materialize.md }
 - { name: Unsupported statements,       href: not_yet_supported.md }

@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 namespace NYT::NRpc {
@@ -86,10 +88,9 @@ public:
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& /*formatOptionsYson*/) override
     {
         google::protobuf::io::ArrayInputStream stream(message.Begin(), message.Size());
-        // TODO(babenko): migrate to std::string
-        TString ysonBuffer;
+        std::string ysonBuffer;
         {
-            TStringOutput output(ysonBuffer);
+            TStdStringOutput output(ysonBuffer);
             // TODO(ignat): refactor TYsonFormatConfig, move it closer to YSON.
             TYsonWriter writer{&output, EYsonFormat::Text};
             ParseProtobuf(&writer, &stream, messageType);
@@ -126,10 +127,9 @@ public:
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& formatOptionsYson) override
     {
         google::protobuf::io::ArrayInputStream stream(message.Begin(), message.Size());
-        // TODO(babenko): migrate to std::string
-        TString ysonBuffer;
+        std::string ysonBuffer;
         {
-            TStringOutput output(ysonBuffer);
+            TStdStringOutput output(ysonBuffer);
             auto formatConfig = New<TJsonFormatConfig>();
             if (formatOptionsYson) {
                 formatConfig->Load(NYTree::ConvertToNode(formatOptionsYson));

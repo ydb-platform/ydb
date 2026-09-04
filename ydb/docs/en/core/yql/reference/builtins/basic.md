@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD022 MD031 -->
 # Basic built-in functions
 
 Below are the general-purpose functions. For specialized functions, there are separate articles: [aggregate functions](aggregation.md){% if feature_window_functions %}, [window functions](window.md){% endif %}, and functions for [lists](list.md), [dictionaries](dict.md), [structures](struct.md), [data types](types.md){% if feature_codegen %}, and [code generation](codegen.md){% endif %}.
@@ -1127,6 +1128,7 @@ SELECT $callables.0(10), $callables.1(true);
 
 ### Examples
 
+{% if feature_tablesample==true %}
 ```yql
 SELECT *
 FROM my_table
@@ -1137,7 +1139,18 @@ WHERE Digest::MurMurHash32(
 $buf = Pickle(123);
 SELECT Unpickle(Int32, $buf);
 ```
+{% else %}
+```yql
+SELECT *
+FROM my_table
+WHERE Digest::MurMurHash32(
+        Pickle(TableRow())
+    ) % 10 == 0;
 
+$buf = Pickle(123);
+SELECT Unpickle(Int32, $buf);
+```
+{% endif %}
 
 
 ## StaticMap

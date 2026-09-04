@@ -216,7 +216,32 @@ void TChannelPool::EraseFromQueueByTime(const TInstant& lastUseTime, const std::
     LastUsedQueue_.erase(pos);
 }
 
+namespace {
+
+thread_local bool IsGrpcWorkerThread = false;
+
+class TGrpcWorkerThreadGuard {
+public:
+    TGrpcWorkerThreadGuard() {
+        IsGrpcWorkerThread = true;
+    }
+
+    ~TGrpcWorkerThreadGuard() {
+        IsGrpcWorkerThread = PreviousValue_;
+    }
+
+private:
+    const bool PreviousValue_ = IsGrpcWorkerThread;
+};
+
+} // namespace
+
+bool IsGRpcCompletionThread() {
+    return IsGrpcWorkerThread;
+}
+
 static void PullEvents(grpc::CompletionQueue* cq) {
+    TGrpcWorkerThreadGuard guard;
     TThread::SetCurrentThreadName("grpc_client");
     while (true) {
         void* tag;

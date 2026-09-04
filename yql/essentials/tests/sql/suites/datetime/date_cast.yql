@@ -1,4 +1,3 @@
-/* postgres can not */
 select cast(Yql::Date(AsAtom("1")) as Uint8);
 select cast(Yql::Date(AsAtom("1")) as Uint32);
 select cast(Yql::Date(AsAtom("1")) as Int32);
@@ -31,7 +30,6 @@ select cast(1l as Date);
 select cast(-1 as Date);
 select cast(1/1 as Date);
 select cast(-1/1 as Date);
-/* postgres can not */
 select cast(Yql::Date(AsAtom("1")) as Uint8);
 select cast(Yql::Date(AsAtom("1")) as Uint32);
 select cast(Yql::Date(AsAtom("1")) as Int32);

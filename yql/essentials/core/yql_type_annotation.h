@@ -9,6 +9,7 @@
 
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
+#include <yql/essentials/minikql/mkql_bridge_mode.h>
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -17,7 +18,7 @@
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/core/layers/layers.h>
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/sql/settings/translation_sql_flags.h>
+#include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
@@ -53,16 +54,21 @@ class TModuleResolver : public IModuleResolver {
 public:
     using TModuleChecker = std::function<bool(const TString& query, const TString& fileName, TExprContext& ctx)>;
 
-    TModuleResolver(NSQLTranslation::TTranslators translators, TModulesTable&& modules,
-        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true,
-        THolder<TExprContext> ownedCtx = {}, TModuleChecker moduleChecker = {})
+    TModuleResolver(
+        NSQLTranslation::TTranslators translators,
+        TModulesTable&& modules,
+        ui64 nextUniqueId,
+        const THashMap<TString, TString>& clusterMapping,
+        NSQLTranslation::TExtendedSqlFlags sqlFlags,
+        bool optimizeLibraries = true,
+        THolder<TExprContext> ownedCtx = {},
+        TModuleChecker moduleChecker = {})
         : Translators_(std::move(translators))
         , OwnedCtx_(std::move(ownedCtx))
         , LibsContext_(nextUniqueId)
         , Modules_(std::move(modules))
         , ClusterMapping_(clusterMapping)
-        , SqlFlags_(sqlFlags)
+        , SqlFlags_(std::move(sqlFlags))
         , ModuleChecker_(std::move(moduleChecker))
         , OptimizeLibraries_(optimizeLibraries)
     {
@@ -71,17 +77,25 @@ public:
         }
     }
 
-    TModuleResolver(NSQLTranslation::TTranslators translators, const TModulesTable* parentModules,
-        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, TString fileAliasPrefix, TModuleChecker moduleChecker)
+    TModuleResolver(
+        NSQLTranslation::TTranslators translators,
+        const TModulesTable* parentModules,
+        ui64 nextUniqueId,
+        const THashMap<TString, TString>& clusterMapping,
+        NSQLTranslation::TExtendedSqlFlags sqlFlags,
+        bool optimizeLibraries,
+        const TSet<TString>& knownPackages,
+        const THashMap<TString,
+        THashMap<int, TLibraryCohesion>>& libs,
+        TString fileAliasPrefix,
+        TModuleChecker moduleChecker)
         : Translators_(std::move(translators))
         , ParentModules_(parentModules)
         , LibsContext_(nextUniqueId)
         , KnownPackages_(knownPackages)
         , Libs_(libs)
         , ClusterMapping_(clusterMapping)
-        , SqlFlags_(sqlFlags)
+        , SqlFlags_(std::move(sqlFlags))
         , ModuleChecker_(std::move(moduleChecker))
         , OptimizeLibraries_(optimizeLibraries)
         , FileAliasPrefix_(std::move(fileAliasPrefix))
@@ -113,8 +127,9 @@ public:
     void SetClusterMapping(const THashMap<TString, TString>& clusterMapping) {
         ClusterMapping_ = clusterMapping;
     }
-    void SetSqlFlags(const THashSet<TString>& flags) {
-        SqlFlags_ = flags;
+
+    void SetSqlFlags(NSQLTranslation::TExtendedSqlFlags flags) {
+        SqlFlags_ = std::move(flags);
     }
 
     void SetModuleChecker(TModuleChecker moduleChecker) {
@@ -147,7 +162,7 @@ private:
     TString SubstParameters(const TString& str);
     bool IsSExpr(bool isYql, bool isYqls, const TString& body) const;
 
-private:
+
     const NSQLTranslation::TTranslators Translators_;
     THolder<TExprContext> OwnedCtx_;
     const TModulesTable* ParentModules_ = nullptr;
@@ -162,7 +177,7 @@ private:
     THashMap<TString, THashMap<int, TLibraryCohesion>> Libs_;
     TModulesTable Modules_;
     THashMap<TString, TString> ClusterMapping_;
-    THashSet<TString> SqlFlags_;
+    NSQLTranslation::TExtendedSqlFlags SqlFlags_;
     TModuleChecker ModuleChecker_;
     const bool OptimizeLibraries_;
     THolder<TExprContext::TFreezeGuard> FreezeGuard_;
@@ -342,6 +357,11 @@ enum class EBlockEngineMode {
     Force /* "force" */,
 };
 
+enum class EDecimalConversionMode {
+    WithoutCommonTypeFixup /* "without_common_type_fixup" */,
+    WithCommonTypeFixup /* "with_common_type_fixup" */,
+};
+
 enum class EEngineType {
     Default /* "default" */,
     Dq /* "dq" */,
@@ -366,6 +386,13 @@ struct TLineageStats {
     ui64 Memory = 0;
     ui64 Duration = 0;
     ui32 Version = 0;
+};
+
+struct TEvaluationStats {
+    ui64 Count = 0;
+    ui64 CacheHits = 0;
+    ui64 CalcProviderCalls = 0;
+    TDuration CalcProviderDurationSum = TDuration::Zero();
 };
 
 struct TLineageSettings {
@@ -444,6 +471,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     IModuleResolver::TPtr Modules;
     IUrlListerManagerPtr UrlListerManager;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
+    NUdf::EBridgeMode BridgeMode = NUdf::EBridgeMode::None;
+    TString BridgeBinaryPath;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
     NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
@@ -471,6 +500,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool WindowNewPipeline = true;
     bool ForceDq = false;
     bool DqCaptured = false; // TODO: Add before/after recapture transformers
+    bool EnableEvaluateExprCache = false;
     EFallbackPolicy DqFallbackPolicy = EFallbackPolicy::Default;
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
@@ -506,6 +536,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 AndOverOrExpansionLimit = 100;
     bool EarlyExpandSeq = true;
     bool DirectRowDependsOn = true;
+    TEvaluationStats EvaluationStats;
     TLineageStats LineageStats;
     TLineageSettings LineageSettings;
     bool FuzzUntypedLambda = false;
@@ -646,6 +677,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
         return BlockEngineMode != EBlockEngineMode::Disable || UseBlocks;
     }
 
+    void UpdateDecimalConversionMode(EDecimalConversionMode decimalConversionMode);
+    EDecimalConversionMode GetDecimalConversionMode() const;
+
     void IncNoBlockCallable(TStringBuf callableName);
     void IncNoBlockType(const TTypeAnnotationNode& type);
     void IncNoBlockType(ETypeAnnotationKind kind);
@@ -653,6 +687,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     TVector<TString> GetTopNoBlocksCallables(size_t maxCount) const;
     TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
+
+private:
+    EDecimalConversionMode DecimalConversionMode_ = EDecimalConversionMode::WithoutCommonTypeFixup;
 };
 
 template <> inline

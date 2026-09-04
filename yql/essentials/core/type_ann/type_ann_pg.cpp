@@ -141,7 +141,7 @@ IGraphTransformer::TStatus InferPgCommonType(
         {
             size_t j = 0;
             for (const auto& [col, gen_col] : *childColumnOrder) {
-                auto itemIdx = structType->FindItemI(gen_col, nullptr);
+                auto itemIdx = structType->FindItemI(gen_col, /*isVirtual=*/nullptr);
                 YQL_ENSURE(itemIdx);
 
                 const auto* type = structType->GetItems()[*itemIdx]->GetItemType();
@@ -254,6 +254,34 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             }
 
             refinedType = NPg::LookupType(TString(setting->Tail().Content())).TypeId;
+        } else if (content == "collation") {
+            if (!EnsureTupleSize(*setting, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            TString collationName(setting->Tail().Content());
+            try {
+                NPg::LookupCollation(collationName);
+            } catch (const yexception& e) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Failed to resolve collation \"" << collationName << "\" for function " << name << ": " << e.what()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (content == "collation_oid") {
+            // Resolved collation oid, computed once from the "collation" setting above
+            // when PgResolvedCall was built (see below) - trusted as-is, same as the
+            // resolved proc oid in input->Child(1) is trusted without re-resolving the name.
+            if (!EnsureTupleSize(*setting, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unexpected setting " << content << " in function " << name));
@@ -373,6 +401,32 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                     children.push_back(std::move(node));
                 }
 
+                // If the call had an explicit COLLATE, resolve it to a stable oid (see
+                // NPg::LookupCollation) and replace the "collation" (name) setting with the
+                // resolved "collation_oid" one - the name has done its job (validation) and
+                // the oid is now the single source of truth, same as how the function name
+                // atom stays but the unresolved settings entry itself doesn't need to persist.
+                auto& settingsNode = children[argStart - 1];
+                for (const auto& setting : settingsNode->Children()) {
+                    if (setting->Head().Content() != "collation") {
+                        continue;
+                    }
+
+                    auto collationOid = NPg::LookupCollation(TString(setting->Tail().Content())).Oid;
+                    TExprNode::TListType newSettings;
+                    for (const auto& other : settingsNode->Children()) {
+                        if (other->Head().Content() != "collation") {
+                            newSettings.push_back(other);
+                        }
+                    }
+                    newSettings.push_back(ctx.Expr.NewList(input->Pos(), {
+                        ctx.Expr.NewAtom(input->Pos(), "collation_oid"),
+                        ctx.Expr.NewAtom(input->Pos(), ToString(collationOid)),
+                    }));
+                    settingsNode = ctx.Expr.NewList(input->Pos(), std::move(newSettings));
+                    break;
+                }
+
                 if (proc.Lang == NPg::LangSQL) {
                     if (!proc.ExprNode) {
                         throw yexception() << "Function " << proc.Name << " has no implementation";
@@ -383,7 +437,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                     YQL_ENSURE(proc.ExprNode->Head().ChildrenSize() == static_cast<ui32>(fargTypes.size()));
                     TNodeOnNodeOwnedMap deepClones;
                     YQL_ENSURE(NPg::GetSqlLanguageParser());
-                    auto lambda = ctx.Expr.DeepCopy(*proc.ExprNode, NPg::GetSqlLanguageParser()->GetContext(), deepClones, true, false);
+                    auto lambda = ctx.Expr.DeepCopy(*proc.ExprNode, NPg::GetSqlLanguageParser()->GetContext(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
                     TNodeOnNodeOwnedMap replaces;
                     for (ui32 i = 0; i < fargTypes.size(); ++i) {
                         replaces[lambda->Head().Child(i)] = children[i + argStart];
@@ -1807,7 +1861,7 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
                     .Build();
                 convertedChildren.push_back(std::move(convertedChild));
             } else {
-                convertedChildren.emplace_back(std::move(child));
+                convertedChildren.emplace_back(child);
             }
         }
         if (hasConvertions) {

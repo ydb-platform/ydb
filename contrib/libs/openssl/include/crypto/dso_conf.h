@@ -1,4 +1,3 @@
-#include <contrib/libs/openssl/redef.h>
 #pragma once
 
 #if defined(__ANDROID__)

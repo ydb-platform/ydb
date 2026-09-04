@@ -53,7 +53,7 @@ TString WriteValueToFuncJsonStr(const NUdf::TUnboxedValuePod& value, NMiniKQL::T
 NUdf::TUnboxedValue ReadJsonStrValue(IInputStream* in, NMiniKQL::TType* type, const NMiniKQL::THolderFactory& holderFactory)
 {
     NJson::TJsonValue json;
-    if (!NJson::ReadJsonTree(in, &json, false)) {
+    if (!NJson::ReadJsonTree(in, &json, /*throwOnError=*/false)) {
         YQL_ENSURE(false, "Error parse json");
     }
     return ReadJsonValue(json, type, holderFactory);

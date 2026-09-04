@@ -25,7 +25,7 @@ def discover_cases():
 
 
 TSpec = collections.namedtuple(
-    'TSpec', ['program', 'canonize_ast', 'cfg', 'xfail', 'langver', 'files', 'diff_tool', 'scan_udfs', 'extra_env', 'secure_params']
+    'TSpec', ['program', 'canonize_ast', 'cfg', 'xfail', 'langver', 'files', 'diff_tool', 'scan_udfs', 'udf_bridge', 'extra_env', 'secure_params', 'patch_cfg_file']
 )
 
 
@@ -59,6 +59,7 @@ def make_test(case):
     files = {}
     diff_tool = None
     scan_udfs = os.getenv('YQL_UDF_NO_SCAN') != 'yes'
+    udf_bridge = False
     # check for purecalc-only UDFs (TODO: replace with YQL_UDF_NO_SCAN macro)
     if project_path.startswith('robot/rthub/yql/udfs') or project_path.startswith('robot/zora'):
         scan_udfs = False
@@ -71,6 +72,10 @@ def make_test(case):
             scan_udfs = True
         elif item[0] == 'disable_scan_udfs':
             scan_udfs = False
+        elif item[0] == 'udf_bridge':
+            udf_bridge = True
+    patch_file_name = yql_utils.get_gateway_cfg_patch(cfg)
+    patch_file_path = os.path.join(DATA_PATH, patch_file_name) if patch_file_name else None
 
     # 4. Build the environment for the YQL runner process.
     extra_env = dict(os.environ)
@@ -94,12 +99,14 @@ def make_test(case):
         files=files,
         diff_tool=diff_tool,
         scan_udfs=scan_udfs,
+        udf_bridge=udf_bridge,
         extra_env=extra_env,
         secure_params=secure_params,
+        patch_cfg_file=patch_file_path,
     )
 
 
-def facade_runner(prov, cfg_dir, binary=None, secure_params={}):
+def facade_runner(prov, cfg_dir, binary=None, secure_params={}, patch_cfg_file=None):
     """Returns a factory that creates YQLRun instances with the given fixed parameters."""
 
     def make(langver, gateway_config=None, extra_args=[]):
@@ -120,14 +127,15 @@ def facade_runner(prov, cfg_dir, binary=None, secure_params={}):
             gateway_config=gateway_config,
             extra_args=extra_args,
             langver=langver,
-            secure_params=secure_params
+            secure_params=secure_params,
+            patch_cfg_file=patch_cfg_file
         )
 
     return make
 
 
 def canonize_opt(res):
-    return [yatest.common.canonical_file(res.opt_file, local=True, diff_tool=ASTDIFF_PATH)]
+    return [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
 
 
 def canonize_results(case, res, xfail, canonize_ast, diff_tool):

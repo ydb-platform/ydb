@@ -26,10 +26,13 @@ default:
   feature_transfer: true
   feature_batch_operations: true
   feature_backup_collections: true
+  feature_tablesample: false
+  feature_topic_codecs: true
   ydb: YDB
   ydb-name: YDB
   ydb-full-name: YDB
   ydb-short-name: YDB
+  ydb-ui-name: YDB UI
   yandex-cloud: Yandex.Cloud
   objstorage-full-name: Yandex Object Storage
   sf-name: Cloud Functions

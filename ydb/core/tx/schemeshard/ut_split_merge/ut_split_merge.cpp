@@ -4,6 +4,7 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/mon_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>  // for Y_UNIT_TEST_FLAGS_N
@@ -15,7 +16,6 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 // defined in ut_table_partitions_format.cpp
-TString PostSwitchAction(TTestActorRuntime& runtime, ui64 schemeShard, TPathId pathId, TStringBuf format);
 TPathId GetPathId(TTestActorRuntime& runtime, const TString& path);
 
 namespace {
@@ -556,7 +556,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         // we can distinguish "stats row present" from "stats missing → default 0".
         constexpr ui64 kShardCDataSize = 99999;
         const ui64 shardCTabletId = TTestTxConfig::FakeHiveTablets + 2;
-        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime);
+        // Only capture events addressed to schemeshard, so a same-typed forward to an aux
+        // actor (which changes Recipient) sails through untouched.
+        const TActorId schemeShardActorId = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime,
+            [schemeShardActorId](const auto& ev) {
+                return ev->GetRecipientRewrite() == schemeShardActorId;
+            }
+        );
 
         runtime.WaitFor("stats from all 3 shards", [&]{ return statsBlocker.size() >= 3; });
 

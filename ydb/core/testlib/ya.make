@@ -53,9 +53,12 @@ PEERDIR(
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
+    ydb/core/blob_depot
+    ydb/core/test_tablet
     ydb/core/kqp
     ydb/core/kqp/federated_query
-    ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
+    ydb/services/workload_manager/service
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
     ydb/core/metering
@@ -65,6 +68,7 @@ PEERDIR(
     ydb/core/mind/hive
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/security
     ydb/core/security/ldap_auth_provider
@@ -89,6 +93,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/security
     yql/essentials/minikql/comp_nodes/llvm16
+    ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/library/yql/providers/s3/actors_factory
     yt/yql/providers/yt/codec/codegen
@@ -99,6 +104,8 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/table
@@ -106,10 +113,13 @@ PEERDIR(
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
-    ydb/services/ext_index/service
     ydb/services/ymq
     ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor/usage
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus

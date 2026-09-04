@@ -12,6 +12,7 @@ SRCS(
     ydb_bridge_v1.proto
     ydb_clickhouse_internal_v1.proto
     ydb_datastreams_v1.proto
+    ydb_distributed_storage_v1.proto
     ydb_dynamic_config_v1.proto
     ydb_logstore_v1.proto
     ydb_maintenance_v1.proto
@@ -21,7 +22,7 @@ SRCS(
     ydb_replication_v1.proto
     ydb_sqs_topic_v1.proto
     ydb_tablet_v1.proto
-    ydb_test_shard_v1.proto
+    ydb_topic_deferred_publish_v1.proto
     ydb_view_v1.proto
     ydb_ymq_v1.proto
 )

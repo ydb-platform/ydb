@@ -25,7 +25,7 @@
 #include <yql/essentials/core/yql_library_compiler.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -186,6 +186,11 @@ int RunUI(int argc, const char* argv[])
 
     NPg::GetSqlLanguageParser()->Freeze();
 
+    NSQLTranslation::TExtendedSqlFlags extendedSqlFlags;
+    for (const auto& flag : sqlFlags) {
+        extendedSqlFlags[flag] = {};
+    }
+
     THolder<TGatewaysConfig> gatewaysConfig;
     if (!gatewaysCfgFile.empty()) {
         gatewaysConfig = ParseProtoConfig<TGatewaysConfig>(gatewaysCfgFile);
@@ -193,7 +198,8 @@ int RunUI(int argc, const char* argv[])
             return -1;
         }
 
-        TGatewaySQLFlags::FromTesting(*gatewaysConfig).CollectAllTo(sqlFlags);
+        extendedSqlFlags = TGatewaySQLFlags::FromTesting(*gatewaysConfig)
+                               .ToMap(std::move(extendedSqlFlags));
     }
 
     THolder<TFileStorageConfig> fsConfig;
@@ -218,8 +224,14 @@ int RunUI(int argc, const char* argv[])
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/true,
+        /*isAmbiguityDebugging=*/false,
+        /*maxParseTreeDepth=*/NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/true,
+        /*isAmbiguityDebugging=*/false,
+        /*maxParseTreeDepth=*/NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH);
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -242,7 +254,12 @@ int RunUI(int argc, const char* argv[])
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags);
+        moduleResolver = std::make_shared<TModuleResolver>(
+            translators,
+            std::move(modules),
+            ctx.NextUniqueId,
+            clusterMapping,
+            extendedSqlFlags);
     } else {
         if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping)) {
             Cerr << "Errors loading default YQL libraries:" << Endl;

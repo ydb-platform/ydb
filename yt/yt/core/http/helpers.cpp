@@ -16,7 +16,10 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/buffer.h>
+#include <util/stream/mem.h>
 
 #include <util/generic/buffer.h>
 
@@ -49,9 +52,8 @@ void FillYTError(
     const THeadersPtr& headers,
     const TError& error)
 {
-    // TODO(babenko): migrate to std::string
-    TString errorString;
-    TStringOutput errorStringOutput(errorString);
+    std::string errorString;
+    TStdStringOutput errorStringOutput(errorString);
 
     auto consumer = CreateJsonConsumer(&errorStringOutput);
 
@@ -108,8 +110,7 @@ TError ParseYTError(
         errorHeader = rsp->GetHeaders()->Find(XYTErrorHeaderName);
     }
 
-    // TODO(babenko): migrate to std::string
-    TString errorString;
+    std::string errorString;
     if (errorHeader) {
         errorString = *errorHeader;
     } else {
@@ -118,7 +119,7 @@ TError ParseYTError(
         errorString = ToString(rsp->ReadAll());
     }
 
-    TStringInput errorStringInput(errorString);
+    TMemoryInput errorStringInput(errorString);
 
     std::unique_ptr<IBuildingYsonConsumer<TError>> buildingConsumer;
     CreateBuildingYsonConsumer(&buildingConsumer, EYsonType::Node);
@@ -127,8 +128,8 @@ TError ParseYTError(
         ParseJson(&errorStringInput, buildingConsumer.get());
     } catch (const std::exception& ex) {
         return TError("Failed to parse error from response")
-            << TErrorAttribute("source", source)
-            << ex;
+            .With("source", source)
+            .With(ex);
     }
     return buildingConsumer->Finish();
 }
@@ -150,8 +151,9 @@ public:
         } catch(const std::exception& ex) {
             TError error(ex);
 
-            YT_LOG_DEBUG(error, "Error handling HTTP request (Path: %v)",
-                req->GetUrl().Path);
+            YT_TLOG_DEBUG("Error handling HTTP request")
+                .With("Path", req->GetUrl().Path)
+                .With(error);
 
             FillYTErrorHeaders(rsp, error);
             rsp->SetStatus(EStatusCode::InternalServerError);
@@ -197,6 +199,7 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<std::string>{
     "X-YT-Request-Format-Options",
     "X-YT-Response-Format-Options",
     "X-YT-Request-Id",
+    "X-YT-Start-Time",
     "X-YT-Error",
     "X-YT-Response-Code",
     "X-YT-Response-Message",
@@ -236,6 +239,7 @@ static const std::vector<std::string> KnownHeaders = {
     RequestFormatOptionsHeaderName,
     RequestIdHeaderName,
     ResponseFormatOptionsHeaderName,
+    StartTimeHeaderName,
     UserNameHeaderName,
     UserTagHeaderName,
     XYTErrorHeaderName,
@@ -435,58 +439,13 @@ NTracing::TSpanId GetSpanId(const IRequestPtr& req)
     return IntFromString<NTracing::TSpanId, 16>(*id);
 }
 
-bool TryParseTraceParent(TStringBuf traceParent, NTracing::TSpanContext& spanContext)
-{
-    // An adaptation of https://github.com/census-instrumentation/opencensus-go/blob/ae11cd04b/plugin/ochttp/propagation/tracecontext/propagation.go#L49-L106
-
-    auto parts = StringSplitter(traceParent).Split('-').ToList<std::string>();
-    if (parts.size() < 3 || parts.size() > 4) {
-        return false;
-    }
-
-    // NB: We support three-part form in which version is assumed to be zero.
-    ui8 version = 0;
-    if (parts.size() == 4) {
-        if (parts[0].size() != 2) {
-            return false;
-        }
-        if (!TryIntFromString<16>(parts[0], version)) {
-            return false;
-        }
-        parts.erase(parts.begin());
-    }
-
-    // Now we have exactly three parts: traceId-spanId-options.
-
-    // Parse trace context.
-    if (!NTracing::TTraceId::FromStringHex32(parts[0], &spanContext.TraceId)) {
-        return false;
-    }
-
-    if (parts[1].size() != 16) {
-        return false;
-    }
-    if (!TryIntFromString<16>(parts[1], spanContext.SpanId)) {
-        return false;
-    }
-
-    ui8 options = 0;
-    if (!TryIntFromString<16>(parts[2], options)) {
-        return false;
-    }
-    spanContext.Sampled = static_cast<bool>(options & 1u);
-    spanContext.Debug = static_cast<bool>(options & 2u);
-
-    return true;
-}
-
 NTracing::TTraceContextPtr GetOrCreateTraceContext(const IRequestPtr& req)
 {
     const auto& headers = req->GetHeaders();
     NTracing::TTraceContextPtr traceContext;
     if (auto* traceParent = headers->Find("traceparent")) {
         NTracing::TSpanContext parentSpan;
-        if (TryParseTraceParent(*traceParent, parentSpan)) {
+        if (NTracing::TryParseTraceParent(*traceParent, parentSpan)) {
             traceContext = NTracing::TTraceContext::NewChildFromSpan(parentSpan, "HttpServer");
         }
     }
@@ -510,7 +469,7 @@ std::optional<std::pair<i64, i64>> FindBytesRange(const THeadersPtr& headers)
     const std::string bytesPrefix = "bytes=";
     if (!range->starts_with(bytesPrefix)) {
         THROW_ERROR_EXCEPTION("Invalid range header format")
-            << TErrorAttribute("range", *range);
+            .With("range", *range);
     }
 
     auto indices = range->substr(bytesPrefix.size());

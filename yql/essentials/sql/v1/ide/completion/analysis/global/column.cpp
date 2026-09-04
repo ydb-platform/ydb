@@ -1,6 +1,6 @@
 #include "column.h"
 
-#include "evaluate.h"
+#include <yql/essentials/sql/v1/ide/analysis/evaluate.h>
 #include "function.h"
 
 #include <yql/essentials/sql/v1/ide/completion/core/name.h>
@@ -62,11 +62,15 @@ public:
     }
 
     std::any visitSelect_stmt(SQLv1::Select_stmtContext* ctx) override {
-        return AccumulatingVisit(ctx->select_stmt_core()->select_stmt_intersect());
+        auto context = AccumulatingVisit(ctx->select_stmt_core()->select_stmt_intersect());
+        SortUnique(context.Columns);
+        return context;
     }
 
     std::any visitSelect_stmt_intersect(SQLv1::Select_stmt_intersectContext* ctx) override {
-        return AccumulatingVisit(ctx->select_kind_parenthesis());
+        auto context = AccumulatingVisit(ctx->select_kind_parenthesis());
+        SortUnique(context.Columns);
+        return context;
     }
 
     std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
@@ -134,7 +138,7 @@ public:
 
     std::any visitWithout_column_list(SQLv1::Without_column_listContext* ctx) override {
         return AccumulatingVisit(ctx->without_column_name());
-    };
+    }
 
     std::any visitWithout_column_name(SQLv1::Without_column_nameContext* ctx) override {
         TString table = GetObjectId(ctx->an_id(0)).GetOrElse("");
@@ -148,7 +152,7 @@ public:
 
         return TColumnContext{
             .WithoutByTableAlias = {
-                {std::move(table), {{std::move(*column)}}},
+                {table, {{std::move(*column)}}},
             },
         };
     }
@@ -159,10 +163,11 @@ public:
             return {};
         }
 
-        const TNamedNode* node = Nodes_->Resolve(*ref);
-        if (!node) {
+        INamedNodeDef::TPtr definition = Nodes_->Definition(*ref);
+        if (!definition) {
             return {};
         }
+        const TNamedNode& node = definition->Value();
 
         if (Resolving_.contains(ref->Name)) {
             return {};
@@ -186,7 +191,7 @@ public:
             }
 
             return nullptr;
-        }, *node);
+        }, node);
 
         if (!rule) {
             return {};
@@ -301,7 +306,7 @@ private:
 class TEnclosingSelectVisitor: public NSQLPureAST::TSQLv1NarrowingVisitor {
 public:
     explicit TEnclosingSelectVisitor(const TParsedInput& input)
-        : NSQLPureAST::TSQLv1NarrowingVisitor(input.Tokens, input.Original.CursorPosition)
+        : NSQLPureAST::TSQLv1NarrowingVisitor(&input.ParseTree->Tokens(), input.CursorPosition)
     {
     }
 
@@ -325,7 +330,7 @@ private:
 class TVisitor: public NSQLPureAST::TSQLv1NarrowingVisitor {
 public:
     TVisitor(const TParsedInput& input, const INamedNodes* nodes)
-        : NSQLPureAST::TSQLv1NarrowingVisitor(input.Tokens, input.Original.CursorPosition)
+        : NSQLPureAST::TSQLv1NarrowingVisitor(&input.ParseTree->Tokens(), input.CursorPosition)
         , Nodes_(nodes)
     {
     }
@@ -371,12 +376,14 @@ private:
 };
 
 antlr4::ParserRuleContext* Enclosing(const TParsedInput& input) {
+    auto* root = input.ParseTree->Root();
+
     TEnclosingSelectVisitor visitor(input);
-    visitor.visit(input.SqlQuery);
+    visitor.visit(root);
 
     antlr4::ParserRuleContext* ctx = std::move(visitor).GetEnclosing();
     if (!ctx) {
-        ctx = input.SqlQuery;
+        ctx = root;
     }
 
     return ctx;

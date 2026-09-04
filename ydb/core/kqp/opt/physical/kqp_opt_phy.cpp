@@ -40,6 +40,7 @@ public:
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TKqlReadTable::Match, HNDL(BuildReadTableStage));
         AddHandler(0, &TKqlReadTableFullTextIndex::Match, HNDL(BuildReadTableFullTextIndexStage));
+        AddHandler(0, &TKqlReadTableVectorIndex::Match, HNDL(BuildReadTableVectorIndexStage));
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStagesKeepSorted));
@@ -114,7 +115,7 @@ public:
         AddHandler(0, &TCoAggregateMergeFinalize::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateMergeManyFinalize::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateFinalize::Match, HNDL(ExpandAggregatePhase));
-        AddHandler(0, &TDqPhyWatermarkGenerator::Match, HNDL(PushWatermarkGeneratorToStage));
+        AddHandler(0, &TDqPhyWatermarkGenerator::Match, HNDL(PushWatermarkGeneratorToStage<false>));
 
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
@@ -152,6 +153,7 @@ public:
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
         AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
+        AddHandler(1, &TDqPhyWatermarkGenerator::Match, HNDL(PushWatermarkGeneratorToStage<true>));
 
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableSysView));
@@ -201,6 +203,12 @@ protected:
     TMaybeNode<TExprBase> BuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReadTableFullTextIndexStage(node, ctx, KqpCtx);
         DumpAppliedRule("BuildReadTableFullTextIndexStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildReadTableVectorIndexStage(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildReadTableVectorIndexStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -541,8 +549,8 @@ protected:
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
-        const bool useSortForPartitionsByKeys = KqpCtx.Config->OptUseSortForPartitionsByKeys.Get().GetOrElse(false);
-        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, useSortForPartitionsByKeys);
+        const bool windowFunctionsV2 = KqpCtx.Config->WindowFunctionsV2.Get().GetOrElse(false);
+        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, windowFunctionsV2);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -658,8 +666,9 @@ protected:
         return output;
     }
 
+    template <bool IsGlobal>
     TMaybeNode<TExprBase> PushWatermarkGeneratorToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        TMaybeNode<TExprBase> output = DqPushWatermarkGeneratorToStage(node, ctx, optCtx, *getParents());
+        TMaybeNode<TExprBase> output = DqPushWatermarkGeneratorToStage(node, ctx, optCtx, *getParents(), IsGlobal);
         if (output) {
             DumpAppliedRule("PushWatermarkGeneratorToStage", node.Ptr(), output.Cast().Ptr(), ctx);
         }
@@ -676,7 +685,7 @@ protected:
         bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(true);
         bool rightCollectStage = !KqpCtx.Config->GetAllowMultiBroadcasts();
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
+            pushLeftStage, TypesCtx, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
             rightCollectStage,
             KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false)
         );
@@ -715,7 +724,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildUpdateStages(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildUpdateStages(node, ctx, KqpCtx);
+        TExprBase output = KqpBuildUpdateStages(node, ctx);
         DumpAppliedRule("BuildUpdateStages", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

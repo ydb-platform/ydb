@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Generator, Iterable, Sequence
+from datetime import timezone, tzinfo
 from math import log
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -43,6 +44,7 @@ class InsertContext(BaseQueryContext):
         column_formats: dict[str, str | dict[str, str]] | None = None,
         block_size: int | None = None,
         transport_settings: dict[str, str] | None = None,
+        server_tz: tzinfo = timezone.utc,
     ):
         super().__init__(settings, query_formats, column_formats, transport_settings=transport_settings)
         self.table = table
@@ -50,6 +52,7 @@ class InsertContext(BaseQueryContext):
         self.column_types = column_types
         self.column_oriented = False if column_oriented is None else column_oriented
         self.compression = compression
+        self.server_tz = server_tz
         self.req_block_size = block_size
         self.block_row_count = DEFAULT_BLOCK_BYTES
         self.data = data
@@ -97,6 +100,7 @@ class InsertContext(BaseQueryContext):
             self.block_row_count = self._calc_block_size()
 
     def _calc_block_size(self) -> int:
+        assert self._data is not None
         if self.req_block_size:
             return self.req_block_size
         row_size = 0

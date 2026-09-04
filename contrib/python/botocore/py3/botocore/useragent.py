@@ -22,6 +22,8 @@ configuration options:
 * The ``user_agent_extra`` field in the :py:class:`botocore.config.Config`.
 
 """
+
+import logging
 import os
 import platform
 from copy import copy
@@ -30,8 +32,12 @@ from typing import NamedTuple, Optional
 
 from botocore import __version__ as botocore_version
 from botocore.compat import HAS_CRT
+from botocore.context import get_context
 
-_USERAGENT_ALLOWED_CHARACTERS = ascii_letters + digits + "!$%&'*+-.^_`|~"
+logger = logging.getLogger(__name__)
+
+
+_USERAGENT_ALLOWED_CHARACTERS = ascii_letters + digits + "!$%&'*+-.^_`|~,"
 _USERAGENT_ALLOWED_OS_NAMES = (
     'windows',
     'linux',
@@ -48,12 +54,89 @@ _USERAGENT_PLATFORM_NAME_MAPPINGS = {'darwin': 'macos'}
 # using their existing values. Uses uppercase "B" with all other characters
 # lowercase.
 _USERAGENT_SDK_NAME = 'Botocore'
+_USERAGENT_FEATURE_MAPPINGS = {
+    'WAITER': 'B',
+    'PAGINATOR': 'C',
+    "RETRY_MODE_LEGACY": "D",
+    "RETRY_MODE_STANDARD": "E",
+    "RETRY_MODE_ADAPTIVE": "F",
+    'S3_TRANSFER': 'G',
+    'GZIP_REQUEST_COMPRESSION': 'L',
+    'PROTOCOL_RPC_V2_CBOR': 'M',
+    'ENDPOINT_OVERRIDE': 'N',
+    'ACCOUNT_ID_MODE_PREFERRED': 'P',
+    'ACCOUNT_ID_MODE_DISABLED': 'Q',
+    'ACCOUNT_ID_MODE_REQUIRED': 'R',
+    'SIGV4A_SIGNING': 'S',
+    'RESOLVED_ACCOUNT_ID': 'T',
+    'FLEXIBLE_CHECKSUMS_REQ_CRC32': 'U',
+    'FLEXIBLE_CHECKSUMS_REQ_CRC32C': 'V',
+    'FLEXIBLE_CHECKSUMS_REQ_CRC64': 'W',
+    'FLEXIBLE_CHECKSUMS_REQ_SHA1': 'X',
+    'FLEXIBLE_CHECKSUMS_REQ_SHA256': 'Y',
+    'FLEXIBLE_CHECKSUMS_REQ_WHEN_SUPPORTED': 'Z',
+    'FLEXIBLE_CHECKSUMS_REQ_WHEN_REQUIRED': 'a',
+    'FLEXIBLE_CHECKSUMS_RES_WHEN_SUPPORTED': 'b',
+    'FLEXIBLE_CHECKSUMS_RES_WHEN_REQUIRED': 'c',
+    'CREDENTIALS_CODE': 'e',
+    'CREDENTIALS_ENV_VARS': 'g',
+    'CREDENTIALS_ENV_VARS_STS_WEB_ID_TOKEN': 'h',
+    'CREDENTIALS_STS_ASSUME_ROLE': 'i',
+    'CREDENTIALS_STS_ASSUME_ROLE_WEB_ID': 'k',
+    'CREDENTIALS_PROFILE': 'n',
+    'CREDENTIALS_PROFILE_SOURCE_PROFILE': 'o',
+    'CREDENTIALS_PROFILE_NAMED_PROVIDER': 'p',
+    'CREDENTIALS_PROFILE_STS_WEB_ID_TOKEN': 'q',
+    'CREDENTIALS_PROFILE_SSO': 'r',
+    'CREDENTIALS_SSO': 's',
+    'CREDENTIALS_PROFILE_SSO_LEGACY': 't',
+    'CREDENTIALS_SSO_LEGACY': 'u',
+    'CREDENTIALS_PROFILE_PROCESS': 'v',
+    'CREDENTIALS_PROCESS': 'w',
+    'CREDENTIALS_BOTO2_CONFIG_FILE': 'x',
+    'CREDENTIALS_HTTP': 'z',
+    'CREDENTIALS_IMDS': '0',
+    'BEARER_SERVICE_ENV_VARS': '3',
+    'CLI_V1_TO_V2_MIGRATION_DEBUG_MODE': '-',
+    'CREDENTIALS_PROFILE_LOGIN': 'AC',
+    'CREDENTIALS_LOGIN': 'AD',
+}
+
+
+def register_feature_id(feature_id):
+    """Adds metric value to the current context object's ``features`` set.
+
+    :type feature_id: str
+    :param feature_id: The name of the feature to register. Value must be a key
+        in the ``_USERAGENT_FEATURE_MAPPINGS`` dict.
+    """
+    ctx = get_context()
+    if ctx is None:
+        # Never register features outside the scope of a
+        # ``botocore.context.start_as_current_context`` context manager.
+        # Otherwise, the context variable won't be reset and features will
+        # bleed into all subsequent requests. Return instead of raising an
+        # exception since this function could be invoked in a public interface.
+        return
+    if val := _USERAGENT_FEATURE_MAPPINGS.get(feature_id):
+        ctx.features.add(val)
+
+
+def register_feature_ids(feature_ids):
+    """Adds multiple feature IDs to the current context object's ``features`` set.
+
+    :type feature_ids: iterable of str
+    :param feature_ids: An iterable of feature ID strings to register. Each
+        value must be a key in the ``_USERAGENT_FEATURE_MAPPINGS`` dict.
+    """
+    for feature_id in feature_ids:
+        register_feature_id(feature_id)
 
 
 def sanitize_user_agent_string_component(raw_str, allow_hash):
     """Replaces all not allowed characters in the string with a dash ("-").
 
-    Allowed characters are ASCII alphanumerics and ``!$%&'*+-.^_`|~``. If
+    Allowed characters are ASCII alphanumerics and ``!$%&'*+-.^_`|~,``. If
     ``allow_hash`` is ``True``, "#"``" is also allowed.
 
     :type raw_str: str
@@ -70,12 +153,35 @@ def sanitize_user_agent_string_component(raw_str, allow_hash):
     )
 
 
+class UserAgentComponentSizeConfig:
+    """
+    Configures the max size of a built user agent string component and the
+    delimiter used to truncate the string if the size is above the max.
+    """
+
+    def __init__(self, max_size_in_bytes: int, delimiter: str):
+        self.max_size_in_bytes = max_size_in_bytes
+        self.delimiter = delimiter
+        self._validate_input()
+
+    def _validate_input(self):
+        if self.max_size_in_bytes < 1:
+            raise ValueError(
+                f'Invalid `max_size_in_bytes`: {self.max_size_in_bytes}. '
+                'Value must be a positive integer.'
+            )
+
+
 class UserAgentComponent(NamedTuple):
     """
     Component of a Botocore User-Agent header string in the standard format.
 
-    Each component consists of a prefix, a name, and a value. In the string
-    representation these are combined in the format ``prefix/name#value``.
+    Each component consists of a prefix, a name, a value, and a size_config.
+    In the string representation these are combined in the format
+    ``prefix/name#value``.
+
+    ``size_config`` configures the max size and truncation strategy for the
+    built user agent string component.
 
     This class is considered private and is subject to abrupt breaking changes.
     """
@@ -83,6 +189,7 @@ class UserAgentComponent(NamedTuple):
     prefix: str
     name: str
     value: Optional[str] = None
+    size_config: Optional[UserAgentComponentSizeConfig] = None
 
     def to_string(self):
         """Create string like 'prefix/name#value' from a UserAgentComponent."""
@@ -93,11 +200,42 @@ class UserAgentComponent(NamedTuple):
             self.name, allow_hash=False
         )
         if self.value is None or self.value == '':
-            return f'{clean_prefix}/{clean_name}'
-        clean_value = sanitize_user_agent_string_component(
-            self.value, allow_hash=True
-        )
-        return f'{clean_prefix}/{clean_name}#{clean_value}'
+            clean_string = f'{clean_prefix}/{clean_name}'
+        else:
+            clean_value = sanitize_user_agent_string_component(
+                self.value, allow_hash=True
+            )
+            clean_string = f'{clean_prefix}/{clean_name}#{clean_value}'
+        if self.size_config is not None:
+            clean_string = self._truncate_string(
+                clean_string,
+                self.size_config.max_size_in_bytes,
+                self.size_config.delimiter,
+            )
+        return clean_string
+
+    def _truncate_string(self, string, max_size, delimiter):
+        """
+        Pop ``delimiter``-separated values until encoded string is less than or
+        equal to ``max_size``.
+        """
+        orig = string
+        while len(string.encode('utf-8')) > max_size:
+            parts = string.split(delimiter)
+            parts.pop()
+            string = delimiter.join(parts)
+
+        if string == '':
+            logger.debug(
+                "User agent component `%s` could not be truncated to "
+                "`%s` bytes with delimiter "
+                "`%s` without losing all contents. "
+                "Value will be omitted from user agent string.",
+                orig,
+                max_size,
+                delimiter,
+            )
+        return string
 
 
 class RawStringUserAgentComponent:
@@ -202,9 +340,9 @@ class UserAgentString:
         self._session_user_agent_extra = None
 
         self._client_config = None
-        self._uses_paginator = None
-        self._uses_waiter = None
-        self._uses_resource = None
+
+        # Component that can be set with ``set_client_features()``
+        self._client_features = None
 
     @classmethod
     def from_environment(cls):
@@ -244,6 +382,16 @@ class UserAgentString:
         self._session_user_agent_extra = session_user_agent_extra
         return self
 
+    def set_client_features(self, features):
+        """
+        Persist client-specific features registered before or during client
+        creation.
+
+        :type features: Set[str]
+        :param features: A set of client-specific features.
+        """
+        self._client_features = features
+
     def with_client_config(self, client_config):
         """
         Create a copy with all original values and client-specific values.
@@ -271,7 +419,7 @@ class UserAgentString:
 
         components = [
             *self._build_sdk_metadata(),
-            RawStringUserAgentComponent('ua/2.0'),
+            RawStringUserAgentComponent('ua/2.1'),
             *self._build_os_metadata(),
             *self._build_architecture_metadata(),
             *self._build_language_metadata(),
@@ -284,7 +432,9 @@ class UserAgentString:
 
         components = modify_components(components)
 
-        return ' '.join([comp.to_string() for comp in components])
+        return ' '.join(
+            [comp.to_string() for comp in components if comp.to_string()]
+        )
 
     def _build_sdk_metadata(self):
         """
@@ -414,12 +564,23 @@ class UserAgentString:
 
     def _build_feature_metadata(self):
         """
-        Build the features components of the User-Agent header string.
+        Build the features component of the User-Agent header string.
 
-        Botocore currently does not report any features. This may change in a
-        future version.
+        Returns a single component with prefix "m" followed by a list of
+        comma-separated metric values.
         """
-        return []
+        ctx = get_context()
+        context_features = set() if ctx is None else ctx.features
+        client_features = self._client_features or set()
+        features = client_features.union(context_features)
+        if not features:
+            return []
+        size_config = UserAgentComponentSizeConfig(1024, ',')
+        return [
+            UserAgentComponent(
+                'm', ','.join(features), size_config=size_config
+            )
+        ]
 
     def _build_config_metadata(self):
         """
@@ -449,9 +610,10 @@ class UserAgentString:
         User-Agent header.
         """
         if self._client_config and self._client_config.user_agent_appid:
-            return [
-                UserAgentComponent('app', self._client_config.user_agent_appid)
-            ]
+            appid = sanitize_user_agent_string_component(
+                raw_str=self._client_config.user_agent_appid, allow_hash=True
+            )
+            return [RawStringUserAgentComponent(f'app/{appid}')]
         else:
             return []
 
@@ -488,6 +650,13 @@ class UserAgentString:
         if self._client_config.user_agent_extra:
             components.append(self._client_config.user_agent_extra)
         return ' '.join(components)
+
+    def rebuild_and_replace_user_agent_handler(
+        self, operation_name, request, **kwargs
+    ):
+        ua_string = self.to_string()
+        if request.headers.get('User-Agent'):
+            request.headers.replace_header('User-Agent', ua_string)
 
 
 def _get_crt_version():

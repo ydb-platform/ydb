@@ -2,6 +2,7 @@
 #include "partition_util.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -159,14 +160,14 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             ui64 curOffset = offset;
 
             AFL_ENSURE(pno == blobs[i].GetPartNo());
-            bool skip = (offset + blobs[i].MessageCount <= startOffset)
+            bool skip = (offset + blobs[i].LogicalMessageCount <= startOffset)
                 || (offset == startOffset && blobs[i].GetPartNo() < partNo);
 
             if (0 < lastOffset && lastOffset <= offset) {
                 break;
             }
             if (blobs[i].IsLastPart()) {
-                offset += blobs[i].MessageCount;
+                offset += blobs[i].LogicalMessageCount;
                 pno = 0;
             } else {
                 ++pno;
@@ -353,7 +354,7 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     AFL_ENSURE(size >= valueD.size());
 
     if (size > valueD.size() && key.HasSuffix()) { //change to real size if real packed size is smaller
-        Y_ABORT("Can't be here right now, only after merging of small batches");
+        AFL_ENSURE(false)("reason", "Can't be here right now, only after merging of small batches")("key", key.ToString())("size", size)("value_size", valueD.size());
 
         //for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
         //    if (it->KeysCount() > 0 ) {
@@ -658,6 +659,43 @@ void TPartitionBlobEncoder::pop_front() {
     ScheduleDelete(key);
     BodySize -= key.Size;
     DataKeysBody.pop_front();
+}
+
+void TPartitionBlobEncoder::PopFrontHeadKey() {
+    AFL_ENSURE(!HeadKeys.empty());
+
+    const TDataKey deletedKey = HeadKeys.front();
+    ScheduleDelete(HeadKeys.front());
+    HeadKeys.pop_front();
+
+    for (auto& level : DataKeysHead) {
+        if (level.KeysCount() > 0) {
+            AFL_ENSURE(level.GetKey(0) == deletedKey.Key);
+            level.PopFront();
+            break;
+        }
+    }
+
+    AFL_ENSURE(Head.PackedSize >= deletedKey.Size);
+    Head.PackedSize -= deletedKey.Size;
+
+    if (HeadKeys.empty()) {
+        Head.Clear();
+        return;
+    }
+
+    const auto& frontKey = HeadKeys.front().Key;
+    Head.Offset = frontKey.GetOffset();
+    Head.PartNo = frontKey.GetPartNo();
+
+    while (!Head.GetBatches().empty()) {
+        const auto& batch = Head.GetBatch(0);
+        if (batch.GetOffset() > frontKey.GetOffset() ||
+            (batch.GetOffset() == frontKey.GetOffset() && batch.GetPartNo() >= frontKey.GetPartNo())) {
+            break;
+        }
+        Head.ExtractFirstBatch();
+    }
 }
 
 void TPartitionBlobEncoder::ScheduleDelete(TDataKey& key) {

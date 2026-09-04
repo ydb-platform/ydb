@@ -1,3 +1,6 @@
+ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/codegen/")
+
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/${MODDIR}
 )
@@ -62,5 +65,3 @@ ELSE()
         str_size
     )
 ENDIF()
-
-

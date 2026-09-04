@@ -1,9 +1,12 @@
 #include "fulltext.h"
 #include "fulltext_query.h"
+#include "superlemmer.h"
 
 #include <contrib/libs/snowball/include/libstemmer.h>
 
+#include <util/charset/unidata.h>
 #include <util/charset/utf8.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/xrange.h>
 
 #include <algorithm>
@@ -27,6 +30,8 @@ namespace {
             return Ydb::Table::FulltextIndexSettings::WHITESPACE;
         else if (tokenizer == "standard")
             return Ydb::Table::FulltextIndexSettings::STANDARD;
+        else if (tokenizer == "alphanumeric")
+            return Ydb::Table::FulltextIndexSettings::ALPHANUMERIC;
         else if (tokenizer == "keyword")
             return Ydb::Table::FulltextIndexSettings::KEYWORD;
         else {
@@ -49,6 +54,51 @@ namespace {
             error = TStringBuilder() << "Invalid " << name << ": " << value;
         }
         return result;
+    }
+
+    bool ApplyAnalyzer(const TString& analyzer_, Ydb::Table::FulltextIndexSettings::Analyzers& analyzers, TString& error) {
+        const TString analyzer = to_lower(analyzer_);
+        if (analyzer == "standard") {
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            analyzers.set_use_filter_lowercase(true);
+            analyzers.set_use_filter_stopwords(true);
+        } else if (analyzer == "snowball") {
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            analyzers.set_use_filter_lowercase(true);
+            analyzers.set_use_filter_stopwords(true);
+            analyzers.set_use_filter_snowball(true);
+        } else if (analyzer == "keyword") {
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+        } else {
+            error = TStringBuilder() << "Invalid analyzer: " << analyzer_;
+            return false;
+        }
+        return true;
+    }
+
+    const THashSet<TStringBuf>* GetStopwords(const TString& language) {
+        static const THashSet<TStringBuf> English = {
+            "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it",
+            "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they",
+            "this", "to", "was", "will", "with"
+        };
+        static const THashSet<TStringBuf> Russian = {
+            "а", "без", "более", "бы", "был", "была", "были", "было", "быть", "в", "вам", "вас", "весь",
+            "во", "вот", "все", "всего", "всех", "вы", "где", "да", "даже", "для", "до", "его", "ее", "если",
+            "есть", "еще", "же", "за", "здесь", "и", "из", "или", "им", "их", "к", "как", "ко", "когда",
+            "кто", "ли", "либо", "мне", "может", "мы", "на", "надо", "наш", "не", "него", "нее", "нет", "ни",
+            "них", "но", "ну", "о", "об", "однако", "он", "она", "они", "оно", "от", "очень", "по", "под",
+            "при", "с", "со", "так", "также", "такой", "там", "те", "тем", "то", "того", "тоже", "той", "только",
+            "том", "ты", "у", "уже", "хотя", "чего", "чей", "чем", "что", "чтобы", "чье", "чья", "эта", "эти", "это", "я"
+        };
+
+        if (language == "english") {
+            return &English;
+        }
+        if (language == "russian") {
+            return &Russian;
+        }
+        return nullptr;
     }
 
     inline bool IsNonStandard(wchar32 c) {
@@ -92,6 +142,301 @@ namespace {
         }
     }
 
+    // --- Lucene StandardTokenizer character classification (UAX#29-based) ---
+
+    inline bool IsHangulScript(wchar32 c) {
+        return IsHangulLeading(c) || IsHangulVowel(c) || IsHangulTrailing(c)
+            || (c >= 0xAC00 && c <= 0xD7A3)     // Hangul Syllables
+            || (c >= 0x3130 && c <= 0x318F)     // Hangul Compatibility Jamo
+            || (c >= 0xA960 && c <= 0xA97F)     // Hangul Jamo Extended-A
+            || (c >= 0xD7B0 && c <= 0xD7FF);    // Hangul Jamo Extended-B
+    }
+
+    inline bool IsSouthEastAsian(wchar32 c) {
+        // LB:Complex_Context — Thai, Lao, Myanmar, Khmer
+        return (c >= 0x0E01 && c <= 0x0E5B)     // Thai
+            || (c >= 0x0E81 && c <= 0x0EDF)     // Lao
+            || (c >= 0x1000 && c <= 0x109F)     // Myanmar
+            || (c >= 0x1780 && c <= 0x17FF)     // Khmer
+            || (c >= 0x19E0 && c <= 0x19FF)     // Khmer Symbols
+            || (c >= 0xAA60 && c <= 0xAA7F)     // Myanmar Extended-A
+            || (c >= 0xA9E0 && c <= 0xA9FF);    // Myanmar Extended-B
+    }
+
+    inline bool IsExtendNumLet(wchar32 c) {
+        // WB:ExtendNumLet — Pc (Connector_Punctuation) category
+        return c == '_'
+            || c == 0x203F || c == 0x2040 || c == 0x2054
+            || c == 0xFE33 || c == 0xFE34
+            || (c >= 0xFE4D && c <= 0xFE4F)
+            || c == 0xFF3F;
+    }
+
+    inline bool IsExtendOrFormat(wchar32 c) {
+        // WB:Extend + WB:Format + ZWJ — transparent inside tokens
+        return IsJoinCntrl(c) || IsCombining(c) || IsFormatCntrl(c) || c == 0x200D;
+    }
+
+    inline bool IsMidLetterChar(wchar32 c) {
+        // WB:MidLetter ∪ WB:MidNumLet ∪ WB:SingleQuote (valid between letters)
+        switch (c) {
+            case 0x0027: // APOSTROPHE
+            case 0x002E: // FULL STOP
+            case 0x003A: // COLON
+            case 0x00B7: // MIDDLE DOT
+            case 0x0387: // GREEK ANO TELEIA
+            case 0x05F4: // HEBREW PUNCTUATION GERSHAYIM
+            case 0x2018: // LEFT SINGLE QUOTATION MARK
+            case 0x2019: // RIGHT SINGLE QUOTATION MARK
+            case 0x2024: // ONE DOT LEADER
+            case 0x2027: // HYPHENATION POINT
+            case 0xFE13: // PRESENTATION FORM FOR VERTICAL COLON
+            case 0xFE52: // SMALL FULL STOP
+            case 0xFE55: // SMALL COLON
+            case 0xFF07: // FULLWIDTH APOSTROPHE
+            case 0xFF0E: // FULLWIDTH FULL STOP
+            case 0xFF1A: // FULLWIDTH COLON
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    inline bool IsMidNumberChar(wchar32 c) {
+        // WB:MidNum ∪ WB:MidNumLet ∪ WB:SingleQuote (valid between digits)
+        switch (c) {
+            case 0x0027: // APOSTROPHE
+            case 0x002C: // COMMA
+            case 0x002E: // FULL STOP
+            case 0x003B: // SEMICOLON
+            case 0x037E: // GREEK QUESTION MARK
+            case 0x0589: // ARMENIAN FULL STOP
+            case 0x060C: // ARABIC COMMA
+            case 0x060D: // ARABIC DATE SEPARATOR
+            case 0x066C: // ARABIC THOUSANDS SEPARATOR
+            case 0x07F8: // NKO COMMA
+            case 0x2018: // LEFT SINGLE QUOTATION MARK
+            case 0x2019: // RIGHT SINGLE QUOTATION MARK
+            case 0x2024: // ONE DOT LEADER
+            case 0x2044: // FRACTION SLASH
+            case 0xFE10: // PRESENTATION FORM FOR VERTICAL COMMA
+            case 0xFE50: // SMALL COMMA
+            case 0xFE52: // SMALL FULL STOP
+            case 0xFF07: // FULLWIDTH APOSTROPHE
+            case 0xFF0C: // FULLWIDTH COMMA
+            case 0xFF0E: // FULLWIDTH FULL STOP
+            case 0xFF1B: // FULLWIDTH SEMICOLON
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    inline bool IsHebrew(wchar32 c) {
+        return c >= 0x0590 && c <= 0x05FF; // Primary Hebrew Block
+    }
+
+    inline bool IsKatakanaOrSymbol(wchar32 c) {
+        return IsKatakana(c) ||
+            c >= 0x3000 && c <= 0x303F; // CJK Symbols and Punctuation
+    }
+
+    // Alphabetic letter excluding script-specific types handled separately
+    inline bool IsALetter(wchar32 c) {
+        return IsAlphabetic(c)
+            && !IsKatakanaOrSymbol(c) && !IsHiragana(c) && !IsIdeographic(c)
+            && !IsHangulScript(c) && !IsSouthEastAsian(c);
+    }
+
+    // Simplified Lucene StandardTokenizer (UAX#29 word break rules).
+    // Token types: ALPHANUM (letters+digits with mid-connectors), NUM (digits),
+    //   KATAKANA (sequences), HANGUL (sequences), IDEOGRAPHIC (single),
+    //   HIRAGANA (single), SOUTHEAST_ASIAN (sequences).
+    // Emoji sequences are not tokenized (skipped).
+    void TokenizeStandard(const TStringBuf text, TVector<TString>& tokens, const std::unordered_set<wchar32>& ignoredDelimiter) {
+        const ui8* p = (const ui8*)text.data();
+        const ui8* end = p + text.size();
+
+        auto tryRead = [&](const ui8* at, wchar32& c, size_t& n) -> bool {
+            if (at >= end) {
+                return false;
+            }
+            return SafeReadUTF8Char(c, n, at, end) == RECODE_OK;
+        };
+
+        auto isLetter = [&](wchar32 c) {
+            return IsALetter(c) || !ignoredDelimiter.empty() && ignoredDelimiter.contains(c);
+        };
+
+        wchar32 c;
+        size_t n;
+
+        auto trySingleChar = [&](auto check) {
+            if (check(c)) {
+                const ui8* s = p;
+                p += n;
+                while (tryRead(p, c, n) && IsExtendOrFormat(c)) {
+                    p += n;
+                }
+                tokens.emplace_back((const char*)s, p - s);
+                return true;
+            }
+            return false;
+        };
+
+        auto tryMultiChar = [&](auto check) {
+            if (check(c)) {
+                const ui8* s = p;
+                p += n;
+                while (tryRead(p, c, n) && (check(c) || IsExtendOrFormat(c))) {
+                    p += n;
+                }
+                tokens.emplace_back((const char*)s, p - s);
+                return true;
+            }
+            return false;
+        };
+
+        while (p < end) {
+            if (!tryRead(p, c, n)) {
+                tokens.clear();
+                return;
+            }
+            if (IsExtendOrFormat(c)) {
+                p += n;
+                continue;
+            }
+
+            // Alphanumeric token (with mid-letter/mid-number connectors)
+            if (isLetter(c) || IsDecdigit(c) || IsExtendNumLet(c)) {
+                enum EPrev { LETTER, DIGIT, NEITHER, MID_LETTER, MID_DIGIT, HEBREW };
+                const ui8* s = p;
+                EPrev prev = IsHebrew(c) ? HEBREW : isLetter(c) ? LETTER : IsDecdigit(c) ? DIGIT : NEITHER;
+                bool hasContent = (prev != NEITHER);
+                bool joined = false;
+                p += n;
+                const ui8* safeEnd = p;
+
+                while (p < end) {
+                    if (!tryRead(p, c, n)) {
+                        tokens.clear();
+                        return;
+                    }
+                    if (IsExtendOrFormat(c)) {
+                        p += n;
+                        safeEnd = p;
+                        joined = c == 0x200D; // ZWJ
+                        continue;
+                    }
+                    if (isLetter(c)) {
+                        p += n;
+                        prev = IsHebrew(c) ? HEBREW : LETTER;
+                        safeEnd = p;
+                        hasContent = true;
+                    } else if (prev == HEBREW && c == '\'') {
+                        p += n;
+                        safeEnd = p;
+                        prev = LETTER;
+                    } else if (prev == HEBREW && c == '\"') {
+                        size_t n2;
+                        if (tryRead(p + n, c, n2) && IsHebrew(c)) {
+                            p += n + n2;
+                            safeEnd = p;
+                        }
+                        prev = LETTER;
+                    } else if (IsDecdigit(c)) {
+                        p += n;
+                        prev = DIGIT;
+                        safeEnd = p;
+                        hasContent = true;
+                    } else if (IsExtendNumLet(c)) {
+                        p += n;
+                        safeEnd = p;
+                        if (prev == DIGIT) {
+                            prev = MID_DIGIT;
+                        } else if (prev == LETTER) {
+                            prev = MID_LETTER;
+                        }
+                    } else if (prev != HEBREW && prev != LETTER && prev != DIGIT && IsKatakanaOrSymbol(c)) {
+                        p += n;
+                        safeEnd = p;
+                        prev = NEITHER;
+                        hasContent = true;
+                    } else if ((prev == LETTER || prev == MID_LETTER) && IsMidLetterChar(c)) {
+                        // Lookahead past connector + extend/format chars
+                        const ui8* q = p + n;
+                        wchar32 c2;
+                        size_t n2;
+                        while (tryRead(q, c2, n2) && IsExtendOrFormat(c2)) {
+                            q += n2;
+                        }
+                        if (tryRead(q, c2, n2) && isLetter(c2)) {
+                            p = q + n2;
+                            prev = LETTER;
+                            safeEnd = p;
+                        } else {
+                            break;
+                        }
+                    } else if ((prev == DIGIT || prev == MID_DIGIT) && IsMidNumberChar(c)) {
+                        const ui8* q = p + n;
+                        wchar32 c2;
+                        size_t n2;
+                        while (tryRead(q, c2, n2) && IsExtendOrFormat(c2)) {
+                            q += n2;
+                        }
+                        if (tryRead(q, c2, n2) && IsDecdigit(c2)) {
+                            p = q + n2;
+                            prev = DIGIT;
+                            safeEnd = p;
+                        } else {
+                            break;
+                        }
+                    } else if (joined && !IsWhitespace(c)) {
+                        p += n;
+                        safeEnd = p;
+                    } else {
+                        break;
+                    }
+                    joined = false;
+                }
+
+                if (hasContent) {
+                    tokens.emplace_back((const char*)s, safeEnd - s);
+                }
+                p = safeEnd;
+                continue;
+            }
+
+            // Single-character token types
+            if (trySingleChar(IsIdeographic)) {
+                continue;
+            }
+            if (trySingleChar(IsHiragana)) {
+                continue;
+            }
+
+            // Sequence token types
+            if (IsKatakanaOrSymbol(c)) {
+                const ui8* s = p;
+                p += n;
+                while (tryRead(p, c, n) && (IsKatakanaOrSymbol(c) || IsExtendOrFormat(c) || IsExtendNumLet(c))) {
+                    p += n;
+                }
+                tokens.emplace_back((const char*)s, p - s);
+                continue;
+            }
+            if (tryMultiChar(IsHangulScript)) {
+                continue;
+            }
+            if (tryMultiChar(IsSouthEastAsian)) {
+                continue;
+            }
+
+            // Other characters (whitespace, punctuation, emoji, etc.) — skip
+            p += n;
+        }
+    }
+
     TVector<TString> Tokenize(const TStringBuf text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer, const std::unordered_set<wchar32> ignoredDelimiter) {
         TVector<TString> tokens;
         switch (tokenizer) {
@@ -102,12 +447,15 @@ namespace {
                         : IsWhitespace(c);
                 });
                 break;
-            case Ydb::Table::FulltextIndexSettings::STANDARD:
+            case Ydb::Table::FulltextIndexSettings::ALPHANUMERIC:
                 Tokenize(text, tokens, [&ignoredDelimiter](const wchar32 c) {
                     return !ignoredDelimiter.empty() && ignoredDelimiter.contains(c)
                         ? false
                         : IsNonStandard(c);
                 });
+                break;
+            case Ydb::Table::FulltextIndexSettings::STANDARD:
+                TokenizeStandard(text, tokens, ignoredDelimiter);
                 break;
             case Ydb::Table::FulltextIndexSettings::KEYWORD:
                 if (UTF8Detect(text) != NotUTF8) {
@@ -145,6 +493,10 @@ namespace {
             return false;
         }
 
+        if (settings.use_filter_snowball() && settings.use_filter_superlemmer()) {
+            error = "cannot set use_filter_snowball and use_filter_superlemmer at the same time";
+            return false;
+        }
         if (settings.use_filter_snowball()) {
             if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
                 error = "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time";
@@ -167,16 +519,38 @@ namespace {
                 error = "language is not supported by snowball";
                 return false;
             }
-        } else if (settings.has_language()) {
+        }
+
+        if (settings.use_filter_superlemmer()) {
+            if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
+                error = "cannot set use_filter_superlemmer with use_filter_ngram or use_filter_edge_ngram at the same time";
+                return false;
+            }
+
+            if (!settings.has_language()) {
+                error = "language required when use_filter_superlemmer is set";
+                return false;
+            }
+
+            if (!IsSuperLemmerSupportedLanguage(settings.language())) {
+                error = "language is not supported by superlemmer";
+                return false;
+            }
+        }
+
+        if (settings.has_language() && !settings.use_filter_snowball() && !settings.use_filter_superlemmer()) {
             // Currently, language is only used for stemming (use_filter_snowball).
             // In the future, it may be used for other language-sensitive operations (e.g., stopword filtering).
-            error = "language setting is only supported with use_filter_snowball at present; other uses may be supported in the future";
+            error = "language setting is only supported with use_filter_snowball or use_filter_superlemmer at present; other uses may be supported in the future";
             return false;
         }
 
         if (settings.use_filter_stopwords()) {
-            error = "Unsupported use_filter_stopwords setting";
-            return false;
+            const TString language = settings.has_language() ? settings.language() : "english";
+            if (!GetStopwords(language)) {
+                error = "language is not supported by stopword filter";
+                return false;
+            }
         }
 
         if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
@@ -293,6 +667,15 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
         }
     }
 
+    if (settings.use_filter_stopwords()) {
+        const TString language = settings.has_language() ? settings.language() : "english";
+        const THashSet<TStringBuf>* stopwords = GetStopwords(language);
+        Y_ENSURE(stopwords);
+        tokens.erase(std::remove_if(tokens.begin(), tokens.end(), [&](const TString& token) {
+            return stopwords->contains(ToLowerUTF8(token));
+        }), tokens.end());
+    }
+
     if (settings.use_filter_length() && (settings.has_filter_length_min() || settings.has_filter_length_max())) {
         tokens.erase(std::remove_if(tokens.begin(), tokens.end(), [&](const TString& token){
             auto length = GetLengthUTF8(token);
@@ -325,6 +708,12 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
 
             const size_t resultLength = sb_stemmer_length(stemmer);
             token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);
+        }
+    }
+
+    if (settings.use_filter_superlemmer()) {
+        for (auto& token : tokens) {
+            ApplySuperLemmerInplace(settings.language(), token);
         }
     }
 
@@ -479,6 +868,15 @@ bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString
     return true;
 }
 
+bool HasSuperLemmer(const Ydb::Table::FulltextIndexSettings& settings) {
+    for (const auto& column : settings.columns()) {
+        if (column.has_analyzers() && column.analyzers().use_filter_superlemmer()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error) {
     error = "";
 
@@ -486,7 +884,9 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
         ? settings.add_columns()->mutable_analyzers()
         : settings.mutable_columns()->rbegin()->mutable_analyzers();
 
-    if (nameLower == "tokenizer") {
+    if (nameLower == "analyzer") {
+        return ApplyAnalyzer(value, *analyzers, error);
+    } else if (nameLower == "tokenizer") {
         analyzers->set_tokenizer(ParseTokenizer(value, error));
     } else if (nameLower == "language") {
         analyzers->set_language(value);
@@ -510,6 +910,8 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
         analyzers->set_filter_length_max(ParseInt32(nameLower, value, error));
     } else if (nameLower == "use_filter_snowball") {
         analyzers->set_use_filter_snowball(ParseBool(nameLower, value, error));
+    } else if (nameLower == "use_filter_superlemmer") {
+        analyzers->set_use_filter_superlemmer(ParseBool(nameLower, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;
@@ -670,7 +1072,7 @@ void TMultiDeltaReader::Reset(bool withFreq, bool sign) {
 
 void TMultiDeltaReader::Add(bool added, TDeltaReader* rdr) {
     Y_ENSURE(!Started);
-    Readers.push_back({ rdr, added });
+    Readers.push_back({ rdr, added, false });
 }
 
 void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf) {
@@ -679,11 +1081,34 @@ void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf) {
         return;
     }
     auto rdr = std::make_unique<TDeltaReader>(buf, WithFreq, Sign);
-    Readers.push_back({ rdr.get(), added });
+    Readers.push_back({ rdr.get(), added, true });
     OwnedReaders.push_back(std::move(rdr));
 }
 
+void TMultiDeltaReader::Pop() {
+    if (!Readers.size()) {
+        return;
+    }
+    auto& last = Readers.back();
+    for (auto& item: Items) {
+        Y_ENSURE(item.RdrId != Readers.size());
+    }
+    if (last.Owned) {
+        Y_ENSURE(OwnedReaders.size() > 0 && OwnedReaders.back().get() == last.Reader);
+        OwnedReaders.pop_back();
+    }
+    Readers.pop_back();
+}
+
+void TMultiDeltaReader::SetMaxId(ui64 maxId) {
+    Y_ENSURE(!Items.size());
+    for (auto& rdr: Readers) {
+        rdr.Reader->SetMaxId(maxId);
+    }
+}
+
 void TMultiDeltaReader::Start() {
+    Y_ENSURE(!Started);
     Started = true;
     if (Readers.size() == 1) {
         OneLeft = true;
@@ -695,6 +1120,12 @@ void TMultiDeltaReader::Start() {
             SelectNext();
         }
     }
+}
+
+void TMultiDeltaReader::Stop() {
+    Y_ENSURE(!Items.size()); // restart is allowed, for example after changing MaxId
+    OneLeft = false;
+    Started = false;
 }
 
 void TMultiDeltaReader::SelectNext() {

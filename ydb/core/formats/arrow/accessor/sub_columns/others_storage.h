@@ -2,7 +2,7 @@
 
 #include "stats.h"
 
-#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/container/container.h>
@@ -117,7 +117,18 @@ public:
             return res;
         }
 
-        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
+        // The Others store is always BinaryJson; exposed as (array, local index) like the column
+        // iterator so the general iterator reads both uniformly.
+        const arrow::Array& GetArray() const {
+            AFL_VERIFY(IsValid());
+            return *Values;
+        }
+        ui32 GetLocalIndex() const {
+            AFL_VERIFY(IsValid());
+            return CurrentIndex;
+        }
+
+        NArrow::NAccessor::TJsonValueView GetValue() const;
 
         bool HasValue() const {
             AFL_VERIFY(IsValid());

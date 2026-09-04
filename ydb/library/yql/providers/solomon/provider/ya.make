@@ -24,7 +24,9 @@ PEERDIR(
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/solomon/actors
     ydb/library/yql/providers/solomon/common
     ydb/library/yql/providers/solomon/expr_nodes

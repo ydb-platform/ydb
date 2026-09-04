@@ -59,11 +59,17 @@ class Workload:
 
         self.successful_inserts = 0
         self.attempted_inserts = 0
+        self._base_ts_sec = int(time.time())
 
-        self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
+        self.driver = None
+        self.pool = None
+        logger.info("FederatedQueriesWorkload::init")
+
+    def start_driver(self):
+        logger.info("Workload::start_driver")
+        self.driver = ydb.Driver(ydb.DriverConfig(self.endpoint, self.database))
         self.driver.wait(timeout=60)
         self.pool = InstrumentedQuerySessionPool(self.driver)
-        logger.info("FederatedQueriesWorkload::init")
 
     def start_solomon_emulator(self):
         logger.info("Workload::start_solomon_emulator")
@@ -154,10 +160,11 @@ class Workload:
             f"`{self.SOLOMON_PROJECT}/{self.SOLOMON_CLUSTER}/{self.SOLOMON_SERVICE}`"
         )
         rows = []
-        for _ in range(self.INSERT_BATCH_SIZE):
+        for i in range(self.INSERT_BATCH_SIZE):
             label = random.choice(self.LABEL_VALUES)
             sensor = random.randint(*self.SENSOR_RANGE)
-            ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            ts_sec = self._base_ts_sec + self.attempted_inserts * self.INSERT_BATCH_SIZE + i
+            ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts_sec))
             rows.append(
                 f'SELECT Unwrap(CAST("{ts}" AS Timestamp)) AS Ts, '
                 f'"{label}" AS Label, {sensor} AS Sensor'
@@ -212,8 +219,10 @@ class Workload:
             )
 
     def loop(self):
-        self.start_solomon_emulator()
         try:
+            # Start the solomon emulator subprocess while this process is still single-threaded
+            self.start_solomon_emulator()
+            self.start_driver()
             self.create_external_data_source()
             try:
                 self.write_to_solomon()

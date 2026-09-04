@@ -24,7 +24,7 @@ IGraphTransformer::TStatus MultiUsageFlatMapOverJoin(const TExprNode::TPtr& node
     for (auto parent : it->second) {
         if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(parent)) {
             auto flatMap = maybeFlatMap.Cast();
-            auto newParent = FlatMapOverEquiJoin(flatMap, ctx, *optCtx.ParentsMap, true, optCtx.Types);
+            auto newParent = FlatMapOverEquiJoin(flatMap, ctx, *optCtx.ParentsMap, /*multiUsage=*/true, optCtx.Types);
             if (!newParent.Raw()) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -423,15 +423,19 @@ TExprNode::TPtr FuseFilterWithCalcOverWindow(const TCoFlatMapBase& node, TExprCo
 
     auto calcs = ExtractCalcsOverWindow(node.Input().Ptr(), ctx);
     YQL_ENSURE(!calcs.empty(), "Empty CalcOverWindow should be processed earlier");
+    TCoCalcOverWindowTuple calc(calcs.back());
+    if (!calc.SessionSpec().Maybe<TCoVoid>()) {
+        // we are not ready for fusing session windows yet
+        return node.Ptr();
+    }
+    YQL_ENSURE(calc.SessionColumns().Empty());
 
     TExprNode::TPtr calcInput = node.Input().Cast<TCoInputBase>().Input().Ptr();
     const TCoConditionalValueBase body = node.Lambda().Body().Cast<TCoConditionalValueBase>();
 
     auto filterLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, body.Predicate().Ptr());
 
-    TCoCalcOverWindowTuple calc(calcs.back());
     auto frames = calc.Frames().Ref().ChildrenList();
-
     frames.push_back(ctx.Builder(filterLambda->Pos())
         .Callable("WinFilter")
             .Add(0, MakeRowsUPCRFrameSpec(filterLambda->Pos(), ctx.NewCallable(filterLambda->Pos(), "Void", {}), ctx, *optCtx.Types))
@@ -685,6 +689,16 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         return true;
     };
 
+    map[TCoSqlCombine::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToSqlCombine(input, members, ctx, " with multi-usage");
+            }
+        );
+
+        return true;
+    };
+
     map[""] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
         FilterPushdownWithMultiusage(node, toOptimize, ctx, optCtx);
         if (toOptimize.empty() && TCoFlatMapBase::Match(node.Get()) && CanPushdownFiltersOverWindow(optCtx.Types)) {
@@ -694,6 +708,16 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
                 toOptimize[node.Get()] = opt;
             }
         }
+
+        return true;
+    };
+
+    map[TCoWithWorld::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToWithWorld(input, members, ctx, " with multi-usage");
+            }
+        );
 
         return true;
     };

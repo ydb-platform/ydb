@@ -2,7 +2,6 @@
 
 #include "auth_factory.h"
 #include "controller_base.h"
-#include "custom_metrics.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "sqs_serialization.h"
@@ -30,6 +29,8 @@
 #include <ydb/services/ymq/ymq_proxy.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 namespace NKikimr::NHttpProxy {
 
@@ -97,14 +98,19 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                              "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
-                              "' database: '" << HttpContext.DatabasePath <<
-                              "' iam token size: " << HttpContext.IamToken.size());
+                YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
+                    {"logPrefix", LogPrefix()},
+                    {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
+                    {"databasePath", HttpContext.DatabasePath},
+                    {"size", HttpContext.IamToken.size()});
 
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
+                    {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
                 };
+                if (TString requestEndpoint = MakeSqsRequestEndpoint(HttpContext)) {
+                    peerMetadata[TString{NSqsTopic::REQUEST_ENDPOINT_METADATA_KEY}] = std::move(requestEndpoint);
+                }
 
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                     std::move(Request),
@@ -306,11 +312,6 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    FillOutputCustomMetrics<TProtoResult>(
-                        *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())),
-                        HttpContext,
-                        ctx
-                    );
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{
                                  1, true, true,
@@ -350,12 +351,10 @@ namespace NKikimr::NHttpProxy {
                                 NKikimr::NSQS::NErrors::INTERNAL_FAILURE.HttpStatusCode)
                             : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
 
-                        LOG_SP_DEBUG_S(
-                            ctx,
-                            NKikimrServices::HTTP_PROXY,
-                            "Not retrying GRPC response."
-                                << " Code: " << errorCode
-                                << ", Error: " << error);
+                        YDB_LOG_DEBUG_CTX(ctx, "Not retrying GRPC response",
+                            {"logPrefix", LogPrefix()},
+                            {"code", errorCode},
+                            {"error", error});
                         return ReplyWithMessageQueueError(
                             ctx,
                             errorCode,
@@ -402,9 +401,10 @@ namespace NKikimr::NHttpProxy {
                     }
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
-                    LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,
-                                  "got new request with incorrect json from [" << HttpContext.SourceAddress << "] " <<
-                                  "database '" << HttpContext.DatabasePath << "'");
+                    YDB_LOG_WARN_CTX(ctx, "Got new request with incorrect json from database",
+                        {"logPrefix", LogPrefix()},
+                        {"sourceAddress", HttpContext.SourceAddress},
+                        {"databasePath", HttpContext.DatabasePath});
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
@@ -424,10 +424,11 @@ namespace NKikimr::NHttpProxy {
                     }
                 }
 
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                              "got new request from [" << HttpContext.SourceAddress << "] " <<
-                              "database '" << HttpContext.DatabasePath << "' " <<
-                              "stream '" << MaybeGetQueueUrl<TProtoRequest>(Request) << "'");
+                YDB_LOG_INFO_CTX(ctx, "Got new request from database stream",
+                    {"logPrefix", LogPrefix()},
+                    {"sourceAddress", HttpContext.SourceAddress},
+                    {"databasePath", HttpContext.DatabasePath},
+                    {"request", MaybeGetQueueUrl<TProtoRequest>(Request)});
 
                 ReportInputCounters(ctx);
                 if (!HttpContext.SecurityToken.empty()) {
@@ -549,4 +550,3 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
-

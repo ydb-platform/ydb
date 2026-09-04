@@ -8,6 +8,8 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/protos/statistics.pb.h>
 
+#include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
+
 #include <type_traits>
 
 namespace NKikimr::NStat {
@@ -133,6 +135,53 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
+    Y_UNIT_TEST(StablePickleManyTypes) {
+        TTestEnv env(1, 1);
+        CreateDatabase(env, "Database");
+
+        auto col = [](NScheme::TTypeId type, TStringBuf value) {
+            return TPickleColumnValue{.Type = type, .Value = TString(value)};
+        };
+
+        std::vector<TPickleColumnValue> columns = {
+            col(NScheme::NTypeIds::Bool, "true"),
+            col(NScheme::NTypeIds::Int8, "-8"),
+            col(NScheme::NTypeIds::Uint8, "200"),
+            col(NScheme::NTypeIds::Int16, "-16000"),
+            col(NScheme::NTypeIds::Uint16, "60000"),
+            col(NScheme::NTypeIds::Int32, "-100000"),
+            col(NScheme::NTypeIds::Uint32, "100000"),
+            col(NScheme::NTypeIds::Int64, "-5000000000"),
+            col(NScheme::NTypeIds::Uint64, "5000000000"),
+            col(NScheme::NTypeIds::Float, "1.5"),
+            col(NScheme::NTypeIds::Double, "2.25"),
+            col(NScheme::NTypeIds::String, "hello"),
+            col(NScheme::NTypeIds::Utf8, "мир"),
+            col(NScheme::NTypeIds::Yson, "[1;2]"),
+            col(NScheme::NTypeIds::Json, "{\"a\":1}"),
+            col(NScheme::NTypeIds::JsonDocument, "{\"b\":2}"),
+            col(NScheme::NTypeIds::Uuid, "f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),
+            col(NScheme::NTypeIds::DyNumber, "-10.23"),
+            col(NScheme::NTypeIds::Date, "2019-09-09"),
+            col(NScheme::NTypeIds::Datetime, "2019-09-09T12:00:00Z"),
+            col(NScheme::NTypeIds::Timestamp, "2019-09-09T12:00:00.000000Z"),
+            col(NScheme::NTypeIds::Interval, "P1D"),
+            col(NScheme::NTypeIds::Date32, "2019-09-09"),
+            col(NScheme::NTypeIds::Datetime64, "2019-09-09T12:00:00Z"),
+            col(NScheme::NTypeIds::Timestamp64, "2019-09-09T12:00:00.000000Z"),
+            col(NScheme::NTypeIds::Interval64, "P1D"),
+            TPickleColumnValue{.Type = NScheme::NTypeIds::Decimal, .Value = "11.3",
+                .DecimalPrecision = 5, .DecimalScale = 2},
+        };
+
+        // The whole heterogeneous tuple at once...
+        CheckStablePickleTupleMatchesYql(env, columns);
+        // ...and each column individually, to localize any per-type mismatch.
+        for (const auto& c : columns) {
+            CheckStablePickleTupleMatchesYql(env, {c});
+        }
+    }
+
     Y_UNIT_TEST(CountMinSketchServerlessStatistics) {
         TTestEnv env(1, 3);
         auto& runtime = *env.GetServer().GetRuntime();
@@ -160,6 +209,29 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
         ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(CountMinSketchNestedTable) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "subdir/Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(CountMinSketchMultiColumnStatistics) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnColumnTable(env, "Database", "Table1");
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
     }
 
     Y_UNIT_TEST(SimpleColumnStatistics) {
@@ -292,6 +364,41 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Int64);
         auto estimator = TEqWidthHistogramEstimator(histogram);
         UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<i64>(0), 500);
+    }
+
+    Y_UNIT_TEST(EqHeightHistogram) {
+        // Service-level EQ_HEIGHT over (Value1, Value2). Only boundary probes:
+        // merge/compaction is not exact (see eq_height_histogram_ut.cpp).
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnEqHeightColumnTable(env, "Database", "Table1");
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        // Fetch the histogram via the stat service using the multi-column
+        // variant (the single-column GetStatistics would construct a
+        // TColumnTags(ui32) that only collides with the multi-column key by
+        // coincidence of SerializeColumnTags).
+        auto responses = GetStatisticsMultiColumn(
+            runtime, tableInfo.PathId, EStatType::EQ_HEIGHT_HISTOGRAM, {2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+
+        const auto& resp = responses.at(0);
+        UNIT_ASSERT(resp.Success);
+        const auto& histogram = resp.EqHeightHistogram.Data;
+        UNIT_ASSERT(histogram);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->GetTotalCount(), ColumnTableRowsNumber);
+        UNIT_ASSERT(histogram->GetNumBuckets() >= 1);
+
+        // Optional-null String tuple sorts first. "zz" is above all digit-only values.
+        UNIT_ASSERT_VALUES_EQUAL(
+            histogram->EstimateLessOrEqual(MakeNullStringTuplePresortKey(2)), 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            histogram->EstimateLessOrEqual(
+                MakeStringTuplePresortKey({"zz", "zz"}, /*isOptional=*/true)),
+            ColumnTableRowsNumber);
     }
 
     Y_UNIT_TEST(ManyColumns) {

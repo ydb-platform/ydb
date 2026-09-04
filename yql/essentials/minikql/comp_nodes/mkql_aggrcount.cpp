@@ -4,16 +4,15 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TAggrCountInitWrapper: public TDecoratorCodegeneratorNode<TAggrCountInitWrapper> {
-    typedef TDecoratorCodegeneratorNode<TAggrCountInitWrapper> TBaseComputation;
+    using TBaseComputation = TDecoratorCodegeneratorNode<TAggrCountInitWrapper>;
 
 public:
-    TAggrCountInitWrapper(IComputationNode* value)
+    explicit TAggrCountInitWrapper(IComputationNode* value)
         : TBaseComputation(value)
     {
     }
@@ -23,7 +22,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto check = IsExists(value, block, context);
         if (Node_->IsTemporaryValue()) {
@@ -35,10 +34,10 @@ public:
 };
 
 class TAggrCountUpdateWrapper: public TDecoratorCodegeneratorNode<TAggrCountUpdateWrapper> {
-    typedef TDecoratorCodegeneratorNode<TAggrCountUpdateWrapper> TBaseComputation;
+    using TBaseComputation = TDecoratorCodegeneratorNode<TAggrCountUpdateWrapper>;
 
 public:
-    TAggrCountUpdateWrapper(IComputationNode* state)
+    explicit TAggrCountUpdateWrapper(IComputationNode* state)
         : TBaseComputation(state)
     {
     }
@@ -48,36 +47,36 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*& block) const override {
         return BinaryOperator::CreateAdd(value, ConstantInt::get(value->getType(), 1), "incr", block);
     }
 #endif
 };
 
 class TAggrCountIfUpdateWrapper: public TMutableCodegeneratorNode<TAggrCountIfUpdateWrapper> {
-    typedef TMutableCodegeneratorNode<TAggrCountIfUpdateWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TAggrCountIfUpdateWrapper>;
 
 public:
     TAggrCountIfUpdateWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* state)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Arg(value)
-        , State(state)
+        , Arg_(value)
+        , State_(state)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        auto state = State->GetValue(compCtx);
-        return Arg->GetValue(compCtx) ? NUdf::TUnboxedValuePod(state.Get<ui64>() + 1U) : state.Release();
+        auto state = State_->GetValue(compCtx);
+        return Arg_->GetValue(compCtx) ? NUdf::TUnboxedValuePod(state.Get<ui64>() + 1U) : state.Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
-        const auto state = GetNodeValue(State, ctx, block);
-        const auto value = GetNodeValue(Arg, ctx, block);
+        const auto state = GetNodeValue(State_, ctx, block);
+        const auto value = GetNodeValue(Arg_, ctx, block);
         const auto check = IsExists(value, block, context);
-        if (Arg->IsTemporaryValue()) {
-            ValueCleanup(Arg->GetRepresentation(), value, ctx, block);
+        if (Arg_->IsTemporaryValue()) {
+            ValueCleanup(Arg_->GetRepresentation(), value, ctx, block);
         }
         const auto zext = new ZExtInst(check, state->getType(), "zext", block);
         const auto incr = BinaryOperator::CreateAdd(state, zext, "incr", block);
@@ -86,12 +85,12 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        DependsOn(Arg);
-        DependsOn(State);
+        DependsOn(Arg_);
+        DependsOn(State_);
     }
 
-    IComputationNode* const Arg;
-    IComputationNode* const State;
+    IComputationNode* const Arg_;
+    IComputationNode* const State_;
 };
 
 } // namespace
@@ -115,5 +114,4 @@ IComputationNode* WrapAggrCountUpdate(TCallable& callable, const TComputationNod
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

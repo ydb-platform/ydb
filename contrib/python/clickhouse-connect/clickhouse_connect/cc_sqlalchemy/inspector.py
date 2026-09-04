@@ -4,9 +4,10 @@ from collections.abc import Collection
 from typing import Any
 
 import sqlalchemy.schema as sa_schema
-from sqlalchemy import text
+from sqlalchemy import String, bindparam, text
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import NoResultFound
+from sqlalchemy.sql.elements import TextClause
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import sqla_type_from_name
 from clickhouse_connect.cc_sqlalchemy.ddl.tableengine import build_engine
@@ -16,18 +17,33 @@ from clickhouse_connect.cc_sqlalchemy.sql.sqlparse import (
     find_top_level_clause,
     split_top_level,
 )
+from clickhouse_connect.driver.client import _INTERNAL_QUERY_FORMATS
+
+
+def with_internal_query_formats(clause: TextClause) -> TextClause:
+    """Force String columns to decode as str for driver metadata introspection.
+
+    User-configured global read formats such as set_default_formats("String", "bytes")
+    must not affect DESCRIBE / system.tables / SHOW TABLES results used by reflection.
+    Mirrors driver.client._INTERNAL_QUERY_FORMATS on the orchestration path.
+    """
+    return clause.execution_options(query_formats=dict(_INTERNAL_QUERY_FORMATS))
 
 
 def _database_name(connection, schema: str | None) -> str:
     if schema:
         return schema
-    return connection.execute(text("SELECT currentDatabase()")).scalar()
+    return connection.execute(with_internal_query_formats(text("SELECT currentDatabase()"))).scalar()
 
 
 def get_table_metadata(connection, table_name, schema=None):
     database = _database_name(connection, schema)
     result_set = connection.execute(
-        text("SELECT engine, engine_full, comment FROM system.tables WHERE database = :database AND name = :table_name"),
+        with_internal_query_formats(
+            text("SELECT engine, engine_full, comment FROM system.tables WHERE database = :database AND name = :table_name").bindparams(
+                bindparam("database", type_=String()), bindparam("table_name", type_=String())
+            )
+        ),
         {"database": database, "table_name": table_name},
     )
     row = next(result_set, None)
@@ -42,7 +58,7 @@ def get_engine(connection, table_name, schema=None):
 
 
 def get_dictionary_create_sql(connection, table_name: str, schema: str | None = None) -> str:
-    create_sql = connection.execute(text(f"SHOW CREATE DICTIONARY {full_table(table_name, schema)}")).scalar()
+    create_sql = connection.execute(with_internal_query_formats(text(f"SHOW CREATE DICTIONARY {full_table(table_name, schema)}"))).scalar()
     return create_sql or ""
 
 
@@ -119,6 +135,36 @@ def get_dictionary_metadata(connection, table_name: str, schema: str | None = No
     return metadata
 
 
+def get_columns(connection, table_name: str, schema: str | None = None) -> list[dict[str, Any]]:
+    table_metadata = get_table_metadata(connection, table_name, schema)
+    if table_metadata.engine == "Dictionary":
+        return get_dictionary_columns(connection, table_name, schema)
+    table_id = full_table(table_name, schema)
+    result_set = connection.execute(with_internal_query_formats(text(f"DESCRIBE TABLE {table_id}")))
+    if not result_set:
+        raise NoResultFound(f"Table {table_id} does not exist")
+    columns = []
+    for row in result_set:
+        sqla_type = sqla_type_from_name(row.type.replace("\n", ""))
+        col = {
+            "name": row.name,
+            "type": sqla_type,
+            "nullable": sqla_type.nullable,
+            "autoincrement": False,
+            "comment": row.comment or None,
+            "clickhouse_codec": row.codec_expression or None,
+            "clickhouse_ttl": text(row.ttl_expression) if row.ttl_expression else None,
+        }
+        if row.default_type == "DEFAULT" and row.default_expression:
+            col["server_default"] = text(row.default_expression)
+        elif row.default_type == "MATERIALIZED" and row.default_expression:
+            col["clickhouse_materialized"] = text(row.default_expression)
+        elif row.default_type == "ALIAS" and row.default_expression:
+            col["clickhouse_alias"] = text(row.default_expression)
+        columns.append(col)
+    return columns
+
+
 class ChInspector(Inspector):
     def reflect_table(
         self,
@@ -155,30 +201,4 @@ class ChInspector(Inspector):
             table.kwargs["clickhouse_engine"] = table.engine
 
     def get_columns(self, table_name, schema=None, **_kwargs):
-        table_metadata = get_table_metadata(self.bind, table_name, schema)
-        if table_metadata.engine == "Dictionary":
-            return get_dictionary_columns(self.bind, table_name, schema)
-        table_id = full_table(table_name, schema)
-        result_set = self.bind.execute(text(f"DESCRIBE TABLE {table_id}"))
-        if not result_set:
-            raise NoResultFound(f"Table {table_id} does not exist")
-        columns = []
-        for row in result_set:
-            sqla_type = sqla_type_from_name(row.type.replace("\n", ""))
-            col = {
-                "name": row.name,
-                "type": sqla_type,
-                "nullable": sqla_type.nullable,
-                "autoincrement": False,
-                "comment": row.comment or None,
-                "clickhouse_codec": row.codec_expression or None,
-                "clickhouse_ttl": text(row.ttl_expression) if row.ttl_expression else None,
-            }
-            if row.default_type == "DEFAULT" and row.default_expression:
-                col["server_default"] = text(row.default_expression)
-            elif row.default_type == "MATERIALIZED" and row.default_expression:
-                col["clickhouse_materialized"] = text(row.default_expression)
-            elif row.default_type == "ALIAS" and row.default_expression:
-                col["clickhouse_alias"] = text(row.default_expression)
-            columns.append(col)
-        return columns
+        return get_columns(self.bind, table_name, schema)

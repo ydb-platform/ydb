@@ -952,6 +952,113 @@ roaring_bitmap_t *roaring_bitmap_or(const roaring_bitmap_t *x1,
     return answer;
 }
 
+static void roaring_inplace_merge_bulk(roaring_bitmap_t *x1,
+                                       const roaring_bitmap_t *x2, int dst,
+                                       int left, int right, bool is_xor) {
+    roaring_array_t *ra1 = &x1->high_low_container;
+    const roaring_array_t *ra2 = &x2->high_low_container;
+    const bool cow2 = is_cow(x2);
+    const int length1 = ra1->size;
+    const int length2 = ra2->size;
+
+    int distinct = 0;
+    {
+        int l = left, r = right;
+        while (l < length1 && r < length2) {
+            uint16_t k1 = ra1->keys[l];
+            uint16_t k2 = ra2->keys[r];
+            if (k1 < k2) {
+                l++;
+            } else if (k1 > k2) {
+                r++;
+            } else {
+                l++;
+                r++;
+            }
+            distinct++;
+        }
+        distinct += (length1 - l) + (length2 - r);
+    }
+    const int total = dst + distinct;
+
+    roaring_array_t merged;
+    ra_init_with_capacity(&merged, total > 0 ? (uint32_t)total : 1);
+
+    for (int i = 0; i < dst; i++) {
+        ra_append(&merged, ra1->keys[i], ra1->containers[i], ra1->typecodes[i]);
+    }
+
+    uint8_t result_type = 0;
+    while (left < length1 && right < length2) {
+        uint16_t k1 = ra1->keys[left];
+        uint16_t k2 = ra2->keys[right];
+        if (k1 < k2) {
+            ra_append(&merged, k1, ra1->containers[left], ra1->typecodes[left]);
+            left++;
+        } else if (k1 > k2) {
+            uint8_t type2 = ra2->typecodes[right];
+            container_t *c2 =
+                get_copy_of_container(ra2->containers[right], &type2, cow2);
+            if (cow2) {
+                ra_set_container_at_index(ra2, right, c2, type2);
+            }
+            ra_append(&merged, k2, c2, type2);
+            right++;
+        } else {
+            uint8_t type1 = ra1->typecodes[left];
+            container_t *c1 = ra1->containers[left];
+            uint8_t type2 = ra2->typecodes[right];
+            container_t *c2 = ra2->containers[right];
+            if (is_xor) {
+                container_t *c;
+                if (type1 == SHARED_CONTAINER_TYPE) {
+                    c = container_xor(c1, type1, c2, type2, &result_type);
+                    shared_container_free(CAST_shared(c1));
+                } else {
+                    c = container_ixor(c1, type1, c2, type2, &result_type);
+                }
+                if (container_nonzero_cardinality(c, result_type)) {
+                    ra_append(&merged, k1, c, result_type);
+                } else {
+                    container_free(c, result_type);
+                }
+            } else {
+                if (container_is_full(c1, type1)) {
+                    ra_append(&merged, k1, c1, type1);
+                } else {
+                    container_t *c =
+                        (type1 == SHARED_CONTAINER_TYPE)
+                            ? container_or(c1, type1, c2, type2, &result_type)
+                            : container_ior(c1, type1, c2, type2, &result_type);
+                    if (c != c1) {
+                        container_free(c1, type1);
+                    }
+                    ra_append(&merged, k1, c, result_type);
+                }
+            }
+            left++;
+            right++;
+        }
+    }
+    for (; left < length1; left++) {
+        ra_append(&merged, ra1->keys[left], ra1->containers[left],
+                  ra1->typecodes[left]);
+    }
+    for (; right < length2; right++) {
+        uint8_t type2 = ra2->typecodes[right];
+        container_t *c2 =
+            get_copy_of_container(ra2->containers[right], &type2, cow2);
+        if (cow2) {
+            ra_set_container_at_index(ra2, right, c2, type2);
+        }
+        ra_append(&merged, ra2->keys[right], c2, type2);
+    }
+
+    merged.flags = ra1->flags;
+    ra_clear_without_containers(ra1);
+    *ra1 = merged;
+}
+
 // inplace or (modifies its first argument).
 void roaring_bitmap_or_inplace(roaring_bitmap_t *x1,
                                const roaring_bitmap_t *x2) {
@@ -1001,22 +1108,8 @@ void roaring_bitmap_or_inplace(roaring_bitmap_t *x1,
             s1 = ra_get_key_at_index(&x1->high_low_container, (uint16_t)pos1);
 
         } else {  // s1 > s2
-            container_t *c2 = ra_get_container_at_index(&x2->high_low_container,
-                                                        (uint16_t)pos2, &type2);
-            c2 = get_copy_of_container(c2, &type2, is_cow(x2));
-            if (is_cow(x2)) {
-                ra_set_container_at_index(&x2->high_low_container, pos2, c2,
-                                          type2);
-            }
-
-            // container_t *c2_clone = container_clone(c2, type2);
-            ra_insert_new_key_value_at(&x1->high_low_container, pos1, s2, c2,
-                                       type2);
-            pos1++;
-            length1++;
-            pos2++;
-            if (pos2 == length2) break;
-            s2 = ra_get_key_at_index(&x2->high_low_container, (uint16_t)pos2);
+            roaring_inplace_merge_bulk(x1, x2, pos1, pos1, pos2, false);
+            return;
         }
     }
     if (pos1 == length1) {
@@ -1152,8 +1245,9 @@ void roaring_bitmap_xor_inplace(roaring_bitmap_t *x1,
                 ++pos1;
             } else {
                 container_free(c, result_type);
-                ra_remove_at_index(&x1->high_low_container, pos1);
-                --length1;
+                roaring_inplace_merge_bulk(x1, x2, pos1, pos1 + 1, pos2 + 1,
+                                           true);
+                return;
             }
 
             ++pos2;
@@ -1168,21 +1262,8 @@ void roaring_bitmap_xor_inplace(roaring_bitmap_t *x1,
             s1 = ra_get_key_at_index(&x1->high_low_container, (uint16_t)pos1);
 
         } else {  // s1 > s2
-            container_t *c2 = ra_get_container_at_index(&x2->high_low_container,
-                                                        (uint16_t)pos2, &type2);
-            c2 = get_copy_of_container(c2, &type2, is_cow(x2));
-            if (is_cow(x2)) {
-                ra_set_container_at_index(&x2->high_low_container, pos2, c2,
-                                          type2);
-            }
-
-            ra_insert_new_key_value_at(&x1->high_low_container, pos1, s2, c2,
-                                       type2);
-            pos1++;
-            length1++;
-            pos2++;
-            if (pos2 == length2) break;
-            s2 = ra_get_key_at_index(&x2->high_low_container, (uint16_t)pos2);
+            roaring_inplace_merge_bulk(x1, x2, pos1, pos1, pos2, true);
+            return;
         }
     }
     if (pos1 == length1) {
@@ -1519,9 +1600,18 @@ size_t roaring_bitmap_serialize(const roaring_bitmap_t *r, char *buf) {
         return roaring_bitmap_portable_serialize(r, buf + 1) + 1;
     } else {
         buf[0] = CROARING_SERIALIZATION_ARRAY_UINT32;
-        memcpy(buf + 1, &cardinality, sizeof(uint32_t));
-        roaring_bitmap_to_uint32_array(
-            r, (uint32_t *)(buf + 1 + sizeof(uint32_t)));
+        uint32_t card_le = croaring_htole32((uint32_t)cardinality);
+        memcpy(buf + 1, &card_le, sizeof(uint32_t));
+        uint32_t *out = (uint32_t *)(buf + 1 + sizeof(uint32_t));
+        roaring_bitmap_to_uint32_array(r, out);
+#if CROARING_IS_BIG_ENDIAN
+        for (uint64_t i = 0; i < cardinality; ++i) {
+            uint32_t v;
+            memcpy(&v, out + i, sizeof(uint32_t));
+            v = croaring_htole32(v);
+            memcpy(out + i, &v, sizeof(uint32_t));
+        }
+#endif
         return 1 + (size_t)sizeasarray;
     }
 }
@@ -1580,6 +1670,7 @@ roaring_bitmap_t *roaring_bitmap_deserialize(const void *buf) {
         uint32_t card;
 
         memcpy(&card, bufaschar + 1, sizeof(uint32_t));
+        card = croaring_letoh32(card);
 
         const uint32_t *elems =
             (const uint32_t *)(bufaschar + 1 + sizeof(uint32_t));
@@ -1593,6 +1684,7 @@ roaring_bitmap_t *roaring_bitmap_deserialize(const void *buf) {
             // elems may not be aligned, read with memcpy
             uint32_t elem;
             memcpy(&elem, elems + i, sizeof(elem));
+            elem = croaring_letoh32(elem);
             roaring_bitmap_add_bulk(bitmap, &context, elem);
         }
         return bitmap;
@@ -1618,6 +1710,7 @@ roaring_bitmap_t *roaring_bitmap_deserialize_safe(const void *buf,
         /* This looks like a compressed set of uint32_t elements */
         uint32_t card;
         memcpy(&card, bufaschar + 1, sizeof(uint32_t));
+        card = croaring_letoh32(card);
 
         // Check the buffer is big enough to contain card uint32_t elements
         if (maxbytes < 1 + sizeof(uint32_t) + card * sizeof(uint32_t)) {
@@ -1636,6 +1729,7 @@ roaring_bitmap_t *roaring_bitmap_deserialize_safe(const void *buf,
             // elems may not be aligned, read with memcpy
             uint32_t elem;
             memcpy((char *)&elem, (char *)(elems + i), sizeof(elem));
+            elem = croaring_letoh32(elem);
             roaring_bitmap_add_bulk(bitmap, &context, elem);
         }
         return bitmap;
@@ -2809,6 +2903,10 @@ void roaring_bitmap_rank_many(const roaring_bitmap_t *bm, const uint32_t *begin,
             *(ans++) = size;
             iter++;
         }
+    }
+    while (iter != end) {  // must have N outputs for N inputs...
+        *(ans++) = size;   // ...everything left is beyond all containers
+        iter++;
     }
 }
 

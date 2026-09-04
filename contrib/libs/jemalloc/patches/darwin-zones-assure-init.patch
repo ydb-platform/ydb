@@ -12,6 +12,6 @@
 +#if defined(JEMALLOC_ZONE)
 +    je_assure_zone_register();
 +#endif
- 	LOG("core.malloc.entry", "size: %zu", size);
  	if (tsd_get_allocates() && unlikely(!malloc_initialized())) {
  		return fallback_alloc(size);
+	}

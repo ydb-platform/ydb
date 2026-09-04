@@ -98,7 +98,7 @@ namespace NYql {
             TTypeAnnotationContext* types,
             const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
             const std::shared_ptr<IDatabaseAsyncResolver>& databaseResolver,
-            const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+            const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
             const NConnector::IClient::TPtr& genericClient,
             const TGenericGatewayConfig& gatewayConfig)
             : Types(types)
@@ -128,9 +128,10 @@ namespace NYql {
 
         // key - cluster name, value - TCredentialsProviderPtr
         // It's important to cache credentials providers, because they make IO
-        // (synchronous call via Token Accessor client) during the construction.
+        // (e.g. synchronous call via Token Accessor client) during the construction.
+        // TODO: reconsider cache usefulness; TokenAccessor is part of deprecated yqv1, IAM cloud delegated auth (which also uses IO) shares singleton instance internally, "simple" providers are inexpensive
         std::unordered_map<TString, NYdb::TCredentialsProviderPtr> CredentialProviders;
-        ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
 
         NConnector::IClient::TPtr GenericClient;
 

@@ -1,5 +1,8 @@
 #include "flush_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -21,13 +24,23 @@ TFlushRequestExecutor::TFlushRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", "Flush"},
-           {"src", PrintHostIndex(route.SourceHostIndex)},
-           {"dst", PrintHostIndex(route.DestinationHostIndex)}}))
+           {"src",
+            THostAndNodeId{
+                .HostIndex = route.SourceHostIndex,
+                .NodeId = directBlockGroup->GetNodeId(route.SourceHostIndex)}},
+           {"dst",
+            THostAndNodeId{
+                .HostIndex = route.DestinationHostIndex,
+                .NodeId =
+                    directBlockGroup->GetNodeId(route.DestinationHostIndex)}}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
     , Route(route)
     , Hint(std::move(hint))
+    , Cooldown(DirectBlockGroup->GetOracle()->GetFlushRequestCooldown(
+          THostMask::MakeFromRoute(Route)))
+    , RequestTimeout(DirectBlockGroup->GetOracle()->GetFlushRequestTimeout())
 {
     Y_ABORT_UNLESS(Route.SourceHostIndex != InvalidHostIndex);
     Y_ABORT_UNLESS(Route.DestinationHostIndex != InvalidHostIndex);
@@ -48,6 +61,46 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
 
 void TFlushRequestExecutor::Run()
 {
+    if (!Cooldown) {
+        DoRun();
+    } else {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s Flush cooldown time %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatDuration(Cooldown).c_str());
+        DirectBlockGroup->Schedule(
+            Cooldown,
+            [self = shared_from_this()]()
+            {
+                self->DoRun();   //
+            });
+    }
+}
+
+TString TFlushRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    result << Hint.DebugPrint(true);
+    if (Cooldown) {
+        result << ",Cooldown=" << FormatDuration(Cooldown);
+    }
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
+    return result;
+}
+
+NThreading::TFuture<TFlushRequestExecutor::TResponse>
+TFlushRequestExecutor::GetFuture() const
+{
+    return Promise.GetFuture();
+}
+
+void TFlushRequestExecutor::DoRun()
+{
+    ScheduleRequestTimeout();
+
     auto future = DirectBlockGroup->SyncWithPBuffer(
         VChunkConfig.GetVChunkIndex(),
         Route.SourceHostIndex,
@@ -58,55 +111,31 @@ void TFlushRequestExecutor::Run()
         [self = shared_from_this()]   //
         (const NThreading::TFuture<TDBGFlushResponse>& f)
         {
-            //
-            self->OnFlushResponse(f.GetValue());
+            self->OnFlushResponse(f.GetValue());   //
         });
-}
-
-TString TFlushRequestExecutor::Print()
-{
-    TStringBuilder result;
-    result << LogTitle.GetWithTime();
-    result << "{";
-    bool first = true;
-    for (const auto& segment: Hint.Segments) {
-        if (!first) {
-            result << ",";
-        }
-        result << " " << segment.Lsn;
-        first = false;
-    }
-    result << "}";
-    return result;
-}
-
-NThreading::TFuture<TFlushRequestExecutor::TResponse>
-TFlushRequestExecutor::GetFuture() const
-{
-    return Promise.GetFuture();
 }
 
 void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
 {
     Y_ABORT_UNLESS(Hint.Segments.size() == response.Errors.size());
 
-    TVector<ui64> flushOk;
-    TVector<ui64> flushFailed;
+    TVector<TPBufferKey> flushOk;
+    TVector<TPBufferKey> flushFailed;
     flushOk.reserve(Hint.Segments.size());
     for (size_t i = 0; i < Hint.Segments.size(); ++i) {
         if (HasError(response.Errors[i])) {
             LOG_ERROR(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "%s Flush failed: %lu %s %s",
+                "%s Flush failed: %s %s %s",
                 LogTitle.GetWithTime().c_str(),
-                Hint.Segments[i].Lsn,
+                Hint.Segments[i].PBufferKey.Print().c_str(),
                 Hint.Segments[i].Range.Print().c_str(),
-                FormatError(response.Errors[i]).c_str());
+                FormatError(response.Errors[i]).Quote().c_str());
 
-            flushFailed.push_back(Hint.Segments[i].Lsn);
+            flushFailed.push_back(Hint.Segments[i].PBufferKey);
         } else {
-            flushOk.push_back(Hint.Segments[i].Lsn);
+            flushOk.push_back(Hint.Segments[i].PBufferKey);
         }
     }
 
@@ -114,13 +143,51 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
 }
 
 void TFlushRequestExecutor::Reply(
-    TVector<ui64> flushOk,
-    TVector<ui64> flushFailed)
+    TVector<TPBufferKey> flushOk,
+    TVector<TPBufferKey> flushFailed)
 {
     Promise.TrySetValue(TResponse{
         .Route = Route,
         .FlushOk = std::move(flushOk),
         .FlushFailed = std::move(flushFailed)});
+}
+
+void TFlushRequestExecutor::ScheduleRequestTimeout()
+{
+    if (!RequestTimeout) {
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Schedule OnRequestTimeout %s",
+        LogTitle.GetWithTime().c_str(),
+        FormatDuration(RequestTimeout).c_str());
+
+    DirectBlockGroup->Schedule(
+        RequestTimeout,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->OnRequestTimeout();
+            }
+        });
+}
+
+void TFlushRequestExecutor::OnRequestTimeout()
+{
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnRequestTimeout.",
+        LogTitle.GetWithTime().c_str());
+
+    Reply({}, MakePBufferKeys(Hint.Segments));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

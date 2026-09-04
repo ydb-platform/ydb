@@ -20,14 +20,6 @@ from dataclasses import dataclass, field
 from github import Github, GithubException, Auth
 import requests
 
-try:
-    pr_template_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'actions', 'validate_pr_description'))
-    sys.path.insert(0, pr_template_path)
-    from pr_template import ISSUE_PATTERNS, get_category_section_template
-except ImportError as e:
-    logging.error(f"Failed to import pr_template: {e}")
-    raise
-
 
 @dataclass
 class ConflictInfo:
@@ -54,6 +46,10 @@ class BackportResult:
     @property
     def has_conflicts(self) -> bool:
         return len(self.conflict_files) > 0
+
+
+class ChangesAlreadyAppliedError(Exception):
+    """Raised when all requested commits are already present in the target branch."""
 
 
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
@@ -129,6 +125,15 @@ def create_pr_source(pull: Any, allow_unmerged: bool, logger) -> Source:
         body_item=f"* PR {pull.html_url}",
         author=pull.user.login,
         pull_requests=[pull]
+    )
+
+
+def is_empty_cherry_pick(output: str) -> bool:
+    """Detects git empty cherry-pick when patch is already present in the branch."""
+    output_lower = output.lower()
+    return (
+        'now empty' in output_lower
+        or 'nothing added to commit' in output_lower
     )
 
 
@@ -212,31 +217,17 @@ def get_linked_issues(repo, token: str, pull_requests: List[Any], logger) -> str
     return ' '.join(unique_issues) if unique_issues else 'None'
 
 
-def extract_changelog(pr_body: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Extracts changelog category, entry, and entry content"""
+def extract_changelog(pr_body: str) -> Optional[str]:
+    """Extracts the changelog entry"""
     if not pr_body:
-        return None, None, None
-    
-    # Category
-    category_match = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
-    category = None
-    if category_match:
-        categories = [line.lstrip('* ').strip() for line in category_match.group(1).splitlines() if line.strip() and line.strip().startswith('*')]
-        category = categories[0] if categories else None
-    
-    # Entry
+        return None
+
     entry_match = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
     entry = entry_match.group(1).strip() if entry_match else None
     if entry in ['...', '']:
         entry = None
-    
-    # Entry content (stops at category)
-    entry_content_match = re.search(r"### Changelog entry.*?\n(.*?)(\n### Changelog category|$)", pr_body, re.DOTALL)
-    entry_content = entry_content_match.group(1).strip() if entry_content_match else None
-    if entry_content in ['...', '']:
-        entry_content = None
-    
-    return category, entry, entry_content
+
+    return entry
 
 
 def build_pr_content(
@@ -277,22 +268,17 @@ def build_pr_content(
     authors_str = ', '.join([f"@{a}" for a in set(all_authors)]) if all_authors else "Unknown"
     
     # Changelog: build entry for each source, then merge
-    categories = []
     changelog_entries = []
-    
+
     for source in sources:
         source_entry = None
-        source_category = None
-        
+
         # For PR or merge commit with linked PR
         if source.pull_requests:
             pull = source.pull_requests[0]
             if pull.body:
-                cat, ent, ent_content = extract_changelog(pull.body)
-                source_category = cat
-                # Use entry_content if available, otherwise entry
-                source_entry = ent_content if ent_content else ent
-            
+                source_entry = extract_changelog(pull.body)
+
             # Format: "PR Title: changelog_entry" or just "PR Title"
             if source_entry:
                 changelog_entries.append(f"{pull.title}: {source_entry}")
@@ -309,12 +295,7 @@ def build_pr_content(
             except Exception as e:
                 logger.debug(f"Failed to get commit message for {source.commit_shas[0]}: {e}")
                 changelog_entries.append(f"commit {source.commit_shas[0][:7]}")
-        
-        if source_category:
-            categories.append(source_category)
-    
-    changelog_category = categories[0] if len(set(categories)) == 1 else None
-    
+
     # Merge all entries
     if len(changelog_entries) > 1:
         changelog_entry = "\n\n---\n\n".join(changelog_entries)
@@ -323,12 +304,7 @@ def build_pr_content(
     else:
         # Fallback
         changelog_entry = f"Backport to `{target_branch}`"
-    
-    if changelog_category == "Bugfix" and issue_refs != "None":
-        if not any(re.search(p, changelog_entry) for p in ISSUE_PATTERNS):
-            changelog_entry = f"{changelog_entry} ({issue_refs})"
-    
-    category_section = f"* {changelog_category}" if changelog_category else get_category_section_template()
+
     commits = '\n'.join(all_body_items)
     
     # Build body sections
@@ -373,10 +349,6 @@ After resolving conflicts:
     body = f"""### Changelog entry <!-- a user-readable short description of the changes that goes to CHANGELOG.md and Release Notes -->
 
 {changelog_entry}
-
-### Changelog category <!-- remove all except one -->
-
-{category_section}
 
 ### Description for reviewers <!-- (optional) description for those who read this PR -->
 
@@ -494,6 +466,17 @@ def process_branch(
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             
             if result.returncode != 0:
+                if is_empty_cherry_pick(output):
+                    run_git(repo_path, ['cherry-pick', '--skip'], logger, check=False)
+                    logger.info(
+                        "Commit %s is already present in %s, skipping",
+                        commit_sha[:7], target_branch
+                    )
+                    cherry_pick_logs.append(
+                        f"=== Cherry-picking {commit_sha[:7]} ===\n"
+                        f"Skipped: changes already present in branch\n{output}"
+                    )
+                    continue
                 if "conflict" in output.lower():
                     conflicts = detect_conflicts(repo_path, logger)
                     if conflicts:
@@ -510,6 +493,20 @@ def process_branch(
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{output}")
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}")
+
+    ahead_result = run_git(
+        repo_path, ['rev-list', '--count', f'{target_branch}..HEAD'], logger, check=False
+    )
+    if ahead_result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to count commits ahead of {target_branch}: "
+            f"{(ahead_result.stderr or ahead_result.stdout or '').strip()}"
+        )
+    commits_ahead = int((ahead_result.stdout or '0').strip() or 0)
+    if commits_ahead == 0:
+        raise ChangesAlreadyAppliedError(
+            f"All requested changes are already present in {target_branch}"
+        )
     
     # Push branch
     run_git(repo_path, ['push', '--set-upstream', 'origin', dev_branch_name], logger)
@@ -781,6 +778,12 @@ def main():
                     repo_name, repo, token, sources, workflow_triggerer, workflow_url, summary_path, logger
                 )
                 results.append(result)
+            except ChangesAlreadyAppliedError as e:
+                logger.info("Branch %s skipped: %s", target_branch, e)
+                if summary_path:
+                    with open(summary_path, 'a') as f:
+                        f.write(f"Branch `{target_branch}`: skipped (changes already present)\n\n")
+                skipped_branches.append((target_branch, "changes already present"))
             except Exception as e:
                 has_errors = True
                 error_msg = f"UNEXPECTED_ERROR: Branch {target_branch} - {type(e).__name__}: {e}"

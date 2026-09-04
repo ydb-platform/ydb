@@ -186,10 +186,14 @@ public:
             }
 
             if (checks) {
-                checks
-                    .PathsLimit()
-                    .IsValidLeafName(context.UserToken.Get())
-                    .IsValidACL(acl);
+                checks.PathsLimit();
+                if (!internal) {
+                    // Internal operations (e.g. index build auto-provisioning the unique index over
+                    // __ydb_row_id) may legitimately create system-prefixed index names that the
+                    // user-facing reserved-name check would reject.
+                    checks.IsValidLeafName(context.UserToken.Get());
+                }
+                checks.IsValidACL(acl);
             }
 
             if (!checks) {

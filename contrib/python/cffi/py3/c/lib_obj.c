@@ -123,8 +123,8 @@ static int lib_traverse(LibObject *lib, visitproc visit, void *arg)
 
 static PyObject *lib_repr(LibObject *lib)
 {
-    return PyText_FromFormat("<Lib object for '%.200s'>",
-                             PyText_AS_UTF8(lib->l_libname));
+    return PyUnicode_FromFormat("<Lib object for '%.200s'>",
+                             PyUnicode_AsUTF8(lib->l_libname));
 }
 
 static PyObject *lib_build_cpython_func(LibObject *lib,
@@ -143,7 +143,7 @@ static PyObject *lib_build_cpython_func(LibObject *lib,
     int i, type_index = _CFFI_GETARG(g->type_op);
     _cffi_opcode_t *opcodes = lib->l_types_builder->ctx.types;
     static const char *const format = ";\n\nCFFI C function from %s.lib";
-    const char *libname = PyText_AS_UTF8(lib->l_libname);
+    const char *libname = PyUnicode_AsUTF8(lib->l_libname);
     struct funcbuilder_s funcbuilder;
 
     /* return type: */
@@ -226,7 +226,7 @@ static PyObject *lib_build_and_cache_attr(LibObject *lib, PyObject *name,
     const struct _cffi_global_s *g;
     CTypeDescrObject *ct;
     builder_c_t *types_builder = lib->l_types_builder;
-    const char *s = PyText_AsUTF8(name);
+    const char *s = PyUnicode_AsUTF8(name);
     if (s == NULL)
         return NULL;
 
@@ -281,7 +281,7 @@ static PyObject *lib_build_and_cache_attr(LibObject *lib, PyObject *name,
         PyErr_Format(PyExc_AttributeError,
                      "cffi library '%.200s' has no function, constant "
                      "or global variable named '%.200s'",
-                     PyText_AS_UTF8(lib->l_libname), s);
+                     PyUnicode_AsUTF8(lib->l_libname), s);
         return NULL;
     }
 
@@ -478,7 +478,7 @@ static PyObject *_lib_dir1(LibObject *lib, int ignore_global_vars)
             if (op == _CFFI_OP_GLOBAL_VAR || op == _CFFI_OP_GLOBAL_VAR_F)
                 continue;
         }
-        s = PyText_FromString(g[i].name);
+        s = PyUnicode_FromString(g[i].name);
         if (s == NULL)
             goto error;
         PyList_SET_ITEM(lst, count, s);
@@ -502,7 +502,7 @@ static PyObject *_lib_dict(LibObject *lib)
         return NULL;
 
     for (i = 0; i < total; i++) {
-        name = PyText_FromString(g[i].name);
+        name = PyUnicode_FromString(g[i].name);
         if (name == NULL)
             goto error;
 
@@ -534,7 +534,7 @@ static PyObject *lib_getattr(LibObject *lib, PyObject *name)
 
  missing:
     /*** ATTRIBUTEERROR IS SET HERE ***/
-    p = PyText_AsUTF8(name);
+    p = PyUnicode_AsUTF8(name);
     if (p == NULL)
         return NULL;
     if (strcmp(p, "__all__") == 0) {
@@ -558,16 +558,14 @@ static PyObject *lib_getattr(LibObject *lib, PyObject *name)
        module-like behavior */
     if (strcmp(p, "__name__") == 0) {
         PyErr_Clear();
-        return PyText_FromFormat("%s.lib", PyText_AS_UTF8(lib->l_libname));
+        return PyUnicode_FromFormat("%s.lib", PyUnicode_AsUTF8(lib->l_libname));
     }
-#if PY_MAJOR_VERSION >= 3
     if (strcmp(p, "__loader__") == 0 || strcmp(p, "__spec__") == 0) {
         /* some more module-like behavior hacks */
         PyErr_Clear();
         Py_INCREF(Py_None);
         return Py_None;
     }
-#endif
     return NULL;
 }
 
@@ -587,7 +585,7 @@ static int lib_setattr(LibObject *lib, PyObject *name, PyObject *val)
 
     PyErr_Format(PyExc_AttributeError,
                  "cannot write to function or constant '%.200s'",
-                 PyText_Check(name) ? PyText_AS_UTF8(name) : "?");
+                 PyUnicode_Check(name) ? PyUnicode_AsUTF8(name) : "?");
     return -1;
 }
 
@@ -645,7 +643,7 @@ static LibObject *lib_internal_new(FFIObject *ffi, const char *module_name,
     LibObject *lib;
     PyObject *libname, *dict;
 
-    libname = PyText_FromString(module_name);
+    libname = PyUnicode_FromString(module_name);
     if (libname == NULL)
         goto err1;
 
@@ -712,7 +710,7 @@ static PyObject *address_of_global_var(PyObject *args)
 
     /* rebuild a string from 'varname', to do typechecks and to force
        a unicode back to a plain string (on python 2) */
-    o_varname = PyText_FromString(varname);
+    o_varname = PyUnicode_FromString(varname);
     if (o_varname == NULL)
         return NULL;
 

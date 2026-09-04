@@ -3,6 +3,8 @@ LIBRARY()
     SRCS(
         ddisk.cpp
         ddisk.h
+        ddisk_checksums.cpp
+        ddisk_checksums.h
         ddisk_actor.cpp
         ddisk_actor.h
         ddisk_actor_boot.cpp
@@ -13,6 +15,8 @@ LIBRARY()
         ddisk_actor_read_write.cpp
         ddisk_actor_sync.cpp
         direct_io_op.cpp
+        integrity_manager.cpp
+        integrity_manager.h
         persistent_buffer_barriers_manager.cpp
         persistent_buffer_space_allocator.cpp
         persistent_buffer_mon.cpp
@@ -24,7 +28,8 @@ LIBRARY()
         ydb/core/protos
         ydb/core/blobstorage/vdisk/common
         ydb/library/pdisk_io
-        library/cpp/containers/absl_flat_hash
+        library/cpp/containers/absl
+        contrib/libs/xxhash
     )
 
 END()

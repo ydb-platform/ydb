@@ -50,6 +50,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     Y_UNUSED(config);
 
     if (*txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
         *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO &&
         *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
         *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW)
@@ -135,6 +136,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     if (txCtx.NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
         return true;
+    }
+
+    if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
+        // In Strict Serializable mode, all read-only transactions must acquire snapshot
+        return hasEffects ? readPhases > 1 : readPhases > 0;
     }
 
     if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW && hasEffects) {
@@ -291,6 +297,19 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     break;
                 case NKqpProto::TKqpPhyConnection::kSequencer:
                     return true;
+                case NKqpProto::TKqpPhyConnection::kVectorSearch: {
+                    // The actor reads the index impl tables and (unless the index covers every
+                    // output column) the main table inside the connection, so there is no
+                    // separate read operation in the plan to catch here.
+                    const auto& vectorSearch = input.GetVectorSearch();
+                    if (modifiedTables.contains(getTable(vectorSearch.GetTable()))
+                        || modifiedTables.contains(getTable(vectorSearch.GetLevelTable()))
+                        || modifiedTables.contains(getTable(vectorSearch.GetPostingTable())))
+                    {
+                        return true;
+                    }
+                    break;
+                }
                 case NKqpProto::TKqpPhyConnection::kVectorResolve: // FIXME: Maybe, when prefix tables are enabled
                 case NKqpProto::TKqpPhyConnection::kUnionAll:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
@@ -329,8 +348,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     modifiedTables.insert(getTable(index.GetTable()));
                 }
 
-                // For plans compatibility with old indexes. Don't need it for new.
-                if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
+                if (settings.GetNeedLookup() && tableModifiedBefore) {
                     AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
                     return true;
                 }

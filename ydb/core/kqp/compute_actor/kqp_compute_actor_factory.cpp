@@ -1,9 +1,12 @@
 #include "kqp_compute_actor_factory.h"
 #include "kqp_compute_actor.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
 namespace NKikimr::NKqp::NComputeActor {
 
@@ -24,7 +27,6 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui32> CriticalTotalRetriesCount = 20;
     std::atomic<ui32> ReaskShardRetriesCount = 5;
 
-    std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
     std::atomic<ui64> MinChannelBufferSize = 0;
     std::atomic<ui64> MinMemAllocSize = 1_MB;
     std::atomic<ui64> MinMemFreeSize = 32_MB;
@@ -88,7 +90,7 @@ public:
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
 
-        NScheduler::TSchedulableActorOptions schedulableOptions {
+        NScheduler::TSchedulableOptions schedulableOptions {
             .Query = args.Query,
             .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
         };
@@ -102,12 +104,13 @@ public:
             memoryLimits.ChannelBufferSize = std::max<ui32>(estimation.ChannelBufferMemoryLimit / std::max<ui32>(1, inputChannelsCount), MinChannelBufferSize.load());
             memoryLimits.OutputChunkMaxSize = args.OutputChunkMaxSize;
             memoryLimits.ChunkSizeLimit = ChannelChunkSizeLimit.load();
-            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
-                ("ch_size", estimation.ChannelBufferMemoryLimit)
-                ("ch_count", estimation.ChannelBuffersCount)
-                ("ch_limit", memoryLimits.ChannelBufferSize)
-                ("inputs", args.Task->InputsSize())
-                ("input_channels_count", inputChannelsCount);
+            YDB_LOG_DEBUG("Computed compute actor channel memory limits",
+                {"event", "channel_info"},
+                {"chSize", estimation.ChannelBufferMemoryLimit},
+                {"chCount", estimation.ChannelBuffersCount},
+                {"chLimit", memoryLimits.ChannelBufferSize},
+                {"inputs", args.Task->InputsSize()},
+                {"inputChannelsCount", inputChannelsCount});
         }
 
         memoryLimits.MemoryQuotaManager = std::move(args.TaskQuotaManager);
@@ -134,9 +137,12 @@ public:
 
         runtimeSettings.TerminateHandler = [state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
-                AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
-                    ("problem", "finish_compute_actor")
-                    ("tx_id", txId)("task_id", taskId)("success", success)("message", issues.ToOneLineString());
+                YDB_LOG_DEBUG("Compute actor terminated",
+                    {"problem", "finish_compute_actor"},
+                    {"txId", txId},
+                    {"taskId", taskId},
+                    {"success", success},
+                    {"message", issues.ToOneLineString()});
                 if (state) {
                     state->OnTaskFinished(txId, executerId, taskId, success);
                 }
@@ -170,7 +176,9 @@ public:
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
                 std::move(schedulableOptions), args.BlockTrackingMode);
-            TActorId result = TlsActivationContext->Register(computeActor);
+            TActorId result = args.UseBatchPool
+                ? TlsActivationContext->Register(computeActor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId)
+                : TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
         } else {

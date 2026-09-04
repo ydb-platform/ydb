@@ -40,7 +40,9 @@ public:
             ColumnNames.emplace_back(i);
         }
         if (ShardsCount >= 1 && ColumnNames.empty()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("shards_count", ShardsCount)("column_names", JoinSeq(",", ColumnNames));
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"shardsCount", ShardsCount},
+                {"columnNames", JoinSeq(",", ColumnNames)});
             return false;
         }
         return true;
@@ -75,8 +77,8 @@ public:
         return Resolver.get();
     }
 
-    ui64 GetConveyorProcessId() const {
-        return ConveyorProcessGuard.GetInternalProcessId();
+    bool SendTaskToExecute(const std::shared_ptr<NConveyorComposite::ITask>& task) const {
+        return ConveyorProcessGuard.SendTaskToExecute(task);
     }
 
     template <class T>
@@ -197,7 +199,9 @@ public:
     }
 
     void Abort(const TString& reason) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_aborted")("reason", reason);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "scan_aborted"},
+            {"reason", reason});
         return DoAbort();
     }
 

@@ -774,6 +774,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(clusterAdminToken);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddRegisterDynamicNodeAllowedSIDs("root@builtin");
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
@@ -872,6 +873,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddRegisterDynamicNodeAllowedSIDs("root@builtin");
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
         // Make all users except root@builtin non-admins.
@@ -5018,6 +5020,92 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         // Inner retries are suppressed inside RetryOperationSync. Without that guard, each outer attempt
         // would run up to (innerMaxRetries + 1) ReadRows tries with backoff and take much longer.
         UNIT_ASSERT(duration < TDuration::Seconds(1));
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(SetNotNullOperationsLifecycle) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableSetColumnConstraint(true);
+
+        NYdb::TDriver driver(
+            TDriverConfig()
+                .SetEndpoint(
+                    TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
+        );
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TSetNotNullOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0); // No operations in progress
+        }
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"___(
+                CREATE TABLE `/Root/SetNotNullTest` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )___").ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result = session.ExecuteDataQuery(R"___(
+                UPSERT INTO `/Root/SetNotNullTest` (Key, Value)
+                    VALUES (1u, "a"), (2u, "b"), (3u, "c");
+            )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SetNotNullTest` ALTER COLUMN Value SET NOT NULL;"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TSetNotNullOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_GE(result.GetList().size(), 1);
+            auto op = result.GetList()[0];
+            UNIT_ASSERT_VALUES_EQUAL(op.Ready(), true);
+            UNIT_ASSERT_VALUES_EQUAL(op.Status().GetStatus(), EStatus::SUCCESS);
+            auto meta = op.Metadata();
+            UNIT_ASSERT_VALUES_EQUAL(meta.State, NYdb::NTable::ESetNotNullState::Done);
+            UNIT_ASSERT_DOUBLES_EQUAL(meta.Progress, 100, 0.001);
+            UNIT_ASSERT(meta.Path.find("SetNotNullTest") != TString::npos);
+            UNIT_ASSERT_GE(meta.Columns.size(), 1u);
+
+            auto result2 = operationClient.Get<NYdb::NTable::TSetNotNullOperation>(result.GetList()[0].Id()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.Status().GetStatus(), EStatus::SUCCESS, result2.Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().State, NYdb::NTable::ESetNotNullState::Done);
+            UNIT_ASSERT_DOUBLES_EQUAL(result2.Metadata().Progress, 100, 0.001);
+
+            {
+                // Cancel already finished operation returns PRECONDITION_FAILED
+                auto resultOp = operationClient.Cancel(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.GetStatus(), EStatus::PRECONDITION_FAILED, resultOp.GetIssues().ToString());
+            }
+
+            {
+                auto resultOp = operationClient.Forget(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.GetStatus(), EStatus::SUCCESS, resultOp.GetIssues().ToString());
+            }
+
+            {
+                auto resultOp = operationClient.Get<NYdb::NTable::TSetNotNullOperation>(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.Status().GetStatus(), EStatus::NOT_FOUND, resultOp.Status().GetIssues().ToString());
+            }
+        }
 
         driver.Stop(true);
     }

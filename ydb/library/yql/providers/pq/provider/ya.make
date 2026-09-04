@@ -30,11 +30,12 @@ PEERDIR(
 
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt
+    ydb/library/yql/dq/runtime/streaming
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/pushdown
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/dq/provider/exec
+    ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/common
@@ -66,7 +67,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

@@ -185,6 +185,10 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("partial_peer_probing_timeouts", &TThis::PartialPeerProbingTimeouts)
         .Default();
+    registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
+        .Default(TDuration::Minutes(5));
+    registrar.Parameter("io_fair_share_weight", &TThis::IoFairShareWeight)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -340,8 +344,6 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("sync_on_close", &TThis::SyncOnClose)
         .Default(true);
-    registrar.Parameter("enable_direct_io", &TThis::EnableDirectIO)
-        .Default(false);
     registrar.Parameter("enable_early_finish", &TThis::EnableEarlyFinish)
         .Default(false);
     registrar.Parameter("allocate_write_targets_backoff_time", &TThis::AllocateWriteTargetsBackoffTime)
@@ -358,8 +360,15 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("use_probe_put_blocks", &TThis::UseProbePutBlocks)
         .Default(false);
 
+    registrar.Parameter("use_send_blocks", &TThis::UseSendBlocks)
+        .Default(true);
+
     registrar.Parameter("preallocate_disk_space", &TThis::PreallocateDiskSpace)
         .Default(false);
+    registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
+        .Default(TDuration::Minutes(1));
+    registrar.Parameter("io_fair_share_weight", &TThis::IoFairShareWeight)
+        .Default();
 
     registrar.Preprocessor([] (TThis* config) {
         config->NodeChannel->RetryBackoffTime = TDuration::Seconds(10);
@@ -386,11 +395,13 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
 int TReplicationWriterConfig::GetDirectUploadNodeCount()
 {
     auto replicationFactor = std::min(MinUploadReplicationFactor, UploadReplicationFactor);
-    if (DirectUploadNodeCount) {
+    if (!UseSendBlocks) {
+        return UploadReplicationFactor;
+    } else if (DirectUploadNodeCount) {
         return std::min(*DirectUploadNodeCount, replicationFactor);
+    } else {
+        return std::max(static_cast<int>(std::sqrt(replicationFactor)), 1);
     }
-
-    return std::max(static_cast<int>(std::sqrt(replicationFactor)), 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -95,9 +95,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         firstNativeType = inputInfos.front()->GetNativeYtType();
     }
     auto maybeReadSettings = sort.Input().template Maybe<TCoRight>().Input().template Maybe<TYtReadTable>().Input().Item(0).Settings();
-    const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES)
-         ? GetNativeYtTypeFlags(*outType)
-         : 0ul;
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(*cluster, *State_->Configuration);
+    const ui64 nativeTypeFlags = GetNativeYtTypeFlags(*outType) & nativeTypeCompatibility;
     const bool needMap = (maybeReadSettings && NYql::HasSetting(maybeReadSettings.Ref(), EYtSettingType::SysColumns))
         || AnyOf(inputInfos, [nativeTypeFlags, firstNativeType] (const TYtPathInfo::TPtr& path) {
             return path->RequiresRemap()
@@ -117,7 +116,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outType);
     builder.ProcessKeySelector(keySelectorLambda.Ptr(), sortDirections.Ptr());
 
-    TYtOutTableInfo sortOut(outType, nativeTypeFlags);
+    TYtOutTableInfo sortOut(outType, nativeTypeCompatibility);
     builder.FillRowSpecSort(*sortOut.RowSpec, useNativeYtDefaultColumnOrder);
     sortOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
 
@@ -132,7 +131,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
             return {};
         }
 
-        TYtOutTableInfo mapOut(builder.MakeRemapType(), nativeTypeFlags);
+        TYtOutTableInfo mapOut(builder.MakeRemapType(), nativeTypeCompatibility);
         mapOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
 
         sortInput = Build<TYtOutput>(ctx, node.Pos())
@@ -154,7 +153,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         unordered = false;
     }
     else if (needMerge) {
-        TYtOutTableInfo mergeOut(outType, nativeTypeFlags);
+        TYtOutTableInfo mergeOut(outType, nativeTypeCompatibility);
         mergeOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
         if (firstNativeType) {
             mergeOut.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
@@ -432,7 +431,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
             .Build()
         .Build().Done();
 
-    TYtOutTableInfo outTable(inputItemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+
+    TYtOutTableInfo outTable(inputItemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(sort.DataSink().Cluster().StringValue(), *State_->Configuration));
     outTable.RowSpec->SetConstraints(sort.Ref().GetConstraintSet());
 
     return Build<TYtSort>(ctx, sort.Pos())
@@ -470,22 +470,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
         .Done();
 }
 
-
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExprBase assume, TExprContext& ctx, const TGetParents& getParents) const {
-    if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
-        return assume;
-    }
-
-    auto input = TExprBase(assume.Ref().HeadPtr());
-    if (!IsYtProviderInput(input)) {
-        return assume;
-    }
-
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::OptimizeAssumeConstraints(TPositionHandle pos, TExprBase input, const TConstraintSet& constraints, TExprContext& ctx, const TGetParents& getParents) const {
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     auto cluster = DeriveClusterFromInput(input, selectionMode);
 
-    auto sorted = assume.Ref().GetConstraint<TSortedConstraintNode>();
+    auto sorted = constraints.GetConstraint<TSortedConstraintNode>();
 
     auto maybeOp = input.Maybe<TYtOutput>().Operation();
     bool needSeparateOp = !maybeOp
@@ -493,7 +483,41 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         || (maybeOp.Raw()->HasResult() && maybeOp.Raw()->GetResult().Type() == TExprNode::World)
         || IsOutputUsedMultipleTimes(maybeOp.Ref(), *getParents())
         || (sorted && maybeOp.Maybe<TYtMapReduce>())
-        || (sorted && maybeOp.Maybe<TYtEquiJoin>());
+        || (sorted && maybeOp.Maybe<TYtEquiJoin>())
+        || maybeOp.Maybe<TYtCopy>();
+
+    if (maybeOp.Maybe<TYtPersist>() && !needSeparateOp) {
+        auto persist = maybeOp.Cast<TYtPersist>();
+        if (NYql::HasSetting(maybeOp.Cast<TYtPersist>().Settings().Ref(), EYtSettingType::Transparent)) {
+            auto newPersistInput = OptimizeAssumeConstraints(pos, persist.Input().Item(0).Paths().Item(0).Table(), constraints, ctx, getParents);
+            if (!newPersistInput) {
+                return {};
+            }
+            YQL_ENSURE(newPersistInput.Maybe<TYtOutput>());
+            return Build<TYtOutput>(ctx, pos)
+                .InitFrom(input.Cast<TYtOutput>())
+                .Operation<TYtPersist>()
+                    .InitFrom(persist)
+                    .Input()
+                        .Add()
+                            .Paths()
+                                .Add()
+                                    .InitFrom(persist.Input().Item(0).Paths().Item(0))
+                                    .Table(newPersistInput.Cast())
+                                .Build()
+                            .Build()
+                            .Settings().Build()
+                        .Build()
+                    .Build()
+                    .Output()
+                        .Add(GetOutTable(newPersistInput.Cast()))
+                    .Build()
+                .Build()
+                .Done();
+        } else {
+            needSeparateOp = true;
+        }
+    }
 
     bool canMerge = !sorted;
     bool equalSort = false;
@@ -505,12 +529,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
             }
         }
     }
-    if (equalSort && maybeOp.Maybe<TYtSort>() && assume.Ref().GetAllConstraints().size() == 1 /* only sort constraint */) {
+    if (equalSort && maybeOp.Maybe<TYtSort>() && constraints.GetAllConstraints().size() == 1 /* only sort constraint */) {
         return input;
     }
 
     const TStructExprType* outItemType = nullptr;
-    if (auto type = GetSequenceItemType(assume, false, ctx)) {
+    if (auto type = GetSequenceItemType(input, false, ctx)) {
         outItemType = type->Cast<TStructExprType>();
     } else {
         return {};
@@ -521,14 +545,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
 
     THolder<TKeySelectorBuilder> builder;
     if (sorted) {
-        builder = MakeHolder<TKeySelectorBuilder>(assume.Pos(), ctx, useNativeDescSort, outItemType);
+        builder = MakeHolder<TKeySelectorBuilder>(pos, ctx, useNativeDescSort, outItemType);
         builder->ProcessConstraint(*sorted);
         needSeparateOp = needSeparateOp || (builder->NeedMap() && !equalSort && !maybeOp.Maybe<TYtDqProcessWrite>());
     }
 
     if (needSeparateOp) {
-        TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-        outTable.RowSpec->SetConstraints(assume.Ref().GetConstraintSet());
+        TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(*cluster, *State_->Configuration));
+        outTable.RowSpec->SetConstraints(constraints);
 
         if (auto maybeReadSettings = input.Maybe<TCoRight>().Input().Maybe<TYtReadTable>().Input().Item(0).Settings()) {
             if (NYql::HasSetting(maybeReadSettings.Ref(), EYtSettingType::SysColumns)) {
@@ -546,12 +570,26 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
                 && path->GetNativeYtTypeFlags() == outTable.RowSpec->GetNativeYtTypeFlags()
                 && firstNativeType == path->GetNativeYtType();
         });
+
+        if (sorted && equalSort && useNativeDescSort) {
+            TYtOutTableInfo outTableForDescJoinCheck(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+            outTableForDescJoinCheck.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
+            outTableForDescJoinCheck.RowSpec->ClearSortness(ctx, sorted->GetContent().size());
+
+            TKeySelectorBuilder builderForDescJoinCheck(pos, ctx, useNativeDescSort, outItemType);
+            builderForDescJoinCheck.ProcessRowSpec(*outTableForDescJoinCheck.RowSpec);
+
+            if (builderForDescJoinCheck.NeedMap()) {
+                canMerge = false;
+            }
+        }
+
         if (canMerge) {
             if (sorted) {
                 outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                 outTable.RowSpec->ClearSortness(ctx, sorted->GetContent().size());
             }
-            outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);
+            outTable.SetUnique(constraints.GetConstraint<TDistinctConstraintNode>(), pos, ctx);
 
             if (firstNativeType) {
                 outTable.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
@@ -564,16 +602,16 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
 
             TConvertInputOpts opts;
             if (useExplicitColumns) {
-                opts.ExplicitFields(*outTable.RowSpec, assume.Pos(), ctx);
+                opts.ExplicitFields(*outTable.RowSpec, pos, ctx);
             }
 
-            return Build<TYtOutput>(ctx, assume.Pos())
+            return Build<TYtOutput>(ctx, pos)
                 .Operation<TYtMerge>()
                     .World(GetWorld(input, {}, ctx))
-                    .DataSink(MakeDataSink(assume.Pos(), *cluster, ctx))
+                    .DataSink(MakeDataSink(pos, *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, opts))
                     .Output()
-                        .Add(outTable.ToExprNode(ctx, assume.Pos()).Cast<TYtOutTable>())
+                        .Add(outTable.ToExprNode(ctx, pos).Cast<TYtOutTable>())
                     .Build()
                     .Settings()
                         .Add()
@@ -590,22 +628,22 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
             if (builder) {
                 builder->FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
             }
-            outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);
+            outTable.SetUnique(constraints.GetConstraint<TDistinctConstraintNode>(), pos, ctx);
 
             TCoLambda mapper = builder && builder->NeedMap()
-                ? Build<TCoLambda>(ctx, assume.Pos())
+                ? Build<TCoLambda>(ctx, pos)
                     .Args({"stream"})
                     .Body<TExprApplier>()
                         .Apply(TCoLambda(builder->MakeRemapLambda(true)))
                         .With(0, "stream")
                     .Build()
                 .Done()
-                : Build<TCoLambda>(ctx, assume.Pos())
+                : Build<TCoLambda>(ctx, pos)
                     .Args({"stream"})
                     .Body("stream")
                 .Done();
 
-            auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, assume.Pos());
+            auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
             if (sorted) {
                 settingsBuilder
                     .Add()
@@ -628,13 +666,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
                     .Build();
             }
 
-            return Build<TYtOutput>(ctx, assume.Pos())
+            return Build<TYtOutput>(ctx, pos)
                 .Operation<TYtMap>()
                     .World(GetWorld(input, {}, ctx))
-                    .DataSink(MakeDataSink(assume.Pos(), *cluster, ctx))
+                    .DataSink(MakeDataSink(pos, *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx))
                     .Output()
-                        .Add(outTable.ToExprNode(ctx, assume.Pos()).Cast<TYtOutTable>())
+                        .Add(outTable.ToExprNode(ctx, pos).Cast<TYtOutTable>())
                     .Build()
                     .Settings(settingsBuilder.Done())
                     .Mapper(mapper)
@@ -694,7 +732,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
 
     if (!op.Maybe<TYtSort>() && sorted) {
         if (auto settings = op.Maybe<TYtTransientOpBase>().Settings()) {
-            if (!NYql::HasSetting(settings.Ref(), EYtSettingType::KeepSorted)) {
+            if (!NYql::HasSetting(settings.Ref(), EYtSettingType::KeepSorted) && !op.Maybe<TYtPersist>()) {
                 newOp = ctx.ChangeChild(*newOp, TYtTransientOpBase::idx_Settings, NYql::AddSetting(settings.Ref(), EYtSettingType::KeepSorted, {}, ctx));
             }
         } else if (auto settings = op.Maybe<TYtFill>().Settings()) {
@@ -710,8 +748,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
             YQL_ENSURE(!builder->NeedMap() || op.Maybe<TYtDqProcessWrite>());
             builder->FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
         }
-        outTable.RowSpec->SetConstraints(assume.Ref().GetConstraintSet());
-        outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);
+        outTable.RowSpec->SetConstraints(constraints);
+        outTable.SetUnique(constraints.GetConstraint<TDistinctConstraintNode>(), pos, ctx);
 
         if (op.Maybe<TYtMap>() || op.Maybe<TYtReduce>()) {
             TExprNode::TPtr lambda;
@@ -773,11 +811,24 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         newOp = ctx.ChangeChild(*newOp, TYtOutputOpBase::idx_Output, Build<TYtOutSection>(ctx, op.Pos()).Add(outputs).Done().Ptr());
     }
 
-    return Build<TYtOutput>(ctx, assume.Pos())
+    return Build<TYtOutput>(ctx, pos)
         .Operation(newOp)
         .OutIndex(input.Cast<TYtOutput>().OutIndex())
         .Mode(sorted ? TMaybeNode<TCoAtom>() : input.Cast<TYtOutput>().Mode())
         .Done();
+}
+
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExprBase assume, TExprContext& ctx, const TGetParents& getParents) const {
+    if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
+        return assume;
+    }
+
+    auto input = TExprBase(assume.Ref().HeadPtr());
+    if (!IsYtProviderInput(input)) {
+        return assume;
+    }
+
+    return OptimizeAssumeConstraints(assume.Pos(), input, assume.Ref().GetConstraintSet(), ctx, getParents);
 }
 
 } // namespace NYql

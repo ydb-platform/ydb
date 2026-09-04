@@ -70,8 +70,6 @@ def set_socket_timeout(http_response, timeout):
     http_response._fp.fp.raw._sock.settimeout(timeout)
 
 def accepts_kwargs(func):
-    # In python3.4.1, there's backwards incompatible
-    # changes when using getargspec with functools.partials.
     return inspect.getfullargspec(func)[2]
 
 def ensure_unicode(s, encoding=None, errors=None):
@@ -86,12 +84,9 @@ def ensure_bytes(s, encoding='utf-8', errors='strict'):
     raise ValueError(f"Expected str or bytes, received {type(s)}.")
 
 
-try:
-    import xml.etree.cElementTree as ETree
-except ImportError:
-    # cElementTree does not exist from Python3.9+
-    import xml.etree.ElementTree as ETree
+import xml.etree.ElementTree as ETree
 XMLParseError = ETree.ParseError
+
 import json
 
 
@@ -148,9 +143,9 @@ def total_seconds(delta):
 # Checks to see if md5 is available on this system. A given system might not
 # have access to it for various reasons, such as FIPS mode being enabled.
 try:
-    hashlib.md5()
+    hashlib.md5(usedforsecurity=False)
     MD5_AVAILABLE = True
-except ValueError:
+except (AttributeError, ValueError):
     MD5_AVAILABLE = False
 
 
@@ -296,6 +291,29 @@ except ImportError:
     HAS_CRT = False
 
 
+def has_minimum_crt_version(minimum_version):
+    """Not intended for use outside botocore."""
+    if not HAS_CRT:
+        return False
+
+    crt_version_str = awscrt.__version__
+    try:
+        crt_version_ints = map(int, crt_version_str.split("."))
+        crt_version_tuple = tuple(crt_version_ints)
+    except (TypeError, ValueError):
+        return False
+
+    return crt_version_tuple >= minimum_version
+
+
+def get_current_datetime(remove_tzinfo=True):
+    """Retrieve the current timezone in UTC, with or without an explicit timezone."""
+    datetime_now = datetime.datetime.now(datetime.timezone.utc)
+    if remove_tzinfo:
+        datetime_now = datetime_now.replace(tzinfo=None)
+    return datetime_now
+
+
 ########################################################
 #              urllib3 compat backports                #
 ########################################################
@@ -345,3 +363,9 @@ try:
     HAS_GZIP = True
 except ImportError:
     HAS_GZIP = False
+
+# Conditional import for awscrt EC crypto functionality
+if HAS_CRT and has_minimum_crt_version((0, 28, 4)):
+    from awscrt.crypto import EC
+else:
+    EC = None

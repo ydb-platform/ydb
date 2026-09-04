@@ -1,7 +1,6 @@
 #pragma once
 
 #include "public.h"
-#include "peer_discovery.h"
 #include "hedging_channel.h"
 
 #include <yt/yt/core/actions/callback.h>

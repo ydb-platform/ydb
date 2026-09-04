@@ -16,6 +16,7 @@ class IFunctionRegistry;
 class TBuiltinFunctionRegistry;
 
 constexpr std::string_view RandomMTResource = "MTRand";
+constexpr std::string_view ErasedResourceTag = "_Erased";
 constexpr std::string_view ResourceQueuePrefix = "TResourceQueue:";
 constexpr std::string_view BlockStorageResourcePrefix = "TBlockStorage:";
 constexpr std::string_view BlockMapJoinIndexResourcePrefix = "TBlockMapJoinIndex:";
@@ -161,14 +162,14 @@ public:
 
     template <typename T, typename = std::enable_if_t<NUdf::TKnownDataType<T>::Result>>
     TRuntimeNode NewDataLiteral(T data) const {
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env_), true);
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env_), /*isImmediate=*/true);
     }
 
     template <typename T, typename = std::enable_if_t<NUdf::TTzDataType<T>::Result>>
     TRuntimeNode NewTzDataLiteral(typename NUdf::TDataType<T>::TLayout value, ui16 tzId) const {
         auto data = NUdf::TUnboxedValuePod(value);
         data.SetTimezoneId(tzId);
-        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env_), true);
+        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env_), /*isImmediate=*/true);
     }
 
     template <NUdf::EDataSlot Type>
@@ -260,8 +261,7 @@ public:
     TRuntimeNode Ascending(TRuntimeNode data);
     TRuntimeNode Descending(TRuntimeNode data);
 
-    // FIXME: Drop the default argument value, when all the callers are adjusted.
-    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes = {});
+    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode FromFlow(TRuntimeNode flow);
     TRuntimeNode Steal(TRuntimeNode input);
 
@@ -289,7 +289,8 @@ public:
     TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
-                                     const TArrayRef<const TRuntimeNode>& args, TType* returnType);
+                                     const TArrayRef<const TRuntimeNode>& args, TType* returnType,
+                                     ui32 collationOid);
     TRuntimeNode BlockStorage(TRuntimeNode list, TType* returnType);
     TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* listItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
     TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightListItemType, EJoinKind joinKind,
@@ -302,17 +303,24 @@ public:
     TRuntimeNode BlockOr(TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BlockXor(TRuntimeNode first, TRuntimeNode second);
 
+    TRuntimeNode BlockGuess(TRuntimeNode variant, ui32 tupleIndex);
+    TRuntimeNode BlockGuess(TRuntimeNode variant, const std::string_view& memberName);
+    TRuntimeNode BlockWay(TRuntimeNode variant);
+    TRuntimeNode BlockVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
+    TRuntimeNode BlockVariant(TRuntimeNode item, const std::string_view& memberName, TType* variantType);
+    TRuntimeNode BlockVariantItem(TRuntimeNode variant);
+    TRuntimeNode BlockDynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType);
     TRuntimeNode BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch);
     TRuntimeNode BlockJust(TRuntimeNode data);
 
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
                                  const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
+    TRuntimeNode BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, TArrayRef<const ui32> keys,
                                     const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+    TRuntimeNode BlockMergeFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                           const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+    TRuntimeNode BlockMergeManyFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                               const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType);
 
     // udfs
@@ -684,6 +692,12 @@ public:
     // returns tuple of (ui64 random value, resource)
     TRuntimeNode NextMTRand(TRuntimeNode rand);
 
+    //-- type erasure
+    // boxes a value together with its MiniKQL type into an opaque Resource<_Erased>
+    TRuntimeNode AsErased(TRuntimeNode value);
+    // recovers the boxed value as Optional<U> when the requested type matches, empty optional otherwise
+    TRuntimeNode PeekErased(TRuntimeNode resource, TType* expectedType);
+
     //-- aggregation functions
     TRuntimeNode AggrCountInit(TRuntimeNode value);
     TRuntimeNode AggrCountUpdate(TRuntimeNode value, TRuntimeNode state);
@@ -746,7 +760,8 @@ public:
 
     TRuntimeNode PgConst(TPgType* pgType, const std::string_view& value, TRuntimeNode typeMod = {});
     TRuntimeNode PgResolvedCall(bool useContext, const std::string_view& name, ui32 id,
-                                const TArrayRef<const TRuntimeNode>& args, TType* returnType, bool rangeFunction);
+                                const TArrayRef<const TRuntimeNode>& args, TType* returnType, bool rangeFunction,
+                                ui32 collationOid);
     TRuntimeNode PgCast(TRuntimeNode input, TType* returnType, TRuntimeNode typeMod = {});
     TRuntimeNode FromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode ToPg(TRuntimeNode input, TType* returnType);
@@ -820,10 +835,10 @@ private:
     TRuntimeNode BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
                                       const TArrayRef<const TAggInfo>& aggs, TType* returnType);
     TRuntimeNode BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
-                                         const TArrayRef<ui32>& keys, const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+                                         TArrayRef<const ui32> keys, const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, TArrayRef<const ui32> keys,
                                                const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+    TRuntimeNode BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, TArrayRef<const ui32> keys,
                                                    const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType);
 
     TRuntimeNode If(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch, TType* resultType);
@@ -850,6 +865,8 @@ private:
 
     TRuntimeNode InvokeBinary(const std::string_view& callableName, TType* type, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode AggrCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
+    TRuntimeNode ConvertIntegralToDecimal(TRuntimeNode data);
+    std::pair<TRuntimeNode, TRuntimeNode> ConvertIntegralToDecimalForComparison(std::pair<TRuntimeNode, TRuntimeNode> comparisonData);
     TRuntimeNode DataCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
 
     TRuntimeNode BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);

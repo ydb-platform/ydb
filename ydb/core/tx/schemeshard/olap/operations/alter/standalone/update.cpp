@@ -22,7 +22,15 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     if (alterCS.HasAlterTtlSettings()) {
         AlterTTL = alterCS.GetAlterTtlSettings();
     }
-    if (!AlterSchema && !AlterTTL) {
+    if (alterCS.UpsertMultiColumnStatisticsSize() || alterCS.DropMultiColumnStatisticsSize()) {
+        TOlapMultiColumnStatisticsUpdate statisticsUpdate;
+        TSimpleErrorCollector statisticsCollector;
+        if (!statisticsUpdate.Parse(alterCS, statisticsCollector)) {
+            return TConclusionStatus::Fail("statistics update error: " + statisticsCollector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
+        }
+        AlterMultiColumnStatistics = std::move(statisticsUpdate);
+    }
+    if (!AlterSchema && !AlterTTL && !AlterMultiColumnStatistics) {
         return TConclusionStatus::Fail("no data for update");
     }
 
@@ -34,6 +42,13 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     if (AlterSchema) {
         if (!targetSchema.Update(*AlterSchema, collector)) {
             return TConclusionStatus::Fail("schema update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
+        }
+    }
+
+    TOlapMultiColumnStatisticsDescription targetMultiColumnStatistics = originalTable.GetTableMultiColumnStatisticsVerified();
+    if (AlterMultiColumnStatistics) {
+        if (!targetMultiColumnStatistics.ApplyUpdate(targetSchema, *AlterMultiColumnStatistics, collector)) {
+            return TConclusionStatus::Fail("statistics update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
     }
 
@@ -56,6 +71,7 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     }
     auto description = originalTable.GetTableInfoVerified().Description;
     targetSchema.Serialize(*description.MutableSchema());
+    targetMultiColumnStatistics.Serialize(description);
     auto ttl = originalTable.GetTableTTLOptional() ? *originalTable.GetTableTTLOptional() : TOlapTTL();
     if (AlterTTL) {
         auto patch = ttl.Update(*AlterTTL);

@@ -120,6 +120,16 @@ memory_controller_config:
   query_execution_limit_percent: 25
 ```
 
+#### Лимит памяти Query Processor {#query-execution-limit}
+
+Параметры `query_execution_limit_percent` (по умолчанию 20% от [жёсткого лимита памяти](#hard-memory-limit)) и `query_execution_limit_bytes` задают размер пула оперативной памяти, который Resource Manager выделяет запросам на узле:
+
+Если заданы оба параметра, эффективный лимит равен `min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`. Если задан только один параметр — используется его значение.
+
+Вычисленный лимит передаётся в Resource Manager через Resource Broker.
+
+Порог [`spilling_percent`](table_service_config.md#spilling-percent) в `table_service_config` рассчитывается относительно этого пула.
+
 ## Параметры конфигурации
 
 Каждый параметр конфигурации применяется в контексте одного узла базы данных.

@@ -45,6 +45,7 @@ public:
             EvCleanupLog,
             EvStartCollecting,
             EvProcessQueue,
+            EvPersistDDiskInfo,
 
             EvEnd
         };
@@ -76,6 +77,10 @@ public:
         struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
 
         struct TEvProcessQueue : public TEventLocal<TEvProcessQueue, EvProcessQueue> {};
+
+        struct TEvPersistDDiskInfo : public TEventLocal<TEvPersistDDiskInfo, EvPersistDDiskInfo> {
+            NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult Record;
+        };
     };
 
     void PersistNodeTenants(TTransactionContext &txc, const TActorContext &ctx);
@@ -107,6 +112,7 @@ private:
     class TTxUpdateConfig;
     class TTxUpdateDowntimes;
     class TTxStoreFirstBootTimestamp;
+    class TTxPersistDDiskInfo;
 
     struct TActionOptions {
         TDuration PermissionDuration;
@@ -156,6 +162,7 @@ private:
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
     ITransaction *CreateTxStoreFirstBootTimestamp();
+    ITransaction *CreateTxPersistDDiskInfo(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev);
 
     static void AuditLog(const TActorContext &ctx, const TString &message) {
         NCms::AuditLog("CMS tablet", message, ctx);
@@ -188,8 +195,9 @@ private:
     }
 
     STFUNC(StateInit) {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->ToString().data());
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::CMS, "StateInit event",
+            {"type", ev->GetTypeRewrite()},
+            {"ev", ev->ToString()});
         StateInitImpl(ev, SelfId());
     }
 
@@ -223,8 +231,9 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->ToString().data());
+                YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"ev", ev->ToString()});
             }
         }
     }
@@ -250,6 +259,7 @@ private:
             CFunc(TEvPrivate::EvCleanupWalle, CleanupWalleTasks);
             cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
             cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
+            HFunc(TEvPrivate::TEvPersistDDiskInfo, Handle);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
@@ -265,6 +275,16 @@ private:
             HFunc(TEvCms::TEvStoreWalleTask, Handle);
             HFunc(TEvCms::TEvRemoveWalleTask, Handle);
             // public api begin
+            HFunc(TEvCms::TEvDDiskInfoListRequest, Handle);
+            HFunc(TEvCms::TEvDDiskInfoGetRequest, Handle);
+            // Route through EnqueueRequest (like EvClusterStateRequest) so that
+            // a fresh ClusterInfo collection is triggered before the request is
+            // actually processed -- otherwise the DDisk viewer (which relies on
+            // ClusterInfo for availability/state via IsDDiskAvailable() /
+            // GetDDiskStateName()) could serve up to a minute of stale PDisk
+            // state on every page load.
+            FFunc(TEvCms::EvDDiskTabletListRequest, EnqueueRequest);
+            FFunc(TEvCms::EvDDiskDiskListRequest, EnqueueRequest);
             HFunc(TEvCms::TEvListClusterNodesRequest, Handle);
             HFunc(TEvCms::TEvCreateMaintenanceTaskRequest, Handle);
             HFunc(TEvCms::TEvRefreshMaintenanceTaskRequest, Handle);
@@ -285,6 +305,9 @@ private:
             HFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult, Handle);
+            HFunc(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult, Handle);
+            HFunc(TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
@@ -292,8 +315,9 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateWork unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->ToString().data());
+                YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::CMS, "StateWork unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"ev", ev->ToString()});
             }
         }
     }
@@ -345,6 +369,8 @@ private:
     bool CheckSysTabletsNode(const TActionOptions &opts,
         const TNodeInfo &node,
         TErrorInfo &error) const;
+    void SortActionsBySysTabletPriority(
+        NKikimrCms::TPermissionRequest &request) const;
     bool TryToLockNode(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         const TNodeInfo &node,
@@ -418,9 +444,22 @@ private:
     void AddHostExtensions(const TString &host, NKikimrCms::TPermission &perm) const;
 
     void OnBSCPipeDestroyed(const TActorContext &ctx);
+    void StartDDiskSync(const TActorContext &ctx);
+    void QueueDDiskInfoRequest(ui64 tabletId, ui64 knownRevision, const TActorContext &ctx);
+    void SendQueuedDDiskInfoRequests(const TActorContext &ctx);
 
+    void Handle(TEvCms::TEvDDiskInfoListRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvDDiskTabletListRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvDDiskDiskListRequest::TPtr &ev, const TActorContext &ctx);
+    bool IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
+    TString GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvManagePermissionRequest::TPtr &ev, const TActorContext &ctx);
@@ -466,6 +505,10 @@ private:
 
     TQueue<TRequestsQueueItem> Queue;
     TQueue<TRequestsQueueItem> NextQueue;
+
+    static constexpr ui32 MaxDDiskInfoRequestsInFlight = 16;
+    ui32 DDiskInfoRequestsInFlight = 0;
+    TQueue<THolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>> DDiskInfoRequestQueue;
 
     TCmsStatePtr State;
     TLogger Logger;

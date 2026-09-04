@@ -39,3 +39,33 @@ from Input1 as a
 join /*+ star() */ any Input2 as b on a.k1 = b.k2
 join any Input3 as c on a.k1 = c.key
 join Input3 as d on a.k1 = d.key;
+
+-- Join side "d" cannot be added to a star join chain
+select
+    a.k1,
+    a.v1,
+    b.k2,
+    b.v2,
+    c.key,
+    c.value,
+    d.key,
+    d.value
+from Input1 as a
+join /*+ star() */ any Input2 as b on a.k1 = b.k2
+join any Input3 as c on c.key = a.k1
+join any Input3 as d on a.v1 = d.key;
+
+-- no warnings
+select x.key, y.value FROM (
+    select
+        a.k1 as key,
+        a.v1,
+        b.k2,
+        b.v2,
+        c.key,
+        c.value,
+    from Input1 as a
+    join /*+ star() */ any Input2 as b on a.k1 = b.k2
+    join any Input3 as c on c.key = a.k1
+) as x
+right join Input3 as y on x.key = y.key;

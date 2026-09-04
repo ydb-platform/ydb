@@ -394,7 +394,8 @@ public:
             if (checks) {
                 if (parentPath.Parent()->IsTableIndex()) {
                     // Only __ydb_id sequence can be created in the prefixed index
-                    if (name != NTableIndex::NKMeans::IdColumnSequence) {
+                    if (name != NTableIndex::NKMeans::IdColumnSequence &&
+                        name != NTableIndex::NFulltext::GenSequence) {
                         result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
                         return result;
                     }

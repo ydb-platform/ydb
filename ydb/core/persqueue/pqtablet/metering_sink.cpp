@@ -4,6 +4,7 @@
 #include <ydb/core/metering/metering.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/size_literals.h>
+#include <ydb/library/actors/core/log.h>
 
 
 namespace NKikimr::NPQ {
@@ -232,7 +233,7 @@ TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMetering
     }
 
     default:
-        Y_ENSURE(false);
+        AFL_ENSURE(false)("type", static_cast<int>(type))("tablet_id", Parameters_.TabletId)("stream", Parameters_.StreamName);
     };
 }
 

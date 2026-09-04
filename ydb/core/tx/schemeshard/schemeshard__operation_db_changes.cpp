@@ -160,6 +160,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& pId : ResourcePools) {
         ss->PersistResourcePool(db, pId);
     }
+
+    for (const auto& pId : TestShardSets) {
+        ss->PersistTestShardSet(db, pId);
+    }
 }
 
 }

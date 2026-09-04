@@ -1,0 +1,10 @@
+PRAGMA EvaluateExprCache;
+
+$v1 = EvaluateExpr(
+    EvaluateCode(FuncCode('EvaluateExprIfPure', QuoteCode(10 + 20)))
+);
+$v2 = EvaluateExpr(
+    EvaluateCode(FuncCode('EvaluateExprIfPure', QuoteCode(10 + 20)))
+);
+
+SELECT AsList($v1, $v2);

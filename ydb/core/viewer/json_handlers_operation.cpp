@@ -11,7 +11,7 @@ void InitOperationGetJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitOperationListJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/operation/list", new TJsonHandler<TOperationList>(TOperationList::GetSwagger()));
+    handlers.AddHandler("/operation/list", new TJsonHandler<TOperationList>(TOperationList::GetSwagger()), 2);
 }
 
 void InitOperationCancelJsonHandler(TJsonHandlers& handlers) {

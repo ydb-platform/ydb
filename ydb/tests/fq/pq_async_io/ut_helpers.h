@@ -35,6 +35,7 @@ TString GetDefaultPqDatabase();
 struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     std::unique_ptr<TFakeCASetup> CaSetup = std::make_unique<TFakeCASetup>();
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release())));
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
 
     TPqIoTestFixture();
     ~TPqIoTestFixture();
@@ -87,8 +88,8 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
         InitAsyncOutput(BuildPqTopicSinkSettings(topic), freeSpace);
     }
 
-    void LoadSink(const TSinkState& state) {
-        CaSetup->LoadSink(state);
+    void LoadSink(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint) {
+        CaSetup->LoadSink(state, checkpoint);
     }
 
     void AsyncOutputWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing());

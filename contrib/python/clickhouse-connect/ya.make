@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.1.1)
+VERSION(1.7.1)
 
 LICENSE(Apache-2.0)
 
@@ -10,7 +10,6 @@ PEERDIR(
     contrib/python/certifi
     contrib/python/lz4
     contrib/python/urllib3
-    contrib/python/zstandard
 )
 
 ADDINCL(
@@ -23,6 +22,9 @@ NO_LINT()
 
 NO_CHECK_IMPORTS(
     clickhouse_connect.cc_sqlalchemy.*
+    clickhouse_connect.driver._backend.chdb_backend
+    clickhouse_connect.driver._backend.http_async
+    clickhouse_connect.driver._chdbclient
     clickhouse_connect.driver.asyncclient
 )
 
@@ -34,6 +36,7 @@ PY_SRCS(
     clickhouse_connect/cc_sqlalchemy/alembic/__init__.py
     clickhouse_connect/cc_sqlalchemy/alembic/adapter.py
     clickhouse_connect/cc_sqlalchemy/alembic/impl.py
+    clickhouse_connect/cc_sqlalchemy/alembic/operations.py
     clickhouse_connect/cc_sqlalchemy/alembic/utils.py
     clickhouse_connect/cc_sqlalchemy/datatypes/__init__.py
     clickhouse_connect/cc_sqlalchemy/datatypes/base.py
@@ -55,6 +58,7 @@ PY_SRCS(
     clickhouse_connect/common.py
     clickhouse_connect/datatypes/__init__.py
     clickhouse_connect/datatypes/base.py
+    clickhouse_connect/datatypes/binary_value.py
     clickhouse_connect/datatypes/container.py
     clickhouse_connect/datatypes/dynamic.py
     clickhouse_connect/datatypes/format.py
@@ -71,6 +75,17 @@ PY_SRCS(
     clickhouse_connect/dbapi/connection.py
     clickhouse_connect/dbapi/cursor.py
     clickhouse_connect/driver/__init__.py
+    clickhouse_connect/driver/_backend/__init__.py
+    clickhouse_connect/driver/_backend/chdb_backend.py
+    clickhouse_connect/driver/_backend/contracts.py
+    clickhouse_connect/driver/_backend/http_async.py
+    clickhouse_connect/driver/_backend/http_sync.py
+    clickhouse_connect/driver/_backend/httpcommon.py
+    clickhouse_connect/driver/_backend/models.py
+    clickhouse_connect/driver/_backend/operations.py
+    clickhouse_connect/driver/_backend/orchestration.py
+    clickhouse_connect/driver/_backendclient.py
+    clickhouse_connect/driver/_chdbclient.py
     clickhouse_connect/driver/asyncclient.py
     clickhouse_connect/driver/asyncqueue.py
     clickhouse_connect/driver/binding.py
@@ -119,6 +134,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    clickhouse_connect/py.typed
 )
 
 END()

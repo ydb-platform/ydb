@@ -92,7 +92,7 @@ TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr
     }
     innerExtracted.insert(filteredMembers.begin(), filteredMembers.end());
 
-    const auto inputType = GetSequenceItemType(filterInput, false);
+    const auto inputType = GetSequenceItemType(filterInput, /*allowMultiIO=*/false);
     YQL_ENSURE(inputType);
     const size_t inputWidth = inputType->Cast<TStructExprType>()->GetSize();
     YQL_ENSURE(inputWidth >= innerExtracted.size());
@@ -425,9 +425,9 @@ TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, co
 
     auto right = mapJoin.RightRenames().Ref().ChildrenList();
     for (auto it = right.cbegin(); it < right.cend();) {
-        if (used.contains((++it)->Get()))
+        if (used.contains((++it)->Get())) {
             ++it;
-        else {
+        } else {
             auto to = it;
             it = right.erase(--it, ++to);
         }
@@ -439,18 +439,20 @@ TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, co
     input.reserve(leftColumsEstimate);
     TNodeSet set(leftColumsEstimate);
     for (auto it = input.cbegin(); input.cend() != it;) {
-        if (set.emplace(it->Get()).second)
+        if (set.emplace(it->Get()).second) {
             ++it;
-        else
+        } else {
             it = input.erase(it);
+        }
     }
 
     for (auto it = left.cbegin(); it < left.cend();) {
-        if (set.emplace(it->Get()).second)
+        if (set.emplace(it->Get()).second) {
             input.emplace_back(*it);
-        if (used.contains((++it)->Get()))
+        }
+        if (used.contains((++it)->Get())) {
             ++it;
-        else {
+        } else {
             auto to = it;
             it = left.erase(--it, ++to);
         }
@@ -804,8 +806,9 @@ TExprNode::TPtr ApplyExtractMembersToMapNext(const TExprNode::TPtr& node, const 
 TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExprNode::TPtr members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
     const TCoChain1Map chain1Map(node);
     const auto allMembers = AddMembersUsedInside(chain1Map.UpdateHandler().Body().Ptr(), chain1Map.UpdateHandler().Args().Arg(1).Ref(), TExprNode::TPtr(members), parentsMap, ctx);
-    if (!allMembers || GetSeqItemType(*node->GetTypeAnn()).Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize())
+    if (!allMembers || GetSeqItemType(*node->GetTypeAnn()).Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize()) {
         return {};
+    }
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
     auto output = Build<TCoChain1Map>(ctx, chain1Map.Pos())
@@ -835,8 +838,8 @@ TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExp
 
     if (allMembers != members) {
         output = Build<TCoExtractMembers>(ctx, chain1Map.Pos())
-            .Input(std::move(output))
-            .Members(std::move(members))
+            .Input(output)
+            .Members(members)
             .Done().Ptr();
     }
 
@@ -849,8 +852,9 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
     allMembers = AddMembersUsedInside(condense1.UpdateHandler().Body().Ptr(), condense1.UpdateHandler().Args().Arg(1).Ref(), std::move(allMembers), parentsMap, ctx);
     allMembers = AddMembersUsedInside(condense1.SwitchHandler().Body().Ptr(), condense1.SwitchHandler().Args().Arg(1).Ref(), std::move(allMembers), parentsMap, ctx);
 
-    if (!allMembers || GetSeqItemType(*node->GetTypeAnn()).Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize())
+    if (!allMembers || GetSeqItemType(*node->GetTypeAnn()).Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize()) {
         return {};
+    }
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
     auto output = Build<TCoCondense1>(ctx, condense1.Pos())
@@ -881,8 +885,8 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
 
     if (allMembers != members) {
         output = Build<TCoExtractMembers>(ctx, condense1.Pos())
-            .Input(std::move(output))
-            .Members(std::move(members))
+            .Input(output)
+            .Members(members)
             .Done().Ptr();
     }
 
@@ -928,6 +932,52 @@ TExprNode::TPtr ApplyExtractMembersToTableSource(const TExprNode::TPtr& node, co
             .Input(tableSource.Input())
             .Members(members)
         .Build()
+        .Done().Ptr();
+}
+
+TExprNode::TPtr ApplyExtractMembersToSqlCombine(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoSqlCombine sqlCombine(node);
+    YQL_CLOG(DEBUG, Core) << "Propagate ExtractMembers over " << node->Content() << logSuffix;
+
+    const auto usingLambda = sqlCombine.UsingLambda();
+    const auto usingBody = usingLambda.Body();
+    TMaybeNode<TExprBase> newUsing;
+    if (usingBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
+        newUsing = Build<TCoFilterMembers>(ctx, node->Pos())
+            .Input(usingBody)
+            .Members(members)
+            .Done();
+    } else {
+        newUsing = Build<TCoExtractMembers>(ctx, node->Pos())
+            .Input(usingBody)
+            .Members(members)
+            .Done();
+    }
+
+    const auto usingArgs = usingLambda.Args();
+    return Build<TCoSqlCombine>(ctx, node->Pos())
+        .InitFrom(sqlCombine)
+        .UsingLambda()
+            .Args({"key", "leftList", "rightList"})
+            .Body<TExprApplier>()
+                .Apply(newUsing.Cast())
+                .With(usingArgs.Arg(0), "key")
+                .With(usingArgs.Arg(1), "leftList")
+                .With(usingArgs.Arg(2), "rightList")
+                .Build()
+            .Build()
+        .Done().Ptr();
+}
+
+TExprNode::TPtr ApplyExtractMembersToWithWorld(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoWithWorld withWorld(node);
+    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over WithWorld" << logSuffix;
+    return Build<TCoWithWorld>(ctx, node->Pos())
+        .Input<TCoExtractMembers>()
+            .Input(withWorld.Input())
+            .Members(members)
+        .Build()
+        .World(withWorld.World())
         .Done().Ptr();
 }
 

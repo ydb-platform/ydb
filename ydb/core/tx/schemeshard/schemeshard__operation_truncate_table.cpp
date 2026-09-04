@@ -228,11 +228,6 @@ public:
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 
-        if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE statement is not supported");
-            return result;
-        }
-
         const auto& truncateTableOp = Transaction.GetTruncateTable();
         const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), truncateTableOp.GetTableName()});
         TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
@@ -334,12 +329,13 @@ enum ESchemeObjectType {
 
 // Second tree's level
     GenericIndex,                // used for secondary, unique and fulltext indexes
-    GlobalVectorIndex,           // global vector index require special processing
-    PrefixVectorIndex,           // prefix vector index require special processing
+    GlobalVectorIndex,           // global vector index requires special processing
+    PrefixVectorIndex,           // prefixed vector index requires special processing
+    FulltextCompactIndex,        // compact fulltext index has a sequence under indexImplTable
 
 // Third tree's level
-    GenericIndexImplTable,       // used for other index impl tables
-    IndexImplPrefixTable,        // impl prefix table require special processing
+    GenericIndexImplTable,       // simple index impl table
+    IndexImplWithSequence,       // index impl table with a sequence
 };
 
 // About DfsOnTableChildrenTree.
@@ -432,12 +428,18 @@ bool DfsOnTableChildrenTree(
 
                                 break;
                             }
+                            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+                                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::FulltextCompactIndex)) {
+                                    return false;
+                                }
+
+                                break;
+                            }
                             case NKikimrSchemeOp::EIndexTypeGlobalJson:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-                            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
-                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
-                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                             case NKikimrSchemeOp::EIndexTypeGlobal:
                             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
                                 if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GenericIndex)) {
@@ -449,7 +451,8 @@ bool DfsOnTableChildrenTree(
                             case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
                             case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
                             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
-                                // Bloom filter scheme objects are not supported yet in row tables
+                            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                                // Local index scheme objects are not supported yet in row tables
                                 break;
                         }
 
@@ -477,6 +480,7 @@ bool DfsOnTableChildrenTree(
 
         case ESchemeObjectType::GlobalVectorIndex:
         case ESchemeObjectType::PrefixVectorIndex:
+        case ESchemeObjectType::FulltextCompactIndex:
         case ESchemeObjectType::GenericIndex: {
             for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -493,9 +497,9 @@ bool DfsOnTableChildrenTree(
 
                 switch (srcChildPath.Base()->PathType) {
                     case NKikimrSchemeOp::EPathType::EPathTypeTable: {
-                        constexpr TStringBuf prefixTableName = "indexImplPrefixTable";
-                        if (objectType == ESchemeObjectType::PrefixVectorIndex && srcChildPath.PathString().EndsWith(prefixTableName)) {
-                            if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::IndexImplPrefixTable)) {
+                        if (objectType == ESchemeObjectType::PrefixVectorIndex && srcChildPath.PathString().EndsWith("indexImplPrefixTable") ||
+                            objectType == ESchemeObjectType::FulltextCompactIndex && srcChildPath.PathString().EndsWith("indexImplTable")) {
+                            if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::IndexImplWithSequence)) {
                                 return false;
                             }
                         } else {
@@ -517,11 +521,11 @@ bool DfsOnTableChildrenTree(
             break;
         }
 
-        case ESchemeObjectType::IndexImplPrefixTable: {
+        case ESchemeObjectType::IndexImplWithSequence: {
             if (currentPath.Base()->GetChildren().size() != 1 ||
                 currentPath.Child(currentPath.Base()->GetChildren().begin()->first).Base()->PathType != NKikimrSchemeOp::EPathType::EPathTypeSequence
             ) {
-                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Index impl prefix tables can contain only sequence")};
+                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder() << currentPath.PathString() << " should contain only 1 sequence")};
                 return false;
             }
 

@@ -5,12 +5,14 @@
     "endpointPrefix":"route53resolver",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceAbbreviation":"Route53Resolver",
     "serviceFullName":"Amazon Route 53 Resolver",
     "serviceId":"Route53Resolver",
     "signatureVersion":"v4",
     "targetPrefix":"Route53Resolver",
-    "uid":"route53resolver-2018-04-01"
+    "uid":"route53resolver-2018-04-01",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "AssociateFirewallRuleGroup":{
@@ -251,6 +253,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServiceErrorException"},
+        {"shape":"ValidationException"},
         {"shape":"ThrottlingException"}
       ],
       "documentation":"<p>Deletes the specified firewall rule.</p>"
@@ -1221,7 +1224,7 @@
       "members":{
         "Message":{"shape":"ExceptionMessage"}
       },
-      "documentation":"<p>The current account doesn't have the IAM permissions required to perform the specified Resolver operation.</p>",
+      "documentation":"<p>The current account doesn't have the IAM permissions required to perform the specified Resolver operation.</p> <p>This error can also be thrown when a customer has reached the 5120 character limit for a resource policy for CloudWatch Logs.</p>",
       "exception":true
     },
     "AccountId":{
@@ -1407,6 +1410,14 @@
       ]
     },
     "Boolean":{"type":"boolean"},
+    "ConfidenceThreshold":{
+      "type":"string",
+      "enum":[
+        "LOW",
+        "MEDIUM",
+        "HIGH"
+      ]
+    },
     "ConflictException":{
       "type":"structure",
       "members":{
@@ -1485,7 +1496,6 @@
       "required":[
         "CreatorRequestId",
         "FirewallRuleGroupId",
-        "FirewallDomainListId",
         "Priority",
         "Action",
         "Name"
@@ -1502,7 +1512,8 @@
         },
         "FirewallDomainListId":{
           "shape":"ResourceId",
-          "documentation":"<p>The ID of the domain list that you want to use in the rule. </p>"
+          "documentation":"<p>The ID of the domain list that you want to use in the rule. Can't be used together with <code>DnsThreatProtecton</code>.</p>",
+          "box":true
         },
         "Priority":{
           "shape":"Priority",
@@ -1510,7 +1521,7 @@
         },
         "Action":{
           "shape":"Action",
-          "documentation":"<p>The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list:</p> <ul> <li> <p> <code>ALLOW</code> - Permit the request to go through.</p> </li> <li> <p> <code>ALERT</code> - Permit the request and send metrics and logs to Cloud Watch.</p> </li> <li> <p> <code>BLOCK</code> - Disallow the request. This option requires additional details in the rule's <code>BlockResponse</code>. </p> </li> </ul>"
+          "documentation":"<p>The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list, or a threat in a DNS Firewall Advanced rule:</p> <ul> <li> <p> <code>ALLOW</code> - Permit the request to go through. Not available for DNS Firewall Advanced rules.</p> </li> <li> <p> <code>ALERT</code> - Permit the request and send metrics and logs to Cloud Watch.</p> </li> <li> <p> <code>BLOCK</code> - Disallow the request. This option requires additional details in the rule's <code>BlockResponse</code>. </p> </li> </ul>"
         },
         "BlockResponse":{
           "shape":"BlockResponse",
@@ -1536,9 +1547,24 @@
           "shape":"Name",
           "documentation":"<p>A name that lets you identify the rule in the rule group.</p>"
         },
+        "FirewallDomainRedirectionAction":{
+          "shape":"FirewallDomainRedirectionAction",
+          "documentation":"<p> How you want the the rule to evaluate DNS redirection in the DNS redirection chain, such as CNAME or DNAME. </p> <p> <code>INSPECT_REDIRECTION_DOMAIN</code>: (Default) inspects all domains in the redirection chain. The individual domains in the redirection chain must be added to the domain list.</p> <p> <code>TRUST_REDIRECTION_DOMAIN</code>: Inspects only the first domain in the redirection chain. You don't need to add the subsequent domains in the domain in the redirection list to the domain list.</p>",
+          "box":true
+        },
         "Qtype":{
           "shape":"Qtype",
-          "documentation":"<p> The DNS query type you want the rule to evaluate. Allowed values are; </p> <ul> <li> <p> A: Returns an IPv4 address.</p> </li> <li> <p>AAAA: Returns an Ipv6 address.</p> </li> <li> <p>CAA: Restricts CAs that can create SSL/TLS certifications for the domain.</p> </li> <li> <p>CNAME: Returns another domain name.</p> </li> <li> <p>DS: Record that identifies the DNSSEC signing key of a delegated zone.</p> </li> <li> <p>MX: Specifies mail servers.</p> </li> <li> <p>NAPTR: Regular-expression-based rewriting of domain names.</p> </li> <li> <p>NS: Authoritative name servers.</p> </li> <li> <p>PTR: Maps an IP address to a domain name.</p> </li> <li> <p>SOA: Start of authority record for the zone.</p> </li> <li> <p>SPF: Lists the servers authorized to send emails from a domain.</p> </li> <li> <p>SRV: Application specific values that identify servers.</p> </li> <li> <p>TXT: Verifies email senders and application-specific values.</p> </li> </ul>",
+          "documentation":"<p> The DNS query type you want the rule to evaluate. Allowed values are; </p> <ul> <li> <p> A: Returns an IPv4 address.</p> </li> <li> <p>AAAA: Returns an Ipv6 address.</p> </li> <li> <p>CAA: Restricts CAs that can create SSL/TLS certifications for the domain.</p> </li> <li> <p>CNAME: Returns another domain name.</p> </li> <li> <p>DS: Record that identifies the DNSSEC signing key of a delegated zone.</p> </li> <li> <p>MX: Specifies mail servers.</p> </li> <li> <p>NAPTR: Regular-expression-based rewriting of domain names.</p> </li> <li> <p>NS: Authoritative name servers.</p> </li> <li> <p>PTR: Maps an IP address to a domain name.</p> </li> <li> <p>SOA: Start of authority record for the zone.</p> </li> <li> <p>SPF: Lists the servers authorized to send emails from a domain.</p> </li> <li> <p>SRV: Application specific values that identify servers.</p> </li> <li> <p>TXT: Verifies email senders and application-specific values.</p> </li> <li> <p>A query type you define by using the DNS type ID, for example 28 for AAAA. The values must be defined as TYPENUMBER, where the NUMBER can be 1-65334, for example, TYPE28. For more information, see <a href=\"https://en.wikipedia.org/wiki/List_of_DNS_record_types\">List of DNS record types</a>.</p> </li> </ul>",
+          "box":true
+        },
+        "DnsThreatProtection":{
+          "shape":"DnsThreatProtection",
+          "documentation":"<p> Use to create a DNS Firewall Advanced rule. </p>",
+          "box":true
+        },
+        "ConfidenceThreshold":{
+          "shape":"ConfidenceThreshold",
+          "documentation":"<p> The confidence threshold for DNS Firewall Advanced. You must provide this value when you create a DNS Firewall Advanced rule. The confidence level values mean: </p> <ul> <li> <p> <code>LOW</code>: Provides the highest detection rate for threats, but also increases false positives.</p> </li> <li> <p> <code>MEDIUM</code>: Provides a balance between detecting threats and false positives.</p> </li> <li> <p> <code>HIGH</code>: Detects only the most well corroborated threats with a low rate of false positives. </p> </li> </ul>",
           "box":true
         }
       }
@@ -1617,12 +1643,12 @@
         },
         "SecurityGroupIds":{
           "shape":"SecurityGroupIds",
-          "documentation":"<p>The ID of one or more security groups that you want to use to control access to this VPC. The security group that you specify must include one or more inbound rules (for inbound Resolver endpoints) or outbound rules (for outbound Resolver endpoints). Inbound and outbound rules must allow TCP and UDP access. For inbound access, open port 53. For outbound access, open the port that you're using for DNS queries on your network.</p>",
+          "documentation":"<p>The ID of one or more security groups that you want to use to control access to this VPC. The security group that you specify must include one or more inbound rules (for inbound Resolver endpoints) or outbound rules (for outbound Resolver endpoints). Inbound and outbound rules must allow TCP and UDP access. For inbound access, open port 53. For outbound access, open the port that you're using for DNS queries on your network.</p> <p>Some security group rules will cause your connection to be tracked. For outbound resolver endpoint, it can potentially impact the maximum queries per second from outbound endpoint to your target name server. For inbound resolver endpoint, it can bring down the overall maximum queries per second per IP address to as low as 1500. To avoid connection tracking caused by security group, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/security-group-connection-tracking.html#untracked-connectionsl\">Untracked connections</a>.</p>",
           "box":true
         },
         "Direction":{
           "shape":"ResolverEndpointDirection",
-          "documentation":"<p>Specify the applicable value:</p> <ul> <li> <p> <code>INBOUND</code>: Resolver forwards DNS queries to the DNS service for a VPC from your network</p> </li> <li> <p> <code>OUTBOUND</code>: Resolver forwards DNS queries from the DNS service for a VPC to your network</p> </li> </ul>"
+          "documentation":"<p>Specify the applicable value:</p> <ul> <li> <p> <code>INBOUND</code>: Resolver forwards DNS queries to the DNS service for a VPC from your network.</p> </li> <li> <p> <code>OUTBOUND</code>: Resolver forwards DNS queries from the DNS service for a VPC to your network.</p> </li> <li> <p> <code>INBOUND_DELEGATION</code>: Resolver delegates queries to Route 53 private hosted zones from your network.</p> </li> </ul>"
         },
         "IpAddresses":{
           "shape":"IpAddressesRequest",
@@ -1650,7 +1676,7 @@
         },
         "Protocols":{
           "shape":"ProtocolList",
-          "documentation":"<p> The protocols you want to use for the endpoint. DoH-FIPS is applicable for inbound endpoints only. </p> <p>For an inbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 and DoH-FIPS in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>DoH-FIPS alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <p>For an outbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul>",
+          "documentation":"<p> The protocols you want to use for the endpoint. DoH-FIPS is applicable for default inbound endpoints only. </p> <p>For a default inbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 and DoH-FIPS in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>DoH-FIPS alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <p>For a delegation inbound endpoint you can use Do53 only.</p> <p>For an outbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul>",
           "box":true
         }
       }
@@ -1678,7 +1704,7 @@
         },
         "DestinationArn":{
           "shape":"DestinationArn",
-          "documentation":"<p>The ARN of the resource that you want Resolver to send query logs. You can send query logs to an S3 bucket, a CloudWatch Logs log group, or a Kinesis Data Firehose delivery stream. Examples of valid values include the following:</p> <ul> <li> <p> <b>S3 bucket</b>: </p> <p> <code>arn:aws:s3:::examplebucket</code> </p> <p>You can optionally append a file prefix to the end of the ARN.</p> <p> <code>arn:aws:s3:::examplebucket/development/</code> </p> </li> <li> <p> <b>CloudWatch Logs log group</b>: </p> <p> <code>arn:aws:logs:us-west-1:123456789012:log-group:/mystack-testgroup-12ABC1AB12A1:*</code> </p> </li> <li> <p> <b>Kinesis Data Firehose delivery stream</b>:</p> <p> <code>arn:aws:kinesis:us-east-2:0123456789:stream/my_stream_name</code> </p> </li> </ul>"
+          "documentation":"<p>The ARN of the resource that you want Resolver to send query logs. You can send query logs to an S3 bucket, a CloudWatch Logs log group, or a Kinesis Data Firehose delivery stream. Examples of valid values include the following:</p> <ul> <li> <p> <b>S3 bucket</b>: </p> <p> <code>arn:aws:s3:::amzn-s3-demo-bucket</code> </p> <p>You can optionally append a file prefix to the end of the ARN.</p> <p> <code>arn:aws:s3:::amzn-s3-demo-bucket/development/</code> </p> </li> <li> <p> <b>CloudWatch Logs log group</b>: </p> <p> <code>arn:aws:logs:us-west-1:123456789012:log-group:/mystack-testgroup-12ABC1AB12A1:*</code> </p> </li> <li> <p> <b>Kinesis Data Firehose delivery stream</b>:</p> <p> <code>arn:aws:kinesis:us-east-2:0123456789:stream/my_stream_name</code> </p> </li> </ul>"
         },
         "CreatorRequestId":{
           "shape":"CreatorRequestId",
@@ -1718,7 +1744,7 @@
         },
         "RuleType":{
           "shape":"RuleTypeOption",
-          "documentation":"<p>When you want to forward DNS queries for specified domain name to resolvers on your network, specify <code>FORWARD</code>.</p> <p>When you have a forwarding rule to forward DNS queries for a domain to your network and you want Resolver to process queries for a subdomain of that domain, specify <code>SYSTEM</code>.</p> <p>For example, to forward DNS queries for example.com to resolvers on your network, you create a rule and specify <code>FORWARD</code> for <code>RuleType</code>. To then have Resolver process queries for apex.example.com, you create a rule and specify <code>SYSTEM</code> for <code>RuleType</code>.</p> <p>Currently, only Resolver can create rules that have a value of <code>RECURSIVE</code> for <code>RuleType</code>.</p>"
+          "documentation":"<p>When you want to forward DNS queries for specified domain name to resolvers on your network, specify <code>FORWARD</code> or <code>DELEGATE</code>.</p> <p>When you have a forwarding rule to forward DNS queries for a domain to your network and you want Resolver to process queries for a subdomain of that domain, specify <code>SYSTEM</code>.</p> <p>For example, to forward DNS queries for example.com to resolvers on your network, you create a rule and specify <code>FORWARD</code> for <code>RuleType</code>. To then have Resolver process queries for apex.example.com, you create a rule and specify <code>SYSTEM</code> for <code>RuleType</code>.</p> <p>Currently, only Resolver can create rules that have a value of <code>RECURSIVE</code> for <code>RuleType</code>.</p>"
         },
         "DomainName":{
           "shape":"DomainName",
@@ -1739,6 +1765,11 @@
           "shape":"TagList",
           "documentation":"<p>A list of the tag keys and values that you want to associate with the endpoint.</p>",
           "box":true
+        },
+        "DelegationRecord":{
+          "shape":"DelegationRecord",
+          "documentation":"<p> DNS queries with the delegation records that match this domain name are forwarded to the resolvers on your network. </p>",
+          "box":true
         }
       }
     },
@@ -1754,6 +1785,11 @@
     "CreatorRequestId":{
       "type":"string",
       "max":255,
+      "min":1
+    },
+    "DelegationRecord":{
+      "type":"string",
+      "max":256,
       "min":1
     },
     "DeleteFirewallDomainListRequest":{
@@ -1796,10 +1832,7 @@
     },
     "DeleteFirewallRuleRequest":{
       "type":"structure",
-      "required":[
-        "FirewallRuleGroupId",
-        "FirewallDomainListId"
-      ],
+      "required":["FirewallRuleGroupId"],
       "members":{
         "FirewallRuleGroupId":{
           "shape":"ResourceId",
@@ -1807,11 +1840,17 @@
         },
         "FirewallDomainListId":{
           "shape":"ResourceId",
-          "documentation":"<p>The ID of the domain list that's used in the rule. </p>"
+          "documentation":"<p>The ID of the domain list that's used in the rule. </p>",
+          "box":true
+        },
+        "FirewallThreatProtectionId":{
+          "shape":"ResourceId",
+          "documentation":"<p> The ID that is created for a DNS Firewall Advanced rule. </p>",
+          "box":true
         },
         "Qtype":{
           "shape":"Qtype",
-          "documentation":"<p> The DNS query type that the rule you are deleting evaluates. Allowed values are; </p> <ul> <li> <p> A: Returns an IPv4 address.</p> </li> <li> <p>AAAA: Returns an Ipv6 address.</p> </li> <li> <p>CAA: Restricts CAs that can create SSL/TLS certifications for the domain.</p> </li> <li> <p>CNAME: Returns another domain name.</p> </li> <li> <p>DS: Record that identifies the DNSSEC signing key of a delegated zone.</p> </li> <li> <p>MX: Specifies mail servers.</p> </li> <li> <p>NAPTR: Regular-expression-based rewriting of domain names.</p> </li> <li> <p>NS: Authoritative name servers.</p> </li> <li> <p>PTR: Maps an IP address to a domain name.</p> </li> <li> <p>SOA: Start of authority record for the zone.</p> </li> <li> <p>SPF: Lists the servers authorized to send emails from a domain.</p> </li> <li> <p>SRV: Application specific values that identify servers.</p> </li> <li> <p>TXT: Verifies email senders and application-specific values.</p> </li> </ul>"
+          "documentation":"<p> The DNS query type that the rule you are deleting evaluates. Allowed values are; </p> <ul> <li> <p> A: Returns an IPv4 address.</p> </li> <li> <p>AAAA: Returns an Ipv6 address.</p> </li> <li> <p>CAA: Restricts CAs that can create SSL/TLS certifications for the domain.</p> </li> <li> <p>CNAME: Returns another domain name.</p> </li> <li> <p>DS: Record that identifies the DNSSEC signing key of a delegated zone.</p> </li> <li> <p>MX: Specifies mail servers.</p> </li> <li> <p>NAPTR: Regular-expression-based rewriting of domain names.</p> </li> <li> <p>NS: Authoritative name servers.</p> </li> <li> <p>PTR: Maps an IP address to a domain name.</p> </li> <li> <p>SOA: Start of authority record for the zone.</p> </li> <li> <p>SPF: Lists the servers authorized to send emails from a domain.</p> </li> <li> <p>SRV: Application specific values that identify servers.</p> </li> <li> <p>TXT: Verifies email senders and application-specific values.</p> </li> <li> <p>A query type you define by using the DNS type ID, for example 28 for AAAA. The values must be defined as TYPENUMBER, where the NUMBER can be 1-65334, for example, TYPE28. For more information, see <a href=\"https://en.wikipedia.org/wiki/List_of_DNS_record_types\">List of DNS record types</a>.</p> </li> </ul>"
         }
       }
     },
@@ -2002,6 +2041,14 @@
         }
       }
     },
+    "DnsThreatProtection":{
+      "type":"string",
+      "enum":[
+        "DGA",
+        "DNS_TUNNELING",
+        "DICTIONARY_DGA"
+      ]
+    },
     "DomainListFileUrl":{
       "type":"string",
       "max":1024,
@@ -2166,6 +2213,13 @@
       "max":255,
       "min":1
     },
+    "FirewallDomainRedirectionAction":{
+      "type":"string",
+      "enum":[
+        "INSPECT_REDIRECTION_DOMAIN",
+        "TRUST_REDIRECTION_DOMAIN"
+      ]
+    },
     "FirewallDomainUpdateOperation":{
       "type":"string",
       "enum":[
@@ -2191,11 +2245,15 @@
       "members":{
         "FirewallRuleGroupId":{
           "shape":"ResourceId",
-          "documentation":"<p>The unique identifier of the firewall rule group of the rule. </p>"
+          "documentation":"<p>The unique identifier of the Firewall rule group of the rule. </p>"
         },
         "FirewallDomainListId":{
           "shape":"ResourceId",
           "documentation":"<p>The ID of the domain list that's used in the rule. </p>"
+        },
+        "FirewallThreatProtectionId":{
+          "shape":"ResourceId",
+          "documentation":"<p> ID of the DNS Firewall Advanced rule. </p>"
         },
         "Name":{
           "shape":"Name",
@@ -2207,7 +2265,7 @@
         },
         "Action":{
           "shape":"Action",
-          "documentation":"<p>The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list:</p> <ul> <li> <p> <code>ALLOW</code> - Permit the request to go through.</p> </li> <li> <p> <code>ALERT</code> - Permit the request to go through but send an alert to the logs.</p> </li> <li> <p> <code>BLOCK</code> - Disallow the request. If this is specified, additional handling details are provided in the rule's <code>BlockResponse</code> setting. </p> </li> </ul>"
+          "documentation":"<p>The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list, or a threat in a DNS Firewall Advanced rule:</p> <ul> <li> <p> <code>ALLOW</code> - Permit the request to go through. Not available for DNS Firewall Advanced rules.</p> </li> <li> <p> <code>ALERT</code> - Permit the request to go through but send an alert to the logs.</p> </li> <li> <p> <code>BLOCK</code> - Disallow the request. If this is specified, additional handling details are provided in the rule's <code>BlockResponse</code> setting. </p> </li> </ul>"
         },
         "BlockResponse":{
           "shape":"BlockResponse",
@@ -2237,9 +2295,21 @@
           "shape":"Rfc3339TimeString",
           "documentation":"<p>The date and time that the rule was last modified, in Unix time format and Coordinated Universal Time (UTC).</p>"
         },
+        "FirewallDomainRedirectionAction":{
+          "shape":"FirewallDomainRedirectionAction",
+          "documentation":"<p> How you want the the rule to evaluate DNS redirection in the DNS redirection chain, such as CNAME or DNAME. </p> <p> <code>INSPECT_REDIRECTION_DOMAIN</code>: (Default) inspects all domains in the redirection chain. The individual domains in the redirection chain must be added to the domain list.</p> <p> <code>TRUST_REDIRECTION_DOMAIN</code>: Inspects only the first domain in the redirection chain. You don't need to add the subsequent domains in the domain in the redirection list to the domain list.</p>"
+        },
         "Qtype":{
           "shape":"Qtype",
-          "documentation":"<p> The DNS query type you want the rule to evaluate. Allowed values are; </p> <ul> <li> <p> A: Returns an IPv4 address.</p> </li> <li> <p>AAAA: Returns an Ipv6 address.</p> </li> <li> <p>CAA: Restricts CAs that can create SSL/TLS certifications for the domain.</p> </li> <li> <p>CNAME: Returns another domain name.</p> </li> <li> <p>DS: Record that identifies the DNSSEC signing key of a delegated zone.</p> </li> <li> <p>MX: Specifies mail servers.</p> </li> <li> <p>NAPTR: Regular-expression-based rewriting of domain names.</p> </li> <li> <p>NS: Authoritative name servers.</p> </li> <li> <p>PTR: Maps an IP address to a domain name.</p> </li> <li> <p>SOA: Start of authority record for the zone.</p> </li> <li> <p>SPF: Lists the servers authorized to send emails from a domain.</p> </li> <li> <p>SRV: Application specific values that identify servers.</p> </li> <li> <p>TXT: Verifies email senders and application-specific values.</p> </li> </ul>"
+          "documentation":"<p> The DNS query type you want the rule to evaluate. Allowed values are; </p> <ul> <li> <p> A: Returns an IPv4 address.</p> </li> <li> <p>AAAA: Returns an Ipv6 address.</p> </li> <li> <p>CAA: Restricts CAs that can create SSL/TLS certifications for the domain.</p> </li> <li> <p>CNAME: Returns another domain name.</p> </li> <li> <p>DS: Record that identifies the DNSSEC signing key of a delegated zone.</p> </li> <li> <p>MX: Specifies mail servers.</p> </li> <li> <p>NAPTR: Regular-expression-based rewriting of domain names.</p> </li> <li> <p>NS: Authoritative name servers.</p> </li> <li> <p>PTR: Maps an IP address to a domain name.</p> </li> <li> <p>SOA: Start of authority record for the zone.</p> </li> <li> <p>SPF: Lists the servers authorized to send emails from a domain.</p> </li> <li> <p>SRV: Application specific values that identify servers.</p> </li> <li> <p>TXT: Verifies email senders and application-specific values.</p> </li> <li> <p>A query type you define by using the DNS type ID, for example 28 for AAAA. The values must be defined as TYPENUMBER, where the NUMBER can be 1-65334, for example, TYPE28. For more information, see <a href=\"https://en.wikipedia.org/wiki/List_of_DNS_record_types\">List of DNS record types</a>.</p> </li> </ul>"
+        },
+        "DnsThreatProtection":{
+          "shape":"DnsThreatProtection",
+          "documentation":"<p> The type of the DNS Firewall Advanced rule. Valid values are: </p> <ul> <li> <p> <code>DGA</code>: Domain generation algorithms detection. DGAs are used by attackers to generate a large number of domains to to launch malware attacks.</p> </li> <li> <p> <code>DNS_TUNNELING</code>: DNS tunneling detection. DNS tunneling is used by attackers to exfiltrate data from the client by using the DNS tunnel without making a network connection to the client.</p> </li> </ul>"
+        },
+        "ConfidenceThreshold":{
+          "shape":"ConfidenceThreshold",
+          "documentation":"<p> The confidence threshold for DNS Firewall Advanced. You must provide this value when you create a DNS Firewall Advanced rule. The confidence level values mean: </p> <ul> <li> <p> <code>LOW</code>: Provides the highest detection rate for threats, but also increases false positives.</p> </li> <li> <p> <code>MEDIUM</code>: Provides a balance between detecting threats and false positives.</p> </li> <li> <p> <code>HIGH</code>: Detects only the most well corroborated threats with a low rate of false positives. </p> </li> </ul>"
         }
       },
       "documentation":"<p>A single firewall rule in a rule group.</p>"
@@ -2875,7 +2945,8 @@
         "DELETING",
         "DELETE_FAILED_FAS_EXPIRED",
         "UPDATING",
-        "UPDATE_FAILED"
+        "UPDATE_FAILED",
+        "ISOLATED"
       ]
     },
     "IpAddressUpdate":{
@@ -3121,7 +3192,7 @@
         },
         "Action":{
           "shape":"Action",
-          "documentation":"<p>Optional additional filter for the rules to retrieve.</p> <p>The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list:</p> <ul> <li> <p> <code>ALLOW</code> - Permit the request to go through.</p> </li> <li> <p> <code>ALERT</code> - Permit the request to go through but send an alert to the logs.</p> </li> <li> <p> <code>BLOCK</code> - Disallow the request. If this is specified, additional handling details are provided in the rule's <code>BlockResponse</code> setting. </p> </li> </ul>",
+          "documentation":"<p>Optional additional filter for the rules to retrieve.</p> <p>The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list, or a threat in a DNS Firewall Advanced rule:</p> <ul> <li> <p> <code>ALLOW</code> - Permit the request to go through. Not availabe for DNS Firewall Advanced rules.</p> </li> <li> <p> <code>ALERT</code> - Permit the request to go through but send an alert to the logs.</p> </li> <li> <p> <code>BLOCK</code> - Disallow the request. If this is specified, additional handling details are provided in the rule's <code>BlockResponse</code> setting. </p> </li> </ul>",
           "box":true
         },
         "MaxResults":{
@@ -3753,7 +3824,7 @@
         },
         "ResourceId":{
           "shape":"ResourceId",
-          "documentation":"<p>The ID of the Amazon Virtual Private Cloud VPC that you're configuring Resolver for.</p>"
+          "documentation":"<p>The ID of the Amazon Virtual Private Cloud VPC or a Route 53 Profile that you're configuring Resolver for.</p>"
         },
         "OwnerId":{
           "shape":"AccountId",
@@ -3832,7 +3903,7 @@
         },
         "Direction":{
           "shape":"ResolverEndpointDirection",
-          "documentation":"<p>Indicates whether the Resolver endpoint allows inbound or outbound DNS queries:</p> <ul> <li> <p> <code>INBOUND</code>: allows DNS queries to your VPC from your network</p> </li> <li> <p> <code>OUTBOUND</code>: allows DNS queries from your VPC to your network</p> </li> </ul>"
+          "documentation":"<p>Indicates whether the Resolver endpoint allows inbound or outbound DNS queries:</p> <ul> <li> <p> <code>INBOUND</code>: allows DNS queries to your VPC from your network</p> </li> <li> <p> <code>OUTBOUND</code>: allows DNS queries from your VPC to your network</p> </li> <li> <p> <code>INBOUND_DELEGATION</code>: Resolver delegates queries to Route 53 private hosted zones from your network.</p> </li> </ul>"
         },
         "IpAddressCount":{
           "shape":"IpAddressCount",
@@ -3872,7 +3943,7 @@
         },
         "Protocols":{
           "shape":"ProtocolList",
-          "documentation":"<p> Protocols used for the endpoint. DoH-FIPS is applicable for inbound endpoints only. </p> <p>For an inbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 and DoH-FIPS in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>DoH-FIPS alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <p>For an outbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul>"
+          "documentation":"<p> Protocols used for the endpoint. DoH-FIPS is applicable for a default inbound endpoints only. </p> <p>For an inbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 and DoH-FIPS in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>DoH-FIPS alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <p>For a delegation inbound endpoint you can use Do53 only.</p> <p>For an outbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul>"
         }
       },
       "documentation":"<p>In the response to a <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_CreateResolverEndpoint.html\">CreateResolverEndpoint</a>, <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_DeleteResolverEndpoint.html\">DeleteResolverEndpoint</a>, <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_GetResolverEndpoint.html\">GetResolverEndpoint</a>, Updates the name, or ResolverEndpointType for an endpoint, or <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_UpdateResolverEndpoint.html\">UpdateResolverEndpoint</a> request, a complex type that contains settings for an existing inbound or outbound Resolver endpoint.</p>"
@@ -3881,7 +3952,8 @@
       "type":"string",
       "enum":[
         "INBOUND",
-        "OUTBOUND"
+        "OUTBOUND",
+        "INBOUND_DELEGATION"
       ]
     },
     "ResolverEndpointStatus":{
@@ -3970,7 +4042,7 @@
         },
         "Status":{
           "shape":"ResolverQueryLogConfigAssociationStatus",
-          "documentation":"<p>The status of the specified query logging association. Valid values include the following:</p> <ul> <li> <p> <code>CREATING</code>: Resolver is creating an association between an Amazon VPC and a query logging configuration.</p> </li> <li> <p> <code>CREATED</code>: The association between an Amazon VPC and a query logging configuration was successfully created. Resolver is logging queries that originate in the specified VPC.</p> </li> <li> <p> <code>DELETING</code>: Resolver is deleting this query logging association.</p> </li> <li> <p> <code>FAILED</code>: Resolver either couldn't create or couldn't delete the query logging association.</p> </li> </ul>"
+          "documentation":"<p>The status of the specified query logging association. Valid values include the following:</p> <ul> <li> <p> <code>CREATING</code>: Resolver is creating an association between an Amazon VPC and a query logging configuration.</p> </li> <li> <p> <code>ACTIVE</code>: The association between an Amazon VPC and a query logging configuration was successfully created. Resolver is logging queries that originate in the specified VPC.</p> </li> <li> <p> <code>DELETING</code>: Resolver is deleting this query logging association.</p> </li> <li> <p> <code>FAILED</code>: Resolver either couldn't create or couldn't delete the query logging association.</p> </li> </ul>"
         },
         "Error":{
           "shape":"ResolverQueryLogConfigAssociationError",
@@ -4063,7 +4135,7 @@
         },
         "RuleType":{
           "shape":"RuleTypeOption",
-          "documentation":"<p>When you want to forward DNS queries for specified domain name to resolvers on your network, specify <code>FORWARD</code>.</p> <p>When you have a forwarding rule to forward DNS queries for a domain to your network and you want Resolver to process queries for a subdomain of that domain, specify <code>SYSTEM</code>.</p> <p>For example, to forward DNS queries for example.com to resolvers on your network, you create a rule and specify <code>FORWARD</code> for <code>RuleType</code>. To then have Resolver process queries for apex.example.com, you create a rule and specify <code>SYSTEM</code> for <code>RuleType</code>.</p> <p>Currently, only Resolver can create rules that have a value of <code>RECURSIVE</code> for <code>RuleType</code>.</p>"
+          "documentation":"<p>When you want to forward DNS queries for specified domain name to resolvers on your network, specify <code>FORWARD</code> or <code>DELEGATE</code>. If a query matches multiple Resolver rules (example.com and www.example.com), outbound DNS queries are routed using the Resolver rule that contains the most specific domain name (www.example.com).</p> <p>When you have a forwarding rule to forward DNS queries for a domain to your network and you want Resolver to process queries for a subdomain of that domain, specify <code>SYSTEM</code>.</p> <p>For example, to forward DNS queries for example.com to resolvers on your network, you create a rule and specify <code>FORWARD</code> for <code>RuleType</code>. To then have Resolver process queries for apex.example.com, you create a rule and specify <code>SYSTEM</code> for <code>RuleType</code>.</p> <p>Currently, only Resolver can create rules that have a value of <code>RECURSIVE</code> for <code>RuleType</code>.</p>"
         },
         "Name":{
           "shape":"Name",
@@ -4092,6 +4164,10 @@
         "ModificationTime":{
           "shape":"Rfc3339TimeString",
           "documentation":"<p>The date and time that the Resolver rule was last updated, in Unix time format and Coordinated Universal Time (UTC).</p>"
+        },
+        "DelegationRecord":{
+          "shape":"DelegationRecord",
+          "documentation":"<p> DNS queries with delegation records that point to this domain name are forwarded to resolvers on your network. </p>"
         }
       },
       "documentation":"<p>For queries that originate in your VPC, detailed information about a Resolver rule, which specifies how to route DNS queries out of the VPC. The <code>ResolverRule</code> parameter appears in the response to a <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_CreateResolverRule.html\">CreateResolverRule</a>, <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_DeleteResolverRule.html\">DeleteResolverRule</a>, <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_GetResolverRule.html\">GetResolverRule</a>, <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_ListResolverRules.html\">ListResolverRules</a>, or <a href=\"https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_UpdateResolverRule.html\">UpdateResolverRule</a> request.</p>"
@@ -4238,12 +4314,18 @@
       "enum":[
         "FORWARD",
         "SYSTEM",
-        "RECURSIVE"
+        "RECURSIVE",
+        "DELEGATE"
       ]
     },
     "SecurityGroupIds":{
       "type":"list",
       "member":{"shape":"ResourceId"}
+    },
+    "ServerNameIndication":{
+      "type":"string",
+      "max":255,
+      "min":0
     },
     "ServicePrinciple":{
       "type":"string",
@@ -4340,8 +4422,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -4368,7 +4449,12 @@
         },
         "Protocol":{
           "shape":"Protocol",
-          "documentation":"<p> The protocols for the Resolver endpoints. DoH-FIPS is applicable for inbound endpoints only. </p> <p>For an inbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 and DoH-FIPS in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>DoH-FIPS alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <p>For an outbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul>",
+          "documentation":"<p> The protocols for the target address. The protocol you choose needs to be supported by the outbound endpoint of the Resolver rule.</p>",
+          "box":true
+        },
+        "ServerNameIndication":{
+          "shape":"ServerNameIndication",
+          "documentation":"<p> The Server Name Indication of the DoH server that you want to forward queries to. This is only used if the Protocol of the <code>TargetAddress</code> is <code>DoH</code>. </p>",
           "box":true
         }
       },
@@ -4415,8 +4501,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateFirewallConfigRequest":{
       "type":"structure",
@@ -4523,10 +4608,7 @@
     },
     "UpdateFirewallRuleRequest":{
       "type":"structure",
-      "required":[
-        "FirewallRuleGroupId",
-        "FirewallDomainListId"
-      ],
+      "required":["FirewallRuleGroupId"],
       "members":{
         "FirewallRuleGroupId":{
           "shape":"ResourceId",
@@ -4534,7 +4616,13 @@
         },
         "FirewallDomainListId":{
           "shape":"ResourceId",
-          "documentation":"<p>The ID of the domain list to use in the rule. </p>"
+          "documentation":"<p>The ID of the domain list to use in the rule. </p>",
+          "box":true
+        },
+        "FirewallThreatProtectionId":{
+          "shape":"ResourceId",
+          "documentation":"<p> The DNS Firewall Advanced rule ID. </p>",
+          "box":true
         },
         "Priority":{
           "shape":"Priority",
@@ -4543,7 +4631,7 @@
         },
         "Action":{
           "shape":"Action",
-          "documentation":"<p>The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list:</p> <ul> <li> <p> <code>ALLOW</code> - Permit the request to go through.</p> </li> <li> <p> <code>ALERT</code> - Permit the request to go through but send an alert to the logs.</p> </li> <li> <p> <code>BLOCK</code> - Disallow the request. This option requires additional details in the rule's <code>BlockResponse</code>. </p> </li> </ul>",
+          "documentation":"<p>The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list, or a threat in a DNS Firewall Advanced rule:</p> <ul> <li> <p> <code>ALLOW</code> - Permit the request to go through. Not available for DNS Firewall Advanced rules.</p> </li> <li> <p> <code>ALERT</code> - Permit the request to go through but send an alert to the logs.</p> </li> <li> <p> <code>BLOCK</code> - Disallow the request. This option requires additional details in the rule's <code>BlockResponse</code>. </p> </li> </ul>",
           "box":true
         },
         "BlockResponse":{
@@ -4571,9 +4659,24 @@
           "documentation":"<p>The name of the rule.</p>",
           "box":true
         },
+        "FirewallDomainRedirectionAction":{
+          "shape":"FirewallDomainRedirectionAction",
+          "documentation":"<p> How you want the the rule to evaluate DNS redirection in the DNS redirection chain, such as CNAME or DNAME. </p> <p> <code>INSPECT_REDIRECTION_DOMAIN</code>: (Default) inspects all domains in the redirection chain. The individual domains in the redirection chain must be added to the domain list.</p> <p> <code>TRUST_REDIRECTION_DOMAIN</code>: Inspects only the first domain in the redirection chain. You don't need to add the subsequent domains in the domain in the redirection list to the domain list.</p>",
+          "box":true
+        },
         "Qtype":{
           "shape":"Qtype",
-          "documentation":"<p> The DNS query type you want the rule to evaluate. Allowed values are; </p> <ul> <li> <p> A: Returns an IPv4 address.</p> </li> <li> <p>AAAA: Returns an Ipv6 address.</p> </li> <li> <p>CAA: Restricts CAs that can create SSL/TLS certifications for the domain.</p> </li> <li> <p>CNAME: Returns another domain name.</p> </li> <li> <p>DS: Record that identifies the DNSSEC signing key of a delegated zone.</p> </li> <li> <p>MX: Specifies mail servers.</p> </li> <li> <p>NAPTR: Regular-expression-based rewriting of domain names.</p> </li> <li> <p>NS: Authoritative name servers.</p> </li> <li> <p>PTR: Maps an IP address to a domain name.</p> </li> <li> <p>SOA: Start of authority record for the zone.</p> </li> <li> <p>SPF: Lists the servers authorized to send emails from a domain.</p> </li> <li> <p>SRV: Application specific values that identify servers.</p> </li> <li> <p>TXT: Verifies email senders and application-specific values.</p> </li> </ul>"
+          "documentation":"<p> The DNS query type you want the rule to evaluate. Allowed values are; </p> <ul> <li> <p> A: Returns an IPv4 address.</p> </li> <li> <p>AAAA: Returns an Ipv6 address.</p> </li> <li> <p>CAA: Restricts CAs that can create SSL/TLS certifications for the domain.</p> </li> <li> <p>CNAME: Returns another domain name.</p> </li> <li> <p>DS: Record that identifies the DNSSEC signing key of a delegated zone.</p> </li> <li> <p>MX: Specifies mail servers.</p> </li> <li> <p>NAPTR: Regular-expression-based rewriting of domain names.</p> </li> <li> <p>NS: Authoritative name servers.</p> </li> <li> <p>PTR: Maps an IP address to a domain name.</p> </li> <li> <p>SOA: Start of authority record for the zone.</p> </li> <li> <p>SPF: Lists the servers authorized to send emails from a domain.</p> </li> <li> <p>SRV: Application specific values that identify servers.</p> </li> <li> <p>TXT: Verifies email senders and application-specific values.</p> </li> <li> <p>A query type you define by using the DNS type ID, for example 28 for AAAA. The values must be defined as TYPENUMBER, where the NUMBER can be 1-65334, for example, TYPE28. For more information, see <a href=\"https://en.wikipedia.org/wiki/List_of_DNS_record_types\">List of DNS record types</a>.</p> <note> <p>If you set up a firewall BLOCK rule with action NXDOMAIN on query type equals AAAA, this action will not be applied to synthetic IPv6 addresses generated when DNS64 is enabled. </p> </note> </li> </ul>"
+        },
+        "DnsThreatProtection":{
+          "shape":"DnsThreatProtection",
+          "documentation":"<p> The type of the DNS Firewall Advanced rule. Valid values are: </p> <ul> <li> <p> <code>DGA</code>: Domain generation algorithms detection. DGAs are used by attackers to generate a large number of domains to to launch malware attacks.</p> </li> <li> <p> <code>DNS_TUNNELING</code>: DNS tunneling detection. DNS tunneling is used by attackers to exfiltrate data from the client by using the DNS tunnel without making a network connection to the client.</p> </li> </ul>",
+          "box":true
+        },
+        "ConfidenceThreshold":{
+          "shape":"ConfidenceThreshold",
+          "documentation":"<p> The confidence threshold for DNS Firewall Advanced. You must provide this value when you create a DNS Firewall Advanced rule. The confidence level values mean: </p> <ul> <li> <p> <code>LOW</code>: Provides the highest detection rate for threats, but also increases false positives.</p> </li> <li> <p> <code>MEDIUM</code>: Provides a balance between detecting threats and false positives.</p> </li> <li> <p> <code>HIGH</code>: Detects only the most well corroborated threats with a low rate of false positives. </p> </li> </ul>",
+          "box":true
         }
       }
     },
@@ -4653,7 +4756,7 @@
       "members":{
         "ResourceId":{
           "shape":"ResourceId",
-          "documentation":"<p>Resource ID of the Amazon VPC that you want to update the Resolver configuration for.</p>"
+          "documentation":"<p>The ID of the Amazon Virtual Private Cloud VPC or a Route 53 Profile that you're configuring Resolver for.</p>"
         },
         "AutodefinedReverseFlag":{
           "shape":"AutodefinedReverseFlag",
@@ -4721,7 +4824,7 @@
         },
         "Protocols":{
           "shape":"ProtocolList",
-          "documentation":"<p> The protocols you want to use for the endpoint. DoH-FIPS is applicable for inbound endpoints only. </p> <p>For an inbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 and DoH-FIPS in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>DoH-FIPS alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <p>For an outbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <important> <p> You can't change the protocol of an inbound endpoint directly from only Do53 to only DoH, or DoH-FIPS. This is to prevent a sudden disruption to incoming traffic that relies on Do53. To change the protocol from Do53 to DoH, or DoH-FIPS, you must first enable both Do53 and DoH, or Do53 and DoH-FIPS, to make sure that all incoming traffic has transferred to using the DoH protocol, or DoH-FIPS, and then remove the Do53.</p> </important>",
+          "documentation":"<p> The protocols you want to use for the endpoint. DoH-FIPS is applicable for default inbound endpoints only. </p> <p>For a default inbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 and DoH-FIPS in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>DoH-FIPS alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <p>For a delegation inbound endpoint you can use Do53 only.</p> <p>For an outbound endpoint you can apply the protocols as follows:</p> <ul> <li> <p> Do53 and DoH in combination.</p> </li> <li> <p>Do53 alone.</p> </li> <li> <p>DoH alone.</p> </li> <li> <p>None, which is treated as Do53.</p> </li> </ul> <important> <p> You can't change the protocol of an inbound endpoint directly from only Do53 to only DoH, or DoH-FIPS. This is to prevent a sudden disruption to incoming traffic that relies on Do53. To change the protocol from Do53 to DoH, or DoH-FIPS, you must first enable both Do53 and DoH, or Do53 and DoH-FIPS, to make sure that all incoming traffic has transferred to using the DoH protocol, or DoH-FIPS, and then remove the Do53.</p> </important>",
           "box":true
         }
       }

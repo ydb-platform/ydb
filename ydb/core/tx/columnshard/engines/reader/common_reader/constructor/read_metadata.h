@@ -1,8 +1,10 @@
 #pragma once
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
@@ -42,8 +44,8 @@ public:
         DoFillReadStats(*stats);
     }
 
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const {
-        return std::vector<TInsertWriteId>();
+    virtual std::vector<TPortionInfo::TConstPtr> GetConflictingPortions() const {
+        return std::vector<TPortionInfo::TConstPtr>();
     }
 
     TString DebugString() const {
@@ -90,6 +92,7 @@ class TReadMetadata: public TReadMetadataBase {
 private:
     mutable TAtomicCounter BreakLockOnReadFinished = TAtomicCounter();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
+    std::shared_ptr<NOlap::NDataLocks::TManager::TGuard> DataLockGuard;
 
     class TWriteIdInfo {
     private:
@@ -126,6 +129,7 @@ private:
     virtual TConclusionStatus DoInitCustom(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) = 0;
 
     mutable std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+    bool DuplicateFilteringNeeded = false;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
@@ -188,6 +192,12 @@ public:
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
+
+    bool NeedDuplicateFiltering() const {
+        return DuplicateFilteringNeeded;
+    }
+
+    EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
@@ -197,6 +207,10 @@ public:
 
     bool OrderByLimitAllowed() const {
         return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+    }
+
+    EScanGroupedMemoryLimiterOperator GetGroupedMemoryLimiterOperator() const {
+        return GroupedMemoryLimiterOperator;
     }
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {

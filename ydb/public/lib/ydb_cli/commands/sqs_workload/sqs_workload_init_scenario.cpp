@@ -11,13 +11,13 @@
 namespace NYdb::NConsoleClient {
 
     int TSqsWorkloadInitScenario::Run(TClientCommand::TConfig& config) {
-        TDriver driver(TYdbCommand::CreateDriver(
+        auto driver = TYdbCommand::CreateDriver(
             config, std::unique_ptr<TLogBackend>(
                         CreateLogBackend(
                             "cerr",
                             VerbosityLevelToELogPriority(
                                 config.VerbosityLevel))
-                            .Release())));
+                            .Release()));
 
         NTopic::TTopicClient client(driver);
 

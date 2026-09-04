@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     control.cpp
+    dynamic_function_registry.cpp
     kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
@@ -53,6 +54,7 @@ PEERDIR(
     yql/essentials/core/dq_integration
     yql/essentials/core/issue
     yql/essentials/core/services
+    yql/essentials/minikql
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
 )

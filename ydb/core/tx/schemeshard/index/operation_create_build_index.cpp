@@ -57,6 +57,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     const auto& op = tx.GetInitiateIndexBuild();
     NKikimrSchemeOp::TIndexCreationConfig indexDesc = op.GetIndex();
+    const bool isRebuild = op.GetIsRebuild();
 
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -91,6 +92,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
+    if (isRebuild && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "REBUILD INDEX is only supported for vector_kmeans_tree indexes")};
+    }
+
     auto counts = GetIndexObjectCounts(indexDesc);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
@@ -102,7 +107,19 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     const auto index = table.Child(indexDesc.GetName());
-    {
+    if (isRebuild) {
+        const auto checks = index.Check();
+        checks
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
+    } else {
         const auto checks = index.Check();
         checks
             .IsAtLocalSchemeShard();
@@ -134,17 +151,21 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         }
     }
 
-    const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
-    if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
-            << "indexes count has reached maximum value in the table"
-            << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
-            << ", intention to create new children: " << aliveIndices + 1)};
+    if (!isRebuild) {
+        const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
+        if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+                << "indexes count has reached maximum value in the table"
+                << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
+                << ", intention to create new children: " << aliveIndices + 1)};
+        }
     }
 
     TString errStr;
-    if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes, indexDesc, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
+    if (!isRebuild) {
+        if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes, indexDesc, errStr)) {
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
+        }
     }
 
     NTableIndex::TTableColumns implTableColumns;
@@ -155,7 +176,24 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     TVector<ISubOperation::TPtr> result;
 
-    {
+    if (isRebuild) {
+        // For rebuild: set existing index to WriteOnly. Impl table drop and recreation
+        // is handled in the build state machine after Initiating completes.
+        {
+            auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+            *outTx.MutableLockGuard() = tx.GetLockGuard();
+            outTx.SetInternal(tx.GetInternal());
+            auto alterIndex = outTx.MutableAlterTableIndex();
+            alterIndex->SetName(index.LeafName());
+            alterIndex->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+            // Update key columns and data columns (may change during rebuild, e.g. non-prefixed to prefixed)
+            *alterIndex->MutableKeyColumnNames() = indexDesc.GetKeyColumnNames();
+            *alterIndex->MutableDataColumnNames() = indexDesc.GetDataColumnNames();
+
+            result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
+        }
+    } else {
+        // For new build: create the index in WriteOnly state
         auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
@@ -177,7 +215,20 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }
 
+    // For rebuild, skip impl table creation - existing impl tables will be reused.
+    // The build state machine will handle dropping old data and filling new data.
+    if (isRebuild) {
+        return result;
+    }
+
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
+        // Index impl tables inherit their base table's detailed metrics level. Gated on the
+        // feature flag: the base table's setting may have been persisted while the flag was on,
+        // and an unguarded copy would make the impl table's TCreateTable reject the whole build.
+        if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && tableInfo->HasDetailedMetricsSettings()) {
+            *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
+        }
+
         if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
             context.SS->EnableOnlineAddUniqueIndex) {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);
@@ -191,7 +242,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     };
 
     const auto indexType = GetIndexType(indexDesc);
-    bool compact = false;
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -237,8 +287,43 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         }
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
-            compact = true;
-            [[fallthrough]];
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+            NKikimrSchemeOp::TTableDescription indexTableDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                if (indexDesc.IndexImplTableDescriptionsSize() == 4) {
+                    dictTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition);
+                    docsTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition);
+                    statsTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition);
+                    indexTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
+                }
+            } else if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
+                indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+            }
+
+            auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames());
+            auto implTableDesc = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
+                indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns, false);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            result.push_back(createImplTable(std::move(implTableDesc),
+                THashSet<TString>{NTableIndex::NFulltext::GenSequence}));
+
+            auto outTx = TransactionTemplate(
+                index.PathString() + "/" + NTableIndex::ImplTable,
+                NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+            outTx.MutableSequence()->SetName(NTableIndex::NFulltext::GenSequence);
+            outTx.MutableSequence()->SetStartValue(static_cast<i64>(Max<NTableIndex::NFulltext::TGen>() - 1));
+            outTx.MutableSequence()->SetIncrement(-1);
+            outTx.MutableSequence()->SetMaxValue(static_cast<i64>(Max<NTableIndex::NFulltext::TGen>() - 1));
+            outTx.SetInternal(tx.GetInternal());
+            result.push_back(CreateNewSequence(NextPartId(opId, result), outTx));
+
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
+                result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc, prefixColumns)));
+            }
+            break;
+        }
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
             NKikimrSchemeOp::TTableDescription indexTableDesc;
@@ -246,20 +331,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-            auto implTableDesc = compact
-                ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType,
-                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()))
-                : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
-                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
+            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
+                indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
+                NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
-            compact = true;
-            [[fallthrough]];
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
             NKikimrSchemeOp::TTableDescription indexTableDesc, docsTableDesc, dictTableDesc, statsTableDesc;
             if (indexDesc.IndexImplTableDescriptionsSize() == 4) {
@@ -269,18 +347,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
             }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-            auto implTableDesc = compact
-                ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType,
-                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()))
-                : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
-                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
+            auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames());
+            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
+                indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
             result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
-            result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
+            result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc, prefixColumns)));
             break;
         }
         default:

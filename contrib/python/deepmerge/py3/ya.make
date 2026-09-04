@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 SUBSCRIBER(g:python-contrib)
 
-VERSION(2.0)
+VERSION(3.0)
 
 LICENSE(MIT)
 

@@ -37,18 +37,13 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
 
     TVector<TString> queries;
     TString resourceName = "click_bench_queries.sql";
-    if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
-        resourceName = "click_bench_queries_pg.sql";
-    } else if (Params.GetCheckCanonical()) {
+    if (Params.GetCheckCanonical()) {
         resourceName = "queries-deterministic.sql";
     }
     queries = StringSplitter(NResource::Find(resourceName)).Split(';').ToList<TString>();
-    const auto tablePath = Params.GetTablePathQuote(Params.GetSyntax()) + Params.GetPath() + Params.GetTablePathQuote(Params.GetSyntax());
+    const auto tablePath = Params.GetTablePathQuote() + Params.GetPath() + Params.GetTablePathQuote();
     for (ui32 i = 0; i < queries.size(); ++i) {
         auto& query = queries[i];
-        if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
-            query = "--!syntax_pg\n" + query;
-        }
         SubstGlobal(query, "{table}", tablePath);
         SubstGlobal(query, "$data", tablePath);
         result.emplace_back();
@@ -69,8 +64,15 @@ void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EC
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
-            .StoreResult(&Syntax).DefaultValue(Syntax);
+        opts.AddLongOption("syntax", "Query syntax [yql]")
+            .Hidden()
+            .Handler1T<TString>("yql", [this](const TString& arg) {
+                if (arg == "yql") {
+                    Syntax = EQuerySyntax::YQL;
+                } else {
+                    throw yexception() << "Unknown syntax option \"" << arg << "\"";
+                }
+            });
         break;
     default:
         break;

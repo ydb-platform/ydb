@@ -7,6 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
@@ -17,6 +18,8 @@
 #include <util/folder/path.h>
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -343,8 +346,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (request->ResultSet.empty()) {
             return this->Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
@@ -487,7 +493,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             }
 
             if (!entry.DomainInfo) {
-                LOG_E("Got empty domain info");
+                YDB_LOG_ERROR("Got empty domain info",
+                    {"logPrefix", GetLogPrefix()},
+                    {"selfId", this->SelfId()},
+                    {"txId", this->TxId});
                 return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
             }
 
@@ -510,8 +519,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvExport::TEvCreateExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvCreateExportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvExport::TEvCreateExportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         this->Reply(TExportConv::ToOperation(record.GetEntry()));
     }
@@ -570,6 +582,21 @@ public:
         const auto& settings = request.settings();
         InitCommonSourcePath();
 
+        if constexpr (TTraits::HasEncryption) {
+            if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
+                if (!NBackup::IsEncryptedExportEnabled(*AppData())) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
+                if (!TTraits::HasDestination(settings)) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
+                }
+
+                if (!ValidateEncryptionParameters()) {
+                    return;
+                }
+            }
+        }
+
         try {
             ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
         } catch (const std::exception& ex) {
@@ -602,9 +629,8 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
             }
         } else {
-            const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
             const bool commonDestSpecified = TTraits::HasDestination(settings);
-            if (!encryptedExportFeatureFlag) {
+            if (!NBackup::IsExportFilteringEnabled(*AppData())) {
                 // Check that no new fields are specified
                 if constexpr (IsS3Export) {
                     if (commonDestSpecified) {
@@ -613,9 +639,6 @@ public:
                 }
                 if (!settings.source_path().empty()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source path is not supported in current configuration");
-                }
-                if (settings.has_encryption_settings()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
                 }
                 if constexpr (IsFsExport) {
                     if (settings.items().empty()) {
@@ -636,17 +659,6 @@ public:
             for (const auto& item : settings.items()) {
                 if (TTraits::GetDestination(item).empty() && !commonDestSpecified) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix or common destination prefix specified for item \"" << item.source_path() << "\"");
-                }
-            }
-        }
-        if constexpr (TTraits::HasEncryption) {
-            if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
-                if (!TTraits::HasDestination(settings)) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
-                }
-
-                if (!ValidateEncryptionParameters()) {
-                    return;
                 }
             }
         }

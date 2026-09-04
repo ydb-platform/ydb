@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -12,6 +13,7 @@ using namespace fmt::literals;
 using namespace NTestUtils;
 using namespace NYdb;
 using namespace NYdb::NQuery;
+using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(CreateExternalDataSource, TStreamingTestFixture) {
@@ -225,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const std::string sourceName = "sourceName";
         const std::string inputTopicName = "inputTopicName";
-        const std::string outputTopicName = "outputTopicName";
+        const TString outputTopicName = "outputTopicName";
         const std::string tableName = "tableName";
 
         CreateTopic(outputTopicName);
@@ -334,11 +336,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphBasic, TStreamingTestFixture) {
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph";
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphBasic, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopic";
+        const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -349,6 +352,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto executeQuery = [&](TScriptQuerySettings settings) {
             const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 INSERT INTO `{s3_sink}`.`folder/` WITH (FORMAT = "json_each_row")
                 SELECT * FROM `{source}`.`{topic}` WITH (
                     STREAMING = "TRUE",
@@ -384,9 +388,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphGroupByHop, TStreamingTestFixture) {
-        constexpr char sourceTopicName[] = "restoreScriptGroupByHopTopicSource";
-        constexpr char sinkTopicName[] = "restoreScriptGroupByHopTopicSink";
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphGroupByHop, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto sourceTopicName = TStringBuilder() << Name_ << "TopicSource";
+        const auto sinkTopicName = TStringBuilder() << Name_ << "TopicSink";
         CreateTopic(sourceTopicName);
         CreateTopic(sinkTopicName);
 
@@ -396,6 +401,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         std::vector<std::string> expectedMessages;
         const auto executeQuery = [&](TScriptQuerySettings settings) {
             const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 $input = SELECT * FROM `{source}`.`{source_topic}` WITH (
                     STREAMING = "TRUE",
                     FORMAT = "json_each_row",
@@ -441,13 +447,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
     }
 
-    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetry, TStreamingTestFixture) {
+    Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphOnRetry, ModernChannels, TStreamingTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph_on_retry";
+        const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopicOnRetry";
+        const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -457,6 +464,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateS3Source(writeBucket, s3SinkName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+            PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
             PRAGMA s3.AtomicUploadCommit = "true";
 
             INSERT INTO `{s3_sink}`.`folder/` WITH (FORMAT = "json_each_row")
@@ -504,7 +512,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 $input = SELECT key, value FROM `{source}`.`{input_topic}` WITH (
                     STREAMING = "TRUE",
@@ -560,7 +568,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -628,7 +636,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -656,7 +664,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         writeSession->Lock();
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
-        const std::string value(1_KB, 'x');
+        const TString value(1_KB, 'x');
         TInstant time = TInstant::Now();
         for (ui64 i = 0; i < 100000; ++i, time += TDuration::Hours(2)) {
             readSession->AddDataReceivedEvent(i, fmt::format(R"({{"time": "{time}", "event": "{event}"}})", "time"_a = time.ToString(), "event"_a = value));
@@ -1024,16 +1032,54 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
     }
 
+    Y_UNIT_TEST_F(MultipleWriteIntoTopicsDisabled, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+
+        constexpr char inputTopic[] = "multipleWriteIntoTopicsDisabledInputTopicName";
+        constexpr char outputTopic[] = "multipleWriteIntoTopicsDisabledOutputTopicName";
+        CreateTopic(inputTopic, std::nullopt, /* local */ true);
+        CreateTopic(outputTopic, std::nullopt, /* local */ true);
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic);
+
+        constexpr char pqSource[] = "pqSourceName";
+        CreatePqSource(pqSource);
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{output_topic}` SELECT * FROM `{input_topic}` WITH (STREAMING = "TRUE");
+                INSERT INTO `{output_topic}` SELECT * FROM `{input_topic}` WITH (STREAMING = "TRUE");
+            )",
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::GENERIC_ERROR, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: db.[/Root/" << outputTopic);
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}` WITH (STREAMING = "TRUE");
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}` WITH (STREAMING = "TRUE");
+            )",
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::GENERIC_ERROR, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: /Root/" << pqSource << ".[" << outputTopic);
+    }
+
     Y_UNIT_TEST_F(ScalarFederativeWriting, TStreamingTestFixture) {
         constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
         constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
-        constexpr char pqSource[] = "pqSourceName";
+        constexpr char pqSource1[] = "pqSourceName1";
+        constexpr char pqSource2[] = "pqSourceName2";
         CreateTopic(firstOutputTopic);
         CreateTopic(secondOutputTopic);
-        CreatePqSource(pqSource);
+        CreatePqSource(pqSource1);
+        CreatePqSource(pqSource2);
 
-        constexpr char solomonSink[] = "solomonSinkName";
-        CreateSolomonSource(solomonSink);
+        constexpr char solomonSink1[] = "solomonSinkName1";
+        constexpr char solomonSink2[] = "solomonSinkName2";
+        CreateSolomonSource(solomonSink1);
+        CreateSolomonSource(solomonSink2);
 
         const TSolomonLocation soLocation = {
             .ProjectId = "cloudId1",
@@ -1043,28 +1089,30 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         };
         CleanupSolomon(soLocation);
         ExecQuery(fmt::format(R"(
-            INSERT INTO `{pq_source}`.`{output_topic1}` SELECT "TestData1";
-            INSERT INTO `{pq_source}`.`{output_topic2}` SELECT "TestData2" AS Data;
-            INSERT INTO `{pq_source}`.`{output_topic2}`(Data) VALUES ("TestData2");
+            INSERT INTO `{pq_source1}`.`{output_topic1}` SELECT "TestData1";
+            INSERT INTO `{pq_source1}`.`{output_topic2}` SELECT "TestData2" AS Data;
+            INSERT INTO `{pq_source2}`.`{output_topic2}`(Data) VALUES ("TestData2");
 
-            INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+            INSERT INTO `{solomon_sink1}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
             SELECT
                 13333 AS value,
                 "test-insert" AS sensor,
                 Timestamp("2025-03-12T14:40:39Z") AS ts;
 
-            INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+            INSERT INTO `{solomon_sink2}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
                 (value, sensor, ts)
             VALUES
                 (23333, "test-insert-2", Timestamp("2025-03-12T14:40:39Z"));)",
-            "pq_source"_a = pqSource,
+            "pq_source1"_a = pqSource1,
+            "pq_source2"_a = pqSource2,
             "output_topic1"_a = firstOutputTopic,
             "output_topic2"_a = secondOutputTopic,
-            "solomon_sink"_a = solomonSink,
+            "solomon_sink1"_a = solomonSink1,
+            "solomon_sink2"_a = solomonSink2,
             "solomon_project"_a = soLocation.ProjectId,
             "solomon_folder"_a = soLocation.FolderId,
             "solomon_service"_a = soLocation.Service
-        ), EStatus::SUCCESS, "", AstChecker(2, 5));
+        ), EStatus::SUCCESS, "", AstChecker(1, 5));
 
         ReadTopicMessage(firstOutputTopic, "TestData1");
         ReadTopicMessages(secondOutputTopic, {"TestData2", "TestData2"});
@@ -1148,9 +1196,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         auto results = ExecQuery(fmt::format(R"(
             $input = SELECT
-                    CAST(SystemMetadata("partition_id") as String) as part_id,
-                    CAST(SystemMetadata("offset") as String) as offset,
-                    SystemMetadata("cluster") as cluster,
+                    CAST(__ydb_partition_id as String) as part_id,
+                    CAST(__ydb_offset as String) as offset,
+                    __ydb_cluster as cluster,
                     value as value
                 FROM {topic} WITH (
                     FORMAT = "json_each_row",
@@ -1165,6 +1213,69 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "0-0--value1");
         });
+    }
+
+    Y_UNIT_TEST_F(ReadSystemColumnsWithoutRename, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        constexpr char topicName[] = "inReadSystemColumnsWithoutRename";
+        CreateTopic(topicName, std::nullopt, true);
+
+        WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
+
+        auto results = ExecQuery(fmt::format(R"(
+            SELECT __ydb_partition_id, __ydb_offset, value
+                FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key Uint64 NOT NULL,
+                        value String NOT NULL
+                    )
+            );)",
+            "topic"_a = topicName
+        ));
+
+        auto resultSet = results[0];
+        auto columns = resultSet.GetColumnsMeta();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "__ydb_partition_id");
+        UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "__ydb_offset");
+        UNIT_ASSERT_VALUES_EQUAL(columns[2].Name, "value");
+
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("__ydb_partition_id").GetUint64(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("__ydb_offset").GetUint64(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetString(), "value1");
+    }
+
+    // TODO: Implement SELECT * filtering for table mode topics to exclude __ydb_ system columns.
+    // The PQ provider (streaming mode) already filters them in GetReadTopicSchema,
+    // but the KQP table mode path adds __ydb_ columns through a different mechanism
+    // that doesn't yet support filtering them from SELECT *.
+
+    Y_UNIT_TEST_F(WriteToSystemColumnsIsProhibited, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        constexpr char topicName[] = "inWriteToSystemColumnsIsProhibited";
+        CreateTopic(topicName, std::nullopt, true);
+
+        // Attempt to insert into a topic referencing a system column should fail
+        ExecQuery(fmt::format(R"(
+            INSERT INTO {topic}
+                SELECT __ydb_offset FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key Uint64 NOT NULL,
+                        value String NOT NULL
+                    )
+                );)",
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR);
     }
 
     Y_UNIT_TEST_F(TableModeWithDisabledPredicatePushdown, TStreamingTestFixture) {
@@ -1185,12 +1296,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         ExecQuery(fmt::format(R"(
             SELECT 
-                SystemMetadata('partition_id') as partition_id,
-                SystemMetadata("offset") as offset,
+                __ydb_partition_id as partition_id,
+                __ydb_offset as offset,
                 key as data
             FROM `{topic}`
             WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
-            WHERE SystemMetadata('partition_id') = 1)",
+            WHERE __ydb_partition_id = 1)",
             "topic"_a = topic
         ),
         EStatus::PRECONDITION_FAILED, "Cannot parse input");
@@ -1217,8 +1328,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
                 SELECT 
-                    SystemMetadata('partition_id') as partition_id,
-                    SystemMetadata("offset") as offset,
+                    __ydb_partition_id as partition_id,
+                    __ydb_offset as offset,
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
@@ -1230,24 +1341,24 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("SystemMetadata('partition_id') > 42", 0, [&](TResultSetParser&) {});
-        test("SystemMetadata('partition_id') IS NOT DISTINCT FROM 2", 1, [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id > 42", 0, [&](TResultSetParser&) {});
+        test("__ydb_partition_id IS NOT DISTINCT FROM 2", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
         });
 
-        test("SystemMetadata('partition_id') = 0 \
-           OR SystemMetadata('partition_id') >= 2", 3, [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 0 \
+           OR __ydb_partition_id >= 2", 3, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0"
             || resultSet.ColumnParser(2).GetString() == "data2"
             || resultSet.ColumnParser(2).GetString() == "data3");
         });
 
-        test("(SystemMetadata('partition_id') = 0 AND SystemMetadata('offset') >=0) \
-           OR (SystemMetadata('partition_id') = 2 AND SystemMetadata('offset') >=1)", 1, [&](TResultSetParser& resultSet) {
+        test("(__ydb_partition_id = 0 AND __ydb_offset >=0) \
+           OR (__ydb_partition_id = 2 AND __ydb_offset >=1)", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
         });
 
-        test("SystemMetadata('partition_id') = 0 and key = 'data0'", 1, [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 0 and key = 'data0'", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 0);
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(2).GetString(), "data0");
         });
@@ -1274,8 +1385,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
                 SELECT 
-                    SystemMetadata('partition_id') as partition_id,
-                    SystemMetadata("offset") as offset,
+                    __ydb_partition_id as partition_id,
+                    __ydb_offset as offset,
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
@@ -1287,101 +1398,35 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("SystemMetadata('offset') < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('offset') < -42 AND SystemMetadata('offset') > 42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('offset') <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('offset') >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_offset < -42 AND __ydb_offset > 42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_offset <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_offset >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_offset = 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
-        test("SystemMetadata('offset') IS NOT DISTINCT FROM 1", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset IS NOT DISTINCT FROM 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
-        test("SystemMetadata('offset') >= 1 AND SystemMetadata('offset') < 3", 2,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset >= 1 AND __ydb_offset < 3", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
         // bug
-        // test("NOT (SystemMetadata('offset') < 1 AND NOT SystemMetadata('offset') < 3)", 2,  [&](TResultSetParser& resultSet) {
+        // test("NOT (__ydb_offset < 1 AND NOT __ydb_offset < 3)", 2,  [&](TResultSetParser& resultSet) {
         //         UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
         //     });
-        test("1 <= SystemMetadata('offset') AND 3 > SystemMetadata('offset')", 2,  [&](TResultSetParser& resultSet) {
+        test("1 <= __ydb_offset AND 3 > __ydb_offset", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
-        test("SystemMetadata('offset') IN (1, 2)", 2,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset IN (1, 2)", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
-        test("SystemMetadata('offset') BETWEEN 1 AND 2", 2,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset BETWEEN 1 AND 2", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
-        test("SystemMetadata('offset') == CAST(SUBSTRING('1234567891', 9, 1) AS Uint64)", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset == CAST(SUBSTRING('1234567891', 9, 1) AS Uint64)", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
-    }
-
-    Y_UNIT_TEST_F(TableModeWithWriteTimePredicate, TStreamingTestFixture) {
-        InternalInitFederatedQuerySetupFactory = true;
-        auto& config = SetupAppConfig();
-        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
-        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
-        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
-        constexpr char topic[] = "tableMode";
-
-        ui32 partitionCount = 1;
-        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
-
-        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
-        WriteTopicMessage(topic, "{\"key\": \"data1\"}", 0, /* local */ true);
-        WriteTopicMessage(topic, "{\"key\": \"data2\"}", 0, /* local */ true);
-        Sleep(TDuration::Seconds(5));
-        WriteTopicMessage(topic, "data3", 0, /* local */ true);                  // wrong schema
-
-        auto received = ReadTopicMessages(topic, {"1", "2", "3", "4"}, TInstant{}, false, true, false);
-        UNIT_ASSERT_VALUES_EQUAL(received.size(), 4);
-
-        auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
-            TString text = fmt::format(R"(
-                SELECT 
-                    SystemMetadata('partition_id') as partition_id,
-                    SystemMetadata("write_time") as offset,
-                    key as data
-                FROM `{topic}`
-                WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
-                WHERE {filter})",
-                "topic"_a = topic,
-                "filter"_a = filter
-            );
-            auto result = ExecQuery(text);
-            CheckScriptResult(result[0], 3, rowCount, validator);
-        };
-
-        test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('write_time') < Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\") AND SystemMetadata('write_time') > Timestamp(\"2021-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('write_time') = Timestamp(\"" + received[1].second.ToString() + "\")", 1,  [&](TResultSetParser& resultSet) {
-            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
-        });
-        test("SystemMetadata('write_time') >= Timestamp(\"" + received[1].second.ToString() + "\") \
-            AND SystemMetadata('write_time') <= Timestamp(\"" + received[2].second.ToString() + "\")", 2,  [&](TResultSetParser& resultSet) {
-            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
-        });
-
-        // the implementation does not support such a test
-        // auto future = received[3].second + TDuration::Seconds(100);
-        // test("SystemMetadata('write_time') > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
-
-        auto test_raw = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
-            TString text = fmt::format(R"(
-                SELECT SystemMetadata("write_time") as offset, Data FROM `{topic}` WHERE {filter})",
-                "topic"_a = topic,
-                "filter"_a = filter
-            );
-            auto result = ExecQuery(text);
-            CheckScriptResult(result[0], 2, rowCount, validator);
-        };
-
-        test_raw("SystemMetadata('write_time') > CurrentUtcTimestamp(1) - Interval('P1D') AND Data LIKE '%data3%'", 1, [&](TResultSetParser& resultSet) {
-            UNIT_ASSERT(resultSet.ColumnParser(1).GetString() == "data3");
-        });
     }
 
     Y_UNIT_TEST_F(TableModeWithMixedPredicate, TStreamingTestFixture) {
@@ -1412,8 +1457,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
                 SELECT 
-                    SystemMetadata('partition_id') as partition_id,
-                    SystemMetadata("offset") as offset,
+                    __ydb_partition_id as partition_id,
+                    __ydb_offset as offset,
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
@@ -1425,24 +1470,24 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("SystemMetadata('partition_id') = 0 AND SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 0 AND __ydb_offset = 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
             });
-        test("SystemMetadata('partition_id') = 1 AND SystemMetadata('offset') >= 2", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 1 AND __ydb_offset >= 2", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
-        test("SystemMetadata('partition_id') = 2 AND SystemMetadata('offset') < 1", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 2 AND __ydb_offset < 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
             });
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
-        InternalInitFederatedQuerySetupFactory = true;
         ++DynamicNodeCount;
         auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
         constexpr char cloudId[] =  "testcloud4";
+        constexpr char cloudIdAlt[] =  "testcloud5";
 
         constexpr char sourceName[] = "sourceName";
         constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
@@ -1451,14 +1496,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // Prepare "mock cloud" database
         auto databasePath = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
         auto location = GetKikimrRunner()->GetEndpoint();
+        NYdb::TDriver driver(
+            NYdb::TDriverConfig()
+                .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
+                .SetEndpoint(location)
+                .SetDatabase(databasePath)
+        );
+        NYdb::NTopic::TTopicClient topicClient(driver);
         {
-            NYdb::TDriver driver(
-                NYdb::TDriverConfig()
-                    .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
-                    .SetEndpoint(location)
-                    .SetDatabase(databasePath)
-            );
-            NYdb::NTopic::TTopicClient topicClient(driver);
             WaitFor(TEST_OPERATION_TIMEOUT, "CreateTopic", [&](TString& error) {
                 auto result = topicClient.CreateTopic(topicName).GetValueSync();
                 if (result.IsSuccess()) {
@@ -1468,7 +1513,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 UNIT_ASSERT_STRING_CONTAINS(error, "Database nodes resolve failed with no certain result");
                 return false;
             });
-            driver.Stop(true);
         }
 
         constexpr char missingSecretPath[] = "eds_missing_iam_token";
@@ -1555,7 +1599,209 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudId);
         }
 
-        // Cannot verify successful use without some kind of "mock IAM"
+        // Confirm write to topic via eds works
+        auto now = TInstant::Now();
+        constexpr char testData[] = "barfoo";
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("{test_data}");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName,
+                "test_data"_a = testData
+            ));
+
+        ReadTopicMessages(topicName, TVector<std::string> { testData }, topicClient, now, true);
+
+        driver.Stop(true);
+
+        ExecQuery(fmt::format(
+                "DROP EXTERNAL DATA SOURCE {pq_source}",
+                "pq_source"_a = sourceName
+        ));
+
+        // Check successful EDS creation with overridden RESOURCE_ID
+        ExecQuery(fmt::format(
+                R"(
+                CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "{pq_location}",
+                    DATABASE_NAME = "{pq_database_name}",
+                    AUTH_METHOD = "IAM",
+                    INITIAL_TOKEN_SECRET_PATH = "{secret}",
+                    RESOURCE_ID = "{cloud_id}",
+                    SERVICE_ACCOUNT_ID = "{service_account_id}"
+                );)",
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = badSecretPath,
+                "cloud_id"_a = cloudIdAlt,
+                "service_account_id"_a = serviceAccountId
+        ));
+
+        // Verify EDS description
+        {
+            const auto externalDataSourceDesc = Navigate(
+                    GetRuntime(),
+                    GetRuntime().AllocateEdgeActor(),
+                    TStringBuilder() << "/Root/" << sourceName,
+                    NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+            UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+            UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
+            auto& info = *externalDataSource.ExternalDataSourceInfo;
+            auto& description = info.Description;
+            UNIT_ASSERT_VALUES_EQUAL(description.GetSourceType(), "Ydb");
+            auto& auth = description.GetAuth();
+            UNIT_ASSERT(auth.HasIam());
+            auto& iam = auth.GetIam();
+            UNIT_ASSERT(iam.HasServiceAccountId());
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetServiceAccountId(), serviceAccountId);
+            UNIT_ASSERT(iam.HasResourceId());
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudIdAlt);
+        }
+
+        ExecQuery(fmt::format(
+                "DROP EXTERNAL DATA SOURCE {pq_source}",
+                "pq_source"_a = sourceName
+        ));
+
+        // Check successful EDS creation with sa returning invalid tokens
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = "bad-token"
+        ));
+
+        // Confirm write to topic via eds fails
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("data for bad token");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName
+            ),
+            EStatus::GENERIC_ERROR, "Error: Access denied");
+
+        ExecQuery(fmt::format(
+                "DROP EXTERNAL DATA SOURCE {pq_source}",
+                "pq_source"_a = sourceName
+        ));
+
+        constexpr char serviceAccountUnavailableToken[] = "unavailable-token";
+        // Check with "unavailable-token" SA
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountUnavailableToken
+        ));
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("data for unavailable-token");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName
+            ),
+            EStatus::GENERIC_ERROR,
+            TStringBuilder() << "Too busy to respond forever");
+
+        // Check solomon cloud auth
+        constexpr char solomonSourceName[] = "solokeitsu";
+
+        const TSolomonLocation soLocation = {
+            .ProjectId = "cloudId1",
+            .FolderId = "folderId1",
+            .Service = "custom",
+            .IsCloud = true,
+        };
+
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
+                    SOURCE_TYPE = "Monium.Metrics",
+                    LOCATION = "localhost:{solomon_port}",
+                    AUTH_METHOD = "IAM",
+                    INITIAL_TOKEN_SECRET_PATH = "{secret}",
+                    RESOURCE_ID = "{cloud_id}",
+                    SERVICE_ACCOUNT_ID = "{service_account_id}",
+                    PROJECT = "{project}",
+                    CLUSTER = "{cluster}",
+                    USE_TLS = "false"
+                );
+            )sql",
+            "secret"_a = secretPath,
+            "cloud_id"_a = cloudId,
+            "project"_a = soLocation.ProjectId,
+            "cluster"_a = soLocation.FolderId,
+            "service_account_id"_a = serviceAccountId,
+            "solomon_source"_a = solomonSourceName,
+            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
+        ));
+
+        CleanupSolomon(soLocation);
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{solomon_sink}`.`{solomon_service}`
+            SELECT
+                13333 AS value,
+                "test-insert" AS sensor,
+                Timestamp("2025-03-12T14:40:39Z") AS ts;
+            )",
+            "solomon_sink"_a = solomonSourceName,
+            "solomon_service"_a = soLocation.Service
+            ));
+
+        std::string expectedMetrics = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert"
+      ]
+    ],
+    "ts": "2025-03-12T14:40:39.000000Z",
+    "value": 13333
+  }
+])";
+        auto results = GetSolomonMetrics(soLocation);
+        UNIT_ASSERT_VALUES_EQUAL(results, expectedMetrics);
+
+        constexpr char pqBadSourceName[] = "sourceNameCloudBad";
+        constexpr char serviceAccountBadId[] = "bad-sa";
+        // Check with "bad-sa" SA
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = pqBadSourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountBadId
+            ),
+            EStatus::UNAUTHORIZED,
+            TStringBuilder() << "Error: gRpcStatusCode: " << (int)grpc::StatusCode::PERMISSION_DENIED << ", ");
+
+        constexpr char serviceAccountUnavailable[] = "unavailable";
+        // Check with "unavailable" SA
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = pqBadSourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountUnavailable
+            ),
+            EStatus::UNAVAILABLE,
+            TStringBuilder() << "Error: gRpcStatusCode: " << (int)grpc::StatusCode::UNAVAILABLE << ", ");
+
         // Check with disabled feature-flag
         {
             auto& runtime = GetRuntime();
@@ -1576,7 +1822,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
 
         // b) Attempt to create new EDS fails
-        constexpr char pqBadSourceName[] = "sourceNameCloudBad";
         ExecQuery(fmt::format(
                 createExternalDataSourceTemplate,
                 "pq_source"_a = pqBadSourceName,
@@ -2174,6 +2419,173 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST_F(ForbidYqlSysColumnsRejectsSystemMetadataInStreamingMode, TStreamingTestFixture) {
+        auto& config = SetupAppConfig();
+        config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
+
+        constexpr char sourceName[] = "forbidSysSourceStreaming";
+        constexpr char topicName[] = "forbidSysTopicStreaming";
+        CreateTopic(topicName);
+        CreatePqSource(sourceName);
+
+        // SystemMetadata callable should be rejected
+        ExecQuery(fmt::format(R"(
+            SELECT SystemMetadata('write_time') as wt FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL
+                )
+            )
+            LIMIT 1;
+        )",
+            "source"_a = sourceName,
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR,
+        "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"
+        );
+    }
+
+    Y_UNIT_TEST_F(ForbidYqlSysColumnsRejectsSystemMetadataInTableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
+
+        constexpr char topicName[] = "forbidSysTableModeTopic";
+        CreateTopic(topicName, std::nullopt, true);
+
+        // SystemMetadata callable should be rejected in table mode too
+        ExecQuery(fmt::format(R"(
+            SELECT SystemMetadata('write_time') as wt FROM {topic} WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL
+                )
+            );
+        )",
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR,
+        "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"
+        );
+    }
+
+    Y_UNIT_TEST_F(ForbidYqlSysColumnsAllowsYdbColumnsInTableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
+
+        constexpr char topicName[] = "forbidSysAllowYdbTopic";
+        CreateTopic(topicName, std::nullopt, true);
+
+        WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
+
+        // __ydb_-prefixed columns should still work
+        auto results = ExecQuery(fmt::format(R"(
+            SELECT __ydb_partition_id, __ydb_offset, value FROM {topic} WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    key Uint64 NOT NULL,
+                    value String NOT NULL
+                )
+            );)",
+            "topic"_a = topicName
+        ));
+
+        CheckScriptResult(results[0], 3, 1, [](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("__ydb_partition_id").GetUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("__ydb_offset").GetUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("value").GetString(), "value1");
+        });
+    }
+
+    // In streaming mode through KQP, _yql_sys_* columns are not supported —
+    // only __ydb_* columns work. The ForbidYqlSysColumns flag is irrelevant here.
+    Y_UNIT_TEST_F(YqlSysColumnsAccessInStreamingMode, TStreamingTestFixture) {
+        constexpr char sourceName[] = "yqlSysColsStreamSource";
+        constexpr char topicName[] = "yqlSysColsStreamTopic";
+        CreateTopic(topicName);
+        CreatePqSource(sourceName);
+
+        for (const char* column : {"_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time"}) {
+            auto query = fmt::format(R"(
+                SELECT `{column}` FROM `{source}`.`{topic}` WITH (
+                    STREAMING = "TRUE",
+                    FORMAT = "json_each_row",
+                    SCHEMA = (key String NOT NULL)
+                ) LIMIT 1;
+            )", "column"_a = column, "source"_a = sourceName, "topic"_a = topicName);
+
+            ExecQuery(query, EStatus::GENERIC_ERROR);
+        }
+    }
+
+    // In table mode (local topics via KQP), _yql_sys_* columns are never supported —
+    // only __ydb_* columns work. The ForbidYqlSysColumns flag is irrelevant here.
+    Y_UNIT_TEST_F(YqlSysColumnsAccessInTableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+
+        constexpr char topicName[] = "yqlSysColsTableTopic";
+        CreateTopic(topicName, std::nullopt, true);
+
+        for (const char* column : {"_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time"}) {
+            auto query = fmt::format(R"(
+                SELECT `{column}` FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA = (key String NOT NULL)
+                );
+            )", "column"_a = column, "topic"_a = topicName);
+
+            ExecQuery(query, EStatus::GENERIC_ERROR);
+        }
+    }
+
+    // In table mode, _yql_sys_* columns in predicates are never supported —
+    // only __ydb_* columns work for filtering.
+    Y_UNIT_TEST_F(YqlSysColumnsAccessInFilter, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
+
+        constexpr char topicName[] = "yqlSysColsFilterTopic";
+        CreateTopic(topicName, std::nullopt, true);
+
+        for (const auto& [column, predicate] : std::vector<std::pair<const char*, const char*>>{
+            {"_yql_sys_partition_id", "_yql_sys_partition_id = 0"},
+            {"_yql_sys_offset", "_yql_sys_offset >= 0"}
+        }) {
+            auto query = fmt::format(R"(
+                SELECT key FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA = (key String NOT NULL)
+                )
+                WHERE {predicate};
+            )", "topic"_a = topicName, "predicate"_a = predicate);
+
+            ExecQuery(query, EStatus::GENERIC_ERROR);
+        }
+    }
+
+    Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
+        const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(outputTopic);
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT String::JoinFromList(ListReplicate("X", 600000), "-");)",
+            "pq_source"_a = pqSourceName,
+            "output_topic"_a = outputTopic
+        ), EStatus::EXTERNAL_ERROR, "Max message size for YDS is 1048576 bytes but received message with size of");
     }
 }
 

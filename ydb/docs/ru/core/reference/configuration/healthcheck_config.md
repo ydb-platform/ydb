@@ -1,11 +1,11 @@
-# healthcheck_config
+# health_check_config
 
-Секция `healthcheck_config` настраивает пороговые значения и таймауты, используемые [сервисом Health Check](../ydb-sdk/health-check-api.md) {{ ydb-short-name }}. Эти параметры помогают настраивать обнаружение возможных [проблем](../ydb-sdk/health-check-api.md#issues), таких как чрезмерные перезапуски или расхождение по времени между динамическими узлами.
+Секция `health_check_config` настраивает пороговые значения и таймауты, используемые [сервисом Health Check](../ydb-sdk/health-check-api.md) {{ ydb-short-name }}. Эти параметры помогают настраивать обнаружение возможных [проблем](../ydb-sdk/health-check-api.md#issues), таких как чрезмерные перезапуски или расхождение по времени между динамическими узлами.
 
 ## Синтаксис
 
 ```yaml
-healthcheck_config:
+health_check_config:
   thresholds:
     node_restarts_yellow: 10
     node_restarts_orange: 30

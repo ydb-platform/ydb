@@ -7,6 +7,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
+#include <ydb/library/plan2svg/plan2svg.h>
 
 #include <iomanip>
 #include <regex>
@@ -54,6 +55,7 @@ namespace {
         { EDataFormat::Csv, "CSV format" },
         { EDataFormat::Tsv, "TSV format" },
         { EDataFormat::Parquet, "Parquet format" },
+        { EDataFormat::Svg, "SVG format" },
     };
 
     THashMap<EMessagingFormat, TString> MessagingFormatDescriptions = {
@@ -83,6 +85,35 @@ namespace {
             choices.emplace_back(ToString(value), std::move(desc));
         }
         return choices;
+    }
+
+    bool IsConnectionPlanNode(const NJson::TJsonValue& plan) {
+        const auto& node = plan.GetMapSafe();
+        return node.contains("PlanNodeType")
+            && node.at("PlanNodeType").GetStringSafe() == "Connection";
+    }
+
+    TString FormatConnectionPlanNode(const NJson::TJsonValue& plan) {
+        const auto& node = plan.GetMapSafe();
+        const TString displayName = node.at("Node Type").GetStringSafe() + " connection";
+
+        TVector<TString> info;
+        auto appendField = [&](TStringBuf field) {
+            if (auto it = node.find(field); it != node.end()) {
+                info.emplace_back(TStringBuilder() << field << ": " << it->second.GetStringRobust());
+            }
+        };
+
+        appendField("KeyColumns");
+        appendField("HashFunc");
+        appendField("SortColumns");
+        appendField("Parallel");
+        appendField("Blocks");
+
+        if (info.empty()) {
+            return displayName;
+        }
+        return TStringBuilder() << displayName << " (" << JoinStrings(info, ", ") << ")";
     }
 } // anonymous namespace
 
@@ -427,6 +458,9 @@ void TQueryPlanPrinter::Print(const TString& plan) {
         case EDataFormat::JsonBase64:
             PrintJson(plan);
             break;
+        case EDataFormat::Svg:
+            PrintSvg(plan);
+            break;
         default:
             throw TMisuseException() << "This command doesn't support " << Format << " output format";
     }
@@ -434,6 +468,12 @@ void TQueryPlanPrinter::Print(const TString& plan) {
 
 void TQueryPlanPrinter::PrintJson(const TString& plan) {
     Output << NJson::PrettifyJson(plan, false) << Endl;
+}
+
+void TQueryPlanPrinter::PrintSvg(const TString& plan) {
+    NPlan2Svg::TPlanVisualizer planViz;
+    planViz.LoadPlans(plan);
+    Output << planViz.PrintSvg() << Endl;
 }
 
 void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) {
@@ -490,8 +530,8 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
                      << " (" << JoinStrings(info, ", ") << ")" << Endl;
             }
         }
-    } else if (node.contains("PlanNodeType") && node.at("PlanNodeType").GetString() == "Connection") {
-        Output << prefix << "<" << node.at("Node Type").GetString() << ">" << Endl;
+    } else if (IsConnectionPlanNode(plan)) {
+        Output << prefix << "<" << FormatConnectionPlanNode(plan) << ">" << Endl;
     } else {
         Output << prefix << node.at("Node Type").GetString() << Endl;
     }
@@ -687,7 +727,13 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         }
     } else {
         TStringBuilder operation;
-        operation << arrowOffset << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
+        operation << arrowOffset << colors.LightCyan();
+        if (IsConnectionPlanNode(plan)) {
+            operation << FormatConnectionPlanNode(plan);
+        } else {
+            operation << node.at("Node Type").GetString();
+        }
+        operation << colors.Default();
         newRow.WriteToLastColumn(std::move(operation));
     }
 

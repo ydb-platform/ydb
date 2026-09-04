@@ -1,6 +1,5 @@
 #include "control_plane_config.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
@@ -12,6 +11,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/library/db_pool/db_pool.h>
@@ -21,6 +21,8 @@
 #include <util/datetime/base.h>
 #include <util/digest/multi.h>
 #include <util/system/hostname.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_CONTROL_PLANE_CONFIG
 
 namespace NFq {
 
@@ -55,7 +57,8 @@ public:
     static constexpr char ActorName[] = "FQ_CONTROL_PLANE_CONFIG";
 
     void Bootstrap() {
-        CPC_LOG_D("STARTING: " << SelfId());
+        YDB_LOG_DEBUG("Starting",
+            {"selfId", SelfId()});
         Become(&TControlPlaneConfigActor::StateFunc);
         if (Config.GetUseDbMapping()) {
             YdbConnection = NewYdbConnection(Config.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
@@ -68,14 +71,16 @@ public:
             for (const auto& scopeToTenant : mapping.GetScopeToTenantName()) {
                 auto [_, isInserted] = TenantInfo->SubjectMapping[SUBJECT_TYPE_SCOPE].emplace(scopeToTenant.GetKey(), scopeToTenant.GetValue());
                 if (!isInserted) {
-                    CPC_LOG_E("Invalid configuation, the scope with the name " << scopeToTenant.GetKey() << " already exists");
+                    YDB_LOG_ERROR("Invalid configuration, the scope with the name already exists",
+                        {"scope", scopeToTenant.GetKey()});
                 }
                 TenantInfo->TenantMapping.emplace(scopeToTenant.GetValue(), scopeToTenant.GetValue());
             }
             for (const auto& cloudToTenant : mapping.GetCloudIdToTenantName()) {
                 auto [_, isInserted] = TenantInfo->SubjectMapping[SUBJECT_TYPE_CLOUD].emplace(cloudToTenant.GetKey(), cloudToTenant.GetValue());
                 if (!isInserted) {
-                    CPC_LOG_E("Invalid configuation, the cloud with the name " << cloudToTenant.GetKey() << " already exists");
+                    YDB_LOG_ERROR("Invalid configuration, the cloud with the name already exists",
+                        {"cloudId", cloudToTenant.GetKey()});
                 }
                 TenantInfo->TenantMapping.emplace(cloudToTenant.GetValue(), cloudToTenant.GetValue());
             }
@@ -104,15 +109,17 @@ private:
 
     void Handle(TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) {
         if (ev->Get()->Issues) {
-            CPC_LOG_E("TEvGetTaskResponse (Self Ping): " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("TEvGetTaskResponse",
+                {"issues", ev->Get()->Issues.ToOneLineString()});
         } else if (ev->Get()->Record.tasks().size()) {
-            CPC_LOG_E("TEvGetTaskResponse (Self Ping) returned : " << ev->Get()->Record.tasks().size() << " tasks, empty list expected");
+            YDB_LOG_ERROR("TEvGetTaskResponse (Self Ping) returned tasks, empty list expected",
+                {"tasksCount", ev->Get()->Record.tasks().size()});
         }
     }
 
     void Handle(TEvControlPlaneConfig::TEvGetTenantInfoRequest::TPtr& ev) {
         if (!TenantInfo) {
-            CPC_LOG_W("TEvGetTenantInfoRequest: IS NOT READY yet");
+            YDB_LOG_WARN("TEvGetTenantInfoRequest: IS NOT READY yet");
         }
         Send(ev->Sender, new TEvControlPlaneConfig::TEvGetTenantInfoResponse(TenantInfo), 0, ev->Cookie);
     }
@@ -187,9 +194,10 @@ private:
                 this->TenantInfo = executer.State;
 
                 if (refreshed) {
-                    CPC_LOG_D("LOADED TenantInfo: State CHANGED at " << this->TenantInfo->StateTime);
+                    YDB_LOG_DEBUG("LOADED TenantInfo: State CHANGED",
+                        {"stateTime", this->TenantInfo->StateTime});
                 } else {
-                    CPC_LOG_T("LOADED TenantInfo: State NOT changed");
+                    YDB_LOG_TRACE("LOADED TenantInfo: State NOT changed");
                 }
 
                 if (refreshed) {
@@ -222,7 +230,8 @@ private:
                         actorSystem->Send(selfId, new TEvents::TEvCallback([executable, future]() {
                             auto issues = GetIssuesFromYdbStatus(executable, future);
                             if (issues) {
-                                CPC_LOG_E("UpdateState in case of LoadTenantsAndMapping finished with error: " << issues->ToOneLineString());
+                                YDB_LOG_ERROR("UpdateState in case of LoadTenantsAndMapping finished with",
+                                    {"error", issues->ToOneLineString()});
                                 // Nothing to do. We will retry it in the next Wakeup
                             }
                         }));
@@ -237,7 +246,8 @@ private:
             actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, future]() {
                 auto issues = GetIssuesFromYdbStatus(executable, future);
                 if (issues) {
-                    CPC_LOG_E("LoadTenantsAndMapping finished with error: " << issues->ToOneLineString());
+                    YDB_LOG_ERROR("LoadTenantsAndMapping finished with",
+                        {"error", issues->ToOneLineString()});
                     LoadInProgress = false;
                 }
             }));
@@ -249,7 +259,9 @@ private:
             auto& tenant = p.first;
             auto state = p.second;
             if (oldInfo->TenantState.Value(tenant, state) != state) {
-                CPC_LOG_D("Tenant " << tenant << " state CHANGED to " << state);
+                YDB_LOG_DEBUG("Tenant state CHANGED",
+                    {"tenant", tenant},
+                    {"state", state});
                 switch (state) {
                 case TenantState::Idle:
                     ReassignPending(tenant);

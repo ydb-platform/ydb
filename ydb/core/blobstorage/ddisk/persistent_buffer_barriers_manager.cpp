@@ -3,6 +3,8 @@
 
 #include <ydb/core/util/stlog.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
+
 namespace NKikimr::NDDisk {
 
     // Returns a new sorted vector containing all unique elements from sorted a and sorted b.
@@ -43,6 +45,14 @@ namespace NKikimr::NDDisk {
         return result;
     }
 
+    // Uncompact stops at a zero raw LSN / zero LEB128 delta, so unused CompactLsns
+    // bytes have to be zeros rather than leftover / uninitialized padding.
+    static void ZeroCompactLsnsTail(TPersistentBufferFastErases& header, size_t used) {
+        if (used < TPersistentBufferFastErases::ErasesBufferSize) {
+            memset(header.CompactLsns + used, 0, TPersistentBufferFastErases::ErasesBufferSize - used);
+        }
+    }
+
     void TPersistentBufferBarriersManager::Initialize(ui64 uniqueId, ui32 nodeId, ui32 pdiskId, ui32 slotId) {
         PersistentBufferUniqueId = uniqueId;
         NodeId = nodeId;
@@ -50,10 +60,11 @@ namespace NKikimr::NDDisk {
         SlotId = slotId;
     }
 
-    TPersistentBufferBarrierRecord TPersistentBufferBarriersManager::GetBarrier(ui64 tabletId) const {
-        auto it = PersistentBufferBarriersLocation.find(tabletId);
+    TPersistentBufferBarrierRecord TPersistentBufferBarriersManager::GetBarrier(ui64 tabletId, ui8 directBlockGroupIndex) const {
+        const TTabletKey key{tabletId, directBlockGroupIndex};
+        auto it = PersistentBufferBarriersLocation.find(key);
         if (it == PersistentBufferBarriersLocation.end()) {
-            return {tabletId, 0, 0};
+            return {tabletId, 0, 0, directBlockGroupIndex};
         }
         const auto barrierIdx = it->second.BarrierIdx;
         const auto hpos = it->second.Position;
@@ -62,27 +73,30 @@ namespace NKikimr::NDDisk {
         return PersistentBufferBarriers[barrierIdx].Header.Barriers[hpos];
     }
 
-    bool TPersistentBufferBarriersManager::CanMoveBarrier(ui64 tabletId, ui32 barriersLimit) {
+    bool TPersistentBufferBarriersManager::CanMoveBarrier(ui64 tabletId, ui32 barriersLimit, ui8 directBlockGroupIndex) {
+        const TTabletKey key{tabletId, directBlockGroupIndex};
         return !PersistentBufferBarrierHoles.empty()
-            || PersistentBufferBarriersLocation.find(tabletId) != PersistentBufferBarriersLocation.end()
+            || PersistentBufferBarriersLocation.find(key) != PersistentBufferBarriersLocation.end()
             || FreeBarrierPosition < TPersistentBufferBarriers::MaxBarriersPerHeader
             || PersistentBufferBarriers.size() < barriersLimit;
     }
 
-    std::unordered_map<ui64, ui64> TPersistentBufferBarriersManager::GetBarriers() const {
-        std::unordered_map<ui64, ui64> res;
+    std::map<std::pair<ui64, ui8>, ui64> TPersistentBufferBarriersManager::GetBarriers() const {
+        std::map<std::pair<ui64, ui8>, ui64> res;
         for (auto& b : PersistentBufferBarriers) {
             for (auto& h : b.Header.Barriers) {
                 if (h.TabletId != 0) {
-                    res[h.TabletId] = Max(res[h.TabletId], h.Lsn);
+                    const std::pair<ui64, ui8> key{h.TabletId, h.DirectBlockGroupIndex};
+                    res[key] = Max(res[key], h.Lsn);
                 }
             }
         }
         return res;
     }
 
-    std::tuple<ui32, ui32, TEraseBarrier&> TPersistentBufferBarriersManager::MoveBarrier(ui64 tabletId, ui32 generation, ui64 lsn, const TPersistentBufferSectorInfo& newSector) {
-        auto it = PersistentBufferBarriersLocation.find(tabletId);
+    std::tuple<ui32, ui32, TEraseBarrier&> TPersistentBufferBarriersManager::MoveBarrier(ui64 tabletId, ui32 generation, ui64 lsn, const TPersistentBufferSectorInfo& newSector, ui8 directBlockGroupIndex) {
+        const TTabletKey key{tabletId, directBlockGroupIndex};
+        auto it = PersistentBufferBarriersLocation.find(key);
         ui32 barrierIdx = 0;
         ui32 pos = 0;
         if (it == PersistentBufferBarriersLocation.end()) {
@@ -90,7 +104,7 @@ namespace NKikimr::NDDisk {
                 barrierIdx = PersistentBufferBarrierHoles.back().BarrierIdx;
                 pos = PersistentBufferBarrierHoles.back().Position;
                 PersistentBufferBarrierHoles.pop_back();
-                PersistentBufferBarriersLocation[tabletId] = {barrierIdx, pos};
+                PersistentBufferBarriersLocation[key] = {barrierIdx, pos};
             } else {
                 if (FreeBarrierPosition >= TPersistentBufferBarriers::MaxBarriersPerHeader || PersistentBufferBarriers.empty()) {
                     FreeBarrierPosition = 0;
@@ -110,7 +124,7 @@ namespace NKikimr::NDDisk {
                 }
                 barrierIdx = PersistentBufferBarriers.size() - 1;
                 pos = FreeBarrierPosition;
-                PersistentBufferBarriersLocation[tabletId] = {barrierIdx, pos};
+                PersistentBufferBarriersLocation[key] = {barrierIdx, pos};
                 FreeBarrierPosition++;
             }
         } else {
@@ -127,12 +141,17 @@ namespace NKikimr::NDDisk {
 
         if (barrier.Header.Barriers[pos].Generation > generation
             || (barrier.Header.Barriers[pos].Generation == generation && barrier.Header.Barriers[pos].Lsn >= lsn)) {
-            STLOG(PRI_ERROR, BS_DDISK, BSDD29, "TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous", (TabletId, tabletId), (Lsn, lsn), (PrevLsn, barrier.Header.Barriers[pos].Lsn));
+            YDB_LOG_ERROR("TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous",
+                {"marker", "BSDD29"},
+                {"tabletId", tabletId},
+                {"directBlockGroupIndex", directBlockGroupIndex},
+                {"lsn", lsn},
+                {"prevLsn", barrier.Header.Barriers[pos].Lsn});
         }
-        barrier.Header.Barriers[pos] = {tabletId, generation, lsn};
+        barrier.Header.Barriers[pos] = {tabletId, generation, lsn, directBlockGroupIndex};
         barrier.Header.Header.RecordLsn++;
 
-        auto erasesIt = Erases.find(tabletId);
+        auto erasesIt = Erases.find(key);
         if (erasesIt != Erases.end()) {
             if (erasesIt->second.Generation < generation) {
                 erasesIt->second.Lsns.clear();
@@ -152,34 +171,19 @@ namespace NKikimr::NDDisk {
             allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&barrierSector, 1));
             for (FreeBarrierPosition = 0; FreeBarrierPosition < TPersistentBufferBarriers::MaxBarriersPerHeader && b.Header.Barriers[FreeBarrierPosition].TabletId > 0; FreeBarrierPosition++) {
                 auto& barrier = b.Header.Barriers[FreeBarrierPosition];
-                auto it = persistentBuffers.lower_bound({barrier.TabletId, 0});
-                if (it == persistentBuffers.end() || it->first.TabletId != barrier.TabletId) {
-                    STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::RestoreBarriers tablet records not found, erase barrier marked as free", (TabletId, barrier.TabletId), (Lsn, barrier.Lsn));
-                    PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
-                } else {
-                    auto locationIt = PersistentBufferBarriersLocation.find(barrier.TabletId);
-                    if (locationIt == PersistentBufferBarriersLocation.end()) {
-                        PersistentBufferBarriersLocation[barrier.TabletId] = {pos, FreeBarrierPosition};
-                    } else {
-                        auto oldBarrierLocation = PersistentBufferBarriersLocation[barrier.TabletId];
-                        auto oldBarrier = PersistentBufferBarriers[oldBarrierLocation.BarrierIdx].Header.Barriers[oldBarrierLocation.Position];
-                        STLOG(PRI_DEBUG, BS_DDISK, BSDD38, "TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
-                            (TabletId, barrier.TabletId),
-                            (barrier.Generation, barrier.Generation),
-                            (oldBarrier.Generation, oldBarrier.Generation),
-                            (barrier.Lsn, barrier.Lsn),
-                            (oldBarrier.Lsn, oldBarrier.Lsn),
-                        );
-                        if (barrier.Generation > oldBarrier.Generation
-                            || (barrier.Generation == oldBarrier.Generation && barrier.Lsn > oldBarrier.Lsn)) {
-                            PersistentBufferBarrierHoles.push_back(locationIt->second);
-                            locationIt->second = {pos, FreeBarrierPosition};
-                        } else {
-                            PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
-                        }
+                const TTabletKey key{barrier.TabletId, barrier.DirectBlockGroupIndex};
+                // Persistent buffers for this (tabletId, directBlockGroupIndex) can be scattered
+                // across the map (ordering is TabletId, then Generation, then
+                // DirectBlockGroupIndex), so we scan every entry with a matching TabletId and
+                // filter by DirectBlockGroupIndex rather than relying on a contiguous range.
+                bool found = false;
+                for (auto it = persistentBuffers.lower_bound({barrier.TabletId, 0});
+                        it != persistentBuffers.end() && it->first.TabletId == barrier.TabletId; ) {
+                    if (it->first.DirectBlockGroupIndex != barrier.DirectBlockGroupIndex) {
+                        ++it;
+                        continue;
                     }
-                }
-                while (it != persistentBuffers.end() && it->first.TabletId == barrier.TabletId) {
+                    found = true;
                     if (it->first.Generation < barrier.Generation) {
                         it = persistentBuffers.erase(it);
                         continue;
@@ -194,6 +198,37 @@ namespace NKikimr::NDDisk {
                         it = persistentBuffers.erase(it);
                     } else {
                         ++it;
+                    }
+                }
+                if (!found) {
+                    YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers tablet records not found, erase barrier marked as free",
+                        {"marker", "BSDD30"},
+                        {"tabletId", barrier.TabletId},
+                        {"directBlockGroupIndex", barrier.DirectBlockGroupIndex},
+                        {"lsn", barrier.Lsn});
+                    PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
+                } else {
+                    auto locationIt = PersistentBufferBarriersLocation.find(key);
+                    if (locationIt == PersistentBufferBarriersLocation.end()) {
+                        PersistentBufferBarriersLocation[key] = {pos, FreeBarrierPosition};
+                    } else {
+                        auto oldBarrierLocation = PersistentBufferBarriersLocation[key];
+                        auto oldBarrier = PersistentBufferBarriers[oldBarrierLocation.BarrierIdx].Header.Barriers[oldBarrierLocation.Position];
+                        YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
+                            {"marker", "BSDD38"},
+                            {"tabletId", barrier.TabletId},
+                            {"directBlockGroupIndex", barrier.DirectBlockGroupIndex},
+                            {"barrierGeneration", barrier.Generation},
+                            {"oldBarrierGeneration", oldBarrier.Generation},
+                            {"barrierLsn", barrier.Lsn},
+                            {"oldBarrier.Lsn", oldBarrier.Lsn});
+                        if (barrier.Generation > oldBarrier.Generation
+                            || (barrier.Generation == oldBarrier.Generation && barrier.Lsn > oldBarrier.Lsn)) {
+                            PersistentBufferBarrierHoles.push_back(locationIt->second);
+                            locationIt->second = {pos, FreeBarrierPosition};
+                        } else {
+                            PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
+                        }
                     }
                 }
             }
@@ -226,7 +261,9 @@ namespace NKikimr::NDDisk {
 
         if (cnt * sizeof(oldLsns[0]) <= TPersistentBufferFastErases::ErasesBufferSize) {
             oldLsns = MergeUnique(oldLsns, newLsns);
-            memcpy(header.CompactLsns, oldLsns.data(), oldLsns.size() * sizeof(oldLsns[0]));
+            const size_t used = oldLsns.size() * sizeof(oldLsns[0]);
+            memcpy(header.CompactLsns, oldLsns.data(), used);
+            ZeroCompactLsnsTail(header, used);
             return true;
         }
 
@@ -260,33 +297,36 @@ namespace NKikimr::NDDisk {
         }
         oldLsns = std::move(lsns);
         header.Header.Flags |= TPersistentBufferHeader::IS_ERASE_COMPACT;
+        ZeroCompactLsnsTail(header, resPos);
         return true;
     }
 
     std::vector<ui64> TPersistentBufferBarriersManager::Uncompact(const ui8* data, bool isCompact) {
         std::vector<ui64> res;
+        constexpr size_t lsnSize = sizeof(ui64);
         ui64 first = 0;
-        memcpy(&first, data, sizeof(res[0]));
+        memcpy(&first, data, lsnSize);
         if (first == 0) {
             return res;
         }
         res.push_back(first);
 
         if (!isCompact) {
-            size_t pos = sizeof(res[0]);
-            while (pos < TPersistentBufferFastErases::ErasesBufferSize) {
+            size_t pos = lsnSize;
+            // ErasesBufferSize is not a multiple of 8; never memcpy a ui64 past the buffer.
+            while (pos + lsnSize <= TPersistentBufferFastErases::ErasesBufferSize) {
                 ui64 v = 0;
-                memcpy(&v, data + pos, sizeof(res[0]));
+                memcpy(&v, data + pos, lsnSize);
                 if (v == 0) {
                     return res;
                 }
                 res.push_back(v);
-                pos += sizeof(res[0]);
+                pos += lsnSize;
             }
             return res;
         }
         ui64 prev = first;
-        size_t pos = sizeof(res[0]);
+        size_t pos = lsnSize;
         while (pos < TPersistentBufferFastErases::ErasesBufferSize) {
             ui64 delta = 0;
             int shift = 0;
@@ -309,11 +349,12 @@ namespace NKikimr::NDDisk {
     }
 
     std::optional<TFastErase> TPersistentBufferBarriersManager::Erase(ui64 tabletId, ui32 generation, std::vector<ui64>& lsns,
-        TPersistentBufferSpaceAllocator& allocator) {
+        TPersistentBufferSpaceAllocator& allocator, ui8 directBlockGroupIndex) {
         if (allocator.GetFreeSpace() < 2 || lsns.size() < 2) {
             return std::nullopt;
         }
-        auto& erase = Erases[tabletId];
+        const TTabletKey key{tabletId, directBlockGroupIndex};
+        auto& erase = Erases[key];
 
         if (erase.Generation < generation) {
             erase.Lsns.clear();
@@ -340,8 +381,10 @@ namespace NKikimr::NDDisk {
         header.Header.PDiskId = PDiskId;
         header.Header.SlotId = SlotId;
         header.TabletId = tabletId;
+        header.DirectBlockGroupIndex = directBlockGroupIndex;
         header.Header.RecordIdx = 0;
         header.Header.Version = 0;
+        header.Header.HeaderDataSize = sizeof(TPersistentBufferFastErases);
 
         return std::make_optional(TFastErase{oldChunkIdx, oldSectorIdx, erase.ChunkIdx, erase.SectorIdx, std::move(header)});
     }
@@ -352,9 +395,15 @@ namespace NKikimr::NDDisk {
         }
         TPersistentBufferFastErases* erasesHeader = (TPersistentBufferFastErases*)header;
         auto tabletId = erasesHeader->TabletId;
-        auto& erase = Erases[tabletId];
+        const TTabletKey key{tabletId, erasesHeader->DirectBlockGroupIndex};
+        auto& erase = Erases[key];
         if (erase.HeaderLsn > header->RecordLsn) {
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found ", (TabletId, tabletId), (erase.HeaderLsn, erase.HeaderLsn), (header->RecordLsn, header->RecordLsn));
+            YDB_LOG_DEBUG("TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found",
+                {"marker", "BSDD30"},
+                {"tabletId", tabletId},
+                {"directBlockGroupIndex", erasesHeader->DirectBlockGroupIndex},
+                {"headerLsn", erase.HeaderLsn},
+                {"recordLsn", header->RecordLsn});
             return false;
         }
         erase.ChunkIdx = chunkIdx;
@@ -362,19 +411,25 @@ namespace NKikimr::NDDisk {
         erase.HeaderLsn = header->RecordLsn;
         erase.Generation = erasesHeader->Generation;
         erase.Lsns = Uncompact(erasesHeader->CompactLsns, header->Flags & TPersistentBufferHeader::IS_ERASE_COMPACT);
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase", (TabletId, tabletId), (HeaderLsn, header->RecordLsn));
+        YDB_LOG_DEBUG("TPersistentBufferBarriersManager::AddErase",
+            {"marker", "BSDD30"},
+            {"tabletId", tabletId},
+            {"directBlockGroupIndex", erasesHeader->DirectBlockGroupIndex},
+            {"headerLsn", header->RecordLsn});
         return true;
     }
 
     void TPersistentBufferBarriersManager::RestoreErases(std::map<TPersistentBufferId, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
         for (auto it = Erases.begin(); it != Erases.end();) {
-            auto& [tid, erase] = *it;
+            auto& [key, erase] = *it;
+            const auto tid = key.TabletId;
+            const auto dbg = key.DirectBlockGroupIndex;
 
-            const auto barrier = GetBarrier(tid);
+            const auto barrier = GetBarrier(tid, dbg);
             auto itErase = std::upper_bound(erase.Lsns.begin(), erase.Lsns.end(), barrier.Lsn);
             erase.Lsns = std::vector<ui64>(itErase, erase.Lsns.end());
 
-            auto pbIt = persistentBuffers.find({tid, erase.Generation});
+            auto pbIt = persistentBuffers.find({tid, erase.Generation, dbg});
             if (pbIt == persistentBuffers.end()) {
                 it = Erases.erase(it);
                 continue;
@@ -385,7 +440,11 @@ namespace NKikimr::NDDisk {
 
             TPersistentBuffer& buffer = pbIt->second;
             for (ui64 lsn : erase.Lsns) {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::RestoreErases tablet erase record found", (TabletId, tid), (Lsn, lsn));
+                YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreErases tablet erase record found",
+                    {"marker", "BSDD30"},
+                    {"tabletId", tid},
+                    {"directBlockGroupIndex", dbg},
+                    {"lsn", lsn});
                 buffer.Records.erase(lsn);
             }
             if (buffer.Records.empty()) {
@@ -398,16 +457,17 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    ui32 TPersistentBufferBarriersManager::GetErasesCount(ui64 tabletId) {
-        const auto& it = Erases.find(tabletId);
+    ui32 TPersistentBufferBarriersManager::GetErasesCount(ui64 tabletId, ui8 directBlockGroupIndex) {
+        const TTabletKey key{tabletId, directBlockGroupIndex};
+        const auto& it = Erases.find(key);
         if (it == Erases.end()) {
             return 0;
         }
         return it->second.Lsns.size();
     }
 
-    bool TPersistentBufferBarriersManager::CanFastErase(ui64 tabletId, ui32 generation) {
-        const auto barrier = GetBarrier(tabletId);
+    bool TPersistentBufferBarriersManager::CanFastErase(ui64 tabletId, ui32 generation, ui8 directBlockGroupIndex) {
+        const auto barrier = GetBarrier(tabletId, directBlockGroupIndex);
         return barrier.Generation == generation;
     }
 

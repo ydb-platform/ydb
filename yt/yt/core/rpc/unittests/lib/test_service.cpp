@@ -27,8 +27,8 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
-static YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls);
+static YT_DEFINE_LEAKY_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
+static YT_DEFINE_LEAKY_GLOBAL(std::atomic<int>, ConcurrentCalls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,7 +43,9 @@ public:
 
     TFuture<TAuthenticationResult> AsyncAuthenticate(const TAuthenticationContext& /*context*/) override
     {
-        return MakeFuture(TAuthenticationResult());
+        return MakeFuture(TAuthenticationResult{
+            .User = "authenticated-user",
+        });
     }
 };
 
@@ -75,6 +77,9 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(PassCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(AllocationCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RegularAttachments));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(DirectPlacementAttachments)
+            .SetRequestAttachmentsDptEnabled(true)
+            .SetResponseAttachmentsDptEnabled(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(NullAndEmptyAttachments));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(Compression));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(DoNothing));
@@ -131,6 +136,9 @@ public:
         WriteAuthenticationIdentityToProto(response, context->GetAuthenticationIdentity());
         ToProto(response->mutable_mutation_id(), context->GetMutationId());
         response->set_retry(context->IsRetry());
+        if (const auto& header = context->GetRequestHeader(); header.has_start_time()) {
+            response->set_start_time(header.start_time());
+        }
         context->Reply();
     }
 
@@ -146,6 +154,21 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RegularAttachments)
     {
+        for (const auto& attachment : request->Attachments()) {
+            auto data = TBlob();
+            data.Append(attachment);
+            data.Append("_", 1);
+            response->Attachments().push_back(TSharedRef::FromBlob(std::move(data)));
+        }
+        context->Reply();
+    }
+
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, DirectPlacementAttachments)
+    {
+        // Over a non-DPT-capable transport (e.g. TCP) the attachments are delivered
+        // inline even though the method supports direct placement transfer, so no
+        // transfer is handed to the service.
+        EXPECT_FALSE(context->TryGetRequestAttachmentsTransfer());
         for (const auto& attachment : request->Attachments()) {
             auto data = TBlob();
             data.Append(attachment);
@@ -337,7 +360,7 @@ public:
     {
         context->SetRequestInfo();
 
-        auto data = TSharedRef::FromString("abacaba");
+        auto data = TSharedRef::FromString(std::string("abacaba"));
         WaitFor(context->GetResponseAttachmentsStream()->Write(data))
             .ThrowOnError();
 

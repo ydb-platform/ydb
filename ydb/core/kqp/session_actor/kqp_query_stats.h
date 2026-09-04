@@ -30,12 +30,12 @@ struct TKqpQueryStats {
 void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery* queryStats,
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits);
+    const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId);
 
 void CollectQueryStats(const TActorContext& ctx, const TKqpQueryStats* queryStats,
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits);
+    const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId);
 
 void SendVictimStats(const TActorContext& ctx, ui64 locksBrokenAsVictim,
     const TString& victimQueryText, const TString& database);

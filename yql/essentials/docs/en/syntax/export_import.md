@@ -4,6 +4,8 @@ A mechanism for putting part of the query into a separate attached file. To use 
 
 * [PRAGMA Library](pragma/file.md#library) &mdash; marks the attached file as available for import.
 
+* Explicitly attached files with paths starting with `yql_libs/` are available for import without the `PRAGMA Library`.
+
 ## EXPORT
 
 `EXPORT $my_symbol1, $my_symbol2, ...;` lists the names of named expressions in the library that are available for import.
@@ -59,4 +61,3 @@ FROM (
   SELECT 3 AS x
 )
 ```
-

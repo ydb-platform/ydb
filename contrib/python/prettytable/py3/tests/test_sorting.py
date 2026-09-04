@@ -34,9 +34,7 @@ class TestSorting:
 
         city_data.sortby = "City name"
         city_data.sort_key = key
-        assert (
-            city_data.get_string().strip()
-            == """
+        assert city_data.get_string().strip() == """
 +-----------+------+------------+-----------------+
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
@@ -49,7 +47,6 @@ class TestSorting:
 | Melbourne | 1566 |  3806092   |      646.9      |
 +-----------+------+------------+-----------------+
 """.strip()
-        )
 
     def test_sort_key_at_class_declaration(self) -> None:
         # Test sorting by length of city name
@@ -65,8 +62,7 @@ class TestSorting:
         assert table.sort_key == key
         for row in CITY_DATA:
             table.add_row(row)
-        assert (
-            """+-----------+------+------------+-----------------+
+        assert """+-----------+------+------------+-----------------+
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
 |   Perth   | 5386 |  1554769   |      869.4      |
@@ -76,11 +72,9 @@ class TestSorting:
 |  Adelaide | 1295 |  1158259   |      600.5      |
 |  Brisbane | 5905 |  1857594   |      1146.4     |
 | Melbourne | 1566 |  3806092   |      646.9      |
-+-----------+------+------------+-----------------+"""
-            == table.get_string().strip()
-        )
++-----------+------+------------+-----------------+""" == table.get_string().strip()
 
-    def test_sort_slice(self) -> None:
+    def test_sort_slice_get_string(self) -> None:
         """Make sure sorting and slicing interact in the expected way"""
         table = PrettyTable(["Foo"])
         for i in range(20, 0, -1):
@@ -91,6 +85,44 @@ class TestSorting:
         oldstyle = table.get_string(sortby="Foo", end=10, oldsortslice=True)
         assert "10" not in oldstyle
         assert "20" in oldstyle
+
+    def test_sort_slice(self) -> None:
+        """Make sure sorting and slicing interact in the expected way"""
+        # Arrange
+        table_new = PrettyTable(["Foo"])
+        table_old = PrettyTable(["Foo"], oldsortslice=True)
+        for i in range(20, 0, -1):
+            table_new.add_row([i])
+            table_old.add_row([i])
+
+        # Act
+        new_style = table_new.get_string(sortby="Foo", end=10)
+        old_style = table_old.get_string(sortby="Foo", end=10)
+
+        # Assert
+        assert "10" in new_style
+        assert "20" not in new_style
+        assert "10" not in old_style
+        assert "20" in old_style
+
+    def test_sort_slice_setter(self) -> None:
+        # Arrange
+        table_new = PrettyTable(["Foo"])
+        table_old = PrettyTable(["Foo"])
+        table_old.oldsortslice = True
+        for i in range(20, 0, -1):
+            table_new.add_row([i])
+            table_old.add_row([i])
+
+        # Act
+        new_style = table_new.get_string(sortby="Foo", end=10)
+        old_style = table_old.get_string(sortby="Foo", end=10)
+
+        # Assert
+        assert "10" in new_style
+        assert "20" not in new_style
+        assert "10" not in old_style
+        assert "20" in old_style
 
     def test_sortby_at_class_declaration(self) -> None:
         """
@@ -103,8 +135,7 @@ class TestSorting:
         assert table.sortby == "Area"
         for row in CITY_DATA:
             table.add_row(row)
-        assert (
-            """+-----------+------+------------+-----------------+
+        assert """+-----------+------+------------+-----------------+
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
 |   Darwin  | 112  |   120900   |      1714.7     |
@@ -114,6 +145,4 @@ class TestSorting:
 |   Sydney  | 2058 |  4336374   |      1214.8     |
 |   Perth   | 5386 |  1554769   |      869.4      |
 |  Brisbane | 5905 |  1857594   |      1146.4     |
-+-----------+------+------------+-----------------+"""
-            == table.get_string().strip()
-        )
++-----------+------+------------+-----------------+""" == table.get_string().strip()

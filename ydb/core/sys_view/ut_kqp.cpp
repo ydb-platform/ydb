@@ -382,31 +382,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(PgTablesOneSchemeShardDataQuery) {
-        TTestEnv env;
-        CreateRootTable(env, 1, false, 0);
-        CreateRootTable(env, 2, false, 1);
-
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
-
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        {
-            auto result = session.ExecuteDataQuery(R"(
-                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `/Root/.sys/pg_tables` WHERE tablename = PgName("Table0") OR tablename = PgName("Table1") ORDER BY tablename;
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            NKqp::CompareYson(R"([
-                ["public";"Table0";"root@builtin";#;"t";"f";"f";"f"];
-                ["public";"Table1";"root@builtin";#;"t";"f";"f";"f"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
@@ -1126,6 +1101,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     BoxId,
                     DecommitStatus,
                     ExpectedSlotCount,
+                    ExpectedSlotSize,
                     Guid,
                     Kind,
                     MaintenanceStatus,
@@ -1157,12 +1133,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 19);
+        TYsonFieldChecker check(ysonString, 20);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.String("DECOMMIT_NONE"); // DecommitStatus
         check.Uint64(16); // ExpectedSlotCount
+        check.Uint64(0); // ExpectedSlotSize
         check.Uint64(123u); // Guid
         check.Uint64(0u); // Kind
         check.String("NO_REQUEST"); // MaintenanceStatus
@@ -2047,7 +2024,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 35);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2055,6 +2032,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
             TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
@@ -2067,7 +2045,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 29);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2075,6 +2053,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
             TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
@@ -2464,6 +2443,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
+    }
+
+    Y_UNIT_TEST(UdfModulesEmpty) {
+        TTestEnv env(1, 0);
+        TTableClient client(env.GetDriver());
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT Uid, Name, ModuleType, CompileStatus
+            FROM `/Root/.sys/udf_modules`;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        NKqp::CompareYson(R"([])", NKqp::StreamResultToYson(it));
     }
 }
 Y_UNIT_TEST_SUITE(ViewQuerySplit) {

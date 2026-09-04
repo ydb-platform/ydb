@@ -6,6 +6,7 @@
 #include "hulldb_compstrat_space.h"
 #include "hulldb_compstrat_squeeze.h"
 #include "hulldb_compstrat_explicit.h"
+#include "hulldb_compstrat_emergency.h"
 
 namespace NKikimr {
     namespace NHullComp {
@@ -26,6 +27,7 @@ namespace NKikimr {
             using TStrategyPromoteSsts = NHullComp::TStrategyPromoteSsts<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategyStorageRatio = NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategySqueeze = NHullComp::TStrategySqueeze<TKeyLogoBlob, TMemRecLogoBlob>;
+            using TStrategyEmergency = NHullComp::TStrategyEmergency<TKeyLogoBlob, TMemRecLogoBlob>;
 
             // calculate storage ratio and gather space consumption statistics
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriersEssence = BarriersSnap.CreateEssence(HullCtx);
@@ -35,40 +37,47 @@ namespace NKikimr {
             // delete free ssts
             action = TStrategyDelSst(HullCtx, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BlobsDelSst();
+                Task->SelectStrategy = ESelectStrategy::DelSst;
                 return action;
             }
 
             // try to promote ssts on higher levels w/o merging
             action = TStrategyPromoteSsts(HullCtx, Params.Boundaries, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BlobsPromoteSsts();
+                Task->SelectStrategy = ESelectStrategy::PromoteSsts;
                 return action;
             }
 
             // compact explicitly defined SST's, if set
             action = TStrategyExplicit(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BlobsExplicit();
+                Task->SelectStrategy = ESelectStrategy::Explicit;
                 return action;
             }
 
-            // try to find what to compact based on levels balance
-            action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
-            if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BlobsBalance();
-                if (Task->IsFullCompaction) {
-                    ++HullCtx->CompactionStrategyGroup.BlobsBalanceFull();
-                } else {
-                    ++HullCtx->CompactionStrategyGroup.BlobsBalanceLevel();
+            // try to find what to compact based on levels balance (skipped in emergency mode;
+            // even then Balance refuses jobs whose estimated output exceeds the free-chunk budget)
+            if (!Params.EmergencyMode) {
+                action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
+                if (action != ActNothing) {
+                    Task->SelectStrategy = Task->IsFullCompaction
+                        ? ESelectStrategy::BalanceFull
+                        : ESelectStrategy::BalanceLevel;
+                    return action;
                 }
+            }
+
+            // reclaim index chunks with a small, budgeted compaction
+            action = TStrategyEmergency(HullCtx, Params, LevelSnap, Task).Select();
+            if (action != ActNothing) {
+                Task->SelectStrategy = ESelectStrategy::Emergency;
                 return action;
             }
 
             // try to find what to compact based on storage consumption
             action = TStrategyFreeSpace(HullCtx, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BlobsFreeSpace();
+                Task->SelectStrategy = ESelectStrategy::FreeSpace;
                 return action;
             }
 
@@ -76,7 +85,7 @@ namespace NKikimr {
             if (Params.SqueezeBefore) {
                 action = TStrategySqueeze(HullCtx, LevelSnap, Task, Params.SqueezeBefore).Select();
                 if (action != ActNothing) {
-                    ++HullCtx->CompactionStrategyGroup.BlobsSqueeze();
+                    Task->SelectStrategy = ESelectStrategy::Squeeze;
                     return action;
                 }
             }
@@ -99,21 +108,23 @@ namespace NKikimr {
             // try to promote ssts on higher levels w/o merging
             action = TStrategyPromoteSsts(HullCtx, Params.Boundaries, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BlocksPromoteSsts();
+                Task->SelectStrategy = ESelectStrategy::PromoteSsts;
                 return action;
             }
 
             // compact explicitly defined SST's, if set
             action = TStrategyExplicit(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BlocksExplicit();
+                Task->SelectStrategy = ESelectStrategy::Explicit;
                 return action;
             }
 
             // try to find what to compact based on levels balance
             action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BlocksBalance();
+                Task->SelectStrategy = Task->IsFullCompaction
+                    ? ESelectStrategy::BalanceFull
+                    : ESelectStrategy::BalanceLevel;
                 return action;
             }
 
@@ -136,21 +147,23 @@ namespace NKikimr {
             // try to promote ssts on higher levels w/o merging
             action = TStrategyPromoteSsts(HullCtx, Params.Boundaries, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BarriersPromoteSsts();
+                Task->SelectStrategy = ESelectStrategy::PromoteSsts;
                 return action;
             }
 
             // compact explicitly defined SST's, if set
             action = TStrategyExplicit(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BarriersExplicit();
+                Task->SelectStrategy = ESelectStrategy::Explicit;
                 return action;
             }
 
             // try to find what to compact based on levels balance
             action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
-                ++HullCtx->CompactionStrategyGroup.BarriersBalance();
+                Task->SelectStrategy = Task->IsFullCompaction
+                    ? ESelectStrategy::BalanceFull
+                    : ESelectStrategy::BalanceLevel;
                 return action;
             }
 

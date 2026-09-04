@@ -3,6 +3,8 @@
 
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(
@@ -50,7 +52,8 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(con
 NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
     if (!proto.HasCountMinSketch()) {
         const TString errorMessage = "not found CountMinSketch section in proto: \"" + proto.DebugString() + "\"";
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
+        YDB_LOG_ERROR("",
+            {"problem", errorMessage});
         return TConclusionStatus::Fail(errorMessage);
     }
     auto& sketch = proto.GetCountMinSketch();

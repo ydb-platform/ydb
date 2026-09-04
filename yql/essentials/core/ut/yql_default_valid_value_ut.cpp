@@ -304,67 +304,67 @@ Y_UNIT_TEST(Pg) {
 Y_UNIT_TEST(UnsupportedUnit) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TUnitExprType>());
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedMulti) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TMultiExprType>(TTypeAnnotationNode::TListType{}));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedList) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedStream) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedFlow) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TFlowExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedWorld) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TWorldExprType>());
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedResource) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TResourceExprType>("TestResource"));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedTypeExpr) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedDict) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDictExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint32), ctx.MakeType<TDataExprType>(EDataSlot::String)));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedGeneric) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TGenericExprType>());
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedError) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TErrorExprType>(TIssue{}));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedVariant) {
@@ -373,19 +373,19 @@ Y_UNIT_TEST(UnsupportedVariant) {
         ctx.MakeType<TDataExprType>(EDataSlot::Uint32),
         ctx.MakeType<TDataExprType>(EDataSlot::String)};
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TVariantExprType>(ctx.MakeType<TTupleExprType>(items)));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedBlock) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TBlockExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(UnsupportedScalar) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 // Tests for complex types with unsupported children
@@ -396,7 +396,7 @@ Y_UNIT_TEST(TupleWithUnsupportedChild) {
         ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)) // unsupported
     };
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTupleExprType>(items));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(StructWithUnsupportedChild) {
@@ -405,19 +405,19 @@ Y_UNIT_TEST(StructWithUnsupportedChild) {
         ctx.MakeType<TItemExprType>("supported", ctx.MakeType<TDataExprType>(EDataSlot::Uint32)),
         ctx.MakeType<TItemExprType>("unsupported", ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)))};
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TStructExprType>(items));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(TaggedWithUnsupportedBase) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTaggedExprType>(ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)), "TestTag"));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(TaggedWithSupportedBase) {
     TExprContext ctx;
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTaggedExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String), "TestTag"));
-    TestTypeValidValue(type, ctx, true);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/true);
 }
 
 Y_UNIT_TEST(NestedTupleWithUnsupported) {
@@ -430,7 +430,7 @@ Y_UNIT_TEST(NestedTupleWithUnsupported) {
         ctx.MakeType<TDataExprType>(EDataSlot::String),
         ctx.MakeType<TTupleExprType>(innerItems)};
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTupleExprType>(outerItems));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 Y_UNIT_TEST(NestedStructWithUnsupported) {
@@ -443,7 +443,7 @@ Y_UNIT_TEST(NestedStructWithUnsupported) {
         ctx.MakeType<TItemExprType>("outer", ctx.MakeType<TDataExprType>(EDataSlot::String)),
         ctx.MakeType<TItemExprType>("inner", ctx.MakeType<TStructExprType>(innerItems))};
     auto* type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TStructExprType>(outerItems));
-    TestTypeValidValue(type, ctx, false);
+    TestTypeValidValue(type, ctx, /*isTypeSupported=*/false);
 }
 
 } // Y_UNIT_TEST_SUITE(TYqlDefaulValidValueTest)

@@ -49,8 +49,8 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;
-    std::optional<TString> RboTraceAstBeforeRewriteSelect;
-    std::optional<TString> RboTraceAstAfterRewriteSelect;
+    NYql::TExprNode::TPtr RboTraceAstBeforeRewriteSelect;
+    NYql::TExprNode::TPtr RboTraceAstAfterRewriteSelect;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics();
 
@@ -75,8 +75,6 @@ struct TKqpBuildQueryContext : TThrRefBase {
     }
 };
 
-bool IsKqpEffectsStage(const NYql::NNodes::TDqStageBase& stage);
-bool NeedSinks(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx);
 bool CanEnableStreamWrite(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx);
 bool HasReadTable(const TStringBuf table, const NYql::TExprNode::TPtr& root);
 

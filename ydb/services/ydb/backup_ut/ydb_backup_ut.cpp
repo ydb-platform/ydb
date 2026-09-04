@@ -11,6 +11,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
@@ -37,6 +38,10 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
+
+#include <cmath>
+#include <limits>
+#include <utility>
 
 using namespace NYdb;
 using namespace NYdb::NOperation;
@@ -763,6 +768,37 @@ void TestRestoreTableWithSerial(
 
     CheckTableDescription(session, table, CreateHasSerialChecker(8, false), TDescribeTableSettings().WithSetVal(true));
     CompareResults(GetTableContent(session, table), originalContent);
+}
+
+void TestRestoreTableWithMultiColumnStatistics(
+    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    using namespace fmt::literals;
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            CREATE TABLE `{table}` (
+                key Uint32,
+                value Utf8,
+                PRIMARY KEY (key),
+                STATISTICS s1 ON (value) WITH (COUNT_MIN_SKETCH)
+            )
+        )",
+        "table"_a = table
+    ));
+    backup();
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+    restore();
+    auto describe = session.DescribeTable(table).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+    const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+    UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "s1");
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns()[0], "value");
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetTypes().size(), 1);
+    UNIT_ASSERT(statistics[0].GetTypes()[0] == EMultiColumnStatisticsType::CountMinSketch);
 }
 
 const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
@@ -2343,10 +2379,16 @@ void TestOlapColumnEncodingsPreservedThroughBackup(
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
-    auto CreateBackupLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root", const TString& db = "/Root") {
+    auto CreateBackupLambda(
+        const TDriver& driver,
+        const TFsPath& fsPath,
+        const TString& dbPath = "/Root",
+        const TString& db = "/Root",
+        NDump::TDumpSettings settings = NDump::TDumpSettings()
+    ) {
         return [=, &driver]() {
             NDump::TClient backupClient(driver);
-            const auto result = backupClient.Dump(dbPath, fsPath, NDump::TDumpSettings().Database(db));
+            const auto result = backupClient.Dump(dbPath, fsPath, NDump::TDumpSettings(settings).Database(db));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
     }
@@ -2600,6 +2642,104 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
             CompareResults(newContent, originalContent);
         }
+    }
+
+    Y_UNIT_TEST(BackupFloatSpecialValues) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* dbPath = "/Root";
+        constexpr const char* table = "/Root/table";
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    FloatValue Float,
+                    DoubleValue Double,
+                    PRIMARY KEY (Key)
+                )
+            )", table
+        ));
+
+        TValueBuilder rowsBuilder;
+        rowsBuilder.BeginList();
+        const auto addRow = [&rowsBuilder](ui32 key, float floatValue, double doubleValue) {
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint32(key)
+                    .AddMember("FloatValue").Float(floatValue)
+                    .AddMember("DoubleValue").Double(doubleValue)
+                .EndStruct();
+        };
+        addRow(1, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
+        addRow(2, -std::numeric_limits<float>::quiet_NaN(), -std::numeric_limits<double>::quiet_NaN());
+        addRow(3, std::numeric_limits<float>::infinity(), std::numeric_limits<double>::infinity());
+        addRow(4, -std::numeric_limits<float>::infinity(), -std::numeric_limits<double>::infinity());
+        addRow(5, -0.0f, -0.0);
+
+        auto upsertResult = tableClient.BulkUpsert(table, rowsBuilder.EndList().Build()).ExtractValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump(dbPath, pathToBackup, NDump::TDumpSettings().Database(dbPath));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+
+        {
+            const auto result = backupClient.Restore(pathToBackup, dbPath);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto content = GetTableContent(session, table);
+        TResultSetParser parser(content.GetResultSet(0));
+
+        const auto readValues = [&parser]() {
+            UNIT_ASSERT(parser.TryNextRow());
+            const auto floatValue = parser.ColumnParser("FloatValue").GetOptionalFloat();
+            const auto doubleValue = parser.ColumnParser("DoubleValue").GetOptionalDouble();
+            UNIT_ASSERT(floatValue);
+            UNIT_ASSERT(doubleValue);
+            return std::pair(*floatValue, *doubleValue);
+        };
+
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isnan(floatValue));
+            UNIT_ASSERT(std::isnan(doubleValue));
+        }
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isnan(floatValue));
+            UNIT_ASSERT(std::isnan(doubleValue));
+        }
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isinf(floatValue) && floatValue > 0);
+            UNIT_ASSERT(std::isinf(doubleValue) && doubleValue > 0);
+        }
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isinf(floatValue) && floatValue < 0);
+            UNIT_ASSERT(std::isinf(doubleValue) && doubleValue < 0);
+        }
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT_EQUAL(floatValue, 0.0f);
+            UNIT_ASSERT_EQUAL(doubleValue, 0.0);
+            UNIT_ASSERT(std::signbit(floatValue));
+            UNIT_ASSERT(std::signbit(doubleValue));
+        }
+        UNIT_ASSERT(!parser.TryNextRow());
     }
 
     // TO DO: test index impl table split boundaries restoration from a backup
@@ -2861,8 +3001,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestTableBackupRestore() {
-        TKikimrWithGrpcAndRootSchema server;
+    void TestTableBackupRestore(bool isOlap = false) {
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = CreateSession(queryClient);
@@ -2871,12 +3012,18 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         constexpr const char* table = "/Root/table";
 
+        auto dumpSettings = NDump::TDumpSettings();
+        auto restoreSettings = NDump::TRestoreSettings();
+        if (isOlap) {
+            dumpSettings.AvoidCopy(true); 
+        }
+
         TestTableContentIsPreserved(
             table,
             session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            false
+            CreateBackupLambda(driver, pathToBackup, "/Root", "/Root", dumpSettings),
+            CreateRestoreLambda(driver, pathToBackup, "/Root", restoreSettings),
+            isOlap
         );
     }
 
@@ -2923,6 +3070,25 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* table = "/Root/table";
 
         TestRestoreTableWithSerial(
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestTableWithMultiColumnStatisticsBackupRestore() {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
+        TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithMultiColumnStatistics(
             table,
             session,
             CreateBackupLambda(driver, pathToBackup),
@@ -3360,8 +3526,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeKesus:
                 return TestKesusBackupRestore();
             case EPathTypeColumnStore:
-            case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
+            case EPathTypeColumnTable:
+                return TestTableBackupRestore(/* isOlap */ true);
             case EPathTypeSysView:
                 return TestSystemViewBackupRestore();
             case EPathTypeSecret:
@@ -3369,6 +3536,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShardSet:
                 break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
@@ -3402,16 +3570,15 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
+            case EIndexTypeLocalCountMinSketch:
             case EIndexTypeInvalid:
                 break; // not applicable
-            default:
-                UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
     }
 
     Y_UNIT_TEST_TWIN(TestReplaceRestoreOption, IsOlap) {
         if (IsOlap) {
-            // TODO
+            // TODO: replace restore for column tables still needs work
             // https://github.com/ydb-platform/ydb/issues/36786
             return;
         }
@@ -3626,24 +3793,152 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId) {
-        if (DontTestThisType(Value)) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES_WITH_FLAG(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId, IsOlap) {
+        if (DontTestThisType(Value, IsOlap)) {
             return;
         }
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
+        auto dumpSettings = NDump::TDumpSettings();
+        auto restoreSettings = NDump::TRestoreSettings();
+        if (IsOlap) {
+            dumpSettings.AvoidCopy(true);
+        }
+
         TestPrimitiveType(
             Value,
             session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            false
+            CreateBackupLambda(driver, pathToBackup, "/Root", "/Root", dumpSettings),
+            CreateRestoreLambda(driver, pathToBackup, "/Root", restoreSettings),
+            IsOlap
         );
+    }
+
+    Y_UNIT_TEST(OlapColumnTableContentPreservedThroughFsBackupRestore) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        constexpr const char* table = "/Root/olap_table";
+
+        for (auto mode : {NDump::TRestoreSettings::EMode::BulkUpsert, NDump::TRestoreSettings::EMode::ImportData}) {
+            TTempDir tempDir;
+            TestTableContentIsPreserved(
+                table,
+                session,
+                CreateBackupLambda(driver, tempDir.Path(), "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true)),
+                CreateRestoreLambda(driver, tempDir.Path(), "/Root",
+                    NDump::TRestoreSettings().Mode(mode)),
+                /* isOlap */ true
+            );
+            ExecuteQuery(session, Sprintf(R"(
+                    DROP TABLE `%s`;
+                )", table
+            ), true);
+        }
+    }
+
+    Y_UNIT_TEST(EmptyColumnTableBackupLeavesNoIncompleteDataFile) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/empty_olap_table";
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", table
+        ), true);
+
+        NDump::TClient backupClient(driver);
+        const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TVector<TFsPath> children;
+        pathToBackup.Child("empty_olap_table").List(children);
+        for (const auto& child : children) {
+            UNIT_ASSERT_C(child.GetName() != NDump::NFiles::IncompleteData().FileName,
+                "Stray incomplete data file left behind after backing up an empty column table: " << child.GetPath());
+        }
+    }
+
+    Y_UNIT_TEST(ColumnTableSkippedWhenCopyTableFallbackTriggered) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* rowTable = "/Root/row_table";
+        constexpr const char* columnTable = "/Root/column_table";
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", rowTable
+        ), true);
+        ExecuteQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value) VALUES (1, "one"), (2, "two");
+            )", rowTable
+        ));
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", columnTable
+        ), true);
+        ExecuteQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value) VALUES (1u, "a");
+            )", columnTable
+        ));
+
+        const auto originalRowTableContent = GetTableContent(session, rowTable);
+
+        NDump::TClient backupClient(driver);
+        const auto dumpResult = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
+
+        UNIT_ASSERT_C(!pathToBackup.Child("column_table").Exists(),
+            "Column table directory should not be present in the backup after the CopyTable fallback skipped it");
+        UNIT_ASSERT_C(pathToBackup.Child("row_table").Exists(),
+            "Row table should still be backed up via the fallback CopyTables call");
+
+        ExecuteQuery(session, Sprintf(R"(DROP TABLE `%s`;)", rowTable), true);
+
+        NDump::TClient restoreClient(driver);
+        const auto restoreResult = restoreClient.Restore(pathToBackup, "/Root");
+        UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
+
+        CompareResults(GetTableContent(session, rowTable), originalRowTableContent);
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
@@ -3909,6 +4204,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
+        TestTableWithMultiColumnStatisticsBackupRestore();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
@@ -3936,7 +4235,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TDataShardExportFactory DataShardExportFactory;
 
     public:
-        TS3TestEnv()
+        explicit TS3TestEnv(bool alwaysSetSystemOwner = false)
             : Server([&] {
                     NKikimrConfig::TAppConfig appConfig;
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
@@ -3944,7 +4243,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
+                    appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
                     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+                    appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetAlwaysSetSystemOwner(alwaysSetSystemOwner);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))
@@ -4391,8 +4692,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     // TO DO: test view restoration to a different database
 
-    void TestTableBackupRestore() {
-        TS3TestEnv testEnv;
+    void CheckObjectOwnerIsSystem(const TDriver& driver, const TString& path, bool alwaysSetSystemOwner) {
+        if (!alwaysSetSystemOwner) {
+            return;
+        }
+        TSchemeClient schemeClient(driver);
+        auto result = schemeClient.DescribePath(path).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetEntry().Owner, BUILTIN_ACL_BASIC_OWNER, "unexpected owner for " << path);
+    }
+
+    void TestTableBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* table = "/Root/table";
 
         TestTableContentIsPreserved(
@@ -4402,10 +4713,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
             false
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
-        TS3TestEnv testEnv;
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
             indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
             indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
@@ -4423,10 +4735,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestTableWithSerialBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestTableWithSerialBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* table = "/Root/table";
 
         TestRestoreTableWithSerial(
@@ -4435,10 +4748,23 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestViewBackupRestore() {
+    void TestTableWithMultiColumnStatisticsBackupRestore() {
         TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithMultiColumnStatistics(
+            table,
+            testEnv.GetTableSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
+        );
+    }
+
+    void TestViewBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* view = "/Root/view";
 
         TestViewOutputIsPreserved(
@@ -4447,6 +4773,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), view, alwaysSetSystemOwner);
     }
 
     void TestSystemViewBackupRestore() {
@@ -4463,8 +4790,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestChangefeedBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestChangefeedBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
 
         constexpr const char* table = "/Root/table";
@@ -4479,10 +4806,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
             {"a", "b", "c"}
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestReplicationBackupRestore( const TMaybe<ESecretType>& tokenSecretType) {
-        TS3TestEnv testEnv;
+    void TestReplicationBackupRestore(const TMaybe<ESecretType>& tokenSecretType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
@@ -4513,11 +4841,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"replication"}),
             tokenSecretType
         );
-
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/replication", alwaysSetSystemOwner);
     }
 
-    void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType) {
-        TS3TestEnv testEnv;
+    void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
@@ -4554,10 +4882,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             tempDir.Path(),
             config
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/test_transfer", alwaysSetSystemOwner);
     }
 
-    void TestExternalTableBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestExternalTableBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableExternalDataSources(true);
 
@@ -4578,10 +4907,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(driver, testEnv.GetS3Port()),
             CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalTable", "externalDataSource"})
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/externalTable", alwaysSetSystemOwner);
     }
 
-    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
-        TS3TestEnv testEnv;
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
@@ -4617,10 +4947,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             secretType,
             authType
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/externalDataSource", alwaysSetSystemOwner);
     }
 
-    void TestTopicBackupRestoreWithoutData() {
-        TS3TestEnv testEnv;
+    void TestTopicBackupRestoreWithoutData(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
         constexpr const char* topic = "/Root/topic";
 
@@ -4631,54 +4962,59 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "topic" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), topic, alwaysSetSystemOwner);
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES_WITH_FLAG(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, AlwaysSetSystemOwner) {
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
             case EPathTypeTable:
-                TestTableBackupRestore();
+                TestTableBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeTableIndex:
-                TestTableWithIndexBackupRestore();
+                TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobal, false, AlwaysSetSystemOwner);
                 break;
             case EPathTypeSequence:
-                TestTableWithSerialBackupRestore();
+                TestTableWithSerialBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeDir:
                 break; // https://github.com/ydb-platform/ydb/issues/10430
             case EPathTypePersQueueGroup:
-                TestTopicBackupRestoreWithoutData();
+                TestTopicBackupRestoreWithoutData(AlwaysSetSystemOwner);
                 break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432
             case EPathTypeView:
-                TestViewBackupRestore();
+                TestViewBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeCdcStream:
-                TestChangefeedBackupRestore();
+                TestChangefeedBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeReplication:
-                TestReplicationBackupRestore(ESecretType::SecretTypeOld);
-                TestReplicationBackupRestore(ESecretType::SecretTypeScheme);
+                if (!AlwaysSetSystemOwner) { // Replications with old secrets don't support the owner change
+                    TestReplicationBackupRestore(ESecretType::SecretTypeOld, AlwaysSetSystemOwner);
+                }
+                TestReplicationBackupRestore(ESecretType::SecretTypeScheme, AlwaysSetSystemOwner);
                 return;
             case EPathTypeTransfer:
-                TestTransferBackupRestore(ESecretType::SecretTypeOld);
-                TestTransferBackupRestore(ESecretType::SecretTypeScheme);
+                if (!AlwaysSetSystemOwner) { // Transfers with old secrets don't support the owner change
+                    TestTransferBackupRestore(ESecretType::SecretTypeOld, AlwaysSetSystemOwner);
+                }
+                TestTransferBackupRestore(ESecretType::SecretTypeScheme, AlwaysSetSystemOwner);
                 break;
             case EPathTypeSysView:
                 TestSystemViewBackupRestore();
                 break;
             case EPathTypeExternalTable:
-                return TestExternalTableBackupRestore();
+                return TestExternalTableBackupRestore(AlwaysSetSystemOwner);
             case EPathTypeExternalDataSource: {
-                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
+                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws, AlwaysSetSystemOwner);
                 return;
             }
             case EPathTypeResourcePool:
@@ -4693,6 +5029,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShardSet:
+                break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
             case EPathTypeSolomonVolume:
@@ -4724,10 +5062,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
+            case EIndexTypeLocalCountMinSketch:
             case EIndexTypeInvalid:
                 break; // not applicable
-            default:
-                UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }
     }
 
@@ -4857,5 +5194,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         UNIT_ASSERT_VALUES_EQUAL(items[0].Dst, "Dest/Dir/Table");
         UNIT_ASSERT_VALUES_EQUAL(items[1].Src, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(items[1].Dst, "Dest/Table");
+    }
+
+    Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
+        TestTableWithMultiColumnStatisticsBackupRestore();
     }
 }

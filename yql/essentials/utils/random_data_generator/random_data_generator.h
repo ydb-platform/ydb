@@ -16,9 +16,7 @@
 #include <type_traits>
 #include <variant>
 
-namespace NKikimr::NMiniKQL {
-
-namespace NPrivate {
+namespace NYql {
 
 template <typename T, typename = void>
 struct TRandomDataGenerator {
@@ -161,17 +159,15 @@ private:
     }
 };
 
-} // namespace NPrivate
-
 template <typename T>
-using TGeneratorSettings = typename NPrivate::TRandomDataGenerator<T>::TSettings;
+using TGeneratorSettings = typename TRandomDataGenerator<T>::TSettings;
 
 template <typename T>
 TVector<T> GenerateRandomData(TIntrusivePtr<IRandomProvider> provider, TGeneratorSettings<T> settings, size_t count) {
     TVector<T> result;
     result.reserve(count);
     for (size_t i = 0; i < count; ++i) {
-        result.push_back(NPrivate::TRandomDataGenerator<T>::Generate(*provider, settings));
+        result.push_back(TRandomDataGenerator<T>::Generate(*provider, settings));
     }
     return result;
 }
@@ -181,4 +177,4 @@ TVector<T> GenerateRandomData(TIntrusivePtr<IRandomProvider> provider, size_t co
     return GenerateRandomData<T>(std::move(provider), TGeneratorSettings<T>{}, count);
 }
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql

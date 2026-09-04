@@ -8,7 +8,7 @@
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/lib/full_capture/yql_yt_full_capture.h>
 #include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <yql/essentials/sql/settings/translation_sql_flags.h>
+#include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/dq_integration/yql_dq_helper.h>
@@ -99,6 +99,7 @@ struct TYtState {
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
     bool HybridTakesTooLong() const;
+    TDuration GetHybridDqTimeSpentLimit() const;
     TMaybe<TString> ResolveClusterToken(const TString& cluster);
 
     TYtState(TTypeAnnotationContext* types, const TQContext& qContext = {}) {

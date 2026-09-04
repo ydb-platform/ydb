@@ -17,6 +17,8 @@
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
+#include <library/cpp/yt/containers/slot_map.h>
+
 #include <algorithm>
 #include <atomic>
 #include <type_traits>
@@ -57,8 +59,9 @@ auto RunFutureHandler(F&& functor, As&&... args) noexcept -> decltype(functor(st
 
 inline TError WrapIntoCancelationError(const TError& error)
 {
+    // Cancel may be passed an OK error.
     return TError(NYT::EErrorCode::Canceled, "Operation canceled")
-        << error;
+        .WithIf(!error.IsOK(), error);
 }
 
 inline TError TryExtractCancelationError()
@@ -72,7 +75,8 @@ inline TError TryExtractCancelationError()
         // rely on their cancelation error to never be wrapped
         // into anything with a different error code.
         const auto& tokenError = GetCancelationError(currentToken);
-        return TError(tokenError.GetCode(), "Promise abandoned") << tokenError;
+        return TError(tokenError.GetCode(), "Promise abandoned")
+            .WithIf(!tokenError.IsOK(), tokenError);
     }
 
     return TError(NYT::EErrorCode::Canceled, "Promise abandoned");
@@ -80,70 +84,19 @@ inline TError TryExtractCancelationError()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, TFutureCallbackCookie MinCookie, TFutureCallbackCookie MaxCookie>
-class TFutureCallbackList
-{
-public:
-    static bool IsValidCookie(TFutureCallbackCookie cookie)
-    {
-        return cookie >= MinCookie && cookie <= MaxCookie;
-    }
+// Future callback cookies are partitioned into two ranges so that a single
+// cookie identifies which handler list owns it: void-result handlers occupy
+// [VoidResultHandlerCookieBase, ...Base + Span), typed-result handlers occupy
+// [ResultHandlerCookieBase, ...Base + Span).
+constexpr ui32 VoidResultHandlerCookieBase = 0;
+constexpr ui32 ResultHandlerCookieBase = 1u << 30;
+constexpr ui32 FutureCallbackCookieSpan = 1u << 30;
 
-    TFutureCallbackCookie Add(T callback)
-    {
-        YT_ASSERT(callback);
-        TFutureCallbackCookie cookie;
-        if (SpareCookies_.empty()) {
-            cookie = static_cast<TFutureCallbackCookie>(Callbacks_.size());
-            Callbacks_.push_back(std::move(callback));
-        } else {
-            cookie = SpareCookies_.back();
-            SpareCookies_.pop_back();
-            YT_ASSERT(!Callbacks_[cookie]);
-            Callbacks_[cookie] = std::move(callback);
-        }
-        cookie += MinCookie;
-        YT_ASSERT(cookie <= MaxCookie);
-        return cookie;
-    }
+template <class T>
+using TFutureCallbackVector = TCompactVector<T, 2>;
 
-    bool TryRemove(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
-    {
-        if (!IsValidCookie(cookie)) {
-            return false;
-        }
-        cookie -= MinCookie;
-        YT_ASSERT(cookie >= 0 && cookie < std::ssize(Callbacks_));
-        YT_ASSERT(Callbacks_[cookie]);
-        SpareCookies_.push_back(cookie);
-        auto callback = std::move(Callbacks_[cookie]);
-        // Make sure callback is not being destroyed under spinlock.
-        guard->Release();
-        return true;
-    }
-
-    template <class... As>
-    void RunAndClear(const As&... args)
-    {
-        for (const auto& callback : Callbacks_) {
-            if (callback) {
-                RunFutureHandler(callback, args...);
-            }
-        }
-        Callbacks_.clear();
-        SpareCookies_.clear();
-    }
-
-    bool IsEmpty() const
-    {
-        return Callbacks_.size() == SpareCookies_.size();
-    }
-
-private:
-    static constexpr int TypicalCount = 2;
-    TCompactVector<T, TypicalCount> Callbacks_;
-    TCompactVector<TFutureCallbackCookie, TypicalCount> SpareCookies_;
-};
+template <class T>
+using TFutureCallbackMap = TSlotMap<T, TFutureCallbackVector>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -223,7 +176,7 @@ class TFutureState<void>
 {
 public:
     using TVoidResultHandler = TCallback<void(const TError&)>;
-    using TVoidResultHandlers = TFutureCallbackList<TVoidResultHandler, 0, (1ULL << 30) - 1>;
+    using TVoidResultHandlers = TFutureCallbackMap<TVoidResultHandler>;
 
     using TUniqueVoidResultHandler = TCallback<void(TError&&)>;
 
@@ -432,7 +385,9 @@ protected:
             CancelHandlers_.clear();
         }
 
-        VoidResultHandlers_.RunAndClear(ResultError_);
+        VoidResultHandlers_.ExtractAll([&] (const TVoidResultHandler& handler) {
+            RunFutureHandler(handler, ResultError_);
+        });
 
         return true;
     }
@@ -455,6 +410,42 @@ protected:
     void WaitUntilSet() const;
     bool CheckIfSet() const;
 
+    static TFutureCallbackCookie EncodeFutureCallbackCookie(TSlotMapIndex index, ui32 base)
+    {
+        auto offset = static_cast<ui32>(index.Underlying());
+        YT_ASSERT(offset < FutureCallbackCookieSpan);
+        return TFutureCallbackCookie(base + offset);
+    }
+
+    static TSlotMapIndex TryDecodeFutureCallbackCookie(TFutureCallbackCookie cookie, ui32 base)
+    {
+        // NB: Unsigned wraparound also rejects cookies below #base.
+        auto offset = cookie.Underlying() - base;
+        if (offset >= FutureCallbackCookieSpan) {
+            return InvalidSlotMapIndex;
+        }
+        return TSlotMapIndex(offset);
+    }
+
+    // Extracts a handler from #map by #cookie, releasing #guard before the handler
+    // is destroyed. Returns |false| if #cookie does not belong to #map's range.
+    template <class T>
+    static bool TryUnsubscribe(
+        TFutureCallbackMap<T>* map,
+        TFutureCallbackCookie cookie,
+        ui32 base,
+        TGuard<NThreading::TSpinLock>* guard)
+    {
+        auto index = TryDecodeFutureCallbackCookie(cookie, base);
+        if (index == InvalidSlotMapIndex) {
+            return false;
+        }
+        auto handler = map->Extract(index);
+        // Make sure handler is not being destroyed under spinlock.
+        guard->Release();
+        return true;
+    }
+
 private:
     void OnLastFutureRefLost();
     void OnLastPromiseRefLost();
@@ -468,7 +459,7 @@ class TFutureState
 {
 public:
     using TResultHandler = TCallback<void(const TErrorOr<T>&)>;
-    using TResultHandlers = TFutureCallbackList<TResultHandler, (1ULL << 30), (1ULL << 31) - 1>;
+    using TResultHandlers = TFutureCallbackMap<TResultHandler>;
 
     using TUniqueResultHandler = TCallback<void(TErrorOr<T>&&)>;
 
@@ -522,7 +513,10 @@ private:
         // It is possible that the result has already been moved out by, e.g., GetUnique.
         // Hence GetResult must only be called when we actually have handlers to invoke.
         if (!ResultHandlers_.IsEmpty()) {
-            ResultHandlers_.RunAndClear(GetResult());
+            const auto& result = GetResult();
+            ResultHandlers_.ExtractAll([&] (const TResultHandler& handler) {
+                RunFutureHandler(handler, result);
+            });
         }
 
         if (UniqueResultHandler_) {
@@ -580,7 +574,7 @@ private:
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         return
-            ResultHandlers_.TryRemove(cookie, guard) ||
+            TryUnsubscribe(&ResultHandlers_, cookie, ResultHandlerCookieBase, guard) ||
             TFutureState<void>::DoUnsubscribe(cookie, guard);
     }
 
@@ -680,7 +674,7 @@ public:
                 return NullFutureCallbackCookie;
             } else {
                 HasHandlers_ = true;
-                return ResultHandlers_.Add(std::move(handler));
+                return EncodeFutureCallbackCookie(ResultHandlers_.Insert(std::move(handler)), ResultHandlerCookieBase);
             }
         }
     }
@@ -942,14 +936,14 @@ TFuture<T> ApplyTimeoutHelper(
             } else {
                 error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
                 if constexpr (std::is_same_v<D, TDuration>) {
-                    error = error << TErrorAttribute("timeout", timeoutOrDeadline);
+                    error = error.With("timeout", timeoutOrDeadline);
                 }
                 if constexpr (std::is_same_v<D, TInstant>) {
-                    error = error << TErrorAttribute("deadline", timeoutOrDeadline);
+                    error = error.With("deadline", timeoutOrDeadline);
                 }
             }
             if (!options.Error.IsOK()) {
-                error = options.Error << std::move(error);
+                error = options.Error.With(std::move(error));
             }
             promise.TrySet(error);
             cancelable.Cancel(error);
@@ -1825,12 +1819,11 @@ struct TAsyncViaHelper<R(TArgs...)>
                 };
         };
 
-        GuardedInvoke(
-            invoker,
-            makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>()),
-            [promise] {
+        invoker->Invoke(MakeGuardedCallback(
+            BIND_NO_PROPAGATE(makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>())),
+            BIND_NO_PROPAGATE([promise] {
                 promise.Set(TryExtractCancelationError());
-            });
+            })));
         return promise;
     }
 
@@ -1855,12 +1848,11 @@ struct TAsyncViaHelper<R(TArgs...)>
                 };
         };
 
-        GuardedInvoke(
-            invoker,
-            makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>()),
-            [promise, cancellationError = std::move(cancellationError)] {
+        invoker->Invoke(MakeGuardedCallback(
+            BIND_NO_PROPAGATE(makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>())),
+            BIND_NO_PROPAGATE([promise, cancellationError = std::move(cancellationError)] {
                 promise.Set(std::move(cancellationError));
-            });
+            })));
         return promise;
     }
 
@@ -2274,7 +2266,7 @@ private:
         auto combinerError = TError(
             NYT::EErrorCode::FutureCombinerFailure,
             "Any-of combiner failure: all responses have failed")
-            << Errors_;
+            .With(Errors_);
 
         guard.Release();
 
@@ -2446,7 +2438,7 @@ private:
                 this->CancelFutures(TError(
                     NYT::EErrorCode::FutureCombinerShortcut,
                     "All-of combiner shortcut: some response failed")
-                    << error);
+                    .With(error));
             }
 
             return;
@@ -2606,7 +2598,7 @@ private:
             N_,
             failedCount,
             totalCount)
-            << Errors_;
+            .With(Errors_);
 
         guard.Release();
 
@@ -2620,7 +2612,7 @@ private:
             this->CancelFutures(TError(
                 NYT::EErrorCode::FutureCombinerShortcut,
                 "Any-N-of combiner shortcut: one of responses failed")
-                << error);
+                .With(error));
         }
     }
 };
@@ -2916,7 +2908,7 @@ private:
     void OnCanceled(const TError& error)
     {
         auto wrappedError = TError(NYT::EErrorCode::Canceled, "Canceled")
-            << error;
+            .With(error);
 
         OnError(wrappedError);
     }

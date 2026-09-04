@@ -20,7 +20,7 @@ class BaseSubscriber:
     """The base subscriber class
 
     It is recommended that all subscriber implementations subclass and then
-    override the subscription methods (i.e. on_{subsribe_type}() methods).
+    override the subscription methods (i.e. on_{subscribe_type}() methods).
     """
 
     VALID_SUBSCRIBER_TYPES = ['queued', 'progress', 'done']

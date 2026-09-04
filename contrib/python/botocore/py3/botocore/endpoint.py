@@ -21,6 +21,7 @@ import uuid
 
 from botocore import parsers
 from botocore.awsrequest import create_request_object
+from botocore.compat import get_current_datetime
 from botocore.exceptions import HTTPClientError
 from botocore.history import get_global_history_recorder
 from botocore.hooks import first_non_none_response
@@ -42,10 +43,9 @@ MAX_POOL_CONNECTIONS = 10
 def convert_to_response_dict(http_response, operation_model):
     """Convert an HTTP response object to a request dict.
 
-    This converts the requests library's HTTP response object to
-    a dictionary.
+    This converts the HTTP response object to a dictionary.
 
-    :type http_response: botocore.vendored.requests.model.Response
+    :type http_response: botocore.awsrequest.AWSResponse
     :param http_response: The HTTP response from an AWS service request.
 
     :rtype: dict
@@ -128,9 +128,7 @@ class Endpoint:
                 ]
             )
             service_id = operation_model.service_model.service_id.hyphenize()
-            event_name = 'request-created.{service_id}.{op_name}'.format(
-                service_id=service_id, op_name=operation_model.name
-            )
+            event_name = f'request-created.{service_id}.{operation_model.name}'
             self._event_emitter.emit(
                 event_name,
                 request=request,
@@ -152,7 +150,7 @@ class Endpoint:
     def _calculate_ttl(
         self, response_received_timestamp, date_header, read_timeout
     ):
-        local_timestamp = datetime.datetime.utcnow()
+        local_timestamp = get_current_datetime()
         date_conversion = datetime.datetime.strptime(
             date_header, "%a, %d %b %Y %H:%M:%S %Z"
         )
@@ -169,7 +167,7 @@ class Endpoint:
         has_streaming_input = retries_context.get('has_streaming_input')
         if response_date_header and not has_streaming_input:
             try:
-                response_received_timestamp = datetime.datetime.utcnow()
+                response_received_timestamp = get_current_datetime()
                 retries_context['ttl'] = self._calculate_ttl(
                     response_received_timestamp,
                     response_date_header,
@@ -224,9 +222,9 @@ class Endpoint:
         ):
             # We want to share num retries, not num attempts.
             total_retries = attempts - 1
-            success_response[1]['ResponseMetadata'][
-                'RetryAttempts'
-            ] = total_retries
+            success_response[1]['ResponseMetadata']['RetryAttempts'] = (
+                total_retries
+            )
         if exception is not None:
             raise exception
         else:
@@ -298,16 +296,24 @@ class Endpoint:
         )
 
         http_response_record_dict = response_dict.copy()
-        http_response_record_dict[
-            'streaming'
-        ] = operation_model.has_streaming_output
+        http_response_record_dict['streaming'] = (
+            operation_model.has_streaming_output
+        )
         history_recorder.record('HTTP_RESPONSE', http_response_record_dict)
 
-        protocol = operation_model.metadata['protocol']
+        protocol = operation_model.service_model.resolved_protocol
+        customized_response_dict = {}
+        self._event_emitter.emit(
+            f"before-parse.{service_id}.{operation_model.name}",
+            operation_model=operation_model,
+            response_dict=response_dict,
+            customized_response_dict=customized_response_dict,
+        )
         parser = self._response_parser_factory.create_parser(protocol)
         parsed_response = parser.parse(
             response_dict, operation_model.output_shape
         )
+        parsed_response.update(customized_response_dict)
         # Do a second parsing pass to pick up on any modeled error fields
         # NOTE: Ideally, we would push this down into the parser classes but
         # they currently have no reference to the operation or service model
@@ -399,7 +405,7 @@ class EndpointCreator:
         if not is_valid_endpoint_url(
             endpoint_url
         ) and not is_valid_ipv6_endpoint_url(endpoint_url):
-            raise ValueError("Invalid endpoint: %s" % endpoint_url)
+            raise ValueError(f"Invalid endpoint: {endpoint_url}")
 
         if proxies is None:
             proxies = self._get_proxies(endpoint_url)

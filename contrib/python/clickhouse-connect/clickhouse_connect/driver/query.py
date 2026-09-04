@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfoNotFoundError
 
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.binding import bind_query
-from clickhouse_connect.driver.common import StreamContext, dict_copy, empty_gen, get_rename_method
+from clickhouse_connect.driver.common import ShowClickHouseErrors, StreamContext, dict_copy, empty_gen, get_rename_method
 from clickhouse_connect.driver.context import BaseQueryContext
 from clickhouse_connect.driver.exceptions import ProgrammingError, StreamClosedError
 from clickhouse_connect.driver.external import ExternalData
@@ -34,14 +34,7 @@ limit_re = re.compile(r"\s+LIMIT($|\s)", re.IGNORECASE)
 select_re = re.compile(r"(^|\s)SELECT\s", re.IGNORECASE)
 insert_re = re.compile(r"(^|\s)INSERT\s*INTO", re.IGNORECASE)
 command_re = re.compile(r"(^\s*)(" + commands + r")\s", re.IGNORECASE)
-row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\b", re.IGNORECASE)
 bare_row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\s*$", re.IGNORECASE)
-
-
-def returns_empty_string_on_empty_body(cmd: str | bytes) -> bool:
-    if not isinstance(cmd, str):
-        return False
-    return row_policy_show_re.search(remove_sql_comments(cmd)) is not None
 
 
 class QueryContext(BaseQueryContext):
@@ -52,7 +45,7 @@ class QueryContext(BaseQueryContext):
     def __init__(
         self,
         query: str | bytes = "",
-        parameters: dict[str, Any] | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
         settings: dict[str, Any] | None = None,
         query_formats: dict[str, str] | None = None,
         column_formats: dict[str, str | dict[str, str]] | None = None,
@@ -117,7 +110,7 @@ class QueryContext(BaseQueryContext):
         self.parameters = parameters or {}
         self.use_none = True if use_none is None else use_none
         self.column_oriented = False if column_oriented is None else column_oriented
-        self.use_numpy = use_numpy
+        self.use_numpy = use_numpy if use_numpy is not None else False
         self.max_str_len = 0 if max_str_len is None else max_str_len
         self.server_tz = server_tz
         self.apply_server_tz = apply_server_tz
@@ -132,7 +125,7 @@ class QueryContext(BaseQueryContext):
                 raise ProgrammingError(f"query_tz {query_tz} is not recognized; {tzutil.TZDATA_HINT}") from ex
         self.query_tz = query_tz
         if column_tzs is not None:
-            resolved_column_tzs = {}
+            resolved_column_tzs: dict[str, str | tzinfo] = {}
             for col_name, col_tz in column_tzs.items():
                 if isinstance(col_tz, str):
                     try:
@@ -143,11 +136,12 @@ class QueryContext(BaseQueryContext):
                     resolved_column_tzs[col_name] = col_tz
             column_tzs = resolved_column_tzs
         self.column_tzs = column_tzs
-        self.column_tz = None
-        self.response_tz = None
+        self.column_tz: str | tzinfo | None = None
+        self.response_tz: tzinfo | None = None
         self.block_info = False
         self.as_pandas = as_pandas
         self.streaming = streaming
+        self.show_clickhouse_errors: ShowClickHouseErrors = True
         self._rename_response_column: str | None = rename_response_column
         self.column_renamer = get_rename_method(rename_response_column)
         self._update_query()
@@ -177,12 +171,12 @@ class QueryContext(BaseQueryContext):
     def is_command(self) -> bool:
         return command_re.search(self.uncommented_query) is not None or bare_row_policy_show_re.search(self.uncommented_query) is not None
 
-    def set_parameters(self, parameters: dict[str, Any]):
+    def set_parameters(self, parameters: Sequence | dict[str, Any]):
         self.parameters = parameters
         self._update_query()
 
     def set_parameter(self, key: str, value: Any):
-        if not self.parameters:
+        if not isinstance(self.parameters, dict):
             self.parameters = {}
         self.parameters[key] = value
         self._update_query()
@@ -219,7 +213,7 @@ class QueryContext(BaseQueryContext):
     def updated_copy(
         self,
         query: str | bytes | None = None,
-        parameters: dict[str, Any] | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
         settings: dict[str, Any] | None = None,
         query_formats: dict[str, str] | None = None,
         column_formats: dict[str, str | dict[str, str]] | None = None,
@@ -245,7 +239,11 @@ class QueryContext(BaseQueryContext):
         resolved_tz_mode = tz_mode if tz_mode is not None else self.tz_mode
         return QueryContext(
             query=query or self.query,
-            parameters=dict_copy(self.parameters, parameters),
+            parameters=(
+                dict_copy(self.parameters, parameters if isinstance(parameters, dict) else None)
+                if isinstance(self.parameters, dict)
+                else (parameters if parameters is not None else self.parameters)
+            ),
             settings=dict_copy(self.settings, settings),
             query_formats=dict_copy(self.query_formats, query_formats),
             column_formats=dict_copy(self.column_formats, column_formats),
@@ -283,18 +281,18 @@ class QueryResult(Closable):
 
     def __init__(
         self,
-        result_set: Matrix = None,
-        block_gen: Generator[Matrix, None, None] = None,
+        result_set: Matrix | None = None,
+        block_gen: Generator[Matrix, None, None] | None = None,
         column_names: tuple[str, ...] = (),
         column_types: tuple["ClickHouseType", ...] = (),
         column_oriented: bool = False,
-        source: Closable = None,
-        query_id: str = None,
-        summary: dict[str, Any] = None,
+        source: Closable | None = None,
+        query_id: str | None = None,
+        summary: dict[str, Any] | None = None,
     ):
-        self._result_rows = result_set
-        self._result_columns = None
-        self._block_gen = block_gen or empty_gen()
+        self._result_rows: Matrix | None = result_set
+        self._result_columns: Matrix | None = None
+        self._block_gen: Generator[Matrix, None, None] | None = block_gen or empty_gen()
         self._in_context = False
         self._query_id = query_id
         self.column_names = column_names
@@ -320,7 +318,7 @@ class QueryResult(Closable):
                 else:
                     self._result_columns = [[] for _ in range(len(self.column_names))]
             else:
-                result = [[] for _ in range(len(self.column_names))]
+                result: list[list[Any]] = [[] for _ in range(len(self.column_names))]
                 with self.column_block_stream as stream:
                     for block in stream:
                         for base, added in zip(result, block):
@@ -343,7 +341,7 @@ class QueryResult(Closable):
         query_id = self.summary.get("query_id")
         if query_id:
             return query_id
-        return self._query_id
+        return self._query_id or ""
 
     def _column_block_stream(self):
         if self._block_gen is None:
@@ -383,13 +381,17 @@ class QueryResult(Closable):
         return len(self.result_set)
 
     @property
-    def first_item(self) -> dict[str, Any]:
+    def first_item(self) -> dict[str, Any] | None:
+        if self.row_count == 0:
+            return None
         if self.column_oriented:
             return {name: col[0] for name, col in zip(self.column_names, self.result_set)}
         return dict(zip(self.column_names, self.result_set[0]))
 
     @property
-    def first_row(self) -> Sequence[Any]:
+    def first_row(self) -> Sequence[Any] | None:
+        if self.row_count == 0:
+            return None
         if self.column_oriented:
             return [col[0] for col in self.result_set]
         return self.result_set[0]
@@ -403,7 +405,7 @@ class QueryResult(Closable):
             self._block_gen = None
 
 
-comment_re = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|(--\s)[^\n]*$)", re.MULTILINE | re.DOTALL)
+comment_re = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|(--)[^\n]*$)", re.MULTILINE | re.DOTALL)
 
 
 def remove_sql_comments(sql: str) -> str:
@@ -411,15 +413,20 @@ def remove_sql_comments(sql: str) -> str:
     Remove SQL comments.  This is useful to determine the type of SQL query, such as SELECT or INSERT, but we
     don't fully trust it to correctly ignore weird quoted strings, and other edge cases, so we always pass the
     original SQL to ClickHouse (which uses a full-fledged AST/ token parser)
+
+    A block comment is replaced with a single space because the server lexer treats it as a token separator,
+    so "SELECT/*c*/1" is two tokens for the server and has to stay two tokens here.  A line comment ends at
+    its newline, which is kept, so it separates the tokens around it on its own.
     :param sql:  SQL query
     :return: SQL Query without SQL comments
     """
 
     def replacer(match):
         # if the 2nd group (capturing comments) is not None, it means we have captured a
-        # non-quoted, actual comment string, so return nothing to remove the comment
+        # non-quoted, actual comment string, so replace it with its separator
         if match.group(2):
-            return ""
+            # the 3rd group is only set for a line comment, whose terminating newline is not consumed
+            return "" if match.group(3) else " "
         # Otherwise we've actually captured a quoted string, so return it
         return match.group(1)
 

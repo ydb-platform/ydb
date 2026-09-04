@@ -80,3 +80,23 @@ To contribute:
 4. Run tests across all supported interpreters with the ``tox`` command. You will need to have the interpreters installed separately. We recommend ``pyenv`` for that. Use ``tox -p auto`` to run the tests in parallel.
 5. By default certain tests which take a very long time to run are skipped, but they are run in CI.
    These are marked using the ``pytest`` marker ``slow`` and can be run on their own with ``pytest -m slow`` or as part of the full suite with ``pytest -m ''``.
+
+Documentation
+-------------
+
+Documentation at https://asttokens.readthedocs.io/ is built by Read the Docs automatically on
+every push, from the sources in ``docs/`` (configured in ``.readthedocs.yaml``). To preview
+changes locally::
+
+    pip install -r docs/requirements.txt
+    sphinx-build -M html docs docs/_build
+
+Release
+-------
+
+The version is derived from the git tag by ``setuptools_scm``; there is no version to update in
+the source. To release, draft a new release at https://github.com/gristlabs/asttokens/releases
+with a new tag named ``vX.Y.Z``, and use "Generate release notes" to fill in the description.
+Publishing the release triggers the ``publish.yml`` workflow, which builds the package and
+uploads it to PyPI via `trusted publishing
+<https://docs.pypi.org/trusted-publishers/>`_.

@@ -30,7 +30,6 @@ class IDictValueBuilder {
 public:
     using TPtr = TUniquePtr<IDictValueBuilder>;
 
-public:
     virtual ~IDictValueBuilder() = default;
 
     virtual IDictValueBuilder& Add(TUnboxedValue&& key, TUnboxedValue&& value) = 0;
@@ -44,7 +43,6 @@ class IListValueBuilder {
 public:
     using TPtr = TUniquePtr<IListValueBuilder>;
 
-public:
     virtual ~IListValueBuilder() = default;
 
     // Destroys (moves out from) the element
@@ -254,7 +252,7 @@ public:
     virtual TUnboxedValue NewVariant(ui32 index, TUnboxedValue&& value) const = 0;
 
     inline TUnboxedValue NewEmptyList() const {
-        return NewList(nullptr, 0);
+        return NewList(/*items=*/nullptr, 0);
     }
 };
 

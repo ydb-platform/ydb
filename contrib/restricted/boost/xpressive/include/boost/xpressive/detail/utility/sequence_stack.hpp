@@ -22,7 +22,7 @@
 namespace boost { namespace xpressive { namespace detail
 {
 
-struct fill_t {} const fill = {};
+BOOST_INLINE_CONSTEXPR struct fill_t {} fill = {};
 
 //////////////////////////////////////////////////////////////////////////
 // sequence_stack

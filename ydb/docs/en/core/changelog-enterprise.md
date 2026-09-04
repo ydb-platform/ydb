@@ -1,54 +1,60 @@
 # Yandex Enterprise Database changelog
 
+## Version 26.1 {#26-1}
+
+### Version 26.1.1.ent.3 {#26-1-1-ent-3}
+
+Release date: August 3, 2026.
+
+This version includes all improvements from {{ ydb-short-name }} 26.1.1.22; see the [changelog](./changelog-server.md#26-1-1-22). It also includes the [enterprise-specific improvements](#26-1-1-ent-3-extras) listed below.
+
+#### Enterprise-specific Improvements {#26-1-1-ent-3-extras}
+
+The following changes are available in Yandex Enterprise Database in addition to the corresponding {{ ydb-short-name }} build:
+
+* Added an optimization that allows filtering rows by index columns before querying the main table, reducing the number of accesses to the main table when executing certain types of queries.
+* Implemented a set of fixes in index access (StreamIndexLookup) that eliminates the possibility of rare situations where executed queries could hang, and reduces RAM consumption during query execution.
+* Invalid views can now be restored from a backup. This allows restoring backups created from databases containing such views without additional actions from the administrator.
+* Added support for mutual certificate-based authentication (mTLS) in the [Kafka API](./reference/kafka-api/index.md).
+* Added the `TraceId` column with the query trace identifier to the `.sys/top_queries_*` and `.sys/query_sessions` system views.
+
+## Version 25.4 {#25-4}
+
+### Version 25.4.1.ent.2 {#25-4-1-ent-2}
+
+Release date: June 17, 2026.
+
+This version includes all improvements from {{ ydb-short-name }} 25.4.1.15; see the [changelog](./changelog-server.md#25-4-1-15). It also includes all [additional fixes](#25-2-1-ent-13-extras) listed below for version 25.2.1.ent.13.
+
 ## Version 25.3 {#25-3}
 
 ### Version 25.3.1.ent.3 {#25-3-1-ent-3}
 
-Release date: June 12, 2026.
+Release date: June 11, 2026.
 
-#### New Features
-
-* Added support for two–data center configuration with synchronous data writes (Bridge mode).
-* Topic improvements:
-  * In Kafka API [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
-  * Topic APIs were extended with new `DescribeConsumer` and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
-* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
-
-#### Bug Fixes
-
-* [Fixed](https://github.com/ydb-platform/ydb/pull/33758) an issue that caused a server-side session leak.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/36926) an issue where, in rare cases, reads from a table could block its deletion.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
-* [Fixed behavior](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18088) inconsistent results in some read-write transactions — conflicting writes no longer overwrite uncommitted changes.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18234) serializability violations in read-write transactions after shard restarts.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/20560) a memory management issue when committing offsets in topics with automatic partitioning enabled.
-* [Added ](https://github.com/ydb-platform/ydb/pull/18698) checks for enabled encryption in zero-copy transfers.
-* [Fixed ](https://github.com/ydb-platform/ydb/pull/20519) an issue that could cause a VDisk to hang in local recovery after a ChunkRead error.
-* [Eliminated](https://github.com/ydb-platform/ydb/pull/18924) phantom VDisk appearances caused by race conditions between group creation and deletion operations.
-* [Improved](https://github.com/ydb-platform/ydb/pull/17687) phantom VDisks caused by races between group creation and deletion operations.
-* When a session ends via attach stream, a notification is now [sent](https://github.com/ydb-platform/ydb/pull/22298).
-* The coordination service now correctly [returns](https://github.com/ydb-platform/ydb/pull/16901) `SCHEME_ERROR` for non-existent resources instead of the incorrect `INTERNAL_ERROR` code.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/20157) memory handling issues and internal data consistency violations in Workload Manager and related scheduler code.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/20432) an issue where PDisk info requests could time out when the target node was disabled or unavailable.
+This version includes all improvements from {{ ydb-short-name }} 25.3.1.27; see the [changelog](./changelog-server.md#25-3-1-27). It also includes all [additional fixes](#25-2-1-ent-13-extras) listed below for version 25.2.1.ent.13.
 
 ## Version 25.2 {#25-2}
 
 ### Version 25.2.1.ent.13 {#25-2-1-ent-13}
 
-Release date: June 12, 2026.
+Release date: June 11, 2026.
 
-#### Performance
+This version includes all improvements from {{ ydb-short-name }} 25.2.1.26; see the [changelog](./changelog-server.md#25-2-1-26). It also includes a number of additional improvements ported from the current 26.1 version.
 
-* [Reduced](https://github.com/ydb-platform/ydb/pull/32880) memory consumption when processing queries with the `TopSort` operation (`SELECT ... ORDER BY x LIMIT n`).
-* Added an optimization that filters rows by secondary index columns before accessing the main table, reducing the number of read operations.
+#### Additional Fixes {#25-2-1-ent-13-extras}
 
-#### Bug Fixes
+The following changes were ported from version 26.1 into supported stable versions of Yandex Enterprise Database:
 
-* [Fixed](https://github.com/ydb-platform/ydb/issues/24779) the `Unexpected end of buffer, Handle(): requirement chunkSize <= Buffer.size() failed` error that caused crashes in dynamic nodes.
-* Resolved several potential hang scenarios during query execution when using `StreamIndexLookup` index access.
-* Fixed a bug where the query limit was not applied to the index table, causing it to read far more records than necessary.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one who is not a member of a group allowed to access {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (LDAP search filter injection; special characters are now escaped per RFC 2254).
+* Fixed a bug that violated the sort order specified in the query when accessing system tables.
+* Fixed a bug in internal state integrity check logic that in rare cases could cause a single (not mass) restart of storage nodes.
+* Added an optimization that allows filtering rows by index columns before querying the main table, reducing the number of accesses to the main table when executing certain types of queries.
+* Implemented a set of fixes in index access (StreamIndexLookup) that eliminates the possibility of rare situations where executed queries could hang, and reduces RAM consumption during query execution.
+* Added an optimization that reduces memory consumption when processing queries with the TopSort operation (`SELECT ... ORDER BY x LIMIT n`).
+* Added support for index materialization during backup and restore.
+* TLI (Transaction Locks Invalidated) error messages now always include either an identifier or the path of the affected table.
+* Lock metrics have been added to query statistics provided through the `.sys/query_metrics_*` system tables.
+* Invalid views can now be restored from a backup. This allows restoring backups created from databases containing such views without additional actions from the administrator.
 
 ### Version 25.2.1.ent.4 {#25-2-1-ent-4}
 
@@ -94,7 +100,7 @@ Release date: February 12, 2026.
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.4.ent.8 {#24-1-4-ent-8}
+### Version 25.1.4.ent.8 {#25-1-4-ent-8}
 
 Release date: February 12, 2026.
 
@@ -103,7 +109,7 @@ Release date: February 12, 2026.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/29940) an [issue](https://github.com/ydb-platform/ydb/issues/29903) where named expression containing another named expression caused incorrect `VIEW` backup
 * [Fixed](https://github.com/ydb-platform/ydb/commit/c3b025603a6ba71d27ef0f1f66b9f643407643b3) descending sorting not working in queries to system views.
 
-### Version 25.1.4.ent.3 {#24-1-4-ent-3}
+### Version 25.1.4.ent.3 {#25-1-4-ent-3}
 
 Release date: November 25, 2025.
 
@@ -187,7 +193,7 @@ Release date: November 25, 2025.
 
 #### Bug Fixes
 
-* [Fixed](https://github.com/ydb-platform/ydb/pull/9707) an error in the [Interconnect](../concepts/glossary?version=v25.1#actor-system-interconnect) configuration that caused performance degradation.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9707) an error in the [Interconnect](./concepts/glossary.md?version=v25.1#actor-system-interconnect) configuration that caused performance degradation.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/13993) an out-of-memory error that occurred when deleting very large tables by limiting the number of tablets that process this operation concurrently.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9848) an issue that caused accidental duplicate entries in the system tablet configuration.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/11059) an issue where data reads took too long (seconds) during frequent table resharding operations.
@@ -202,7 +208,7 @@ Release date: November 25, 2025.
 * [Improved](https://github.com/ydb-platform/ydb/pull/16420) the secondary index build process: the system now retries on certain errors instead of interrupting the build.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16635) an error executing the `RETURNING` expression in `INSERT` and `UPSERT` operations.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16269) an issue causing Drop Tablet operations in PQ tablets to hang during Interconnect delays.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/16194) an error during VDisk [compaction](../concepts/glossary?version=v25.1#compaction).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16194) an error during VDisk [compaction](./concepts/glossary.md?version=v25.1#compaction).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an issue in which long topic-reading sessions ended with "too big inflight" errors.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15515) an issue where reading a topic by multiple consumers hangs if at least one partition has no incoming data.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18614) a rare issue with PQ tablet restarts.
@@ -222,7 +228,7 @@ Release date: November 25, 2025.
 
 ## Version 24.4 {#24-4}
 
-### Version 24.4.4.15 {#24-4-4-20}
+### Version 24.4.4.20 {#24-4-4-20}
 
 Release date: November 1, 2025.
 
@@ -320,12 +326,12 @@ Release date: December 24, 2024.
 
 * Introduced [query tracing](./reference/observability/tracing/setup), a tool that allows you to view the detailed path of a request through a distributed system.
 * Added support for [asynchronous replication](./concepts/async-replication), that allows synchronizing data between YDB databases in near real time. It can also be used for data migration between databases with minimal downtime for applications interacting with these databases.
-* Added support for [views](./concepts/datamodel/view), which can be enabled by the cluster administrator using the `enable_views` setting in [dynamic configuration](./maintenance/manual/dynamic-config#updating-dynamic-configuration).
+* Added support for [views](./concepts/datamodel/view), which can be enabled by the cluster administrator using the `enable_views` setting in [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#updating-dynamic-configuration).
 * Extended [federated query](./concepts/query_execution/federated_query/) capabilities to support new external data sources: MySQL, Microsoft SQL Server, and Greenplum.
 * Published [documentation](./devops/deployment-options/manual/federated-queries/connector-deployment.md) on deploying YDB with [federated query](./concepts/query_execution/federated_query/) New Features (manual setup).
 * Added a new launch parameter `FQ_CONNECTOR_ENDPOINT` for YDB Docker containers that specifies an external data source connector address. Added support for TLS encryption for connections to the connector and the ability to expose the connector service port locally on the same host as the dynamic YDB node.
-* Added an [auto-partitioning mode](./concepts/datamodel/topic.md#autopartitioning) for topics, where partitions can dynamically split based on load while preserving message read-order and exactly-once guarantees. The mode can be enabled by the cluster administrator using the settings `enable_topic_split_merge` and `enable_pqconfig_transactions_at_scheme_shard` in [dynamic configuration](./maintenance/manual/dynamic-config#updating-dynamic-configuration).
-* Added support for transactions involving [topics](./concepts/topic) and row-based tables, enabling transactional data transfer between tables and topics, or between topics, ensuring no data loss or duplication. Transactions can be enabled by the cluster administrator using the settings `enable_topic_service_tx` and `enable_pqconfig_transactions_at_scheme_shard` in [dynamic configuration](./maintenance/manual/dynamic-config#updating-dynamic-configuration).
+* Added an [auto-partitioning mode](./concepts/datamodel/topic.md#autopartitioning) for topics, where partitions can dynamically split based on load while preserving message read-order and exactly-once guarantees. The mode can be enabled by the cluster administrator using the settings `enable_topic_split_merge` and `enable_pqconfig_transactions_at_scheme_shard` in [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#updating-dynamic-configuration).
+* Added support for transactions involving [topics](./concepts/datamodel/topic.md) and row-based tables, enabling transactional data transfer between tables and topics, or between topics, ensuring no data loss or duplication. Transactions can be enabled by the cluster administrator using the settings `enable_topic_service_tx` and `enable_pqconfig_transactions_at_scheme_shard` in [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#updating-dynamic-configuration).
 * [Implemented](https://github.com/ydb-platform/ydb/pull/7150) [Change Data Capture (CDC)](./concepts/cdc) for synchronous secondary indexes.
 * Added support for changing record retention periods in [CDC](./concepts/cdc) topics.
 * Added support for auto-increment columns as part of a table's primary key.
@@ -342,7 +348,7 @@ Release date: December 24, 2024.
 * Improved diagnostics for storage issues in HealthCheck.
 * **_(Experimental)_** Added a [cost-based optimizer](./concepts/optimizer#cost-based-query-optimizer) for complex queries, involving [column-oriented tables](./concepts/glossary#column-oriented-table). The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option.  Currently, this optimizer only works with plans that contain [JOIN](./yql/reference/syntax/join) operations.
 * **_(Experimental)_** Initial version of the workload manager was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers were implemented to assign queries to specific resource pool.
-* **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config` in [dynamic configuration](./maintenance/manual/dynamic-config#updating-dynamic-configuration).
+* **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config` in [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#updating-dynamic-configuration).
 
 #### YDB UI
 
@@ -599,11 +605,23 @@ Release date: October 12, 2023.
 * Fixed a `SIGSEGV` error in the dinnode during `CSV` import via `YDB CLI`.
 * Fixed an error that caused a crash when processing `NGRpcService::TRefreshTokenImpl`.
 * Implemented a `gossip protocol` for exchanging cluster resource information.
-* Fixed an error in `DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed`.
+* Fixed an error:
+
+  ```text
+  DeserializeValuePickleV1(): requirement data.GetTransportVersion() ==
+  (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed
+  ```
+
 * Implemented `auto-increment` columns.
 * Use `UNAVAILABLE` status instead of `GENERIC_ERROR` when shard identification fails.
 * Added support for rope payload in `TEvVGet`.
 * Added ignoring of deprecated events.
 * Fixed a crash of write sessions on an invalid topic name.
-* Fixed an error in `CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap`.
+* Fixed an error:
+
+  ```text
+  CheckExpected(): requirement newConstr failed, message: Rewrite error,
+  missing Distinct((id)) constraint in node FlatMap
+  ```
+
 * Enabled `self-heal` by default.

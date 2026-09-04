@@ -8,6 +8,7 @@ SRCS(
     attribute_filter_ut.cpp
     attributes_ut.cpp
     complex_key_map.cpp
+    composite_map_ut.cpp
     lazy_ypath_service_ut.cpp
     options_ut.cpp
     precise_time_ut.cpp

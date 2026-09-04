@@ -60,13 +60,12 @@ public:
         const THashSet<TString>& ignoredRules,
         const THashMap<TString, THashSet<TString>>& disabledPreviousByToken,
         const THashMap<TString, THashSet<TString>>& forcedPreviousByToken)
-        : Grammar_(&GetSqlGrammar())
-        , Lexer_(lexer(/* ansi = */ IsAnsiLexer))
+        : Lexer_(lexer(/* ansi = */ IsAnsiLexer))
         , C3_(ComputeC3Config(ignoredRules, disabledPreviousByToken, forcedPreviousByToken))
     {
     }
 
-    TLocalSyntaxContext Analyze(TCompletionInput input) override {
+    TLocalSyntaxContext Analyze(TCompletionInput input) const override {
         TMaterializedInput materialized = {
             .Text = TString(input.Text),
             .CursorPosition = input.CursorPosition,
@@ -138,11 +137,11 @@ private:
     }
 
     [[nodiscard]] std::unordered_set<TTokenId> ComputeIgnoredTokens() const {
-        auto ignoredTokens = Grammar_->GetAllTokens();
-        for (auto keywordToken : Grammar_->GetKeywordTokens()) {
+        auto ignoredTokens = Grammar().GetAllTokens();
+        for (auto keywordToken : Grammar().GetKeywordTokens()) {
             ignoredTokens.erase(keywordToken);
         }
-        for (auto punctuationToken : Grammar_->GetPunctuationTokens()) {
+        for (auto punctuationToken : Grammar().GetPunctuationTokens()) {
             ignoredTokens.erase(punctuationToken);
         }
         return ignoredTokens;
@@ -156,7 +155,7 @@ private:
         std::unordered_set<TRuleId> ignored;
         ignored.reserve(IgnoredRules.size());
         for (const auto& ruleName : IgnoredRules) {
-            ignored.emplace(Grammar_->GetRuleId(ruleName));
+            ignored.emplace(Grammar().GetRuleId(ruleName));
         }
         return ignored;
     }
@@ -165,7 +164,7 @@ private:
     Resolved(const THashMap<TString, THashSet<TString>>& tokens) const {
         std::unordered_map<TTokenId, std::unordered_set<TTokenId>> resolved;
         for (const auto& [name, set] : tokens) {
-            resolved[Grammar_->GetTokenId(name)] = Resolved(set);
+            resolved[Grammar().GetTokenId(name)] = Resolved(set);
         }
         return resolved;
     }
@@ -173,12 +172,12 @@ private:
     [[nodiscard]] std::unordered_set<TTokenId> Resolved(const THashSet<TString>& tokens) const {
         std::unordered_set<TTokenId> resolved;
         for (const TString& name : tokens) {
-            resolved.emplace(Grammar_->GetTokenId(name));
+            resolved.emplace(Grammar().GetTokenId(name));
         }
         return resolved;
     }
 
-    TC3Candidates C3Complete(TCompletionInput statement, const TCursorTokenContext& context) {
+    TC3Candidates C3Complete(TCompletionInput statement, const TCursorTokenContext& context) const {
         auto enclosing = context.Enclosing();
 
         size_t caretTokenIndex = context.Cursor.NextTokenIndex;
@@ -196,8 +195,8 @@ private:
     }
 
     [[nodiscard]] TLocalSyntaxContext::TKeywords SiftedKeywords(const TC3Candidates& candidates) const {
-        const auto& vocabulary = Grammar_->GetVocabulary();
-        const auto& keywordTokens = Grammar_->GetKeywordTokens();
+        const auto& vocabulary = Grammar().GetVocabulary();
+        const auto& keywordTokens = Grammar().GetKeywordTokens();
 
         TLocalSyntaxContext::TKeywords keywords;
         for (const auto& token : candidates.Tokens) {
@@ -313,7 +312,7 @@ private:
         if (auto enclosing = context.Enclosing()) {
             TString path = enclosing->Base->Content;
             if (enclosing->Base->Name == "ID_QUOTED") {
-                path = Unquoted(std::move(path));
+                path = Unquoted(path);
                 enclosing->Position += 1;
             }
             path.resize(context.Cursor.Position - enclosing->Position);
@@ -404,9 +403,12 @@ private:
         };
     }
 
-    const ISqlGrammar* Grammar_;
+    static const ISqlGrammar& Grammar() {
+        return GetSqlGrammar();
+    }
+
     NSQLTranslation::ILexer::TPtr Lexer_;
-    TC3Engine<G> C3_;
+    const TC3Engine<G> C3_;
 };
 
 class TLocalSyntaxAnalysis: public ILocalSyntaxAnalysis {
@@ -421,14 +423,14 @@ public:
     {
     }
 
-    TLocalSyntaxContext Analyze(TCompletionInput input) override {
+    TLocalSyntaxContext Analyze(TCompletionInput input) const override {
         auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
         auto& engine = GetSpecializedEngine(isAnsiLexer);
-        return engine.Analyze(std::move(input));
+        return engine.Analyze(input);
     }
 
 private:
-    ILocalSyntaxAnalysis& GetSpecializedEngine(bool isAnsiLexer) {
+    const ILocalSyntaxAnalysis& GetSpecializedEngine(bool isAnsiLexer) const {
         if (isAnsiLexer) {
             return AnsiEngine_;
         }

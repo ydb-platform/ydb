@@ -76,6 +76,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(StatsGroup, NumActiveSlots, false);
     COUNTER_INIT(StatsGroup, ExpectedSlotCount, false);
     COUNTER_INIT(StatsGroup, SlotSizeInUnits, false);
+    COUNTER_INIT(StatsGroup, SlotSizeBytes, false);
 
     COUNTER_INIT(StatsGroup, EmulatedWriteErrors, true);
     COUNTER_INIT(StatsGroup, EmulatedReadErrors, true);
@@ -129,6 +130,9 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceActualCostNs, true);
     COUNTER_INIT(DeviceGroup, DeviceOverestimationRatio, false);
     COUNTER_INIT(DeviceGroup, DeviceNonperformanceMs, false);
+    COUNTER_INIT(DeviceGroup, DeviceOverestimationRatioMerged, false);
+    COUNTER_INIT(DeviceGroup, DeviceNonperformanceMsMerged, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceOverestimationDroppedSamples, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceInterruptedSystemCalls, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceSubmitThreadBusyTimeNs, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceCompletionThreadBusyTimeNs, true);
@@ -155,6 +159,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
 
     TRACKER_INIT_IF_EXTENDED(UpdateDurationTracker.UpdateCycleTime, updateCycle, Time in millisec);
 
+    HISTOGRAM_INIT(DeviceWritesSizes, deviceWritesSizes);
     HISTOGRAM_INIT(DeviceReadDuration, deviceReadDuration);
     HISTOGRAM_INIT(DeviceWriteDuration, deviceWriteDuration);
     HISTOGRAM_INIT(DeviceTrimDuration, deviceTrimDuration);

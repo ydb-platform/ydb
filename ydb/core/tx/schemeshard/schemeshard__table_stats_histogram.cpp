@@ -188,7 +188,10 @@ public:
 
 
 void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) {
-    const auto& rec = ev->Get()->Record;
+    auto* msg = ev->Get();
+    const auto& rec = msg->Record;
+
+    TabletCounters->Percentile()[COUNTER_GET_TABLE_STATS_RESULT_ARENA_SPACE_USED].IncrementFor(msg->Arena->Get()->SpaceUsed());
 
     auto datashardId = TTabletId(rec.GetDatashardId());
     ui64 dataSize = rec.GetTableStats().GetDataSize();
@@ -415,12 +418,14 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     TSerializedCellVec splitKey = getSplitBoundary(rec.GetTableStats(), GetKeyColumnTypes(*tableInfo));
 
-    if ((tableInfo->TableDescription.GetIndexImplType() == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
-        tableInfo->TableDescription.GetIndexImplType() == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
-        tableInfo->TableDescription.GetIndexImplType() == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) &&
-        splitKey.GetCells().size() > 1) {
-        // For now, only allow to split compact fulltext index table by __ydb_token
-        splitKey = TSerializedCellVec(splitKey.GetCells().Slice(0, 1));
+    const auto specialType = tableInfo->TableDescription.GetPartitionConfig().GetSpecialTableType();
+    if (specialType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
+        specialType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
+        const auto prefixSize = tableInfo->KeyColumnIds.size() - NTableIndex::NFulltext::CompactTableKeySize;
+        if (splitKey.GetCells().size() > prefixSize + 1) {
+            // For now, only allow to split compact fulltext index table by prefix + __ydb_token
+            splitKey = TSerializedCellVec(splitKey.GetCells().Slice(0, prefixSize + 1));
+        }
     }
 
     if (splitKey.GetBuffer().empty()) {

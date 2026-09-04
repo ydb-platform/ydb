@@ -3,7 +3,28 @@
 #include <util/generic/algorithm.h>
 #include <util/system/types.h>
 
+#include <vector>
+
 namespace NYql::NUdf {
+
+std::shared_ptr<arrow::Scalar> CreateOptionalUnionScalar(
+    std::shared_ptr<arrow::Scalar> unionScalar,
+    std::shared_ptr<arrow::DataType> optionalUnionType) {
+    return std::make_shared<arrow::StructScalar>(
+        std::vector<std::shared_ptr<arrow::Scalar>>{std::move(unionScalar)},
+        std::move(optionalUnionType));
+}
+
+std::shared_ptr<arrow::ArrayData> CreateOptionalUnionArray(
+    i64 length,
+    std::shared_ptr<arrow::Buffer> validityBitmap,
+    std::shared_ptr<arrow::ArrayData> unionArray,
+    i64 nullCount,
+    std::shared_ptr<arrow::DataType> optionalUnionType) {
+    return arrow::ArrayData::Make(std::move(optionalUnionType), length,
+                                  {std::move(validityBitmap)},
+                                  {std::move(unionArray)}, nullCount, /*offset=*/0);
+}
 
 namespace {
 
@@ -83,6 +104,19 @@ TVector<TDenseUnionChildUsage> CalculateDenseUnionChildrenUsage(const arrow::Arr
 }
 
 void AdjustDenseUnionValueOffsets(
+    TArrayRef<const i32> src,
+    TArrayRef<i32> dst,
+    TArrayRef<const i8> typeCodes,
+    TArrayRef<const TDenseUnionChildUsage> childUsage) {
+    Y_ENSURE(dst.size() == src.size(), "src and dst must have the same size");
+    Y_ENSURE(dst.size() == typeCodes.size(), "typeCodes size must match value offsets size");
+    for (size_t rowIndex = 0; rowIndex < dst.size(); ++rowIndex) {
+        const size_t typeCode = static_cast<size_t>(static_cast<ui8>(typeCodes[rowIndex]));
+        dst[rowIndex] = src[rowIndex] - static_cast<i32>(childUsage[typeCode].Offset);
+    }
+}
+
+void AdjustDenseUnionValueOffsetsInplace(
     TArrayRef<i32> valueOffsets,
     TArrayRef<const i8> typeCodes,
     TArrayRef<const TDenseUnionChildUsage> childUsage) {
@@ -92,11 +126,11 @@ void AdjustDenseUnionValueOffsets(
     if (!needsAdjust) {
         return;
     }
-
-    for (size_t rowIndex = 0; rowIndex < valueOffsets.size(); ++rowIndex) {
-        const size_t typeCode = static_cast<size_t>(static_cast<ui8>(typeCodes[rowIndex]));
-        valueOffsets[rowIndex] -= static_cast<i32>(childUsage[typeCode].Offset);
-    }
+    AdjustDenseUnionValueOffsets(
+        TArrayRef<const i32>(valueOffsets.data(), valueOffsets.size()),
+        valueOffsets,
+        typeCodes,
+        childUsage);
 }
 
 } // namespace NYql::NUdf

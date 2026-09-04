@@ -767,6 +767,8 @@ elf_syminfo (struct backtrace_state *state, uintptr_t addr,
 {
   struct elf_syminfo_data *edata;
   struct elf_symbol *sym = NULL;
+  void *mdata;
+  struct backtrace_moredata md;
 
   if (!state->threaded)
     {
@@ -802,10 +804,20 @@ elf_syminfo (struct backtrace_state *state, uintptr_t addr,
 	}
     }
 
-  if (sym == NULL)
-    callback (data, addr, NULL, 0, 0);
+  if (!state->moredata)
+    mdata = data;
   else
-    callback (data, addr, sym->name, sym->address, sym->size);
+    {
+      memset (&md, 0, sizeof md);
+      md.backtrace_version = BACKTRACE_MOREDATA_VERSION;
+      md.backtrace_data = data;
+      mdata = (void *) &md;
+    }
+
+  if (sym == NULL)
+    callback (mdata, addr, NULL, 0, 0);
+  else
+    callback (mdata, addr, sym->name, sym->address, sym->size);
 }
 
 /* Return whether FILENAME is a symlink.  */
@@ -4302,6 +4314,7 @@ elf_zstd_unpack_seq_decode (int mode,
 	decode->table_bits = 0;
 	if (!conv (&entry, 0, table))
 	  return 0;
+	decode->table = table;
       }
       break;
 
@@ -4364,6 +4377,7 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
   uint32_t repeated_offset3;
   uint16_t *scratch;
   unsigned char hdr;
+  int single_segment;
   int has_checksum;
   uint64_t content_size;
   int last_block;
@@ -4422,11 +4436,17 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
 
   hdr = *pin++;
 
-  /* We expect a single frame.  */
-  if (unlikely ((hdr & (1 << 5)) == 0))
+  single_segment = (hdr & (1 << 5)) != 0;
+  if (!single_segment)
     {
-      elf_uncompress_failed ();
-      return 0;
+      if (unlikely (pin >= pinend))
+	{
+	  elf_uncompress_failed ();
+	  return 0;
+	}
+      /* We have all the data in memory, so we can ignore the window
+	 size.  */
+      pin++;
     }
   /* Reserved bit must be zero.  */
   if (unlikely ((hdr & (1 << 3)) != 0))
@@ -4444,12 +4464,21 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
   switch (hdr >> 6)
     {
     case 0:
-      if (unlikely (pin >= pinend))
+      if (!single_segment)
 	{
-	  elf_uncompress_failed ();
-	  return 0;
+	  /* The content_size is not specified, but we know it from the
+	     section header.  */
+	  content_size = (uint64_t) sout;
 	}
-      content_size = (uint64_t) *pin++;
+      else
+	{
+	  if (unlikely (pin >= pinend))
+	    {
+	      elf_uncompress_failed ();
+	      return 0;
+	    }
+	  content_size = (uint64_t) *pin++;
+	}
       break;
     case 1:
       if (unlikely (pin + 1 >= pinend))

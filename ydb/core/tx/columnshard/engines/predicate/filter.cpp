@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap {
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
@@ -72,19 +74,25 @@ TConclusionStatus TPKRangesFilter::Add(std::optional<NOlap::TPredicate> f, std::
     }
     auto fromContainerConclusion = TPredicateContainer::BuildPredicateFrom(std::move(f));
     if (fromContainerConclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect from container")(
-            "from", fromContainerConclusion.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "add_range_filter"},
+            {"problem", "incorrect from container"},
+            {"from", fromContainerConclusion.GetErrorMessage()});
         return fromContainerConclusion;
     }
     auto toContainerConclusion = TPredicateContainer::BuildPredicateTo(std::move(t));
     if (toContainerConclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect to container")(
-            "from", toContainerConclusion.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "add_range_filter"},
+            {"problem", "incorrect to container"},
+            {"from", toContainerConclusion.GetErrorMessage()});
         return toContainerConclusion;
     }
     if (SortedRanges.size() && !FakeRanges) {
         if (fromContainerConclusion->CrossRanges(SortedRanges.back().GetPredicateTo())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
+            YDB_LOG_ERROR("",
+                {"event", "add_range_filter"},
+                {"problem", "not sorted sequence"});
             return TConclusionStatus::Fail("not sorted sequence");
         }
     }

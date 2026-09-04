@@ -213,6 +213,11 @@ public:
                         return TStringBuilder() << what << " SpecializedIndexDescription is not empty for index type LocalMinMax";
                     }
                     return std::nullopt;
+                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                    if (!std::holds_alternative<std::monostate>(info.SpecializedIndexDescription)) {
+                        return TStringBuilder() << what << " SpecializedIndexDescription is not empty for index type LocalCountMinSketch";
+                    }
+                    return std::nullopt;
                 default:
                     return TStringBuilder() << "Unexpected index type " << static_cast<int>(info.Type)
                         << " in TAlterLocalIndex::Propose. Only local bloom filter and min_max types are supported.";

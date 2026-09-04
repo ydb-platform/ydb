@@ -8,6 +8,8 @@ from clickhouse_connect.cc_sqlalchemy.alembic.adapter import (
     include_object as base_include_object,
 )
 
+__all__ = ["make_include_name", "make_include_object", "prevent_empty_migrations"]
+
 
 def make_include_name(
     include_schemas: frozenset[str] | None = None, exclude_mv_pattern: str = "_mv", default_schema: str = "default"
@@ -75,9 +77,9 @@ def prevent_empty_migrations(writer_fn: Callable) -> Callable:
         if not directives:
             return
         config = context.config
-        if getattr(config.cmd_opts, "autogenerate", False):
+        if config is not None and getattr(config.cmd_opts, "autogenerate", False):
             script = directives[0]
-            if script.upgrade_ops.is_empty():
+            if script.upgrade_ops is not None and script.upgrade_ops.is_empty():
                 directives.clear()
                 return
         writer_fn(context, revision, directives)

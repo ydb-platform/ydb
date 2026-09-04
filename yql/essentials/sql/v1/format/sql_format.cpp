@@ -237,7 +237,7 @@ public:
 
 private:
     void VisitToken(const TToken& token) {
-        auto str = token.GetValue();
+        const auto& str = token.GetValue();
         if (str == "<EOF>") {
             return;
         }
@@ -253,7 +253,7 @@ private:
         }
 
         if (Scopes_.back() == EScope::Identifier && !FuncCall_) {
-            if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, true)) {
+            if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, /*flexibleTypesEnabled=*/true)) {
                 Sb_ << "id";
             } else {
                 Sb_ << str;
@@ -494,7 +494,7 @@ private:
 
     void NewLine() {
         if (TokenIndex_ >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_].Line > LastLine_) {
-            WriteComments(true, /*nextTokenIndex=*/TokenIndex_);
+            WriteComments(/*completeLine=*/true, /*nextTokenIndex=*/TokenIndex_);
         }
 
         if (OutColumn_) {
@@ -654,7 +654,7 @@ private:
     }
 
     void MarkToken(const TToken& token) {
-        auto str = token.GetValue();
+        const auto& str = token.GetValue();
         if (str == "<EOF>") {
             return;
         }
@@ -882,7 +882,7 @@ private:
     void VisitPragma(const TRule_pragma_stmt& msg) {
         NewLine();
         VisitKeyword(msg.GetToken1());
-        auto prefix = msg.GetRule_opt_id_prefix_or_type2();
+        const auto& prefix = msg.GetRule_opt_id_prefix_or_type2();
         if (prefix.HasBlock1()) {
             Visit(prefix.GetBlock1().GetRule_an_id_or_type1());
             VisitKeyword(prefix.GetBlock1().GetToken2());
@@ -994,7 +994,8 @@ private:
 
     void VisitSmartParenthesis(const TRule_smart_parenthesis& msg) {
         if (!IsSelect(msg)) {
-            return VisitAllFields(msg.GetDescriptor(), msg);
+            VisitAllFields(msg.GetDescriptor(), msg);
+            return;
         }
 
         Y_ENSURE(msg.GetBlock2().HasAlt1());
@@ -1882,15 +1883,15 @@ private:
     void PosFromToken(const TToken& token) {
         LastLine_ = token.GetLine();
         LastColumn_ = token.GetColumn();
-        WriteComments(false, /*nextTokenIndex=*/TokenIndex_);
+        WriteComments(/*completeLine=*/false, /*nextTokenIndex=*/TokenIndex_);
     }
 
     void VisitToken(const TToken& token) {
-        VisitTokenImpl(token, false);
+        VisitTokenImpl(token, /*forceKeyword=*/false);
     }
 
     void VisitKeyword(const TToken& token) {
-        VisitTokenImpl(token, true);
+        VisitTokenImpl(token, /*forceKeyword=*/true);
     }
 
     void VisitTokenImpl(const TToken& token, bool forceKeyword) {
@@ -1985,7 +1986,7 @@ private:
         Out(str);
 
         if (TokenIndex_ + 1 >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_ + 1].Line > LastLine_) {
-            WriteComments(true, /*nextTokenIndex=*/TokenIndex_ + 1);
+            WriteComments(/*completeLine=*/true, /*nextTokenIndex=*/TokenIndex_ + 1);
         }
 
         if (str == ";") {
@@ -3052,7 +3053,7 @@ private:
 
     void VisitNeqSubexpr(const TRule_neq_subexpr& msg) {
         bool pushedIndent = false;
-        VisitNeqSubexprImpl(msg, pushedIndent, true);
+        VisitNeqSubexprImpl(msg, pushedIndent, /*top=*/true);
     }
 
     void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool& pushedIndent, bool top) {
@@ -3087,7 +3088,7 @@ private:
                         }
                     }
 
-                    VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, false);
+                    VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, /*top=*/false);
                     if (pushedIndent && top) {
                         PopCurrentIndent();
                         pushedIndent = false;
@@ -3164,7 +3165,7 @@ private:
 
         bool pushedIndent = false;
         for (; begin != end; ++begin) {
-            const auto op = getOp(*begin);
+            const auto& op = getOp(*begin);
             const auto opSize = BinaryOpTokenSize(op);
             const bool hasFirstNewline = LastLine_ != ParsedTokens_[TokenIndex_].Line;
             const bool hasSecondNewline = ParsedTokens_[TokenIndex_].Line != ParsedTokens_[TokenIndex_ + opSize].Line;
@@ -3205,7 +3206,6 @@ private:
         CurrentIndent_ -= OneIndent;
     }
 
-private:
     const TStaticData& StaticData_;
     const TParsedTokenList& ParsedTokens_;
     const TParsedTokenList& Comments_;
@@ -3489,7 +3489,7 @@ public:
 
         auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer);
         TVector<TString> statements;
-        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File, false)) {
+        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File, /*areBlankSkipped=*/false)) {
             return false;
         }
 

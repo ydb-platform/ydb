@@ -1,6 +1,8 @@
 items:
   - name: Обзор
     href: index.md
+  - name: Процесс выполнения запросов
+    href: execution_process.md
   - name: Оптимизатор запросов
     href: optimizer.md
   - name: Многоверсионное управление конкурентным доступом (MVCC)
@@ -13,6 +15,10 @@ items:
     href: fulltext_search.md
   - name: Гибридный поиск
     href: hybrid_search.md
+  - name: Поиск по JSON
+    href: json_search.md
+  - name: Локальные индексы
+    href: local_indexes.md
   - name: Федеративные запросы
     include:
       path: federated_query/toc_p.yaml
@@ -21,3 +27,5 @@ items:
     href: spilling.md
   - name: Скан запросы
     href: scan_query.md
+  - name: YQL запросы к топикам
+    href: topics.md

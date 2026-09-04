@@ -11,8 +11,10 @@
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/udf/udf_value_utils.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/guid.h>
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 #include <util/system/unaligned_mem.h>
@@ -40,6 +42,26 @@ struct IColumnDataExtractor {
 
 // ------------------------------------------------------------
 
+template <typename TLayout>
+void StoreFixedSizeLayout(TLayout& dst, const NYql::NUdf::TUnboxedValue& value) {
+    if constexpr (std::is_same_v<TLayout, TGUID>) {
+        const auto ref = value.AsStringRef();
+        Y_ENSURE(ref.Size() == sizeof(TGUID), "Wrong Uuid size: " << ref.Size());
+        dst = ReadUnaligned<TGUID>(ref.Data());
+    } else {
+        dst = value.Get<TLayout>();
+    }
+}
+
+template <typename TLayout>
+NYql::NUdf::TUnboxedValue CreateFixedSizeValue(const TLayout& data) {
+    if constexpr (std::is_same_v<TLayout, TGUID>) {
+        return MakeString(NYql::NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(TGUID)));
+    } else {
+        return NYql::NUdf::TUnboxedValuePod(data);
+    }
+}
+
 template <typename TLayout, bool Nullable>
 class TFixedSizeColumnDataExtractor : public IColumnDataExtractor {
 public:
@@ -57,11 +79,11 @@ public:
                 std::memset(dataStorage.data(), 0, sizeof(TLayout));
             } else {
                 bitmapStorage[0] = 1; // not null
-                *reinterpret_cast<TLayout*>(dataStorage.data()) = value.Get<TLayout>();
+                StoreFixedSizeLayout(*reinterpret_cast<TLayout*>(dataStorage.data()), value);
             }
         } else {
             bitmapStorage[0] = 1;
-            *reinterpret_cast<TLayout*>(dataStorage.data()) = value.Get<TLayout>();
+            StoreFixedSizeLayout(*reinterpret_cast<TLayout*>(dataStorage.data()), value);
         }
 
         columnsData.push_back(dataStorage.data());
@@ -85,7 +107,7 @@ public:
                     std::memset(&dataPtr[i], 0, sizeof(TLayout));
                 } else {
                     bitmapPtr[i] = 1; // not null
-                    dataPtr[i] = values[i].Get<TLayout>();
+                    StoreFixedSizeLayout(dataPtr[i], values[i]);
                 }
                 columnsData.push_back(reinterpret_cast<const ui8*>(&dataPtr[i]));
                 columnsNullBitmap.push_back(&bitmapPtr[i]);
@@ -93,7 +115,7 @@ public:
         } else {
             for (ui32 i = 0; i < count; ++i) {
                 bitmapPtr[i] = 1;
-                dataPtr[i] = values[i].Get<TLayout>();
+                StoreFixedSizeLayout(dataPtr[i], values[i]);
                 columnsData.push_back(reinterpret_cast<const ui8*>(&dataPtr[i]));
                 columnsNullBitmap.push_back(&bitmapPtr[i]);
             }
@@ -113,8 +135,8 @@ public:
             }
         }
 
-        TLayout* data = reinterpret_cast<TLayout*>(columnsData[0]) + tupleIndex;
-        return NYql::NUdf::TUnboxedValuePod(*data);
+        const TLayout* data = reinterpret_cast<const TLayout*>(columnsData[0]) + tupleIndex;
+        return CreateFixedSizeValue(*data);
     }
 
     ui32 GetElementSize() override {
@@ -200,6 +222,7 @@ protected:
     TType* Type_;
 };
 
+template <bool IsNull>
 class TSingularColumnDataExtractor : public IColumnDataExtractor {
 public:
     TSingularColumnDataExtractor(TType* type) {
@@ -208,11 +231,16 @@ public:
 
     void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
         Y_UNUSED(value);
-        auto& dataStorage = tempStorage.emplace_back(1);
-        dataStorage[0] = 0;
+        columnsData.push_back(nullptr);
 
-        columnsData.push_back(dataStorage.data());
-        columnsNullBitmap.push_back(nullptr);
+        if constexpr (IsNull) {
+            auto& bitmapStorage = tempStorage.emplace_back(1);
+            bitmapStorage[0] = 0; // null
+            columnsNullBitmap.push_back(bitmapStorage.data());
+        } else {
+            Y_UNUSED(tempStorage);
+            columnsNullBitmap.push_back(nullptr);
+        }
     }
 
     void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
@@ -224,11 +252,11 @@ public:
 
     NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         Y_UNUSED(columnsData, columnsNullBitmap, tupleIndex, holderFactory);
-        return NYql::NUdf::TUnboxedValuePod::Void();
+        return NYql::NUdf::CreateSingularUnboxedValuePod<IsNull>();
     }
 
     ui32 GetElementSize() override {
-        return 1;
+        return 0;
     }
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {
@@ -583,7 +611,8 @@ struct TColumnDataExtractorTraits {
     using TResource = TResourceColumnDataExtractor<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateColumnDataExtractor<TTzDate, Nullable>;
-    using TSingular = TSingularColumnDataExtractor;
+    template <bool IsNull>
+    using TSingular = TSingularColumnDataExtractor<IsNull>;
 
     constexpr static bool PassType = false;
 
@@ -598,8 +627,7 @@ struct TColumnDataExtractorTraits {
 
     template <bool IsNull>
     static TResult::TPtr MakeSingular(TType* type) {
-        Y_UNUSED(IsNull);
-        return std::make_unique<TSingular>(type);
+        return std::make_unique<TSingular<IsNull>>(type);
     }
 
     static TResult::TPtr MakeResource(bool isOptional, TType* type) {
@@ -709,7 +737,7 @@ public:
 
     void PackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPackResult& packed) override {
         if (numTuples == 0) return;
-        
+
         const ui32 numColumns = Extractors_.size();
         for (ui32 tupleIdx = 0; tupleIdx < numTuples; ++tupleIdx) {
             Pack(values + tupleIdx * numColumns, packed);
@@ -718,7 +746,7 @@ public:
 
     void BucketPack(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) override {
         if (numTuples == 0) return;
-        
+
         const ui32 numColumns = Extractors_.size();
         
         // Pack each tuple and distribute to buckets based on hash
@@ -749,11 +777,32 @@ public:
 
     void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) override {
         Y_ENSURE(tupleIndex < static_cast<ui32>(packed.NTuples));
+        UnpackImpl(
+            packed,
+            packed.PackedTuples.data() + tupleIndex * TupleLayout_->TotalRowSize,
+            1,
+            values);
+    }
+
+    void UnpackBatch(const TPackResult& packed, NYql::NUdf::TUnboxedValue* values) override {
+        UnpackImpl(packed, packed.PackedTuples.data(), packed.NTuples, values);
+    }
+
+    const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
+        return TupleLayout_.get();
+    }
+
+private:
+    void UnpackImpl(const TPackResult& packed, const ui8* packedData, ui32 count,
+                    NYql::NUdf::TUnboxedValue* values) {
+        if (Extractors_.empty() || count == 0) {
+            return;
+        }
 
         // We need to unpack all tuples to get proper column pointers
         std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
         TupleLayout_->CalculateColumnSizes(
-            packed.PackedTuples.data(), packed.NTuples, bytesPerColumn);
+            packedData, count, bytesPerColumn);
 
         // Calculate total pointers needed (InnerExtractors corresponds to ColumnDescs)
         Y_ENSURE(bytesPerColumn.size() == InnerExtractors_.size(),
@@ -773,12 +822,12 @@ public:
             // For variable-size columns (strings), we need to create offset buffer first
             if (packer->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
                 // Offset buffer: (NTuples + 1) * sizeof(ui32)
-                columnsDataStorage.emplace_back((packed.NTuples + 1) * sizeof(ui32));
-                std::memset(columnsDataStorage.back().data(), 0, (packed.NTuples + 1) * sizeof(ui32));
+                columnsDataStorage.emplace_back((count + 1) * sizeof(ui32));
+                std::memset(columnsDataStorage.back().data(), 0, (count + 1) * sizeof(ui32));
                 columnsData.push_back(columnsDataStorage.back().data());
 
                 // Null bitmap for offset buffer
-                ui32 bitmapBytes = (packed.NTuples + 7) / 8;
+                ui32 bitmapBytes = (count + 7) / 8;
                 columnsNullBitmapStorage.emplace_back(bitmapBytes);
                 columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
 
@@ -795,7 +844,7 @@ public:
                 columnsData.push_back(columnsDataStorage.back().data());
 
                 // Allocate bitmap storage
-                ui32 bitmapBytes = (packed.NTuples + 7) / 8;
+                ui32 bitmapBytes = (count + 7) / 8;
                 columnsNullBitmapStorage.emplace_back(bitmapBytes);
                 columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
             }
@@ -803,38 +852,35 @@ public:
 
         TupleLayout_->Unpack(
             columnsData.data(), columnsNullBitmap.data(),
-            packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
+            packedData, packed.Overflow, 0, count);
 
-        // Now extract the specific tuple for each extractor
-        // We need to calculate pointer offsets based on inner extractors
-        for (size_t i = 0; i < Extractors_.size(); ++i) {
-            const auto& mapping = InnerMapping_[i];
-            
-            // Calculate how many pointers we need to pass
-            // (strings have 2 pointers per column: offset + data)
-            size_t pointerOffset = 0;
-            for (size_t j = 0; j < mapping.front(); ++j) {
-                auto* innerExtractor = InnerExtractors_[j];
-                if (innerExtractor->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
-                    pointerOffset += 2; // offset + data
-                } else {
-                    pointerOffset += 1;
+        // Now extract each tuple for each extractor
+        for (ui32 tupleIndex = 0; tupleIndex < count; ++tupleIndex) {
+            // We need to calculate pointer offsets based on inner extractors
+            for (size_t i = 0; i < Extractors_.size(); ++i) {
+                const auto& mapping = InnerMapping_[i];
+
+                // Calculate how many pointers we need to pass
+                // (strings have 2 pointers per column: offset + data)
+                size_t pointerOffset = 0;
+                for (size_t j = 0; j < mapping.front(); ++j) {
+                    auto* innerExtractor = InnerExtractors_[j];
+                    if (innerExtractor->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
+                        pointerOffset += 2; // offset + data
+                    } else {
+                        pointerOffset += 1;
+                    }
                 }
-            }
 
-            values[i] = Extractors_[i]->CreateFromUnpack(
-                columnsData.data() + pointerOffset,
-                columnsNullBitmap.data() + pointerOffset,
-                tupleIndex,
-                HolderFactory_);
+                values[tupleIndex * Extractors_.size() + i] = Extractors_[i]->CreateFromUnpack(
+                    columnsData.data() + pointerOffset,
+                    columnsNullBitmap.data() + pointerOffset,
+                    tupleIndex,
+                    HolderFactory_);
+            }
         }
     }
 
-    const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
-        return TupleLayout_.get();
-    }
-
-private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;

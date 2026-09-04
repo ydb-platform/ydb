@@ -150,6 +150,19 @@
             ]
         },
         {
+            "Name": "TKqlReadTableVectorIndex",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqlReadTableVectorIndex"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 4, "Name": "TargetVector", "Type": "TExprBase"},
+                {"Index": 5, "Name": "PrefixRows", "Type": "TExprBase", "Optional": true}
+            ]
+        },
+        {
             "Name": "TKqlReadTableRanges",
             "Base": "TKqlReadTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"},
@@ -328,14 +341,6 @@
             ]
         },
         {
-            "Name": "TKqpUpsertRows",
-            "Base": "TKqlUpsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqpUpsertRows"},
-            "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
-            ]
-        },
-        {
             "Name": "TKqpWriteConstraint",
             "Base": "TExprBase",
             "Match": {"Type": "Callable", "Name": "KqpWriteConstraint"},
@@ -487,11 +492,6 @@
             "ListBase": "TKqlQuery"
         },
         {
-            "Name": "TKqpEffects",
-            "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "KqpEffects"}
-        },
-        {
             "Name": "TKqpConnection",
             "Base": "TDqConnection",
             "Match": {"Type": "CallableBase"},
@@ -520,6 +520,19 @@
                 {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
                 {"Index": 3, "Name": "Index", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "WithData", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpCnVectorSearch",
+            "Base": "TKqpConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnVectorSearch"},
+            "Children": [
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 6, "Name": "HasPrefix", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {
@@ -590,11 +603,6 @@
                 {"Index": 3, "Name": "IsBatch", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
-        },
-        {
-            "Name": "TKqpDeleteRows",
-            "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
         },
         {
             "Name": "TKqpLockAndCheck",

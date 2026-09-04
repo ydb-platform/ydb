@@ -42,6 +42,10 @@ void LogAndTraceJoinTree(
 
 } // anonymous namespace
 
+bool TOptimizeCBOTreeRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::CBOTree;
+}
+
 /**
  * Run dynamic programming CBO and convert the resulting tree into operator tree
  *

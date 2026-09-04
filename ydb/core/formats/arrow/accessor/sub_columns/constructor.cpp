@@ -1,11 +1,25 @@
 #include "accessor.h"
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
+
+namespace {
+
+TConclusionStatus ValidateSettings(const TSettings& settings) {
+    if (!settings.IsDenseEncodingVersionSupported()) {
+        return TConclusionStatus::Fail(
+            TStringBuilder{} << "unsupported dense encoding version " << settings.GetDenseEncodingVersionResolved()
+                             << "; maximum supported version is " << GetMaxDenseEncodingVersion());
+    }
+    return TConclusionStatus::Success();
+}
+
+}   // namespace
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
     AFL_VERIFY(externalInfo.GetDefaultValue() == nullptr);
@@ -14,6 +28,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(con
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
+    if (auto conclusion = ValidateSettings(Settings); conclusion.IsFail()) {
+        return conclusion;
+    }
     auto headerConclusion = TSubColumnsHeader::ReadHeader(originalData, externalInfo);
     if (headerConclusion.IsFail()) {
         return headerConclusion;
@@ -29,11 +46,13 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
                                                                              "schema", headerConclusion->GetColumnStats().GetColumnsCount())(
                                                                              "proto", proto.GetKeyColumns().size());
         for (ui32 i = 0; i < (ui32)proto.GetKeyColumns().size(); ++i) {
-            std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
-                externalInfo.GetDefaultSerializer(), headerConclusion->GetColumnStats().GetAccessorConstructor(i), schema->field(i), nullptr, 0);
-            std::shared_ptr<IChunkedArray> chunk = std::make_shared<TDeserializeChunkedArray>(externalInfo.GetRecordsCount(), columnLoader,
-                TStringBuf(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize()), true);
-            columns.emplace_back(chunk);
+            std::shared_ptr<TColumnLoader> columnLoader =
+                std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(),
+                    headerConclusion->GetColumnStats().GetAccessorConstructor(i, Settings.GetEncodingParams()), schema->field(i), nullptr, 0);
+            const TStringBuf columnBlob(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize());
+            auto additionalData = NArrow::NAccessor::BuildAdditionalAccessorData(proto.GetKeyColumns(i).GetAdditionalAccessorData());
+            columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(
+                externalInfo.GetRecordsCount(), columnLoader, columnBlob, true, std::move(additionalData)));
             currentIndex += proto.GetKeyColumns(i).GetSize();
         }
         columnKeysContainer = std::make_shared<TGeneralContainer>(schema, std::move(columns));
@@ -74,9 +93,10 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     return conclusion.DetachResult();
 }
 
-TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     const std::shared_ptr<TSubColumnsArray> arr = std::static_pointer_cast<TSubColumnsArray>(columnData);
-    return arr->SerializeToString(externalInfo);
+    return { arr->SerializeToString(externalInfo), std::make_shared<TEmptyAdditionalData>() };
 }
 
 TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContainer(const TStringBuf data,
@@ -102,13 +122,16 @@ TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContain
 }
 
 TConclusion<std::shared_ptr<TSubColumnsPartialArray>> TConstructor::BuildPartialReader(
-    const TString& originalData, const TChunkConstructionData& externalInfo) {
+    const TString& originalData, const TChunkConstructionData& externalInfo, const TSettings& settings) {
+    if (auto conclusion = ValidateSettings(settings); conclusion.IsFail()) {
+        return conclusion;
+    }
     auto headerConclusion = TSubColumnsHeader::ReadHeader(originalData, externalInfo);
     if (headerConclusion.IsFail()) {
         return headerConclusion;
     }
     return std::make_shared<TSubColumnsPartialArray>(
-        headerConclusion.DetachResult(), externalInfo.GetRecordsCount(), externalInfo.GetColumnType());
+        headerConclusion.DetachResult(), externalInfo.GetRecordsCount(), externalInfo.GetColumnType(), settings);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

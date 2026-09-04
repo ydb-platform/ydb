@@ -18,16 +18,15 @@ public:
         , Join(join) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin) override;
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) override;
 
 private:
-    TExprNode::TPtr BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoins);
+    TExprNode::TPtr BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoins, const TTypeAnnotationContext& typesCtx);
     TExprNode::TPtr BuildCrossJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput);
-    TString GetValidJoinKind(const TString& joinKind) const;
     void PrepareJoinKeys(TVector<TString>& leftJoinKeys, TVector<TString>& rightJoinKeys, TModifyKeysList& remapLeft, TModifyKeysList& remapRight,
                          THashMap<TString, TString>& leftColumnRemap, THashMap<TString, TString>& rightColumnRemap, TVector<TString>& leftJoinKeyRenames,
                          TVector<TString>& rightJoinKeyRenames, const TStructExprType* leftInputType, const TStructExprType* rightInputType, const bool outer,
-                         const EJoinSide joinSide);
+                         const EJoinSide joinSide, const TTypeAnnotationContext& typesCtx);
     TExprNode::TPtr PrepareJoinSide(TExprNode::TPtr input, const TVector<TInfoUnit>& colNames, TVector<TString>& joinKeys, const TModifyKeysList& remap,
                                     const bool filterNulls);
     TExprNode::TPtr SqueezeJoinInputToDict(TExprNode::TPtr input, const ui32 width, const TVector<ui32>& joinKeys, const bool withPayloads);
@@ -39,7 +38,9 @@ private:
                                    TVector<TCoAtom>& rightKeyColumnNames);
     TExprNode::TPtr BuildBlockHashJoin(const TString& joinType, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput,
                                        const TVector<TCoAtom>& leftKeyColumnIdxs, const TVector<TCoAtom>& rightKeyColumnIdsx,
-                                       const TVector<TCoAtom>& leftKeyColumnNames, const TVector<TCoAtom>& rightKeyColumnNames, bool isReverseBlockJoin);
+                                       const TVector<TCoAtom>& leftKeyColumnNames, const TVector<TCoAtom>& rightKeyColumnNames,const TVector<TString>& leftInputColumns, const TVector<TString>& rightInputColumns, bool isReverseBlockJoin);
+    void PrepareJoinFilters(TExprNode::TPtr& leftLambda, TExprNode::TPtr& rightLambda, TExprNode::TPtr& commonLambda, const TVector<TString>& leftInputColumns,
+                            const TVector<TString>& rightInputColumns, const TString& joinType);
 
     TIntrusivePtr<TOpJoin> Join;
 };

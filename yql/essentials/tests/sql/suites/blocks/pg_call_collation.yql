@@ -1,0 +1,6 @@
+$data = [
+    <|x:"straße"p|>,
+    <|x:"foo"p|>,
+];
+
+select PgCall("upper", x, "de-DE-x-icu" as Collation), PgCall("upper", x) from as_table($data);

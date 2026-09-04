@@ -1013,28 +1013,48 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1001);
     }
 
-    Y_UNIT_TEST(YqlSyntaxV0) {
+    Y_UNIT_TEST(YqlSyntaxV0Rejected) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v0
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        result = session.ExecuteDataQuery(R"(
-            --!syntax_v1
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(!result.IsSuccess());
 
         result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
+        result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+    }
+
+    Y_UNIT_TEST(LegacySqlVersionConfigIsIgnored) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetSqlVersion(0);
+        appConfig.MutableTableServiceConfig()->SetEnforceSqlVersionV1(false);
+
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
+            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
     }
 
     Y_UNIT_TEST(YqlTableSample) {
@@ -3501,6 +3521,70 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[1u;1u]])");
         }
+    }
+
+    Y_UNIT_TEST(RejectSyntaxPgMarker) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto result = client.ExecuteQuery(
+            "--!syntax_pg\nSELECT 1 AS result;",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PostgreSQL syntax is not supported", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(RejectSyntaxPgProto) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+
+        auto result = client.ExecuteQuery(
+            "SELECT 1 AS result",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PostgreSQL syntax is not supported", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(RejectSyntaxPgMarkerStream) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto it = client.StreamExecuteQuery(
+            "--!syntax_pg\nSELECT 1 AS result;",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        auto streamPart = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(streamPart.GetIssues().ToString(), "PostgreSQL syntax is not supported", streamPart.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(RejectSyntaxPgProtoStream) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+
+        auto it = client.StreamExecuteQuery(
+            "SELECT 1 AS result",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        auto streamPart = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(streamPart.GetIssues().ToString(), "PostgreSQL syntax is not supported", streamPart.GetIssues().ToString());
     }
 }
 Y_UNIT_TEST_SUITE(KqpQueryDiscard) {

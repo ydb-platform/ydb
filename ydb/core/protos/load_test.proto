@@ -152,12 +152,18 @@ message TEvLoadTestRequest {
             enum EAreaInit {
                 INIT_NONE = 0;
 
-                // requires ExpectedChunkSize: the idea is just to preallocate all chunks
+                // Write one zeroed IoSizeBytes block at the start of each chunk
+                // (preallocates chunks). Schema default for omitted InitType;
+                // used as-is for write loads.
                 INIT_ZEROES_FIRST_BLOCK = 1;
 
+                // Zero-fill every IoSizeBytes slot. Required for read load with
+                // checksums: DDisk serves never-written blocks as in-memory zeros
+                // and does not issue device I/O. The load actor treats omitted
+                // InitType as INIT_ZEROES_FULL when IsReadLoad is set.
                 INIT_ZEROES_FULL = 2;
             }
-            optional uint32 AreaSize = 1; // must be a multiple of IoSizeBytes
+            optional uint32 AreaSize = 1; // must be a multiple of IoSizeBytes (and of background write size when enabled)
             optional EAreaInit InitType = 2 [default = INIT_ZEROES_FIRST_BLOCK];
             optional uint32 Weight = 3 [default = 1]; // probability weight
             optional bool Sequential = 4 [default = true];
@@ -173,7 +179,7 @@ message TEvLoadTestRequest {
         optional uint32 IntervalMsMin = 7;
         optional uint32 IntervalMsMax = 8;
 
-        optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB, must be divisible by IoSizeBytes
+        optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB, must be divisible by IoSizeBytes (and by background write size when enabled)
 
         repeated TArea Areas = 10;
 
@@ -188,12 +194,16 @@ message TEvLoadTestRequest {
 
         // When true, the load test performs reads instead of writes.
         optional bool IsReadLoad = 15 [default = false];
-        // Enable io_uring SQPOLL mode for DDisk direct I/O.
-        optional bool SQPoll = 16 [default = false];
-        // Enable io_uring IOPOLL mode for DDisk direct I/O.
-        optional bool IOPoll = 17 [default = false];
+        reserved 16, 17;
+        reserved "SQPoll", "IOPoll";
         // Request size for read/write operations in bytes.
         optional uint32 IoSizeBytes = 18 [default = 4096];
+        // Unmeasured background writes per measured read during IsReadLoad.
+        // 0 disables them; 1.0 issues one write per read. Shares InFlight with measured reads.
+        optional float BackgroundWriteRatio = 19 [default = 0];
+        // Background write size in KiB (power of two, at least 4). When background writes
+        // are enabled, ExpectedChunkSize and each AreaSize must be divisible by this size.
+        optional uint32 BackgroundWriteSizeKiB = 20 [default = 4];
     }
 
     message TPersistentBufferWriteLoad {
@@ -562,6 +572,20 @@ message TEvLoadTestRequest {
 
         optional TWorkloadConfig WorkloadConfig = 102;
         optional uint64 Tag = 100;
+
+        // One target tablet for a multi-tablet run. NodeId is the node that
+        // currently hosts the tablet (from Hive); the coordinator places the
+        // per-tablet load actor on that node so it is co-located with the tablet.
+        message TNbsTabletTarget {
+            optional uint64 TabletId = 1;
+            optional uint32 NodeId = 2;
+        }
+
+        // When non-empty the load runs in multi-tablet coordinator mode:
+        // CreateNbsDbgLikeLoadActor returns the coordinator actor, which fans
+        // the shared WorkloadConfig out to one single-tablet child run per
+        // target (each child sets NbsDbgLikeTabletId and clears Targets).
+        repeated TNbsTabletTarget Targets = 103;
     }
 
     message TInterconnectLoad {
@@ -578,6 +602,10 @@ message TEvLoadTestRequest {
         optional uint32 DurationSeconds = 11;
         optional bool UseProtobufWithPayload = 12;
         optional uint32 RdmaMode = 13;
+        // Warm-up period: samples generated during this initial delay are
+        // excluded from the reported throughput/RTT statistics (see
+        // MeasurementStartTime in ydb/library/actors/interconnect/load.cpp).
+        optional uint32 DelayBeforeMeasurementsSeconds = 14 [default = 15];
     }
 
     optional uint64 Cookie = 1;
@@ -683,6 +711,37 @@ message TEvNodeFinishResponse {
         repeated float Percentiles = 4;
     }
 
+    // Compact serialization of an NHdr::THistogram as (value, count) pairs for
+    // the recorded buckets. Reconstructed with RecordValues(value, count),
+    // which is exact within the histogram's resolution. Used to ship NBS-DBG
+    // latency histograms across nodes so a multi-tablet coordinator can merge
+    // them into an exact combined result.
+    message TNbsDbgLikeHistogram {
+        optional int64 Lowest = 1;
+        optional int64 Highest = 2;
+        optional int32 SignificantDigits = 3;
+        repeated int64 Values = 4 [packed = true];
+        repeated int64 Counts = 5 [packed = true];
+    }
+
+    // Per-tablet NBS-DBG-like measured stats, attached only by NBS-DBG-like
+    // runs so a coordinator on another node can merge them exactly. Empty for
+    // all other load types.
+    message TNbsDbgLikeNodeStats {
+        optional uint64 TabletId = 1;
+        optional uint32 NodeId = 2;
+        optional uint64 WritesOk = 3;
+        optional uint64 WriteBytes = 4;
+        optional uint64 WritesErr = 5;
+        optional uint64 ReadsOk = 6;
+        optional uint64 ReadBytes = 7;
+        optional uint64 ReadsErr = 8;
+        optional uint64 MeasuredMs = 9;
+        optional uint32 MaxInFlight = 10;
+        optional TNbsDbgLikeHistogram WriteLatencyUs = 11;
+        optional TNbsDbgLikeHistogram ReadLatencyUs = 12;
+    }
+
     optional string Uuid = 1;
     optional uint32 NodeId = 2;
     optional bool Success = 3;
@@ -691,4 +750,5 @@ message TEvNodeFinishResponse {
     optional TNodeStats Stats = 6;
     optional string LastHtmlPage = 7;
     optional string JsonResult = 8;
+    optional TNbsDbgLikeNodeStats NbsDbgLikeStats = 9;
 }

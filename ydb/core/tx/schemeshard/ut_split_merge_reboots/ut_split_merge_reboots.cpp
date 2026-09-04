@@ -1,4 +1,6 @@
+#include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <yql/essentials/minikql/mkql_node.h>
@@ -1135,7 +1137,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitWithTxInFlightWithReboots, 2, 1, true) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitWithTxInFlightWithReboots, 4, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -1176,24 +1178,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             UNIT_ASSERT(req1.GetErrors().empty());
 
             // Split partition #2 into 2
+            const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+            TWaitForFirstEvent<TEvDataShard::TEvSplit> startSplit(runtime);
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
-                            R"(
-                                SourceTabletId: 72075186233409547
+                            Sprintf(R"(
+                                SourceTabletId: %lu
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Text: "Marla" } }
                                     }
                                 }
-                            )");
+                            )", shards[1]));
 
             // Wait for split to reach src DS
             int retries = 3;
             while (retries--) {
-                {
-                    TDispatchOptions opts;
-                    opts.FinalEvents.emplace_back(TEvDataShard::EvSplit);
-                    runtime.DispatchEvents(opts);
-                }
+                startSplit.Wait();
 
                 ++dataTxId;
                 TFakeDataReq req2(runtime, dataTxId, "/MyRoot/Table",
@@ -1238,6 +1240,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
     /* Test that multiple bloom filter prefixes are preserved during split and merge operations */
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitMergePreservesMultipleBloomPrefixes, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
             {
                 TInactiveZone inactive(activeZone);
                 // Create table with multiple bloom filter prefixes
@@ -1258,12 +1262,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                // Verify multiple bloom filters are configured
-                auto cfg = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription().GetTable().GetPartitionConfig();
-                UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-                UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+                // Restart SchemeShard to trigger migration to scheme objects
+                TActorId sender = runtime.AllocateEdgeActor();
+                GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+                runtime.SimulateSleep(TDuration::Seconds(5));
+
+                // Verify multiple bloom filters are configured with scheme objects after migration
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
+                    {1, 3},
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
             }
 
             // Perform split operation - split the single partition
@@ -1280,18 +1287,33 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            // Verify all bloom filter prefixes are preserved after split
+            // Verify all bloom filter prefixes and scheme objects are preserved after split
             {
                 TInactiveZone inactive(activeZone);
-                auto tableDescr = DescribePath(runtime, "/MyRoot/Table", true);
-                const auto& table = tableDescr.GetPathDescription().GetTable();
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
+                    {1, 3},
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
+            }
 
-                // Check that all bloom filter configurations are preserved at table level
-                const auto& partitionConfig = table.GetPartitionConfig();
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-                UNIT_ASSERT_DOUBLES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+            // Perform merge operation with reboots
+            {
+                TInactiveZone inactive(activeZone);
+                const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+                UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+                const TString mergeRequest = Sprintf(R"(
+                    SourceTabletId: %lu
+                    SourceTabletId: %lu
+                )", shards[0], shards[1]);
+                TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", mergeRequest);
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            // Verify all bloom filter prefixes and scheme objects are preserved after merge
+            {
+                TInactiveZone inactive(activeZone);
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
+                    {1, 3},
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
             }
 
         });

@@ -198,9 +198,9 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 INSERT INTO {ref}(Data) VALUES("data3");
 
                 SELECT
-                    SystemMetadata('offset') as offset,
-                    SystemMetadata('seq_no') as seq_no,
-                    SystemMetadata("write_time") as write_time,
+                    __ydb_offset as offset,
+                    __ydb_seq_no as seq_no,
+                    __ydb_write_time as write_time,
                     Data
                 FROM {ref};"""
         )
@@ -336,10 +336,8 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
             )
 
         try:
-            external_client = YdbClient(endpoint.endpoint, endpoint.database)
-            test_client = YdbClient(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
-            external_client.wait_connection()
-            test_client.wait_connection()
+            external_client = YdbClient.from_driver_config(endpoint.endpoint, endpoint.database)
+            test_client = YdbClient.from_driver_config(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
 
             test_secret_name = entity_name("test_secret")
             test_source_name = entity_name("test_target_source")

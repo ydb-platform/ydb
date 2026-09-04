@@ -703,8 +703,8 @@ void DoCreatePqPart(
     if (IsReplicationSupportTopicAutopartitioning(op)) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMinPartitionCount(std::min<ui32>(std::max<ui32>(table->GetPartitions().size() / 16, 1), TSchemeShard::MaxPQGroupPartitionsCount));
-        ps->SetMaxPartitionCount(std::min<ui32>(std::max<ui32>(table->GetPartitions().size() * 16, 50), TSchemeShard::MaxPQGroupPartitionsCount));
+        ps->SetMinPartitionCount(std::max<ui32>(table->GetPartitions().size() / 16, 1));
+        ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 16, 50));
         ps->SetScaleThresholdSeconds(30);
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
@@ -942,6 +942,11 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     LOG_D("CreateNewCdcStream"
         << ": opId# " << opId
         << ", tx# " << tx.ShortDebugString());
+
+    if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+            << "CDC stream creation is not allowed when topic is not FirstClassCitizen")};
+    }
 
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto& op = tx.GetCreateCdcStream();

@@ -12,6 +12,8 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
+#include <library/cpp/yt/string/string.h>
+
 #include <library/cpp/yt/system/exit.h>
 #include <library/cpp/yt/system/thread_id.h>
 
@@ -220,8 +222,7 @@ private:
 
     static bool IsShutdownLoggingEnabledImpl()
     {
-        auto value = GetEnv("YT_ENABLE_SHUTDOWN_LOGGING");
-        value.to_lower();
+        auto value = AsciiStringToLower(GetEnv("YT_ENABLE_SHUTDOWN_LOGGING"));
         return value == "1" || value == "true";
     }
 

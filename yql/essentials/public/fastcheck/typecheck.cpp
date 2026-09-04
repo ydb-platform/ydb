@@ -38,7 +38,7 @@ private:
     TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
         TCheckResponse res{.CheckName = GetCheckName()};
 
-        const auto* astResult = state.TranslateSExpr(res.Issues);
+        const auto* astResult = state.TranslateSExpr(request.SuppressPrerequisiteIssues ? nullptr : &res.Issues);
         if (!astResult || !astResult->IsOk()) {
             res.Success = false;
             return res;
@@ -52,7 +52,7 @@ private:
     TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
         TCheckResponse res{.CheckName = GetCheckName()};
 
-        const auto* astResult = state.TranslatePg(res.Issues);
+        const auto* astResult = state.TranslatePg(request.SuppressPrerequisiteIssues ? nullptr : &res.Issues);
         if (!astResult || !astResult->IsOk()) {
             res.Success = false;
             return res;
@@ -66,7 +66,7 @@ private:
     TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
         TCheckResponse res{.CheckName = GetCheckName()};
 
-        const auto* astResult = state.TranslateSql(res.Issues);
+        const auto* astResult = state.TranslateSql(request.SuppressPrerequisiteIssues ? nullptr : &res.Issues);
         if (!astResult || !astResult->IsOk()) {
             res.Success = false;
             return res;
@@ -84,7 +84,7 @@ private:
 
         // clang-format off
         return PartialAnnonateTypes(astRoot, mode == EMode::Library, langver, udfMeta, issues,
-            [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); },
+            [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true); },
             [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); },
             [](const TTypeAnnotationNode* type) { return NCommon::WriteTypeToYson(type); }
         );

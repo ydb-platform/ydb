@@ -121,7 +121,6 @@ class TestMoveData(RollingUpgradeAndDowngradeFixture):
             time.sleep(2)
         return False
 
-
     def _create_table(self, table_name):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(

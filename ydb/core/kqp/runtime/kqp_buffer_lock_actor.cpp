@@ -66,6 +66,7 @@ public:
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId)
         , LockActorSpan(TWilsonKqp::LockActor, std::move(Settings.ParentTraceId), "LockActor") {
+        AFL_ENSURE(Settings.MvccSnapshot); // Read Committed tx always acquires snapshot.
     }
 
     void Bootstrap() {

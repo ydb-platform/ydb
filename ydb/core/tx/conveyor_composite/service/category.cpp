@@ -22,7 +22,7 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
     std::shared_ptr<TProcess> pMin;
     for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
         for (ui32 i = 0; i < it->second.size(); ++i) {
-            if (!it->second[i]->GetScope()->CheckToRun() || !taskFilter(it->second[i]->GetTasks().top())) {
+            if (!it->second[i]->GetScope()->CheckToRun() || !it->second[i]->HasTask(taskFilter)) {
                 continue;
             }
             pMin = it->second[i];
@@ -40,7 +40,7 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
     if (!pMin) {
         return std::nullopt;
     }
-    auto result = pMin->ExtractTaskWithPrediction(counters);
+    auto result = pMin->ExtractTaskWithPrediction(counters, taskFilter);
     if (pMin->GetTasksCount()) {
         WeightedProcesses[pMin->GetWeightedUsage()].emplace_back(pMin);
     }

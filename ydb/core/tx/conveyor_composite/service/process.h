@@ -14,6 +14,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <functional>
 #include <queue>
 
 namespace NKikimr::NConveyorComposite {
@@ -39,10 +40,9 @@ public:
         --Size;
         return result;
     }
-    const TWorkerTaskPrepare& top() const {
-        Y_ABORT_UNLESS(Size);
-        return Tasks.rbegin()->second.front();
-    }
+    TWorkerTaskPrepare pop(const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter);
+    const TWorkerTaskPrepare& top() const;
+    bool has(const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter) const;
     ui32 size() const {
         return Size;
     }
@@ -92,6 +92,11 @@ public:
         const auto taskClass = result.GetTask()->GetTaskClassIdentifier();
         return std::move(result).BuildTask(signals->GetTaskSignals(taskClass));
     }
+
+    TWorkerTask ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& signals,
+        const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter);
+
+    bool HasTask(const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter) const;
 
     void PutTaskResult(TWorkerTaskResult&& result) {
         CPUUsage->Exchange(result.GetPredictedDuration(), result.GetStart(), result.GetFinish());

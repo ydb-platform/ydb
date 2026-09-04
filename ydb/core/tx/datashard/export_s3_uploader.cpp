@@ -161,9 +161,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         ProxyResolved = true;
 
         const auto& cfg = GetS3StorageConfig()->GetConfig();
-        EXPORT_LOG_N("Using proxy: "
-            << (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")
-            << cfg.proxyHost << ":" << cfg.proxyPort);
         YDB_LOG_NOTICE("[Export] Using proxy:",
             {"proxy", (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")},
             {"proxyHost", cfg.proxyHost},
@@ -319,14 +316,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleScheme(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("HandleScheme TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] HandleScheme TEvExternalStorage::TEvPutObjectResponse",
+            {"selfId", this->SelfId()},
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("PutObject (scheme)"))) {
             return;
@@ -348,14 +340,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandlePermissions(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] HandlePermissions TEvExternalStorage::TEvPutObjectResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("PutObject (permissions)"))) {
             return;
@@ -377,14 +363,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleChangefeed(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("HandleChangefeed TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] HandleChangefeed TEvExternalStorage::TEvPutObjectResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("PutObject (changefeed)"))) {
             return;
@@ -405,14 +385,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleTopic(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("HandleTopic TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] HandleTopic TEvExternalStorage::TEvPutObjectResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("PutObject (topic)"))) {
             return;
@@ -434,14 +408,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] HandleMetadata TEvExternalStorage::TEvPutObjectResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("PutObject (metadata)"))) {
             return;
@@ -467,14 +435,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleChecksum(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("HandleChecksum TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] HandleChecksum TEvExternalStorage::TEvPutObjectResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("PutObject (checksum)"))) {
             return;
@@ -484,14 +446,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle TEvExportScan::TEvReady"
-            << ": self# " << this->SelfId()
-            << ", sender# " << ev->Sender);
-=======
+
         YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvReady",
             {"sender", ev->Sender});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         Scanner = ev->Sender;
 
@@ -506,18 +463,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void Handle(TEvBuffer::TPtr& ev) {
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle TEvExportScan::TEvBuffer"
-            << ": self# " << this->SelfId()
-            << ", sender# " << ev->Sender
-            << ", msg# " << ev->Get()->ToString());
-
-        if (ev->Sender != Scanner) {
-            EXPORT_LOG_W("Received buffer from unknown scanner"
-                << ": self# " << this->SelfId()
-                << ", sender# " << ev->Sender
-                << ", scanner# " << Scanner);
-=======
         YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvBuffer",
             {"sender", ev->Sender},
             {"msg", ev->Get()->ToString()});
@@ -526,7 +471,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             YDB_LOG_WARN("[Export] Received buffer from unknown scanner",
                 {"sender", ev->Sender},
                 {"scanner", Scanner});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
             return;
         }
 
@@ -560,14 +504,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleData(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("HandleData TEvExternalStorage::TEvPutObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] HandleData TEvExternalStorage::TEvPutObjectResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("PutObject (data)"))) {
             return;
@@ -590,14 +528,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvDataShard::TEvS3Upload::TPtr& ev) {
         auto& upload = ev->Get()->Upload;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle TEvDataShard::TEvS3Upload"
-            << ": self# " << this->SelfId()
-            << ", upload# " << upload);
-=======
         YDB_LOG_DEBUG("[Export] Handle TEvDataShard::TEvS3Upload",
             {"upload", upload});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!upload) {
             auto request = Aws::S3::Model::CreateMultipartUploadRequest()
@@ -654,14 +586,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvCreateMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvCreateMultipartUploadResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvCreateMultipartUploadResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("CreateMultipartUpload"))) {
             return;
@@ -673,14 +599,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvUploadPartResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvUploadPartResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!CheckResult(result, TStringBuf("UploadPart"))) {
             return;
@@ -709,14 +629,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvCompleteMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvCompleteMultipartUploadResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvCompleteMultipartUploadResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (result.IsSuccess()) {
             return PassAway();
@@ -745,14 +659,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvHeadObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvHeadObjectResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (result.IsSuccess()) {
             return PassAway();
@@ -771,14 +679,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvAbortMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-<<<<<<< HEAD
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvAbortMultipartUploadResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
-=======
         YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvAbortMultipartUploadResponse",
             {"result", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (result.IsSuccess()) {
             return PassAway();
@@ -802,15 +704,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             return true;
         }
 
-<<<<<<< HEAD
-        EXPORT_LOG_E("Error at '" << marker << "'"
-            << ": self# " << this->SelfId()
-            << ", error# " << result);
-=======
         YDB_LOG_ERROR("[Export] Check result error",
             {"marker", marker},
             {"error", result});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
         RetryOrFinish(result.GetError());
 
         return false;
@@ -842,20 +738,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
-<<<<<<< HEAD
-        EXPORT_LOG_I("Finish"
-            << ": self# " << this->SelfId()
-            << ", success# " << success
-            << ", error# " << error
-            << ", multipart# " << MultiPart
-            << ", uploadId# " << UploadId);
-=======
+
         YDB_LOG_INFO("[Export] Finish",
             {"success", success},
             {"error", error},
             {"multipart", MultiPart},
             {"uploadId", UploadId});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if (!success) {
             Error = error;
@@ -947,15 +835,9 @@ public:
     }
 
     void Bootstrap() {
-<<<<<<< HEAD
-        EXPORT_LOG_D("Bootstrap"
-            << ": self# " << this->SelfId()
-            << ", attempt# " << Attempt);
-=======
         YDB_LOG_CREATE_CONTEXT(LogPrefix());
         YDB_LOG_DEBUG("[Export] Bootstrap",
             {"attempt", Attempt});
->>>>>>> 339501dfce8 ([YDB_LOG] Remigrate messages ydb/core/tx/datashard/export files (#51596))
 
         if constexpr (!RequiresHttpResolver<TSettings>) {
             ProxyResolved = true;

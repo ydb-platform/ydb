@@ -45,7 +45,7 @@ TString CompressBlob(const TString& blob) {
     TString result;
     TStringOutput output(result);
     {
-        TZstdCompress compress(&output);
+        TZstdCompress compress(&output, /* quality */ 3);   // ZSTD_CLEVEL_DEFAULT
         compress.Write(blob.data(), blob.size());
         compress.Finish();
     }

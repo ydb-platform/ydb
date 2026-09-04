@@ -1108,6 +1108,42 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", "non-existent", queryId, {}), yexception);
     }
 
+    Y_UNIT_TEST(StopExecutionWithProvidedDuration) {
+        constexpr ui64 kCpuLimit = 1;
+        const auto executionDuration = TDuration::MilliSeconds(42);
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        const TString poolId = "pool1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, poolId, {});
+        auto query = scheduler.AddOrUpdateQuery(databaseId, poolId, 1, {});
+
+        struct TSchedulableWorkMock : public TSchedulableBase {
+            explicit TSchedulableWorkMock(NHdrf::NDynamic::TQueryPtr query)
+                : TSchedulableBase({.Query=std::move(query), .IsSchedulable=true}) {}
+
+            using TSchedulableBase::StartExecution;
+            using TSchedulableBase::StopExecution;
+        } work(query);
+
+        scheduler.UpdateFairShare();
+        UNIT_ASSERT(work.StartExecution(TMonotonic::Now()));
+
+        work.StopExecution(executionDuration);
+
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuBurstUsage.load(), executionDuration.MicroSeconds());
+        UNIT_ASSERT_VALUES_EQUAL(query->GetParent()->CpuBurstUsage.load(), executionDuration.MicroSeconds());
+        UNIT_ASSERT_VALUES_EQUAL(query->GetParent()->GetParent()->CpuBurstUsage.load(), executionDuration.MicroSeconds());
+    }
+
     Y_UNIT_TEST(StressTest) {
         constexpr ui64 kCpuLimit = 100;
 

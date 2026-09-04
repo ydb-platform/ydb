@@ -56,8 +56,12 @@ std::optional<TDuration> TSchedulableBase::TryStartExecution(TMonotonic now) {
 }
 
 void TSchedulableBase::StopExecution() {
+    StopExecution(TDuration::MicroSeconds(Timer.Passed() * 1'000'000));
+}
+
+void TSchedulableBase::StopExecution(TDuration executionDuration) {
     bool forced = false;
-    StopExecution(forced);
+    StopExecution(executionDuration, forced);
 }
 
 bool TSchedulableBase::StartExecution(TMonotonic now) {
@@ -99,15 +103,18 @@ bool TSchedulableBase::StartExecution(TMonotonic now) {
 }
 
 void TSchedulableBase::StopExecution(bool& forcedResume) {
+    StopExecution(TDuration::MicroSeconds(Timer.Passed() * 1'000'000), forcedResume);
+}
+
+void TSchedulableBase::StopExecution(TDuration executionDuration, bool& forcedResume) {
     Y_ASSERT(SchedulableTask);
 
     if (Executed) {
         Y_ASSERT(!Throttled);
 
-        TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
         SchedulableTask->Query->CurrentTasksTime -= LastExecutionTime.MicroSeconds();
-        LastExecutionTime = timePassed;
-        SchedulableTask->DecreaseUsage(timePassed, forcedResume ? TSchedulableTask::CPU_RESUMED : TSchedulableTask::CPU_DEFAULT);
+        LastExecutionTime = executionDuration;
+        SchedulableTask->DecreaseUsage(executionDuration, forcedResume ? TSchedulableTask::CPU_RESUMED : TSchedulableTask::CPU_DEFAULT);
         forcedResume = false;
         Executed = false;
 

@@ -406,6 +406,9 @@ public:
         std::optional<bool> UseFilterLength;
         std::optional<int32_t> FilterLengthMin;
         std::optional<int32_t> FilterLengthMax;
+        std::optional<bool> UseFilterSuperLemmer;
+
+        static TAnalyzers SuperLemmer(std::string language);
     };
 
     struct TColumnAnalyzers {

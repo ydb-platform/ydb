@@ -248,35 +248,36 @@ namespace NKikimr::NDDisk {
     std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(
         ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes,
         TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors,
-        const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex)
+        const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex, ui64 headerUniqueId)
     {
         TRope fullData(std::move(payloadWithHeader));
 
         // Phase 1: signature correction. A data sector whose first byte equals the header signature byte
         // would be misread as a record header during chunk restore, so we zero that byte on disk and remember
         // it via HasSignatureCorrection (JoinData restores the original byte on disk read-back). This mutates
-        // payload bytes that, on the interconnect fast path, share their backend with the payload-only rope
-        // that becomes the in-memory cache entry (pr.Data). ContiguousDataMut() routes to TRcBuf::GetDataMut(),
-        // which copies-on-write once when the backend is shared, forking fullData into a private buffer so the
-        // cached copy keeps the original bytes. This pass MUST run before the header pointer is captured below:
-        // the COW relocates fullData's backend, so a pointer taken earlier would dangle at the orphaned buffer
-        // and every subsequent header write (Locations, Header.Checksum) would miss the buffer that is actually
-        // written to disk. Do NOT switch to UnsafeContiguousDataMut(): it would mutate the shared backend in
-        // place and silently corrupt the in-memory cache. The copy is rare (only when a data sector starts with
-        // the signature byte) and fires at most once per write (fullData is private afterwards).
+        // payload bytes that may share their backend both with the payload-only rope retained for the in-memory
+        // cache and with writes sent to other DDisk replicas. ContiguousDataMut() must preserve those owners by
+        // copying on write: disk I/O is asynchronous, so changing the shared backend in place and restoring it
+        // on completion would expose the temporary on-disk representation to the other replicas. This pass MUST
+        // run before the header pointer is captured below because COW may relocate fullData's backend.
         for (ui32 i = 1; i < sectors.size(); ++i) {
             auto it = fullData.Begin() + SectorSize * i;
+            auto& sector = sectors[i];
+            if (!PersistentBufferFormat.EnableChecksums) {
+                ui64 originalPrefix;
+                memcpy(&originalPrefix, it.ContiguousData(), sizeof(originalPrefix));
+                sector.ChecksumOrData = originalPrefix;
+                memcpy(it.ContiguousDataMut(), &headerUniqueId, sizeof(ui64));
+            }
             if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                sectors[i].HasSignatureCorrection = true;
+                sector.HasSignatureCorrection = true;
                 *it.ContiguousDataMut() = 0;
             }
         }
 
-        // Phase 2: fullData's backend is now final (private if Phase 1 copied it), so this header pointer stays
-        // valid for every write below. The header sector occupies reserved headroom that is not part of any
-        // payload view, so writing it through UnsafeContiguousDataMut() never needs (or triggers) a copy.
+        // Phase 2: the header sector occupies reserved headroom that is not part of any payload view, so writing
+        // it through UnsafeContiguousDataMut() does not affect the payload retained for the in-memory cache.
         auto* header = reinterpret_cast<TPersistentBufferHeader*>(fullData.Begin().UnsafeContiguousDataMut());
-
         memset(header, 0, SectorSize);
         memcpy(
             header->Signature,
@@ -288,8 +289,10 @@ namespace NKikimr::NDDisk {
         header->SlotId = BaseInfo.VDiskSlotId;
         header->RecordLsn = 0;
         header->RecordIdx = 0;
-        header->Flags = 0;
+        header->Flags = PersistentBufferFormat.EnableChecksums ? TPersistentBufferHeader::NONE
+            : TPersistentBufferHeader::CHECKSUMS_DISABLED;
         header->BatchSize = 1;
+        header->HeaderUniqueId = headerUniqueId;
 
         auto* lsnRecordHeader = reinterpret_cast<TPersistentBufferLsnRecordHeader*>(fullData.Begin().UnsafeContiguousDataMut() + sizeof(TPersistentBufferHeader));
 
@@ -311,10 +314,12 @@ namespace NKikimr::NDDisk {
 
         for (ui32 i = 1; i < sectors.size(); ++i) {
             auto& loc = locations[i - 1];
-            loc = sectors[i]; // carries HasSignatureCorrection set in Phase 1
-            auto it = fullData.Begin() + SectorSize * i;
-            loc.Checksum = CalculateChecksum(it);
-            sectors[i].Checksum = loc.Checksum;
+            loc = sectors[i]; // carries signature correction and first 8 bytes of data from Phase 1
+            if (PersistentBufferFormat.EnableChecksums) {
+                auto it = fullData.Begin() + SectorSize * i;
+                loc.ChecksumOrData = CalculateChecksum(it);
+                sectors[i].ChecksumOrData = loc.ChecksumOrData;
+            }
         }
 
         ui32 headerDataSize = sizeof(TPersistentBufferHeader)
@@ -335,8 +340,9 @@ namespace NKikimr::NDDisk {
         // Only the meaningful prefix of the header sector is checksummed - the rest is unused
         // padding, never read back, so hashing it would waste CPU with no integrity benefit.
         header->HeaderDataSize = headerDataSize;
-        header->Checksum = CalculateChecksum(fullData.Begin(), headerDataSize);
-
+        if (PersistentBufferFormat.EnableChecksums) {
+            header->Checksum = CalculateChecksum(fullData.Begin(), headerDataSize);
+        }
         // Slice fullData ([header | payload], a single contiguous, SectorSize-aligned buffer) into one part
         // per run of physically adjacent on-disk sectors. This is zero-copy: TRope::ExtractFront moves whole
         // chunks and turns the partial tail into a shared TRcBuf::Piece (no memcpy), so every part is a single
@@ -429,6 +435,11 @@ namespace NKikimr::NDDisk {
 
         auto checkIsSameRequest = [&](auto &data) {
             bool dataEqual = data.Size == selector.Size;
+            if (dataEqual && data.ChecksumsDisabled && !data.PayloadChecksums.empty()) {
+                const auto& checksums = record.GetChecksums();
+                dataEqual = data.PayloadChecksums.size() == static_cast<size_t>(checksums.size())
+                    && std::equal(data.PayloadChecksums.begin(), data.PayloadChecksums.end(), checksums.begin());
+            }
             if (dataEqual) {
                 const TWriteInstruction instr(record.GetInstruction());
                 Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
@@ -438,7 +449,7 @@ namespace NKikimr::NDDisk {
                     if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
                         *it.ContiguousDataMut() = 0;
                     }
-                    if (data.Sectors[i + 1].Checksum != CalculateChecksum(it)) {
+                    if (!data.ChecksumsDisabled && data.Sectors[i + 1].ChecksumOrData != CalculateChecksum(it)) {
                         dataEqual = false;
                         break;
                     }
@@ -577,13 +588,14 @@ namespace NKikimr::NDDisk {
             if (memcmp(headerData.GetDataMut(), TPersistentBufferHeader::PersistentBufferHeaderSignature, 16) == 0) {
                 TRope headerRope(std::move(headerData));
                 TPersistentBufferHeader* header = reinterpret_cast<TPersistentBufferHeader*>(headerRope.Begin().ContiguousDataMut());
+                const bool checksumsDisabled = header->Flags & TPersistentBufferHeader::CHECKSUMS_DISABLED;
                 ui64 headerChecksum = header->Checksum;
                 header->Checksum = 0;
                 // HeaderDataSize comes from disk and is not yet trusted at this point - clamp it to
                 // the sector size so a corrupted value can never cause an out-of-bounds hash read.
                 // A bogus (but in-range) value simply fails the checksum comparison below.
                 const ui32 headerDataSize = Min<ui32>(header->HeaderDataSize, SectorSize);
-                ui64 sectorChecksum = CalculateChecksum(headerRope.Begin(), headerDataSize);
+                ui64 sectorChecksum = checksumsDisabled ? 0 : CalculateChecksum(headerRope.Begin(), headerDataSize);
                 if (headerChecksum != sectorChecksum || header->PersistentBufferUniqueId != PersistentBufferUniqueId
                     || (header->NodeId != BaseInfo.PDiskActorID.NodeId()) || header->PDiskId != BaseInfo.PDiskId
                     || header->SlotId != BaseInfo.VDiskSlotId) {
@@ -601,6 +613,9 @@ namespace NKikimr::NDDisk {
                         {"headerSlotId", header->SlotId},
                         {"VDiskSlotId", BaseInfo.VDiskSlotId});
                     continue;
+                }
+                if (checksumsDisabled) {
+                    NextPersistentBufferHeaderUniqueId = Max(NextPersistentBufferHeaderUniqueId, header->HeaderUniqueId + 1);
                 }
                 if (PersistentBufferBarriersManager.AddBarrier(header, chunkIdx, sectorIdx)) {
                     continue;
@@ -629,7 +644,9 @@ namespace NKikimr::NDDisk {
                         .OffsetInBytes = recordHeader->OffsetInBytes,
                         .Size = recordHeader->Size,
                         .VChunkIndex = recordHeader->VChunkIndex,
-                        .Timestamp = TInstant::Now()
+                        .Timestamp = TInstant::Now(),
+                        .ChecksumsDisabled = checksumsDisabled,
+                        .HeaderUniqueId = header->HeaderUniqueId,
                     };
                     ui32 sectorsCnt = recordHeader->Size / SectorSize;
                     Y_ABORT_UNLESS(sectorsCnt <= TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord);
@@ -652,7 +669,9 @@ namespace NKikimr::NDDisk {
                     }
                 }
             } else {
-                PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = CalculateChecksum(dataPos);
+                auto& dataSectorInfo = PersistentBufferDataSectorsInfo[chunkIdx][sectorIdx];
+                dataSectorInfo.Checksum = CalculateChecksum(dataPos);
+                memcpy(&dataSectorInfo.HeaderUniqueId, dataPos.ContiguousData(), sizeof(dataSectorInfo.HeaderUniqueId));
             }
         }
 
@@ -660,8 +679,24 @@ namespace NKikimr::NDDisk {
         if (PersistentBufferRestoreChunksInflight == 0) {
             for (auto& [_, pb] : PersistentBuffers) {
                 std::erase_if(pb.Records, [this](const auto& pair) {
-                    for (auto sector : pair.second.Sectors) {
-                        if (PersistentBufferSectorsChecksum[sector.ChunkIdx][sector.SectorIdx] != sector.Checksum) {
+                    // Sectors[0] is the header sector itself (see the push_back at chunk restore
+                    // time above), not a payload data sector - it is never populated in
+                    // PersistentBufferDataSectorsInfo (that map is only filled for sectors that do
+                    // NOT match the header signature). Validation below only applies to the actual
+                    // payload sectors, i.e. indices [1, Sectors.size()).
+                    for (size_t i = 1; i < pair.second.Sectors.size(); ++i) {
+                        const auto& sector = pair.second.Sectors[i];
+                        if (pair.second.ChecksumsDisabled) {
+                            ui64 headerUniqueId = PersistentBufferDataSectorsInfo[sector.ChunkIdx][sector.SectorIdx].HeaderUniqueId;
+                            ui64 expectedId = pair.second.HeaderUniqueId;
+                            if (sector.HasSignatureCorrection) {
+                                reinterpret_cast<ui8*>(&headerUniqueId)[0] = 0;
+                                reinterpret_cast<ui8*>(&expectedId)[0] = 0;
+                            }
+                            if (headerUniqueId != expectedId) {
+                                return true;
+                            }
+                        } else if (PersistentBufferDataSectorsInfo[sector.ChunkIdx][sector.SectorIdx].Checksum != sector.ChecksumOrData) {
                             return true;
                         }
                     }
@@ -672,7 +707,7 @@ namespace NKikimr::NDDisk {
                 }
             }
             std::erase_if(PersistentBuffers, [](const auto& pb) { return pb.second.Records.empty(); });
-            PersistentBufferSectorsChecksum.clear();
+            PersistentBufferDataSectorsInfo.clear();
 
             PersistentBufferBarriersManager.RestoreBarriers(PersistentBuffers, PersistentBufferSpaceAllocator);
             PersistentBufferBarriersManager.RestoreErases(PersistentBuffers, PersistentBufferSpaceAllocator);
@@ -786,6 +821,8 @@ namespace NKikimr::NDDisk {
                         .VChunkIndex = record.VChunkIndex,
                         .Timestamp = TInstant::Now(),
                         .PayloadChecksums = std::move(record.PayloadChecksums),
+                        .ChecksumsDisabled = record.ChecksumsDisabled,
+                        .HeaderUniqueId = record.HeaderUniqueId,
                     };
 
                     auto& pbh = PersistentBufferHeaders[{pr.Sectors[0].ChunkIdx, pr.Sectors[0].SectorIdx}];
@@ -1025,10 +1062,14 @@ namespace NKikimr::NDDisk {
         // selector.Size, so a payload is always present here; slicing relies on this (sectorsCnt > 1).
         Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer reached slicing without a payload");
         TRcBuf payloadWithHeader = ev->Get()->GetPayloadWithHeader(*instr.PayloadId);
-
+        ui64 persistentBufferHeaderUniqueId = 0;
+        if (!PersistentBufferFormat.EnableChecksums) {
+            persistentBufferHeaderUniqueId = NextPersistentBufferHeaderUniqueId++;
+        }
         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
             selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, std::move(payloadWithHeader), sectors,
-            payloadChecksums, static_cast<ui8>(creds.DirectBlockGroupIndex));
+            payloadChecksums, static_cast<ui8>(creds.DirectBlockGroupIndex),
+            persistentBufferHeaderUniqueId);
 
         auto opCookie = NextCookie++;
         auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
@@ -1055,6 +1096,8 @@ namespace NKikimr::NDDisk {
             // move into the inflight record now that this is its last use.
             .PayloadChecksums = std::move(payloadChecksums),
             .DirectBlockGroupIndex = static_cast<ui8>(creds.DirectBlockGroupIndex),
+            .ChecksumsDisabled = !PersistentBufferFormat.EnableChecksums,
+            .HeaderUniqueId = persistentBufferHeaderUniqueId,
         });
         PersistentBufferWriteInflightsByRecord[TPersistentBufferRecordId{creds.TabletId, creds.Generation, lsn, static_cast<ui8>(creds.DirectBlockGroupIndex)}].emplace_back(
             opCookie,
@@ -1152,7 +1195,9 @@ namespace NKikimr::NDDisk {
             .Attribute("lsn", static_cast<i64>(lsn));
 
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
-
+        ui64 headerUniqueId = PersistentBufferFormat.EnableChecksums ? 0
+            : inflight.Records.size() ? inflight.Records.back().HeaderUniqueId
+            : NextPersistentBufferHeaderUniqueId++;
         inflight.Records.push_back({
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,
@@ -1168,6 +1213,8 @@ namespace NKikimr::NDDisk {
             .PartsCount = 1,
             .PayloadChecksums = std::move(payloadChecksums),
             .DirectBlockGroupIndex = static_cast<ui8>(creds.DirectBlockGroupIndex),
+            .ChecksumsDisabled = !PersistentBufferFormat.EnableChecksums,
+            .HeaderUniqueId = headerUniqueId,
         });
 
         auto& r = inflight.Records.back();
@@ -1178,13 +1225,26 @@ namespace NKikimr::NDDisk {
         inflight.DataToWrite.Insert(inflight.DataToWrite.End(), std::move(payload));
         for (ui32 i = 0; i < sectorsCnt; ++i) {
             auto it = inflight.DataToWrite.End() - r.Size + SectorSize * i;
-            if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                r.Sectors[i + 1].HasSignatureCorrection = true;
-                sectorsIt->HasSignatureCorrection = true;
-                *it.ContiguousDataMut() = 0;
+            if (PersistentBufferFormat.EnableChecksums) {
+                if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                    r.Sectors[i + 1].HasSignatureCorrection = true;
+                    sectorsIt->HasSignatureCorrection = true;
+                    *it.ContiguousDataMut() = 0;
+                }
+                r.Sectors[i + 1].ChecksumOrData = CalculateChecksum(it);
+                sectorsIt->ChecksumOrData = r.Sectors[i + 1].ChecksumOrData;
+            } else {
+                ui64 originalPrefix;
+                memcpy(&originalPrefix, it.ContiguousData(), sizeof(originalPrefix));
+                r.Sectors[i + 1].ChecksumOrData = originalPrefix;
+                *sectorsIt = r.Sectors[i + 1];
+                memcpy(it.ContiguousDataMut(), &headerUniqueId, sizeof(headerUniqueId));
+                if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                    r.Sectors[i + 1].HasSignatureCorrection = true;
+                    sectorsIt->HasSignatureCorrection = true;
+                    *it.ContiguousDataMut() = 0;
+                }
             }
-            r.Sectors[i + 1].Checksum = CalculateChecksum(it);
-            sectorsIt->Checksum = r.Sectors[i + 1].Checksum;
             ++sectorsIt;
         }
         PersistentBufferWriteInflightsByRecord[TPersistentBufferRecordId{creds.TabletId, creds.Generation, lsn, static_cast<ui8>(creds.DirectBlockGroupIndex)}].emplace_back(
@@ -1220,8 +1280,10 @@ namespace NKikimr::NDDisk {
         header->SlotId = BaseInfo.VDiskSlotId;
         header->RecordLsn = 0;
         header->RecordIdx = 0;
-        header->Flags = 0;
+        header->Flags = PersistentBufferFormat.EnableChecksums ? TPersistentBufferHeader::NONE
+            : TPersistentBufferHeader::CHECKSUMS_DISABLED;
         header->BatchSize = inflight.Records.size();
+        header->HeaderUniqueId = inflight.Records[0].HeaderUniqueId;
 
         bool anyPayloadChecksums = false;
         auto* pos = inflight.DataToWrite.Begin().UnsafeContiguousDataMut() + sizeof(TPersistentBufferHeader);
@@ -1261,7 +1323,10 @@ namespace NKikimr::NDDisk {
         // Only the meaningful prefix of the header sector is checksummed - the rest is unused
         // padding, never read back, so hashing it would waste CPU with no integrity benefit.
         header->HeaderDataSize = headerDataSize;
-        header->Checksum = CalculateChecksum(inflight.DataToWrite.Begin(), headerDataSize);
+
+        if (PersistentBufferFormat.EnableChecksums) {
+            header->Checksum = CalculateChecksum(inflight.DataToWrite.Begin(), headerDataSize);
+        }
 
         auto parts = SlicePersistentBufferData(inflight.DataToWrite, inflight.OccupiedSectors);
         for(auto& [chunkIdx, offset, data] : parts) {
@@ -1490,7 +1555,9 @@ namespace NKikimr::NDDisk {
             .OffsetInBytes = selector.OffsetInBytes,
             .Size = selector.Size,
             .PartsCount = 0,
+            .Sectors = pr.Sectors,
             .DirectBlockGroupIndex = static_cast<ui8>(creds.DirectBlockGroupIndex),
+            .ChecksumsDisabled = pr.ChecksumsDisabled,
         });
         pr.ReadInflight.insert(operationCookie);
         if (pr.ReadInflight.size() > 1) {
@@ -1655,8 +1722,12 @@ namespace NKikimr::NDDisk {
         PartsCount = 1;
         auto& payload = DataParts.begin()->second;
         for (ui32 i = 1; i < Sectors.size(); i++) {
-            if (Sectors[i].HasSignatureCorrection) {
-                *payload.Position(sectorSize * (i - 1)).ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
+            auto pos = payload.Position(sectorSize * (i - 1));
+            if (ChecksumsDisabled) {
+                const ui64 originalPrefix = Sectors[i].ChecksumOrData;
+                memcpy(pos.ContiguousDataMut(), &originalPrefix, sizeof(originalPrefix));
+            } else if (Sectors[i].HasSignatureCorrection) {
+                *pos.ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
             }
         }
         return DataParts.begin()->second;
@@ -1706,8 +1777,14 @@ namespace NKikimr::NDDisk {
         memcpy(headerData.GetDataMut(), &barrier.Header, sizeof(TPersistentBufferBarriers));
         memset(headerData.GetDataMut() + sizeof(TPersistentBufferBarriers), 0, SectorSize - sizeof(TPersistentBufferBarriers));
         TRope headerRope(std::move(headerData));
-        ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
-            CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferBarriers));
+
+        if (PersistentBufferFormat.EnableChecksums) {
+            ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
+                CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferBarriers));
+        } else {
+            ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Flags |= TPersistentBufferHeader::CHECKSUMS_DISABLED;
+        }
+
         inflightRecord->second.OccupiedSectors.emplace_back(TPersistentBufferSectorInfo{barrier.ChunkIdx, barrier.SectorIdx, 0, 0, 0});
 
         auto chunkOffset = barrier.SectorIdx * SectorSize;
@@ -1832,8 +1909,12 @@ namespace NKikimr::NDDisk {
         memcpy(fastEraseData.GetDataMut(), &fastErase.Header, sizeof(TPersistentBufferFastErases));
         memset(fastEraseData.GetDataMut() + sizeof(TPersistentBufferFastErases), 0, SectorSize - sizeof(TPersistentBufferFastErases));
         TRope headerRope(std::move(fastEraseData));
-        ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
-            CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferFastErases));
+        if (PersistentBufferFormat.EnableChecksums) {
+            ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
+                CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferFastErases));
+        } else {
+            ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Flags |= TPersistentBufferHeader::CHECKSUMS_DISABLED;
+        }
 
         inflightRecord->second.OccupiedSectors.emplace_back(TPersistentBufferSectorInfo{fastErase.ChunkIdx, fastErase.SectorIdx, 0, 0, 0});
         auto chunkOffset = fastErase.SectorIdx * SectorSize;

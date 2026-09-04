@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Encryption mode
+
+enum EEncryptionMode
+{
+    NO_ENCRYPTION = 0;
+    ENCRYPTION_AES_XTS = 1;
+
+    // Client-side encryption using DEK (Data Encryption Key) provided by Root KMS.
+    // Data is encrypted with AES XTS algorithm before transmission.
+    // Encrypted DEK is stored in VolumeConfig.
+    ENCRYPTION_WITH_ROOT_KMS_PROVIDED_KEY = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// KMS key options
+
+message TKmsKey
+{
+    // Identifier of the key in KMS.
+    string KekId = 1;
+
+    // Encrypted Data Encryption Key.
+    bytes EncryptedDEK = 2;
+
+    // Identifier of the compute task to get iam-token.
+    string TaskId = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Encryption key path
+
+message TKeyPath
+{
+    oneof Path
+    {
+        // Identifier of the keyring containing the key.
+        uint32 KeyringId = 1;
+
+        // Path to the file containing the key.
+        bytes FilePath = 2;
+
+        // KMS key options
+        TKmsKey KmsKey = 3;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Encryption spec
+
+message TEncryptionSpec
+{
+    // Encryption mode.
+    EEncryptionMode Mode = 1;
+
+    oneof KeyParam
+    {
+        // Encryption key path.
+        TKeyPath KeyPath = 2;
+
+        // Encryption key hash for snapshot.
+        bytes KeyHash = 3;
+    }
+}

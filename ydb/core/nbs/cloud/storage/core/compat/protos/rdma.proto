@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package NCloud.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/storage/core/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum EWaitMode
+{
+    WAIT_MODE_POLL = 0;
+    WAIT_MODE_BUSY_WAIT = 1;
+    WAIT_MODE_ADAPTIVE_WAIT = 2;
+}
+
+message TBufferPool
+{
+    // Memory chunks of this size will be kept for reuse. Buffers smaller or
+    // equal to the ChunkSize will be backed by one of the available chunks
+    uint64 ChunkSize = 1;
+
+    // Maximum buffer size that will be backed by a chunk. Anything bigger will
+    // spawn a custom chunk that won't be reused
+    uint64 MaxChunkAlloc = 2;
+
+    // Number of unused chunks to be kept to speed up allocations
+    uint64 MaxFreeChunks = 3;
+}
+
+message TRdmaServer
+{
+    uint32 Backlog = 1;
+    // Deprecated, use SendQueueSize and RecvQueueSize instead.
+    uint32 QueueSize = 2;
+    uint32 MaxBufferSize = 3;
+    uint64 KeepAliveTimeout = 4;            // in milliseconds
+    EWaitMode WaitMode = 5;
+    uint32 PollerThreads = 6;
+    uint32 MaxInflightBytes = 7;            // per client
+    uint64 AdaptiveWaitSleepDelay = 8;      // in microseconds
+    uint64 AdaptiveWaitSleepDuration = 9;   // in microseconds
+    bool AlignedDataEnabled = 10;
+    uint32 IpTypeOfService = 11;
+
+    // bind to the first non local address of this interface
+    string SourceInterface = 12;
+
+    // use ibv_create_qp instead of rdma_create_qp
+    bool VerbsQP = 13;
+
+    TBufferPool BufferPool = 14;
+
+    uint32 SendQueueSize = 15;
+    uint32 RecvQueueSize = 16;
+    bool StrictValidation = 17;
+
+    // Sets the "retry_cnt" parameter in the "ibv_qp_attr" for
+    // "ibv_modify_qp()" function. Valid values are in range [0, 7].
+    uint32 QpRetryCount = 18;
+    // Sets the "retry_cnt" parameter in the "ibv_qp_attr" for
+    // "ibv_modify_qp()" function. Valid values are in range [0, 7].
+    uint32 QpRnrRetryCount = 19;
+    // Sets the "timeout" parameter in the "ibv_qp_attr" for
+    // "ibv_modify_qp()" function. Valid values are in range [0, 31].
+    // The resulting timeout is calculated as 4096*2^{QpTimeout} microseconds.
+    // 0 means infinite timeout.
+    uint32 QpTimeout = 20;
+    // Sets the "min_rnr_timer" parameter in the "ibv_qp_attr" for
+    // "ibv_modify_qp()" function. Valid values are in range [0, 31].
+    uint32 QpMinRnrTimer = 21;
+}
+
+message TRdmaClient
+{
+    // Deprecated, use SendQueueSize and RecvQueueSize instead.
+    uint32 QueueSize = 1;
+    uint32 MaxBufferSize = 2;
+    uint32 PollerThreads = 3;
+    EWaitMode WaitMode = 4;
+    uint64 AdaptiveWaitSleepDelay = 5;      // in microseconds
+    uint64 AdaptiveWaitSleepDuration = 6;   // in microseconds
+    bool AlignedDataEnabled = 7;
+    uint32 IpTypeOfService = 8;
+
+    // bind to the first non local address of this interface
+    string SourceInterface = 9;
+
+    // use ibv_create_qp instead of rdma_create_qp
+    bool VerbsQP = 10;
+
+    uint64 MaxReconnectDelay = 11;  // in milliseconds
+    uint64 MaxResponseDelay = 12;   // in milliseconds
+
+    TBufferPool BufferPool = 13;
+
+    uint32 SendQueueSize = 14;
+    uint32 RecvQueueSize = 15;
+
+    // Timeout for address/route resolution during connect:
+    // rdma_resolve_addr + rdma_resolve_route. (in milliseconds)
+    uint64 ResolveTimeout = 16;
+
+    // Maximum time we wait for in-flight requests to drain during endpoint
+    // flush/shutdown before considering flush "hung". (in milliseconds)
+    uint64 FlushTimeout = 17;
+
+    // Sets the "retry_cnt" parameter in the "ibv_qp_attr" for
+    // "ibv_modify_qp()" function. Valid values are in range [0, 7].
+    uint32 QpRetryCount = 18;
+    // Sets the "retry_cnt" parameter in the "ibv_qp_attr" for
+    // "ibv_modify_qp()" function. Valid values are in range [0, 7].
+    uint32 QpRnrRetryCount = 19;
+    // Sets the "timeout" parameter in the "ibv_qp_attr" for
+    // "ibv_modify_qp()" function. Valid values are in range [0, 31].
+    // The resulting timeout is calculated as 4096*2^{QpTimeout} microseconds.
+    // 0 means infinite timeout.
+    uint32 QpTimeout = 20;
+    // Sets the "min_rnr_timer" parameter in the "ibv_qp_attr" for
+    // "ibv_modify_qp()" function. Valid values are in range [0, 31].
+    uint32 QpMinRnrTimer = 21;
+}

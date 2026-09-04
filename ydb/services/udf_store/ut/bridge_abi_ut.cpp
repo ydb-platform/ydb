@@ -880,6 +880,38 @@ Y_UNIT_TEST(TryReuseRefcountedString) {
     UNIT_ASSERT_VALUES_EQUAL(table.TryReuse(keepAlive), NullBridgeHandle);
 }
 
+Y_UNIT_TEST(SubstringsOfOneBufferGetDistinctNodes) {
+    EnsureUdfHostIntrinsicsRegistered();
+    TMiniKqlEnv mkql;
+
+    auto handle = std::make_unique<TQueryCompartmentHandle>();
+    handle->Generation = 99;
+    handle->BridgeNodes = std::make_unique<TWasmBridgeNodeTable>(handle->Generation);
+    auto& table = *handle->BridgeNodes;
+
+    const TUnboxedValue whole = mkql.ValueBuilder.NewString(
+        TStringRef("AAAAAAAAAAAAAAAAAAAAAAAAbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 52));
+    // Same TStringValue buffer, different offset/size; each > 14 bytes so
+    // SubString does not collapse either into an embedded copy.
+    const TUnboxedValue head = mkql.ValueBuilder.SubString(whole, 0, 24);
+    const TUnboxedValue tail = mkql.ValueBuilder.SubString(whole, 24, 28);
+    UNIT_ASSERT(head.IsString() && tail.IsString());
+    UNIT_ASSERT_VALUES_EQUAL(head.AsRawStringValue(), tail.AsRawStringValue());
+
+    const ui64 h1 = table.RegisterOrReuse(
+        EBridgeNodeKind::String, EBridgeValueKind::String, nullptr, head);
+    const ui64 h2 = table.RegisterOrReuse(
+        EBridgeNodeKind::String, EBridgeValueKind::String, nullptr, tail);
+
+    // Distinct values must never alias one node: a node holds exactly one
+    // TUnboxedValue, so sharing a handle hands the guest the wrong bytes.
+    UNIT_ASSERT_VALUES_UNEQUAL(h1, h2);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 2u);
+
+    // And the same value must still be reused.
+    UNIT_ASSERT_VALUES_EQUAL(table.TryReuse(tail), h2);
+}
+
 Y_UNIT_TEST(AliasingNodeKeepsIdentityOwner) {
     TMiniKqlEnv mkql;
 

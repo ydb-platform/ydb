@@ -57,6 +57,12 @@ public:
         return TabletId;
     }
 
+    // The transaction has written something and its lock is broken, so it can no longer commit,
+    // and it does not make sense to execute scans for it too.
+    virtual bool HasWritesAndBroken() const {
+        return false;
+    }
+
     bool NeedToDetectConflicts() const {
         // do not detect conflicts for snapshot isolated transactions or txs with no lock
         return LockId.has_value() && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;

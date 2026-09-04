@@ -204,7 +204,7 @@ bool TPortionDataSource::DoAddTxConflict() {
             return true;
         }
         // conflicting portion is already committed, we don't have a chance to commit anymore
-        GetContext()->GetReadMetadata()->SetBreakLockOnReadFinished();
+        GetContext()->GetReadMetadata()->BreakLock();
         return true;
     } else {
         // conflicting portion is not committed yet, remember it

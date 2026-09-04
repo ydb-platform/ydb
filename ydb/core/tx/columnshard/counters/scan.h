@@ -75,6 +75,7 @@ public:
         UndeliveredEvent /* "UndeliveredEvent" */,
         CannotAddInFlight /* "CannotAddInFlight" */,
         ProblemOnStart /*ProblemOnStart*/,
+        BrokenLock /* "BrokenLock" */,
 
         COUNT
     };

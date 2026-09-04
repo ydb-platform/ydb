@@ -53,6 +53,18 @@ public:
             return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, {});
         }
     }
+
+    static std::optional<TWorkloadManagerQueryGuard> StartWorkloadManager(
+        const std::optional<TWorkloadManagerQueryIdentity>& identity, const bool useBatchPool = false) {
+        if (!identity) {
+            return std::nullopt;
+        }
+        if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
+            const auto& selfId = NActors::TActorContext::AsActorContext().SelfID;
+            return TWorkloadManagerQueryGuard(*identity, MakeServiceId(selfId.NodeId(), useBatchPool));
+        }
+        return TWorkloadManagerQueryGuard(*identity, {});
+    }
 };
 
 class TInsertServiceOperator {

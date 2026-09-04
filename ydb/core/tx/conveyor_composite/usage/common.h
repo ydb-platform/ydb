@@ -2,9 +2,45 @@
 #include <ydb/core/tx/conveyor_composite/common/category.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
+#include <util/generic/hash.h>
+
 namespace NKikimr::NConveyorComposite {
 using ITask = NConveyor::ITask;
 class TCPULimitsConfig;
+
+class TWorkloadManagerQueryIdentity {
+private:
+    YDB_READONLY_DEF(TString, DatabaseId);
+    YDB_READONLY_DEF(TString, PoolId);
+    YDB_READONLY(ui64, QueryId, 0);
+
+public:
+    struct THash {
+        size_t operator()(const TWorkloadManagerQueryIdentity& identity) const {
+            return CombineHashes(
+                CombineHashes(::THash<TString>()(identity.GetDatabaseId()), ::THash<TString>()(identity.GetPoolId())),
+                ::THash<ui64>()(identity.GetQueryId()));
+        }
+    };
+
+    TWorkloadManagerQueryIdentity() = default;
+
+    TWorkloadManagerQueryIdentity(TString databaseId, TString poolId, const ui64 queryId)
+        : DatabaseId(std::move(databaseId))
+        , PoolId(std::move(poolId))
+        , QueryId(queryId) {
+    }
+
+    bool operator==(const TWorkloadManagerQueryIdentity&) const = default;
+};
+
+enum class ESpecialTaskCategory {
+    Insert = 0 /* "insert" */,
+    Compaction = 1 /* "compaction" */,
+    Normalizer = 2 /* "normalizer" */,
+    Scan = 3 /* "scan" */,
+    Deduplication = 4 /* "deduplication" */
+};
 
 class TProcessGuard: TNonCopyable {
 private:
@@ -40,6 +76,33 @@ public:
     }
 
     ~TProcessGuard() {
+        if (!Finished) {
+            Finish();
+        }
+    }
+};
+
+class TWorkloadManagerQueryGuard: TNonCopyable {
+private:
+    const TWorkloadManagerQueryIdentity Identity;
+    bool Finished = false;
+    std::optional<NActors::TActorId> ServiceActorId;
+
+public:
+    explicit TWorkloadManagerQueryGuard(
+        TWorkloadManagerQueryIdentity identity, const std::optional<NActors::TActorId>& actorId);
+
+    void Finish();
+
+    TWorkloadManagerQueryGuard(TWorkloadManagerQueryGuard&& other)
+        : Identity(other.Identity)
+        , Finished(other.Finished)
+        , ServiceActorId(std::move(other.ServiceActorId)) {
+        other.Finished = true;
+        other.ServiceActorId.reset();
+    }
+
+    ~TWorkloadManagerQueryGuard() {
         if (!Finished) {
             Finish();
         }

@@ -62,7 +62,8 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
     const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
     const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId)
+    std::optional<NConveyorComposite::TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity, std::shared_ptr<NLWTrace::TOrbit> orbit,
+    ui64 pathId)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)
@@ -79,6 +80,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     , DataFormat(dataFormat)
     , TabletId(tabletId)
     , CPULimits(cpuLimits)
+    , WorkloadManagerQueryIdentity(std::move(workloadManagerQueryIdentity))
     , ReadMetadataRange(readMetadataRange)
     , Timeout(timeout ? timeout : COMPUTE_HARD_TIMEOUT)
     , ScanCountersPool(scanCountersPool, TValidator::CheckNotNull(ReadMetadataRange)->GetProgram().GetGraphOptional())
@@ -98,8 +100,9 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     Y_ABORT_UNLESS(!ScanIterator);
     ResourceSubscribeActorId = ctx.Register(new NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
 
-    std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ColumnDataManager,
-        ScanCountersPool, ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ComputeShardingPolicy, ScanId, CPULimits, ScanOrbit);
+    std::shared_ptr<TReadContext> context =
+        std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ColumnDataManager, ScanCountersPool, ReadMetadataRange, SelfId(),
+            ResourceSubscribeActorId, ComputeShardingPolicy, ScanId, CPULimits, WorkloadManagerQueryIdentity, ScanOrbit);
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();

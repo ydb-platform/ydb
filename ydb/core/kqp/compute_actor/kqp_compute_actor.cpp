@@ -285,9 +285,9 @@ IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vect
     const TString& database, const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
     TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
-    bool useBatchPool) {
+    TString databaseId, TString poolId, bool useBatchPool) {
     return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode,
-        database, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits, useBatchPool);
+        database, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits, std::move(databaseId), std::move(poolId), useBatchPool);
 }
 
 } // namespace NKikimr::NKqp

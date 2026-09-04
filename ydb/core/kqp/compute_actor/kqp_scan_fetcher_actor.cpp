@@ -31,11 +31,13 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
     const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
-    const TCPULimits& cpuLimits, const bool useBatchPool)
+    const TCPULimits& cpuLimits, TString databaseId, TString poolId, const bool useBatchPool)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
     , Database(database)
+    , DatabaseId(std::move(databaseId))
+    , PoolId(std::move(poolId))
     , TxId(txId)
     , LockTxId(lockTxId)
     , LockNodeId(lockNodeId)
@@ -577,6 +579,11 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
 
     if (UseBatchPool) {
         ev->Record.SetUseBatchPool(true);
+    }
+
+    if (!DatabaseId.empty() && !PoolId.empty()) {
+        ev->Record.SetDatabaseId(DatabaseId);
+        ev->Record.SetPoolId(PoolId);
     }
 
     ev->Record.SetDataFormat(Meta.GetDataFormat());

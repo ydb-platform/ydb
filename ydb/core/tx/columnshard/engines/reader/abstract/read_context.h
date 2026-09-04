@@ -67,6 +67,7 @@ private:
     const TComputeShardingPolicy ComputeShardingPolicy;
     std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
+    const std::optional<NConveyorComposite::TWorkloadManagerQueryGuard> WorkloadManagerQueryGuard;
     const NConveyorComposite::TProcessGuard ConveyorProcessGuard;
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
     std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
@@ -160,6 +161,7 @@ public:
         const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
         const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
         const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+        const std::optional<NConveyorComposite::TWorkloadManagerQueryIdentity>& workloadManagerQueryIdentity,
         const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit);
 };
 

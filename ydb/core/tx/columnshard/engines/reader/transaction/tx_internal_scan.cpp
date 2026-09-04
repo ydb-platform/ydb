@@ -132,7 +132,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId,
         Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(),
         TComputeShardingPolicy(), ScanId, request.GetLockId().value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(),
-        readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}, std::move(orbit)));
+        readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}, {}, std::move(orbit)));
 
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
     YDB_LOG_DEBUG("",

@@ -149,6 +149,15 @@ TResult ApplyChangesInt(
     if (request.has_alter_partitioning_settings()) {
         const auto& settings = request.alter_partitioning_settings();
         if (settings.has_set_min_active_partitions()) {
+            if (settings.set_min_active_partitions() < 0) {
+                return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                    << "Partitions count must be non-negative, provided " << settings.set_min_active_partitions()};
+            }
+            if (settings.set_min_active_partitions() >= Max<ui32>()) {
+                return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                    << "Partitions count must be less than " << Max<ui32>()
+                    << ", provided " << settings.set_min_active_partitions()};
+            }
             auto minParts = IfEqualThenDefault<i64>(settings.set_min_active_partitions(), 0L, 1L);
             config.SetTotalGroupCount(minParts);
             if (needHandleAutoPartitioning) {
@@ -158,6 +167,11 @@ TResult ApplyChangesInt(
 
         if (needHandleAutoPartitioning) {
             if (settings.has_set_max_active_partitions()) {
+                if (settings.set_max_active_partitions() < 0) {
+                    return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                        << "Max active partitions must be non-negative, provided "
+                        << settings.set_max_active_partitions()};
+                }
                 pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());
             }
             if (settings.has_alter_auto_partitioning_settings()) {
@@ -256,7 +270,7 @@ TResult ApplyChangesInt(
         }
     }
 
-    auto result = FillMeteringMode(*pqTabletConfig, request.set_metering_mode(), EOperation::Create);
+    auto result = FillMeteringMode(*pqTabletConfig, request.set_metering_mode(), EOperation::Alter);
     if (!result) {
         return result;
     }

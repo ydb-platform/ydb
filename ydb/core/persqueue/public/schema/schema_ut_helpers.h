@@ -7,19 +7,29 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/future.h>
 
 namespace NKikimr::NPQ::NSchema::NTests {
 
 using namespace NYdb::NTopic::NTests;
 
-inline std::shared_ptr<TTopicSdkTestSetup> CreateSetup(const char* name = "CoreSchema") {
-    auto setup = std::make_shared<TTopicSdkTestSetup>(name, TTopicSdkTestSetup::MakeServerSettings(), false);
+inline std::shared_ptr<TTopicSdkTestSetup> CreateSetup(
+    const char* name = "CoreSchema",
+    NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings())
+{
+    auto setup = std::make_shared<TTopicSdkTestSetup>(name, std::move(settings), false);
     setup->GetServer().EnableLogs({
             NKikimrServices::PQ_SCHEMA,
             NKikimrServices::PQ_MLP_DESCRIBER,
         },
         NActors::NLog::PRI_DEBUG);
     return setup;
+}
+
+inline std::shared_ptr<TTopicSdkTestSetup> CreateMeteringSetup(const char* name = "CoreSchemaMetering") {
+    auto settings = TTopicSdkTestSetup::MakeServerSettings();
+    settings.PQConfig.MutableBillingMeteringConfig()->SetEnabled(true);
+    return CreateSetup(name, std::move(settings));
 }
 
 inline void AssertStatus(
@@ -37,15 +47,17 @@ inline void AssertStatus(
 inline THolder<TEvSchemaResponse> DoCreate(
     NActors::TTestActorRuntime& runtime,
     Ydb::Topic::CreateTopicRequest request,
-    const TString& database = "/Root")
+    const TString& database = "/Root",
+    bool prepareOnly = false,
+    bool ifNotExists = false)
 {
     auto edge = runtime.AllocateEdgeActor();
     runtime.Register(CreateCreateTopicActor(edge, {
         .Database = database,
         .Request = std::move(request),
         .UserToken = nullptr,
-        .IfNotExists = false,
-        .PrepareOnly = false,
+        .IfNotExists = ifNotExists,
+        .PrepareOnly = prepareOnly,
         .Cookie = 0,
     }));
     return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
@@ -54,15 +66,17 @@ inline THolder<TEvSchemaResponse> DoCreate(
 inline THolder<TEvSchemaResponse> DoAlter(
     NActors::TTestActorRuntime& runtime,
     Ydb::Topic::AlterTopicRequest request,
-    const TString& database = "/Root")
+    const TString& database = "/Root",
+    bool prepareOnly = false,
+    bool ifExists = false)
 {
     auto edge = runtime.AllocateEdgeActor();
     runtime.Register(CreateAlterTopicActor(edge, {
         .Database = database,
         .Request = std::move(request),
         .UserToken = nullptr,
-        .IfExists = false,
-        .PrepareOnly = false,
+        .IfExists = ifExists,
+        .PrepareOnly = prepareOnly,
         .Cookie = 0,
     }));
     return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
@@ -71,17 +85,61 @@ inline THolder<TEvSchemaResponse> DoAlter(
 inline THolder<TEvSchemaResponse> DoDrop(
     NActors::TTestActorRuntime& runtime,
     const TString& path,
-    const TString& database = "/Root")
+    const TString& database = "/Root",
+    bool ifExists = false)
 {
     auto edge = runtime.AllocateEdgeActor();
     runtime.Register(CreateDropTopicActor(edge, {
         .Database = database,
         .Path = path,
         .UserToken = nullptr,
-        .IfExists = false,
+        .IfExists = ifExists,
         .Cookie = 0,
     }));
     return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
+}
+
+inline NThreading::TFuture<TSchemaResponse> DoCreateViaPromise(
+    NActors::TTestActorRuntime& runtime,
+    Ydb::Topic::CreateTopicRequest request,
+    const TString& database = "/Root")
+{
+    auto promise = NThreading::NewPromise<TSchemaResponse>();
+    auto future = promise.GetFuture();
+    runtime.Register(CreateCreateTopicActor(std::move(promise), {
+        .Database = database,
+        .Request = std::move(request),
+        .UserToken = nullptr,
+        .IfNotExists = false,
+        .PrepareOnly = false,
+        .Cookie = 0,
+    }));
+    // Drive the actor system until the promise is filled.
+    for (int i = 0; i < 1000 && !future.HasValue(); ++i) {
+        runtime.DispatchEvents(NActors::TDispatchOptions(), TDuration::MilliSeconds(10));
+    }
+    return future;
+}
+
+inline NThreading::TFuture<TSchemaResponse> DoAlterViaPromise(
+    NActors::TTestActorRuntime& runtime,
+    Ydb::Topic::AlterTopicRequest request,
+    const TString& database = "/Root")
+{
+    auto promise = NThreading::NewPromise<TSchemaResponse>();
+    auto future = promise.GetFuture();
+    runtime.Register(CreateAlterTopicActor(std::move(promise), {
+        .Database = database,
+        .Request = std::move(request),
+        .UserToken = nullptr,
+        .IfExists = false,
+        .PrepareOnly = false,
+        .Cookie = 0,
+    }));
+    for (int i = 0; i < 1000 && !future.HasValue(); ++i) {
+        runtime.DispatchEvents(NActors::TDispatchOptions(), TDuration::MilliSeconds(10));
+    }
+    return future;
 }
 
 inline THolder<TEvSchemaResponse> DoAddConsumer(

@@ -1080,8 +1080,8 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         bool slowFound = false;
         bool errorFound = false;
         for (const auto& shard : stats.GetShardReads()) {
-            UNIT_ASSERT_VALUES_EQUAL(shard.GetTimingBoundary(),
-                NKqpProto::TKqpShardReadStats::REQUEST_SENT_TO_LAST_MESSAGE);
+            UNIT_ASSERT(shard.GetTimingBoundary()
+                == NKqpProto::TKqpShardReadStats::REQUEST_SENT_TO_LAST_MESSAGE);
             slowFound = slowFound || shard.GetShardId() == slowShard;
             if (shard.GetShardId() == failedShard) {
                 UNIT_ASSERT_VALUES_EQUAL(shard.GetStatus(), Ydb::StatusIds::ABORTED);

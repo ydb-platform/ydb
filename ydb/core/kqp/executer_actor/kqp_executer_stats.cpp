@@ -775,7 +775,7 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
     // - Output producing with active input reading (returns `Yield` + produces some data)
     // - Long spilling in MKQL node
     // - Reading sources / channels without producing data (e. g. GROUP BY HOP with long window)
-    if (CurrentWaitInputTimeUs.MinValue < deadline || InputStages.empty() || IsFinished()) {
+    if (CurrentWaitInputTimeUs.MinValue < deadline || InputStages.empty()) {
         return false;
     }
 

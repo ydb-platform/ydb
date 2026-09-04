@@ -65,6 +65,7 @@ public:
         TString key;
         with_lock (MetadataMutex) {
             CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
+            CapturedAuthenticateService.clear();
             if (request->has_signature()) {
                 CapturedAuthenticateService = request->signature().v4_parameters().service();
                 key = CapturedAuthenticateService;
@@ -145,6 +146,7 @@ public:
         TString key;
         with_lock (MetadataMutex) {
             CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
+            CapturedAuthenticateService.clear();
             if (request->has_signature()) {
                 CapturedAuthenticateService = request->signature().v4_parameters().service();
                 key = CapturedAuthenticateService;
@@ -197,6 +199,7 @@ public:
         with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
             CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
+            CapturedAuthenticateService.clear();
             if (request->has_signature()) {
                 CapturedAuthenticateService = request->signature().v4_parameters().service();
             }

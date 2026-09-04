@@ -178,6 +178,12 @@ namespace NKikimr::NHttpProxy {
                                           "Access key id should be provided",
                                           NYds::EErrorCodes::MISSING_AUTHENTICATION_TOKEN);
                 }
+
+                if (Signature->GetService().empty()) {
+                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
+                                          "Service name should be provided",
+                                          NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
+                }
             }
 
             if (Authorize) {

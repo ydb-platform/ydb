@@ -52,6 +52,19 @@ Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/ru-central1/sqs/
         UNIT_ASSERT_EQUAL("AKIDEXAMPLE", signature.GetAccessKeyId());
     }
 
+    Y_UNIT_TEST(TestParsesEmptyServiceFromIncompleteCredential) {
+        const TString request = \
+R"__(POST / HTTP/1.1
+Host:example.amazonaws.com
+X-Amz-Date:20150830T123600Z
+Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/ru-central1, SignedHeaders=host;x-amz-date, Signature=5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b)__";
+
+        TAwsRequestSignV4 signature(request);
+        UNIT_ASSERT_EQUAL("AKIDEXAMPLE", signature.GetAccessKeyId());
+        UNIT_ASSERT_EQUAL("ru-central1", signature.GetRegion());
+        UNIT_ASSERT(signature.GetService().empty());
+    }
+
     Y_UNIT_TEST(TestPostVanilla) {
         const TString request = \
 R"__(POST / HTTP/1.1

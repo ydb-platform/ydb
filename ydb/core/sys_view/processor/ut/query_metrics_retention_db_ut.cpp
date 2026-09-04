@@ -1,5 +1,6 @@
-#include <ydb/core/sys_view/processor/query_metrics_retention_db.h>
+#include <ydb/core/sys_view/common/query_metrics_limits.h>
 #include <ydb/core/sys_view/processor/query_metrics_retention.h>
+#include <ydb/core/sys_view/processor/query_metrics_retention_db.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_dummy.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -137,10 +138,14 @@ Y_UNIT_TEST_SUITE(TQueryMetricsRetentionDbTest) {
     }
 
     Y_UNIT_TEST(ResumesBatchedCleanupAfterReboot) {
+        constexpr ui32 rowsPerClosedBucket =
+            NQueryMetricsLimits::OneHourCleanupBatchSize + 1;
+        constexpr size_t totalRowsToDelete = 2 * rowsPerClosedBucket;
+
         TQueryMetricsTestDb testDb;
-        testDb.Transaction([](NIceDb::TNiceDb& db) {
+        testDb.Transaction([&](NIceDb::TNiceDb& db) {
             db.Materialize<TProcessorSchema>();
-            for (ui32 rank = 1; rank <= 600; ++rank) {
+            for (ui32 rank = 1; rank <= rowsPerClosedBucket; ++rank) {
                 WriteRow(db, 100, rank, 1, 1);
                 WriteRow(db, 200, rank, 1, 1);
             }
@@ -159,7 +164,9 @@ Y_UNIT_TEST_SUITE(TQueryMetricsRetentionDbTest) {
                 const ui64 cutoff = ReadCutoff(db);
                 TQueryMetricsOneHourCleanupResult cleanup;
                 UNIT_ASSERT(CleanupQueryMetricsOneHour(
-                    db, cutoff, /* batchSize */ 512, cleanup));
+                    db, cutoff,
+                    NQueryMetricsLimits::OneHourCleanupBatchSize,
+                    cleanup));
                 totalDeleted += cleanup.Deleted;
                 totalEvictedBuckets += cleanup.EvictedBuckets;
                 more = cleanup.More;
@@ -187,8 +194,11 @@ Y_UNIT_TEST_SUITE(TQueryMetricsRetentionDbTest) {
             }
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(transactions, 3);
-        UNIT_ASSERT_VALUES_EQUAL(totalDeleted, 1200);
+        const size_t expectedTransactions =
+            (totalRowsToDelete + NQueryMetricsLimits::OneHourCleanupBatchSize - 1)
+            / NQueryMetricsLimits::OneHourCleanupBatchSize;
+        UNIT_ASSERT_VALUES_EQUAL(transactions, expectedTransactions);
+        UNIT_ASSERT_VALUES_EQUAL(totalDeleted, totalRowsToDelete);
         UNIT_ASSERT_VALUES_EQUAL(totalEvictedBuckets, 2);
 
         testDb.Transaction([](NIceDb::TNiceDb& db) {

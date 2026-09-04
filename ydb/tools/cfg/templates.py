@@ -713,7 +713,7 @@ def kikimr_cfg_for_dynamic_node_new_style(
                 kikimr_binaries_base_path=kikimr_binaries_base_path,
                 pq_enable=False,
                 enable_cores=enable_cores,
-                default_log_level=default_log_level,
+                default_log_level=0,
                 mon_address=mon_address,
                 cert_params=cert_params,
                 new_style_kikimr_cfg=True,

@@ -769,6 +769,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             const auto& reasonId = issue->reason(0);
             const auto reasonIt = issueById.find(reasonId);
             UNIT_ASSERT_C(reasonIt != issueById.end(), "Reason " << reasonId << " of " << issue->type() << " issue not found");
+            issue = reasonIt->second;
             UNIT_ASSERT_VALUES_EQUAL(issue->type(), *it);
         }
     }

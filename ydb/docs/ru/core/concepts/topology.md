@@ -110,4 +110,4 @@
 * [{#T}](../contributor/distributed-storage.md)
 {% endif %}
 
-[*recommended-node-count]: Использование меньшего количества узлов приведёт к ограничению способности кластера к [автоматическому восстановлению](../maintenance/manual/selfheal.md).
+[*recommended-node-count]: Использование меньшего количества узлов приведёт к ограничению способности кластера к [автоматическому восстановлению](../devops/concepts/selfheal.md).

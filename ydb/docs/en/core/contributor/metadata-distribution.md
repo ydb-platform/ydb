@@ -296,7 +296,7 @@ In clusters with V2 configuration, the **Self Heal State Storage** mechanism is 
 - Moves replicas from failed nodes to healthy ones.
 - Adds new replicas when the cluster expands.
 
-Self Heal works through the same ring group mechanism as manual reconfiguration, but performs all steps automatically. For more details, see the section [Self Heal State Storage](../maintenance/manual/selfheal_statestorage.md).
+Self Heal works through the same ring group mechanism as manual reconfiguration, but performs all steps automatically. For more details, see the section [Self Heal State Storage](../devops/concepts/selfheal-state-storage.md).
 
 ### Ring groups in a two-data-center configuration {#two-dc}
 
@@ -321,7 +321,7 @@ The replica placement rule (different rings in different racks; replicas of the 
 
 - [Metadata distribution services](../concepts/architecture/metadata-services.md) — an overview for documentation users.
 - Configuring metadata distribution subsystems — instructions for manually changing the configuration.
-- [Self Heal State Storage](../maintenance/manual/selfheal_statestorage.md) — automatic management of subsystem configuration.
+- [Self Heal State Storage](../devops/concepts/selfheal-state-storage.md) — automatic management of subsystem configuration.
 - [Bridge mode](../concepts/bridge.md) — a configuration with two data centers and the role of ring groups in it.
 - [Cluster topology](../concepts/topology.md) — the failure model, failure domains, and failure regions.
 - [Glossary](../concepts/glossary.md) — definitions of terms: StateStorage, Board, SchemeBoard, tablet, ActorId.

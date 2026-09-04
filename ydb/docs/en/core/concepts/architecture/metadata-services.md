@@ -51,7 +51,7 @@ Details (replica rings, quorum, configuration changes, placement across failure 
 
 - [Metadata distribution subsystems](../../contributor/metadata-distribution.md) — a detailed description for core contributors.
 - Configuring metadata distribution subsystems.
-- [Self Heal State Storage](../../maintenance/manual/selfheal_statestorage.md).
+- [Self Heal State Storage](../../devops/concepts/selfheal-state-storage.md).
 - [Bridge mode](../bridge.md).
 - [Cluster topology](../topology.md).
 - [Glossary](../glossary.md).

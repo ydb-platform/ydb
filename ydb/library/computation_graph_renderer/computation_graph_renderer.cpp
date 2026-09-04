@@ -44,17 +44,45 @@ struct TBuilder {
                    : ENodeState::Running;
     }
 
+    static TString IoName(const NJson::TJsonValue& op, TStringBuf typeKey) {
+        return op.Has("Name") ? op["Name"].GetString() : op[typeKey].GetString();
+    }
+
+    // A node carrying nothing but a source or a sink is represented by its input/output node.
+    static bool IsIoOnly(const NJson::TJsonValue& planNode) {
+        if (planNode.Has("Stats") && planNode["Stats"].IsMap()) {
+            return false;
+        }
+        if (!planNode.Has("Operators") || !planNode["Operators"].IsArray()) {
+            return false;
+        }
+        const auto& ops = planNode["Operators"].GetArray();
+        if (ops.empty()) {
+            return false;
+        }
+        for (const auto& op : ops) {
+            if (!op.IsMap() || (!op.Has("SourceType") && !op.Has("SinkType"))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void VisitChildren(const NJson::TJsonValue& planNode, ui32 parentId) {
+        if (planNode.Has("Plans") && planNode["Plans"].IsArray()) {
+            for (const auto& child : planNode["Plans"].GetArray()) {
+                Visit(child, parentId);
+            }
+        }
+    }
+
     ui32 Visit(const NJson::TJsonValue& planNode, ui32 parentId) {
         if (!planNode.IsMap()) {
             return 0;
         }
         TStringBuf planNodeType = planNode["PlanNodeType"].GetString();
         if (planNodeType == "Query" || planNodeType == "Connection" || planNodeType == "Materialize") {
-            if (planNode.Has("Plans") && planNode["Plans"].IsArray()) {
-                for (const auto& child : planNode["Plans"].GetArray()) {
-                    Visit(child, parentId);
-                }
-            }
+            VisitChildren(planNode, parentId);
             return 0;
         }
         if (planNodeType == "ResultSet") {
@@ -63,12 +91,23 @@ struct TBuilder {
                 rsName += " (" + planNode["Name"].GetString() + ")";
             }
             ui32 id = NewNode(std::move(rsName), ENodeType::Output);
-            if (planNode.Has("Plans") && planNode["Plans"].IsArray()) {
-                for (const auto& child : planNode["Plans"].GetArray()) {
-                    Visit(child, id);
+            VisitChildren(planNode, id);
+            return id;
+        }
+        if (IsIoOnly(planNode)) {
+            ui32 childParent = parentId;
+            for (const auto& op : planNode["Operators"].GetArray()) {
+                if (op.Has("SourceType")) {
+                    ui32 inId = NewNode(IoName(op, "SourceType"), ENodeType::Input);
+                    if (parentId != 0) {
+                        Link(inId, parentId);
+                    }
+                } else {
+                    childParent = NewNode(IoName(op, "SinkType"), ENodeType::Output);
                 }
             }
-            return id;
+            VisitChildren(planNode, childParent);
+            return 0;
         }
         TString name = planNode["Node Type"].GetString();
         ui32 id = NewNode(std::move(name), ENodeType::Operation);
@@ -79,13 +118,11 @@ struct TBuilder {
                     continue;
                 }
                 if (op.Has("SourceType")) {
-                    TString inName = op.Has("Name") ? op["Name"].GetString() : op["SourceType"].GetString();
-                    ui32 inId = NewNode(std::move(inName), ENodeType::Input);
+                    ui32 inId = NewNode(IoName(op, "SourceType"), ENodeType::Input);
                     Link(inId, id);
                 }
                 if (op.Has("SinkType")) {
-                    TString outName = op.Has("Name") ? op["Name"].GetString() : op["SinkType"].GetString();
-                    ui32 outId = NewNode(std::move(outName), ENodeType::Output);
+                    ui32 outId = NewNode(IoName(op, "SinkType"), ENodeType::Output);
                     Link(id, outId);
                 }
             }
@@ -93,11 +130,7 @@ struct TBuilder {
         if (parentId != 0) {
             Link(id, parentId);
         }
-        if (planNode.Has("Plans") && planNode["Plans"].IsArray()) {
-            for (const auto& child : planNode["Plans"].GetArray()) {
-                Visit(child, id);
-            }
-        }
+        VisitChildren(planNode, id);
         return id;
     }
 

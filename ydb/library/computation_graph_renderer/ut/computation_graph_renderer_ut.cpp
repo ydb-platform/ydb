@@ -44,15 +44,10 @@ static const TString PlanWithStats = R"({
             "PlanNodeId": 5,
             "Node Type": "Sink",
             "Operators": [{"Name": "Write pq", "SinkType": "pq", "ExternalDataSource": "pq", "Inputs": []}],
-            "Stats": {
-                "Tasks": 1, "FinishedTasks": 1,
-                "EgressRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
-                "EgressBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2}
-            },
             "Plans": [{
                 "PlanNodeId": 4,
                 "Node Type": "Stage",
-                "Stats": {"Tasks": 0, "FinishedTasks": 0},
+                "Stats": {"Tasks": 1, "FinishedTasks": 1},
                 "Plans": [{
                     "PlanNodeId": 3,
                     "Node Type": "HashShuffle",
@@ -63,18 +58,12 @@ static const TString PlanWithStats = R"({
                         "Stats": {
                             "Tasks": 2, "FinishedTasks": 0,
                             "OutputRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
-                            "OutputBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2},
                             "CpuTimeUs":   {"Min": 1000, "Max": 3000, "Sum": 4000, "Count": 2}
                         },
                         "Plans": [{
                             "PlanNodeId": 1,
                             "Node Type": "Source",
-                            "Operators": [{"Name": "Read pq", "SourceType": "pq", "ExternalDataSource": "pq", "Inputs": []}],
-                            "Stats": {
-                                "Tasks": 2, "FinishedTasks": 0,
-                                "IngressRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
-                                "IngressBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2}
-                            }
+                            "Operators": [{"Name": "Read pq", "SourceType": "pq", "ExternalDataSource": "pq", "Inputs": []}]
                         }]
                     }]
                 }]
@@ -134,45 +123,36 @@ Y_UNIT_TEST(PlanWithoutStagesGivesEmptyGraph) {
 
 Y_UNIT_TEST(FixtureShape) {
     TGraph g = Build(PlanWithoutStats);
-    UNIT_ASSERT_EQUAL(g.Nodes.size(), 6u);
+    UNIT_ASSERT_EQUAL(g.Nodes.size(), 4u);
 
     UNIT_ASSERT_EQUAL(NodeByName(g, "Read pq").Type,  ENodeType::Input);
-    UNIT_ASSERT_EQUAL(NodeByName(g, "Source").Type,   ENodeType::Operation);
-    UNIT_ASSERT_EQUAL(NodeByName(g, "Sink").Type,     ENodeType::Operation);
     UNIT_ASSERT_EQUAL(NodeByName(g, "Write pq").Type, ENodeType::Output);
 
-    UNIT_ASSERT_EQUAL(g.Nodes[2].Name, "Stage");
-    UNIT_ASSERT_EQUAL(g.Nodes[2].Type, ENodeType::Operation);
-    UNIT_ASSERT_EQUAL(g.Nodes[3].Name, "Stage");
-    UNIT_ASSERT_EQUAL(g.Nodes[3].Type, ENodeType::Operation);
+    const TNode& stageBeforeSink = g.Nodes[1];
+    const TNode& stageAfterSource = g.Nodes[2];
+    UNIT_ASSERT_EQUAL(stageBeforeSink.Name, "Stage");
+    UNIT_ASSERT_EQUAL(stageBeforeSink.Type, ENodeType::Operation);
+    UNIT_ASSERT_EQUAL(stageAfterSource.Name, "Stage");
+    UNIT_ASSERT_EQUAL(stageAfterSource.Type, ENodeType::Operation);
 
-    ui32 idReadPq         = NodeByName(g, "Read pq").Id;
-    ui32 idSource         = NodeByName(g, "Source").Id;
-    ui32 idStageAfterSource = g.Nodes[3].Id;
-    ui32 idStageBeforeSink  = g.Nodes[2].Id;
-    ui32 idSink           = NodeByName(g, "Sink").Id;
-    ui32 idWritePq        = NodeByName(g, "Write pq").Id;
-
-    UNIT_ASSERT_EQUAL(g.Links.size(), 5u);
-    UNIT_ASSERT(HasLink(g, idReadPq, idSource));
-    UNIT_ASSERT(HasLink(g, idSource, idStageAfterSource));
-    UNIT_ASSERT(HasLink(g, idStageAfterSource, idStageBeforeSink));
-    UNIT_ASSERT(HasLink(g, idStageBeforeSink, idSink));
-    UNIT_ASSERT(HasLink(g, idSink, idWritePq));
+    UNIT_ASSERT_EQUAL(g.Links.size(), 3u);
+    UNIT_ASSERT(HasLink(g, NodeByName(g, "Read pq").Id, stageAfterSource.Id));
+    UNIT_ASSERT(HasLink(g, stageAfterSource.Id, stageBeforeSink.Id));
+    UNIT_ASSERT(HasLink(g, stageBeforeSink.Id, NodeByName(g, "Write pq").Id));
 
     for (const auto& n : g.Nodes) {
         UNIT_ASSERT_UNEQUAL(n.Name, "HashShuffle");
+        UNIT_ASSERT_UNEQUAL(n.Name, "Source");
+        UNIT_ASSERT_UNEQUAL(n.Name, "Sink");
     }
 }
 
 Y_UNIT_TEST(LevelsFollowDataFlow) {
     TGraph g = Build(PlanWithoutStats);
     UNIT_ASSERT_EQUAL(NodeByName(g, "Read pq").Level,  0u);
-    UNIT_ASSERT_EQUAL(NodeByName(g, "Source").Level,   1u);
-    UNIT_ASSERT_EQUAL(g.Nodes[3].Level,                2u);
-    UNIT_ASSERT_EQUAL(g.Nodes[2].Level,                3u);
-    UNIT_ASSERT_EQUAL(NodeByName(g, "Sink").Level,     4u);
-    UNIT_ASSERT_EQUAL(NodeByName(g, "Write pq").Level, 5u);
+    UNIT_ASSERT_EQUAL(g.Nodes[2].Level,                1u);
+    UNIT_ASSERT_EQUAL(g.Nodes[1].Level,                2u);
+    UNIT_ASSERT_EQUAL(NodeByName(g, "Write pq").Level, 3u);
 }
 
 Y_UNIT_TEST(NoStatsMeansPending) {
@@ -188,21 +168,35 @@ Y_UNIT_TEST(NoStatsMeansPending) {
 
 Y_UNIT_TEST(StateFollowsTaskCounters) {
     TGraph g = Build(PlanWithStats);
-    const TNode& sink = g.Nodes[0];
-    UNIT_ASSERT_EQUAL(sink.State, ENodeState::Finished);
-    UNIT_ASSERT_EQUAL(sink.Tasks, 1u);
-    UNIT_ASSERT_EQUAL(sink.FinishedTasks, 1u);
 
-    UNIT_ASSERT_EQUAL(g.Nodes[2].State, ENodeState::Pending);
-    UNIT_ASSERT_EQUAL(g.Nodes[2].Tasks, 0u);
+    const TNode& stageBeforeSink = g.Nodes[1];
+    UNIT_ASSERT_EQUAL(stageBeforeSink.State, ENodeState::Finished);
+    UNIT_ASSERT_EQUAL(stageBeforeSink.Tasks, 1u);
+    UNIT_ASSERT_EQUAL(stageBeforeSink.FinishedTasks, 1u);
 
-    const TNode& midStage = g.Nodes[3];
-    UNIT_ASSERT_EQUAL(midStage.State, ENodeState::Running);
-    UNIT_ASSERT_EQUAL(midStage.Tasks, 2u);
+    const TNode& stageAfterSource = g.Nodes[2];
+    UNIT_ASSERT_EQUAL(stageAfterSource.State, ENodeState::Running);
+    UNIT_ASSERT_EQUAL(stageAfterSource.Tasks, 2u);
+    UNIT_ASSERT_EQUAL(stageAfterSource.FinishedTasks, 0u);
+}
 
-    const TNode& src = g.Nodes[4];
-    UNIT_ASSERT_EQUAL(src.State, ENodeState::Running);
-    UNIT_ASSERT_EQUAL(src.Tasks, 2u);
+Y_UNIT_TEST(SourceNodeWithStatsIsKept) {
+    TGraph g = Build(R"({
+        "Plan": {
+            "Node Type": "Query",
+            "PlanNodeType": "Query",
+            "Plans": [{
+                "Node Type": "Source",
+                "Stats": {"Tasks": 3, "FinishedTasks": 0},
+                "Operators": [{"Name": "Read pq", "SourceType": "pq"}]
+            }]
+        }
+    })");
+    UNIT_ASSERT_EQUAL(g.Nodes.size(), 2u);
+    const TNode& op = NodeByName(g, "Source");
+    UNIT_ASSERT_EQUAL(op.Type, ENodeType::Operation);
+    UNIT_ASSERT_EQUAL(op.Tasks, 3u);
+    UNIT_ASSERT(HasLink(g, NodeByName(g, "Read pq").Id, op.Id));
 }
 
 Y_UNIT_TEST(ConnectionFanIn) {
@@ -258,6 +252,7 @@ Y_UNIT_TEST(MixedSourceSinkStage) {
             "PlanNodeType": "Query",
             "Plans": [{
                 "Node Type": "Transform",
+                "Stats": {"Tasks": 1, "FinishedTasks": 0},
                 "Operators": [
                     {"Name": "ReadSrc", "SourceType": "kafka"},
                     {"Name": "WriteDst", "SinkType": "pq"}
@@ -294,8 +289,8 @@ Y_UNIT_TEST(SvgHasOneShapePerNode) {
         return n;
     };
     UNIT_ASSERT_EQUAL(countOf("<rect x="), 2);
-    UNIT_ASSERT_GE(countOf("<text"), 6);
-    UNIT_ASSERT_EQUAL(countOf("<line x1="), 5);
+    UNIT_ASSERT_GE(countOf("<text"), 4);
+    UNIT_ASSERT_EQUAL(countOf("<line x1="), 3);
 }
 
 Y_UNIT_TEST(SvgShowsTasksAndState) {

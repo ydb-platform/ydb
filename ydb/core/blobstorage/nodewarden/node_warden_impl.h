@@ -115,6 +115,7 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TDsProxyNodeMon> DsProxyNodeMon;
         TActorId DsProxyNodeMonActor;
         TIntrusivePtr<TDsProxyPerPoolCounters> DsProxyPerPoolCounters;
+        TActorId DsProxyInFlightLatencyAggregator;
 
         // Counters for drives by drive path.
         TMap<TString, TDrivePathCounters> ByPathDriveCounters;

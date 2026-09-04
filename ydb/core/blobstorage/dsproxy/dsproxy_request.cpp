@@ -5,12 +5,29 @@
 
 namespace NKikimr {
 
-    void TBlobStorageGroupProxy::PushRequest(IActor *actor, TInstant deadline) {
+    ui32 CountGetRequestBytes(const TEvBlobStorage::TEvGet& ev) {
+        ui32 result = 0;
+        for (ui32 queryIdx = 0; queryIdx < ev.QuerySize; ++queryIdx) {
+            const TEvBlobStorage::TEvGet::TQuery& query = ev.Queries[queryIdx];
+            ui32 size = query.Size;
+            if (!size) {
+                size = Max<i32>(0, query.Id.BlobSize() - query.Shift);
+            }
+            result += size;
+        }
+        return result;
+    }
+
+    void TBlobStorageGroupProxy::PushRequest(IActor *actor, TInstant deadline,
+            TMaybe<TStoragePoolInFlightRequestInfo> inFlightRequest) {
         const TActorId actorId = Register(actor);
         if (deadline != TInstant::Max()) {
             ActiveRequests.try_emplace(actorId, DeadlineMap.emplace(deadline, actorId));
         } else {
             ActiveRequests.try_emplace(actorId);
+        }
+        if (inFlightRequest) {
+            StoragePoolInFlightRequests.emplace(actorId, std::move(*inFlightRequest));
         }
     }
 
@@ -24,7 +41,63 @@ namespace NKikimr {
             jt->second = {};
         }
         DeadlineMap.erase(DeadlineMap.begin(), it);
+        SendInFlightLatencySnapshot();
         TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(EvCheckDeadlines, 0, SelfId(), {}, nullptr, 0));
+    }
+
+    TMaybe<TBlobStorageGroupProxy::TStoragePoolInFlightRequestInfo>
+    TBlobStorageGroupProxy::MakeStoragePoolInFlightRequestInfo(
+            TStoragePoolCounters::EHandleClass handleClass, ui32 requestBytes, TMonotonic startTime) const {
+        if (!InFlightLatencyAggregator || !StoragePoolCounters) {
+            return {};
+        }
+
+        return TStoragePoolInFlightRequestInfo{
+            .BucketKey = TDsProxyInFlightLatencyBucketKey{
+                .PoolCounters = StoragePoolCounters,
+                .HandleClass = static_cast<ui32>(handleClass),
+                .SizeClassIdx = TStoragePoolCounters::SizeClassIndex(handleClass, requestBytes),
+            },
+            .StartTime = startTime,
+        };
+    }
+
+    void TBlobStorageGroupProxy::SendInFlightLatencySnapshot(bool force) {
+        if (!InFlightLatencyAggregator) {
+            return;
+        }
+        if (!force && StoragePoolInFlightRequests.empty() && LastInFlightLatencySnapshotEmpty) {
+            return;
+        }
+
+        const TMonotonic now = TActivationContext::Monotonic();
+        THashMap<TDsProxyInFlightLatencyBucketKey, TDsProxyInFlightLatencyStats> byBucket;
+        for (const auto& [actorId, request] : StoragePoolInFlightRequests) {
+            Y_UNUSED(actorId);
+            if (!request.BucketKey.PoolCounters) {
+                continue;
+            }
+
+            const ui64 latencyUs = now > request.StartTime
+                ? (now - request.StartTime).MicroSeconds()
+                : 0;
+            TDsProxyInFlightLatencyStats& stats = byBucket[request.BucketKey];
+            stats.InFlightLatencyUsSum += latencyUs;
+            ++stats.InFlightCount;
+            stats.InFlightLatencyUsMax = Max(stats.InFlightLatencyUsMax, latencyUs);
+        }
+
+        TVector<TDsProxyInFlightLatencyBucket> buckets;
+        buckets.reserve(byBucket.size());
+        for (const auto& [key, stats] : byBucket) {
+            buckets.push_back(TDsProxyInFlightLatencyBucket{
+                .Key = key,
+                .Stats = stats,
+            });
+        }
+
+        LastInFlightLatencySnapshotEmpty = buckets.empty();
+        Send(InFlightLatencyAggregator, new TEvDsProxyInFlightLatencySnapshot(std::move(buckets)));
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvGet::TPtr &ev) {
@@ -93,6 +166,10 @@ namespace NKikimr {
             }
 
             if (differentBlobCount == 1 || isSmall) {
+                const TMonotonic requestStartTime = TActivationContext::Monotonic();
+                const ui32 requestBytes = CountGetRequestBytes(*ev->Get());
+                const TStoragePoolCounters::EHandleClass storagePoolHandleClass =
+                    HandleClassToHandleClass(ev->Get()->GetHandleClass);
                 Mon->EventGet->Inc();
                 PushRequest(CreateBlobStorageGroupGetRequest(
                     TBlobStorageGroupGetParameters{
@@ -102,7 +179,7 @@ namespace NKikimr {
                             .Mon = Mon,
                             .Source = ev->Sender,
                             .Cookie = ev->Cookie,
-                            .Now = TActivationContext::Monotonic(),
+                            .Now = requestStartTime,
                             .StoragePoolCounters = StoragePoolCounters,
                             .RestartCounter = ev->Get()->RestartCounter,
                             .TraceId = std::move(ev->TraceId),
@@ -115,7 +192,8 @@ namespace NKikimr {
                         .AccelerationParams = GetAccelerationParams(),
                         .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
                     }),
-                    ev->Get()->Deadline
+                    ev->Get()->Deadline,
+                    MakeStoragePoolInFlightRequestInfo(storagePoolHandleClass, requestBytes, requestStartTime)
                 );
             } else {
                 Mon->EventMultiGet->Inc();
@@ -225,6 +303,9 @@ namespace NKikimr {
             batchedPuts.Bytes += partSize;
         } else {
             TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(ev->Get()->HandleClass);
+            const TMonotonic requestStartTime = TActivationContext::Monotonic();
+            const TStoragePoolCounters::EHandleClass storagePoolHandleClass =
+                HandleClassToHandleClass(ev->Get()->HandleClass);
 
             TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
             bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
@@ -237,7 +318,7 @@ namespace NKikimr {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TActivationContext::Monotonic(),
+                        .Now = requestStartTime,
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
@@ -251,7 +332,8 @@ namespace NKikimr {
                     .AccelerationParams = GetAccelerationParams(),
                     .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
                 }),
-                ev->Get()->Deadline
+                ev->Get()->Deadline,
+                MakeStoragePoolInFlightRequestInfo(storagePoolHandleClass, bytes, requestStartTime)
             );
         }
     }
@@ -533,6 +615,11 @@ namespace NKikimr {
             DeadlineMap.erase(it->second);
         }
         ActiveRequests.erase(it);
+        StoragePoolInFlightRequests.erase(ev->Sender);
+    }
+
+    void TBlobStorageGroupProxy::Handle(TEvStoragePoolRequestFinished::TPtr ev) {
+        StoragePoolInFlightRequests.erase(ev->Sender);
     }
 
     void TBlobStorageGroupProxy::Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev) {
@@ -550,6 +637,10 @@ namespace NKikimr {
                 // TODO(alexvru): MinLatency support
                 if (batchedPuts.Queue.size() == 1) {
                     auto& ev = batchedPuts.Queue.front();
+                    const TMonotonic requestStartTime = TActivationContext::Monotonic();
+                    const ui32 requestBytes = ev->Get()->Buffer.size();
+                    const TStoragePoolCounters::EHandleClass storagePoolHandleClass =
+                        HandleClassToHandleClass(handleClass);
                     PushRequest(CreateBlobStorageGroupPutRequest(
                         TBlobStorageGroupPutParameters{
                             .Common = {
@@ -558,7 +649,7 @@ namespace NKikimr {
                                 .Mon = Mon,
                                 .Source = ev->Sender,
                                 .Cookie = ev->Cookie,
-                                .Now = TActivationContext::Monotonic(),
+                                .Now = requestStartTime,
                                 .StoragePoolCounters = StoragePoolCounters,
                                 .RestartCounter = ev->Get()->RestartCounter,
                                 .TraceId = std::move(ev->TraceId),
@@ -572,16 +663,24 @@ namespace NKikimr {
                             .AccelerationParams = GetAccelerationParams(),
                             .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
                         }),
-                        ev->Get()->Deadline
+                        ev->Get()->Deadline,
+                        MakeStoragePoolInFlightRequestInfo(storagePoolHandleClass, requestBytes, requestStartTime)
                     );
                 } else {
+                    const TMonotonic requestStartTime = TActivationContext::Monotonic();
+                    ui32 requestBytes = 0;
+                    for (const auto& ev : batchedPuts.Queue) {
+                        requestBytes += ev->Get()->Buffer.size();
+                    }
+                    const TStoragePoolCounters::EHandleClass storagePoolHandleClass =
+                        HandleClassToHandleClass(handleClass);
                     PushRequest(CreateBlobStorageGroupPutRequest(
                         TBlobStorageGroupMultiPutParameters{
                             .Common = {
                                 .GroupInfo = Info,
                                 .GroupQueues = Sessions->GroupQueues,
                                 .Mon = Mon,
-                                .Now = TActivationContext::Monotonic(),
+                                .Now = requestStartTime,
                                 .StoragePoolCounters = StoragePoolCounters,
                                 .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batchedPuts.Queue),
                                 .LatencyQueueKind = kind,
@@ -595,7 +694,8 @@ namespace NKikimr {
                             .AccelerationParams = GetAccelerationParams(),
                             .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
                         }),
-                        TInstant::Max()
+                        TInstant::Max(),
+                        MakeStoragePoolInFlightRequestInfo(storagePoolHandleClass, requestBytes, requestStartTime)
                     );
                 }
             } else {
@@ -901,6 +1001,7 @@ namespace NKikimr {
         if (RequestHandleClass && PoolCounters && FirstResponse) {
             PoolCounters->GetItem(*RequestHandleClass, RequestBytes).Register(
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());
+            SendToProxy(std::make_unique<TEvStoragePoolRequestFinished>());
         }
 
         if (timeStats) {

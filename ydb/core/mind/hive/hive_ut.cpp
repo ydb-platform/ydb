@@ -8605,6 +8605,189 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
+    Y_UNIT_TEST(TestMonReassignFilters) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 3);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        std::vector<ui64> tablets;
+
+        {
+            THolder<TEvHive::TEvCreateTablet> createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, TVector{GetChannelBind("def3"), GetChannelBind("def2"), GetChannelBind("def3")});
+            tablets.push_back(SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true));
+            THolder<TEvHive::TEvCreateTablet> createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::ColumnShard, TVector{3, GetChannelBind("def1")});
+            tablets.push_back(SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet2), 0, true));
+            THolder<TEvHive::TEvCreateTablet> createTablet3 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 3, TTabletTypes::Dummy, TVector{GetChannelBind("def2"), GetChannelBind("def2"), GetChannelBind("def3")});
+            tablets.push_back(SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet3), 0, true));
+            THolder<TEvHive::TEvCreateTablet> createTablet4 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 4, TTabletTypes::ColumnShard, TVector{GetChannelBind("def2"), GetChannelBind("def1"), GetChannelBind("def1")});
+            tablets.push_back(SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet4), 0, true));
+        }
+
+        for (auto tablet : tablets) {
+            MakeSureTabletIsUp(runtime, tablet, 0);
+        }
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("ReassignTablet");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("channel");
+            p3->SetValue("1,2");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("type");
+            p4->SetValue(TStringBuilder() << (int)TTabletTypes::ColumnShard);
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("storagePool");
+            p5->SetValue("def2");
+            auto* p6 = pb.AddQueryParams();
+            p6->SetKey("tablet");
+            p6->SetValue("all");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["total"].GetIntegerSafe(), 0); // no CS has def2 in channels 1-2
+        }
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("ReassignTablet");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("channel");
+            p3->SetValue("1,2");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("tablet");
+            p4->SetValue("all");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["total"].GetIntegerSafe(), 4); // all tablets
+        }
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("ReassignTablet");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("channel");
+            p3->SetValue("0");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("type");
+            p4->SetValue(TStringBuilder() << (int)TTabletTypes::ColumnShard);
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("storagePool");
+            p5->SetValue("def1");
+            auto* p6 = pb.AddQueryParams();
+            p6->SetKey("tablet");
+            p6->SetValue("all");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["total"].GetIntegerSafe(), 1); // tablet 2
+        }
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("ReassignTablet");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("channel");
+            p3->SetValue("0,1");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("type");
+            p4->SetValue(TStringBuilder() << (int)TTabletTypes::ColumnShard);
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("tablet");
+            p5->SetValue("all");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["total"].GetIntegerSafe(), 2); // all CS
+        }
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("ReassignTablet");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("channel");
+            p3->SetValue("0,1");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("storagePool");
+            p4->SetValue("def1");
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("tablet");
+            p5->SetValue("all");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["total"].GetIntegerSafe(), 2); // tablets 2, 4
+        }
+    }
+
     Y_UNIT_TEST(TestTabletsStartingCounter) {
       TTestBasicRuntime runtime(1, false);
       Setup(runtime, true);

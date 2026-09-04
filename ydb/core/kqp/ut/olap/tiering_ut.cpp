@@ -761,6 +761,25 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_GT(GetUint64(rows[0].at("cnt")), 0);
         }
     }
+
+    Y_UNIT_TEST(MoveTableWithTieringRejected) {
+        TTieringTestHelper tieringHelper;
+        auto& testHelper = tieringHelper.GetTestHelper();
+        const TString tablePath = "/Root/olapTable";
+
+        tieringHelper.GetOlapHelper().CreateTestOlapStandaloneTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        testHelper.SetTiering(tablePath, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(
+                "ALTER TABLE `" + tablePath + "` RENAME TO `/Root/renamedTable`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "tiering");
+        }
+    }
+
 }
 
 }   // namespace NKikimr::NKqp

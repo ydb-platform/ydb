@@ -6,6 +6,8 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/events.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -208,7 +210,8 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem,
+    bool forModify = false
 );
 
 IActor* CreateDescribeSchemaSecretsService();
@@ -247,5 +250,13 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
 );
 
 IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
+
+NThreading::TFuture<NYdbGrpc::TGrpcStatus> AuthorizeServiceAccountUse(
+    const TString& serviceAccount,
+    const TString& token,
+    NActors::TActorSystem* actorSystem
+);
+
+NActors::IActor* CreateAccessServiceActor();
 
 }  // namespace NKikimr::NKqp

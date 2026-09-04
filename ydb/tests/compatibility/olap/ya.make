@@ -18,13 +18,11 @@ REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 TAG(ya:manual)
 
-
 DEPENDS(
     ydb/tests/library/compatibility/binaries
 )
 
 PEERDIR(
-    contrib/python/boto3
     ydb/tests/library
     ydb/tests/library/compatibility
 )

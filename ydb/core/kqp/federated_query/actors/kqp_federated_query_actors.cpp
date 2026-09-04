@@ -1,13 +1,20 @@
 #include "kqp_federated_query_actors.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/ycloud/api/access_service.h>
+#include <ydb/library/ycloud/impl/access_service.h>
+
+#include <util/stream/file.h>
 
 #include <limits>
 
@@ -618,7 +625,8 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem,
+    bool forModify
 ) {
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
@@ -652,7 +660,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
         }
 
         case NKikimrSchemeOp::TAuth::kIam: {
-            if (authDescription.GetIam().HasResourceId()) {
+            if (!forModify) {
                 return NThreading::MakeFuture(TEvDescribeSecretsResponse::TDescription({}));
             }
             const TString& initialTokenId = authDescription.GetIam().GetInitialTokenSecretName();
@@ -899,6 +907,159 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
 
 IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver) {
     return new TDescribeResourceIdService(driver);
+}
+
+namespace {
+
+// XXX duplicated
+inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
+    switch (status.GRpcStatusCode) {
+    case grpc::StatusCode::UNAUTHENTICATED:
+    case grpc::StatusCode::PERMISSION_DENIED:
+    case grpc::StatusCode::INVALID_ARGUMENT:
+    case grpc::StatusCode::NOT_FOUND:
+        return false;
+    }
+    return true;
+}
+
+class TAuthorizeServiceAccountUseActor : public NActors::TActorBootstrapped<TAuthorizeServiceAccountUseActor> {
+public:
+    using TBase = NActors::TActorBootstrapped<TAuthorizeServiceAccountUseActor>;
+    TAuthorizeServiceAccountUseActor(const TString& serviceAccountId, const TString& token, NThreading::TPromise<NYdbGrpc::TGrpcStatus> promise)
+        : Promise(std::move(promise))
+        , ServiceAccountId(serviceAccountId)
+        , Token(token)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TAuthorizeServiceAccountUseActor::StateFunc);
+#if 0 // [BACKPORT stable-26-2]
+        EnableAccessServiceV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+#endif
+        SendRequest();
+    }
+
+    void SendRequest() {
+        LOG_D("Sending Authorize request"
+                << ", serviceAccountId" << ServiceAccountId
+                << ", permission" << Permission);
+
+        const auto setupRequest = [&](auto& request) {
+            request->Request.set_permission(Permission);
+            auto& resourcePath = *request->Request.add_resource_path();
+            resourcePath.set_type("iam.serviceAccount");
+            resourcePath.set_id(ServiceAccountId);
+            *request->Request.mutable_iam_token() = Token;
+        };
+
+#if 0 // [BACKPORT stable-26-2]
+        if (EnableAccessServiceV2Interface) {
+            auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequestV2>();
+            setupRequest(request);
+            Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
+        } else
+#endif
+        {
+            auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequest>();
+            setupRequest(request);
+            Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
+        }
+    }
+
+    template <typename TEvResponse>
+    void HandleAuthorizeResultImpl(typename TEvResponse::TPtr& ev) {
+        if (ev->Get()->Status.Ok()) {
+            LOG_D("Authorize success"
+                    ", response" << ev->Get()->Response.DebugString());
+        } else {
+            LOG_D("Authorize failure"
+                    << ", status" << ev->Get()->Status.ToDebugString()
+                    << ", iteration" << Backoff.GetIteration());
+            if (IsRetryableGrpcError(ev->Get()->Status) && Backoff.HasMore()) {
+                auto delay = Backoff.Next();
+                Schedule(delay, new NActors::TEvents::TEvWakeup());
+                return;
+            }
+        }
+        Promise.SetValue(std::move(ev->Get()->Status));
+        PassAway();
+    }
+
+    void HandleAuthorizeResult(NCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
+        HandleAuthorizeResultImpl<NCloud::TEvAccessService::TEvAuthorizeResponse>(ev);
+    }
+
+#if 0
+    void HandleAuthorizeResult(NCloud::TEvAccessService::TEvAuthorizeResponseV2::TPtr& ev) {
+        HandleAuthorizeResultImpl<NCloud::TEvAccessService::TEvAuthorizeResponseV2>(ev);
+    }
+#endif
+
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        try {
+            throw yexception() << "AccessService: "
+                << "Undelivered Event " << ev->Get()->SourceType
+                << " from " << SelfId() << " (Self) to " << ev->Sender
+                << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie
+                << " (service was not started or failed, check logs)"
+                ;
+        } catch(...) {
+            Promise.SetException(std::current_exception());
+        }
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, HandleAuthorizeResult)
+#if 0 // [BACKPORT stable-26-2]
+        hFunc(NCloud::TEvAccessService::TEvAuthorizeResponseV2, HandleAuthorizeResult)
+#endif
+        sFunc(NActors::TEvents::TEvWakeup, SendRequest)
+        hFunc(NActors::TEvents::TEvUndelivered, Handle)
+    )
+
+    NThreading::TPromise<NYdbGrpc::TGrpcStatus> Promise;
+    const TString ServiceAccountId;
+    const TString Token;
+#if 0 // [BACKPORT stable-26-2]
+    bool EnableAccessServiceV2Interface;
+#endif
+    TBackoff Backoff = TBackoff(/*maxRetries=*/10, /*initialDelay=*/TDuration::MilliSeconds(100), /*maxDelay=*/TDuration::Seconds(10));
+    static inline const TString Permission = "iam.serviceAccounts.use";
+};
+}
+
+NThreading::TFuture<NYdbGrpc::TGrpcStatus> AuthorizeServiceAccountUse(
+    const TString& serviceAccount,
+    const TString& token,
+    NActors::TActorSystem* actorSystem
+) {
+    auto promise = NThreading::NewPromise<NYdbGrpc::TGrpcStatus>();
+    auto actor = new TAuthorizeServiceAccountUseActor(serviceAccount, token, promise);
+    actorSystem->Register(actor);
+    return promise.GetFuture();
+}
+
+NActors::IActor* CreateAccessServiceActor() {
+    // XXX duplicated: ticket_parser, http_proxy
+#if 0 // [BACKPORT stable-26-2]
+    auto enableV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+#endif
+    auto& authConfig = AppData()->AuthConfig;
+
+    NCloud::TAccessServiceSettings asSettings;
+    asSettings.Endpoint = authConfig.GetAccessServiceEndpoint();
+    asSettings.EnableSsl = authConfig.GetUseAccessServiceTLS();
+    asSettings.GrpcKeepAliveTimeMs = authConfig.GetAccessServiceGrpcKeepAliveTimeMs();
+    asSettings.GrpcKeepAliveTimeoutMs = authConfig.GetAccessServiceGrpcKeepAliveTimeoutMs();
+
+    if (asSettings.EnableSsl && authConfig.GetPathToRootCA()) {
+        TString certificate = TFileInput(authConfig.GetPathToRootCA()).ReadAll();
+        asSettings.CertificateRootCA = certificate;
+    }
+    return NCloud::CreateAccessServiceWithCache(asSettings /*, enableV2Interface*/);
 }
 
 }  // namespace NKikimr::NKqp

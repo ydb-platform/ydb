@@ -1,5 +1,6 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/change_exchange.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
@@ -1767,4 +1768,82 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         }
     }
 
+    Y_UNIT_TEST(MoveColumnTableWithTieringWhileDropInProgress) {
+       TTestBasicRuntime runtime;
+       TTestEnvOptions options;
+       options.EnableTieringInColumnShard(true);
+       options.RunFakeConfigDispatcher(true);
+       TTestEnv env(runtime, options);
+       runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+       ui64 txId = 100;
+
+       // Create external data source for tiering.
+       TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+           Name: "Tier1"
+           SourceType: "ObjectStorage"
+           Location: "http://fake.fake/fake"
+           Auth: {
+               Aws: {
+                   AwsAccessKeyIdSecretName: "secret"
+                   AwsSecretAccessKeySecretName: "secret"
+               }
+           }
+       )");
+       env.TestWaitNotification(runtime, txId);
+
+       // Create standalone column table with tiering configured.
+       TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+           Name: "TableWithTiering"
+           ColumnShardCount: 1
+           Schema {
+               Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+               Columns { Name: "data" Type: "Utf8" }
+               KeyColumnNames: "timestamp"
+           }
+           TtlSettings {
+               Enabled: {
+                   ColumnName: "timestamp"
+                   ColumnUnit: UNIT_AUTO
+                   Tiers: {
+                       ApplyAfterSeconds: 360
+                       EvictToExternalStorage {
+                           Storage: "/MyRoot/Tier1"
+                       }
+                   }
+               }
+           }
+       )");
+       env.TestWaitNotification(runtime, txId);
+
+       // Verify the table was created with tiering.
+       TestLs(runtime, "/MyRoot/TableWithTiering", false, NLs::All(
+           NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "/MyRoot/Tier1")));
+
+       // Start drop operation but block it at the planning stage.
+       const ui64 dropTxId = ++txId;
+       TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime, [dropTxId](const auto& ev) {
+           const auto& record = ev->Get()->Record;
+           for (const auto& tx : record.GetTransactions()) {
+               if (tx.GetTxId() == dropTxId) {
+                   return true;
+               }
+           }
+           return false;
+       });
+
+       // Send drop request — this will be blocked at planning stage.
+       AsyncDropColumnTable(runtime, dropTxId, "/MyRoot", "TableWithTiering");
+
+       // Wait until the plan is blocked (drop is in Propose state).
+       runtime.WaitFor("blocked plan", [&] { return !blockedPlan.empty(); });
+
+       // Try to move the table while drop is in progress.
+       // The move should fail because the table is under operation (being dropped),
+       auto* moveRequest = MoveTableRequest(++txId, "/MyRoot/TableWithTiering", "/MyRoot/MovedTable");
+       AsyncSend(runtime, TTestTxConfig::SchemeShard, moveRequest);
+       TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
+
+       // Unblock the blocked plan events so the drop can complete.
+       blockedPlan.Unblock();
+   }
 }

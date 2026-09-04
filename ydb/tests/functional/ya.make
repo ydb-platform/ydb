@@ -34,6 +34,7 @@ RECURSE(
     serverless
     split_merge
     sqs
+    topic_sqs
     statistics
     suite_tests
     tpc

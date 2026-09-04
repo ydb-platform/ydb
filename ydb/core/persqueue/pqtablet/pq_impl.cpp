@@ -3674,7 +3674,7 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
     PQ_LOG_TX_D("send TEvSubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.KeyId, writeId.NodeId));
 }
 
@@ -3682,7 +3682,7 @@ void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
     PQ_LOG_TX_D("send TEvUnsubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.KeyId, writeId.NodeId));
 }
 
@@ -3889,7 +3889,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         TDistributedTransaction& tx = p->second;
 
         // таблетка координатора могла перезапуститься надо обновить информацию
-        tx.SendPlanStepAcksAfterCompletion(sender, std::move(ev));
+        tx.AddPlanStepSender(sender, std::move(ev));
 
         if (tx.State >= NKikimrPQ::TTransaction::EXECUTED) {
             // таблетка PQ могла отправить подтвержение, но координатор перезапустился и его не получил
@@ -3919,11 +3919,13 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
                                   const TDistributedTransaction& tx)
 {
-    if (!tx.PlanStepSender) {
+    if (tx.PlanStepSenders.empty()) {
         return;
     }
 
-    SendPlanStepAcks(ctx, tx.PlanStepSender, *tx.PlanStepEvent);
+    for (const auto& [receiver, event] : tx.PlanStepSenders) {
+        SendPlanStepAcks(ctx, receiver, *event);
+    }
 }
 
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,

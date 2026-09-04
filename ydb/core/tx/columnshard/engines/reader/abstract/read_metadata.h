@@ -50,7 +50,6 @@ protected:
     ui64 TxId = 0;
     std::optional<ui64> LockId;
     std::optional<NKikimrDataEvents::ELockMode> LockMode;
-    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
@@ -107,10 +106,6 @@ public:
 
     std::optional<ui64> GetLockId() const {
         return LockId;
-    }
-
-    EDeduplicationPolicy GetDeduplicationPolicy() const {
-        return DeduplicationPolicy;
     }
 
     void OnReadFinished(NColumnShard::TColumnShard& owner) const {

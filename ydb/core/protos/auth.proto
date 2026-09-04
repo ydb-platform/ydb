@@ -63,6 +63,13 @@ message TAuthConfig {
     optional string AccessServiceSslTargetNameOverride = 87;
     optional string UserAccountServiceSslTargetNameOverride = 88;
     optional string ServiceAccountServiceSslTargetNameOverride = 89;
+    optional TLocalMetadataService LocalMetadataService = 92;
+    optional TBlackBoxTvmSettings BlackBoxTvmSettings = 93;
+}
+
+message TLocalMetadataService {
+    optional string Host = 1 [default = "169.254.169.254"];
+    optional uint64 Port = 2 [default = 80];
 }
 
 message TUserRegistryConfig {
@@ -84,6 +91,18 @@ message TStaffApiTvmSettings {
     optional uint32 SelfTvmId = 3;
     optional string DiskCacheDir = 4;
     optional uint32 StaffAppId = 5;
+    oneof Secret {
+        string SecretEnvironmentVariable = 6;
+        string PlainTextSecret = 7 [(Ydb.sensitive) = true];
+    }
+}
+
+message TBlackBoxTvmSettings {
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    optional uint32 SelfTvmId = 3;
+    optional string DiskCacheDir = 4;
+    optional uint32 BlackBoxAppId = 5;
     oneof Secret {
         string SecretEnvironmentVariable = 6;
         string PlainTextSecret = 7 [(Ydb.sensitive) = true];

@@ -1261,6 +1261,74 @@ FROM `{table_name}`"""
         expected = ['hello1', 'hello2']
         assert self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint) == expected
 
+    @pytest.mark.parametrize("local_topics", [False])
+    def test_shared_reading_group(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_reading_group_{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+
+        source_name2 = entity_name("shared_group_two")
+        name = f"test_reading_group_{local_topics!s:.1}"
+        kikimr.ydb_client.query(f'''
+            CREATE EXTERNAL DATA SOURCE `{source_name2}` WITH (
+                SOURCE_TYPE = 'Ydb',
+                LOCATION = '{endpoint.endpoint}',
+                DATABASE_NAME = '{endpoint.database}',
+                SHARED_READING = 'TRUE',
+                SHARED_READING_GROUP = "MyGroup2",
+                AUTH_METHOD = 'NONE'
+            );
+        ''')
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT {data_expr} AS data FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA=(time UINT32 NOT NULL, data {data_type} NOT NULL));
+                INSERT INTO {out} SELECT data FROM $in;
+            END DO;'''
+
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, data_type="String", data_expr="data"))
+        self.wait_completed_checkpoints(kikimr, path)
+        name_int = name + '_int'
+        path_int = f"/Root/{name_int}"
+        kikimr.ydb_client.query(sql.format(query_name=name_int, inp=f'`{source_name2}`.{self.input_topic}', out=out, data_type="Int64", data_expr='"from_integer_" || CAST(data AS String)'))
+        self.wait_completed_checkpoints(kikimr, path_int)
+
+        result_sets = kikimr.ydb_client.query(
+            f"""SELECT Ast FROM `.sys/streaming_queries` WHERE Path = "{path}";"""
+        )
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 1
+        ast = result_sets[0].rows[0]['Ast']
+        logger.debug(ast)
+        assert "MyGroup2" not in ast
+
+        result_sets = kikimr.ydb_client.query(
+            f"""SELECT Ast FROM `.sys/streaming_queries` WHERE Path = "{path_int}";"""
+        )
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 1
+        ast = result_sets[0].rows[0]['Ast']
+        logger.debug(ast)
+        assert "MyGroup2" in ast
+
+        data = [
+            '{"time": 101, "data": "hello1"}',
+            '{"time": 102, "data": 7777}',
+            '{"time": 103, "data": "hello2"}',
+            '{"time": 104, "data": 1111}',
+        ]
+        self.write_stream(data, partition_key="key", endpoint=endpoint)
+
+        expected = ['hello1', 'from_integer_7777', 'hello2', 'from_integer_1111']
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected)
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`")
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name_int}`")
+
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_restart_query_by_rescaling(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(

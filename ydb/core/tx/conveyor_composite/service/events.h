@@ -100,6 +100,7 @@ struct TEvInternal {
     enum EEv {
         EvNewTask = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvTaskProcessedResult,
+        EvRetryConfigSubscription,
         EvEnd
     };
 
@@ -109,6 +110,7 @@ struct TEvInternal {
     private:
         std::vector<TWorkerTask> Tasks;
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
+        YDB_READONLY(double, CPULimit, 1);
 
     public:
         TEvNewTask() = default;
@@ -117,14 +119,14 @@ struct TEvInternal {
             return std::move(Tasks);
         }
 
-        explicit TEvNewTask(std::vector<TWorkerTask>&& tasks)
-            : Tasks(std::move(tasks)) {
+        TEvNewTask(std::vector<TWorkerTask>&& tasks, const double cpuLimit)
+            : Tasks(std::move(tasks))
+            , CPULimit(cpuLimit) {
         }
     };
 
     class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
-        using TBase = TConclusion<ITask::TPtr>;
         YDB_READONLY_DEF(TDuration, ForwardSendDuration);
         std::vector<TWorkerTaskResult> Results;
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
@@ -143,6 +145,8 @@ struct TEvInternal {
         TEvTaskProcessedResult(
             std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId);
     };
+
+    class TEvRetryConfigSubscription: public NActors::TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
 };
 
 }   // namespace NKikimr::NConveyorComposite

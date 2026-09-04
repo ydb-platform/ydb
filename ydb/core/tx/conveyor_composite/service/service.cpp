@@ -19,9 +19,6 @@ TDistributor::TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMoni
     , Counters(ConveyorName, conveyorSignals) {
 }
 
-TDistributor::~TDistributor() {
-}
-
 void TDistributor::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CONVEYOR_COMPOSITE_PROVIDER));
     Manager = std::make_unique<TTasksManager>(ConveyorName, Config, SelfId(), Counters);
@@ -32,6 +29,109 @@ void TDistributor::Bootstrap() {
         {"actorId", SelfId()},
         {"manager", Manager->DebugString()});
     Become(&TDistributor::StateMain);
+    SubscribeToCompositeConveyorConfig();
+}
+
+void TDistributor::SubscribeToCompositeConveyorConfig() {
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+            (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem),
+        NActors::IEventHandle::FlagTrackDelivery);
+}
+
+void TDistributor::ScheduleConfigSubscriptionRetry() {
+    Schedule(TDuration::Seconds(1), new TEvInternal::TEvRetryConfigSubscription());
+}
+
+void TDistributor::HandleMain(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& /*ev*/) {
+    YDB_LOG_DEBUG("",
+        {"name", ConveyorName},
+        {"action", "subscribed_for_composite_conveyor_config"});
+}
+
+void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    const auto& appConfig = record.GetConfig();
+
+    if (!appConfig.HasCompositeConveyorConfig()) {
+        ReplyConfigNotification(ev);
+        return;
+    }
+
+    YDB_LOG_INFO("",
+        {"name", ConveyorName},
+        {"action", "composite_conveyor_config_received"},
+        {"hasConfig", true});
+
+    LatestConfigNotification = std::move(ev);
+    if (Manager->HasWorkersUpdateInProgress()) {
+        YDB_LOG_INFO("",
+            {"name", ConveyorName},
+            {"action", "composite_conveyor_config_update_queued"});
+        return;
+    }
+
+    TryApplyLatestConfig();
+}
+
+void TDistributor::TryApplyLatestConfig() {
+    Y_ENSURE(LatestConfigNotification, "config update attempt without a notification");
+    Y_ENSURE(!Manager->HasWorkersUpdateInProgress(), "config update attempt while another update is in progress");
+
+    const auto& candidateProto = LatestConfigNotification->Get()->Record.GetConfig().GetCompositeConveyorConfig();
+    auto desiredConfig = NConfig::TConfig::BuildFromProto(candidateProto).DetachResult();
+    if (Manager->IsCurrentConfig(desiredConfig)) {
+        ReplyConfigNotification(LatestConfigNotification);
+        LatestConfigNotification.Reset();
+        return;
+    }
+
+    const bool updateFinished = Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters);
+    if (updateFinished) {
+        CompleteConfigUpdate();
+    }
+    Y_UNUSED(Manager->DrainTasks());
+}
+
+void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    auto response = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(ev->Get()->Record);
+    Send(ev->Sender, response.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
+}
+
+void TDistributor::CompleteConfigUpdate() {
+    Y_ENSURE(LatestConfigNotification, "config update completion without a notification");
+    Y_ENSURE(!Manager->HasWorkersUpdateInProgress(), "config update completion while workers update is still in progress");
+    TryApplyLatestConfig();
+}
+
+void TDistributor::HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    switch (ev->Get()->SourceType) {
+        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            YDB_LOG_WARN("",
+                {"name", ConveyorName},
+                {"action", "composite_conveyor_config_subscription_undelivered"});
+            ScheduleConfigSubscriptionRetry();
+            break;
+        case NConsole::TEvConsole::EvConfigNotificationResponse:
+            YDB_LOG_WARN("",
+                {"name", ConveyorName},
+                {"action", "composite_conveyor_config_response_undelivered"});
+            ScheduleConfigSubscriptionRetry();
+            break;
+        default:
+            YDB_LOG_WARN("",
+                {"name", ConveyorName},
+                {"action", "unexpected_undelivered_event"},
+                {"sourceType", ev->Get()->SourceType});
+            break;
+    }
+}
+
+void TDistributor::HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& /*ev*/) {
+    YDB_LOG_WARN("",
+        {"name", ConveyorName},
+        {"action", "retry_composite_conveyor_config_subscription"});
+    SubscribeToCompositeConveyorConfig();
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
@@ -55,11 +155,11 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     workersPool.GetCounters()->SendFwdDuration->Add(ev.GetForwardSendDuration().MicroSeconds());
 
     workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
-    workersPool.ReleaseWorker(ev.GetWorkerIdx());
     workersPool.PutTaskResults(ev.DetachResults(), ev.GetWorkersPoolId(), ev.GetWorkerIdx());
-    if (workersPool.HasTasks()) {
-        AFL_VERIFY(workersPool.DrainTasks());
+    if (Manager->OnTaskProcessedResult(ev.GetWorkersPoolId(), ev.GetWorkerIdx())) {
+        CompleteConfigUpdate();
     }
+    Y_UNUSED(Manager->DrainTasks());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {

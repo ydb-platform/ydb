@@ -1,3 +1,5 @@
+val output_root = "{{ output_root }}"
+
 pluginManagement {
     val bucketUsername = settings.providers.gradleProperty("bucketUsername")
         .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
@@ -36,6 +38,23 @@ dependencyResolutionManagement {
             credentials {
                 username = bucketUsername
                 password = bucketPassword
+            }
+        }
+{%- endif %}
+{%- if contrib_maven_repo %}
+        maven {
+            name = "contrib"
+            url = uri("file://$output_root/contrib/java")
+                metadataSources {
+                    artifact()
+                }
+        }
+
+        maven {
+            name = "patched_contrib"
+            url = uri("file://$output_root/contrib/java/patched")
+            metadataSources {
+                artifact()
             }
         }
 {%- endif %}

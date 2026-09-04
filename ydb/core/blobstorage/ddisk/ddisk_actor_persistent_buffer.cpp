@@ -250,12 +250,12 @@ namespace NKikimr::NDDisk {
 
         // Phase 1: signature correction. A data sector whose first byte equals the header signature byte
         // would be misread as a record header during chunk restore, so we zero that byte on disk and remember
-        // it via HasSignatureCorrection (JoinData restores the original byte after the disk write completes).
-        // The checksum-free format similarly replaces every data-sector prefix with headerUniqueId and keeps
-        // the original prefix in ChecksumOrData. On the interconnect fast path fullData shares its backend with
-        // the payload-only rope retained for the in-memory cache. Mutate that backend in place to keep the write
-        // zero-copy; HandleWritePart calls JoinData only after every part has completed, before exposing the
-        // payload through the cache. At that point the buffers are no longer used by disk I/O.
+        // it via HasSignatureCorrection (JoinData restores the original byte on disk read-back). This mutates
+        // payload bytes that may share their backend both with the payload-only rope retained for the in-memory
+        // cache and with writes sent to other DDisk replicas. ContiguousDataMut() must preserve those owners by
+        // copying on write: disk I/O is asynchronous, so changing the shared backend in place and restoring it
+        // on completion would expose the temporary on-disk representation to the other replicas. This pass MUST
+        // run before the header pointer is captured below because COW may relocate fullData's backend.
         for (ui32 i = 1; i < sectors.size(); ++i) {
             auto it = fullData.Begin() + SectorSize * i;
             auto& sector = sectors[i];
@@ -263,11 +263,11 @@ namespace NKikimr::NDDisk {
                 ui64 originalPrefix;
                 memcpy(&originalPrefix, it.ContiguousData(), sizeof(originalPrefix));
                 sector.ChecksumOrData = originalPrefix;
-                memcpy(it.UnsafeContiguousDataMut() + it.ChunkOffset(), &headerUniqueId, sizeof(ui64));
+                memcpy(it.ContiguousDataMut(), &headerUniqueId, sizeof(ui64));
             }
             if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
                 sector.HasSignatureCorrection = true;
-                it.UnsafeContiguousDataMut()[it.ChunkOffset()] = 0;
+                *it.ContiguousDataMut() = 0;
             }
         }
 
@@ -825,7 +825,7 @@ namespace NKikimr::NDDisk {
                     pbh.insert({record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex});
 
                     buffer.Size += pr.Size;
-                    pr.Data = record.JoinData(SectorSize);
+                    pr.Data = std::move(record.DataParts.begin()->second);
                     PersistentBufferInMemoryCacheSize += pr.Size;
                     *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
                     auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex);
@@ -1225,7 +1225,7 @@ namespace NKikimr::NDDisk {
                 if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
                     r.Sectors[i + 1].HasSignatureCorrection = true;
                     sectorsIt->HasSignatureCorrection = true;
-                    it.UnsafeContiguousDataMut()[it.ChunkOffset()] = 0;
+                    *it.ContiguousDataMut() = 0;
                 }
                 r.Sectors[i + 1].ChecksumOrData = CalculateChecksum(it);
                 sectorsIt->ChecksumOrData = r.Sectors[i + 1].ChecksumOrData;
@@ -1234,11 +1234,11 @@ namespace NKikimr::NDDisk {
                 memcpy(&originalPrefix, it.ContiguousData(), sizeof(originalPrefix));
                 r.Sectors[i + 1].ChecksumOrData = originalPrefix;
                 *sectorsIt = r.Sectors[i + 1];
-                memcpy(it.UnsafeContiguousDataMut() + it.ChunkOffset(), &headerUniqueId, sizeof(headerUniqueId));
+                memcpy(it.ContiguousDataMut(), &headerUniqueId, sizeof(headerUniqueId));
                 if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
                     r.Sectors[i + 1].HasSignatureCorrection = true;
                     sectorsIt->HasSignatureCorrection = true;
-                    it.UnsafeContiguousDataMut()[it.ChunkOffset()] = 0;
+                    *it.ContiguousDataMut() = 0;
                 }
             }
             ++sectorsIt;
@@ -1721,9 +1721,9 @@ namespace NKikimr::NDDisk {
             auto pos = payload.Position(sectorSize * (i - 1));
             if (ChecksumsDisabled) {
                 const ui64 originalPrefix = Sectors[i].ChecksumOrData;
-                memcpy(pos.UnsafeContiguousDataMut() + pos.ChunkOffset(), &originalPrefix, sizeof(originalPrefix));
+                memcpy(pos.ContiguousDataMut(), &originalPrefix, sizeof(originalPrefix));
             } else if (Sectors[i].HasSignatureCorrection) {
-                pos.UnsafeContiguousDataMut()[pos.ChunkOffset()] = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
+                *pos.ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
             }
         }
         return DataParts.begin()->second;

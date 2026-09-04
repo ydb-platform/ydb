@@ -3749,7 +3749,7 @@ public:
         return ptr;
     }
 
-    IKqpBufferTableLock* EnsureLockActor(TLockInfo& lockInfo,
+    IKqpBufferTableLock* EnsureLockActor(const TWriteSettings& settings, TLockInfo& lockInfo,
             const TTableId& tableId, const TString& tablePath) {
         auto& actors = lockInfo.Actors;
         if (actors.contains(tableId.PathId)) {
@@ -3899,7 +3899,7 @@ public:
                     (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)) {
                 auto& lockInfo = LockInfos[indexSettings.TableId.PathId];
                 if (!lockInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                    if (!EnsureLockActor(lockInfo, indexSettings.TableId, indexSettings.TablePath)) {
+                    if (!EnsureLockActor(settings, lockInfo, indexSettings.TableId, indexSettings.TablePath)) {
                         return false;
                     }
                 } else {
@@ -4268,7 +4268,7 @@ public:
         if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
             auto& lockInfo = LockInfos[settings.TableId.PathId];
             if (!lockInfo.Actors.contains(settings.TableId.PathId)) {
-                if (!EnsureLockActor(lockInfo, settings.TableId, settings.TablePath)) {
+                if (!EnsureLockActor(settings, lockInfo, settings.TableId, settings.TablePath)) {
                     return std::nullopt;
                 }
             }

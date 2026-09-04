@@ -374,6 +374,8 @@ private:
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .LangVer(State_->Types->LangVer)
                 .RuntimeSettings(State_->Types->RuntimeSettings)
+                .BridgeMode(State_->Types->BridgeMode)
+                .BridgeBinaryPath(State_->Types->UdfBridgeBinaryPath)
                 .AdditionalSecurityTags(addSecTags)
                 .LayersPaths(std::move(finalCypressPaths))
             );

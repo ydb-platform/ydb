@@ -40,12 +40,23 @@ using namespace NKikimr;
 using namespace NMiniKQL;
 using namespace NUdf;
 
+std::shared_ptr<arrow::Buffer> SliceBufferForTransport(
+    const std::shared_ptr<arrow::Buffer>& buffer, i64 offset, i64 length)
+{
+    // The serializer cannot untrack a parent allocation through a slice's interior pointer.
+    MKQLArrowUntrack(buffer->data());
+    return arrow::SliceBuffer(buffer, offset, length);
+}
+
 class IFastBlockReorderer {
 public:
     virtual ~IFastBlockReorderer() = default;
 
     virtual std::shared_ptr<arrow::ArrayData> Reorder(
         const arrow::ArrayData& data, const ui64* indexes, size_t count, arrow::MemoryPool* pool) const = 0;
+
+    virtual std::shared_ptr<arrow::ArrayData> Slice(
+        const std::shared_ptr<arrow::ArrayData>& data, ui64 offset, ui64 length, arrow::MemoryPool* pool) const = 0;
 };
 
 template <typename T, arrow::Type::type ArrowType>
@@ -66,6 +77,28 @@ public:
         }
 
         return arrow::ArrayData::Make(data.type, count, {nullptr, std::move(values)});
+    }
+
+    std::shared_ptr<arrow::ArrayData> Slice(
+        const std::shared_ptr<arrow::ArrayData>& data, ui64 offset, ui64 length, arrow::MemoryPool*) const final
+    {
+        YQL_ENSURE(offset <= static_cast<ui64>(data->length));
+        YQL_ENSURE(length <= static_cast<ui64>(data->length) - offset);
+        YQL_ENSURE(data->buffers.size() == 2);
+        YQL_ENSURE(data->GetNullCount() == 0);
+        if (offset == 0 && length == static_cast<ui64>(data->length)) {
+            return data;
+        }
+
+        const i64 sliceOffset = static_cast<i64>(offset);
+        const i64 sliceLength = static_cast<i64>(length);
+        const i64 absoluteOffset = data->offset + sliceOffset;
+        const i64 offsetRemainder = absoluteOffset % 8;
+        auto values = SliceBufferForTransport(
+            data->buffers[1],
+            (absoluteOffset - offsetRemainder) * sizeof(T),
+            (sliceLength + offsetRemainder) * sizeof(T));
+        return arrow::ArrayData::Make(data->type, sliceLength, {nullptr, std::move(values)}, 0, offsetRemainder);
     }
 };
 
@@ -103,6 +136,40 @@ public:
         YQL_ENSURE(static_cast<size_t>(dstOffsets[count]) == dataSize);
         return arrow::ArrayData::Make(data.type, count, {nullptr, std::move(offsets), std::move(values)});
     }
+
+    std::shared_ptr<arrow::ArrayData> Slice(
+        const std::shared_ptr<arrow::ArrayData>& data, ui64 offset, ui64 length, arrow::MemoryPool* pool) const final
+    {
+        YQL_ENSURE(offset <= static_cast<ui64>(data->length));
+        YQL_ENSURE(length <= static_cast<ui64>(data->length) - offset);
+        YQL_ENSURE(data->buffers.size() == 3);
+        YQL_ENSURE(data->GetNullCount() == 0);
+        if (offset == 0 && length == static_cast<ui64>(data->length)) {
+            return data;
+        }
+
+        using TOffset = i32;
+        const i64 sliceOffset = static_cast<i64>(offset);
+        const i64 sliceLength = static_cast<i64>(length);
+        const i64 absoluteOffset = data->offset + sliceOffset;
+        const i64 offsetRemainder = absoluteOffset % 8;
+        const i64 offsetsLength = sliceLength + 1 + offsetRemainder;
+        const TOffset* srcOffsets = data->GetValues<TOffset>(1, absoluteOffset - offsetRemainder);
+        const TOffset valuesOffset = srcOffsets[0];
+        YQL_ENSURE(valuesOffset >= 0);
+        YQL_ENSURE(srcOffsets[offsetsLength - 1] >= valuesOffset);
+        const TOffset valuesSize = srcOffsets[offsetsLength - 1] - valuesOffset;
+
+        auto offsets = ARROW_RESULT(arrow::AllocateBuffer(offsetsLength * sizeof(TOffset), pool));
+        TOffset* dstOffsets = reinterpret_cast<TOffset*>(offsets->mutable_data());
+        for (i64 i = 0; i < offsetsLength; ++i) {
+            dstOffsets[i] = srcOffsets[i] - valuesOffset;
+        }
+
+        auto values = SliceBufferForTransport(data->buffers[2], valuesOffset, valuesSize);
+        return arrow::ArrayData::Make(
+            data->type, sliceLength, {nullptr, std::move(offsets), std::move(values)}, 0, offsetRemainder);
+    }
 };
 
 class TStructBlockReorderer final : public IFastBlockReorderer {
@@ -127,6 +194,29 @@ public:
         }
 
         return arrow::ArrayData::Make(data.type, count, {nullptr}, std::move(children));
+    }
+
+    std::shared_ptr<arrow::ArrayData> Slice(
+        const std::shared_ptr<arrow::ArrayData>& data, ui64 offset, ui64 length, arrow::MemoryPool* pool) const final
+    {
+        YQL_ENSURE(offset <= static_cast<ui64>(data->length));
+        YQL_ENSURE(length <= static_cast<ui64>(data->length) - offset);
+        YQL_ENSURE(data->buffers.size() == 1);
+        YQL_ENSURE(data->GetNullCount() == 0);
+        YQL_ENSURE(data->child_data.size() == Children_.size());
+        if (offset == 0 && length == static_cast<ui64>(data->length)) {
+            return data;
+        }
+
+        std::vector<std::shared_ptr<arrow::ArrayData>> children;
+        children.reserve(Children_.size());
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            children.emplace_back(Children_[i]->Slice(data->child_data[i], offset, length, pool));
+        }
+
+        const i64 sliceLength = static_cast<i64>(length);
+        const i64 offsetRemainder = (data->offset + static_cast<i64>(offset)) % 8;
+        return arrow::ArrayData::Make(data->type, sliceLength, {nullptr}, std::move(children), 0, offsetRemainder);
     }
 
 private:
@@ -172,20 +262,6 @@ std::unique_ptr<IFastBlockReorderer> MakeFastBlockReorderer(
         default:
             return {};
     }
-}
-
-std::shared_ptr<arrow::ArrayData> SliceFastBlock(
-    const std::shared_ptr<arrow::ArrayData>& data, ui64 offset, ui64 length)
-{
-    if (offset == 0 && length == static_cast<ui64>(data->length)) {
-        return data;
-    }
-
-    auto result = data->Slice(offset, length);
-    for (size_t i = 0; i < data->child_data.size(); ++i) {
-        result->child_data[i] = SliceFastBlock(data->child_data[i], offset, length);
-    }
-    return result;
 }
 
 ///////////////////////////////////
@@ -1010,7 +1086,8 @@ private:
                         arrow::Datum(*datums[j]), NYql::DefaultDatumValidationMode));
                 } else {
                     outputValues.emplace_back(HolderFactory_.CreateArrowBlock(
-                        arrow::Datum(SliceFastBlock(reorderedArrays[j], outputBlockOffset, outputBlockLen)),
+                        arrow::Datum(FastReorderers_[j]->Slice(
+                            reorderedArrays[j], outputBlockOffset, outputBlockLen, pool)),
                         NYql::DefaultDatumValidationMode));
                 }
             }

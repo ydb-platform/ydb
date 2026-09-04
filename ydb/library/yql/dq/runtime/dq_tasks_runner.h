@@ -435,7 +435,7 @@ public:
     }
 
     NYql::NDqProto::EValuePackerVersion GetValuePackerVersion() const {
-        return Task_->GetValuePackerVersion();
+        return NDqProto::VALUE_PACKER_VERSION_V1;
     }
 
     ui32 GetDqChannelVersion() const {

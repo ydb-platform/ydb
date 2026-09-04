@@ -5,10 +5,16 @@
 #include <ydb/library/yql/dq/runtime/ut/ut_helper.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <arrow/buffer.h>
+#include <arrow/type.h>
+
+#include <cstring>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -1056,7 +1062,119 @@ void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
     Cerr << "Blocked " << blockCount << " time(s) emptyPops " << emptyPops << Endl;
 }
 
+void TestFastBlockStringSlicing(EValuePackerVersion packerVersion) {
+    TTestContext ctx;
+
+    auto* i64Type = TDataType::Create(NUdf::TDataType<i64>::Id, ctx.TypeEnv);
+    auto* stringType = TDataType::Create(NUdf::TDataType<char*>::Id, ctx.TypeEnv);
+    TStructMember structMembers[] = {
+        {"key", i64Type},
+        {"value", stringType},
+    };
+    auto* structType = TStructType::Create(std::size(structMembers), structMembers, ctx.TypeEnv);
+
+    TType* columnTypes[] = {
+        TBlockType::Create(i64Type, TBlockType::EShape::Many, ctx.TypeEnv),
+        TBlockType::Create(structType, TBlockType::EShape::Many, ctx.TypeEnv),
+        TBlockType::Create(TDataType::Create(NUdf::TDataType<ui64>::Id, ctx.TypeEnv), TBlockType::EShape::Scalar, ctx.TypeEnv),
+    };
+    auto* outputType = TMultiType::Create(std::size(columnTypes), columnTypes, ctx.TypeEnv);
+
+    constexpr ui64 rowCount = 64;
+    constexpr ui64 stringSize = 4096;
+    auto* pool = NUdf::GetYqlMemoryPool();
+
+    std::shared_ptr<arrow::Buffer> keyBuffer = ARROW_RESULT(arrow::AllocateBuffer(rowCount * sizeof(i64), pool));
+    auto* keys = reinterpret_cast<i64*>(keyBuffer->mutable_data());
+    for (ui64 i = 0; i < rowCount; ++i) {
+        keys[i] = i;
+    }
+    auto keyArray = arrow::ArrayData::Make(arrow::int64(), rowCount, {nullptr, keyBuffer}, 0);
+
+    std::shared_ptr<arrow::Buffer> offsetsBuffer = ARROW_RESULT(arrow::AllocateBuffer((rowCount + 1) * sizeof(i32), pool));
+    auto* offsets = reinterpret_cast<i32*>(offsetsBuffer->mutable_data());
+    for (ui64 i = 0; i <= rowCount; ++i) {
+        offsets[i] = i * stringSize;
+    }
+    std::shared_ptr<arrow::Buffer> valuesBuffer = ARROW_RESULT(arrow::AllocateBuffer(rowCount * stringSize, pool));
+    std::memset(valuesBuffer->mutable_data(), 'x', valuesBuffer->size());
+    auto stringArray = arrow::ArrayData::Make(arrow::binary(), rowCount, {nullptr, offsetsBuffer, valuesBuffer}, 0);
+
+    auto structArray = arrow::ArrayData::Make(
+        arrow::struct_({arrow::field("key", arrow::int64()), arrow::field("value", arrow::binary())}),
+        rowCount,
+        {nullptr},
+        {keyArray, stringArray},
+        0);
+
+    constexpr ui32 channelCount = 8;
+    TVector<IDqOutputChannel::TPtr> channels;
+    TVector<IDqOutput::TPtr> outputs;
+    for (ui32 i = 0; i < channelCount; ++i) {
+        TDqChannelSettings settings = {
+            .RowType = outputType,
+            .HolderFactory = &ctx.HolderFactory,
+            .ChannelId = i,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0,
+            .PackerVersion = packerVersion,
+            .MaxStoredBytes = 4_MB,
+            .MaxChunkBytes = 4_MB,
+        };
+        auto channel = CreateDqOutputChannel(settings, Log);
+        channels.emplace_back(channel);
+        outputs.emplace_back(channel);
+    }
+
+    TVector<TColumnInfo> keyColumns;
+    keyColumns.emplace_back(GetColumnInfo(outputType, "0"));
+    auto consumer = CreateOutputHashPartitionConsumer(
+        std::move(outputs), std::move(keyColumns), outputType, ctx.HolderFactory,
+        Nothing(), NDqProto::TTaskOutputHashPartition(), nullptr);
+
+    TUnboxedValueVector values;
+    values.emplace_back(ctx.HolderFactory.CreateArrowBlock(arrow::Datum(keyArray), NYql::DefaultDatumTestValidationMode));
+    values.emplace_back(ctx.HolderFactory.CreateArrowBlock(arrow::Datum(structArray), NYql::DefaultDatumTestValidationMode));
+    values.emplace_back(ctx.HolderFactory.CreateArrowBlock(
+        arrow::Datum(std::make_shared<arrow::UInt64Scalar>(rowCount)), NYql::DefaultDatumTestValidationMode));
+    consumer->WideConsume(values.data(), values.size());
+
+    TDqDataSerializer deserializer(
+        ctx.TypeEnv, ctx.HolderFactory, NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0,
+        packerVersion, DefaultDatumTestValidationMode);
+    ui64 serializedBytes = 0;
+    ui64 deserializedRows = 0;
+    ui32 nonEmptyChannels = 0;
+    for (const auto& channel : channels) {
+        TDqSerializedBatch data;
+        if (!channel->PopAll(data)) {
+            continue;
+        }
+        ++nonEmptyChannels;
+        serializedBytes += data.Payload.Size();
+
+        TUnboxedValueBatch batch(outputType);
+        deserializer.Deserialize(std::move(data), outputType, batch);
+        batch.ForEachRowWide([&](const NUdf::TUnboxedValue* row, ui32 width) {
+            UNIT_ASSERT_VALUES_EQUAL(width, std::size(columnTypes));
+            deserializedRows += TArrowBlock::From(row[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        });
+    }
+
+    UNIT_ASSERT_GT(nonEmptyChannels, 1);
+    UNIT_ASSERT_VALUES_EQUAL(deserializedRows, rowCount);
+    UNIT_ASSERT_LT(serializedBytes, 2 * rowCount * stringSize);
+}
+
 Y_UNIT_TEST_SUITE(HashShuffle) {
+
+Y_UNIT_TEST(FastBlockStringSlicingV0) {
+    TestFastBlockStringSlicing(EValuePackerVersion::V0);
+}
+
+Y_UNIT_TEST(FastBlockStringSlicingV1) {
+    TestFastBlockStringSlicing(EValuePackerVersion::V1);
+}
 
 Y_UNIT_TEST(BackPressureInMemory) {
     TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);

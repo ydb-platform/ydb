@@ -169,6 +169,9 @@ NThreading::TFuture<void> TTerminal::Run() {
 
             // the block helps to ensure, that session is destroyed before we sleep right after the block
             {
+                // Reset so each business transaction gets fresh inputs; retries reuse FixedInputs.
+                Context.FixedInputs.reset();
+
                 bool real = Context.SimulateTransactionMs == 0 && Context.SimulateTransactionSelect1 == 0;
                 auto future = Context.Client->RetryQuery(
                     [this, real, &transaction, &execCount, &latencyPure](TSession session) mutable {

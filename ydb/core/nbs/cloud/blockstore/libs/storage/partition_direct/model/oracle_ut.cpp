@@ -54,6 +54,11 @@ struct THostStateControllerMock: public IHostStateController
     {
         ++AddHostQueries;
     }
+
+    void QueryRemoveHost(THostIndex hostIndex) override
+    {
+        Y_UNUSED(hostIndex);
+    }
 };
 
 void THostStateControllerMock::PersistHostHealth(

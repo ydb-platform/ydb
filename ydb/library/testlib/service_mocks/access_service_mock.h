@@ -42,8 +42,9 @@ public:
     THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>> AuthenticateData;
     THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse>> AuthorizeData;
 
-    TMutex UserIpMutex;
+    TMutex MetadataMutex;
     TString CapturedXUserIP;
+    TString CapturedAuthenticateService;
 
     template <class TResponseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
@@ -61,10 +62,14 @@ public:
         yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override
     {
         TString key;
-        if (request->has_signature()) {
-            key = request->signature().v4_parameters().service();
-        } else {
-            key = request->iam_token();
+        with_lock (MetadataMutex) {
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+                key = CapturedAuthenticateService;
+            } else {
+                key = request->iam_token();
+            }
         }
 
         auto it = AuthenticateData.find(key);
@@ -82,8 +87,7 @@ public:
         const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
         yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override
     {
-        {
-            std::lock_guard guard(UserIpMutex);
+        with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
         }
 
@@ -116,8 +120,9 @@ public:
     THashMap<TString, TResponse<yandex::cloud::priv::accessservice::v2::AuthenticateResponse>> AuthenticateData;
     THashMap<TString, TResponse<yandex::cloud::priv::accessservice::v2::AuthorizeResponse>> AuthorizeData;
 
-    TMutex UserIpMutex;
+    TMutex MetadataMutex;
     TString CapturedXUserIP;
+    TString CapturedAuthenticateService;
 
     template <class TResponseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
@@ -135,10 +140,14 @@ public:
         yandex::cloud::priv::accessservice::v2::AuthenticateResponse* response) override
     {
         TString key;
-        if (request->has_signature()) {
-            key = request->signature().v4_parameters().service();
-        } else {
-            key = request->iam_token();
+        with_lock (MetadataMutex) {
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+                key = CapturedAuthenticateService;
+            } else {
+                key = request->iam_token();
+            }
         }
 
         auto it = AuthenticateData.find(key);
@@ -156,8 +165,7 @@ public:
         const yandex::cloud::priv::accessservice::v2::AuthorizeRequest* request,
         yandex::cloud::priv::accessservice::v2::AuthorizeResponse* response) override
     {
-        {
-            std::lock_guard guard(UserIpMutex);
+        with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
         }
 
@@ -182,9 +190,12 @@ public:
         const yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest* request,
         yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse* response) override
     {
-        {
-            std::lock_guard guard(UserIpMutex);
+        with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+            CapturedAuthenticateService.clear();
+            if (request->has_signature()) {
+                CapturedAuthenticateService = request->signature().v4_parameters().service();
+            }
         }
 
         for (const auto& action : request->actions().items()) {

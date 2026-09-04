@@ -1055,7 +1055,7 @@ private:
             WriteSession.reset();
         }
 
-        Y_VALIDATE(!IsIn({NDqProto::StatusIds::SUCCESS, NDqProto::StatusIds::UNSPECIFIED}, status), "Invalid fail status: " << status);
+        Y_VALIDATE(!IsIn({NDqProto::StatusIds::SUCCESS, NDqProto::StatusIds::UNSPECIFIED}, status), "Invalid fail status: " << NDqProto::StatusIds::StatusCode_Name(status));
         SINK_LOG_W("Fail. Status: " << NDqProto::StatusIds::StatusCode_Name(status) << ". Issues: " << issues.ToOneLineString());
         Callbacks->OnAsyncOutputError(OutputIndex, issues, status);
     }

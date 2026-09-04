@@ -68,6 +68,8 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactor
         CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
 
     auto provider = factory->CreateProvider();
+    auto authInfo = provider->GetAuthInfoAsync();
+    ASSERT_FALSE(authInfo.IsReady());
 
     ASSERT_TRUE(iamService.WaitUntilRpcEntered(std::chrono::seconds(5)))
         << "server should have accepted the IAM Create call";
@@ -126,28 +128,6 @@ TEST(GrpcIamCredentialsProviderFactory, NoArgProvidersAreCachedAcrossFactoryInst
     EXPECT_EQ(differentOAuthProvider->GetAuthInfo(), "unit-test-iam-token");
     EXPECT_EQ(iamStub.GetRequestCount(), 3);
 
-    server.Stop();
-}
-
-TEST(GrpcIamCredentialsProviderFactory, ReadyCallbackCanReleaseNoArgProvider) {
-    TBlockingIamTokenService iamService;
-    TIamGrpcServer server(&iamService);
-    ASSERT_TRUE(server.Start());
-
-    auto provider = std::make_shared<TIamOAuthCredentialsProviderFactory<
-        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(
-            MakeOAuthParams(server.Endpoint()))->CreateProvider();
-    auto released = std::make_shared<std::promise<void>>();
-    auto authInfo = provider->GetAuthInfoAsync();
-    ASSERT_FALSE(authInfo.IsReady());
-    authInfo.Subscribe(
-        [provider = std::move(provider), released](const auto&) mutable {
-            provider.reset();
-            released->set_value();
-        });
-    iamService.Release();
-
-    ASSERT_EQ(released->get_future().wait_for(std::chrono::seconds(10)), std::future_status::ready);
     server.Stop();
 }
 

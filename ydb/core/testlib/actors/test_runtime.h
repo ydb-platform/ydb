@@ -65,6 +65,7 @@ namespace NActors {
             ui32 IOPoolId = 2;
             ui32 BatchPoolId = 3;
             TMap<TString, ui32> ServicePools = {};
+            TVector<ui32> BlobStorageExecutorPoolIds = {};
         };
 
         TTestActorRuntime(THeSingleSystemEnv d);
@@ -78,6 +79,7 @@ namespace NActors {
         virtual void Initialize(TEgg);
         void SetupStatsCollectors();
         void SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools);
+        const TVector<ui32>& GetBlobStorageExecutorPoolIds() const;
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
 

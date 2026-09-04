@@ -11,7 +11,7 @@ import ydb
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, max_json_depth
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
-from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, create_stream, delete_stream
 
 logger = logging.getLogger(__name__)
 
@@ -2423,3 +2423,67 @@ FROM `{table_name}`"""
         assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize(
+        "local_topics, shared_reading",
+        [(True, False), (False, False), (False, True)],
+        ids=["local_pq_read_actor", "external_pq_read_actor", "topic_session"],
+    )
+    def test_restart_query_after_input_topic_recreation(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_restart_after_topic_recreation_{local_topics!s:.1}_{shared_reading!s:.1}",
+            local_topics,
+            entity_name,
+            shared=shared_reading,
+        )
+
+        query_name = f"test_restart_after_topic_recreation_{local_topics!s:.1}_{shared_reading!s:.1}"
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $input = SELECT Data FROM {inp};
+                INSERT INTO {out} SELECT Data FROM $input;
+            END DO;
+        ''')
+        self.wait_completed_checkpoints(kikimr, query_name)
+
+        expected_data = ["first", "second"]
+        self.write_stream(expected_data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, query_name)
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+        time.sleep(0.5)
+        delete_stream(self.input_topic, default_endpoint=endpoint)
+        create_stream(self.input_topic, default_endpoint=endpoint)
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+        query_path = f"{kikimr.get_database_name()}/{query_name}"
+
+        def get_query_issues() -> str:
+            result_sets = kikimr.ydb_client.query(f'''
+                SELECT Issues
+                FROM `.sys/streaming_queries`
+                WHERE Path = "{query_path}"
+            ''')
+            assert len(result_sets) == 1
+            assert len(result_sets[0].rows) == 1
+            return result_sets[0].rows[0].Issues
+
+        def has_missing_offsets_issue() -> bool:
+            issues = get_query_issues().lower()
+            return (
+                "offset" in issues
+                and "do not exist in the topic" in issues
+                and "recreat" in issues
+                and "streaming query" in issues
+            )
+
+        assert wait_for(has_missing_offsets_issue, timeout_seconds=60, step_seconds=1), get_query_issues()

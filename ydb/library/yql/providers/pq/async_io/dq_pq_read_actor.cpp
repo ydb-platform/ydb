@@ -1187,6 +1187,20 @@ private:
             }
             partitionInfo.EndWriteTime = Self.EndWriteTime;
 
+            if (partitionInfo.Offset && *partitionInfo.Offset > event.GetEndOffset()) {
+                TStringBuilder message;
+                message << "Requested offsets do not exist in the topic \"" << Self.SourceParams.GetTopicPath()
+                    << "\": offset " << *partitionInfo.Offset << " for partition " << partitionKey.PartitionId
+                    << " exceeds the end offset " << event.GetEndOffset()
+                    << ". The topic may have been recreated. Recreate or restart the streaming query.";
+                SRC_LOG_E("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " " << message);
+                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(
+                    Self.InputIndex,
+                    TIssues({TIssue(message)}),
+                    NYql::NDqProto::StatusIds::BAD_REQUEST));
+                return;
+            }
+
             if (!partitionInfo.EndOffset) {
                 partitionInfo.EndOffset = event.GetEndOffset();
                 if (Self.EndOffset && *Self.EndOffset < *partitionInfo.EndOffset) {

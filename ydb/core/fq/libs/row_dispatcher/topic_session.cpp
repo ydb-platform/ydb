@@ -318,6 +318,7 @@ private:
     std::unordered_map<TActorId, TClientsInfo::TPtr> Clients;
 
     ui64 LastMessageOffset = 0;
+    TMaybe<ui64> EndOffset;
     bool IsWaitingEvents = false;
     ui64 QueuedBytes = 0;
     TMaybe<TString> ConsumerName;
@@ -770,8 +771,19 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     YDB_LOG_DEBUG("StartPartitionSessionEvent received",
         {"logPrefix", LogPrefix});
 
+    Self.EndOffset = event.GetEndOffset();
     std::optional<ui64> minOffset;
-    for (const auto& [actorId, info] : Self.Clients) {
+    for (const auto& [_, info] : Self.Clients) {
+        if (info->NextMessageOffset && *info->NextMessageOffset > event.GetEndOffset()) {
+            Self.ThrowFatalError(TStatus::Fail(
+                EStatusId::BAD_REQUEST,
+                TStringBuilder() << "Requested offsets do not exist in the topic \"" << Self.TopicPath
+                    << "\": offset " << *info->NextMessageOffset << " for partition " << Self.PartitionId
+                    << " exceeds the end offset " << event.GetEndOffset()
+                    << ". The topic may have been recreated. Recreate or restart the streaming query \""
+                    << info->QueryId << "\"."));
+            return;
+        }
         if (!minOffset || (info->NextMessageOffset && *info->NextMessageOffset < *minOffset)) {
             minOffset = info->NextMessageOffset;
         }
@@ -932,6 +944,17 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         {"predicate", source.GetPredicate()},
         {"watermarkExpr", source.GetWatermarkExpr()},
         {"offset", offset});
+
+    if (offset && EndOffset && *offset > *EndOffset) {
+        SendSessionError(ev->Sender, TStatus::Fail(
+            EStatusId::BAD_REQUEST,
+            TStringBuilder() << "Requested offsets do not exist in the topic \"" << TopicPath
+                << "\": offset " << *offset << " for partition " << PartitionId
+                << " exceeds the end offset " << *EndOffset
+                << ". The topic may have been recreated. Recreate or restart the streaming query \""
+                << ev->Get()->Record.GetQueryId() << "\"."), false);
+        return;
+    }
 
     if (!CheckNewClient(ev)) {
         return;

@@ -5,6 +5,9 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -399,7 +402,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         bool UsePragma;
 
     protected:
-        void Setup(TKikimrSettings& settings) override {   
+        void Setup(TKikimrSettings& settings) override {
             if (!UsePragma) {
                 settings.AppConfig.MutableTableServiceConfig()->SetDefaultTxMode([&]() {
                     if (Isolation == "SerializableRW") {
@@ -413,7 +416,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     } else {
                         ythrow yexception() << "unknonw isolation: " << Isolation;
                     }
-                }());     
+                }());
             }
         }
 
@@ -512,8 +515,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
     class TDisableOnlineRO : public TTableDataModificationTester {
     protected:
-        void Setup(TKikimrSettings& settings) override {   
-            settings.AppConfig.MutableFeatureFlags()->SetDisableOnlineRO(true);     
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetDisableOnlineRO(true);
         }
 
         void DoExecute() override {
@@ -543,6 +546,257 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         TDisableOnlineRO tester;
         tester.SetIsOlap(false);
         tester.SetFillTables(true);
+        tester.Execute();
+    }
+
+    // Reads between upserts force a chain of uncommitted writes; results must be identical
+    // whether or not KQP attaches WriteSeqNum.
+    class TUncommittedWriteSeqNum : public TTableDataModificationTester {
+    protected:
+        YDB_ACCESSOR(bool, Enabled, true);
+        YDB_ACCESSOR(TString, Table, "/Root/KV");
+
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(Enabled);
+        }
+
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            auto tx = session.BeginTransaction(TTxSettings::SerializableRW())
+                .ExtractValueSync()
+                .GetTransaction();
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES (10u, "Ten"), (4000000010u, "BigTen");
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Forces the first flush; must observe the transaction's own writes
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 4000000010u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[4000000010u;["BigTen"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES (11u, "Eleven");
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // The second flush is chained onto the first
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 11u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[11u;["Eleven"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            auto commitResult = tx.Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 11u, 4000000010u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[11u;["Eleven"]];[4000000010u;["BigTen"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    // Keys 10 and 4000000010 land on different shards, so the commit goes through ValidateLocks.
+    Y_UNIT_TEST_TWIN(UncommittedWriteSeqNum, Enabled) {
+        TUncommittedWriteSeqNum tester;
+        tester.SetEnabled(Enabled);
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    // KQP must skip ColumnShard, which does not implement WriteSeqNum
+    Y_UNIT_TEST(UncommittedWriteSeqNumOlap) {
+        TUncommittedWriteSeqNum tester;
+        tester.SetEnabled(true);
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    // A resent uncommitted write is answered twice: with the original result and, once the
+    // shard has seen it, with IsDuplicate set. KQP must take only the first one.
+    class TUncommittedWriteSeqNumAnsweredTwice : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] {
+                return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::SerializableRW())
+                    .ExtractValueSync().GetTransaction(); });
+
+            size_t answeredTwice = 0;
+            auto answerTwice = [&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    const auto& record = ev->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
+                    if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                        && record.GetTxLocks().size() == 1
+                        && record.GetTxLocks(0).WriteSeqNumsSize() == 1)
+                    {
+                        auto again = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+                        again->Record = record;
+                        again->Record.SetIsDuplicate(true);
+                        runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
+                            again.release(), 0, ev->Cookie));
+                        ++answeredTwice;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+            auto saveObserver = runtime.SetObserverFunc(answerTwice);
+
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (10u, "Ten");
+                )", TTxControl::Tx(tx)).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Forces the flush, whose result is then delivered a second time
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key = 10u;
+                )", TTxControl::Tx(tx)).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            runtime.SetObserverFunc(saveObserver);
+            UNIT_ASSERT_C(answeredTwice > 0, answeredTwice);
+
+            auto commitResult = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key = 10u;
+                )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(UncommittedWriteSeqNumAnsweredTwice) {
+        TUncommittedWriteSeqNumAnsweredTwice tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // ALTER TABLE during an in-flight InconsistentTx write must fail the query, not retry forever.
+    class TSchemeChangedDuringInconsistentWrite : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+
+            // UseRealThreads=false requires GetSession() through RunCall.
+            auto session1 = Kikimr->RunCall([&] {
+                return client.GetSession().GetValueSync().GetSession();
+            });
+            auto session2 = Kikimr->RunCall([&] {
+                return client.GetSession().GetValueSync().GetSession();
+            });
+
+            std::atomic<size_t> evWriteCount{0};
+            std::vector<std::unique_ptr<IEventHandle>> held;
+            bool queryRequestPatched = false;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
+                // IsStreamingQuery=true makes the sink compile with InconsistentTx=true.
+                if (!queryRequestPatched &&
+                    ev->GetTypeRewrite() == TEvKqp::TEvQueryRequest::EventType)
+                {
+                    queryRequestPatched = true;
+                    auto* req = ev->Get<TEvKqp::TEvQueryRequest>();
+                    auto userCtx = MakeIntrusive<TUserRequestContext>("", "/Root", "");
+                    userCtx->IsStreamingQuery = true;
+                    req->SetUserRequestContext(std::move(userCtx));
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    ++evWriteCount;
+                    held.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto savedObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(savedObserver); };
+
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(
+                    Q_(R"(UPSERT INTO `/Root/KV` (Key, Value) VALUES (42u, "test");)"),
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+                ).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evWriteCount > 0;
+                });
+                runtime.DispatchEvents(opts);
+                UNIT_ASSERT_C(evWriteCount > 0, "TEvWrite was not intercepted");
+            }
+
+            auto alterResult = Kikimr->RunCall([&] {
+                return session2.ExecuteQuery(
+                    Q_(R"(ALTER TABLE `/Root/KV` ADD COLUMN Extra String;)"),
+                    TTxControl::NoTx()
+                ).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                alterResult.GetStatus(), EStatus::SUCCESS,
+                alterResult.GetIssues().ToString());
+
+            for (auto& ev : held) {
+                runtime.Send(ev.release());
+            }
+            held.clear();
+
+            auto result = runtime.WaitFuture(future, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                result.GetStatus(), EStatus::ABORTED,
+                result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Scheme changed"),
+                TStringBuilder() << "Expected scheme-mismatch issue, got: "
+                    << result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(SchemeChangedDuringInconsistentWrite) {
+        TSchemeChangedDuringInconsistentWrite tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
+        tester.SetUseRealThreads(false);
         tester.Execute();
     }
 }

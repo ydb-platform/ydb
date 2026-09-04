@@ -8,8 +8,11 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
+#include <util/generic/set.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+
+#include <memory>
 
 namespace NSQLPureAST {
 
@@ -22,18 +25,56 @@ struct TNamedNodeRef {
     TString Name;
     TPosition Position;
 
+    bool IsWildcard() const;
+
     friend bool operator==(const TNamedNodeRef& lhs, const TNamedNodeRef& rhs) = default;
     friend bool operator!=(const TNamedNodeRef& lhs, const TNamedNodeRef& rhs) = default;
+
+    static TNamedNodeRef Wildcard(TPosition position);
+};
+
+class INamedNodeDef;
+
+class INamedNodeScope {
+public:
+    using TPtr = std::shared_ptr<INamedNodeScope>;
+    using TEntry = std::variant<TNamedNodeRef, std::shared_ptr<INamedNodeDef>, TPtr>;
+
+    virtual ~INamedNodeScope() = default;
+
+    virtual const TNamedNodeRef& Owner() const = 0;
+
+    virtual TPosition Position() const = 0;
+
+    virtual const TSet<TEntry>& Entries() const = 0;
+};
+
+bool operator<(const INamedNodeScope::TEntry& lhs, const INamedNodeScope::TEntry& rhs);
+
+class INamedNodeDef {
+public:
+    using TPtr = std::shared_ptr<INamedNodeDef>;
+
+    virtual ~INamedNodeDef() = default;
+
+    virtual const TNamedNodeRef& Decl() const = 0;
+
+    virtual const TNamedNode& Value() const = 0;
+
+    virtual const TVector<TNamedNodeRef>& References() const = 0;
 };
 
 class INamedNodes {
 public:
-    using TPtr = THolder<INamedNodes>;
+    using TPtr = std::shared_ptr<INamedNodes>;
 
     virtual ~INamedNodes() = default;
 
-    [[nodiscard]] virtual const TNamedNode* Resolve(const TNamedNodeRef& ref) const = 0;
-    virtual void Dump(IOutputStream& out) const = 0;
+    virtual INamedNodeScope::TPtr TopLevel() const = 0;
+
+    virtual INamedNodeDef::TPtr Declaration(const TNamedNodeRef& ref) const = 0;
+
+    virtual INamedNodeDef::TPtr Definition(const TNamedNodeRef& ref) const = 0;
 };
 
 TMaybe<TNamedNodeRef> GetNamedNodeRef(SQLv1::Bind_parameterContext* ctx);

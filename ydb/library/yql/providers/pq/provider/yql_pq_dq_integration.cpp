@@ -710,7 +710,7 @@ public:
                     } else if (name == NDeliveryGuaranteeSetting::Name) {
                         if (Value(setting) == NDeliveryGuaranteeSetting::ExactlyOnceValue) {
                             YQL_ENSURE(State_->EnableExactlyOnceDeliveryGuaranty && State_->DeferredPublicationExtIdPrefix, "Deferred publication is not enabled");
-                            YQL_ENSURE(!maybeEnableDeduplication.GetOrElse(false), "Deferred publication can not be used with enabled deduplication");
+                            YQL_ENSURE(!maybeEnableDeduplication.GetOrElse(false), "Deferred publication cannot be used with enabled deduplication");
                             sinkDesc.SetDeferredPublicationExtIdPrefix(State_->DeferredPublicationExtIdPrefix);
                         }
                     }

@@ -193,6 +193,7 @@ public:
     NCommon::TConfSetting<TDuration, Static> _SecureTmpTokenUsersAccessPeriod;
     NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
     NCommon::TConfSetting<bool, Static> _ForbidReservedColumns;
+    NCommon::TConfSetting<bool, Static> _ReplaceEmptyOpWithTouch;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

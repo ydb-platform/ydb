@@ -188,3 +188,7 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

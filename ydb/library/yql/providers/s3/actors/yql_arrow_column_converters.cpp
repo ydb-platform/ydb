@@ -749,7 +749,7 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
 }
 
 TColumnConverter ArrowComputeConvertor(const std::string& columnName, const std::shared_ptr<arrow::DataType>& sourceType, const std::shared_ptr<arrow::DataType>& targetType) {
-    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType), "Can not cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
+    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType), "Cannot cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
     return [targetType](const std::shared_ptr<arrow::Array>& value) {
         auto res = arrow::compute::Cast(*value, targetType);
         THROW_ARROW_NOT_OK(res.status());

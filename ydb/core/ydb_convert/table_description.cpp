@@ -760,6 +760,9 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
                     case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
                         statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
                         break;
+                    case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+                        statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
+                        break;
                     default:
                         code = Ydb::StatusIds::BAD_REQUEST;
                         error = "Unknown statistic type";
@@ -1602,6 +1605,9 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                     case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
                         statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
                         break;
+                    case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+                        statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
+                        break;
                     default:
                         status = Ydb::StatusIds::BAD_REQUEST;
                         error = "Unknown statistic type";
@@ -2160,6 +2166,9 @@ void FillMultiColumnStatisticsDescriptionImpl(TYdbProto& out,
                 case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                     outMultiColumnStatistics->add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
                     break;
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                    outMultiColumnStatistics->add_types(Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM);
+                    break;
                 default:
                     break;
             }
@@ -2187,6 +2196,9 @@ void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescriptio
         switch (type) {
             case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
                 out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                break;
+            case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+                out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
                 break;
             default:
                 out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::MULTI_COLUMN_STATISTICS_UNSPECIFIED);

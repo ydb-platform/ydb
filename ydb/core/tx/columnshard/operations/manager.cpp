@@ -260,6 +260,12 @@ TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPat
 }
 
 TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
+    for (const auto& op : evWrite.Record.GetOperations()) {
+        if (op.HasWriteSeqNum() && op.GetWriteSeqNum().GetWriteSeqNum() != 0) {
+            return TConclusionStatus::Fail("WriteSeqNum is not supported by ColumnShard");
+        }
+    }
+
     if (evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback) {
         //FIXME #23784
         // AFL_VERIFY_DEBUG(!evWrite.Record.HasTxId())("TxId", evWrite.Record.GetTxId());

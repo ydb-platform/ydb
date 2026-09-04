@@ -9,6 +9,7 @@
 
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
+#include <yql/essentials/minikql/mkql_bridge_mode.h>
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -470,6 +471,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     IModuleResolver::TPtr Modules;
     IUrlListerManagerPtr UrlListerManager;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
+    NUdf::EBridgeMode BridgeMode = NUdf::EBridgeMode::None;
+    TString UdfBridgeBinaryPath;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
     NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;

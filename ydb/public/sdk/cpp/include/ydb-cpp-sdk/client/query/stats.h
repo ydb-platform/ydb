@@ -42,6 +42,7 @@ public:
     const TOperationStats& GetUpdates() const;
     const TOperationStats& GetDeletes() const;
     uint64_t GetPartitionsCount() const;
+    uint64_t GetAffectedRows() const;
 
 private:
     std::string Name_;
@@ -49,6 +50,7 @@ private:
     TOperationStats Updates_;
     TOperationStats Deletes_;
     uint64_t PartitionsCount_ = 0;
+    uint64_t AffectedRows_ = 0;
 };
 
 class TQueryPhaseStats {

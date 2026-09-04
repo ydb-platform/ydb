@@ -393,6 +393,21 @@ namespace NKikimr {
         HullDs->Barriers->GetOwnedChunks(chunks);
     }
 
+    void THullDbRecovery::ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks)
+    {
+        HullDs->LogoBlobs->ResolveStripeSsts(stripeChunks);
+        HullDs->Blocks->ResolveStripeSsts(stripeChunks);
+        HullDs->Barriers->ResolveStripeSsts(stripeChunks);
+    }
+
+    void THullDbRecovery::ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks,
+            const std::function<void(const TDiskPart&)>& callback) const
+    {
+        HullDs->LogoBlobs->ForEachStripeExtent(stripeChunks, callback);
+        HullDs->Blocks->ForEachStripeExtent(stripeChunks, callback);
+        HullDs->Barriers->ForEachStripeExtent(stripeChunks, callback);
+    }
+
     void THullDbRecovery::BuildBarrierCache()
     {
         if (HullDs->HullCtx->BarrierValidation) {

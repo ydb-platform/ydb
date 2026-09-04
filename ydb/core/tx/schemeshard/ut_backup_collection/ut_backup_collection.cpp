@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     Y_UNIT_TEST(HiddenByFeatureFlag) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(false));
         ui64 txId = 100;
 
         SetupLogging(runtime);

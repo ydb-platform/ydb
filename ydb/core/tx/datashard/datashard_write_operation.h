@@ -31,6 +31,7 @@ private:
     YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
+    YDB_READONLY_DEF(TLockWriteSeqNum, WriteSeqNum);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
@@ -129,7 +130,6 @@ private:
 
     YDB_READONLY_DEF(ui64, LockTxId);
     YDB_READONLY_DEF(ui32, LockNodeId);
-
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
@@ -137,6 +137,7 @@ private:
     YDB_READONLY_DEF(bool, MvccSnapshotRead);
     YDB_READONLY_DEF(std::optional<TRowVersion>, MvccSnapshot);
     YDB_READONLY(TDataShardUserDb::ELockMode, LockMode, TDataShardUserDb::ELockMode::Optimistic);
+    YDB_READONLY_DEF(bool, CollectAffectedRows);
 
     YDB_READONLY_DEF(ui64, TxSize);
 

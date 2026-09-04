@@ -13,6 +13,9 @@ private:
     YDB_READONLY(ui64, TabletId, 0);
     const NCommon::TReplaceKeyAdapter Start;
     const NCommon::TReplaceKeyAdapter Finish;
+    // the sys view's own schema: the shape/PK of the rows this source emits, matching Start/Finish
+    // (the introspected table's schema stays private to the concrete source) YDBBUGS-770
+    const std::shared_ptr<ISnapshotSchema> SysViewSchema;
 
     virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
@@ -59,6 +62,14 @@ private:
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const NArrow::NSSA::IDataSource::TFetchHeaderContext& /*fetchContext*/) override {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        return SysViewSchema;
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
+        return SysViewSchema;
     }
 
     virtual NArrow::TSimpleRow GetFirstPK() const override {
@@ -178,6 +189,7 @@ public:
         , TabletId(tabletId)
         , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
         , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted())
+        , SysViewSchema(context->GetReadMetadata()->GetResultSchema())
     {
     }
 };

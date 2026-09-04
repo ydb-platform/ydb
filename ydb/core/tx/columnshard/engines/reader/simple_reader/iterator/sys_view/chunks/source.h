@@ -36,14 +36,6 @@ private:
         return GetPortionAccessor().RestoreBlobRange(rangeLink);
     }
 
-    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
-        return Schema;
-    }
-
-    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
-        return Schema;
-    }
-
     virtual bool DoStartFetchingAccessor(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) override;
 

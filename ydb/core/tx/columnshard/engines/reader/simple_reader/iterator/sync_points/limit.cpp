@@ -110,7 +110,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
 
     UnfilledIterators.pop_front();
 
-    const auto& rk = *Context->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetReplaceKey();
+    const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
     const auto& g = source->GetStageResult().GetBatch();
 
     if (g && g->GetRecordsCount()) {

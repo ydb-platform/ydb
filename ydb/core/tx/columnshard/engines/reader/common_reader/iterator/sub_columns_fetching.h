@@ -184,6 +184,9 @@ private:
     const NArrow::NAccessor::NSubColumns::TSettings Settings;
     const std::vector<TString> SubColumns;
     std::weak_ptr<IDataSource> Source;
+    // the schema the fetched entity ids belong to; for sys-view sources it is the introspected table's
+    // schema, which is no longer what the source itself reports (YDBBUGS-770)
+    const std::shared_ptr<ISnapshotSchema> SourceSchema;
 
     std::vector<TColumnChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
@@ -246,7 +249,7 @@ private:
                     i.InitReading(reading, SubColumns);
                     const auto headerDuration = TInstant::Now() - headerStart;
                     if (auto source = Source.lock()) {
-                        auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
+                        auto columnLoader = SourceSchema->GetColumnLoaderVerified(GetEntityId());
                         TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
                         const ui64 blobBytes = blob.size();
                         const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetHeaderSize();
@@ -274,7 +277,7 @@ private:
                     i.SetOthersBlob(blobs.ExtractVerified(*StorageId, *i.GetOthersReadData()));
                     const auto dataDuration = TInstant::Now() - dataStart;
                     if (auto source = Source.lock()) {
-                        auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
+                        auto columnLoader = SourceSchema->GetColumnLoaderVerified(GetEntityId());
                         TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
                         const ui64 blobBytes = i.GetOthersBlobs()->size();
                         const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetOthersSize();
@@ -290,7 +293,7 @@ private:
                         chunkData.SetBlobData(blobs.ExtractVerified(*StorageId, *chunkData.GetBlobRangeOptional()));
                         const auto dataDuration = TInstant::Now() - dataStart;
                         if (auto source = Source.lock()) {
-                            auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
+                            auto columnLoader = SourceSchema->GetColumnLoaderVerified(GetEntityId());
                             TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
                             const ui64 blobBytes = chunkData.GetBlobDataVerified().size();
                             const ui32 colIndex = i.GetPartialArray()->GetHeader().GetColumnStats().GetKeyIndexVerified(subColName);
@@ -364,6 +367,7 @@ public:
         , Settings(GetSettings(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->GetAccessorConstructor()))
         , SubColumns(subColumns)
         , Source(source)
+        , SourceSchema(source->GetSourceSchema())
     {
         const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)(
@@ -377,6 +381,7 @@ public:
         , Settings(GetSettings(sourceSchema->GetColumnLoaderVerified(GetEntityId())->GetAccessorConstructor()))
         , SubColumns(subColumns)
         , Source()
+        , SourceSchema(sourceSchema)
     {
         const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)

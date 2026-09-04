@@ -1286,6 +1286,24 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
         );
     }
 
+    // The state hash table is dropped when the state is spilled and re-allocated when the buckets are
+    // read back. With no operator memory quota bound that allocation runs under the allocator yellow zone
+    // (the very signal that triggered the spill), so it falls back to the smallest viable table and the
+    // per-bucket state has to grow it. NumBuckets is 128, so a peak of ~400K keys gives buckets that are
+    // much larger than the smallest table.
+    Y_UNIT_TEST_QUAD(TestUnboundAggregationReadsBackLargeBuckets, UseLLVM, UseFlow) {
+        constexpr size_t numKeys = 400000;
+        TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+        RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
+            return new TWideKVStream(ctx, numKeys, 2, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                if (rowNum == numKeys * 2 - 1) {
+                    // spill the whole in-memory state right before the input ends
+                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                }
+            });
+        });
+    }
+
     // ---- bound operator memory quota (RFC dq_memory_quota_20) ----
 
     Y_UNIT_TEST_QUAD(TestBoundAggregationSpillsOnNegativeAvailability, UseLLVM, UseFlow) {

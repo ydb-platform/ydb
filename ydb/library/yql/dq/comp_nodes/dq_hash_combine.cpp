@@ -823,8 +823,10 @@ protected:
         // Run aggregation on a single bucket
 
         if (!Map) {
-            // the table was dropped when the state was spilled; a bucket holds ~1/NumBuckets of the keys,
-            // mandatory auto-growth in the re-aggregation loop covers skewed buckets
+            // the table was dropped when the state was spilled; a bucket holds ~1/NumBuckets of the keys.
+            // This is only a starting guess: it may be refused down to the smallest table (the allocator
+            // is in the yellow zone here whenever that is what triggered the spill), so both re-aggregation
+            // loops below grow the table on the mandatory path.
             MaxRowCount = TryAllocMapForRowCount(std::max<size_t>(LowerFixedRowCount, PeakMapSizeBeforeSpill / NumBuckets * 2));
         } else if (Map->GetSize() > 0) {
             Map->Clear();
@@ -901,6 +903,14 @@ protected:
                 Map->Insert(keyAndStateBuf, GlobalHashToRhItemHash(Hasher(keyAndStateBuf)), isNew);
 
                 MKQL_ENSURE(isNew, "Every key in the spilled state must be unique");
+
+                // The table was sized by a guess (see above) while the bucket size is whatever was spilled,
+                // so it has to grow here as well. There is no fallback at this point (the state is already
+                // spilled), hence the mandatory path; an overflowing table would loop forever on insert.
+                CheckAutoGrowMap(true, /* optionalReserve = */ false);
+                if (Map->GetSize() > MaxRowCount) {
+                    throw TMemoryLimitExceededException();
+                }
             }
         }
 

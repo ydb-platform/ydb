@@ -1328,14 +1328,23 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
 
     // ---- bound operator memory quota (RFC dq_memory_quota_20) ----
 
+    // A test that expects a spill purely from a negative availability must leave the operator enough rows
+    // after the trigger to notice it. With no allocator limit TryReserveOptional returns before it reads
+    // the quota, so the only reader is the row-sampled pressure refresh in ProcessFetchedRow, which polls
+    // once per PressureRefreshInterval rows. Keep the trigger well inside the input on both counts: below
+    // the key count (so it fires early whatever the repeat count) and far from the end of the stream.
+    constexpr size_t SpillTriggerKeys = 20000;
+    constexpr size_t SpillTriggerRepeats = 5;
+    constexpr size_t SpillTriggerRow = SpillTriggerKeys / 2;
+
     Y_UNIT_TEST_QUAD(TestBoundAggregationSpillsOnNegativeAvailability, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
         TScriptedMemoryQuota quota(setup.Alloc);
         size_t triggerRow = 0;
         size_t readsAtTrigger = 0;
         auto endState = RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
-            return new TWideKVStream(ctx, 100000, 10, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
-                if (rowNum == 100000) {
+            return new TWideKVStream(ctx, SpillTriggerKeys, SpillTriggerRepeats, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                if (rowNum == SpillTriggerRow) {
                     quota.Availability = -1; // the node is over target: the operator must give memory back
                     triggerRow = rowNum;
                     readsAtTrigger = quota.AvailabilityReads;
@@ -1343,7 +1352,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             });
         }, 2, false, false, &quota);
         // report which link of trigger -> poll -> spill broke, the spill is not reproducible everywhere
-        UNIT_ASSERT_VALUES_EQUAL_C(triggerRow, 100000, "the input never reached the trigger row");
+        UNIT_ASSERT_VALUES_EQUAL_C(triggerRow, SpillTriggerRow, "the input never reached the trigger row");
         UNIT_ASSERT_GT_C(quota.AvailabilityReads, readsAtTrigger,
             "the operator did not poll the quota after the trigger: " << endState.DebugString());
         UNIT_ASSERT_GE_C(endState.SpillsStarted, 1, endState.DebugString());
@@ -1451,8 +1460,8 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
         size_t triggerRow = 0;
         size_t readsAtTrigger = 0;
         auto endState = RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
-            return new TWideKVStream(ctx, 100000, 10, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
-                if (rowNum == 100000) {
+            return new TWideKVStream(ctx, SpillTriggerKeys, SpillTriggerRepeats, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                if (rowNum == SpillTriggerRow) {
                     quota.Availability = -1;
                     triggerRow = rowNum;
                     readsAtTrigger = quota.AvailabilityReads;
@@ -1465,7 +1474,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
                 spilledBytes += size;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL_C(triggerRow, 100000, "the input never reached the trigger row");
+        UNIT_ASSERT_VALUES_EQUAL_C(triggerRow, SpillTriggerRow, "the input never reached the trigger row");
         UNIT_ASSERT_GT_C(quota.AvailabilityReads, readsAtTrigger,
             "the operator did not poll the quota after the trigger: " << endState.DebugString());
         UNIT_ASSERT_GT_C(spilledBytes, 0, endState.DebugString());

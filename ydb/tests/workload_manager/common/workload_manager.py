@@ -176,6 +176,8 @@ class WorkloadManagerBase(LoadSuiteBase):
                         pass
             else:
                 results = {}
+            self.stop_checking.set()
+            check_thread.join()
             self.after_workload(overall_result)
         finally:
             self.stop_checking.set()
@@ -292,6 +294,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
 
     @classmethod
     def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+        metrics = list(cls.metrics)
         keys = sorted(cls.metrics_keys)
         pools = cls.get_resource_pools()
         report = ('<html><body><table border=1 valign="center" width="100%">'
@@ -301,15 +304,15 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         norm_metrics = []
         first_i = None
         last_i = None
-        for r in range(len(cls.metrics)):
+        for r in range(len(metrics)):
             record: dict[str, float] = {}
-            cur_t, cur_m = cls.metrics[r]
+            cur_t, cur_m = metrics[r]
             for k, v in cur_m.items():
                 if k.endswith(' d'):
                     if r == 0:
                         record[k] = 0.
                     else:
-                        prev_t, prev_m = cls.metrics[r - 1]
+                        prev_t, prev_m = metrics[r - 1]
                         record[k] = (v - prev_m.get(k, 0.)) / (cur_t - prev_t)
                 elif not k.endswith('satisfaction') or v >= 0.:
                     record[k] = v
@@ -334,7 +337,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                 report += line
         report += '</table></body></html>'
         allure.attach(report, 'metrics', allure.attachment_type.HTML)
-        times = [datetime.fromtimestamp(t) for t, _ in cls.metrics]
+        times = [datetime.fromtimestamp(t) for t, _ in metrics]
         fig, axs = pyplot.subplots(len(pools), 1, layout='constrained', figsize=(6.4, 3.2 * len(pools)))
         if len(pools) == 1:
             axs = [axs]
@@ -344,7 +347,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
             axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label='satisfaction')
             axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label='adj satisfaction')
             if last_i is not None:
-                axs[p].plot([datetime.fromtimestamp(cls.metrics[first_i][0]), datetime.fromtimestamp(cls.metrics[last_i][0])], [1, 1], label='period')
+                axs[p].plot([datetime.fromtimestamp(metrics[first_i][0]), datetime.fromtimestamp(metrics[last_i][0])], [1, 1], label='period')
             axs[p].set_ylabel('satisfaction')
             axs[p].legend(fontsize=10, loc='lower right')
             axs[p].grid()
@@ -357,8 +360,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
             allure.attach(s.read(), 'satisfaction.plot.svg', allure.attachment_type.SVG)
         if last_i is not None:
             for pool in pools:
-                last_t, last_v = cls.metrics[last_i]
-                first_t, first_v = cls.metrics[first_i]
+                last_t, last_v = metrics[last_i]
+                first_t, first_v = metrics[first_i]
                 sat = last_v.get(f'{pool.name} adjusted satisfaction d', 0.) - first_v.get(f'{pool.name} adjusted satisfaction d', 0.)
                 if last_t > first_t:
                     sat /= last_t - first_t

@@ -215,6 +215,7 @@ public:
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
+        TString MaintenanceStatus;
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         float PDiskUsage = 0;
 
@@ -1742,6 +1743,7 @@ public:
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
+                    pDisk.MaintenanceStatus = info.GetMaintenanceStatus();
                 }
                 FieldsAvailable |= FieldsBsPDisks;
                 ApplyEverything();
@@ -2128,7 +2130,6 @@ public:
                     }
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.SetCategory(info.GetCategory());
-                    //pDisk.DecommitStatus = info.GetDecommitStatus();
                     float usage = pDisk.TotalSize ? 100.0 * (pDisk.TotalSize - pDisk.AvailableSize) / pDisk.TotalSize : 0;
                     if (usage >= 95) {
                         pDisk.DiskSpace = NKikimrViewer::EFlag::Red;
@@ -2400,6 +2401,7 @@ public:
                 jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
                 jsonPDisk.SetStatus(pdisk.Status);
                 jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
+                jsonPDisk.SetMaintenanceStatus(pdisk.MaintenanceStatus);
                 jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
                 jsonPDisk.SetSlotCount(pdisk.SlotCount);
                 if (pdisk.DiskSpace != NKikimrViewer::Grey) {

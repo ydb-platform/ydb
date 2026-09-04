@@ -201,6 +201,13 @@ namespace {
         }
     }
 
+    std::optional<NKikimr::NKqp::TCommitTimestamp> ExtractCommitTimestamp(const NKikimrDataEvents::TEvWriteResult& record) {
+        if (!record.HasStep()) {
+            return std::nullopt;
+        }
+        return NKikimr::NKqp::TCommitTimestamp{record.GetStep(), record.GetTxId()};
+    }
+
     std::optional<bool> HandleAttachResult(NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, NKikimr::TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
@@ -271,7 +278,7 @@ struct IKqpTableWriterCallbacks {
 
     // EvWrite statuses
     virtual void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) = 0;
-    virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
+    virtual void OnCommitted(ui64 shardId, ui64 dataSize, std::optional<TCommitTimestamp> writeResultTimestamp = {}) = 0;
     virtual void OnMessageAcknowledged(ui64 dataSize) = 0;
 
     virtual void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) = 0;
@@ -1143,7 +1150,7 @@ public:
 
         if (Mode == EMode::COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
             return;
         }
 
@@ -1152,7 +1159,7 @@ public:
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize, ExtractCommitTimestamp(ev->Get()->Record));
         } else if (result) {
             AFL_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
@@ -2374,7 +2381,6 @@ private:
     void FlushFulltextRelevanceAuxTables(TPathWriteInfo& actorInfo,
             IFulltextTokenizeProjection* ft, bool isDelete) {
         auto& docs = PathWriteInfo.at(actorInfo.FulltextDocsTableId);
-        auto& dict = PathWriteInfo.at(actorInfo.FulltextDictTableId);
         auto& stats = PathWriteInfo.at(actorInfo.FulltextStatsTableId);
         if (isDelete) {
             docs.WriteActor->Write(DeleteCookie, ft->FlushDocs());
@@ -2383,10 +2389,13 @@ private:
             docs.WriteActor->Write(Cookie, ft->FlushDocs());
             docs.WriteActor->FlushBuffer(Cookie);
         }
-        dict.WriteActor->Write(Cookie, ft->FlushDict());
-        dict.WriteActor->FlushBuffer(Cookie);
         stats.WriteActor->Write(Cookie, ft->FlushStats());
         stats.WriteActor->FlushBuffer(Cookie);
+        if (actorInfo.FulltextDictTableId != TPathId()) {
+            auto& dict = PathWriteInfo.at(actorInfo.FulltextDictTableId);
+            dict.WriteActor->Write(Cookie, ft->FlushDict());
+            dict.WriteActor->FlushBuffer(Cookie);
+        }
     }
 
     IDataBatchProjectionPtr CreateWriteProjection(TPathWriteInfo& info, bool added,
@@ -2960,7 +2969,7 @@ private:
                 return;
             }
 
-            if (!Closed && outOfMemory) {
+            if (!WriteTableActor->IsClosed() && (outOfMemory || CheckpointInProgress)) {
                 WriteTableActor->FlushBuffers();
             }
 
@@ -3034,7 +3043,7 @@ private:
         AFL_ENSURE(false);
     }
 
-    void OnCommitted(ui64, ui64) override {
+    void OnCommitted(ui64, ui64, std::optional<TCommitTimestamp>) override {
         AFL_ENSURE(false);
     }
 
@@ -3615,14 +3624,16 @@ public:
                     indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
                     return false;
                 }
-                if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
-                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
+                if (indexSettings.DictTableId.PathId != TPathId()) {
+                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
+                        if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                                indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
+                            return false;
+                        }
+                    } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
+                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
                         return false;
                     }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                    indexSettings.DictTableId, indexSettings.DictTablePath)) {
-                    return false;
                 }
                 if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
                     if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
@@ -3708,17 +3719,19 @@ public:
                             settings.Priority);
                     }
 
-                    writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                        .WriteActor = writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                        .PathType = TKqpWriteTask::EPathWriteType::FulltextDict,
-                    });
-                    writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor->Open(
-                        writeCookie,
-                        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT,
-                        {indexSettings.DictColumns.at(0)},
-                        indexSettings.DictColumns,
-                        0,
-                        settings.Priority);
+                    if (indexSettings.DictTableId.PathId != TPathId()) {
+                        writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+                            .WriteActor = writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
+                            .PathType = TKqpWriteTask::EPathWriteType::FulltextDict,
+                        });
+                        writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor->Open(
+                            writeCookie,
+                            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT,
+                            {indexSettings.DictColumns.at(0)},
+                            indexSettings.DictColumns,
+                            0,
+                            settings.Priority);
+                    }
 
                     writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
                         .WriteActor = writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
@@ -3727,7 +3740,9 @@ public:
                     writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor->Open(
                         writeCookie,
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT,
-                        {indexSettings.StatsColumns.at(0)},
+                        // key is zero id or prefix, 2 data columns
+                        TVector<NKikimrKqp::TKqpColumnMetadataProto>(indexSettings.StatsColumns.begin(),
+                            indexSettings.StatsColumns.end() - 2),
                         indexSettings.StatsColumns,
                         0,
                         settings.Priority);
@@ -5436,7 +5451,7 @@ public:
               ", topic tablet: " << event.GetOrigin() <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
 
-        OnCommitted(event.GetOrigin(), 0);
+        OnCommitted(event.GetOrigin(), 0, std::nullopt);
     }
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -5478,7 +5493,7 @@ public:
 
         CollectTliStats(ev->Get()->Record);
 
-        OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+        OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
     }
 
     void OnReady() override {
@@ -5508,7 +5523,19 @@ public:
         Process();
     }
 
-    void OnCommitted(ui64 shardId, ui64) override {
+    void OnCommitted(ui64 shardId, ui64, std::optional<TCommitTimestamp> writeResultTimestamp) override {
+        if (CommitTimestamp && writeResultTimestamp) {
+            AFL_ENSURE(CommitTimestamp->PlanStep == writeResultTimestamp->PlanStep)
+                ("reason", "commit timestamp PlanStep mismatch")
+                ("coordinator", CommitTimestamp->PlanStep)
+                ("writeResult", writeResultTimestamp->PlanStep)
+                ("shardId", shardId);
+            AFL_ENSURE(CommitTimestamp->TxId == writeResultTimestamp->TxId)
+                ("reason", "commit timestamp TxId mismatch")
+                ("coordinator", CommitTimestamp->TxId)
+                ("writeResult", writeResultTimestamp->TxId)
+                ("shardId", shardId);
+        }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }
@@ -6294,14 +6321,16 @@ private:
                     idx.DocsTablePath = indexSettings.GetDocsTable().GetPath();
                     idx.DocsColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
                         indexSettings.GetDocsColumns().begin(),
-                        indexSettings.GetDocsColumns().end()),
-                    idx.DictTableId = TTableId(indexSettings.GetDictTable().GetOwnerId(),
-                        indexSettings.GetDictTable().GetTableId(),
-                        indexSettings.GetDictTable().GetVersion());
-                    idx.DictTablePath = indexSettings.GetDictTable().GetPath();
-                    idx.DictColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
-                        indexSettings.GetDictColumns().begin(),
-                        indexSettings.GetDictColumns().end()),
+                        indexSettings.GetDocsColumns().end());
+                    if (indexSettings.HasDictTable()) {
+                        idx.DictTableId = TTableId(indexSettings.GetDictTable().GetOwnerId(),
+                            indexSettings.GetDictTable().GetTableId(),
+                            indexSettings.GetDictTable().GetVersion());
+                        idx.DictTablePath = indexSettings.GetDictTable().GetPath();
+                        idx.DictColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
+                            indexSettings.GetDictColumns().begin(),
+                            indexSettings.GetDictColumns().end());
+                    }
                     idx.StatsTableId = TTableId(indexSettings.GetStatsTable().GetOwnerId(),
                         indexSettings.GetStatsTable().GetTableId(),
                         indexSettings.GetStatsTable().GetVersion());

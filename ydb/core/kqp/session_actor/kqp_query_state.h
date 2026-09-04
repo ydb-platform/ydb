@@ -52,6 +52,9 @@ public:
 
         void SetValue(const TTxId& id);
         TTxId GetValue();
+        bool HasValue() const {
+            return Id.Defined();
+        }
 
         void Reset();
 

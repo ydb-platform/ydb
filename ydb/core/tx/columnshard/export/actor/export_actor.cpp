@@ -274,7 +274,9 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator
     // ev->Record.MutableSnapshot()->SetStep(backupTask.GetSnapshotStep());
     // ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
     ev->Record.SetScanId(tablePathId.GetRawValue());
-    ev->Record.SetTxId(tablePathId.GetRawValue());
+    const auto txId = ExportSession->GetTxId();
+    AFL_VERIFY(txId)("reason", "export_session_has_no_tx_id");
+    ev->Record.SetTxId(*txId);
     ev->Record.SetTablePath(backupTask.GetTableName());
     ev->Record.SetSchemaVersion(0);
 

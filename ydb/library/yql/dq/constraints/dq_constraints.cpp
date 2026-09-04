@@ -61,6 +61,16 @@ TStatus ConstraintDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx, boo
     return TStatus::Ok;
 }
 
+TStatus ConstraintDqPhyGraceJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const TDqJoinBase join(input);
+    if (join.LeftInput().Ref().GetConstraint<TStreamingConstraintNode>() || join.RightInput().Ref().GetConstraint<TStreamingConstraintNode>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Streaming inputs are not supported for PhyGraceJoin"));
+        return TStatus::Error;
+    }
+
+    return ConstraintDqJoin(input, ctx);
+}
+
 TStatus ConstraintDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto join = TDqJoinBase(input);
     if (join.LeftInput().Ref().GetConstraint<TStreamingConstraintNode>() || join.RightInput().Ref().GetConstraint<TStreamingConstraintNode>()) {
@@ -147,7 +157,7 @@ public:
             TDqPhyCrossJoin::CallableName(),
             TDqPhyJoinDict::CallableName(),
         }, Hndl(&ConstraintDqJoin));
-        AddHandler({TDqPhyGraceJoin::CallableName()}, Hndl(&ConstraintDqJoin));
+        AddHandler({TDqPhyGraceJoin::CallableName()}, Hndl(&ConstraintDqPhyGraceJoin));
         AddHandler({TDqPhyBlockHashJoin::CallableName()}, Hndl(&ConstraintDqBlockHashJoin));
         AddHandler({TDqBlockHashJoinCore::CallableName()}, Hndl(&ConstraintDqBlockHashJoinCore));
         AddHandler({

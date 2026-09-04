@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
+Y_UNIT_TEST_SUITE(TWriteJsonValuesInMessageLogTest) {
 
     Y_UNIT_TEST(MemLogAdapter) {
         TFixture env{NoBufferSettings()};
@@ -678,13 +678,13 @@ Y_UNIT_TEST_SUITE(TWriteTextLogTest) {
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text"});
-        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text\nnew line"}, {"value2", 2});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text\nnew\nline"}, {"value2", 2});
 
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:677: Test message ");
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:678: Test message with data value=1");
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:679: Test message with data value=1 value2=2");
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:680: Test message with data value=text");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:681: Test message with data value=text new line value2=2");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:681: Test message with data value=\"text\\nnew\\nline\" value2=2");
     }
 }
 
@@ -718,5 +718,114 @@ Y_UNIT_TEST_SUITE(TWriteShortTextLogTest) {
         env.FetchMessage("FAKE: Test message ");
         env.FetchMessage("FAKE: Test message with data value=1");
         env.FetchMessage("FAKE: Test message with data value=1 value2=2");
+    }
+
+    Y_UNIT_TEST(WriteEscaped) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_SHORT_FORMAT);
+
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text"});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text with space"});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_new_line\n"});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_quotation'"});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_double_quotation\""});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_equal="});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", R"("QuotedValue")"});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", R"(\"EscapedQuotedValue\")"});
+
+        env.FetchMessage(R"(FAKE: Test message with data value=text)");
+        env.FetchMessage(R"(FAKE: Test message with data value="text with space")");
+        env.FetchMessage(R"(FAKE: Test message with data value="text_with_new_line\n")");
+        env.FetchMessage(R"(FAKE: Test message with data value="text_with_quotation'")");
+        env.FetchMessage(R"(FAKE: Test message with data value="text_with_double_quotation\"")");
+        env.FetchMessage(R"(FAKE: Test message with data value="text_with_equal=")");
+        env.FetchMessage(R"(FAKE: Test message with data value="\"QuotedValue\"")");
+        env.FetchMessage(R"(FAKE: Test message with data value="\\\"EscapedQuotedValue\\\"")");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TLogEscaping) {
+
+    Y_UNIT_TEST(Escape) {
+        std::vector<std::pair<TString, TString>> samples = {
+            {"text", "text"},
+            {"text with space", "\"text with space\""},
+            {"text with new line\n", "\"text with new line\\n\""},
+            {"text with slash\\", "\"text with slash\\\\\""},
+            {"text with double quote\"", "\"text with double quote\\\"\""}
+        };
+
+        for(const auto& sample: samples) {
+            auto escaped = TTextWriter::EscapeFieldValue(sample.first);
+            UNIT_ASSERT_STRINGS_EQUAL(sample.second, escaped);
+        }
+    }
+
+    Y_UNIT_TEST(Unescape) {
+        struct TSample {
+            TString Escaped;
+            std::string::size_type StartPos;
+            TMaybe<TString> Unescaped;
+            std::string::size_type FinishPos{0};
+        };
+        std::vector<TSample> samples = {
+            {"text", 0, "text", 4},
+            {"text next", 0, "text", 4},
+            {"\"text with space\"", 0, "text with space", 17},
+            {"\"text with space", 0, {}},
+            {"\"unknown escape char\\q", 0, {}},
+            {"\"text with new line\\n\"", 0, "text with new line\n", 22},
+            {"\"text with slash\\\\\"", 0, "text with slash\\", 19},
+            {"\"text with double quote\\\"\"", 0, "text with double quote\"", 26},
+            {"abcd text", 5, "text", 9},
+            {"abcd text next", 5, "text", 9},
+            {"abcd \"text with space\"", 5, "text with space", 22},
+            {"abcd \"text with space", 5, {}},
+            {"abcd \"unknown escape char\\q", 5, {}},
+            {"abcd \"text with new line\\n\"", 5, "text with new line\n", 27},
+            {"abcd \"text with slash\\\\\"", 5, "text with slash\\", 24},
+            {"abcd \"text with double quote\\\"\"", 5, "text with double quote\"", 31}
+        };
+
+        for(const auto& sample: samples) {
+            auto pos = sample.StartPos;
+            auto unescaped = TTextWriter::UnescapeFieldValue(sample.Escaped, pos);
+            UNIT_ASSERT_EQUAL(sample.Unescaped, unescaped);
+            if (unescaped.Defined()) {
+                UNIT_ASSERT_EQUAL(sample.FinishPos, pos);
+            }
+
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TWriteJsonValuesInJsonLogTest) {
+
+    Y_UNIT_TEST(WriteJson) {
+        TFixture env{NoBufferSettings()};
+        env.Settings->EnableStructuredLogInJson = true;
+        env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
+
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
+                         R"("cluster":"","database":"static","node_id":0,"priority":"DEBUG","npriority":7,"component":"FAKE","tag":"KIKIMR",)"
+                         R"("revision":-1,"location":"log_ut.cpp:809","message":"Test message"})");
+        env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
+                         R"("cluster":"","database":"static","node_id":0,"priority":"DEBUG","npriority":7,"component":"FAKE","tag":"KIKIMR",)"
+                         R"("revision":-1,"location":"log_ut.cpp:810","message":"Test message with data","value":"1"})");
+    }
+
+    Y_UNIT_TEST(WriteMeta) {
+        TFixture env{NoBufferSettings()};
+        env.Settings->EnableStructuredLogInJson = true;
+        env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
+
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
+        env.FetchMeta({});
+        env.FetchMeta({{"meta.value","1"}});
+        env.FetchMeta({{"meta.value","1"}, {"meta.value2","2"}});
     }
 }

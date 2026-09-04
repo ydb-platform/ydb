@@ -34,8 +34,11 @@ const char* const CheckpointsGraphsDescriptionTable = "checkpoints_graphs_descri
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCheckpointGraphDescriptionContext : public TThrRefBase {
+    static constexpr ui64 MAX_GRAPH_DESC_ID_GENERATION_ATTEMPTS = 100;
+
     TString GraphDescId;
     const TMaybe<NProto::TCheckpointGraphDescription> NewGraphDescription;
+    ui64 GraphDescIdGenerationAttempts = 0;
 
     explicit TCheckpointGraphDescriptionContext(const TString& graphDescId)
         : GraphDescId(graphDescId)
@@ -55,7 +58,7 @@ using TCheckpointGraphDescriptionContextPtr = TIntrusivePtr<TCheckpointGraphDesc
 struct TCheckpointContext : public TThrRefBase {
     const TCheckpointId CheckpointId;
     const ECheckpointStatus Status; // optional new status
-    const ECheckpointStatus ExpectedStatus; // optional expecrted current status, used only in some operations
+    const ECheckpointStatus ExpectedStatus; // optional expected current status, used only in some operations
     const ui64 StateSizeBytes;
 
     TGenerationContextPtr GenerationContext;
@@ -318,6 +321,10 @@ TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
         return MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
     }
 
+    if (++context->CheckpointGraphDescriptionContext->GraphDescIdGenerationAttempts > TCheckpointGraphDescriptionContext::MAX_GRAPH_DESC_ID_GENERATION_ATTEMPTS) {
+        return MakeFuture(TStatus(EStatus::INTERNAL_ERROR, {NYdb::NIssue::TIssue("Too many attempts to generate graph desc id")}));
+    }
+
     Y_ABORT_UNLESS(context->EntityIdGenerator);
     context->CheckpointGraphDescriptionContext->GraphDescId = context->EntityIdGenerator->Generate(EEntityType::CHECKPOINT_GRAPH_DESCRIPTION);
     return SelectGraphDescId(context)
@@ -326,7 +333,7 @@ TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
                 if (!result.GetValue().IsSuccess()) {
                     return MakeFuture<TStatus>(result.GetValue());
                 }
-                // TODO racing!
+
                 if (!GraphDescIdExists(result)) {
                     return MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
                 } else {

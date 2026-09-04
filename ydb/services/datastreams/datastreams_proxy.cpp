@@ -14,6 +14,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -48,6 +49,10 @@ namespace NKikimr::NDataStreams::V1 {
         const TRequest* GetRequest(NGRpcService::IRequestOpCtx *request)
         {
             return dynamic_cast<const TRequest*>(request->GetRequest());
+        }
+
+        bool IsKafkaBatchDataChunk(const NKikimrPQClient::TDataChunk& proto) {
+            return proto.HasCodec() && proto.GetCodec() + 1 == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH);
         }
 
         ui32 PartitionWriteSpeedInBytesPerSec(ui32 speedInKbPerSec) {
@@ -1609,6 +1614,9 @@ namespace NKikimr::NDataStreams::V1 {
                 }
 
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
+                if (IsKafkaBatchDataChunk(proto)) {
+                    NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), r.GetOffset());
+                }
                 auto record = Result.add_records();
                 record->set_data(proto.GetData());
                 record->set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);

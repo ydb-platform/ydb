@@ -11,6 +11,8 @@
 #include "monitoring.h"
 #include "tx__set_down.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -2808,7 +2810,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"down", Down},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2857,7 +2863,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"freeze", Freeze},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2901,7 +2911,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_KickNode::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -3266,7 +3279,7 @@ public:
             TVector<ui32> channels;
             TVector<ui32> forcedGroupIds;
             bool skip = false;
-            if (GroupId != 0) {
+            if (GroupId != 0 || StoragePool != "") {
                 skip = true;
                 for (const auto& channel : tablet->TabletStorageInfo->Channels) {
                     if (StoragePool && channel.StoragePool != StoragePool) {
@@ -3274,7 +3287,7 @@ public:
                     }
                     if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
                         const auto* latest = channel.LatestEntry();
-                        if (latest != nullptr && latest->GroupID == GroupId) {
+                        if (latest != nullptr && (GroupId == 0 || latest->GroupID == GroupId)) {
                             skip = false;
                             channels.push_back(channel.Channel);
                             if (!ForcedGroupIds.empty()) {

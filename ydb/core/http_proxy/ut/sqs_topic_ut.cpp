@@ -104,6 +104,36 @@ namespace {
         return GetPathFromFullQueueUrl(url);
     }
 
+    NJson::TJsonMap SendSqsJsonWithHost(
+        THttpProxyTestMock& fixture,
+        const TString& host,
+        const TString& method,
+        NJson::TJsonMap request,
+        const TVector<std::pair<TString, TString>>& extraHeaders = {},
+        const TString& authorizationStr = "")
+    {
+        TString authorization = authorizationStr;
+        constexpr TStringBuf authorizationPrefix = "Authorization: ";
+        if (authorization.StartsWith(authorizationPrefix)) {
+            authorization = authorization.substr(authorizationPrefix.size());
+        }
+        auto res = fixture.SendHttpRequestSpecified(
+            "/Root",
+            TStringBuilder() << "AmazonSQS." << method,
+            request,
+            host,
+            "20150830T123600Z",
+            "sqs-topic-ut",
+            "",
+            authorization,
+            "application/json",
+            extraHeaders);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+        return json;
+    }
+
     NYdb::TDriverConfig MakeDriverConfig(std::derived_from<THttpProxyTestMock> auto& fixture) {
         NYdb::TDriverConfig config;
         config.SetEndpoint("localhost:" + ToString(fixture.KikimrGrpcPort));
@@ -385,6 +415,94 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
         }
 
+        Y_UNIT_TEST_F(TestGetQueueUrlWithTrailingSlashOnEndpoint, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            auto res = SendHttpRequest(
+                "/Root/",
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", topicName}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedPath, GetPathFromQueueUrlMap(json));
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlUsesRequestHost, TNoAuthFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString host = "sqs.ydb.test:8443";
+            auto json = SendSqsJsonWithHost(*this, host, "GetQueueUrl", {{"QueueName", topicName}});
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetByPath<TString>(json, "QueueUrl"),
+                TStringBuilder() << "http://" << host << expectedPath);
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlUsesForwardedHost, TNoAuthFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "GetQueueUrl",
+                {{"QueueName", topicName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                });
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetByPath<TString>(json, "QueueUrl"),
+                TStringBuilder() << "https://" << publicHost << expectedPath);
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueUsesRequestHost, TNoAuthFixture) {
+            const TString queueName = "CreateQueueHost";
+            const TString host = "sqs.ydb.test:8443";
+            auto json = SendSqsJsonWithHost(*this, host, "CreateQueue", {{"QueueName", queueName}});
+            const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+            UNIT_ASSERT(queueUrl.StartsWith(TStringBuilder() << "http://" << host << "/v1/"));
+            UNIT_ASSERT(queueUrl.Contains(queueName));
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueUsesForwardedHost, TNoAuthFixture) {
+            const TString queueName = "CreateQueueForwardedHost";
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "CreateQueue",
+                {{"QueueName", queueName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                });
+            const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+            UNIT_ASSERT(queueUrl.StartsWith(TStringBuilder() << "https://" << publicHost << "/v1/"));
+            UNIT_ASSERT(queueUrl.Contains(queueName));
+        }
+
         Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, TFixture) {
             auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
             TString resultType = GetByPath<TString>(json, "__type");
@@ -456,6 +574,38 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         Y_UNIT_TEST_F(TestGetQueueUrlWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
             TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithTrailingSlashOnFederationEndpoint, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicName = "my_topic";
+            const TString topicPath = TStringBuilder() << "federation/" << topicName;
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            const TString expectedQueueUrl = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                database.size(),
+                database.c_str(),
+                topicName.size(),
+                topicName.c_str(),
+                TStringBuf("my/consumer").size(),
+                "my/consumer");
+            auto res = SendHttpRequest(
+                database + "/",
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedQueueUrl, GetPathFromQueueUrlMap(json));
         }
 
         Y_UNIT_TEST_F(TestDeleteQueueInFederation, TNonFirstClassCitizenFixture) {
@@ -1081,6 +1231,52 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             }
         }
 
+        Y_UNIT_TEST_F(TestListQueuesConvertsConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            auto json = FederationSqsRequest(*this, database, "ListQueues", {});
+            const auto& urls = json["QueueUrls"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(urls.size(), 1);
+            const TString listPath = GetPathFromFullQueueUrl(urls[0]);
+            UNIT_ASSERT(listPath.Contains("my/consumer"));
+            UNIT_ASSERT(!listPath.Contains("my@consumer"));
+
+            auto getJson = FederationSqsRequest(*this, database, "GetQueueUrl", {
+                {"QueueName", "my_topic@my/consumer"},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(listPath, GetPathFromQueueUrlMap(getJson));
+        }
+
+        Y_UNIT_TEST_F(TestListQueuesUsesForwardedHost, TFixture) {
+            const TString queueName = "ListQueuesForwardedHost";
+            const TString consumer = "ydb-sqs-consumer";
+            {
+                auto driver = MakeDriver(*this);
+                Y_ENSURE(CreateTopic(driver, queueName, consumer));
+            }
+
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "ListQueues",
+                {{"QueueNamePrefix", queueName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                },
+                FormAuthorizationStr("ru-central1"));
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
+            const auto& urls = json["QueueUrls"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(urls.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                urls[0].GetString(),
+                TStringBuilder() << "https://" << publicHost << expectedPath);
+        }
+
         struct TSqsTopicPaths {
             TString Database = "/Root";
             TString TopicName = "topic1";
@@ -1436,6 +1632,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 });
 
             const TVector<char> expectedFills = {'a', 'b', 'c'};
+            const TVector<ui64> expectedBaseOffsets = {0, 3, 6};
             size_t receivedCount = 0;
             while (receivedCount < 3) {
                 auto jsonReceived = ReceiveMessage({
@@ -1451,7 +1648,12 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                     UNIT_ASSERT_VALUES_EQUAL(
                         message["Attributes"]["BodyEncoding"].GetString(),
                         ToString(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH)));
-                    NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
+                    NKafka::NTest::AssertKafkaBatchPayload(
+                        Base64Decode(message["Body"].GetString()),
+                        3,
+                        expectedFills[receivedCount],
+                        dataSize,
+                        expectedBaseOffsets[receivedCount]);
                     ++receivedCount;
                 }
             }
@@ -1489,7 +1691,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto messageId = NKikimr::NSqsTopic::V1::DeserializeReceipt(receiptHandle);
             UNIT_ASSERT_C(messageId.has_value(), messageId.error());
 
-            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize, 0);
 
             const TString middleReceiptHandle = NKikimr::NSqsTopic::V1::SerializeReceipt({
                 .PartitionId = messageId->PartitionId,
@@ -1508,7 +1710,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"WaitTimeSeconds", 20},
             });
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
-            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize, 0);
 
             DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", jsonReceived["Messages"][0]["ReceiptHandle"].GetString()}});
 

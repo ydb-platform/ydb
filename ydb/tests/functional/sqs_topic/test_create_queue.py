@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import uuid
+from urllib.parse import urlsplit
 
 import botocore
 
@@ -212,3 +213,16 @@ class TestSqsTopicCreateQueue(KikimrSqsTopicTestBase):
                 pattern='InvalidParameterValue',
             ),
         )
+
+    def test_create_queue_uses_request_endpoint(self):
+        queue_name = self._make_queue_name('create_queue_uses_request_endpoint')
+        request_host = 'sqs-create-queue.test'
+
+        with self._boto_client_with_request_host(request_host) as (origin, client):
+            created_url = client.create_queue(QueueName=queue_name)['QueueUrl']
+
+        self._queue_url = created_url
+        created_path = urlsplit(created_url).path
+        assert_that(created_url, equal_to(origin + created_path))
+        assert_that(created_path.startswith('/v1/'), equal_to(True))
+        assert_that(created_url, contains_string(queue_name))

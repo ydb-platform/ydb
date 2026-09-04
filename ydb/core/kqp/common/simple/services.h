@@ -57,4 +57,9 @@ inline NActors::TActorId MakeKqpDescribeResourceIdServiceId() {
     return NActors::TActorId(0, TStringBuf(name, 12));
 }
 
+inline NActors::TActorId MakeKqpAccessServiceId() {
+    const char name[12] = "kqp_as_srv";
+    return NActors::TActorId(0, TStringBuf(name, 12));
+}
+
 } // namespace NKikimr::NKqp

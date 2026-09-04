@@ -501,6 +501,7 @@ public:
             unpreparedBatch.TotalDataSize += shardBatchMemory;
             Memory += shardBatchMemory;
             unpreparedBatch.Batches.emplace_back(shardBatch);
+            UnpreparedBatchedCount++;
 
             FlushUnpreparedBatch(shardId, unpreparedBatch, force);
         }
@@ -513,6 +514,8 @@ public:
             while (!unpreparedBatch.Batches.empty()) {
                 auto batch = unpreparedBatch.Batches.front();
                 unpreparedBatch.Batches.pop_front();
+                AFL_ENSURE(UnpreparedBatchedCount > 0);
+                UnpreparedBatchedCount--;
                 AFL_ENSURE(batch->num_rows() > 0);
                 const auto batchDataSize = NArrow::GetBatchDataSize(batch);
                 unpreparedBatch.TotalDataSize -= batchDataSize;
@@ -530,6 +533,7 @@ public:
                     if (toPrepareSize + nextRowSize >= (i64)ColumnShardMaxOperationBytes) {
                         toPrepare.push_back(batch->Slice(0, index));
                         unpreparedBatch.Batches.push_front(batch->Slice(index, batch->num_rows() - index));
+                        UnpreparedBatchedCount++;
 
                         const auto newBatchDataSize = NArrow::GetBatchDataSize(unpreparedBatch.Batches.front());
 
@@ -588,7 +592,7 @@ public:
     }
 
     bool IsEmpty() override {
-        return Batches.empty();
+        return UnpreparedBatchedCount == 0 && Batches.empty();
     }
 
     bool IsFinished() override {
@@ -643,7 +647,7 @@ private:
     THashSet<ui64> ShardIds;
 
     i64 Memory = 0;
-
+    ui64 UnpreparedBatchedCount = 0;
     bool Closed = false;
 };
 
@@ -1022,6 +1026,7 @@ private:
 
     bool Closed = false;
 };
+
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -1072,6 +1077,11 @@ private:
 
 template<class TDocId>
 class TFulltextTokenizeProjection : public IFulltextTokenizeProjection {
+    struct TPrefixBuffer {
+        ui64 DocCount = 0;
+        ui64 TotalDocLength = 0;
+        THashMap<TString, THashMap<ui64, ui32>> Tokens;
+    };
 public:
     TFulltextTokenizeProjection(
         TConstArrayRef<NScheme::TTypeInfo> columnTypes,
@@ -1091,7 +1101,7 @@ public:
         , RowBatcher(PrefixSize + 5, std::nullopt, Alloc)
         , DocsBatcher(Added ? 2 + DataColumnCount : 1, std::nullopt, Alloc)
         , DictBatcher(2, std::nullopt, Alloc)
-        , StatsBatcher(3, std::nullopt, Alloc) {
+        , StatsBatcher(PrefixSize ? 2 + PrefixSize : 3, std::nullopt, Alloc) {
         AFL_ENSURE(Indexes.size() == columnTypes.size());
         // Settings/Analyzers are required for fulltext indexes, but not for json
         AFL_ENSURE(settings.columns_size() == 1 ||
@@ -1118,7 +1128,7 @@ public:
             case NScheme::NTypeIds::Json: {
                 TString error;
                 tokens = NJsonIndex::TokenizeJson(text, error);
-                YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                // Ignore errors, JSON is already validated
                 break;
             }
             case NScheme::NTypeIds::JsonDocument:
@@ -1127,14 +1137,14 @@ public:
             default:
                 YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
         }
-        auto& prefixTokens = TokenLists[TSerializedCellVec::Serialize(prefixCells)];
+        auto& prefix = PrefixBuffers[TSerializedCellVec::Serialize(prefixCells)];
         ui32 docLength = 0;
         for (auto& token: tokens) {
-            prefixTokens[token][docId]++;
+            prefix.Tokens[token][docId]++;
             docLength++;
         }
-        DocCount++;
-        TotalDocLength += docLength;
+        prefix.DocCount++;
+        prefix.TotalDocLength += docLength;
         if (WithFreq) {
             // indexImplDocsTable columns: document ID, __ydb_length, data columns
             TVector<TCell> docsCells(Added ? 2 + DataColumnCount : 1);
@@ -1150,26 +1160,18 @@ public:
     }
 
     IDataBatchPtr Flush() override {
-        for (auto& [prefix, prefixTokens]: TokenLists) {
+        for (auto& [prefix, prefixTokens]: PrefixBuffers) {
             FlushPrefix(prefix, prefixTokens);
         }
-        TokenLists.clear();
-        if (WithFreq) {
-            // indexImplStatsTable columns: __ydb_id (always ui32 0), __ydb_doc_count, __ydb_total_doc_length
-            TVector<TCell> statsCells(3);
-            statsCells[0] = TCell::Make((ui32)0);
-            statsCells[1] = TCell::Make(Added ? DocCount : -DocCount);
-            statsCells[2] = TCell::Make(Added ? TotalDocLength : -TotalDocLength);
-            StatsBatcher.AddRow(statsCells);
-        }
+        PrefixBuffers.clear();
         auto result = RowBatcher.Flush(true);
         YQL_ENSURE(RowBatcher.IsEmpty());
         return result;
     }
 
-    void FlushPrefix(const TString& prefix, const THashMap<TString, THashMap<ui64, ui32>>& tokenLists) {
+    void FlushPrefix(const TString& prefix, const TPrefixBuffer& prefixBuffer) {
         TVector<TStringBuf> sortedTokens;
-        for (const auto& [token, docFreqs]: tokenLists) {
+        for (const auto& [token, docFreqs]: prefixBuffer.Tokens) {
             sortedTokens.push_back(token);
         }
         std::sort(sortedTokens.begin(), sortedTokens.end());
@@ -1184,7 +1186,7 @@ public:
         TVector<TCell> dictCells(2);
         NFulltext::TDeltaWriter wr;
         for (const auto& token: sortedTokens) {
-            const auto& docFreqs = tokenLists.at(token);
+            const auto& docFreqs = prefixBuffer.Tokens.at(token);
             TVector<ui64> docIds;
             ui64 totalFreq = 0;
             for (const auto& [docId, freq]: docFreqs) {
@@ -1215,6 +1217,21 @@ public:
                 DictBatcher.AddRow(dictCells);
             }
         }
+        if (WithFreq) {
+            // indexImplStatsTable columns: __ydb_id (always ui32 0) or key prefix,
+            // __ydb_doc_count, __ydb_total_doc_length
+            TVector<TCell> statsCells(PrefixSize ? 2 + PrefixSize : 3);
+            if (!PrefixSize) {
+                statsCells[0] = TCell::Make((ui32)0);
+            } else {
+                for (size_t i = 0; i < PrefixSize; i++) {
+                    statsCells[i] = prefixCells.GetCells().at(i);
+                }
+            }
+            statsCells[PrefixSize ? 0 + PrefixSize : 1] = TCell::Make(Added ? prefixBuffer.DocCount : -prefixBuffer.DocCount);
+            statsCells[PrefixSize ? 1 + PrefixSize : 2] = TCell::Make(Added ? prefixBuffer.TotalDocLength : -prefixBuffer.TotalDocLength);
+            StatsBatcher.AddRow(statsCells);
+        }
     }
 
     IDataBatchPtr FlushDocs() override {
@@ -1244,12 +1261,10 @@ private:
     ui32 DataColumnCount = 0;
     ui32 PrefixSize = 0;
     NScheme::TTypeId TextTypeId = 0;
-    ui64 TotalDocLength = 0;
-    ui64 DocCount = 0;
     bool WithFreq = false;
     bool Added = false;
     Ydb::Table::FulltextIndexSettings::Analyzers Analyzers;
-    THashMap<TString, THashMap<TString, THashMap<ui64, ui32>>> TokenLists;
+    THashMap<TString, TPrefixBuffer> PrefixBuffers;
     TVector<ui32> Indexes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TRowsBatcher RowBatcher;

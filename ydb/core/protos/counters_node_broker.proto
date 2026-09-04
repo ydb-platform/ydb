@@ -14,6 +14,7 @@ enum ESimpleCounters {
     COUNTER_ACTIVE_NODES = 4                [(CounterOpts) = {Name: "ActiveNodes"}];
     COUNTER_EXPIRED_NODES = 5               [(CounterOpts) = {Name: "ExpiredNodes"}];
     COUNTER_REMOVED_NODES = 6               [(CounterOpts) = {Name: "RemovedNodes"}];
+    COUNTER_DEAD_NODES = 7                  [(CounterOpts) = {Name: "DeadNodes"}];
 }
 
 enum ECumulativeCounters {

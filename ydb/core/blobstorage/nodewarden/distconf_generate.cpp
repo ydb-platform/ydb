@@ -127,7 +127,12 @@ namespace NKikimr::NStorage {
             config->Mutable##NAME##Config()->CopyFrom(Cfg->DomainsConfig->GetExplicit##NAME##Config()); \
         } \
         if (!config->Has##NAME##Config()) { \
-            GenerateStateStorageConfig(config->Mutable##NAME##Config(), *config, usedNodes); \
+            std::unordered_set<ui32> nodesToUse; \
+            if (Cfg->SelfManagementConfig && Cfg->SelfManagementConfig->NAME##SelfHealAllowedNodesSize()) { \
+                const auto& allowedNodes = Cfg->SelfManagementConfig->Get##NAME##SelfHealAllowedNodes(); \
+                nodesToUse.insert(allowedNodes.begin(), allowedNodes.end()); \
+            } \
+            GenerateStateStorageConfig(config->Mutable##NAME##Config(), *config, usedNodes, nodesToUse); \
         }
 
         UPDATE_EXPLICIT_CONFIG(StateStorage)
@@ -608,14 +613,40 @@ namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes
+            , const std::unordered_set<ui32>& nodesToUse
             , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
+            , bool automaticManagement
             , ui32 overrideReplicasInRingCount
             , ui32 overrideRingsCount
             , ui32 replicasSpecificVolume
         ) {
+        if (!automaticManagement) {
+            ss->CopyFrom(oldConfig);
+
+            const auto collectNodes = [&](const auto& self, const auto& ring) -> void {
+                for (ui32 nodeId : ring.GetNode()) {
+                    usedNodes.insert(nodeId);
+                }
+                for (const auto& subRing : ring.GetRing()) {
+                    self(self, subRing);
+                }
+            };
+
+            if (oldConfig.HasRing()) {
+                collectNodes(collectNodes, oldConfig.GetRing());
+            }
+            for (const auto& rg : oldConfig.GetRingGroups()) {
+                collectNodes(collectNodes, rg);
+            }
+
+            return true;
+        }
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
+            if (!nodesToUse.empty() && !nodesToUse.contains(node.GetNodeId())) {
+                continue;
+            }
             TNodeLocation location(node.GetLocation());
             TBridgePileId pileId = ResolveNodePileId(location);
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
@@ -624,6 +655,13 @@ namespace NKikimr::NStorage {
             TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes, oldConfig, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
             generator.AddRingGroup(ss);
             goodConfig &= generator.IsGoodConfig();
+        }
+        if (ss->RingGroupsSize() == 0) {
+            // nodesToUse was non-empty, but none of the specified node IDs exist in baseConfig
+            // (e.g. StateStorageSelfHealAllowedNodes referencing decommissioned nodes); avoid
+            // returning a bogus empty state storage config that would trigger a destructive
+            // full reconfiguration.
+            return false;
         }
         return goodConfig;
     }

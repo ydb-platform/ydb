@@ -53,7 +53,7 @@ public:
     void ForgetTablet(ui64 tabletId);
     void RecalcAll();
 
-    TVector<TTabletCounterValue> Find(const TString& name) const;
+    bool Find(const TString& name, TVector<TTabletCounterValue>& results) const;
 
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
@@ -85,7 +85,7 @@ public:
     void ForgetTablet(ui64 tabletId);
     void RecalcAll();
 
-    TVector<TTabletCounterValue> Find(const TString& name) const;
+    bool Find(const TString& name, TVector<TTabletCounterValue>& results) const;
 
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;

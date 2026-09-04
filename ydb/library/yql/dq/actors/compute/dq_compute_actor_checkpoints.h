@@ -20,6 +20,20 @@ enum ECheckpointingMode : int;
 
 namespace NYql::NDq {
 
+/*
+
+Requirements for MKQL Node Compatibility with Checkpoints
+
+- A node must either support checkpoint creation or be stateless.
+- When a node returns `Yield`, any state not saved in the checkpoint must already have been drained from the MKQL node. (e.g. nodes that use spilling are not compatible)
+- A node may return `Yield` only after receiving `Yield` from all streaming inputs initialized during the current run.
+
+  **Note:** If a stateful operator is located in an uninitialized input, checkpoint creation will not succeed, and the coordinator will wait for the next checkpoint.
+
+These requirements also ensure compatibility with watermarks.
+
+*/
+
 class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints>
 {
     struct TCheckpointCoordinatorId {
@@ -71,6 +85,7 @@ public:
         virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void ResumeInputsByCheckpoint() = 0;
+        virtual TString GetTaskDebugState() const = 0;
 
         virtual void Start() = 0;
         virtual void Stop() = 0;

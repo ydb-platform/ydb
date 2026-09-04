@@ -17,6 +17,9 @@
 #include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
 #include <ydb/services/persqueue_v1/actors/helpers.h>
 
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
 #include <util/string/strip.h>
@@ -35,6 +38,10 @@ namespace NGRpcProxy {
 
 using namespace NPersQueue;
 using namespace NSchemeCache;
+
+bool IsKafkaBatchDataChunk(const NKikimrPQClient::TDataChunk& proto) {
+    return proto.HasCodec() && proto.GetCodec() + 1 == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH);
+}
 
 #ifdef PQ_LOG_PREFIX
 #undef PQ_LOG_PREFIX
@@ -2245,6 +2252,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
         if (!proto.has_codec()) {
             proto.set_codec(NPersQueueCommon::RAW);
+        }
+        if (IsKafkaBatchDataChunk(proto)) {
+            NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), r.GetOffset());
         }
 
         TString sourceId = "";

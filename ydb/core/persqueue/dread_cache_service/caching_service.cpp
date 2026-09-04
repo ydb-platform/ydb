@@ -1,4 +1,5 @@
 #include "caching_service.h"
+#include "deadline_map.h"
 
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -8,16 +9,24 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
 namespace NKikimr::NPQ {
 using namespace NActors;
 using namespace Ydb::Topic;
 using namespace NGRpcProxy::V1;
 
+namespace {
+constexpr ui64 ExpireDeadlineMapsWakeupTag = 1;
+constexpr TDuration DeadlineMapWakeupPeriod = TDuration::Minutes(1);
+} // namespace
 
 i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
     if (proto.HasCodec()) {
@@ -26,12 +35,11 @@ i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
     return 0;
 }
 
-#define PQ_CPROXY_LOG_D(message) LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_I(message) LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_W(message) LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_E(message) LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_A(message) LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-
+void SetKafkaBatchBaseOffsetIfNeeded(NKikimrPQClient::TDataChunk& proto, ui64 offset) {
+    if (GetDataChunkCodec(proto) == Ydb::Topic::CODEC_KAFKA_BATCH) {
+        NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), offset);
+    }
+}
 
 class TPQDirectReadCacheService : public TActorBootstrapped<TPQDirectReadCacheService> {
 public:
@@ -42,10 +50,10 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        PQ_CPROXY_LOG_D(": Created");
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: Created");
 
         Become(&TThis::StateWork);
-        Y_UNUSED(ctx);
+        ctx.Schedule(DeadlineMapWakeupPeriod, new TEvents::TEvWakeup(ExpireDeadlineMapsWakeupTag));
     }
 
     STRICT_STFUNC(StateWork,
@@ -58,19 +66,52 @@ public:
           hFunc(TEvPQProxy::TEvDirectReadDataSessionConnected, HandleCreateClientSession)
           hFunc(TEvPQProxy::TEvDirectReadDataSessionDead, HandleDestroyClientSession)
           hFunc(TEvPQProxy::TEvDirectReadDestroyPartitionSession, HandlePartitionSessionReleased)
+          hFunc(TEvents::TEvWakeup, HandleWakeup)
     )
 
 private:
     using TSessionsMap = THashMap<TReadSessionKey, TCacheServiceData>;
 
+    struct TPendingStage {
+        ui32 Generation = 0;
+        std::shared_ptr<NKikimrClient::TResponse> Response;
+    };
+    struct TPendingDirectReads {
+        TMap<ui64, TPendingStage> Stages;
+        TMap<ui64, ui32> Publishes; // readId -> tablet generation
+        TInstant Deadline;
+    };
+    struct TRetiredSession {
+        ui32 Generation = 0;
+        TInstant Deadline;
+    };
+
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != ExpireDeadlineMapsWakeupTag) {
+            return;
+        }
+        const auto& ctx = ActorContext();
+        const auto now = ctx.Now();
+        const auto pendingExpired = PendingBySession.Expire(now);
+        const auto retiredExpired = RetiredSessions.Expire(now);
+        if (pendingExpired || retiredExpired) {
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: expired deadline map entries",
+                {"pending", pendingExpired},
+                {"retired", retiredExpired});
+        }
+        ctx.Schedule(DeadlineMapWakeupPeriod, new TEvents::TEvWakeup(ExpireDeadlineMapsWakeupTag));
+    }
+
     void HandleCreateClientSession(TEvPQProxy::TEvDirectReadDataSessionConnected::TPtr& ev) {
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
-        PQ_CPROXY_LOG_D("client session connected with id '" << key.SessionId << "'");
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: client session connected with id",
+            {"sessionId", key.SessionId});
         ChangeCounterValue("CreateClientSessionRate", 1, false, true);
         auto sessionIter = ServerSessions.find(key);
         if (sessionIter.IsEnd()) {
-            PQ_CPROXY_LOG_D("unknown session id '" << key.SessionId << "', close session");
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: unknown session id close session",
+                {"sessionId", key.SessionId});
             CloseSession(ev->Sender, key.SessionId, Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "Unknown session");
             return;
         }
@@ -123,7 +164,18 @@ private:
             return;
 
         assignIter->second.erase(ev->Get()->ReadKey.PartitionSessionId);
-        ServerSessions.erase(ev->Get()->ReadKey);
+        const auto& key = ev->Get()->ReadKey;
+        auto sessionIter = ServerSessions.find(key);
+        if (!sessionIter.IsEnd()) {
+            MarkSessionRetired(key, sessionIter->second.Generation);
+            ServerSessions.erase(sessionIter);
+            ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);
+        } else {
+            // No server session (e.g. already Deregistered): still retire the key so late
+            // Stage/Publish cannot recreate PendingBySession. Generation is unknown here —
+            // use Max to block all gens until Register clears the tombstone.
+            MarkSessionRetired(key, Max<ui32>());
+        }
     }
 
     void HandleRegister(TEvPQ::TEvRegisterDirectReadSession::TPtr& ev) {
@@ -134,13 +186,21 @@ private:
     void HandleDeregister(TEvPQ::TEvDeregisterDirectReadSession::TPtr& ev) {
         const auto& key = ev->Get()->Session;
         const auto& ctx = ActorContext();
+        const auto generation = ev->Get()->Generation;
 
-        auto destroyDone = DestroyServerSession(ServerSessions.find(key), ev->Get()->Generation);
+        auto destroyDone = DestroyServerSession(ServerSessions.find(key), generation);
+        // Always retire this generation so late Stage/Publish cannot re-create PendingBySession
+        // after Deregister/Release (or after Stage-before-Register for a session that never
+        // registered and then died).
+        MarkSessionRetired(key, generation);
         if (destroyDone) {
-            PQ_CPROXY_LOG_D("server session deregistered: " << key.SessionId);
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: server session",
+                {"deregistered", key.SessionId});
         } else {
-            PQ_CPROXY_LOG_W("attempted to deregister unknown server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with generation " << ev->Get()->Generation << ", ignored");
+            YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to deregister unknown server session with generation ignored",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
+                {"generation", ev->Get()->Generation});
             return;
         }
     }
@@ -150,26 +210,30 @@ private:
         auto sessionKey = MakeSessionKey(ev->Get());
         auto sessionIter = ServerSessions.find(sessionKey);
         if (sessionIter.IsEnd()) {
-            PQ_CPROXY_LOG_E("tried to stage direct read for unregistered session: "
-                            << sessionKey.SessionId << ":" << sessionKey.PartitionSessionId);
+            if (IsSessionGenerationRetired(sessionKey, ev->Get()->TabletGeneration)) {
+                YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop stage for retired session generation",
+                    {"session", sessionKey.SessionId},
+                    {"partitionSessionId", sessionKey.PartitionSessionId},
+                    {"readId", ev->Get()->ReadKey.ReadId},
+                    {"tabletGeneration", ev->Get()->TabletGeneration});
+                return;
+            }
+            // LOGBROKER-10590: CreateSession Register is fire-and-forget; Stage can arrive first.
+            // Dropping it permanently leaves tablet inFlight without client-visible DirectRead.
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer stage for unregistered session",
+                {"session", sessionKey.SessionId},
+                {"partitionSessionId", sessionKey.PartitionSessionId},
+                {"readId", ev->Get()->ReadKey.ReadId},
+                {"tabletGeneration", ev->Get()->TabletGeneration});
+            BufferPendingStage(
+                    sessionKey,
+                    ev->Get()->ReadKey.ReadId,
+                    ev->Get()->TabletGeneration,
+                    ev->Get()->Response);
             return;
         }
-        if (sessionIter->second.Generation != ev->Get()->TabletGeneration) {
-            PQ_CPROXY_LOG_A("tried to stage direct read for session " << sessionKey.SessionId
-                            << " with generation " << ev->Get()->TabletGeneration << ", previously had this session with generation "
-                            << sessionIter->second.Generation << ". Data ignored");
-            return;
-        }
-        auto ins = sessionIter->second.StagedReads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, ev->Get()->Response));
-        if (!ins.second) {
-            PQ_CPROXY_LOG_W("tried to stage duplicate direct read for session " << sessionKey.SessionId << " with id "
-                            << ev->Get()->ReadKey.ReadId << ", new data ignored");
-            return;
-        }
-        ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
-        ChangeCounterValue("StagedReadsCount", 1, false);
-        ChangeCounterValue("StagedReadsRate", 1, false, true);
-        PQ_CPROXY_LOG_D("staged direct read id " << ev->Get()->ReadKey.ReadId << " for session: " << sessionKey.SessionId);
+        StageToSession(sessionIter, ev->Get()->ReadKey.ReadId, ev->Get()->TabletGeneration, ev->Get()->Response);
+        TryApplyPendingPublish(sessionKey, ev->Get()->ReadKey.ReadId);
     }
 
     void HandlePublish(TEvPQ::TEvPublishDirectRead::TPtr& ev) {
@@ -177,48 +241,50 @@ private:
         auto key = MakeSessionKey(ev->Get());
         const auto readId = ev->Get()->ReadKey.ReadId;
         const auto& generation = ev->Get()->TabletGeneration;
-        PQ_CPROXY_LOG_D("publish read: " << readId << " for session " << key.SessionId << ", Generation: " << generation);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: publish for session",
+            {"read", readId},
+            {"sessionId", key.SessionId},
+            {"generation", generation});
 
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
-            PQ_CPROXY_LOG_E("attempt to publish read for unknow session " << key.SessionId << " ignored");
+            if (IsSessionGenerationRetired(key, generation)) {
+                YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop publish for retired session generation",
+                    {"sessionId", key.SessionId},
+                    {"partitionSessionId", key.PartitionSessionId},
+                    {"readId", readId},
+                    {"generation", generation});
+                return;
+            }
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer publish for unregistered session",
+                    {"sessionId", key.SessionId},
+                    {"partitionSessionId", key.PartitionSessionId},
+                    {"readId", readId},
+                    {"generation", generation});
+            BufferPendingPublish(key, readId, generation);
             return;
         }
 
-        if (iter->second.Generation != generation)
-            return;
-
-        auto stagedIter = iter->second.StagedReads.find(readId);
-        if (stagedIter == iter->second.StagedReads.end()) {
-            PQ_CPROXY_LOG_E("attempt to publish unknown read id " << readId << " from session: "
-                            << key.SessionId << " ignored");
-            return;
-        }
-        auto inserted = iter->second.Reads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, stagedIter->second)).second;
-        if (inserted) {
-            ChangeCounterValue("PublishedReadDataSize", stagedIter->second->ByteSize(), false);
-            ChangeCounterValue("PublishedReadsCount", 1, false);
-            ChangeCounterValue("PublishedReadsRate", 1, false, true);
-        }
-        ChangeCounterValue("StagedReadDataSize", -stagedIter->second->ByteSize(), false);
-        ChangeCounterValue("StagedReadsCount", -1, false);
-
-        iter->second.StagedReads.erase(stagedIter);
-
-        SendNextReadToClient(iter);
+        Y_UNUSED(PublishToSession(iter, readId, generation));
     }
 
     void HandleForget(TEvPQ::TEvForgetDirectRead::TPtr& ev) {
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
+        const auto readId = ev->Get()->ReadKey.ReadId;
+        const auto generation = ev->Get()->TabletGeneration;
+        ForgetPending(key, readId, generation);
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
-            PQ_CPROXY_LOG_D("attempt to forget read for unknown session: " << ev->Get()->ReadKey.SessionId << " ignored");
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: attempt to forget read for unknown session ignored",
+                {"session", ev->Get()->ReadKey.SessionId});
             return;
         }
-        PQ_CPROXY_LOG_D("forget read: " << ev->Get()->ReadKey.ReadId << " for session " << key.SessionId);
 
-        const auto& generation = ev->Get()->TabletGeneration;
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: forget for session",
+            {"read", readId},
+            {"sessionId", key.SessionId});
+
         if (iter->second.Generation != generation) { // Stale generation in event, ignore it
             return;
         }
@@ -280,24 +346,296 @@ private:
         const auto& ctx = ActorContext();
         auto sessionsIter = ServerSessions.find(key);
         if (sessionsIter.IsEnd()) {
-            PQ_CPROXY_LOG_D("registered server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with generation " << generation);
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
+                {"generation", generation});
 
+            ClearRetiredSession(key);
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
+            FlushPendingDirectReads(key);
         } else if (sessionsIter->second.Generation == generation) {
-            PQ_CPROXY_LOG_W("attempted to register duplicate server session: " << key.SessionId << ":"
-                            << key.PartitionSessionId << " with same generation " << generation << ", ignored");
-
+            YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to register duplicate server with same generation ignored",
+                {"session", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
+                {"generation", generation});
+            ClearRetiredSession(key);
+            FlushPendingDirectReads(key);
         } else if (DestroyServerSession(sessionsIter, generation)) {
-            PQ_CPROXY_LOG_D("registered server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with generation " << generation
-                            << ", killed existing session with older generation ");
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation killed existing session with older generation",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
+                {"generation", generation});
+            ClearRetiredSession(key);
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
+            FlushPendingDirectReads(key);
         } else {
-            PQ_CPROXY_LOG_I("attempted to register server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with stale generation " << generation << ", ignored");
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: attempted to register server with stale generation ignored",
+                {"session", key.SessionId},
+                {"sessionId", key.PartitionSessionId},
+                {"generation", generation});
         }
         ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);
+    }
+
+    void StageToSession(
+            TSessionsMap::iterator sessionIter,
+            ui64 readId,
+            ui32 tabletGeneration,
+            const std::shared_ptr<NKikimrClient::TResponse>& response)
+    {
+        const auto& ctx = ActorContext();
+        if (sessionIter.IsEnd()) {
+            return;
+        }
+        if (sessionIter->second.Generation != tabletGeneration) {
+            YDB_LOG_ALERT_CTX(ctx, "Direct read cache: Stage generation mismatch, data ignored",
+                {"sessionId", sessionIter->first.SessionId},
+                {"tabletGeneration", tabletGeneration},
+                {"previouslyGeneration", sessionIter->second.Generation});
+            return;
+        }
+        auto ins = sessionIter->second.StagedReads.insert(std::make_pair(readId, response));
+        if (!ins.second) {
+            YDB_LOG_WARN_CTX(ctx, "Direct read cache: tried to stage duplicate direct read, new data ignored",
+                {"sessionId", sessionIter->first.SessionId},
+                {"readId", readId});
+
+            return;
+        }
+        ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
+        ChangeCounterValue("StagedReadsCount", 1, false);
+        ChangeCounterValue("StagedReadsRate", 1, false, true);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: staged direct",
+                {"sessionId", sessionIter->first.SessionId},
+                {"readId", readId});
+    }
+
+    // Returns true if the read was published (or already published). False if generation
+    // mismatches or there is no staged payload for readId yet.
+    [[nodiscard]] bool PublishToSession(TSessionsMap::iterator iter, ui64 readId, ui32 generation) {
+        const auto& ctx = ActorContext();
+        if (iter.IsEnd()) {
+            return false;
+        }
+        if (iter->second.Generation != generation)
+            return false;
+
+        auto stagedIter = iter->second.StagedReads.find(readId);
+        if (stagedIter == iter->second.StagedReads.end()) {
+            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish unknown read id ignored",
+                {"sessionId", iter->first.SessionId},
+                {"readId", readId});
+            return false;
+        }
+        auto inserted = iter->second.Reads.insert(std::make_pair(readId, stagedIter->second)).second;
+        if (inserted) {
+            ChangeCounterValue("PublishedReadDataSize", stagedIter->second->ByteSize(), false);
+            ChangeCounterValue("PublishedReadsCount", 1, false);
+            ChangeCounterValue("PublishedReadsRate", 1, false, true);
+        }
+        ChangeCounterValue("StagedReadDataSize", -stagedIter->second->ByteSize(), false);
+        ChangeCounterValue("StagedReadsCount", -1, false);
+
+        iter->second.StagedReads.erase(stagedIter);
+
+        SendNextReadToClient(iter);
+        return true;
+    }
+
+    void FlushPendingDirectReads(const TReadSessionKey& key) {
+        auto* pending = PendingBySession.Find(key);
+        if (!pending) {
+            return;
+        }
+        auto sessionIter = ServerSessions.find(key);
+        if (sessionIter.IsEnd()) {
+            // Register always inserts the session before flush; keep pending if that invariant breaks.
+            return;
+        }
+
+        const ui32 sessionGeneration = sessionIter->second.Generation;
+        const auto& ctx = ActorContext();
+
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: flush pending stage/publish after register",
+            {"sessionId", key.SessionId},
+            {"partitionSessionId", key.PartitionSessionId},
+            {"sessionGeneration", sessionGeneration},
+            {"stages", pending->Stages.size()},
+            {"publishes", pending->Publishes.size()});
+
+        // Apply only matching generation. Drop stale lower gens; keep higher gens for a later Register.
+        for (auto it = pending->Stages.begin(); it != pending->Stages.end(); ) {
+            if (it->second.Generation == sessionGeneration) {
+                StageToSession(sessionIter, it->first, it->second.Generation, it->second.Response);
+                it = pending->Stages.erase(it);
+            } else if (it->second.Generation < sessionGeneration) {
+                it = pending->Stages.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = pending->Publishes.begin(); it != pending->Publishes.end(); ) {
+            if (it->second == sessionGeneration) {
+                // Keep Publish if Stage for this gen is not staged yet (may arrive after Register).
+                if (sessionIter->second.StagedReads.contains(it->first)
+                        && PublishToSession(sessionIter, it->first, it->second)) {
+                    it = pending->Publishes.erase(it);
+                } else {
+                    ++it;
+                }
+            } else if (it->second < sessionGeneration) {
+                it = pending->Publishes.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (pending->Stages.empty() && pending->Publishes.empty()) {
+            PendingBySession.Erase(key);
+        }
+    }
+
+    // If a Publish was buffered before its Stage (or Stage was dropped as stale lower-gen),
+    // apply it once the matching Stage lands on a registered session.
+    void TryApplyPendingPublish(const TReadSessionKey& key, ui64 readId) {
+        auto* pending = PendingBySession.Find(key);
+        if (!pending) {
+            return;
+        }
+        auto sessionIter = ServerSessions.find(key);
+        if (sessionIter.IsEnd()) {
+            return;
+        }
+        auto publishIt = pending->Publishes.find(readId);
+        if (publishIt == pending->Publishes.end()) {
+            return;
+        }
+        if (publishIt->second != sessionIter->second.Generation) {
+            return;
+        }
+        if (!sessionIter->second.StagedReads.contains(readId)) {
+            return;
+        }
+        if (!PublishToSession(sessionIter, readId, publishIt->second)) {
+            return;
+        }
+        pending->Publishes.erase(publishIt);
+        if (pending->Stages.empty() && pending->Publishes.empty()) {
+            PendingBySession.Erase(key);
+        }
+    }
+
+    TPendingDirectReads& GetOrCreatePending(const TReadSessionKey& key) {
+        return PendingBySession.FindOrInsert(
+            key, TPendingDirectReads{}, ActorContext().Now());
+    }
+
+    // DirectReadIds can repeat across tablet generations; keep the highest generation
+    // (first entry wins for same-generation duplicates). A lower-gen Publish for an
+    // overwritten Stage is dropped.
+    void BufferPendingStage(
+            const TReadSessionKey& key,
+            ui64 readId,
+            ui32 generation,
+            const std::shared_ptr<NKikimrClient::TResponse>& response)
+    {
+        auto& pending = GetOrCreatePending(key);
+        auto it = pending.Stages.find(readId);
+        if (it == pending.Stages.end()) {
+            pending.Stages.emplace(readId, TPendingStage{generation, response});
+            return;
+        }
+        if (generation <= it->second.Generation) {
+            return;
+        }
+        it->second = TPendingStage{generation, response};
+        auto publishIt = pending.Publishes.find(readId);
+        if (publishIt != pending.Publishes.end() && publishIt->second < generation) {
+            pending.Publishes.erase(publishIt);
+        }
+    }
+
+    void BufferPendingPublish(const TReadSessionKey& key, ui64 readId, ui32 generation) {
+        auto& pending = GetOrCreatePending(key);
+        auto stageIt = pending.Stages.find(readId);
+        if (stageIt != pending.Stages.end()) {
+            if (stageIt->second.Generation > generation) {
+                return;
+            }
+            // Publish for a newer generation invalidates a stale Stage of an older generation.
+            if (stageIt->second.Generation < generation) {
+                pending.Stages.erase(stageIt);
+            }
+        }
+        auto it = pending.Publishes.find(readId);
+        if (it == pending.Publishes.end()) {
+            pending.Publishes.emplace(readId, generation);
+            return;
+        }
+        if (generation > it->second) {
+            it->second = generation;
+        }
+    }
+
+    void ForgetPending(const TReadSessionKey& key, ui64 readId, ui32 generation) {
+        auto* pending = PendingBySession.Find(key);
+        if (!pending) {
+            return;
+        }
+        auto stageIt = pending->Stages.find(readId);
+        if (stageIt != pending->Stages.end() && generation >= stageIt->second.Generation) {
+            pending->Stages.erase(stageIt);
+        }
+        auto publishIt = pending->Publishes.find(readId);
+        if (publishIt != pending->Publishes.end() && generation >= publishIt->second) {
+            pending->Publishes.erase(publishIt);
+        }
+        if (pending->Stages.empty() && pending->Publishes.empty()) {
+            PendingBySession.Erase(key);
+        }
+    }
+
+    void MarkSessionRetired(const TReadSessionKey& key, ui32 generation) {
+        const auto now = ActorContext().Now();
+        auto& retired = RetiredSessions.FindOrInsert(
+            key, TRetiredSession{.Generation = generation}, now);
+        retired.Generation = Max(retired.Generation, generation);
+        RetiredSessions.TouchDeadline(key, now);
+
+        const ui32 retiredGeneration = retired.Generation;
+
+        // Drop only pending for generations <= retired. Newer Stage/Publish (e.g. Stage(N)
+        // before Register, then stale Deregister(N-1)) must survive for FlushPending.
+        auto* pending = PendingBySession.Find(key);
+        if (!pending) {
+            return;
+        }
+        for (auto it = pending->Stages.begin(); it != pending->Stages.end(); ) {
+            if (it->second.Generation <= retiredGeneration) {
+                it = pending->Stages.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = pending->Publishes.begin(); it != pending->Publishes.end(); ) {
+            if (it->second <= retiredGeneration) {
+                it = pending->Publishes.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (pending->Stages.empty() && pending->Publishes.empty()) {
+            PendingBySession.Erase(key);
+        }
+    }
+
+    void ClearRetiredSession(const TReadSessionKey& key) {
+        RetiredSessions.Erase(key);
+    }
+
+    bool IsSessionGenerationRetired(const TReadSessionKey& key, ui32 generation) const {
+        const auto* retired = RetiredSessions.Find(key);
+        return retired && generation <= retired->Generation;
     }
 
     template<class TEv>
@@ -369,7 +707,10 @@ private:
                         partSessionId);
         message->set_status(Ydb::StatusIds::SUCCESS);
 
-        PQ_CPROXY_LOG_D("send data to client " << sessionId << ", assignId: " << partSessionId << ", readId: " << readId);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: send data to client",
+            {"sessionId", sessionId},
+            {"assignId", partSessionId},
+            {"readId", readId});
 
         ctx.Send(proxyClient.ProxyId, new TEvPQProxy::TEvDirectReadSendClientData(std::move(message)));
         return true;
@@ -383,7 +724,9 @@ private:
     ) {
         const auto& ctx = ActorContext();
         ctx.Send(proxyId, new TEvPQProxy::TEvDirectReadCloseSession(code, reason));
-        PQ_CPROXY_LOG_D("close session for proxy " << proxyId.ToString() << ", sessionId: " << sessionId);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: close session for proxy",
+            {"proxyId", proxyId},
+            {"sessionId", sessionId});
     }
 
     bool DestroyPartitionSession(
@@ -397,7 +740,9 @@ private:
         ctx.Send(
                 sessionIter->second.Client->ProxyId, new TEvPQProxy::TEvDirectReadDestroyPartitionSession(sessionIter->first, code, reason)
         );
-        PQ_CPROXY_LOG_D("DestroyPartitionSession, sessionId: " << sessionIter->first.SessionId << ", proxy: " << sessionIter->second.Client->ProxyId.ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: DestroyPartitionSession",
+            {"sessionId", sessionIter->first.SessionId},
+            {"proxy", sessionIter->second.Client->ProxyId});
         return true;
     }
 
@@ -475,6 +820,7 @@ private:
             if (!proto.has_codec()) {
                 proto.set_codec(NPersQueueCommon::RAW);
             }
+            SetKafkaBatchBaseOffsetIfNeeded(proto, r.GetOffset());
 
             TString sourceId;
             if (!r.GetSourceId().empty()) {
@@ -538,8 +884,13 @@ private:
             *msgMeta = (proto.GetMessageMeta());
         }
     }
-private:
+
     TSessionsMap ServerSessions;
+    TDeadlineMap<TReadSessionKey, TPendingDirectReads> PendingBySession;
+    // Highest generation for which the session was Deregistered/Released. Late Stage/Publish
+    // with generation <= this value must not re-create PendingBySession after teardown.
+    // Entries expire by TTL (with deadline refresh on each MarkSessionRetired).
+    TDeadlineMap<TReadSessionKey, TRetiredSession> RetiredSessions;
     THashMap<TActorId, TSet<ui64>> AssignByProxy;
 
     ::NMonitoring::TDynamicCounterPtr Counters;

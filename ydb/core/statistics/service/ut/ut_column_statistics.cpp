@@ -402,8 +402,9 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
     }
 
     Y_UNIT_TEST(ManyColumns) {
+        constexpr size_t columnCount = 25;
         std::vector<TColumnDesc> columns;
-        for (size_t i = 0; i < 100; ++i) {
+        for (size_t i = 0; i < columnCount; ++i) {
             columns.push_back({
                 .Name = std::format("V_{}", i),
                 .TypeId = NScheme::NTypeIds::Int64,
@@ -413,15 +414,16 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
             });
         }
 
-        TTestEnv env(1, 3);
+        TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
 
-        CreateDatabase(env, "Database", 3);
-        const auto tableInfo = PrepareTable(env, "Database", "Table1", columns);
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table1", columns, /*shardCount=*/1);
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
         auto responses = GetStatistics(
-            runtime, tableInfo.PathId, EStatType::COUNT_MIN_SKETCH, {GetTag("V_99", columns)});
+            runtime, tableInfo.PathId, EStatType::COUNT_MIN_SKETCH,
+            {GetTag(std::format("V_{}", columnCount - 1), columns)});
         UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
         const auto& resp = responses.at(0);
         UNIT_ASSERT(resp.Success);

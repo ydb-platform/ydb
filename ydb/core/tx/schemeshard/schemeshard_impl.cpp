@@ -9547,7 +9547,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "SendBaseStatsToSA() No tables to send"
             << ", at schemeshard: " << TabletID());
-        return TDuration::Seconds(30);
+        return TDuration::Seconds(Max<ui32>(1, AppData()->StatisticsConfig.GetBaseStatsSendInitialDelaySeconds()));
     }
 
     record.SetAreAllStatsFull(incompleteCount == 0);

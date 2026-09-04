@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -624,9 +625,18 @@ public:
             return result;
         }
 
-        TPath path = pathId
-            ? TPath::Init(pathId, context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        // (e) slice 4: take the target from the plan when the plan resolved one, so this part
+        // and the record the outbox writes are the same answer rather than two that agree.
+        // Falls back to resolving for every shape the plan cannot supply an id for -- a
+        // by-name alter, or a part built outside IgniteOperation and never admitted.
+        //
+        // Safe to adopt because it was measured first, not assumed: with the divergence check
+        // armed and fatal, 53 suites reported no disagreement between these two routes
+        // (OK 3327). The check below still guards the fallback path.
+        const auto plannedPathId = FindPlanTargetPathId(context.SS, OperationId);
+        TPath path = plannedPathId
+            ? TPath::Init(*plannedPathId, context.SS)
+            : TPath::ResolveTarget(pathId, parentPathStr, name, context.SS);
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -652,6 +662,35 @@ public:
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
+        }
+
+        // (e) slice 3, measurement only: this part and its declaration resolved the same
+        // request by different routes, so compare them once the target is known good.
+        // TAlterTable is the right family to start with -- it is where E29's owner-id
+        // divergence lived, and it writes no path row at all, so the forward cross-check
+        // cannot see a wrong path here even in principle.
+        //
+        // Only reports; it does not yet resolve *from* the plan. Turning a suspicion into a
+        // measurement across the whole suite has to come before any part changes how it
+        // resolves, or the change lands with no evidence about what it altered.
+        // Only on the fallback. When the path came from the plan the comparison is against
+        // itself and cannot fail, and a check that cannot fail is worse than none -- it reads
+        // as coverage. This keeps it pointed at the one route that still computes its own
+        // answer.
+        const std::optional<TString> divergence = plannedPathId
+            ? std::optional<TString>()
+            : FindPlanDivergence(context.SS, OperationId, path.PathString());
+        if (const auto& declaredPath = divergence) {
+            Y_ABORT_UNLESS(!context.SS->PathCheckModes.DivergenceIsFatal,
+                "part resolved a different path than its plan declared: resolved %s, declared"
+                " %s, txId: %" PRIu64 ", subTxId: %" PRIu64,
+                path.PathString().c_str(), declaredPath->c_str(),
+                ui64(OperationId.GetTxId()), ui64(OperationId.GetSubTxId()));
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "plan divergence"
+                    << ", resolved: " << path.PathString()
+                    << ", declared: " << *declaredPath
+                    << ", opId: " << OperationId);
         }
 
         THashSet<TString> localSequences;
@@ -799,6 +838,72 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpAlterTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterTable>(
+    TAffectedESchemeOpAlterTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    // TAlterTable::Propose (this file) and CreateConsistentAlterTable both prefer the
+    // pathId over the name when both are present; Id_Deprecated is the legacy scalar form.
+    //
+    // The full TPathId, not GetLocalId(): Propose resolves TPathId::FromProto(GetPathId())
+    // at :610, so taking only the local id and letting MakeLocalId supply this tablet as the
+    // owner would declare a different object than Propose mutates whenever the path is owned
+    // by another schemeshard. Id_Deprecated has no owner to lose and stays local.
+    const TPathId pathId = alter.HasPathId()
+        ? TPathId::FromProto(alter.GetPathId())
+        : alter.HasId_Deprecated() ? context.SS->MakeLocalId(alter.GetId_Deprecated())
+        : TPathId();
+    TAffectedPaths result =
+        DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(), pathId);
+
+    // Two alter shapes reach past the table into its index children, both by walking
+    // GetChildren() at propose time, so which paths they touch depends on state rather than
+    // on the request: turning EnableFilterByKey off drops every local bloom index
+    // (CreateConsistentAlterTable via CollectLocalBloomIndexNames + AddDropIndex), and a
+    // DetailedMetricsSettings alter is fanned out to every index impl table
+    // (AppendIndexImplTableMetricsAlters). Conditional rather than blanket: alter is the
+    // most common operation there is, and marking it Incomplete unconditionally would give
+    // up the cross-check on all of it to cover three branches. The third goes the other way
+    // and *creates* index children: TableIndexes on the alter is the add-an-index request
+    // (:1036), whose paths are named relative to the table rather than to WorkingDir.
+    //
+    // All three shapes expand into constructed parts (AddDropIndex, the per-impl-table
+    // AlterTable fan-out, the add-an-index parts), and IgniteOperation asks each part for its
+    // own declaration before proposing it -- so alter, the most common operation there is,
+    // keeps its cross-check instead of giving it up. Verified rather than assumed: with no
+    // Incomplete here the schemeshard suites stay green under the cross-check.
+    return result;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpFinalizeBuildIndexImplTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpFinalizeBuildIndexImplTable>(
+    TAffectedESchemeOpFinalizeBuildIndexImplTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // CreateFinalizeBuildIndexImplTable (below) constructs a plain TAlterTable -- the same
+    // Propose class as ESchemeOpAlterTable above -- reading the same tx.GetAlterTable(). Its
+    // synthesis site (index/operation_apply_build_index.cpp FinalizeIndexImplTable) sets only
+    // the name, never a PathId, so declare by name alone.
+    const auto& alter = tx.GetAlterTable();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterTable>(id, tx);
@@ -1063,9 +1168,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    TPath path = pathId
-        ? TPath::Init(pathId, context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+    TPath path = TPath::ResolveTarget(pathId, parentPathStr, name, context.SS);
 
     if (!path.IsResolved()) {
         return {CreateAlterTable(id, tx)};

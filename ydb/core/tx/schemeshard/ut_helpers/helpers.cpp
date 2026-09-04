@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include "schemeshard_counters.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -230,6 +231,12 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
 
         CheckExpectedResult(expectedResults, event->Record.GetStatus(), event->Record.GetReason());
+
+        // No check here. The cross-check is enforced inside the schemeshard at the
+        // write itself (TSchemeShard::ObservePathTouched), which still covers every
+        // modification in every suite. Asserting from here meant polling a counter over an
+        // edge event after every modification: far more expensive -- it timed out the reboot
+        // suites -- and further from the failure than the write that caused it.
         return event->Record.GetStatus();
     }
 

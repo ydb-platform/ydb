@@ -1,11 +1,17 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_affected_paths.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_plan.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 
+#include <util/generic/scope.h>
+#include <util/string/join.h>
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -18,6 +24,281 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardTest) {
+
+    // Guards the affected-paths declaration against drifting from what the operation
+    // actually writes: every path-row write reports to ObservePathTouched, which counts
+    // the ones the operation did not declare.
+    Y_UNIT_TEST(MkDirDeclaresEveryPathItTouches) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCumulativeCounter(runtime, "SchemeShard/UndeclaredPathTouch"), 0,
+            "MkDir wrote a path row it had not declared");
+    }
+
+    // The cross-check is armed by constructing a TTestEnv, which is invisible from any
+    // individual test -- so if that wiring is ever removed, every suite would keep passing
+    // while checking nothing. This asserts the check is on, so the check being on is itself
+    // checked. It is the one thing here that cannot be caught by the check itself.
+    Y_UNIT_TEST(DeclaredPathsCrossCheckIsArmed) {
+        UNIT_ASSERT_C(!NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal,
+            "expected the cross-check to be off before a test environment exists");
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        UNIT_ASSERT_C(NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal,
+            "TTestEnv no longer arms the affected-paths cross-check: every schemeshard suite "
+            "would now pass without verifying any declaration");
+    }
+
+    // The switches above are the process-wide *default*; each tablet copies them once at
+    // construction and owns its answer thereafter. This asserts that copy really is per
+    // tablet, because the property only shows up with more than one schemeshard -- exactly
+    // the extsubdomain and serverless configurations, where a process-wide flag would force
+    // the root and a tenant to be armed together.
+    // (b): the planning pass is pure and runs before anything is constructed or proposed --
+    // declarations at schemeshard__operation.cpp:303-376, first ConstructParts at :433. The
+    // question that decides whether it needs a namespace overlay is this one: when a create
+    // names a path whose intermediate directories do not exist yet, does the plan computed
+    // *before* those directories are made still name them all?
+    //
+    // It does, and the reason is that a create declares by string arithmetic
+    // (CanonizePath/JoinPath/ExtractParent) rather than by resolving against live state, so
+    // it is indifferent to whether the directories exist yet. See E36.
+    Y_UNIT_TEST(NestedCreatePlanNamesDirectoriesMadeForIt) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        THashMap<ui64, THashSet<TString>> plans;
+        NKikimr::NSchemeShard::CompletedPlanSink = &plans;
+        Y_DEFER { NKikimr::NSchemeShard::CompletedPlanSink = nullptr; };
+
+        // Neither DirA nor DirA/DirB exists; both are auto-created by the split.
+        const ui64 createTxId = ++txId;
+        TestCreateTable(runtime, createTxId, "/MyRoot", R"(
+            Name: "DirA/DirB/Table1"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, createTxId);
+
+        auto it = plans.find(createTxId);
+        UNIT_ASSERT_C(it != plans.end(), "the create completed without recording a plan");
+        const THashSet<TString>& plan = it->second;
+
+        for (const TString& expected : {
+                TString("/MyRoot/DirA"),
+                TString("/MyRoot/DirA/DirB"),
+                TString("/MyRoot/DirA/DirB/Table1")}) {
+            UNIT_ASSERT_C(plan.contains(expected),
+                "plan omits " << expected << ", computed before that directory existed: "
+                    << JoinSeq(", ", plan));
+        }
+    }
+
+    // ---- Pilot: ESchemeOpCreateTable planned under the new model (see
+    // .omc/plans/pilot-create-table.md). Asserts the plan itself, not behaviour inferred from
+    // it, which is the property the older model could never be asked about directly.
+
+    Y_UNIT_TEST(PilotPlanBareCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimr::NSchemeShard::TLogicalOperationPlan plan;
+        NKikimr::NSchemeShard::LastPlannedOperation = &plan;
+        Y_DEFER { NKikimr::NSchemeShard::LastPlannedOperation = nullptr; };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& effects = plan.GetEffects();
+        UNIT_ASSERT_VALUES_EQUAL(effects.size(), 2u);
+
+        // Paths are database-relative: "/Table1", not "/MyRoot/Table1".
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[0].Path.Value()), "/Table1");
+        UNIT_ASSERT(effects[0].Role == NKikimr::NSchemeShard::EPlanRole::Target);
+        UNIT_ASSERT(effects[0].Effect == NKikimr::NSchemeShard::EPlanEffect::Create);
+        UNIT_ASSERT(effects[0].Origin == NKikimr::NSchemeShard::EPlanOrigin::RequestNamed);
+        // No id: the object does not exist when the plan is built.
+        UNIT_ASSERT(!effects[0].PathId.has_value());
+
+        // The database root itself is the container, and it does bump DirAlterVersion, so the
+        // write is demanded rather than merely permitted (create_table.cpp:785).
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[1].Path.Value()), "/");
+        UNIT_ASSERT(effects[1].Role == NKikimr::NSchemeShard::EPlanRole::Container);
+        UNIT_ASSERT(effects[1].Effect == NKikimr::NSchemeShard::EPlanEffect::ChildrenChanged);
+        UNIT_ASSERT(effects[1].Expect == NKikimr::NSchemeShard::EPlanObservation::MustWrite);
+    }
+
+    Y_UNIT_TEST(PilotPlanNestedCreateNamesTheDeepParent) {
+        // A relative Name is split before the sub-operation exists, and the tx is rewritten so
+        // WorkingDir becomes the deepest directory. Deriving the container from WorkingDir is
+        // therefore right only after the rewrite -- computing it from the target's parent is
+        // right either way, which is what the planner does.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimr::NSchemeShard::TLogicalOperationPlan plan;
+        NKikimr::NSchemeShard::LastPlannedOperation = &plan;
+        Y_DEFER { NKikimr::NSchemeShard::LastPlannedOperation = nullptr; };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "DirA/DirB/Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& effects = plan.GetEffects();
+        UNIT_ASSERT_VALUES_EQUAL(effects.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[0].Path.Value()), "/DirA/DirB/Table1");
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[1].Path.Value()), "/DirA/DirB");
+
+        // The generated directories are not this operation's semantic effects -- they are
+        // separate MkDir transactions of the same TxId. A consumer replaying the DDL gets them
+        // from the target database's own split, so the plan must not offer them here.
+        for (const auto& effect : effects) {
+            UNIT_ASSERT_C(effect.Origin != NKikimr::NSchemeShard::EPlanOrigin::PartDerived,
+                "the CreateTable part's own plan should carry no decomposition artefacts");
+        }
+    }
+
+    Y_UNIT_TEST(PilotPlanCopyNamesSourceAndDroppedStreams) {
+        // The case that took six rounds to find the first time: a *create* that drops paths
+        // beneath a table it is only reading from. The write sits ~95 lines from every other
+        // Persist* in the copy's Propose, which is why reading adjacent lines missed it.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Src"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Src"
+            StreamDescription {
+              Name: "Stream1"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NKikimr::NSchemeShard::TLogicalOperationPlan plan;
+        NKikimr::NSchemeShard::LastPlannedOperation = &plan;
+        Y_DEFER { NKikimr::NSchemeShard::LastPlannedOperation = nullptr; };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Dst"
+            CopyFromTable: "/MyRoot/Src"
+            DropSrcCdcStream { StreamName: "Stream1" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        bool sawSource = false;
+        bool sawDroppedStream = false;
+        for (const auto& effect : plan.GetEffects()) {
+            if (TString(effect.Path.Value()) == "/Src") {
+                sawSource = true;
+                UNIT_ASSERT(effect.Role == NKikimr::NSchemeShard::EPlanRole::Source);
+                // Altered, not merely referenced: the copy moves it to EPathStateCopying.
+                UNIT_ASSERT(effect.Effect == NKikimr::NSchemeShard::EPlanEffect::Alter);
+            }
+            if (TString(effect.Path.Value()) == "/Src/Stream1") {
+                sawDroppedStream = true;
+                UNIT_ASSERT(effect.Effect == NKikimr::NSchemeShard::EPlanEffect::Drop);
+            }
+        }
+        UNIT_ASSERT_C(sawSource, "plan omits the table being copied from");
+        UNIT_ASSERT_C(sawDroppedStream,
+            "plan omits the cdc stream this create drops beneath its source");
+    }
+
+    Y_UNIT_TEST(PathCheckModesAreHeldPerTablet) {
+        // Reaches the live tablet the way ut_counters does, since the modes are internal
+        // state with no wire representation.
+        NKikimr::NSchemeShard::TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new NKikimr::NSchemeShard::TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+
+        UNIT_ASSERT_C(schemeshard, "no schemeshard was constructed");
+        UNIT_ASSERT_C(schemeshard->PathCheckModes.UndeclaredTouchIsFatal,
+            "the tablet did not take the armed default at construction");
+
+        // The real property: the tablet owns its answer. Flipping the process-wide default
+        // afterwards must not reach a tablet that already exists -- otherwise arming or
+        // disarming for one schemeshard would silently move every other one in the process,
+        // which is what made a per-tablet mode necessary in the first place.
+        const bool savedDefault = NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal;
+        NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal = false;
+        Y_DEFER { NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal = savedDefault; };
+
+        UNIT_ASSERT_C(schemeshard->PathCheckModes.UndeclaredTouchIsFatal,
+            "the tablet still reads the process-wide switch, so two schemeshards cannot hold "
+            "different path-check modes");
+    }
+
+    // Batch harness for the migration: exercise many object types in one run and assert
+    // the counter once. Each newly migrated operation gets a line here rather than its own
+    // test, so verifying a family costs one build instead of one per operation.
+    Y_UNIT_TEST(MigratedOpsDeclareEveryPathTheyTouch) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot/DirA", "Nested");
+        env.TestWaitNotification(runtime, txId);
+        TestRmDir(runtime, ++txId, "/MyRoot/DirA", "Nested");
+        env.TestWaitNotification(runtime, txId);
+        TestRmDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateKesus(runtime, ++txId, "/MyRoot", "Name: \"Kesus0\"");
+        env.TestWaitNotification(runtime, txId);
+        TestDropKesus(runtime, ++txId, "/MyRoot", "Kesus0");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCumulativeCounter(runtime, "SchemeShard/UndeclaredPathTouch"), 0,
+            "a migrated operation wrote a path row it had not declared");
+    }
+
+    Y_UNIT_TEST(RmDirDeclaresEveryPathItTouches) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+        TestRmDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCumulativeCounter(runtime, "SchemeShard/UndeclaredPathTouch"), 0,
+            "MkDir or RmDir wrote a path row it had not declared");
+    }
     Y_UNIT_TEST(Boot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

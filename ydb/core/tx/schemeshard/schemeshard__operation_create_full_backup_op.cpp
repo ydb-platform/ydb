@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
@@ -151,6 +152,43 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 };
+
+using TAffectedESchemeOpCreateFullBackupOp =
+    TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateFullBackupOp>(
+    TAffectedESchemeOpCreateFullBackupOp,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // The target is WorkingDir itself, not a child of it: Propose resolves WorkingDir and
+    // requires IsBackupCollection(), then opens its TxState on that path id. Declaring a
+    // child here -- the shape every other create has -- would name a path that does not exist.
+    //
+    // Complete despite the name: the copies this op eventually drives are separate
+    // operations with declarations of their own. Within this one, only the collection is
+    // touched.
+    const TPath collection = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+    if (!collection.IsResolved()) {
+        TAffectedPaths unresolved;
+        unresolved.Unresolved = true;
+        return unresolved;
+    }
+
+    TAffectedPaths result;
+    result.Paths.push_back(TAffectedPath{
+        .Locator = TAffectedPath::ELocator::ByPathId,
+        .Role = TAffectedPath::ERole::Target,
+        .Path = collection.PathString(),
+        .PathId = collection.Base()->PathId,
+    });
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewFullBackupOp(TOperationId opId, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateFullBackupOp>(opId, tx);

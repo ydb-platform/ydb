@@ -16,6 +16,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_affected_paths.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
@@ -623,6 +624,15 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , ChannelsCount(opts.NChannels_)
 {
     EnableYDBBacktraceFormat();
+
+    // Every schemeshard suite goes through here, so the affected-paths cross-check is armed
+    // by constructing a test environment rather than by an env var or a per-suite ya.make
+    // line. A suite added tomorrow gets it without anyone remembering to opt in, which is
+    // the only version of this that survives contact with a growing codebase.
+    NSchemeShard::UndeclaredPathTouchIsFatal = opts.CheckDeclaredPaths_;
+    NSchemeShard::UnfulfilledPathDeclarationIsFatal = opts.CheckDeclaredPaths_;
+    NSchemeShard::PlanDivergenceIsFatal = opts.CheckDeclaredPaths_;
+
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
     ui64 coordinator = TTestTxConfig::Coordinator;

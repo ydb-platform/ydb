@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -298,9 +299,9 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = TPath::ResolveTarget(
+            drop.HasId() ? context.SS->MakeLocalId(drop.GetId()) : TPathId(),
+            parentPathStr, name, context.SS);
 
         {
             TPath::TChecker checks = path.Check();
@@ -376,6 +377,38 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpForceDropExtSubDomain = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropExtSubDomain>(
+    TAffectedESchemeOpForceDropExtSubDomain,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // Declared, not waved at: ListSubTree already runs at :212 and :237.
+    //
+    // includeRoot was false here, on the reasoning that :213 does paths.erase(pathId) before
+    // DropPaths -- deliberately, so the extsubdomain root stays resolvable while its nodes can
+    // still reconnect -- so the root is not among the rows this drop *writes*.
+    //
+    // That reasoning was about writes, and this is a plan of semantic effects. Dropping
+    // /MyRoot/USER_0 is an effect on /MyRoot/USER_0 whether or not its path row is rewritten,
+    // and a plan that omits it tells Schema CDC nothing happened to the database that was just
+    // dropped. The operation agrees: it creates tx state targeting the root, which is how the
+    // CreateTx membership check found this.
+    //
+    // So the root is declared, with the default MayWrite rather than MustWrite -- the write
+    // genuinely may not happen, and demanding one would be the over-claim E22/E23 warn about.
+    const auto& drop = tx.GetDrop();
+    return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0, /*includeRoot=*/true,
+        TAffectedPath::EEffect::Drop);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropExtSubdomain>(id, tx);

@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -428,6 +429,22 @@ namespace NKikimr::NSchemeShard {
         };
 
     }
+
+    using TAffectedESchemeOpCreateBlobDepot = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot>;
+
+    namespace NOperation {
+
+    template <>
+    std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateBlobDepot>(
+        TAffectedESchemeOpCreateBlobDepot,
+        const TTxTransaction& tx,
+        const TOperationContext& context)
+    {
+        Y_UNUSED(context);
+        return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetBlobDepot().GetName());
+    }
+
+    } // namespace NOperation
 
     ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, const TTxTransaction& tx) { return MakeIntrusive<TBlobDepot>(EAction::Create, id, tx); }
     ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, TTxState::ETxState state) { return MakeIntrusive<TBlobDepot>(EAction::Create, id, state); }

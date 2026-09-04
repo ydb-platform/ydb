@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -568,6 +569,45 @@ private:
 }; // TAlterReplication
 
 } // anonymous
+
+using TAffectedESchemeOpAlterReplication = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication>;
+using TAffectedESchemeOpAlterTransfer = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterReplication>(
+    TAffectedESchemeOpAlterReplication,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // TAlterReplication::Propose (this file, shared by Replication and Transfer) prefers
+    // pathId (a TPathID proto) over Name when present.
+    const auto& op = tx.GetAlterReplication();
+    // The full TPathId: Propose resolves TPathId::FromProto(op.GetPathId()), so passing only
+    // GetLocalId() would let MakeLocalId substitute this tablet as the owner and declare a
+    // different object for any path owned by another schemeshard.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetName(),
+        op.HasPathId() ? TPathId::FromProto(op.GetPathId()) : TPathId());
+}
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterTransfer>(
+    TAffectedESchemeOpAlterTransfer,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // Same TAlterReplication::Propose (this file), reused for Transfer via TTransferStrategy;
+    // the wire proto is still TReplicationDescription (GetAlterReplication).
+    const auto& op = tx.GetAlterReplication();
+    // The full TPathId: Propose resolves TPathId::FromProto(op.GetPathId()), so passing only
+    // GetLocalId() would let MakeLocalId substitute this tablet as the owner and declare a
+    // different object for any path owned by another schemeshard.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetName(),
+        op.HasPathId() ? TPathId::FromProto(op.GetPathId()) : TPathId());
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterReplication(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterReplication>(id, tx, &ReplicationStrategy);

@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -549,6 +550,40 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpMoveTableIndex = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpMoveTableIndex>(
+    TAffectedESchemeOpMoveTableIndex,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    const auto& move = tx.GetMoveTableIndex();
+    TAffectedPaths result;
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Source,
+        .Path = move.GetSrcPath(),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Container,
+        .Path = TString(ExtractParent(move.GetSrcPath())),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Target,
+        .Path = move.GetDstPath(),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Container,
+        .Path = TString(ExtractParent(move.GetDstPath())),
+    });
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMoveTableIndex>(id, tx);

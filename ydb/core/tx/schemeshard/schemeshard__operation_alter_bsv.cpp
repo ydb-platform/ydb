@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -417,9 +418,9 @@ public:
             return result;
         }
 
-        TPath path = alter.HasPathId()
-            ? TPath::Init(pathId, context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = TPath::ResolveTarget(
+            pathId,
+            parentPathStr, name, context.SS);
 
         {
             TPath::TChecker checks = path.Check();
@@ -653,6 +654,23 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpAlterBlockStoreVolume = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterBlockStoreVolume>(
+    TAffectedESchemeOpAlterBlockStoreVolume,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterBlockStoreVolume();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(),
+        alter.HasPathId() ? alter.GetPathId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterBSV(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterBlockStoreVolume>(id, tx);

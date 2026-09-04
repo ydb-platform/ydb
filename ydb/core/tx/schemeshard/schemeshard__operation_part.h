@@ -3,6 +3,7 @@
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_side_effects.h"
+#include "schemeshard_operation_plan.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
@@ -238,6 +239,45 @@ class TSubOperationBase: public ISubOperation {
 protected:
     const TOperationId OperationId;
     const TTxTransaction Transaction;
+
+    // The effects this part owns, handed over when the part is built -- the same way its
+    // transaction is. Optional rather than empty-by-default, because "this part has no plan"
+    // and "this part's plan names nothing" are different facts and must not look alike.
+    std::optional<TVector<TPlannedPathEffect>> PlannedEffects;
+    TString PlannedDatabaseRoot;
+
+public:
+    // The database root comes with the effects, because their paths are stored relative to it
+    // and the part must be able to produce an absolute path without re-deriving one.
+    void SetPlannedEffects(TVector<TPlannedPathEffect> effects, TString databaseRoot) {
+        PlannedEffects = std::move(effects);
+        PlannedDatabaseRoot = std::move(databaseRoot);
+    }
+
+    bool HasPlan() const {
+        return PlannedEffects.has_value();
+    }
+
+protected:
+    // The path the plan holds for this role.
+    //
+    // Takes no fallback argument, deliberately. An earlier version was
+    // PlannedPath(role, ownResolution, context), which required the call site to derive the
+    // path anyway in order to pass it -- so the second computation was not removed, only moved
+    // into an argument, and the API defeated the thing it exists for.
+    //
+    // Total where it applies: the plan carries the path itself (database-relative, plus the
+    // root), so it can answer whether or not the object exists yet. An id gives the object
+    // directly; without one the plan's own path string is resolved. Callers ask HasPlan()
+    // first; a part that is planned and lacks the role it needs is a planning bug and aborts,
+    // because a quiet fallback there is what let a copy part bind the main table's source.
+    TPath PlannedPath(EPlanRole role, TOperationContext& context) const;
+
+    // Every planned path for a role/effect pair, in plan order. For the repeated case -- a copy
+    // that drops several streams beneath its source -- where one path per request entry is
+    // needed and diving from the source would be a derivation again.
+    TVector<TPath> PlannedPaths(EPlanRole role, EPlanEffect effect,
+        TOperationContext& context) const;
 
 public:
     explicit TSubOperationBase(const TOperationId& id)

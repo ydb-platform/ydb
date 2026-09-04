@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -561,6 +562,22 @@ bool SetName<TTag>(
 {
     tx.MutableCreateColumnStore()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateColumnStore = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateColumnStore>(
+    TAffectedESchemeOpCreateColumnStore,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateColumnStore().GetName());
 }
 
 } // namespace NOperation

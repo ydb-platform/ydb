@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
 #include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
 #include <ydb/core/tx/schemeshard/olap/statistics/update.h>
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -890,6 +891,43 @@ bool SetName<TTag>(
 {
     tx.MutableCreateColumnTable()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateColumnTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateColumnTable>(
+    TAffectedESchemeOpCreateColumnTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    const auto& create = tx.GetCreateColumnTable();
+    TAffectedPaths result = DeclareChildOfWorkingDir(tx.GetWorkingDir(), create.GetName());
+
+    // CopyFromTable routes this to TReadOnlyCopyColumnTable (read_only_copy_table.cpp:401),
+    // which writes the source's path row too -- it takes a shared-shard reference on it, and
+    // dropping either side later rewrites the other's ownership. The source is an absolute
+    // path, not a child of WorkingDir, so it needs naming in its own right; a create that
+    // only ever declared its destination would miss half of what a copy touches.
+    if (create.HasCopyFromTable()) {
+        result.Paths.push_back(TAffectedPath{
+            .Role = TAffectedPath::ERole::Source,
+            .Path = create.GetCopyFromTable(),
+        });
+    }
+
+    // An inline schema carrying Indexes makes this CreateColumnTableWithLocalIndexes, which
+    // appends a create part per index.
+    // No Incomplete. This expands into constructed parts, and IgniteOperation asks each
+    // part for its own declaration before proposing it, so their paths are covered.
+    // Verified rather than assumed: with this removed the schemeshard suites stay green
+    // under the cross-check.
+    return result;
 }
 
 } // namespace NOperation

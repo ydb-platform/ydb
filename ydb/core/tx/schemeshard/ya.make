@@ -96,6 +96,9 @@ SRCS(
     defs.h
     operation_queue_timer.h
     schemeshard.cpp
+    schemeshard__affected_paths.cpp
+    schemeshard__affected_paths_other.cpp
+    schemeshard__affected_paths_traits.h
     schemeshard__background_cleaning.cpp
     schemeshard__background_compaction.cpp
     schemeshard__backup_collection_common.cpp
@@ -243,6 +246,7 @@ SRCS(
     schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
+    schemeshard_affected_paths.h
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
@@ -271,10 +275,13 @@ SRCS(
     schemeshard_cdc_stream_scan.cpp
     schemeshard_continuous_backup_cleaner.cpp
     schemeshard_incremental_restore_scan.cpp
+    schemeshard_database_relative_path.cpp
+    schemeshard_database_relative_path.h
     schemeshard_domain_links.cpp
     schemeshard_domain_links.h
     schemeshard_effective_acl.cpp
     schemeshard_effective_acl.h
+    schemeshard_operation_plan.h
     schemeshard_scheme_builders.cpp
     schemeshard_scheme_builders.h
     schemeshard_export.cpp

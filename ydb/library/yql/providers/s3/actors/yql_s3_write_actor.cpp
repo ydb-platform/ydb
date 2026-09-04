@@ -583,7 +583,7 @@ private:
         Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
     }
 
-    void LoadState(const TSinkState&) final {}
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) final {}
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;

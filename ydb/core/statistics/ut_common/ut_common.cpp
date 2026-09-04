@@ -53,8 +53,22 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     Settings->AddStoragePoolType("hdd1");
     Settings->AddStoragePoolType("hdd2");
     Settings->SetColumnShardAlterObjectEnabled(true);
-    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(6);
-    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(6);
+    auto* stats = Settings->AppConfig->MutableStatisticsConfig();
+    stats->SetBaseStatsSendInitialDelaySeconds(3);
+    stats->SetBaseStatsSendIntervalSecondsDedicated(1);
+    stats->SetBaseStatsSendIntervalSecondsServerless(1);
+    stats->SetBaseStatsPropagateIntervalSecondsDedicated(1);
+    stats->SetBaseStatsPropagateIntervalSecondsServerless(1);
+
+    // Speed up datashard partition stats reporting (default 10s) so that
+    // schemeshard gets full stats faster, especially after reboots.
+    Settings->AppConfig->MutableDataShardConfig()->SetStatsReportIntervalSeconds(1);
+
+    // Speed up columnshard periodic stats reporting (default 60s) so that
+    // schemeshard gets full stats faster, especially after reboots.
+    auto* columnShardStats = Settings->AppConfig->MutableColumnShardConfig()->MutableStatistics();
+    columnShardStats->SetReportBaseStatisticsPeriodMs(1000);
+    columnShardStats->SetReportExecutorStatisticsPeriodMs(1000);
 
     // With LLVM enabled, scan queries calculating column statistics are very slow for some reason
     // (10s of seconds), so we disable it.
@@ -518,20 +532,20 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Key']}`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
                     `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,
                     `COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":0}`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_value, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Value']}`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber);
 

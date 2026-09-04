@@ -1,5 +1,6 @@
 #include "sql_query.h"
 
+#include "sql_ddl_backup.h"
 #include "select_yql.h"
 #include "sql_expression.h"
 #include "sql_select.h"
@@ -1657,141 +1658,27 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore48: {
-            // create_backup_collection_stmt: CREATE BACKUP COLLECTION name WITH (k=v,...);
-            auto& node = core.GetAlt_sql_stmt_core48().GetRule_create_backup_collection_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
-                                 /*allowWildcard=*/false,
-                                 context.ServiceId,
-                                 context.Cluster)) {
-                    return false;
-                }
-            }
-
-            std::map<TString, TDeferredAtom> kv;
-            if (!ParseBackupCollectionSettings(kv, node.GetRule_backup_collection_settings6())) {
+            auto node = TBackupTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core48().GetRule_create_backup_collection_stmt1());
+            if (!node) {
                 return false;
             }
-
-            bool database = false;
-            TVector<TDeferredAtom> tables;
-            if (node.HasBlock3()) {
-                database = node.GetBlock3().GetRule_create_backup_collection_entries1().has_alt_create_backup_collection_entries1();
-                if (node.GetBlock3().GetRule_create_backup_collection_entries1().has_alt_create_backup_collection_entries2()) {
-                    if (!ParseBackupCollectionTables(
-                            tables,
-                            node
-                                .GetBlock3()
-                                .GetRule_create_backup_collection_entries1()
-                                .alt_create_backup_collection_entries2()
-                                .GetRule_create_backup_collection_entries_many1()
-                                .GetRule_table_list2()))
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks,
-                                 BuildCreateBackupCollection(Ctx_.Pos(),
-                                                             TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
-                                                             objectId,
-                                                             TCreateBackupCollectionParameters{
-                                                                 .Settings = std::move(kv),
-                                                                 .Database = database,
-                                                                 .Tables = tables,
-                                                                 .ExistingOk = false,
-                                                             },
-                                                             context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore49: {
-            // alter_backup_collection_stmt: ALTER BACKUP COLLECTION name alter_backup_collection_action (COMMA alter_backup_collection_action)*;
-            auto& node = core.GetAlt_sql_stmt_core49().GetRule_alter_backup_collection_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
-                                 /*allowWildcard=*/false,
-                                 context.ServiceId,
-                                 context.Cluster)) {
-                    return false;
-                }
+            auto node = TBackupTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core49().GetRule_alter_backup_collection_stmt1());
+            if (!node) {
+                return false;
             }
-
-            std::map<TString, TDeferredAtom> kv;
-            std::set<TString> toReset;
-
-            bool addDatabase = false;
-            bool dropDatabase = false;
-            TVector<TDeferredAtom> addTables;
-            TVector<TDeferredAtom> removeTables;
-
-            switch (node.GetBlock3().Alt_case()) {
-                case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
-                    if (!ParseBackupCollectionSettings(kv, toReset, node.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1())) {
-                        return false;
-                    }
-                    break;
-                }
-                case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
-                    if (!ParseBackupCollectionEntries(
-                            addDatabase,
-                            dropDatabase,
-                            addTables,
-                            removeTables,
-                            node.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1()))
-                    {
-                        return false;
-                    }
-                    break;
-                }
-                case TRule_alter_backup_collection_stmt_TBlock3::ALT_NOT_SET:
-                    YQL_ENSURE(false, "Unreachable");
-            }
-
-            auto database = addDatabase ? TAlterBackupCollectionParameters::EDatabase::Add : dropDatabase ? TAlterBackupCollectionParameters::EDatabase::Drop
-                                                                                                          : TAlterBackupCollectionParameters::EDatabase::Unchanged;
-
-            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks,
-                                 BuildAlterBackupCollection(Ctx_.Pos(),
-                                                            TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
-                                                            objectId,
-                                                            TAlterBackupCollectionParameters{
-                                                                .Settings = std::move(kv),
-                                                                .SettingsToReset = std::move(toReset),
-                                                                .Database = database,
-                                                                .TablesToAdd = addTables,
-                                                                .TablesToDrop = removeTables,
-                                                                .MissingOk = false,
-                                                            },
-                                                            context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore50: {
-            // drop_backup_collection_stmt: DROP BACKUP COLLECTION name;
-            auto& node = core.GetAlt_sql_stmt_core50().GetRule_drop_backup_collection_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
-                                 /*allowWildcard=*/false,
-                                 context.ServiceId,
-                                 context.Cluster)) {
-                    return false;
-                }
+            auto node = TBackupTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core50().GetRule_drop_backup_collection_stmt1());
+            if (!node) {
+                return false;
             }
-
-            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks,
-                                 BuildDropBackupCollection(Ctx_.Pos(),
-                                                           TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
-                                                           objectId,
-                                                           TDropBackupCollectionParameters{
-                                                               .MissingOk = false,
-                                                           },
-                                                           context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore51: {
@@ -1883,61 +1770,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore55: {
-            // backup_stmt: BACKUP object_ref (INCREMENTAL)?;
-            auto& node = core.GetAlt_sql_stmt_core55().GetRule_backup_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref2().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref2().GetBlock1().GetRule_cluster_expr1(),
-                                 /*allowWildcard=*/false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto node = TBackupTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core55().GetRule_backup_stmt1());
+            if (!node) {
+                return false;
             }
-
-            bool incremental = node.HasBlock3();
-
-            const TString& objectId = Id(node.GetRule_object_ref2().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks,
-                                 BuildBackup(
-                                     Ctx_.Pos(),
-                                     TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
-                                     objectId,
-                                     TBackupParameters{
-                                         .Incremental = incremental,
-                                     },
-                                     context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore56: {
-            // restore_stmt: RESTORE object_ref (AT STRING_VALUE)?;
-            auto& node = core.GetAlt_sql_stmt_core56().GetRule_restore_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref2().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref2().GetBlock1().GetRule_cluster_expr1(),
-                                 /*allowWildcard=*/false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto node = TBackupTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core56().GetRule_restore_stmt1());
+            if (!node) {
+                return false;
             }
-
-            TString at;
-            if (node.HasBlock3()) {
-                const TString stringValue = Ctx_.Token(node.GetBlock3().GetToken2());
-                const auto unescaped = StringContent(Ctx_, Ctx_.Pos(), stringValue);
-                if (!unescaped) {
-                    return false;
-                }
-                at = unescaped->Content;
-            }
-
-            const TString& objectId = Id(node.GetRule_object_ref2().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks,
-                                 BuildRestore(
-                                     Ctx_.Pos(),
-                                     TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
-                                     objectId,
-                                     TRestoreParameters{
-                                         .At = at,
-                                     },
-                                     context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore57: {

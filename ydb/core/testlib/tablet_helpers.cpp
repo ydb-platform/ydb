@@ -1024,6 +1024,24 @@ namespace NKikimr {
             PrevRegistrationObserverFunc = Runtime.SetRegistrationObserverFunc(
                 [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                 TabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
+                // Chain to the previous observer (normally
+                // TTestActorRuntimeBase::DefaultRegistrationObserver) so that
+                // the EnableScheduleForActor whitelist keeps being propagated
+                // from parent actors to their children while the guard is
+                // active.
+                //
+                // A tablet rebooted under the guard is respawned by
+                // its bootstrapper and without this propagation the new tablet
+                // instance is never whitelisted, and once the guard is destroyed
+                // all the events the tablet schedules for itself are silently
+                // dropped by TTestActorRuntime::DefaultScheduledFilterFunc.
+                //
+                // The problem was originally reproduced in a test that reboots
+                // Hive. The test was hanging because some events Hive scheduled
+                // to itself were never answered
+                if (PrevRegistrationObserverFunc) {
+                    PrevRegistrationObserverFunc(runtime, parentId, actorId);
+                }
             });
 
             PrevScheduledFilterFunc = Runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,

@@ -247,7 +247,7 @@ private:
         State->OnCommitState(SelfId());
     }
 
-    void LoadState(const TSinkState&) override {
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) override {
     }
 
     void PassAway() override {

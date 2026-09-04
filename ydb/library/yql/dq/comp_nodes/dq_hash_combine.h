@@ -21,6 +21,8 @@ public:
     virtual void SetTestStateCallback(const TTestStateCallback& callback) = 0;
 };
 
+static constexpr const size_t DqAggregationPrefetchBatchSize = 10;
+
 IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 

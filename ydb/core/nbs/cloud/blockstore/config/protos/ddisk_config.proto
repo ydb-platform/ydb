@@ -6,8 +6,8 @@ package NYdb.NBS.NProto;
 
 message TDDiskConfig
 {
-    optional bool UseSQPoll = 1;
-    optional bool UseIOPoll = 2;
+    reserved 1, 2;
+    reserved "UseSQPoll", "UseIOPoll";
     optional bool ForcePDiskFallback = 3;
     optional bool EnableChecksums = 4;
 }

@@ -222,6 +222,7 @@ struct TGraphMeta {
     bool StreamResult = false;
     Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     bool CollectAffectedRows = false;
+    bool AllowCheckpoints = false;
 
     // TODO: stuff about shards on nodes should be private or protected.
     using TShardToNodeMap = TMap<ui64 /* shardId */, ui64 /* nodeId */>;

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_hullhugedefs.h"
+#include "blobstorage_hullhugestripe.h"
 
 #include <util/generic/hash_set.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
@@ -78,6 +79,7 @@ namespace NKikimr {
             // current pos
             THullHugeRecoveryLogPos LogPos;
             std::unique_ptr<NHuge::THeap> Heap;
+            std::unique_ptr<NHuge::TStripeHeap> StripeHeap;
             // slots that are already allocated, but not written to log
             THashSet<THugeSlot> SlotsInFlight;
             THashMap<ui32, std::tuple<ui32, ui32>> ChunkToSlotSize;
@@ -90,6 +92,7 @@ namespace NKikimr {
             ui64 PersistentLsn = 0;
             bool LoadedFromProto = false;
             bool EnableTinyDisks = false;
+            bool StripeAllocatorEnabled = false;
             TControlWrapper ChunksSoftLocking;
 
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
@@ -143,10 +146,39 @@ namespace NKikimr {
 
             void AddSlotInFlight(THugeSlot hugeSlot);
             bool DeleteSlotInFlight(THugeSlot hugeSlot);
+            // The in-flight record is the authority on how much space an allocation actually reserved: an SST reserves
+            // a worst-case stripe and only later learns how much of it it filled.
+            THugeSlot ResolveSlotInFlight(const TDiskPart &addr) const;
+            // Give back the unused tail of an in-flight stripe once the committed length is known.
+            void ShrinkSlotInFlight(const TDiskPart &addr);
 
             void AddChunkSize(THugeSlot hugeSlot);
             void DeleteChunkSize(THugeSlot hugeSlot);
             void RegisterBlob(TDiskPart diskPart);
+
+            bool UseStripeAllocator() const;
+            // NOTE: ownership of a chunk migrates back to the slot heap as soon as its last stripe is freed, so this
+            // has to be queried *before* freeing a blob when the answer is needed afterwards
+            bool IsStripeAddr(const TDiskPart &addr) const;
+            bool AllocateBlob(ui32 size, THugeSlot *hugeSlot, ui32 *allocKey);
+            TFreeRes FreeBlob(const TDiskPart &addr);
+            THugeSlot ConvertDiskPart(const TDiskPart &addr) const;
+            THeapStat GetHeapStat() const;
+            bool LockChunkForAllocation(ui32 chunkId, ui32 slotSize);
+            void ShredNotify(const std::vector<ui32>& chunksToShred);
+            void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
+            THashSet<TChunkIdx> GetForbiddenChunks() const;
+            ui32 RemoveChunk();
+            // Log replay establishes only which chunks belong to the stripe heap; the extents inside them come from
+            // the hull's references once replay is over.
+            void RecoveryClaimStripeChunk(ui32 chunkIdx);
+            // Its mirror. Replay watches a chunk enter the stripe heap but cannot watch it leave: a chunk goes back
+            // to the slot heap when its last stripe is freed, and stripes are not tracked until derivation. So the
+            // records that put the chunk to slot use, or hand it back to PDisk, are what retire the claim.
+            void RecoveryReleaseStripeChunk(ui32 chunkIdx);
+            void RecoveryOccupyDerived(const TDiskPart& addr);
+            void FinishStripeDerivation();
+            void CollectStripeChunks(THashSet<TChunkIdx>& chunks) const;
 
             enum ESlotDelDbType {
                 LogoBlobsDb,
@@ -174,6 +206,7 @@ namespace NKikimr {
                         ui64 lsn,
                         const TDiskPartVec &rec,
                         const TDiskPartVec& allocated,
+                        const TDiskPartVec& allocatedStripe,
                         ESlotDelDbType type);
             TRlas Apply(const TActorContext &ctx,
                         ui64 lsn,
@@ -184,6 +217,8 @@ namespace NKikimr {
 
             void FinishRecovery(const TActorContext &ctx);
 
+            // a chunk is owned either by the slot heap or by the stripe heap, but never by both
+            void VerifyHeapsDisjoint() const;
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         };
 

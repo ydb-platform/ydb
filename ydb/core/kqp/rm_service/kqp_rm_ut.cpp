@@ -118,6 +118,7 @@ class KqpRm : public TTestBase {
 public:
     void SetUp() override {
         Runtime = MakeHolder<TTenantTestRuntime>(MakeTenantTestConfig());
+        Runtime->GetAppData().FeatureFlags.SetEnableResourcePoolsCounters(true);
 
         NActors::NLog::EPriority priority = DETAILED_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
         Runtime->SetLogPriority(NKikimrServices::RESOURCE_BROKER, priority);
@@ -297,6 +298,7 @@ public:
         UNIT_TEST(DisonnectNodes);
         UNIT_TEST(P09PoolLimitAndAllocated);
         UNIT_TEST(P11PoolDenied);
+        UNIT_TEST(P14PoolSensorsPersistAcrossIdle);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -316,6 +318,7 @@ public:
     void DisonnectNodes();
     void P09PoolLimitAndAllocated();
     void P11PoolDenied();
+    void P14PoolSensorsPersistAcrossIdle();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -787,6 +790,48 @@ void KqpRm::P11PoolDenied() {
     UNIT_ASSERT(!rm->AllocateResources(*tx, 4, request));
 
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedRequests", true)->Val(), 2);
+}
+
+void KqpRm::P14PoolSensorsPersistAcrossIdle() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // Pool = 10% of 1000 = 100; chunk = 40
+    constexpr double poolPercent = 10;
+    constexpr ui64 chunk = 40;
+
+    auto sensorGroup = GetPoolSensorGroup("db1", "pool_p14");
+    auto limitCtr = sensorGroup->GetCounter("MemoryLimit", false);
+    auto allocCtr = sensorGroup->GetCounter("MemoryAllocated", false);
+    auto deniedCtr = sensorGroup->GetCounter("MemoryDeniedRequests", true);
+
+    // Phase 1: allocate then free to idle
+    {
+        auto tx = MakePoolTx(1, rm, "pool_p14", poolPercent);
+        NRm::TKqpResourcesRequest req{.Memory = chunk};
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, req));
+        UNIT_ASSERT_VALUES_EQUAL(limitCtr->Val(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(allocCtr->Val(), (i64)chunk);
+        UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 0);
+        rm->FreeResources(*tx, 1, req); // pool record erased (used==0)
+    } // FinishTx is no-op (all freed already)
+
+    // Limit must not flap to zero while pool is idle
+    UNIT_ASSERT_VALUES_EQUAL(limitCtr->Val(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(allocCtr->Val(), 0);
+
+    // Phase 2: new TMemoryResource reuses same registry entry
+    {
+        auto tx2 = MakePoolTx(2, rm, "pool_p14", poolPercent);
+        NRm::TKqpResourcesRequest req{.Memory = chunk};
+        UNIT_ASSERT(rm->AllocateResources(*tx2, 1, req)); // 40
+        UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 0);    // cumulative, not reset by idle
+
+        UNIT_ASSERT(rm->AllocateResources(*tx2, 2, req)); // 80
+        UNIT_ASSERT(!rm->AllocateResources(*tx2, 3, req)); // 120 > 100, denied
+        UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 1);
+    }
 }
 
 } // namespace NKqp

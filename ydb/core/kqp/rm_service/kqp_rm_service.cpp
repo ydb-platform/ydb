@@ -71,28 +71,20 @@ struct TPoolSensors {
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {
 public:
     explicit TMemoryResource(ui64 baseLimit, double memoryPoolPercent, double overPercent,
-                             const NMonitoring::TDynamicCounterPtr& sensorGroup = nullptr)
+                             TPoolSensors* sensors = nullptr)
         : BaseLimit(baseLimit)
         , Used(0)
         , MemoryPoolPercent(memoryPoolPercent)
         , OverPercent(overPercent)
         , SpillingCookie(MakeIntrusive<TMemoryResourceCookie>())
+        , Sensors(sensors)
     {
         SetActualLimits();
-        if (sensorGroup) {
-            Sensors = std::make_unique<TPoolSensors>();
-            Sensors->Limit = sensorGroup->GetCounter("MemoryLimit", false);
-            Sensors->Allocated = sensorGroup->GetCounter("MemoryAllocated", false);
-            Sensors->DeniedRequests = sensorGroup->GetCounter("MemoryDeniedRequests", true);
-            Sensors->Limit->Set(Limit);
-        }
     }
 
     ~TMemoryResource() {
-        // gauges must not keep stale values after the pool record is erased
         if (Sensors) {
-            Sensors->Limit->Set(0);
-            Sensors->Allocated->Set(0);
+            Sensors->Allocated->Set(0); // Limit persists at last configured value while pool is idle
         }
     }
 
@@ -185,7 +177,7 @@ private:
     double OverPercent;
 
     TIntrusivePtr<TMemoryResourceCookie> SpillingCookie;
-    std::unique_ptr<TPoolSensors> Sensors;
+    TPoolSensors* Sensors = nullptr; // non-owning; owned by TKqpResourceManager::PoolSensorRegistry
 };
 
 struct TEvPrivate {
@@ -324,12 +316,18 @@ public:
                 auto [it, success] = MemoryNamedPools.emplace(tx.MakePoolId(), nullptr);
 
                 if (success) {
-                    NMonitoring::TDynamicCounterPtr sensorGroup;
-                    if (Counters) {
-                        sensorGroup = Counters->GetWorkloadManagerCounters()
+                    auto regKey = std::make_pair(tx.Database, tx.PoolId);
+                    auto [regIt, regNew] = PoolSensorRegistry.emplace(regKey, TPoolSensors{});
+                    if (regNew && Counters && ActorSystem &&
+                            AppData(ActorSystem)->FeatureFlags.GetEnableResourcePoolsCounters()) {
+                        auto sg = Counters->GetWorkloadManagerCounters()
                             ->GetSubgroup("pool", TStringBuilder() << tx.Database << "/" << tx.PoolId);
+                        regIt->second.Limit = sg->GetCounter("MemoryLimit", false);
+                        regIt->second.Allocated = sg->GetCounter("MemoryAllocated", false);
+                        regIt->second.DeniedRequests = sg->GetCounter("MemoryDeniedRequests", true);
                     }
-                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load(), sensorGroup);
+                    TPoolSensors* sensors = regIt->second.Limit ? &regIt->second : nullptr;
+                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load(), sensors);
                 } else {
                     it->second->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
                 }
@@ -646,6 +644,8 @@ public:
     TActorId ResourceInfoExchanger = TActorId();
 
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
+    // Persistent sensor registry; entries are created once and never deleted; guarded by Lock
+    std::unordered_map<std::pair<TString, TString>, TPoolSensors, THash<std::pair<TString, TString>>> PoolSensorRegistry;
 };
 
 struct TResourceManagers {

@@ -1550,6 +1550,7 @@ void TConsumer::Release(ui32 partitionId, const TActorContext& ctx) {
 
 TSession::TSession(const TActorId& pipe)
             : Pipe(pipe)
+            , PhysicalPipe(pipe)
             , ServerActors(0)
             , ActivePartitionCount(0)
             , InactivePartitionCount(0)
@@ -1817,52 +1818,15 @@ void TBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorC
     consumer->Release(msg->PartitionId, ctx);
 }
 
-void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
-    const TActorId& sender = ev->Get()->ClientId;
-
-    auto it = Sessions.find(sender);
-    if (it == Sessions.end()) {
-        auto [i, _] = Sessions.emplace(sender, std::make_unique<TSession>(sender));
-        it = i;
-    }
+void TBalancer::DropSession(absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>>::iterator it,
+                            const TActorContext& ctx)
+{
     auto& session = it->second;
-    ++session->ServerActors;
-
-    YDB_LOG_INFO("Pipe connected; active server",
-        {"logPrefix", LogPrefix()},
-        {"sender", sender},
-        {"actors", session->ServerActors});
-}
-
-void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG("Pipe disconnected",
-        {"logPrefix", LogPrefix()},
-        {"clientId", ev->Get()->ClientId});
-    Subscriptions.erase(ev->Get()->ClientId);
-
-    auto it = Sessions.find(ev->Get()->ClientId);
-
-    if (it == Sessions.end()) {
-        YDB_LOG_DEBUG("Pipe disconnected but there aren't sessions exists",
-            {"logPrefix", LogPrefix()},
-            {"clientId", ev->Get()->ClientId});
-        return;
-    }
-
-    YDB_LOG_INFO("Pipe disconnected; active server",
-        {"logPrefix", LogPrefix()},
-        {"clientId", ev->Get()->ClientId},
-        {"actors", (it != Sessions.end() ? it->second->ServerActors : -1)});
-
-    auto& session = it->second;
-    if (--(session->ServerActors) > 0) {
-        return;
-    }
-
     if (!session->SessionName.empty()) {
-        YDB_LOG_NOTICE("Pipe client disconnected session",
+        YDB_LOG_NOTICE("Dropping reading session",
             {"logPrefix", LogPrefix()},
-            {"eventClientId", ev->Get()->ClientId},
+            {"pipe", session->Pipe},
+            {"physicalPipe", session->PhysicalPipe},
             {"sessionClientId", session->ClientId},
             {"sessionName", session->SessionName});
 
@@ -1877,15 +1841,91 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
                 consumer->ScheduleBalance(ctx);
             }
         }
-
-        Sessions.erase(it);
     } else {
-        YDB_LOG_INFO("Pipe disconnected no session",
+        YDB_LOG_INFO("Dropping pipe without reading session",
             {"logPrefix", LogPrefix()},
-            {"clientId", ev->Get()->ClientId});
-
-        Sessions.erase(it);
+            {"pipe", session->Pipe});
     }
+
+    if (session->IsPipeCacheSession()) {
+        if (auto pit = PipeCacheSessions.find(session->PhysicalPipe); pit != PipeCacheSessions.end()) {
+            pit->second.erase(session->Pipe);
+            if (pit->second.empty()) {
+                PipeCacheSessions.erase(pit);
+            }
+        }
+    }
+
+    Sessions.erase(it);
+}
+
+void TBalancer::DropSessionsOnPhysicalPipe(const TActorId& physicalPipe, const TActorContext& ctx) {
+    if (auto pit = PipeCacheSessions.find(physicalPipe); pit != PipeCacheSessions.end()) {
+        auto logicalPipes = pit->second; // copy — DropSession mutates the map
+        for (const auto& logicalPipe : logicalPipes) {
+            if (auto it = Sessions.find(logicalPipe); it != Sessions.end()) {
+                DropSession(it, ctx);
+            }
+        }
+    }
+
+    if (auto it = Sessions.find(physicalPipe); it != Sessions.end()) {
+        DropSession(it, ctx);
+    }
+}
+
+void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
+    const TActorId& sender = ev->Get()->ClientId;
+    PipeServerToClient[ev->Get()->ServerId] = sender;
+
+    auto it = Sessions.find(sender);
+    if (it == Sessions.end()) {
+        auto [i, _] = Sessions.emplace(sender, std::make_unique<TSession>(sender));
+        it = i;
+    }
+    auto& session = it->second;
+    ++session->ServerActors;
+
+    YDB_LOG_INFO("Pipe connected; active server",
+        {"logPrefix", LogPrefix()},
+        {"sender", sender},
+        {"serverId", ev->Get()->ServerId},
+        {"actors", session->ServerActors});
+}
+
+void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_DEBUG("Pipe disconnected",
+        {"logPrefix", LogPrefix()},
+        {"clientId", ev->Get()->ClientId},
+        {"serverId", ev->Get()->ServerId});
+    Subscriptions.erase(ev->Get()->ClientId);
+    PipeServerToClient.erase(ev->Get()->ServerId);
+
+    auto it = Sessions.find(ev->Get()->ClientId);
+
+    if (it == Sessions.end()) {
+        // Physical pipe entry may be gone, but pipe-cache logical sessions can remain.
+        if (PipeCacheSessions.contains(ev->Get()->ClientId)) {
+            DropSessionsOnPhysicalPipe(ev->Get()->ClientId, ctx);
+        } else {
+            YDB_LOG_DEBUG("Pipe disconnected but there aren't sessions exists",
+                {"logPrefix", LogPrefix()},
+                {"clientId", ev->Get()->ClientId});
+        }
+        return;
+    }
+
+    YDB_LOG_INFO("Pipe disconnected; active server",
+        {"logPrefix", LogPrefix()},
+        {"clientId", ev->Get()->ClientId},
+        {"actors", it->second->ServerActors});
+
+    auto& session = it->second;
+    if (--(session->ServerActors) > 0) {
+        return;
+    }
+
+    DropSessionsOnPhysicalPipe(ev->Get()->ClientId, ctx);
 }
 
 void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx) {
@@ -1919,12 +1959,41 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
 
     auto jt = Sessions.find(pipe);
     if (jt == Sessions.end()) {
-        YDB_LOG_CRIT("Client pipe is not connected and got register session request for session",
+        // Pipe-cache path: PipeClient is a logical holder id, not the physical ClientId.
+        // Resolve the live physical pipe via ServerId carried in ev->Recipient.
+        auto serverIt = PipeServerToClient.find(ev->Recipient);
+        if (serverIt == PipeServerToClient.end()) {
+            YDB_LOG_CRIT("Client pipe is not connected and got register session request for session",
+                {"logPrefix", LogPrefix()},
+                {"consumerName", consumerName},
+                {"pipe", pipe},
+                {"session", r.GetSession()},
+                {"recipient", ev->Recipient});
+            return;
+        }
+
+        const TActorId physicalPipe = serverIt->second;
+        auto physicalIt = Sessions.find(physicalPipe);
+        if (physicalIt == Sessions.end()) {
+            YDB_LOG_CRIT("Client pipe is not connected and got register session request for session",
+                {"logPrefix", LogPrefix()},
+                {"consumerName", consumerName},
+                {"pipe", pipe},
+                {"physicalPipe", physicalPipe},
+                {"session", r.GetSession()});
+            return;
+        }
+
+        auto [inserted, _] = Sessions.emplace(pipe, std::make_unique<TSession>(pipe));
+        jt = inserted;
+        jt->second->PhysicalPipe = physicalPipe;
+        PipeCacheSessions[physicalPipe].insert(pipe);
+
+        YDB_LOG_INFO("Registered pipe-cache reading session on shared pipe",
             {"logPrefix", LogPrefix()},
-            {"consumerName", consumerName},
             {"pipe", pipe},
+            {"physicalPipe", physicalPipe},
             {"session", r.GetSession()});
-        return;
     }
 
     auto* consumerConfig = ::NKikimr::NPQ::GetConsumer(TopicActor.TabletConfig, consumerName);

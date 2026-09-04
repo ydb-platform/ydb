@@ -256,6 +256,10 @@ struct TSession {
 
     const TActorId Pipe;
 
+    // Physical tablet-pipe ClientId this session is bound to.
+    // For dedicated pipes equals Pipe; for pipe-cache sessions may differ.
+    TActorId PhysicalPipe;
+
     // The consumer name
     TString ClientId;
     TString SessionName;
@@ -269,6 +273,10 @@ struct TSession {
     absl::flat_hash_set<ui32> Partitions;
     // the number of pipes connected from SessionActor to ReadBalancer
     ui32 ServerActors = 0;
+
+    bool IsPipeCacheSession() const {
+        return PhysicalPipe && PhysicalPipe != Pipe;
+    }
 
     // The number of active partitions
     size_t ActivePartitionCount = 0;
@@ -350,10 +358,18 @@ private:
     TString LogPrefix() const;
     ui32 NextStep();
 
+    void DropSession(absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>>::iterator it,
+                     const TActorContext& ctx);
+    void DropSessionsOnPhysicalPipe(const TActorId& physicalPipe, const TActorContext& ctx);
+
 private:
     TPersQueueReadBalancer& TopicActor;
 
     absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>> Sessions;
+    // pipe ServerId -> physical ClientId (from TEvServerConnected)
+    absl::flat_hash_map<TActorId, TActorId, THash<TActorId>> PipeServerToClient;
+    // physical ClientId -> logical session keys that share this pipe (PipeClient != ClientId)
+    absl::flat_hash_map<TActorId, absl::flat_hash_set<TActorId>, THash<TActorId>> PipeCacheSessions;
     absl::flat_hash_map<TString, std::unique_ptr<TConsumer>> Consumers;
 
     ui32 Step;

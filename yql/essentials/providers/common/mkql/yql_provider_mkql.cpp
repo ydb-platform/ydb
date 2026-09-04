@@ -483,6 +483,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Div", &TProgramBuilder::Div},
         {"Mod", &TProgramBuilder::Mod},
 
+        {"DecimalIntegralAdd", &TProgramBuilder::DecimalIntegralAdd},
+        {"DecimalIntegralSub", &TProgramBuilder::DecimalIntegralSub},
         {"DecimalMul", &TProgramBuilder::DecimalMul},
         {"DecimalDiv", &TProgramBuilder::DecimalDiv},
         {"DecimalMod", &TProgramBuilder::DecimalMod},

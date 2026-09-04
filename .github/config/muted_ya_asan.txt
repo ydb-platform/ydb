@@ -156,6 +156,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWith
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/persqueue/pqtablet/quota/ut TWriteQuoterTests.WaitMessagesQuota
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
+ydb/core/persqueue/public/describer/ut TDescriberTests.AccessOrAllows
 ydb/core/persqueue/public/describer/ut TDescriberTests.AuthorizedSuccess
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithEmptyDatabase
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithFederationRoot

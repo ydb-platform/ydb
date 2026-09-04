@@ -520,6 +520,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveWithColumnTableReplace(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
 
@@ -578,9 +579,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     //TODO: switch to iteration through all possible pairs when all variants will work
     static const std::vector<TMoveReplaceTestCase> MoveReplaceTests = {
         { .Tag = "RowTable-over-RowTable", .SrcType = RowTable, .DstType = RowTable },
-        // { .Tag = "ColumnTable-over-ColumnTable", .SrcType = ColumnTable, .DstType = ColumnTable },
+        { .Tag = "ColumnTable-over-ColumnTable", .SrcType = ColumnTable, .DstType = ColumnTable },
         // { .Tag = "ColumnTableWithIndexes-over-ColumnTableWithIndexes", .SrcType = ColumnTableWithIndexes, .DstType = ColumnTableWithIndexes },
-        // { .Tag = "RowTable-over-ColumnTable", .SrcType = RowTable, .DstType = ColumnTable },
+        { .Tag = "RowTable-over-ColumnTable", .SrcType = RowTable, .DstType = ColumnTable },
         { .Tag = "ColumnTable-over-RowTable", .SrcType = ColumnTable, .DstType = RowTable },
     };
     struct TTestRegistration_MoveReplace {

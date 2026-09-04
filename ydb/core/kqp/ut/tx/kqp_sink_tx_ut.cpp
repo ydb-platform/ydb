@@ -5,6 +5,9 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -701,6 +704,98 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(UncommittedWriteSeqNumAnsweredTwice) {
         TUncommittedWriteSeqNumAnsweredTwice tester;
         tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // ALTER TABLE during an in-flight InconsistentTx write must fail the query, not retry forever.
+    class TSchemeChangedDuringInconsistentWrite : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+
+            // UseRealThreads=false requires GetSession() through RunCall.
+            auto session1 = Kikimr->RunCall([&] {
+                return client.GetSession().GetValueSync().GetSession();
+            });
+            auto session2 = Kikimr->RunCall([&] {
+                return client.GetSession().GetValueSync().GetSession();
+            });
+
+            std::atomic<size_t> evWriteCount{0};
+            std::vector<std::unique_ptr<IEventHandle>> held;
+            bool queryRequestPatched = false;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
+                // IsStreamingQuery=true makes the sink compile with InconsistentTx=true.
+                if (!queryRequestPatched &&
+                    ev->GetTypeRewrite() == TEvKqp::TEvQueryRequest::EventType)
+                {
+                    queryRequestPatched = true;
+                    auto* req = ev->Get<TEvKqp::TEvQueryRequest>();
+                    auto userCtx = MakeIntrusive<TUserRequestContext>("", "/Root", "");
+                    userCtx->IsStreamingQuery = true;
+                    req->SetUserRequestContext(std::move(userCtx));
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    ++evWriteCount;
+                    held.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto savedObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(savedObserver); };
+
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(
+                    Q_(R"(UPSERT INTO `/Root/KV` (Key, Value) VALUES (42u, "test");)"),
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+                ).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evWriteCount > 0;
+                });
+                runtime.DispatchEvents(opts);
+                UNIT_ASSERT_C(evWriteCount > 0, "TEvWrite was not intercepted");
+            }
+
+            auto alterResult = Kikimr->RunCall([&] {
+                return session2.ExecuteQuery(
+                    Q_(R"(ALTER TABLE `/Root/KV` ADD COLUMN Extra String;)"),
+                    TTxControl::NoTx()
+                ).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                alterResult.GetStatus(), EStatus::SUCCESS,
+                alterResult.GetIssues().ToString());
+
+            for (auto& ev : held) {
+                runtime.Send(ev.release());
+            }
+            held.clear();
+
+            auto result = runtime.WaitFuture(future, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                result.GetStatus(), EStatus::ABORTED,
+                result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Scheme changed"),
+                TStringBuilder() << "Expected scheme-mismatch issue, got: "
+                    << result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(SchemeChangedDuringInconsistentWrite) {
+        TSchemeChangedDuringInconsistentWrite tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
     }

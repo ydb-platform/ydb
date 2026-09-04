@@ -69,4 +69,5 @@ message TPBufferConfig
     // replying with an OVERLOADED error to avoid returning a potentially-stale view.
     optional uint32 ListPersistentBufferMaxRetries = 16;
     optional uint32 ListPersistentBufferRetryPeriodMilliseconds = 17;
+    optional bool EnableChecksums = 18;
 }

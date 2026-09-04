@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ddisk/ddisk_actor.h>
 #include <ydb/core/blobstorage/ddisk/ddisk_checksums.h>
+#include <ydb/core/blobstorage/ddisk/persistent_buffer_header.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
@@ -2441,6 +2442,41 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT(foundDbg2);
     }
 
+    Y_UNIT_TEST(PersistentBufferWithoutChecksumsStoresHeaderUniqueIdAndRestoresPayload) {
+        TTestContext ctx;
+        NDDisk::TPersistentBufferFormat format;
+        format.EnableChecksums = false;
+        const TDiskHandle disk = ctx.CreateDDisk(88, 1, format);
+        const NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 88, 1);
+        const NDDisk::TBlockSelector selector{1, 0, BlockSize};
+        const ui64 lsn = 1;
+        const TString payload = MakeData('P', BlockSize);
+
+        auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+            creds, selector, lsn, NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(TRope(payload));
+        SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+        auto raw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        const TString onDisk = raw->Get()->Data.ConvertToString();
+        UNIT_ASSERT_VALUES_EQUAL(onDisk.size(), 2 * BlockSize);
+        const auto* header = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(onDisk.data());
+        UNIT_ASSERT(header->Flags & NDDisk::TPersistentBufferHeader::CHECKSUMS_DISABLED);
+
+        ui64 storedHeaderUniqueId;
+        memcpy(&storedHeaderUniqueId, onDisk.data() + BlockSize, sizeof(storedHeaderUniqueId));
+        const ui64 expectedHeaderUniqueId = header->HeaderUniqueId;
+        UNIT_ASSERT_VALUES_EQUAL(storedHeaderUniqueId, expectedHeaderUniqueId);
+
+        ctx.SendPDiskResponse(disk, *raw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx), TReplyStatus::OK);
+
+        auto read = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvReadPersistentBuffer(creds, selector, lsn, 1, {true}));
+        AssertStatus(read, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(read->Get()->GetPayload(0).ConvertToString(), payload);
+    }
+
     Y_UNIT_TEST(PersistentBufferReadPart) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(6, 1);
@@ -3947,16 +3983,16 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     }
 
     // Helper: create a DDisk instance that simulates a restart where the PB chunks from a
-    // previous instance are passed via StartingPoints.  The new instance will have a different
-    // PersistentBufferUniqueId (oldUniqueId + 1), so all checksums written by the old instance
-    // will fail verification and the records will be discarded.
+    // previous instance are passed via StartingPoints. The caller controls the unique ID and
+    // the on-disk format option, allowing migration between checksum and index formats.
     //
     // `preExistingChunkIds` – chunk IDs that were owned by the previous PB instance.
     // `oldUniqueId`         – the UniqueId that was used by the previous instance.
     // `chunkData`           – maps chunkId -> raw bytes (ChunkSize) to return during restore reads.
     TDiskHandle CreateDDiskWithRestoredChunkData(TTestContext& ctx, ui32 pdiskId, ui32 slotId,
-            const std::vector<ui32>& preExistingChunkIds, ui64 oldUniqueId,
-            const std::unordered_map<ui32, TString>& chunkData) {
+            const std::vector<ui32>& preExistingChunkIds, ui64 persistentBufferUniqueId,
+            const std::unordered_map<ui32, TString>& chunkData,
+            NDDisk::TPersistentBufferFormat pbFormat = {256, 4, BlockSize * 128, 8, 5000, 512 * 1024}) {
         const TActorId pdiskEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         const TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
         ctx.Runtime.RegisterService(pdiskServiceId, pdiskEdge);
@@ -3977,7 +4013,6 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             NKikimrBlobStorage::TVDiskKind::Default,
             1,
             "ddisk_pool");
-        NDDisk::TPersistentBufferFormat pbFormat{256, 4, BlockSize * 128, 8, 5000, 512 * 1024};
         const TActorId ddiskActor = ctx.Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
             std::move(pbFormat), NDDisk::TDDiskConfig{}, ctx.Counters),
             NodeId);
@@ -3997,17 +4032,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const NPDisk::TOwner Owner = 1;
         const NPDisk::TOwnerRound OwnerRound = 1;
 
-        // ── Step 1: TEvYardInit → reply with StartingPoints containing old PB chunk map ──
-        // The new instance will read UniqueId from StartingPoints and use it for checksum
-        // verification.  We pass oldUniqueId so the PB actor verifies with the same key
-        // that was used to write the data.  Since the data was written with oldUniqueId,
-        // the checksums WILL match — but we want them to FAIL.
-        //
-        // The correct approach: pass a *different* UniqueId (oldUniqueId + 1) so that
-        // checksum verification fails and stale records are discarded.
-        // However, the UniqueId stored in StartingPoints is what the PB actor uses for
-        // verification (see ddisk_actor_boot.cpp: PersistentBufferUniqueId = chunkMap.GetUniqueId()).
-        // So we pass (oldUniqueId + 1) to simulate a fresh restart with a new UniqueId.
+        // ── Step 1: TEvYardInit → reply with StartingPoints containing the PB chunk map ──
+        // The unique ID stored here is what the PB actor uses to validate legacy sector
+        // checksums during restore (see ddisk_actor_boot.cpp).
         auto init = ctx.WaitPDiskRequest<NPDisk::TEvYardInit>(disk);
         TVector<ui32> ownedChunks;
         auto initReply = std::make_unique<NPDisk::TEvYardInitResult>(
@@ -4032,17 +4059,13 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             delete ptr;
         });
 
-        // Populate StartingPoints with the old PB chunk map, but with a *different* UniqueId.
-        // This causes the PB actor to own the pre-existing chunks (triggering restore) but
-        // verify checksums with a different key → all stale sectors fail → records discarded.
+        // Populate StartingPoints with the existing PB chunk map to trigger restore.
         {
             NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord pbChunkMap;
             for (ui32 chunkIdx : preExistingChunkIds) {
                 pbChunkMap.AddChunkIdxs(chunkIdx);
             }
-            // Use a different UniqueId than what was used to write the data.
-            // The old data was written with oldUniqueId; we verify with (oldUniqueId + 1).
-            pbChunkMap.SetUniqueId(oldUniqueId + 1);
+            pbChunkMap.SetUniqueId(persistentBufferUniqueId);
 
             TString pbChunkMapData;
             const bool serializeOk = pbChunkMap.SerializeToString(&pbChunkMapData);
@@ -4177,6 +4200,110 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto readResult = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
             ctx, disk2.PBServiceId, new NDDisk::TEvReadPersistentBuffer(creds2, selector, lsn, 1, {true}));
         AssertStatus(readResult, TReplyStatus::MISSING_RECORD);
+    }
+
+    Y_UNIT_TEST(PersistentBufferRestoresMixedChecksumFormatsAcrossRestarts) {
+        TTestContext ctx;
+        ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), ctx.Edge);
+        constexpr ui32 PDiskId = 89;
+        constexpr ui32 SlotId = 1;
+        constexpr ui64 TabletId = 89;
+        ui64 persistentBufferUniqueId = 0;
+        const NDDisk::TBlockSelector selector{1, 0, BlockSize};
+        const TString firstPayload = MakeData('A', BlockSize);
+        const TString secondPayload = MakeData('B', BlockSize);
+        const TString thirdPayload = MakeData('C', BlockSize);
+        std::unordered_map<ui32, TString> chunkData;
+        std::vector<ui32> persistentBufferChunks;
+
+        auto saveWrite = [&](const TDiskHandle& disk) {
+            auto raw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            const TString data = raw->Get()->Data.ConvertToString();
+            if (!persistentBufferUniqueId) {
+                UNIT_ASSERT_VALUES_EQUAL(raw->Get()->Offset % BlockSize, 0u);
+                const auto* header = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(data.data());
+                persistentBufferUniqueId = header->PersistentBufferUniqueId;
+                UNIT_ASSERT(persistentBufferUniqueId);
+            }
+            auto& chunk = chunkData.try_emplace(raw->Get()->ChunkIdx, TTestContext::ChunkSize, '\0').first->second;
+            memcpy(chunk.Detach() + raw->Get()->Offset, data.data(), data.size());
+            ctx.SendPDiskResponse(disk, *raw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            AssertStatus(WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx), TReplyStatus::OK);
+        };
+        auto readRestored = [&](const TDiskHandle& disk, const NDDisk::TQueryCredentials& creds, ui64 lsn,
+                                const TString& expected) {
+            SendToDDisk(ctx, disk.PBServiceId,
+                new NDDisk::TEvReadPersistentBuffer(creds, selector, lsn, 1, {true}));
+            auto raw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            const auto& chunk = chunkData.at(raw->Get()->ChunkIdx);
+            const TString data = chunk.substr(raw->Get()->Offset, raw->Get()->Size);
+            ctx.SendPDiskResponse(disk, *raw, new NPDisk::TEvChunkReadRawResult(TRope(data)));
+            auto result = WaitFromDDisk<NDDisk::TEvReadPersistentBufferResult>(ctx);
+            AssertStatus(result, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetPayload(0).ConvertToString(), expected);
+        };
+        auto write = [&](const TDiskHandle& disk, const NDDisk::TQueryCredentials& creds, ui64 lsn,
+                         const TString& payload) {
+            auto event = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            event->AddPayloadThenChecksum(TRope(payload));
+            SendToDDisk(ctx, disk.PBServiceId, event.release());
+            saveWrite(disk);
+        };
+        auto stopDDisk = [&](const TDiskHandle& disk) {
+            const TActorId ddiskActorId =
+                ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.ServiceId);
+            const TActorId persistentBufferActorId =
+                ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
+            SendToDDisk(ctx, disk.ServiceId, new TEvents::TEvPoison());
+            const auto gone = WaitFromDDisk<TEvents::TEvGone>(ctx);
+            UNIT_ASSERT_VALUES_EQUAL(gone->Sender, ddiskActorId);
+            ui32 eventsProcessed = 0;
+            ctx.Runtime.Sim([&] {
+                return (ctx.Runtime.WrapInActorContext(ddiskActorId, [](IActor*) {})
+                        || ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}))
+                    && ++eventsProcessed <= 200;
+            });
+            UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(ddiskActorId, [](IActor*) {}));
+            UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}));
+        };
+
+        // Write the legacy checksum-formatted record.
+        const TDiskHandle disk1 = ctx.CreateDDisk(PDiskId, SlotId);
+        const NDDisk::TQueryCredentials creds1 = Connect(ctx, disk1.PBServiceId, TabletId, 1);
+        write(disk1, creds1, 1, firstPayload);
+        for (ui32 i = 0; i < PersistentBufferInitChunks; ++i) {
+            persistentBufferChunks.push_back(disk1.FirstChunkId + i);
+        }
+        stopDDisk(disk1);
+
+        // Restart with index format: the old checksum-formatted record must restore.
+        NDDisk::TPersistentBufferFormat indexFormat;
+        indexFormat.EnableChecksums = false;
+        const TDiskHandle disk2 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
+            persistentBufferChunks, persistentBufferUniqueId, chunkData, indexFormat);
+        const NDDisk::TQueryCredentials creds2 = Connect(ctx, disk2.PBServiceId, TabletId, 1);
+        readRestored(disk2, creds2, 1, firstPayload);
+        write(disk2, creds2, 2, secondPayload);
+        stopDDisk(disk2);
+
+        // Restart again with index format: both legacy and index records must restore.
+        const TDiskHandle disk3 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
+            persistentBufferChunks, persistentBufferUniqueId, chunkData, indexFormat);
+        const NDDisk::TQueryCredentials creds3 = Connect(ctx, disk3.PBServiceId, TabletId, 1);
+        readRestored(disk3, creds3, 1, firstPayload);
+        readRestored(disk3, creds3, 2, secondPayload);
+        write(disk3, creds3, 3, thirdPayload);
+        stopDDisk(disk3);
+
+        // Restart with checksum format: all records, including both index-formatted
+        // records, must restore using the format encoded in their own headers.
+        const TDiskHandle disk4 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
+            persistentBufferChunks, persistentBufferUniqueId, chunkData);
+        const NDDisk::TQueryCredentials creds4 = Connect(ctx, disk4.PBServiceId, TabletId, 1);
+        readRestored(disk4, creds4, 1, firstPayload);
+        readRestored(disk4, creds4, 2, secondPayload);
+        readRestored(disk4, creds4, 3, thirdPayload);
     }
 
     Y_UNIT_TEST(DeleteTabletChunks_RejectedWhenSyncInFlight) {

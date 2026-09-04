@@ -30,20 +30,12 @@ namespace absl_testing {
 ABSL_NAMESPACE_BEGIN
 namespace status_internal {
 
-// TODO(b/323927127): Remove ABSL_REFACTOR_INLINE once callers are cleaned up
-// and move it into a namespace like adl_barrier without types to avoid
-// accidental ADL.
-ABSL_REFACTOR_INLINE inline const absl::Status& GetStatus(
-    const absl::Status& status) {
+inline const absl::Status& GetStatus(const absl::Status& status) {
   return status;
 }
 
-// TODO(b/323927127): Remove ABSL_REFACTOR_INLINE once callers are cleaned up
-// and move it into a namespace like adl_barrier without types to avoid
-// accidental ADL.
 template <typename T>
-ABSL_REFACTOR_INLINE const absl::Status& GetStatus(
-    const absl::StatusOr<T>& status) {
+const absl::Status& GetStatus(const absl::StatusOr<T>& status) {
   return status.status();
 }
 
@@ -56,8 +48,7 @@ template <typename StatusOrType>
 class IsOkAndHoldsMatcherImpl
     : public ::testing::MatcherInterface<StatusOrType> {
  public:
-  typedef
-      typename std::remove_reference<StatusOrType>::type::value_type value_type;
+  typedef typename std::remove_reference_t<StatusOrType>::value_type value_type;
 
   template <typename InnerMatcher>
   explicit IsOkAndHoldsMatcherImpl(InnerMatcher&& inner_matcher)
@@ -132,7 +123,7 @@ class StatusCode {
 
   explicit operator int() const { return static_cast<int>(code_); }
 
-  friend inline void PrintTo(const StatusCode& code, std::ostream* os) {
+  friend void PrintTo(const StatusCode& code, std::ostream* os) {
     absl::string_view text =
         absl::StatusCodeToStringView(static_cast<absl::StatusCode>(code.code_));
     if (!text.empty()) {

@@ -9,6 +9,9 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMir
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadAllAliveInactiveMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks
+ydb/core/driver_lib/run/ut AutoConfig.AutoConfiguredAdjacentPoolWakesAcrossRepeatedIdleCycles
+ydb/core/driver_lib/run/ut AutoConfig.AutoConfiguredAdjacentPoolWakesAfterIdleOnDirectSend
+ydb/core/driver_lib/run/ut AutoConfig.UnitedPoolFallsBackToForeignThreadWithoutAdjacentOwner
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/fq/libs/control_plane_proxy/ut unittest.sole chunk
 ydb/core/http_proxy/ut/inside_ydb_ut unittest.[*/*] chunk
@@ -72,6 +75,8 @@ ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
 ydb/core/kqp/ut/tx unittest.[*/*] chunk
+ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
+ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/mind/hive/ut THiveTest.TestCheckSubHiveMigrationWithReboots
 ydb/core/mind/hive/ut THiveTestWithTenants.TestShrinkStoragePool
 ydb/core/mind/hive/ut unittest.[*/*] chunk
@@ -115,73 +120,28 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_OneBatch
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/column_table unittest.sole chunk
-ydb/core/transfer/ut/functional Transfer.AlterBatchSize
 ydb/core/transfer/ut/functional Transfer.AlterFlushInterval
-ydb/core/transfer/ut/functional Transfer.AlterLambda
-ydb/core/transfer/ut/functional Transfer.AlterLambdaOnWork
-ydb/core/transfer/ut/functional Transfer.AlterTargetDirectory
-ydb/core/transfer/ut/functional Transfer.Alter_WithSecret
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
-ydb/core/transfer/ut/functional Transfer.CheckCommittedOffset_Local
-ydb/core/transfer/ut/functional Transfer.CheckCommittedOffset_Remote
-ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime
-ydb/core/transfer/ut/functional Transfer.CreateAndAlterTransferInDirectory
-ydb/core/transfer/ut/functional Transfer.CreateAndDropConsumer
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists_LocalTopic
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceIsNotTopic
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceIsNotTopic_LocalTopic
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceNotExists
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceNotExists_LocalTopic
-ydb/core/transfer/ut/functional Transfer.CreateTransferTargetIsNotTable
-ydb/core/transfer/ut/functional Transfer.CreateTransferTargetNotExists
-ydb/core/transfer/ut/functional Transfer.CustomConsumer
-ydb/core/transfer/ut/functional Transfer.CustomConsumer_NotExists_Local
-ydb/core/transfer/ut/functional Transfer.CustomConsumer_NotExists_Remote
-ydb/core/transfer/ut/functional Transfer.CustomFlushInterval
-ydb/core/transfer/ut/functional Transfer.DescribeError_OnLambdaCompilation
 ydb/core/transfer/ut/functional Transfer.DescribeTransferWithErrorTopicNotFound
 ydb/core/transfer/ut/functional Transfer.DropTransfer
-ydb/core/transfer/ut/functional Transfer.EnsureError
-ydb/core/transfer/ut/functional Transfer.ErrorInMultiLine
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
-ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Local
 ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_Key
-ydb/core/transfer/ut/functional Transfer.MessageField_Key_Empty
-ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_WriteTimestamp_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_WriteTimestamp_Remote
-ydb/core/transfer/ut/functional Transfer.PauseAndResumeTransfer
 ydb/core/transfer/ut/functional Transfer.PausedAfterError
-ydb/core/transfer/ut/functional Transfer.ReadFromCDC_Local
-ydb/core/transfer/ut/functional Transfer.ReadFromCDC_Remote
-ydb/core/transfer/ut/functional Transfer.TargetTableWithoutDirectory
-ydb/core/transfer/ut/functional Transfer.TargetTableWriteInsideDirectory
-ydb/core/transfer/ut/functional Transfer.TargetTableWriteOutsideDirectory
-ydb/core/transfer/ut/functional Transfer.TransferSourceDropped
-ydb/core/transfer/ut/functional Transfer.TransferSourceDropped_LocalTopic
-ydb/core/transfer/ut/functional Transfer.WriteToNotExists
-ydb/core/transfer/ut/functional Transfer.WriteToNotTable
 ydb/core/transfer/ut/functional unittest.sole chunk
 ydb/core/transfer/ut/row_table Transfer_RowTable.ComplexKey
 ydb/core/transfer/ut/row_table Transfer_RowTable.KeyColumnLast
 ydb/core/transfer/ut/row_table Transfer_RowTable.MessageField_SeqNo
 ydb/core/transfer/ut/row_table Transfer_RowTable.WriteNullToKeyColumn
-ydb/core/transfer/ut/transfer_metrics TransferMetrics.HasDetailedMetrics
 ydb/core/transfer/ut/transfer_metrics TransferMetrics.TestDescribeTransfer
 ydb/core/transfer/ut/transfer_metrics unittest.sole chunk
+ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-true
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
 ydb/core/tx/tx_proxy/ut_schemereq unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.CreateDummyTabletsInDifferentDomains
 ydb/library/actors/http/ut HttpProxy.RequestAfter307
 ydb/library/actors/http/ut HttpProxy.StreamingResponseWithProgress1
-ydb/library/actors/http/ut THttpProxyWithMTls.UntrustedClientCertificate
 ydb/library/actors/http/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
@@ -203,6 +163,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metric
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_resize
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_infer_pdisk_slot_count
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
@@ -519,6 +480,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[98]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[99]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
 ydb/tests/functional/tpc/medium py3test.[test_clickbench.py */*] chunk
+ydb/tests/functional/tpc/medium py3test.[test_default_path.py */*] chunk
 ydb/tests/functional/tpc/medium py3test.[test_tpcc.py */*] chunk
 ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py */*] chunk
 ydb/tests/functional/tpc/medium test_clean.py.TestClean.test
@@ -664,7 +626,9 @@ ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.t
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsv.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[12]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[10]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[11]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[15]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[16]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[17]
@@ -851,13 +815,13 @@ ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_direct_batched_produce
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kv/tests py3test.sole chunk
 ydb/tests/stress/kv_volume/tests py3test.sole chunk
 ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v2-ydb/tests/stress/kv_volume/tests/configs/common_channel_read.textproto]
 ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[128MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[1GB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[512MB]
-ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/mixedpy/tests py3test.sole chunk
 ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[column]
 ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[row]
@@ -873,8 +837,6 @@ ydb/tests/stress/remove_storage_groups/tests test_workload.py.TestYdbAlterStorag
 ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/result_set_format/tests test_value_workload.py.TestResultSetValueWorkload.test
-ydb/tests/stress/s3_backups/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
 ydb/tests/stress/show_create/table/tests test_workload.py.TestYdbWorkload.test_show_create_table_workload[30-test_sct]
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[heavy-column]

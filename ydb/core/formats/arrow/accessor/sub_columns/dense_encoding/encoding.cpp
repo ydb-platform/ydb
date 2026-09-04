@@ -7,6 +7,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/data.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_run_reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_util.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_ops.h>
@@ -296,7 +297,7 @@ TVector<ui32> DecodeLengths(TStringBuf data, ui32 count) {
     return {};
 }
 
-TString SerializeBinaryArray(const arrow::BinaryArray& array, const std::shared_ptr<arrow::util::Codec>& codec) {
+TString SerializeBinaryLikeArray(const arrow::BinaryArray& array, const std::shared_ptr<arrow::util::Codec>& codec) {
     VerifyLittleEndian();
     TVector<ui32> lengths;
     lengths.reserve(array.length() - array.null_count());
@@ -329,8 +330,10 @@ TString SerializeBinaryArray(const arrow::BinaryArray& array, const std::shared_
     return out;
 }
 
-std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
-    TStringBuf blob, ui32 recordsCount, const std::shared_ptr<arrow::util::Codec>& codec) {
+namespace {
+
+std::shared_ptr<arrow::ArrayData> DeserializeBinaryLikeArrayData(TStringBuf blob, ui32 recordsCount,
+    const std::shared_ptr<arrow::DataType>& valueType, const std::shared_ptr<arrow::util::Codec>& codec) {
     VerifyLittleEndian();
     size_t pos = 0;
     AFL_VERIFY(blob.size() >= 1);
@@ -374,9 +377,17 @@ std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
 
     auto offsetsBuf = CopyToBuffer(offsets.data(), sizeof(int32_t) * offsets.size());
     auto valuesBuf = CopyToBuffer(values.data(), values.size());
-    auto data = arrow::ArrayData::Make(
-        arrow::binary(), recordsCount, { nullBitmap, offsetsBuf, valuesBuf }, nullBitmap ? arrow::kUnknownNullCount : 0);
-    return std::static_pointer_cast<arrow::BinaryArray>(arrow::MakeArray(data));
+    return arrow::ArrayData::Make(valueType, recordsCount, { nullBitmap, offsetsBuf, valuesBuf }, nullBitmap ? arrow::kUnknownNullCount : 0);
+}
+
+}   // namespace
+
+std::shared_ptr<arrow::BinaryArray> DeserializeBinaryLikeArray(TStringBuf blob, ui32 recordsCount,
+    const std::shared_ptr<arrow::DataType>& valueType,
+    const std::shared_ptr<arrow::util::Codec>& codec) {
+    AFL_VERIFY(arrow::is_binary_like(valueType->id()))("type", valueType->ToString());
+    return std::static_pointer_cast<arrow::BinaryArray>(
+        arrow::MakeArray(DeserializeBinaryLikeArrayData(blob, recordsCount, valueType, codec)));
 }
 
 TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const std::shared_ptr<arrow::FixedWidthType>& indexType,

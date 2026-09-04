@@ -526,7 +526,7 @@ private:
                 return false;
             }
 
-            if (Types_.BridgeBinaryPath.empty()) {
+            if (Types_.UdfBridgeBinaryPath.empty()) {
                 ctx.AddError(TIssue(pos, "udf_bridge is not available"));
                 return false;
             }

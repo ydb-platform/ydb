@@ -1696,7 +1696,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         tableAggr.SetWriteBytes(t.StorageStats.WriteBytes + t.WriteBytes.Sum);
         tableAggr.SetEraseRows(t.StorageStats.EraseRows + t.EraseRows.Sum);
         tableAggr.SetEraseBytes(t.StorageStats.EraseBytes + t.EraseBytes.Sum);
-        tableAggr.SetAffectedRows(t.StorageStats.AffectedRows + t.AffectedRows.Sum);
+        if (TasksGraph->GetMeta().CollectAffectedRows) {
+            tableAggr.SetAffectedRows(t.StorageStats.AffectedRows + t.AffectedRows.Sum);
+        }
         tableAggr.SetAffectedPartitions(t.StorageStats.AffectedPartitions +
             (t.AffectedPartitionsUniqueCount ? t.AffectedPartitionsUniqueCount : t.AffectedPartitions.Sum)
         );

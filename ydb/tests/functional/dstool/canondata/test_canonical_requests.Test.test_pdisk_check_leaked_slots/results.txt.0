@@ -4,32 +4,19 @@ Exit Status: 0
 success
 
 ===== grpc_calls =====
-=== Invoke BlobStorageConfig ===
-Domain: 1
-Request {
-  Command {
-    QueryBaseConfig {
-    }
-  }
-  Command {
-    ReadStoragePool {
-      BoxId: 18446744073709551615
-    }
-  }
-  Rollback: true
-}
+=== Invoke StreamStorageState ===
+include_vdisks: true
 
-=== Invoke BlobStorageConfig ===
-Domain: 1
-Request {
-  Command {
-    ReassignGroupDisk {
-      GroupId: 2181038080
-      GroupGeneration: 2
-      FailDomainIdx: 1
-      SuppressDonorMode: true
-    }
+=== Invoke ReassignVDisk ===
+vdisk_id {
+  group_id: 2181038080
+  group_generation: 2
+  fail_domain_idx: 1
+}
+options {
+  safety {
+    ignore_degraded_groups: true
+    ignore_group_failure_model: true
   }
-  IgnoreGroupFailModelChecks: true
-  IgnoreDegradedGroupsChecks: true
+  suppress_donor_mode: true
 }

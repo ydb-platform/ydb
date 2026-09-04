@@ -1586,6 +1586,9 @@ struct TBatchWithMetadata {
     bool HasRead = false;
     // QuerySpanId of the query that created this batch (for TLI lock-break attribution).
     ui64 QuerySpanId = 0;
+    // MvccSnapshot of the operation whose data this batch carries. Covering
+    // (empty) batches have no snapshot.
+    std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
 
     bool IsCoveringBatch() const {
         return Data == nullptr;
@@ -1867,7 +1870,8 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         const ui32 defaultColumnsCount,
-        const i64 priority) override {
+        const i64 priority,
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) override {
         AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
         AFL_ENSURE(defaultColumnsCount == 0 || operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT);
 
@@ -1884,6 +1888,7 @@ public:
                 },
                 .Serializer = nullptr,
                 .Closed = false,
+                .MvccSnapshot = mvccSnapshot,
             });
         YQL_ENSURE(inserted);
 
@@ -1952,6 +1957,26 @@ public:
             return it->second.GetBatch(0).QuerySpanId;
         }
         return 0;
+    }
+
+    std::optional<NKikimrDataEvents::TMvccSnapshot> GetMessageMvccSnapshot(ui64 shardId) const override {
+        if (!ShardsInfo.Has(shardId)) {
+            return std::nullopt;
+        }
+        const auto& shardInfo = ShardsInfo.GetShards().at(shardId);
+        std::optional<NKikimrDataEvents::TMvccSnapshot> result;
+        for (size_t index = 0; index < shardInfo.GetBatchesInFlight(); ++index) {
+            const auto& batch = shardInfo.GetBatch(index);
+            if (batch.MvccSnapshot) {
+                if (result && (result->GetStep() != batch.MvccSnapshot->GetStep()
+                        || result->GetTxId() != batch.MvccSnapshot->GetTxId())) {
+                    // Batches with different snapshots must not be mixed in a single TEvWrite message.
+                    YQL_ENSURE(false, "MvccSnapshot mismatch between batches of a single TEvWrite message");
+                }
+                result = batch.MvccSnapshot;
+            }
+        }
+        return result;
     }
 
     void FlushBuffers() override {
@@ -2163,6 +2188,7 @@ private:
                         .Data = std::move(batch),
                         .HasRead = hasRead,
                         .QuerySpanId = writeInfo.QuerySpanId,
+                        .MvccSnapshot = writeInfo.MvccSnapshot,
                     });
                     ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
                         .ShardId = shardId,
@@ -2209,6 +2235,8 @@ private:
         bool Closed = false;
         // QuerySpanId of the query that opened this token (for TLI lock-break attribution).
         ui64 QuerySpanId = 0;
+        // MvccSnapshot of the operation that opened this token.
+        std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     };
 
     std::map<TWriteToken, TWriteInfo> WriteInfos;

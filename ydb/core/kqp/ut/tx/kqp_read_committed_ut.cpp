@@ -346,6 +346,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                 runtime.SetObserverFunc(saveObserver);
             };
 
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
             // Begin a Read Committed transaction
             {
                 auto future0 = Kikimr->RunInThreadPool([&] {
@@ -371,6 +373,25 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
                 UNIT_ASSERT(lockSnapshots.size() >= 1);
                 const auto firstSnapshot = lockSnapshots.front();
+
+                // Read Committed operations execute as immediate (uncoordinated) writes, so they
+                // don't advance the coordinator's read-step (TEvAcquireReadStep returns
+                // Max(LastSentStep, LastAcquired) without incrementing). To make the next
+                // operation observe a different (fresh) snapshot value, an independent
+                // coordinator-planned (serializable, read+write) transaction must move the
+                // time first; otherwise a correct implementation and the buggy one emit
+                // identical lock snapshots and the test cannot tell them apart.
+                // Serializable writes don't emit TEvLockRows, so only session1's
+                // operations contribute to lockSnapshots.
+                {
+                    auto futureCommit = Kikimr->RunInThreadPool([&] {
+                        return session2.ExecuteQuery(Q_(R"(
+                            UPDATE `/Root/Test` SET Amount = 7300ul WHERE Name == "Tony";
+                        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                    });
+                    auto resultCommit = runtime.WaitFuture(futureCommit);
+                    UNIT_ASSERT_VALUES_EQUAL_C(resultCommit.GetStatus(), EStatus::SUCCESS, resultCommit.GetIssues().ToString());
+                }
 
                 // Second write operation in the same transaction must acquire and use
                 // a fresh snapshot, and must not reuse the first operation's cached one.

@@ -18,7 +18,8 @@ public:
     virtual void SetLockSettings(
         ui64 cookie,
         TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
-        bool skipAbsent) = 0;
+        bool skipAbsent,
+        const NKikimrDataEvents::TMvccSnapshot& mvccSnapshot) = 0;
 
     virtual void AddLockTask(
         ui64 cookie,
@@ -45,7 +46,6 @@ struct TKqpBufferLockSettings {
     ui64 LockNodeId;
     NKikimrDataEvents::ELockMode LockMode;
     ui64 QuerySpanId = 0;
-    std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
 
     IKqpTransactionManagerPtr TxManager;
 

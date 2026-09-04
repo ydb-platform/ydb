@@ -40,10 +40,11 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const TActorId& storageProxy,
                                                const TActorId& runActorId,
                                                const TCheckpointCoordinatorSettings& settings,
-                                               const ::NMonitoring::TDynamicCounterPtr& counters,
-                                               const NProto::TGraphParams& graphParams,
-                                               const FederatedQuery::StateLoadMode& stateLoadMode,
-                                               const FederatedQuery::StreamingDisposition& streamingDisposition)
+                                                const ::NMonitoring::TDynamicCounterPtr& counters,
+                                                const NProto::TGraphParams& graphParams,
+                                                const FederatedQuery::StateLoadMode& stateLoadMode,
+                                                const FederatedQuery::StreamingDisposition& streamingDisposition,
+                                                bool restoreOffsetsFromForeignCheckpoint)
     : NActors::TActor<TCheckpointCoordinator>(&TCheckpointCoordinator::DispatchEvent)
     , CoordinatorId(std::move(coordinatorId))
     , StorageProxy(storageProxy)
@@ -55,6 +56,7 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , Metrics(TCheckpointCoordinatorMetrics(counters))
     , StateLoadMode(stateLoadMode)
     , StreamingDisposition(streamingDisposition)
+    , RestoreOffsetsFromForeignCheckpoint(restoreOffsetsFromForeignCheckpoint)
 {
 }
 
@@ -223,7 +225,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
 
     const bool needCheckpointMetadata = StateLoadMode == FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT || StreamingDisposition.has_from_last_checkpoint();
     if (needCheckpointMetadata) {
-        const bool loadGraphDescription = StateLoadMode == FederatedQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
+        const bool loadGraphDescription = RestoreOffsetsFromForeignCheckpoint;//StateLoadMode == FederatedQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
         YDB_LOG_INFO("Send TEvGetCheckpointsMetadataRequest",
             {"coordinatorId", CoordinatorId},
             {"stateLoadMode", FederatedQuery::StateLoadMode_Name(StateLoadMode)},
@@ -287,8 +289,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
     if (!checkpoints.empty()) {
         const auto& checkpoint = checkpoints.at(0);
         CheckpointIdGenerator = std::make_unique<TCheckpointIdGenerator>(CoordinatorId, checkpoint.CheckpointId);
-        const bool needRestoreOffsets = StateLoadMode == FederatedQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint();
-        if (needRestoreOffsets) {
+        if (RestoreOffsetsFromForeignCheckpoint) {
             TryToRestoreOffsetsFromForeignCheckpoint(checkpoint);
         } else {
             RestoreFromOwnCheckpoint(checkpoint);
@@ -902,7 +903,8 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,
-    const FederatedQuery::StreamingDisposition& streamingDisposition)
+    const FederatedQuery::StreamingDisposition& streamingDisposition,
+    bool restoreOffsetsFromForeignCheckpoint)
 {
     return MakeHolder<TCheckpointCoordinator>(
         coordinatorId,
@@ -912,7 +914,8 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
         counters,
         graphParams,
         stateLoadMode,
-        streamingDisposition);
+        streamingDisposition,
+        restoreOffsetsFromForeignCheckpoint);
 }
 
 } // namespace NFq

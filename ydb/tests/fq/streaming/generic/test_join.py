@@ -1251,7 +1251,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
         # options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
         try:
-            kikimr.ydb_client.query(f"""
+            self.create_streaming_query(kikimr, query_name, f"""
                 CREATE STREAMING QUERY {query_name} AS DO BEGIN
                 {sql}
                 END DO;
@@ -1398,7 +1398,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
                 R'{"uid":"ydb30", "hopTime":20, "tsList":[16]}',
             ),
         ]
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY {query_name} AS DO BEGIN
             {sql}
             END DO;

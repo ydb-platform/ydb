@@ -53,7 +53,7 @@ class TestStreamingLarge(StreamingTestBase):
                 END DO;"""
 
             path = f"/Root/{name}"
-            kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+            self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
             self.wait_completed_checkpoints(kikimr, path)
 
         for i, _ in enumerate(self.roll(kikimr)):
@@ -91,8 +91,8 @@ class TestStreamingLarge(StreamingTestBase):
 
         query_name1 = "test_restart_nodes1"
         query_name2 = "test_restart_nodes2"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
-        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name1, sql.format(query_name=query_name1, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name2, sql.format(query_name=query_name2, inp=inp, out=out))
         path1 = f"/Root/{query_name1}"
         path2 = f"/Root/{query_name2}"
         self.wait_completed_checkpoints(kikimr, path1)
@@ -159,8 +159,8 @@ class TestStreamingLarge(StreamingTestBase):
 
         query_name1 = "test_replace_node1"
         query_name2 = "test_replace_node2"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
-        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name1, sql.format(query_name=query_name1, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name2, sql.format(query_name=query_name2, inp=inp, out=out))
         time.sleep(2)
 
         message_count = 9

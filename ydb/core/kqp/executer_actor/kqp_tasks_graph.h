@@ -409,6 +409,7 @@ public:
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
     void RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
+    void ClearRuntimeTasks();
 
     // TODO: public used by TKqpPlanner - why?
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
@@ -505,5 +506,15 @@ private:
     std::unique_ptr<TMaxTasksGraph> MaxTasksGraph;
     const bool UseKqpTasksGraphV2;
 };
+
+// Patches a saved physical graph to rescale PQ source stages.
+// The new task count per source stage is computed the same way as CountReadTasksFromSource()
+// (proportional to StageCost, bounded by cluster size and partition count).
+// Cascades through downstream Map-connected stages. Rebuilds channels and redistributes
+// ReadRanges (PQ partition params) among the new source tasks round-robin.
+// Must be called before RestoreTasksGraphInfo().
+void PatchQueryPhysicalGraphForRescaling(
+    NKikimrKqp::TQueryPhysicalGraph& graph,
+    const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
 
 } // namespace NKikimr::NKqp

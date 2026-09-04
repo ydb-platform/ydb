@@ -530,7 +530,7 @@ class TestStreamingInYdb(StreamingTestBase):
             assert "Member not found: __ydb_user_attributes" in err
             return
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
@@ -766,7 +766,7 @@ LIMIT 1"""
                 );
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
@@ -812,7 +812,7 @@ LIMIT 1"""
                 );
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
@@ -862,7 +862,7 @@ LIMIT 1"""
                 );
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
@@ -1013,7 +1013,7 @@ FROM `{table_name}`"""
             END DO;'''
 
         path = f"/Root/{name}"
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
 
         data = ['{"time": "lunch time"}']
@@ -1059,8 +1059,8 @@ FROM `{table_name}`"""
 
         query_name1 = f"test_read_topic_shared_reading_insert_to_topic1_{local_topics!s:.1}"
         query_name2 = f"test_read_topic_shared_reading_insert_to_topic2_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
-        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name1, sql.format(query_name=query_name1, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name2, sql.format(query_name=query_name2, inp=inp, out=out))
         path1 = f"/Root/{query_name1}"
         path2 = f"/Root/{query_name2}"
         self.wait_completed_checkpoints(kikimr, path1)
@@ -1110,7 +1110,7 @@ FROM `{table_name}`"""
             END DO;'''
 
         query_name = f"test_read_topic_shared_reading_restart_nodes_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
@@ -1184,7 +1184,7 @@ FROM `{table_name}`"""
             END DO;'''
 
         query_name = f"test_read_topic_restore_state_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
@@ -1242,7 +1242,7 @@ FROM `{table_name}`"""
             END DO;'''
 
         path = f"/Root/{name}"
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
 
         data = [
@@ -1282,7 +1282,7 @@ FROM `{table_name}`"""
             END DO;'''
 
         path = f"/Root/{name}"
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
 
         message_count = 20
@@ -1347,7 +1347,11 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, consumer_name=self.consumer_name, inp=inp, out=out))
+        self.create_streaming_query(
+            kikimr,
+            query_name,
+            sql.format(query_name=query_name, consumer_name=self.consumer_name, inp=inp, out=out),
+        )
         self.write_stream(['{"time": "lunch time"}'], endpoint=endpoint)
         assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ['lunch time']
 
@@ -1372,7 +1376,7 @@ FROM `{table_name}`"""
                     INSERT INTO {out} SELECT CAST(field_name as String) FROM $in;
                 END DO;'''
 
-            kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, type_name=type, out=out))
+            self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, type_name=type, out=out))
             self.write_stream([f"{{\"field_name\": {input}}}"], endpoint=endpoint)
             assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == [expected_output]
             kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
@@ -1409,7 +1413,7 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
         path = f"/Root/{query_name}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
@@ -1428,7 +1432,7 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
         path = f"/Root/{query_name}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
@@ -1450,7 +1454,7 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
         path = f"/Root/{query_name}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
@@ -1477,7 +1481,7 @@ FROM `{table_name}`"""
         inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_disabled", local_topics, entity_name, partitions_count=10)
         name = f"test_deduplication_{local_topics!s:.1}"
         path = f"/Root/{name}"
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
         self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
 
         data1 = 'value1'
@@ -1503,7 +1507,7 @@ FROM `{table_name}`"""
         # Enable deduplication
 
         inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_enabled", local_topics, entity_name, partitions_count=10)
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="TRUE"))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out, enable="TRUE"))
         self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
 
         self.write_stream([data1], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
@@ -1655,7 +1659,7 @@ FROM `{table_name}`"""
             expected_data2 = ["in2-value-p-row-value-j1-value-p-column:1", "in2-value-p-row-value-j2-value-p-column:2"]
 
         query_name = f"test_precompute_and_other_ops_query_{local_topics!s:.1}_{additional_operator}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA FeatureR010 = "prototype";
@@ -1755,7 +1759,7 @@ FROM `{table_name}`"""
         """)
 
         query_name = f"test_alter_query_with_precompute_query_{local_topics!s:.1}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO {out}
@@ -1839,8 +1843,8 @@ FROM `{table_name}`"""
 
         query_name1 = f"test_structured_json1_{local_topics!s:.1}"
         query_name2 = f"test_structured_json2_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out, comment_for_pushdown='--'))
-        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out, comment_for_pushdown=''))
+        self.create_streaming_query(kikimr, query_name1, sql.format(query_name=query_name1, inp=inp, out=out, comment_for_pushdown='--'))
+        self.create_streaming_query(kikimr, query_name2, sql.format(query_name=query_name2, inp=inp, out=out, comment_for_pushdown=''))
         path1 = f"/Root/{query_name1}"
         path2 = f"/Root/{query_name2}"
         self.wait_completed_checkpoints(kikimr, path1)
@@ -1916,7 +1920,7 @@ FROM `{table_name}`"""
         inp, out, endpoint = self.get_io_names(kikimr, f"test_stop_after_restart_{local_topics!s:.1}", local_topics, entity_name)
 
         path = f"/Root/{entity_name(f'test_stop_after_restart_query_{local_topics!s:.1}')}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, path, f"""
             CREATE STREAMING QUERY `{path}` AS DO BEGIN
                 INSERT INTO {out}
                 SELECT * FROM {inp}
@@ -2032,7 +2036,7 @@ FROM `{table_name}`"""
             expected_data2 = ["in2-value-j-row-value-j-column:1", "in2-value-j-row-value-j-column:2"]
 
         query_name = f"test_join_and_other_ops_query_{local_topics!s:.1}_{additional_operator}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA FeatureR010 = "prototype";
@@ -2135,7 +2139,7 @@ FROM `{table_name}`"""
         """)
 
         query_name = f"test_alter_query_with_join_query_{local_topics!s:.1}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO {out}
@@ -2203,7 +2207,7 @@ FROM `{table_name}`"""
 
         query_name = f"test_alter_query_outputs_query_{local_topics!s:.1}"
         # 1. Single output (topic)
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO {out}
@@ -2278,7 +2282,7 @@ FROM `{table_name}`"""
         """)
 
         path = f"/Root/{entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}')}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, path, f"""
             CREATE STREAMING QUERY `{path}` AS DO BEGIN
                 INSERT INTO {out}
                 SELECT Unwrap(j.Value) FROM {inp} AS i
@@ -2364,6 +2368,12 @@ FROM `{table_name}`"""
             partitions_count=1,
         )
 
+        def total_pq_read_actor_count() -> int:
+            return sum(
+                self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                for node_id in kikimr.cluster.nodes
+            )
+
         name = f"test_restart_after_part_inc_{local_topics!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -2377,8 +2387,13 @@ FROM `{table_name}`"""
             END DO;'''
 
         path = f"/Root/{name}"
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
+
+        count_after_create = total_pq_read_actor_count()
+        assert count_after_create == 1, (
+            f"Expected exactly 1 DQ_PQ_READ_ACTOR after CREATE, got {count_after_create}"
+        )
 
         # Stop the query before altering the topic partition count
         logger.debug(f"stopping query {name}")
@@ -2403,6 +2418,11 @@ FROM `{table_name}`"""
                 partition_key=''.join(random.choices(string.digits, k=8)),
                 endpoint=endpoint,
             )
+
+        count_after_alter = total_pq_read_actor_count()
+        assert count_after_alter > 1, (
+            f"Expected more than 1 DQ_PQ_READ_ACTOR after ALTER, got {count_after_alter}"
+        )
 
         expected_data = ["my_data" for _ in range(message_count)]
         assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data

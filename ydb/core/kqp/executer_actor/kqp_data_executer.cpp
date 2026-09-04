@@ -647,8 +647,7 @@ private:
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        // TODO: move graph restoration outside of executer
-        const bool graphRestored = RestoreTasksGraph();
+        const bool graphRestored = PatchAndRestoreTasksGraph(RescalingChangedTaskCount);
 
         NDq::TTxId dqTxId = TxId;
         if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
@@ -712,6 +711,27 @@ private:
         if (!graphRestored) {
             const bool mayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
+
+            // TODO test only
+
+            // if (hasPqSources && Request.SaveQueryPhysicalGraph && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
+            //     const auto preparedQuery = Request.Transactions[0].Body->GetPreparedQuery();
+            //     YQL_ENSURE(preparedQuery);
+
+            //     NKikimrKqp::TQueryPhysicalGraph physicalGraph;
+            //     *physicalGraph.MutablePreparedQuery() = *preparedQuery;
+            //     TasksGraph.PersistTasksGraphInfo(physicalGraph);
+
+            //     const auto taskCount = physicalGraph.TasksSize();
+            //     PatchQueryPhysicalGraphForRescaling(physicalGraph, ResourcesSnapshot);
+            //     RescalingChangedTaskCount = physicalGraph.TasksSize() != taskCount;
+
+            //     Request.QueryPhysicalGraph = std::make_shared<NKikimrKqp::TQueryPhysicalGraph>(std::move(physicalGraph));
+            //     if (RescalingChangedTaskCount) {
+            //         TasksGraph.ClearRuntimeTasks();
+            //         TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
+            //     }
+            // }
         }
 
         TIssue validateIssue;
@@ -1243,6 +1263,9 @@ private:
         const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
             ? FederatedQuery::FROM_LAST_CHECKPOINT
             : FederatedQuery::EMPTY;
+        const bool restoreOffsetsFromForeignCheckpoint =
+            (stateLoadMode == FederatedQuery::StateLoadMode::EMPTY && streamingDisposition.has_from_last_checkpoint())
+            || RescalingChangedTaskCount;
 
         NFq::NProto::TGraphParams graphParams;
         if (Request.QueryPhysicalGraph) {
@@ -1275,7 +1298,8 @@ private:
             counters,
             graphParams,
             stateLoadMode,
-            streamingDisposition
+            streamingDisposition,
+            restoreOffsetsFromForeignCheckpoint
         ).Release());
 
         YDB_LOG_DEBUG("Created new CheckpointCoordinator",
@@ -1433,6 +1457,8 @@ private:
     const TDuration WaitCAStatsTimeout;
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+
+    bool RescalingChangedTaskCount = false;
 };
 
 } // namespace

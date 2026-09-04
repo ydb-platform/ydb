@@ -2166,6 +2166,29 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 100000000,
             DefaultValue: 1000000 }];
+
+        // Ceilings for the adaptive S3 concurrency limiters (writes/deletes/gets). Each limiter still
+        // shrinks on SlowDown and grows back on success; these values only cap how far it may grow.
+        optional uint64 S3MaxWritesInFlight = 2 [(ControlOptions) = {
+            Description: "Maximum number of concurrent S3 PUTs gated by a single BlobDepot tablet",
+            MinValue: 1,
+            MaxValue: 1000000000,
+            DefaultValue: 32 }];
+        optional uint64 S3MaxDeletesInFlight = 3 [(ControlOptions) = {
+            Description: "Maximum number of concurrent S3 delete requests issued by a single BlobDepot tablet",
+            MinValue: 1,
+            MaxValue: 1000000000,
+            DefaultValue: 3 }];
+        optional uint64 S3MaxObjectsToDeleteAtOnce = 4 [(ControlOptions) = {
+            Description: "Maximum number of objects packed into a single S3 multi-delete request. S3 DeleteObjects allows at most 1000 keys per request",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+        optional uint64 S3MaxGetsInFlight = 5 [(ControlOptions) = {
+            Description: "Maximum number of concurrent S3 GETs issued by a single BlobDepot agent",
+            MinValue: 1,
+            MaxValue: 1000000000,
+            DefaultValue: 32 }];
     }
 
     message TPDiskControls {

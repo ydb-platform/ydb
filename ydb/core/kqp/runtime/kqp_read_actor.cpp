@@ -352,7 +352,8 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NWilson::TTraceId& traceId,
         TIntrusivePtr<TKqpCounters> counters,
-        TVector<TSerializedCellVec> keyPoints)
+        TVector<TSerializedCellVec> keyPoints,
+        bool collectShardReadDiagnostics)
         : Settings(settings)
         , Arena(arena)
         , DirectKeyPoints(std::move(keyPoints))
@@ -401,7 +402,7 @@ public:
         if (Settings->HasMaxInFlightShards()) {
             MaxInFlight = Settings->GetMaxInFlightShards();
         }
-        if (Settings->GetCollectDiagnostics()) {
+        if (collectShardReadDiagnostics) {
             ShardReadDiagnostics = std::make_unique<TShardReadDiagnosticsCollector>();
         }
     }
@@ -1810,8 +1811,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(con
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NWilson::TTraceId& traceId,
     TIntrusivePtr<TKqpCounters> counters,
-    TVector<TSerializedCellVec> keyPoints) {
-    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters, std::move(keyPoints));
+    TVector<TSerializedCellVec> keyPoints,
+    bool collectShardReadDiagnostics) {
+    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters, std::move(keyPoints), collectShardReadDiagnostics);
     return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
 }
 
@@ -1820,7 +1822,8 @@ void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<T
         TString(NYql::KqpReadRangesSourceName),
         [counters] (const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateKqpReadActor(settings, args.Arena, args.ComputeActorId, args.InputIndex, args.StatsLevel,
-        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters);
+        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters, {},
+        ShouldCollectShardReadDiagnostics(args.TaskParams));
         });
 }
 

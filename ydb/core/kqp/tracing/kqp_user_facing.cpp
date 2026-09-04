@@ -15,6 +15,9 @@ TProxyUserFacingTraceContext::TProxyUserFacingTraceContext(
     : ParentTraceId(request.GetUserFacingWilsonTraceId())
     , Action(request.GetAction())
     , Origin(request.Record.GetUserFacingTrace().ProxyRequestHopsSize() == 0) {
+    if (request.GetQuerySize() <= MaxUserFacingQueryTextSize) {
+        QueryText = request.GetQuery();
+    }
     if (const auto& seed = request.GetProxyTraceSeed()) {
         StartedAt = seed->StartTime;
         MonotonicStartedAt = seed->StartedAt;
@@ -66,6 +69,7 @@ std::optional<TProxyUserFacingTraceSnapshot> TProxyUserFacingTraceContext::Detac
     return TProxyUserFacingTraceSnapshot{
         .ParentTraceId = std::move(ParentTraceId),
         .RootTraceId = std::move(RootTraceId),
+        .QueryText = std::move(QueryText),
         .StartedAt = startedAt,
         .SentAt = SentAt,
         .FinishedAt = finishedAt,

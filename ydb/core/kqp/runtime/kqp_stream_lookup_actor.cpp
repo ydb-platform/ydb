@@ -83,7 +83,7 @@ public:
         , UseFollowers(settings.GetAllowUseFollowers())
         , IsTableImmutable(settings.GetIsTableImmutable())
         , HasVectorTopK(settings.HasVectorTopK())
-        , ShardReadDiagnostics(settings.GetCollectDiagnostics()
+        , ShardReadDiagnostics(ShouldCollectShardReadDiagnostics(args.TaskParams)
             ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())

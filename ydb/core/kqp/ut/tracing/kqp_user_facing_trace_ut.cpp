@@ -633,17 +633,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         UNIT_ASSERT_C(!userRoot->BFSFindOne("ComputeActor"), "user tree leaked engine internals");
 
-        bool queryTextChecked = false;
-        for (const auto& span : userUploader->Spans) {
-            for (const auto& attr : span.attributes()) {
-                if (attr.key() == "db.query.text") {
-                    const TString& text = attr.value().string_value();
-                    UNIT_ASSERT_C(text.Contains("SELECT"), "db.query.text lost query shape: " << text);
-                    queryTextChecked = true;
-                }
-            }
-        }
-        UNIT_ASSERT_C(queryTextChecked, "db.query.text attribute missing");
+        const auto* queryText = FindAttribute(*rootSpan, "db.query.text");
+        UNIT_ASSERT_C(queryText, "root db.query.text attribute missing");
+        UNIT_ASSERT_C(queryText->value().string_value().Contains("SELECT"),
+            "root db.query.text lost query shape: " << queryText->value().string_value());
         AssertChildSpansAreWithinParents(*userUploader);
 
         trace.Reset();

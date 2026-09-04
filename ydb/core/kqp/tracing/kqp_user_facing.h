@@ -140,6 +140,7 @@ struct TRejectedUserFacingQuerySnapshot {
 struct TProxyUserFacingTraceSnapshot {
     NWilson::TTraceId ParentTraceId;
     NWilson::TTraceId RootTraceId;
+    TString QueryText;
     TInstant StartedAt;
     TInstant SentAt;
     TInstant FinishedAt;
@@ -174,6 +175,7 @@ public:
 private:
     NWilson::TTraceId ParentTraceId;
     NWilson::TTraceId RootTraceId;
+    TString QueryText;
     TInstant StartedAt;
     NActors::TMonotonic MonotonicStartedAt;
     NKikimrKqp::EQueryAction Action;

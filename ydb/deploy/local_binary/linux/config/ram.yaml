@@ -86,5 +86,26 @@ channel_profile_config:
     profile_id: 0
 grpc_config:
   host: 127.0.0.1
+  port: 2136
 monitoring_config:
   monitoring_address: 127.0.0.1
+tracing_config:
+  backend:
+    opentelemetry:
+      collector_url: grpc://localhost:4317
+      service_name: ydb
+  sampling:
+    - fraction: 1
+      level: 15
+      max_traces_per_minute: 1000
+      max_traces_burst: 100
+user_facing_tracing_config:
+  backend:
+    opentelemetry:
+      collector_url: grpc://localhost:4317
+      service_name: ydb-user-facing
+  sampling:
+    - fraction: 1
+      level: 15
+      max_traces_per_minute: 1000
+      max_traces_burst: 100

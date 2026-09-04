@@ -940,6 +940,9 @@ void RenderProxyUserFacingTrace(TProxyUserFacingTraceSnapshot snapshot) {
     root.Attribute("db.operation.name", snapshot.Operation);
     root.Attribute("db.response.status_code", Ydb::StatusIds::StatusCode_Name(snapshot.Status));
     root.Attribute("ydb.duration.source", TString("origin_monotonic"));
+    if (const TString queryText = ProtectUserFacingQueryText(snapshot.QueryText)) {
+        root.Attribute("db.query.text", queryText);
+    }
     if (AppData()) {
         root.Attribute("db.namespace", AppData()->TenantName);
     }

@@ -4,6 +4,8 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
 #include <util/generic/utility.h>
 #include <util/system/types.h>
 
@@ -13,6 +15,13 @@
 #include <vector>
 
 namespace NKikimr::NKqp {
+
+inline constexpr TStringBuf ShardReadDiagnosticsTaskParam =
+    "kqp.collect_shard_read_diagnostics";
+
+inline bool ShouldCollectShardReadDiagnostics(const THashMap<TString, TString>& taskParams) {
+    return taskParams.contains(ShardReadDiagnosticsTaskParam);
+}
 
 // Bounded source-side collectors retain failures, retries, and stragglers under high fan-out.
 constexpr size_t MaxShardReadDiagnostics = 8;

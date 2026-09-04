@@ -996,7 +996,6 @@ message TKqpStreamLookupSettings {
     // Gated by the EnableStreamLookupJoinCookieV2 feature flag so the new format
     // is only emitted once every node in the cluster understands it.
     optional uint32 CookieFormatVersion = 23 [default = 0];
-    optional bool CollectDiagnostics = 24 [default = false];
 }
 
 message TKqpFullTextSourceSettings {
@@ -1051,7 +1050,6 @@ message TKqpFullTextSourceSettings {
     optional string Mode = 16;
 
     optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
-    optional bool CollectDiagnostics = 20 [default = false];
 };
 
 message TKqpSysViewSourceSettings {

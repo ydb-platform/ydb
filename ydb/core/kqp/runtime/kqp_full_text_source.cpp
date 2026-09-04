@@ -2880,7 +2880,8 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NWilson::TTraceId&,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TKqpCounters> counters,
+        bool collectShardReadDiagnostics)
         : Settings(settings)
         , Arena(arena)
         , ComputeActorId(computeActorId)
@@ -2900,7 +2901,7 @@ public:
         , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance(), PrefixCells))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
-        , ShardReadDiagnostics(Settings->GetCollectDiagnostics()
+        , ShardReadDiagnostics(collectShardReadDiagnostics
             ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , ReadsState(Counters, LogPrefix,
             ShardReadDiagnostics.get())
@@ -3726,11 +3727,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSourc
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NWilson::TTraceId& traceId,
-    TIntrusivePtr<TKqpCounters> counters)
+    TIntrusivePtr<TKqpCounters> counters,
+    bool collectShardReadDiagnostics)
 {
     auto makeActor = [&](auto docIdTag) -> std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> {
         using TDocId = decltype(docIdTag);
-        auto* actor = new TFullTextSource<TDocId>(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+        auto* actor = new TFullTextSource<TDocId>(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters, collectShardReadDiagnostics);
         return {actor, actor};
     };
 
@@ -3754,7 +3756,8 @@ void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusive
         TString(NYql::KqpFullTextSourceName),
         [counters] (const NKikimrKqp::TKqpFullTextSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateKqpFullTextSource(settings, args.Arena, args.ComputeActorId, args.InputIndex, args.StatsLevel,
-        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters);
+        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters,
+        ShouldCollectShardReadDiagnostics(args.TaskParams));
         });
 }
 

@@ -60,6 +60,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.FallbackToYqlDisabled
 ydb/core/kqp/ut/rbo KqpRboYql.FallbackToYqlEnabled
 ydb/core/kqp/ut/rbo KqpRboYql.FilterPushdownThroughJoin
+ydb/core/kqp/ut/rbo KqpRboYql.ShuffleEliminationSimpleJoin
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
@@ -291,6 +292,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProdu
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.DirectWriteWithoutDescribeResourcesPermission
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
@@ -303,6 +305,7 @@ ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ByteBurstDefaults
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ConsumerCodecsMustCoverTopicCodecs
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.CreateExistingTopicSucceeds
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.CreateWithRetentionStorageBytes
+ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.FccKeepsLiteralDashDashTopicName
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.FederationTopicNameFormats
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ImportantConsumerAndCodecsStored
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.NegativeReadSpeedRejected

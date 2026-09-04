@@ -36,6 +36,7 @@ namespace NPrivate {
     Y_HAS_MEMBER(AdditionalSecurityTags);
     Y_HAS_MEMBER(LayersPaths);
     Y_HAS_MEMBER(PublicId);
+    Y_HAS_MEMBER(BridgeMode);
 }
 
 TMaybe<ui64> GetUsedRows(const NYT::TRichYPath& table, ui64 tableRowCount);

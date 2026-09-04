@@ -295,7 +295,8 @@ void TYqlJobBase::Save(IOutputStream& s) const {
         TableNames,
         RuntimeLogLevel,
         LangVer,
-        NYql::SerializeRuntimeSettingsToString(*RuntimeSettings)
+        NYql::SerializeRuntimeSettingsToString(*RuntimeSettings),
+        BridgeMode
     );
 }
 
@@ -309,7 +310,8 @@ void TYqlJobBase::Load(IInputStream& s) {
         TableNames,
         RuntimeLogLevel,
         LangVer,
-        serializedRuntimeSettings
+        serializedRuntimeSettings,
+        BridgeMode
     );
     RuntimeSettings = NYql::CreateRuntimeSettingsFromString(serializedRuntimeSettings);
 }

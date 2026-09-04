@@ -100,6 +100,10 @@ public:
         return ret;
     }
 
+    Y_FORCE_INLINE void Prefetch(const ui32 hash) {
+        NYql::PrefetchForWrite(MakeIterator(hash, Data_, CapacityShift_));
+    }
+
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
         if (RHHashTableNeedsGrow(Size_, Capacity_)) {

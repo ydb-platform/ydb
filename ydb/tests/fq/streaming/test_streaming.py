@@ -2308,7 +2308,7 @@ FROM `{table_name}`"""
             assert len(result_set_rows) == 1
             return result_set_rows[0].Issues
 
-        def check_issues(issues: str, substring: str = ""):
+        def check_issues(issues: str, substring: str):
             """Validate issues structure and content."""
             if substring:
                 assert substring in issues, issues

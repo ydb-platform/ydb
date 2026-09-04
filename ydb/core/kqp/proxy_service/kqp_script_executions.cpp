@@ -837,9 +837,8 @@ public:
             Ydb::Query::EXEC_STATUS_STARTING,
             GetExecModeFromAction(Event->Get()->Record.GetRequest().GetAction())
         ));
-        YDB_LOG_INFO("[ScriptExecutions] Sending TEvWakeup to TRunScriptActor to start lease watcher",
+        YDB_LOG_INFO("[ScriptExecutions] Sending TEvWakeup to TRunScriptActor to start script execution",
             {"logPrefix", LogPrefix()},
-            {"executionId", ExecutionId},
             {"runScriptActorId", RunScriptActorId});
         Send(RunScriptActorId, new TEvents::TEvWakeup());
         PassAway();
@@ -972,11 +971,6 @@ private:
 
     void OnGetLeaseInfo() {
         if (ResultSets.size() != 1) {
-            YDB_LOG_WARN("[ScriptExecutions] Lease update failed: unexpected database response",
-                {"logPrefix", LogPrefix()},
-                {"database", Database},
-                {"executionId", ExecutionId},
-                {"resultSetsCount", ResultSets.size()});
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
         }
@@ -985,19 +979,10 @@ private:
 
         if (ValidateLease(ResultSets[0], ELeaseState::ScriptRunning)) {
             LeaseExists = true;
-            YDB_LOG_DEBUG("[ScriptExecutions] Lease update: lease is valid, proceeding with update",
-                {"logPrefix", LogPrefix()},
-                {"database", Database},
-                {"executionId", ExecutionId},
-                {"leaseGeneration", LeaseGeneration});
+            YDB_LOG_DEBUG("[ScriptExecutions] Lease is valid, proceeding with update",
+                {"logPrefix", LogPrefix()});
             UpdateLease();
         } else {
-            YDB_LOG_WARN("[ScriptExecutions] Lease update skipped: lease validation failed",
-                {"logPrefix", LogPrefix()},
-                {"database", Database},
-                {"executionId", ExecutionId},
-                {"expectedGeneration", LeaseGeneration},
-                {"expectedState", static_cast<i32>(ELeaseState::ScriptRunning)});
         }
     }
 
@@ -1343,14 +1328,12 @@ private:
             if (status == Ydb::StatusIds::SUCCESS) {
                 YDB_LOG_INFO("[ScriptExecutions] Restart script execution succeeded, sending TEvWakeup to TRunScriptActor",
                     {"logPrefix", LogPrefix()},
-                    {"executionId", ExecutionId},
                     {"runScriptActorId", RunScriptActorId},
-                    {"leaseGeneration", LeaseGeneration + 1});
+                    {"nextLeaseGeneration", LeaseGeneration + 1});
                 Send(RunScriptActorId, new TEvents::TEvWakeup());
             } else {
                 YDB_LOG_ERROR("[ScriptExecutions] Restart script execution failed, sending TEvPoison to TRunScriptActor",
                     {"logPrefix", LogPrefix()},
-                    {"executionId", ExecutionId},
                     {"runScriptActorId", RunScriptActorId},
                     {"status", status},
                     {"issues", issues.ToOneLineString()});

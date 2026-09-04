@@ -46,9 +46,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Bootstrap",
-            {"logPrefix", LogPrefix()},
-            {"executionId", Ctx->UserRequestContext->CurrentExecutionId},
-            {"streamingQueryPath", Ctx->UserRequestContext->StreamingQueryPath});
+            {"logPrefix", LogPrefix()});
         Become(&TThis::StateFunc);
         ScheduleLeaseUpdate(TInstant::Now() + Ctx->LeaseDuration);
     }
@@ -72,10 +70,7 @@ private:
 
     void HandlePoison() {
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got TEvPoison, stopping lease watcher",
-            {"logPrefix", LogPrefix()},
-            {"executionId", Ctx->UserRequestContext->CurrentExecutionId},
-            {"streamingQueryPath", Ctx->UserRequestContext->StreamingQueryPath},
-            {"leaseGeneration", Ctx->LeaseGeneration});
+            {"logPrefix", LogPrefix()});
         Finish();
     }
 

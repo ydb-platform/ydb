@@ -140,6 +140,11 @@ public:
         size_t directBlockGroupId,
         ui32 connectionConfigGeneration) override;
 
+    void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
+        ui32 connectionConfigGeneration) override;
+
     ui64 GenerateLsn() override;
 
     void StopTablet(const TString& reason) override;

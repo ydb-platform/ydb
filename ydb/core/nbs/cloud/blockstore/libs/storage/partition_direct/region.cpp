@@ -41,7 +41,8 @@ TRegion::TRegion(
     const ui64 vChunksPerRegionCount = GetVChunksPerRegion(vChunkSize);
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
-        const size_t dbgIndex = vChunkIndex % directBlockGroups.size();
+        const size_t dbgIndex =
+            GetDirectBlockGroupIndex(vChunkIndex, directBlockGroups.size());
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
         auto vChunkConfig = persisted ? *persisted

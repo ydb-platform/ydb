@@ -42,6 +42,7 @@ struct TOracleMock: public IOracle
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskBroken(THostIndex hostIndex) override;
+    void OnHostRemoved(THostIndex hostIndex) override;
 
     TDuration GetHostReconnectDelay(THostIndex hostIndex) override;
 
@@ -150,6 +151,11 @@ public:
     using TTakeCopyRangeBudgetHandler =
         std::function<TDuration(ui64 byteCount)>;
 
+    using TOnRemoveHostSucceededHandler = std::function<
+        void(THostIndex removeIndex, ui32 connectionConfigGeneration)>;
+    using TOnRemoveHostFailedHandler = std::function<
+        void(THostIndex removeIndex, const NProto::TError& error)>;
+
     TExecutorPtr Executor;
     TOracleMock Oracle;
     TScheduleHandler ScheduleHandler;
@@ -165,6 +171,8 @@ public:
     TDBGDumpHandler DumpHandler;
     TOnAddHostSucceededHandler OnAddHostSucceededHandler;
     TOnAddHostFailedHandler OnAddHostFailedHandler;
+    TOnRemoveHostSucceededHandler OnRemoveHostSucceededHandler;
+    TOnRemoveHostFailedHandler OnRemoveHostFailedHandler;
     TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
@@ -260,6 +268,14 @@ public:
         ui32 connectionConfigGeneration) override;
 
     void OnAddHostFailed(const NProto::TError& error) override;
+
+    void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 connectionConfigGeneration) override;
+
+    void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) override;
 
     TDuration TakeCopyRangeBudget(ui64 byteCount) override;
 

@@ -7,6 +7,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+size_t GetDirectBlockGroupIndex(
+    size_t vChunkIndex,
+    size_t directBlockGroupCount)
+{
+    return vChunkIndex % directBlockGroupCount;
+}
+
 size_t GetVChunksPerRegion(ui64 vChunkSize)
 {
     Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);

@@ -145,6 +145,12 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
             AddHostInFlight->BSPipeClient);
         AddHostInFlight.reset();
     }
+    if (RemoveHostInFlight) {
+        NTabletPipe::CloseAndForgetClient(
+            SelfId(),
+            RemoveHostInFlight->BSPipeClient);
+        RemoveHostInFlight.reset();
+    }
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -338,6 +344,15 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
                 connection.GetPersistentBufferDDiskId()));
         }
 
+        // Dead slots survive a start that skipped compaction, so the group is
+        // told about them instead of trying to connect to deleted resources.
+        THostMask removedSlots;
+        for (size_t slot = 0; slot < conn.ConnectionsSize(); ++slot) {
+            if (conn.GetConnections(slot).GetRemoved()) {
+                removedSlots.Set(static_cast<THostIndex>(slot));
+            }
+        }
+
         const bool enableChecksums =
             nbsService->StorageConfig->GetEnableChecksums();
         auto transport = NTransport::CreateStorageTransport(
@@ -362,6 +377,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
+            removedSlots,
             conn.GetConnectionConfigGeneration(),
             std::move(transport),
             dbgCountersRoot);
@@ -481,8 +497,8 @@ void TPartitionActor::HandleFastPathServiceReady(
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
 
-    // Re-send the BSC request for an add-host in flight at the last restart
-    // (no live add can be in flight this early). BSController is idempotent.
+    // Re-send the BSC request for a membership op in flight at the last
+    // restart (no live op can be in flight this early). Both are idempotent.
     if (AddHostInFlight.has_value()) {
         LOG_INFO(
             ctx,
@@ -491,10 +507,18 @@ void TPartitionActor::HandleFastPathServiceReady(
             LogTitle.GetWithTime().c_str(),
             AddHostInFlight->DirectBlockGroupId,
             PrintHostIndex(AddHostInFlight->NewHostIndex).c_str());
-        SendAllocateDDiskForAddHost(
+        SendAllocateDDiskForAddHost(ctx, AddHostInFlight->DirectBlockGroupId);
+    }
+
+    if (RemoveHostInFlight.has_value()) {
+        LOG_INFO(
             ctx,
-            AddHostInFlight->DirectBlockGroupId,
-            AddHostInFlight->NewHostIndex);
+            NKikimrServices::NBS_PARTITION,
+            "%s Replaying in-flight RemoveHost dbgId=%lu removeIndex=%s",
+            LogTitle.GetWithTime().c_str(),
+            RemoveHostInFlight->DirectBlockGroupId,
+            PrintHostIndex(RemoveHostInFlight->RemoveIndex).c_str());
+        SendRemoveHostRequest(ctx);
     }
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
@@ -626,8 +650,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         ev->Get()->Record.DebugString().data());
 
     // The first allocation response sets up the group; any later one is the
-    // result of an add-host request.
-    if (DDiskBlockGroupAllocated) {
+    // result of the single in-flight membership op (add xor remove).
+    if (RemoveHostInFlight.has_value()) {
+        HandleRemoveHostAllocationResult(ev, ctx);
+    } else if (DDiskBlockGroupAllocated) {
         HandleAddHostAllocationResult(ev, ctx);
     } else {
         HandleInitialAllocationResult(ev, ctx);
@@ -862,6 +888,9 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
         HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvRemoveHostFromDBG,
+            HandleRemoveHostFromDBG);
 
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,

@@ -229,6 +229,17 @@ public:
     // group.
     virtual void OnAddHostFailed(const NProto::TError& error) = 0;
 
+    // The RemoveHost committed: the slot goes dead and the group adopts the
+    // connection config generation it was committed with.
+    virtual void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 connectionConfigGeneration) = 0;
+
+    // The RemoveHost was refused. The slot stays as it is.
+    virtual void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) = 0;
+
     // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
     // by all DirectBlockGroups. Returns the delay before the operation may
     // start. Zero means it may start immediately or throttling is disabled.

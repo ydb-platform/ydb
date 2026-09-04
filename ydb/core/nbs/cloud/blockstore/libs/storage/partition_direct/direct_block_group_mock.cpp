@@ -56,6 +56,11 @@ void TOracleMock::OnDDiskBroken(THostIndex hostIndex)
     Y_UNUSED(hostIndex);
 }
 
+void TOracleMock::OnHostRemoved(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+}
+
 TDuration TOracleMock::GetHostReconnectDelay(THostIndex hostIndex)
 {
     Y_UNUSED(hostIndex);
@@ -202,6 +207,14 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     OnAddHostFailedHandler = [](const auto&...)
     {
         Y_ABORT_UNLESS(false, "Should set OnAddHostFailedHandler");
+    };
+    OnRemoveHostSucceededHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostSucceededHandler");
+    };
+    OnRemoveHostFailedHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostFailedHandler");
     };
     TakeCopyRangeBudgetHandler = [](ui64)
     {
@@ -409,6 +422,20 @@ void TDirectBlockGroupMock::OnAddHostSucceeded(
 void TDirectBlockGroupMock::OnAddHostFailed(const NProto::TError& error)
 {
     OnAddHostFailedHandler(error);
+}
+
+void TDirectBlockGroupMock::OnRemoveHostSucceeded(
+    THostIndex removeIndex,
+    ui32 connectionConfigGeneration)
+{
+    OnRemoveHostSucceededHandler(removeIndex, connectionConfigGeneration);
+}
+
+void TDirectBlockGroupMock::OnRemoveHostFailed(
+    THostIndex removeIndex,
+    const NProto::TError& error)
+{
+    OnRemoveHostFailedHandler(removeIndex, error);
 }
 
 TDuration TDirectBlockGroupMock::TakeCopyRangeBudget(ui64 byteCount)

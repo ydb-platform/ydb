@@ -47,6 +47,10 @@ public:
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskBroken(THostIndex hostIndex) = 0;
 
+    // The host is gone from the group: the slot is dead and is never
+    // reconsidered.
+    virtual void OnHostRemoved(THostIndex hostIndex) = 0;
+
     virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
@@ -115,6 +119,8 @@ public:
         THostIndex hostIndex) override;
     // Device is permanently broken, so force the host offline.
     void OnDDiskBroken(THostIndex hostIndex) override;
+
+    void OnHostRemoved(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,

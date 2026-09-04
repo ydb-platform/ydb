@@ -47,6 +47,7 @@ EHostState HealthToState(EHostHealth health)
             return EHostState::TemporaryOffline;
         case EHostHealth::Offline:
         case EHostHealth::Broken:
+        case EHostHealth::Removed:
             return EHostState::Offline;
     }
 }
@@ -187,6 +188,10 @@ void TOracle::Think(TInstant now)
             // Host with broken ddisk can not be restored.
             continue;
         }
+        if (newHostsHealths[i] == EHostHealth::Removed) {
+            // The slot is gone from the group, nothing can bring it back.
+            continue;
+        }
 
         const bool hasSufferingSymptom =
             (errorsInfo.ConsecutiveErrorCount != 0);
@@ -267,6 +272,12 @@ void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 {
     Y_UNUSED(now);
     HostsReconnectDelays[hostIndex].Reset();
+}
+
+void TOracle::OnHostRemoved(THostIndex hostIndex)
+{
+    HostsHealths[hostIndex] = EHostHealth::Removed;
+    HostStates[hostIndex].State = EHostState::Offline;
 }
 
 void TOracle::OnDDiskBroken(THostIndex hostIndex)

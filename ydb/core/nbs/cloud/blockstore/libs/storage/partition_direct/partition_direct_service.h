@@ -60,6 +60,13 @@ struct IPartitionDirectService
         size_t directBlockGroupId,
         ui32 connectionConfigGeneration) = 0;
 
+    // Query the removal of the host in that slot. A request decided on a stale
+    // connection config generation is rejected.
+    virtual void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
+        ui32 connectionConfigGeneration) = 0;
+
     // Generates the next tablet-wide write LSN. Called by a vchunk on its
     // executor thread when it starts processing a write, so generation and
     // dirty-map registration happen on the same thread. Also drives periodic

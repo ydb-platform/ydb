@@ -52,6 +52,11 @@ NProto::TError AddConnection(
     for (const auto& conn:
          connections.GetDirectBlockGroupConnections(dbgId).GetConnections())
     {
+        // A dead slot's ids are freed in BSC and may be granted to the
+        // new host.
+        if (conn.GetRemoved()) {
+            continue;
+        }
         if (conn.GetDDiskId().SerializeAsString() == newDDiskIdBytes ||
             conn.GetPersistentBufferDDiskId().SerializeAsString() ==
                 newPBufferIdBytes)
@@ -108,10 +113,7 @@ void TPartitionActor::CompleteStartAddHost(
     const TActorContext& ctx,
     TTxPartition::TStartAddHost& args)
 {
-    SendAllocateDDiskForAddHost(
-        ctx,
-        args.DirectBlockGroupId,
-        args.NewHostIndex);
+    SendAllocateDDiskForAddHost(ctx, args.DirectBlockGroupId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -215,8 +217,11 @@ void TPartitionActor::HandleAddHostAllocationResult(
         return;
     }
 
-    const ui32 expectedCurrent = AddHostInFlight->NewHostIndex;
+    // BSC lists live hosts only, dead slots have no resources there. The
+    // slot the plan names may be further along than that count.
     const auto newHostIndex = AddHostInFlight->NewHostIndex;
+    const ui32 expectedCurrent = static_cast<ui32>(LiveHostCount(
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)));
     NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
 
     TDirectBlockGroupsConnections updated;
@@ -314,7 +319,10 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
         return false;
     }
-
+    if (RemoveHostInFlight.has_value()) {
+        RejectAddHost(ctx, dbgId, "A RemoveHost is already in progress");
+        return false;
+    }
     // Authoritative AddHost gate: reads the persisted connection count under
     // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
     // race a concurrent add. The DBG's own DDiskConnections lags, so it cannot
@@ -327,7 +335,9 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         RejectAddHost(
             ctx,
             dbgId,
-            TStringBuilder() << "MaxHostCount=" << MaxHostCount << " reached");
+            TStringBuilder()
+                << "slot budget exhausted (" << MaxHostCount
+                << "), restart the tablet to compact the dead slots");
         return false;
     }
     if (currentSize == 0) {
@@ -364,8 +374,6 @@ void TPartitionActor::RejectAddHost(
         dbgId,
         FormatError(error).Quote().c_str());
 
-    // Notify the DBG that asked for the host. dbgId is always a valid request
-    // index (see ValidateAddHostToDBGRequest), so the DBG exists.
     auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
     Y_ABORT_UNLESS(dbgPtr);
     auto executor = dbgPtr->GetExecutor();
@@ -375,8 +383,7 @@ void TPartitionActor::RejectAddHost(
 
 void TPartitionActor::SendAllocateDDiskForAddHost(
     const TActorContext& ctx,
-    size_t dbgId,
-    THostIndex newHostIndex)
+    size_t dbgId)
 {
     Y_ABORT_UNLESS(AddHostInFlight.has_value());
 
@@ -388,10 +395,13 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
         NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
     AddHostInFlight->BSPipeClient = pipe;
 
-    // Idempotent: NumDDisks=N+1 is the desired final state, not "add one"; a
-    // re-sent request returns the same DDisk from BSController's persisted
-    // allocation, so a retry (e.g. after a restart) is safe.
-    const ui32 numDDisks = newHostIndex + 1;
+    // NumDDisks is the desired final state in live hosts (dead slots have no
+    // resources in BSC), so a re-sent request is idempotent.
+    const ui32 numDDisks = static_cast<ui32>(
+        LiveHostCount(
+            DirectBlockGroupsConnections.GetDirectBlockGroupConnections(
+                dbgId)) +
+        1);
     auto request = MakeAllocateDDiskBlockGroupRequest();
 
     auto* op = request->Record.AddDirectBlockGroupOperations();

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
 #include "config.h"
 #include "proto2json_printer.h"
 #include "json_output_create.h"

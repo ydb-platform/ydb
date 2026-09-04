@@ -84,7 +84,7 @@ namespace NProtoBuf {
     case FieldDescriptor::CPPTYPE_##cpptype: {                                                                         \
         bool r = TCompareField<FieldDescriptor::CPPTYPE_##cpptype, useDefault>::IsEqual(m1, m2, field, differentPath); \
         if (!r && !!differentPath) {                                                                                   \
-            differentPath->push_back(field.name());                                                                    \
+            differentPath->push_back(TString{field.name()});                                                           \
         }                                                                                                              \
         return r;                                                                                                      \
     }

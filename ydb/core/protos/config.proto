@@ -2159,6 +2159,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+
+        optional uint64 DormantTimeoutMinutes = 18 [(ControlOptions) = {
+            Description: "Time without user requests after which DSProxy enters dormant state, in minutes (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
     }
 
     message TBlobDepotControls {

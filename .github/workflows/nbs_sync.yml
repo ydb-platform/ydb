@@ -2,7 +2,7 @@ name: NBS stable sync
 
 on:
   schedule:
-    - cron: "30 6 * * *"   # At 06:30 UTC / 09:30 MSK
+    - cron: "0 20 * * *"   # At 20:00 UTC / 23:00 MSK
   workflow_dispatch:
 
 concurrency:

@@ -1343,6 +1343,10 @@ protected:
             .DrainsStarted = DrainsStarted,
             .SpillsStarted = SpillsStarted,
             .ShrinksRequested = ShrinksRequested,
+            .SpillingEnabled = EnableSpilling,
+            .QuotaBound = QuotaWasBound,
+            .LastAvailability = LastAvailability,
+            .InputRows = InputRows,
         });
     }
 
@@ -1353,6 +1357,8 @@ protected:
     void RefreshPressure() {
         if (auto* quota = NYql::NDq::GetDqOperatorMemoryQuota()) {
             const i64 availability = quota->GetMemoryAvailability();
+            QuotaWasBound = true;      // test diagnostics only, see TDqHashCombineTestState
+            LastAvailability = availability;
             Pressure.HasMemory = availability > 0 && !SoftPressure;
             Pressure.HardSpillingTime = availability < 0 || TlsAllocState->GetMaximumLimitValueReached();
             PressureRefreshCountdown = PressureRefreshInterval;
@@ -1656,6 +1662,8 @@ protected:
     size_t DrainsStarted = 0;
     size_t SpillsStarted = 0;
     size_t ShrinksRequested = 0;
+    bool QuotaWasBound = false; // test diagnostics, reported through TDqHashCombineTestState
+    i64 LastAvailability = 0;
 
     size_t InputUnpackedWidth;
     const NDqHashOperatorCommon::TCombinerNodes& Nodes;

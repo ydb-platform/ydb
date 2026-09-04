@@ -48,6 +48,7 @@ public:
     }
 
     i64 GetMemoryAvailability() const override {
+        ++AvailabilityReads;
         return Availability;
     }
 
@@ -71,6 +72,7 @@ public:
     }
 
     i64 Availability = std::numeric_limits<i64>::max();
+    mutable size_t AvailabilityReads = 0; // how often the operator polled the availability
     bool RefuseOptional = false;
     ui64 InitialLimit = 0; // non-zero: a shrink lowers the allocator limit, as the real quota does
     bool LimitLowered = false;
@@ -143,6 +145,22 @@ struct TOperatorEndState
     size_t DrainsStarted = 0;
     size_t SpillsStarted = 0;
     size_t ShrinksRequested = 0;
+    bool SpillingEnabled = false;
+    bool QuotaBound = false;
+    i64 LastAvailability = 0;
+    size_t InputRows = 0;
+
+    // what the operator saw, for a test that expected a spill or a drain and did not get one
+    TString DebugString() const {
+        return TStringBuilder()
+            << "spillingEnabled=" << SpillingEnabled
+            << " quotaBound=" << QuotaBound
+            << " lastAvailability=" << LastAvailability
+            << " inputRows=" << InputRows
+            << " spills=" << SpillsStarted
+            << " drains=" << DrainsStarted
+            << " shrinks=" << ShrinksRequested;
+    }
 };
 
 void SetTestEndStateUpdater(THolder<IComputationGraph>& graph, TOperatorEndState& endState) {
@@ -151,6 +169,10 @@ void SetTestEndStateUpdater(THolder<IComputationGraph>& graph, TOperatorEndState
         endState.DrainsStarted = std::max(endState.DrainsStarted, state.DrainsStarted);
         endState.SpillsStarted = std::max(endState.SpillsStarted, state.SpillsStarted);
         endState.ShrinksRequested = std::max(endState.ShrinksRequested, state.ShrinksRequested);
+        endState.SpillingEnabled = endState.SpillingEnabled || state.SpillingEnabled;
+        endState.QuotaBound = endState.QuotaBound || state.QuotaBound;
+        endState.LastAvailability = state.LastAvailability;
+        endState.InputRows = std::max(endState.InputRows, state.InputRows);
     });
 }
 
@@ -1309,16 +1331,24 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
     Y_UNIT_TEST_QUAD(TestBoundAggregationSpillsOnNegativeAvailability, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
         TScriptedMemoryQuota quota(setup.Alloc);
+        size_t triggerRow = 0;
+        size_t readsAtTrigger = 0;
         auto endState = RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
             return new TWideKVStream(ctx, 100000, 10, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
                 if (rowNum == 100000) {
                     quota.Availability = -1; // the node is over target: the operator must give memory back
+                    triggerRow = rowNum;
+                    readsAtTrigger = quota.AvailabilityReads;
                 }
             });
         }, 2, false, false, &quota);
-        UNIT_ASSERT_GE(endState.SpillsStarted, 1);
-        UNIT_ASSERT_GE(endState.ShrinksRequested, 1);
-        UNIT_ASSERT_GE(quota.Shrinks, 1);
+        // report which link of trigger -> poll -> spill broke, the spill is not reproducible everywhere
+        UNIT_ASSERT_VALUES_EQUAL_C(triggerRow, 100000, "the input never reached the trigger row");
+        UNIT_ASSERT_GT_C(quota.AvailabilityReads, readsAtTrigger,
+            "the operator did not poll the quota after the trigger: " << endState.DebugString());
+        UNIT_ASSERT_GE_C(endState.SpillsStarted, 1, endState.DebugString());
+        UNIT_ASSERT_GE_C(endState.ShrinksRequested, 1, endState.DebugString());
+        UNIT_ASSERT_GE_C(quota.Shrinks, 1, endState.DebugString());
     }
 
     Y_UNIT_TEST_QUAD(TestBoundAggregationRefillsAfterShrink, UseLLVM, UseFlow) {
@@ -1418,10 +1448,14 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
         TScriptedMemoryQuota quota(setup.Alloc);
         auto preallocated = std::make_shared<TPreallocatedSpillerFactory>(100_MB);
         const ui64 offloadedBefore = setup.Alloc.Ref().GetOffloadedBytes();
-        RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
+        size_t triggerRow = 0;
+        size_t readsAtTrigger = 0;
+        auto endState = RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
             return new TWideKVStream(ctx, 100000, 10, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
                 if (rowNum == 100000) {
                     quota.Availability = -1;
+                    triggerRow = rowNum;
+                    readsAtTrigger = quota.AvailabilityReads;
                 }
             });
         }, 2, false, false, &quota, std::make_shared<TSlowSpillerFactory>(preallocated));
@@ -1431,9 +1465,12 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
                 spilledBytes += size;
             }
         }
-        UNIT_ASSERT_GT(spilledBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL_C(triggerRow, 100000, "the input never reached the trigger row");
+        UNIT_ASSERT_GT_C(quota.AvailabilityReads, readsAtTrigger,
+            "the operator did not poll the quota after the trigger: " << endState.DebugString());
+        UNIT_ASSERT_GT_C(spilledBytes, 0, endState.DebugString());
         // the packer buffers of the spiller adapters are accounted in the task allocator while the quota is bound
-        UNIT_ASSERT_GT(setup.Alloc.Ref().GetOffloadedBytes(), offloadedBefore);
+        UNIT_ASSERT_GT_C(setup.Alloc.Ref().GetOffloadedBytes(), offloadedBefore, endState.DebugString());
     }
 
     Y_UNIT_TEST_QUAD(TestBoundTeardownDuringStateSpilling, UseLLVM, UseFlow) {

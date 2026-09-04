@@ -105,6 +105,7 @@ message TEvLoadTestRequest {
             repeated TIntervalInfo BarrierIntervals = 24;
             optional uint32 MaxBarriersInFlight = 25 [default = 10];
             optional uint32 BarrierChannelCount = 26 [default = 100];
+            optional bool SharedRequestDispatching = 27 [default = false];
 
             optional bool WriteKeepFlags = 23 [default = false];
         };

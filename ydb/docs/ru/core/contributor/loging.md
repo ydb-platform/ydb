@@ -14,6 +14,13 @@
 1. Исходный код содержится в некотором файле `.cpp` (логирование из заголовочных файлов поддерживается, но [рассматривается далее](#log-in-header-file)).
 2. В одном файле `.cpp` все сообщения пишутся от имени одного и того же компонента. Поэтому, в начале файла (но после всех директив `#include`) должен быть определён макрос `YDB_LOG_THIS_FILE_COMPONENT`, который задаёт код компонента для всего файла.
 
+{% note info %}
+
+Логирование предполагает, что {{ydb-short-name}} состоит из большого количества компонент, для каждого из которых может быть
+[настроен](../reference/configuration/log_config#объекты-entry-entry-objects) уровень логирования.
+
+{% note %}
+
 Пример:
 
 ```cpp
@@ -76,7 +83,7 @@ YDB_LOG_INFO("Module started");
 
 ```cpp
 YDB_LOG_ERROR("Unable to open file",
-    {"path", filename},
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
@@ -94,7 +101,7 @@ YDB_LOG(prio, message, ...values...);
 auto prio = PRI_ERROR;
 ...
 YDB_LOG(prio, "Unable to open file",
-    {"path", filename},
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
@@ -131,17 +138,17 @@ YDB_LOG_CTX_COMP(ctx, prio, comp, message, ...values...)
 1. Сообщение без параметров:
 
 ```cpp
-YDB_LOG_CTX_COMP(ctx, PRI_INFO, 1, "Module started");
+YDB_LOG_CTX_COMP(ctx, PRI_INFO, EXAMPLE_COMP_CODE, "Module started");
 
 2. Сообщение с параметрами:
 
 ```cpp
-YDB_LOG_CTX_COMP(env, PRI_ERROR, 1, "Unable to open file",
-    {"path", filename},
+YDB_LOG_CTX_COMP(env, PRI_ERROR, EXAMPLE_COMP_CODE, "Unable to open file",
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
-В данном примере происходит запись сообщения с текстом `Unable to open file` и двумя параметрами: `path` (значение берётся из переменной `filename`) и `errorCode`(значение берётся из переменной `err`). Для передачи сообщения актору логирования используется контекст исполнения `env`, а в качестве кода компонента передаётся `1`.
+В данном примере происходит запись сообщения с текстом `Unable to open file` и двумя параметрами: `path` (значение берётся из переменной `filename`) и `errorCode`(значение берётся из переменной `err`). Для передачи сообщения актору логирования используется контекст исполнения `env`, а в качестве кода компонента передаётся `EXAMPLE_COMP_CODE`.
 
 {% endcut %}
 
@@ -166,8 +173,8 @@ YDB_LOG_CTX_COMP(env, PRI_ERROR, 1, "Unable to open file",
 Пример:
 
 ```cpp
-YDB_LOG_ERROR_CTX_COMP(env, 1, "Unable to open file",
-    {"path", filename},
+YDB_LOG_ERROR_CTX_COMP(env, EXAMPLE_COMP_CODE, "Unable to open file",
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
@@ -187,20 +194,18 @@ YDB_LOG_ERROR_CTX_COMP(env, 1, "Unable to open file",
 Пример:
 
 ```cpp
-YDB_LOG_COMP(PRI_ERROR, 1, "Unable to open file",
-    {"path", filename},
+YDB_LOG_COMP(PRI_ERROR, EXAMPLE_COMP_CODE, "Unable to open file",
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
 {% note info %}
 
-Построение имени макроса `YDB_LOG_COMP` полностью укладывается в базовый принцип именования макросов, рассмотренный в [ядре логирования]{#extended-logging}
+Построение имени макроса `YDB_LOG_COMP` полностью укладывается в базовый принцип именования макросов, рассмотренный в [ядре логирования](#extended-logging)
 
 {% endnote %}
 
-В этом примере используется стандартный контекст исполнения, а логирование происходит от имени компонента с кодом `1`.
-
-Макрос `YDB_LOG_COMP` подразумевает динамическое определение уровня сообщения и его передачу в виде аргумента. По аналогии с базовыми средствами логирования, существует ряд макросов, которые не требют передачи уровня сообщения в виде аргумента.
+В этом примере используется стандартный контекст исполнения, а логирование происходит от имени компонента с кодом `EXAMPLE_COMP_CODE`.
 
 {% cut "Макросы без указания уровня сообщения в виде аргумента" %}
 
@@ -220,8 +225,8 @@ YDB_LOG_COMP(PRI_ERROR, 1, "Unable to open file",
 Пример:
 
 ```cpp
-YDB_LOG_ERROR_COMP(1, "Unable to open file",
-    {"path", filename},
+YDB_LOG_ERROR_COMP(EXAMPLE_COMP_CODE, "Unable to open file",
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
@@ -243,8 +248,6 @@ YDB_LOG_ERROR_COMP(1, "Unable to open file",
 
 ```
 
-В противном случае, определение макроса `YDB_LOG_THIS_FILE_COMPONENT` может распространиться на несколько файлов исходного кода.
-
 {% endnote %}
 
 2. Далее в файле должны использоваться макросы логирования, не требующие указания кода компонента. Они аналогичны уже рассмотренным ранее, но их имя не содержит в себе строку `_COMP`.
@@ -252,20 +255,12 @@ YDB_LOG_ERROR_COMP(1, "Unable to open file",
 Пример:
 
 ```cpp
-#define YDB_LOG_THIS_FILE_COMPONENT 1
+#define YDB_LOG_THIS_FILE_COMPONENT EXAMPLE_COMP_CODE
 ...
 YDB_LOG_CTX(env, PRI_ERROR, "Unable to open file",
-    {"path", filename},
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
-
-{% note info %}
-
-Построение имени макроса `YDB_LOG_CTX` полностью укладывается в базовый принцип именования макросов, рассмотренный в [ядре логирования]{#extended-logging}
-
-{% endnote %}
-
-Макрос `YDB_LOG_CTX` подразумевает динамическое определение уровня сообщения и его передачу в виде аргумента. По аналогии с базовыми средствами логирования, существует ряд макросов, которые не требют передачи уровня сообщения в виде аргумента.
 
 {% cut "Макросы без указания уровня сообщения в виде аргумента" %}
 
@@ -285,10 +280,10 @@ YDB_LOG_CTX(env, PRI_ERROR, "Unable to open file",
 Пример:
 
 ```cpp
-#define YDB_LOG_THIS_FILE_COMPONENT 1
+#define YDB_LOG_THIS_FILE_COMPONENT EXAMPLE_COMP_CODE
 ...
 YDB_LOG_ERROR_CTX(env, "Unable to open file",
-    {"path", filename},
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
@@ -321,13 +316,13 @@ YDB_LOG_ERROR_CTX(env, "Unable to open file",
 {% cut "Пример" %}
 
 ```cpp
-#define YDB_LOG_THIS_FILE_COMPONENT 1
+#define YDB_LOG_THIS_FILE_COMPONENT EXAMPLE_COMP_CODE
 ...
 void MyFunction(const std::string& filename) {
     ...
     // Create message parameters
     auto context = YDB_LOG_CREATE_MESSAGE(
-        {"path", filename});
+        {"sourceFilePath", filename});
     ...
     if (err != 0 ) {
         YDB_LOG_ERROR("MyFunction failed",
@@ -381,13 +376,13 @@ context.RemoveValue("socket");
 {% cut "Пример" %}
 
 ```cpp
-#define YDB_LOG_THIS_FILE_COMPONENT 1
+#define YDB_LOG_THIS_FILE_COMPONENT EXAMPLE_COMP_CODE
 ...
 void MyFunction() {
     // Create message parameters
     auto context = YDB_LOG_CREATE_MESSAGE(
         {"operation", "read"},
-        {"path", filename});
+        {"sourceFilePath", filename});
     ...
     if (err != 0 ) {
         YDB_LOG_ERROR("MyFunction failed",
@@ -415,11 +410,11 @@ void MyFunction() {
 {% cut "Пример использования контекста логирования" %}
 
 ```cpp
-#define YDB_LOG_THIS_FILE_COMPONENT 1
+#define YDB_LOG_THIS_FILE_COMPONENT EXAMPLE_COMP_CODE
 ...
 void MyFunction() {
     YDB_LOG_CREATE_CONTEXT(
-        {"path", filename});
+        {"sourceFilePath", filename});
     ...
     if (errorCode != 0 ) {
         YDB_LOG_ERROR("MyFunction failed",     // К сообщению будут прикреплены параметры path и error
@@ -448,11 +443,10 @@ void MyFunction() {
 
 ### Стиль кодирования
 
-Рекомендуется следующий стиль кодирования при использования макросов `YDB_LOG_...`:
+Рекомендуется следующий стиль кодирования при использования макросов логирования:
 
 1. Вся обязательная информация (контекст исполнения, код компонента, уровень ошибки и текст сообщения) располагается на одной строке.
 2. Каждая пара `{name, value}` располагается на отдельной строке.
-3. Закрывающая скобка макроса может располагаться либо на той же строке, где и последний параметр, либо на отдельной строке, но тогда она должна выравниваться по началу макроса `YDB_LOG`.
 
 Пример записи сообщения с несколькими параметрами:
 
@@ -481,15 +475,19 @@ void MyFunction() {
 Для согласование текстов сообщений и названий параметров существует простое эмпирическое правило:
 > Если взять текст сообщения и к нему добавить значения параметров в виде `(name=value, name=value, ... )`, то должно получиться осмысленное, законченное, однозначное и понятное человеку текстовое сообщение.
 
-{% cut "Пример согласования" %}
+{% cut "Пример согласованных текста сообщения и названия параметров" %}
 
 ```cpp
 YDB_LOG_ERROR_CTX(env, "Unable to open file",
-    {"path", filename},
+    {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
 Формируемое описание события выглядит так (параметры сообщения перечисляются в алфавитном порядке):
+
+```
+Unable to open file (sourceFileName = ..., errorCode = ...)
+```
 
 
 {% endcut %}
@@ -526,7 +524,7 @@ YDB_LOG_ERROR("Response timeout elapsed",
 
 {% endlist %}
 
-2. Семантически близкие параметры должны иметь сходные названия, поскольку различное именование одних и тех же понятий затрудняет поиск записей в логах. Например, нежелательно в одних сообщениях идентификатор транзакции обозначить как `txId`, а в других — как `transactionId`.
+2. Семантически близкие параметры должны иметь одинаковые названия, поскольку различное именование одних и тех же понятий затрудняет поиск записей в логах. Например, нежелательно в одних сообщениях идентификатор транзакции обозначить как `txId`, а в других — как `transactionId`.
 
 {% list tabs %}
 
@@ -649,7 +647,7 @@ YDB_LOG_INFO("Copy data to another shard",
 YDB_LOG_INFO("Backup volumes progress",
     {"currentVolumeNum", ...},
     {"volumesCount", ...},
-    {"volumesSize", ...});
+    {"volumesSizeByte", ...});
 ```
 
 - Плохо

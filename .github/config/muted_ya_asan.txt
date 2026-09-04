@@ -64,6 +64,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.AlterAddCoveringIndexOverGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddNotNullDefaultColumn
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteWithIndexOnGenerated
+ydb/core/kqp/ut/scheme GeneratedStored.GeneratedInPrimaryKeyRejected
 ydb/core/kqp/ut/scheme GeneratedStored.IndexOnGeneratedKeyUpdatesEntry
 ydb/core/kqp/ut/scheme GeneratedStored.NotNullFailingCastRejected
 ydb/core/kqp/ut/scheme GeneratedStored.NullableOptionalExprAccepted

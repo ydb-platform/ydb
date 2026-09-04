@@ -735,8 +735,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries);
 
         // Six seconds later host 0 goes Offline, dropping the alive count
-        // below DirectBlockGroupHostCount. The oracle must request a new
-        // host.
+        // below DirectBlockGroupHostCount. The oracle must request a new host.
         now += TDuration::Seconds(3);
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(

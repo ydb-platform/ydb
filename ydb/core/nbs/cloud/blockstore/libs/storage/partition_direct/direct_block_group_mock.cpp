@@ -397,13 +397,13 @@ void TDirectBlockGroupMock::OnAddHostSucceeded(
     THostIndex newHostIndex,
     NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
     NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
-    ui64 generation)
+    ui32 dbgConnectionsConfigGeneration)
 {
     OnAddHostSucceededHandler(
         newHostIndex,
         std::move(ddiskId),
         std::move(pbufferId),
-        generation);
+        dbgConnectionsConfigGeneration);
 }
 
 void TDirectBlockGroupMock::OnAddHostFailed(const NProto::TError& error)

@@ -22,11 +22,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Builds in `updated` the connections the add will commit: `connections` with
-// the granted host appended. BSController answers with the whole group, so the
-// granted host is its last entry. A response that does not fit is answered
-// with an error and not with an abort: the intent stays on disk, so the add is
-// retried at the next start.
+// Builds in `updated` the connections the add will store in the local db.
 NProto::TError AddConnection(
     const TDirectBlockGroupsConnections& connections,
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
@@ -67,7 +63,8 @@ NProto::TError AddConnection(
     auto* connection = dbgConnections->AddConnections();
     connection->MutableDDiskId()->CopyFrom(newDDiskId);
     connection->MutablePersistentBufferDDiskId()->CopyFrom(newPBufferId);
-    dbgConnections->SetGeneration(dbgConnections->GetGeneration() + 1);
+    dbgConnections->SetDBGConnectionsConfigGeneration(
+        dbgConnections->GetDBGConnectionsConfigGeneration() + 1);
     return {};
 }
 
@@ -99,7 +96,8 @@ void TPartitionActor::ExecuteStartAddHost(
     TTxPartition::TAddHostInProgress proto;
     proto.SetDirectBlockGroupId(args.DirectBlockGroupId);
     proto.SetNewHostIndex(args.NewHostIndex);
-    proto.SetGeneration(args.Generation);
+    proto.SetDBGConnectionsConfigGeneration(
+        args.DBGConnectionsConfigGeneration);
     db.StoreAddHostInProgress(proto);
 }
 
@@ -160,12 +158,11 @@ void TPartitionActor::CompleteAddHostToDBG(
     const auto& dbgConnections =
         args.DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
 
-    // AddConnection appends, so the plan must name the entry it appended.
-    // Nothing may renumber the slots while a plan is pending.
+    // The generation must not change between restarts.
     Y_ABORT_UNLESS(
         static_cast<size_t>(args.NewHostIndex) + 1 ==
             dbgConnections.ConnectionsSize(),
-        "AddHost plan points at %lu, the connection landed at %lu",
+        "AddHost plan points at %lu, the connection is at %lu",
         static_cast<size_t>(args.NewHostIndex),
         dbgConnections.ConnectionsSize() - 1);
 
@@ -178,7 +175,8 @@ void TPartitionActor::CompleteAddHostToDBG(
     executor->ExecuteSimple(
         [dbgPtr,
          newHostIndex = args.NewHostIndex,
-         generation = dbgConnections.GetGeneration(),
+         dbgConnectionsConfigGeneration =
+             dbgConnections.GetDBGConnectionsConfigGeneration(),
          newDDiskId = newConnection.GetDDiskId(),
          newPBufferId = newConnection.GetPersistentBufferDDiskId()]() mutable
         {
@@ -186,7 +184,7 @@ void TPartitionActor::CompleteAddHostToDBG(
                 newHostIndex,
                 std::move(newDDiskId),
                 std::move(newPBufferId),
-                generation);
+                dbgConnectionsConfigGeneration);
         });
 
     AddHostInFlight.reset();
@@ -254,15 +252,16 @@ void TPartitionActor::HandleAddHostToDBG(
 
     const auto* msg = ev->Get();
     const size_t dbgId = msg->DirectBlockGroupId;
-    const ui64 generation = msg->Generation;
+    const ui32 dbgConnectionsConfigGeneration =
+        msg->DBGConnectionsConfigGeneration;
 
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle AddHost to dbgId=%lu, generation %lu",
+        "%s Handle AddHost to dbgId=%lu, DBG connections config generation %u",
         LogTitle.GetWithTime().c_str(),
         dbgId,
-        generation);
+        dbgConnectionsConfigGeneration);
 
     // The request always carries a DBG's own index so an out-of-range dbgId is
     // a bug, not a bad request.
@@ -274,12 +273,14 @@ void TPartitionActor::HandleAddHostToDBG(
         dbgId,
         dbgCount);
 
-    if (!ValidateAddHostToDBGRequest(ctx, dbgId, generation)) {
+    if (!ValidateAddHostToDBGRequest(
+            ctx,
+            dbgId,
+            dbgConnectionsConfigGeneration))
+    {
         return;
     }
 
-    // The plan: a new host is always added at the end of the validated
-    // state.
     const auto newHostIndex = static_cast<THostIndex>(
         DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
             .GetConnections()
@@ -292,16 +293,21 @@ void TPartitionActor::HandleAddHostToDBG(
     AddHostInFlight = TAddHostInFlight{
         .DirectBlockGroupId = dbgId,
         .NewHostIndex = newHostIndex,
-        .Generation = generation,
+        .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration,
     };
 
-    ExecuteTx(ctx, CreateTx<TStartAddHost>(dbgId, newHostIndex, generation));
+    ExecuteTx(
+        ctx,
+        CreateTx<TStartAddHost>(
+            dbgId,
+            newHostIndex,
+            dbgConnectionsConfigGeneration));
 }
 
 bool TPartitionActor::ValidateAddHostToDBGRequest(
     const TActorContext& ctx,
     size_t dbgId,
-    ui64 generation)
+    ui32 dbgConnectionsConfigGeneration)
 {
     if (AddHostInFlight.has_value()) {
         RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
@@ -328,13 +334,16 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         return false;
     }
 
-    if (generation != dbgConn.GetGeneration()) {
+    if (dbgConnectionsConfigGeneration !=
+        dbgConn.GetDBGConnectionsConfigGeneration())
+    {
         RejectAddHost(
             ctx,
             dbgId,
             TStringBuilder()
-                << "AddHost was decided on generation " << generation
-                << ", the group is at " << dbgConn.GetGeneration());
+                << "AddHost was decided on DBG connections config generation "
+                << dbgConnectionsConfigGeneration << ", the group is at "
+                << dbgConn.GetDBGConnectionsConfigGeneration());
         return false;
     }
 

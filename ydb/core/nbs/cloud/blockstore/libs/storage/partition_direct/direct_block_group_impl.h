@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dbg_connections.h"
 #include "direct_block_group.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
@@ -28,17 +29,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// State of a logical session (lock) with a DDisk.
-// Sessions are used only for DDisk connections.
-enum class EDDiskSessionState
-{
-    NotLocked,
-    Locked,
-    Broken,
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TDirectBlockGroup
     : public IDirectBlockGroup
     , public IHostStateController
@@ -53,7 +43,7 @@ public:
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
-        ui64 connectionsGeneration,
+        ui32 dbgConnectionsConfigGeneration,
         NTransport::TStorageTransportPtr storageTransport,
         NMonitoring::TDynamicCounterPtr counters);
 
@@ -147,7 +137,7 @@ public:
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
-        ui64 generation) override;
+        ui32 dbgConnectionsConfigGeneration) override;
 
     void OnAddHostFailed(const NProto::TError& error) override;
 
@@ -174,32 +164,13 @@ private:
     friend struct TDBGFixture;
     using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
-    using TDDiskIdToHostIndex =
-        TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
-
-    struct TDDiskConnection
-    {
-        using TPromise = NThreading::TPromise<NProto::TError>;
-        using TFuture = NThreading::TFuture<NProto::TError>;
-
-        NTransport::THostConnection HostConnection;
-        TPromise ConnectPromise = NThreading::NewPromise<NProto::TError>();
-        TFuture ConnectFuture{ConnectPromise.GetFuture()};
-
-        EDDiskSessionState SessionState = EDDiskSessionState::NotLocked;
-
-        ui64 ConfirmedSessionSeqNo = 0;
-
-        void ResetSession();
-        [[nodiscard]] const TFuture& GetFuture() const;
-        [[nodiscard]] TString DebugPrint() const;
-    };
 
     [[nodiscard]] size_t GetHostCount() const;
     void AddDDiskAndPBufferConnection(
         THostIndex host,
         const NKikimr::NBsController::TDDiskId& ddiskId,
-        const NKikimr::NBsController::TDDiskId& pbufferId);
+        const NKikimr::NBsController::TDDiskId& pbufferId,
+        ui32 dbgConnectionsConfigGeneration);
     void DoEstablishConnections();
     void DoEstablishConnection(
         THostIndex hostIndex,
@@ -291,15 +262,8 @@ private:
     TLogTitle LogTitle;
     ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
-    // DDiskConnections and PBufferConnections always have the same size.
-    TVector<TDDiskConnection> DDiskConnections;
-    TVector<TDDiskConnection> PBufferConnections;
 
-    // The membership generation these connections were built from. Sent with
-    // every membership request so the partition can tell a decision made on a
-    // state this group has not seen yet.
-    ui64 ConnectionsGeneration = 0;
-    TDDiskIdToHostIndex PBufferIdToHostIndex;
+    TDBGConnections Connections;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
     TDirectBlockGroupCounters Counters;

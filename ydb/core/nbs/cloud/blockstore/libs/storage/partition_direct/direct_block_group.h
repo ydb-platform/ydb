@@ -217,16 +217,12 @@ public:
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) = 0;
 
-    // The AddHost committed: applies the new host and adopts the membership
-    // generation it was committed with.
     virtual void OnAddHostSucceeded(
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
-        ui64 generation) = 0;
+        ui32 dbgConnectionsConfigGeneration) = 0;
 
-    // The AddHost was refused, e.g. at MaxHostCount. Nothing changes in the
-    // group.
     virtual void OnAddHostFailed(const NProto::TError& error) = 0;
 
     // Reserves byteCount from the disk-wide range-copy bandwidth budget shared

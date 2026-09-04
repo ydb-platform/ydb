@@ -144,7 +144,7 @@ public:
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
-        ui64 generation)>;
+        ui32 dbgConnectionsConfigGeneration)>;
     using TOnAddHostFailedHandler =
         std::function<void(const NProto::TError& error)>;
     using TTakeCopyRangeBudgetHandler =
@@ -257,7 +257,7 @@ public:
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
-        ui64 generation) override;
+        ui32 dbgConnectionsConfigGeneration) override;
 
     void OnAddHostFailed(const NProto::TError& error) override;
 

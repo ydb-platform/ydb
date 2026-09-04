@@ -54,10 +54,11 @@ struct IPartitionDirectService
         TDirtyMapStateProto state) = 0;
 
     // Query the addition of a new host to the group. The request is idempotent
-    // and can be repeated multiple times.
-    // Ask for one more host in the group. `generation` is the membership
-    // generation the caller decided on; a stale one is rejected.
-    virtual void QueryAddHost(size_t directBlockGroupId, ui64 generation) = 0;
+    // and can be repeated multiple times. A request with an outdated
+    // generation is rejected.
+    virtual void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 dbgConnectionsConfigGeneration) = 0;
 
     // Generates the next tablet-wide write LSN. Called by a vchunk on its
     // executor thread when it starts processing a write, so generation and

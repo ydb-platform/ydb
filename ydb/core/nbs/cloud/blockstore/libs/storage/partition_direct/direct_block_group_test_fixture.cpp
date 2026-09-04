@@ -78,7 +78,7 @@ TBlockedDetectedState TDBGFixture::GetBlockedDetected(
                {
                    return TBlockedDetectedState{
                        .DDiskSessionBroken =
-                           dbg->DDiskConnections[hostIndex].SessionState ==
+                           dbg->Connections.GetDDisk(hostIndex).SessionState ==
                            EDDiskSessionState::Broken,
                        .BlockedGenerationDetected =
                            dbg->BlockedGenerationDetected};
@@ -98,7 +98,7 @@ TVector<ui64> TDBGFixture::ReadAllDDiskSeqNos(
                    TVector<ui64> result;
                    for (size_t i = 0; i < DirectBlockGroupHostCount; ++i) {
                        result.push_back(
-                           dbg->DDiskConnections[i].ConfirmedSessionSeqNo);
+                           dbg->Connections.GetDDisk(i).ConfirmedSessionSeqNo);
                    }
                    return result;
                })
@@ -113,8 +113,10 @@ ui64 TDBGFixture::GetDDiskSessionSeqNo(
 {
     return RunOnExecutor(
                executor,
-               [&]
-               { return dbg->DDiskConnections[index].ConfirmedSessionSeqNo; })
+               [&] {
+                   return dbg->Connections.GetDDisk(index)
+                       .ConfirmedSessionSeqNo;
+               })
         .GetValue(waitTimeout);
 }
 
@@ -130,12 +132,7 @@ TDBGFixture::GetConnectionToken(
                executor,
                [dbg, connectionType, index]
                {
-                   const auto& connections =
-                       connectionType == NTransport::THostConnection::
-                                             EConnectionType::DDisk
-                           ? dbg->DDiskConnections
-                           : dbg->PBufferConnections;
-                   return connections[index]
+                   return dbg->Connections.Get(connectionType, index)
                        .HostConnection.Credentials.ConnectionToken;
                })
         .GetValue(waitTimeout);
@@ -156,7 +153,7 @@ TDBGFixture::MakeDirectBlockGroup(
     const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
     const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
     size_t directBlockGroupIndex,
-    ui64 connectionsGeneration) const
+    ui32 dbgConnectionsConfigGeneration) const
 {
     return std::make_shared<TDirectBlockGroup>(
         Runtime->GetActorSystem(0),
@@ -166,7 +163,7 @@ TDBGFixture::MakeDirectBlockGroup(
         directBlockGroupIndex,
         ddisksIds,
         pbufferIds,
-        connectionsGeneration,
+        dbgConnectionsConfigGeneration,
         std::move(transport),
         nullptr);
 }

@@ -67,25 +67,26 @@ void TPartitionActor::CompleteLoadState(
             // path service is ready (see HandleFastPathServiceReady).
             if (args.AddHostInProgress.Defined()) {
                 const auto& intent = *args.AddHostInProgress;
-                const ui64 generation = DirectBlockGroupsConnections
-                                            .GetDirectBlockGroupConnections(
-                                                intent.GetDirectBlockGroupId())
-                                            .GetGeneration();
+                const ui32 dbgConnectionsConfigGeneration =
+                    DirectBlockGroupsConnections
+                        .GetDirectBlockGroupConnections(
+                            intent.GetDirectBlockGroupId())
+                        .GetDBGConnectionsConfigGeneration();
 
-                // Nothing may renumber the slots while a plan is pending, so
-                // the plan is applied exactly as it was validated.
                 Y_ABORT_UNLESS(
-                    intent.GetGeneration() == generation,
-                    "AddHost plan was decided on generation %lu, the group is "
-                    "at %lu",
-                    intent.GetGeneration(),
-                    generation);
+                    intent.GetDBGConnectionsConfigGeneration() ==
+                        dbgConnectionsConfigGeneration,
+                    "AddHost plan was decided on DBG connections config "
+                    "generation %u, the group is at %u",
+                    intent.GetDBGConnectionsConfigGeneration(),
+                    dbgConnectionsConfigGeneration);
 
                 AddHostInFlight = TAddHostInFlight{
                     .DirectBlockGroupId = intent.GetDirectBlockGroupId(),
                     .NewHostIndex =
                         static_cast<THostIndex>(intent.GetNewHostIndex()),
-                    .Generation = intent.GetGeneration(),
+                    .DBGConnectionsConfigGeneration =
+                        intent.GetDBGConnectionsConfigGeneration(),
                 };
             }
         }

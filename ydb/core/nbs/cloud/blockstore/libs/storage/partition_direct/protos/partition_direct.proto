@@ -14,9 +14,9 @@ message TDirectBlockGroupConnections {
     }
     repeated TConnection Connections = 1;
 
-    // Bumped by every change of this group's membership. A request decided on
-    // an older generation was decided without seeing that change.
-    uint64 Generation = 2;
+    // The generation of the DirectBlockGroup connections config stored in the
+    // tablet local database.
+    uint32 DBGConnectionsConfigGeneration = 2;
 }
 
 message TDirectBlockGroupsConnections {
@@ -48,10 +48,8 @@ message TTabletInfo {
 }
 
 // An in-flight AddHost, persisted so it can be finished (replayed) on restart.
-// The plan is applied as it was validated, and Generation is the state it was
-// decided on.
 message TAddHostInProgress {
     uint32 DirectBlockGroupId = 1;
     uint32 NewHostIndex = 2;
-    uint64 Generation = 3;
+    uint32 DBGConnectionsConfigGeneration = 3;
 }

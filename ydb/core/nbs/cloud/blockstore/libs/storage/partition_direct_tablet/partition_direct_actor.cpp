@@ -362,7 +362,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
-            conn.GetGeneration(),
+            conn.GetDBGConnectionsConfigGeneration(),
             std::move(transport),
             dbgCountersRoot);
 

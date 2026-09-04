@@ -359,7 +359,7 @@ bool TPartitionActor::OnRenderAppHtmlPage(
                 *data.SelectedDbg,
                 DirectBlockGroupsConnections
                     .GetDirectBlockGroupConnections(*data.SelectedDbg)
-                    .GetGeneration());
+                    .GetDBGConnectionsConfigGeneration());
             reply << "<p>Add host requested for "
                   << PrintDbgId(*data.SelectedDbg) << ".</p>";
         } else {

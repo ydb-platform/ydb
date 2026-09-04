@@ -352,7 +352,7 @@ void THttpRequest::ParseHeaders(const THttpInput& input) {
         } else if (AsciiEqualsIgnoreCase(header.Name(), IAM_TOKEN_HEADER)) {
             IamToken_ = header.Value();
         } else if (AsciiEqualsIgnoreCase(header.Name(), FORWARDED_IP_HEADER)) {
-            SourceAddress_ = header.Value();
+            SourceAddress_ = NKikimr::NNet::ExtractFirstForwardedForAddress(header.Value());
         } else if (AsciiEqualsIgnoreCase(header.Name(), REQUEST_ID_HEADER)) {
             sourceReqId = header.Value();
         }

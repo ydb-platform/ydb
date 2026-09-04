@@ -1206,11 +1206,13 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         } restoreAuthFactory{appData, previousAuthFactory};
 
         const TString sourceAddress = "203.0.113.42";
+        const TString forwardedFor = TStringBuilder()
+            << "  " << sourceAddress << " , 10.0.0.10, 10.0.0.11";
         auto createQueueReq = CreateSqsCreateQueueRequest();
         createQueueReq["QueueName"] = "HttpProxySourceAddressQueue";
         const TString authorization = TStringBuilder()
             << "X-YaCloud-SubjectToken: proxy_sa@builtin"
-            << "\r\nX-Forwarded-For:" << sourceAddress;
+            << "\r\nX-Forwarded-For:" << forwardedFor;
 
         auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), authorization);
         UNIT_ASSERT_VALUES_EQUAL_C(createQueueRes.HttpCode, 200, createQueueRes.Body);

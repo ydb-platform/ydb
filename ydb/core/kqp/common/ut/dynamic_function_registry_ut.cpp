@@ -13,6 +13,9 @@
 
 #include <util/stream/str.h>
 
+#include <atomic>
+#include <thread>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -318,6 +321,124 @@ Y_UNIT_TEST(PrintInfoToDoesNotCrash) {
     auto registry = MakeRegistry();
     TStringStream out;
     registry->PrintInfoTo(out);
+}
+
+Y_UNIT_TEST(ConcurrentLookupDuringRemove) {
+    auto registry = MakeRegistry();
+    registry->AddModule("/lib/foo", "Foo", new TStubUdfModule("Bar"));
+
+    std::atomic<bool> stop{false};
+    std::atomic<ui64> lookups{0};
+    std::atomic<ui64> errors{0};
+    constexpr size_t readerCount = 8;
+
+    TVector<std::thread> readers;
+    readers.reserve(readerCount);
+    for (size_t i = 0; i < readerCount; ++i) {
+        readers.emplace_back([&] {
+            TScopedAlloc alloc(__LOCATION__);
+            TTypeEnvironment env(alloc);
+            NUdf::ITypeInfoHelper::TPtr typeInfoHelper(new TTypeInfoHelper);
+            auto runtimeSettings = NYql::MakeRuntimeSettings();
+
+            while (!stop.load(std::memory_order_relaxed)) {
+                TFunctionTypeInfo funcInfo;
+                auto status = LookupTypeInfo(
+                    *registry, env, typeInfoHelper, *runtimeSettings, "Foo.Bar", &funcInfo);
+                lookups.fetch_add(1, std::memory_order_relaxed);
+                if (!status.IsOk()) {
+                    errors.fetch_add(1, std::memory_order_relaxed);
+                }
+                Y_UNUSED(registry->IsLoadedUdfModule("Foo"));
+            }
+        });
+    }
+
+    // Let readers warm up, then unload under concurrent lookups.
+    while (lookups.load(std::memory_order_relaxed) < 100) {
+        std::this_thread::yield();
+    }
+    Dyn(registry.Get())->RemoveModule("Foo");
+    stop.store(true, std::memory_order_relaxed);
+
+    for (auto& t : readers) {
+        t.join();
+    }
+
+    UNIT_ASSERT(!registry->IsLoadedUdfModule("Foo"));
+    UNIT_ASSERT_GT(lookups.load(), 0u);
+    // After remove some lookups may fail; before remove they must have succeeded.
+    // We only require no crash / use-after-free (survived joins).
+    Y_UNUSED(errors);
+}
+
+Y_UNIT_TEST(ConcurrentAddAndLookup) {
+    auto registry = MakeRegistry();
+    constexpr size_t moduleCount = 32;
+    constexpr size_t writerCount = 4;
+    constexpr size_t readerCount = 4;
+
+    std::atomic<size_t> nextIndex{0};
+    std::atomic<bool> writersDone{false};
+
+    TVector<std::thread> writers;
+    writers.reserve(writerCount);
+    for (size_t w = 0; w < writerCount; ++w) {
+        writers.emplace_back([&] {
+            for (;;) {
+                const size_t i = nextIndex.fetch_add(1, std::memory_order_relaxed);
+                if (i >= moduleCount) {
+                    break;
+                }
+                const TString name = TStringBuilder() << "Mod" << i;
+                registry->AddModule(
+                    TStringBuilder() << "/lib/" << i,
+                    name,
+                    new TStubUdfModule("Func"));
+            }
+        });
+    }
+
+    TVector<std::thread> readers;
+    readers.reserve(readerCount);
+    for (size_t r = 0; r < readerCount; ++r) {
+        readers.emplace_back([&] {
+            TScopedAlloc alloc(__LOCATION__);
+            TTypeEnvironment env(alloc);
+            NUdf::ITypeInfoHelper::TPtr typeInfoHelper(new TTypeInfoHelper);
+            auto runtimeSettings = NYql::MakeRuntimeSettings();
+
+            while (!writersDone.load(std::memory_order_acquire)) {
+                for (size_t i = 0; i < moduleCount; ++i) {
+                    const TString name = TStringBuilder() << "Mod" << i;
+                    if (registry->IsLoadedUdfModule(name)) {
+                        TFunctionTypeInfo funcInfo;
+                        auto status = LookupTypeInfo(
+                            *registry, env, typeInfoHelper, *runtimeSettings,
+                            TStringBuilder() << name << ".Func", &funcInfo);
+                        UNIT_ASSERT_C(status.IsOk(), status.GetError());
+                    }
+                }
+            }
+        });
+    }
+
+    for (auto& t : writers) {
+        t.join();
+    }
+    writersDone.store(true, std::memory_order_release);
+    for (auto& t : readers) {
+        t.join();
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(registry->GetAllModuleNames().size(), moduleCount);
+    for (size_t i = 0; i < moduleCount; ++i) {
+        const TString name = TStringBuilder() << "Mod" << i;
+        UNIT_ASSERT(registry->IsLoadedUdfModule(name));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *registry->FindUdfPath(name),
+            TStringBuilder() << "/lib/" << i);
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(TDynamicFunctionRegistryTest)

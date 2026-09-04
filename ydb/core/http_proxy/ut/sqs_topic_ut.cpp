@@ -14,6 +14,8 @@
 #include <ydb/core/metering/stream_ru_calculator.h>
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/services/sqs_topic/billing.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <util/system/mutex.h>
 
@@ -391,6 +393,22 @@ namespace {
         std::shared_ptr<TMutex> Lock_;
         std::shared_ptr<TVector<TRuCharge>> Charges_;
     };
+
+    NSchemeCache::TSchemeCacheNavigate::TEntry SyncNavigate(
+        TTestActorRuntime* runtime,
+        THolder<NSchemeCache::TSchemeCacheNavigate> request)
+    {
+        const TActorId edge = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(
+            MakeSchemeCacheID(),
+            edge,
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())));
+        auto ev = runtime->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+            edge, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev && ev->Get() && ev->Get()->Request, "scheme cache navigate timed out");
+        UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty());
+        return ev->Get()->Request->ResultSet.front();
+    }
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
@@ -2184,6 +2202,57 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+    }
+
+    // Serverless databases are KindExtSubdomain. The default RedirectRequired=true
+    // makes scheme cache return RedirectLookupError, so ExtractRlContext used to
+    // skip charging even when serverless_rt_* attributes are present.
+    Y_UNIT_TEST_F(TestRlPathNavigateOnExtSubdomainReadsRuAttributes, TFixture) {
+        const TString subdomainName = "sls";
+        const TString database = "/Root/" + subdomainName;
+        const TRuTopicSetup ru;
+
+        NYdb::TClient client(*(KikimrServer->ServerSettings));
+        NKikimrSubDomains::TSubDomainSettings subdomain;
+        subdomain.SetName(subdomainName);
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, client.CreateExtSubdomain("/Root", subdomain));
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            client.AlterUserAttributes("/Root", subdomainName, {
+                {"serverless_rt_coordination_node_path", ru.CoordinationNodePath},
+                {"serverless_rt_topic_resource_ru", ru.ResourcePath},
+            }, {}, {}, "root@builtin"));
+
+        auto makeRequest = [&](bool redirectRequired) {
+            auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+            entry.Path = NKikimr::SplitPath(database);
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+            entry.SyncVersion = false;
+            entry.RedirectRequired = redirectRequired;
+            request->ResultSet.emplace_back(std::move(entry));
+            request->DatabaseName = database;
+            return request;
+        };
+
+        {
+            const auto result = SyncNavigate(ActorRuntime, makeRequest(true));
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                result.Status,
+                NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError,
+                "default RedirectRequired=true must fail on ExtSubdomain");
+        }
+
+        {
+            const auto result = SyncNavigate(ActorRuntime, makeRequest(false));
+            UNIT_ASSERT_VALUES_EQUAL(result.Status, NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+            UNIT_ASSERT_VALUES_EQUAL(result.Kind, NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain);
+            const auto* coordinationNode = result.Attributes.FindPtr("serverless_rt_coordination_node_path");
+            const auto* resourcePath = result.Attributes.FindPtr("serverless_rt_topic_resource_ru");
+            UNIT_ASSERT(coordinationNode);
+            UNIT_ASSERT(resourcePath);
+            UNIT_ASSERT_VALUES_EQUAL(*coordinationNode, ru.CoordinationNodePath);
+            UNIT_ASSERT_VALUES_EQUAL(*resourcePath, ru.ResourcePath);
+        }
     }
 
     Y_UNIT_TEST_F(TestReceiveMessageChargesRequestUnits, TFixture) {

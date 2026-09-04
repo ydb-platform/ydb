@@ -36,6 +36,7 @@ void TJsonComputationGraph::Bootstrap() {
     request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
     request.SetKeepSession(false);
+    request.SetIsInternalCall(true);
     auto& pathParam = (*request.MutableYdbParameters())["$path"];
     pathParam.mutable_type()->set_type_id(Ydb::Type::UTF8);
     pathParam.mutable_value()->set_text_value(std::string(path));

@@ -50,6 +50,8 @@ public:
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
         const TDiskDescription& diskDescription,
+        // Volume block size, distinct from the 4 KiB DDisk integrity unit.
+        ui32 blockSize,
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
@@ -282,6 +284,7 @@ private:
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
     const ui32 TabletGeneration;
+    const ui32 BlockSize;
     const size_t DirectBlockGroupIndex;
     const NTransport::TStorageTransportPtr StorageTransport;
 

@@ -30,7 +30,12 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr ui64 BlocksPerRegion = RegionSize / DefaultBlockSize;
+[[nodiscard]] constexpr ui64 BlocksPerRegion(ui32 blockSize = DefaultBlockSize)
+{
+    return RegionSize / blockSize;
+}
+
+constexpr ui64 DefaultStripeSize = 512_KB;
 constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
@@ -67,6 +72,7 @@ struct TScopedNbsService: TDisableCopyMove
         PersistentBufferDDiskPoolName);
     storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
     storageConfig->SetVChunkSize(DefaultVChunkSize);
+    storageConfig->SetStripeSize(DefaultStripeSize);
     storageConfig->SetWriteHedgingDelay(writeHedgingDelay.MicroSeconds());
     storageConfig->SetPBufferCleanupLsnStep(pbufferCleanupLsnStep);
     if (syncRequestsBatchSize) {
@@ -116,11 +122,13 @@ struct TScopedNbsService: TDisableCopyMove
         syncRequestsBatchSize));
 }
 
-NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(ui64 blockCount)
+NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(
+    ui64 blockCount,
+    ui32 blockSize = DefaultBlockSize)
 {
     NKikimrBlockStore::TVolumeConfig volumeConfig;
     volumeConfig.SetDiskId("test-volume");
-    volumeConfig.SetBlockSize(4096);
+    volumeConfig.SetBlockSize(blockSize);
     volumeConfig.SetStoragePoolName(DDiskPoolName);
     auto* partition = volumeConfig.AddPartitions();
     partition->SetBlockCount(blockCount);
@@ -154,6 +162,7 @@ TActorId WaitForTabletBoot(TEnvironmentSetup& env)
 ui64 CreatePartitionTablet(
     TEnvironmentSetup& env,
     ui64 blockCount = 32768,
+    ui32 blockSize = DefaultBlockSize,
     TActorId* outBootstrapperId = nullptr)
 {
     const TActorId createdBootstrapperId = WaitForTabletBoot(env);
@@ -162,7 +171,7 @@ ui64 CreatePartitionTablet(
     }
 
     // Send volume config update
-    auto volumeConfig = CreateVolumeConfig(blockCount);
+    auto volumeConfig = CreateVolumeConfig(blockCount, blockSize);
     auto updateEvent =
         std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
     updateEvent->Record.MutableVolumeConfig()->CopyFrom(volumeConfig);
@@ -189,6 +198,35 @@ ui64 CreatePartitionTablet(
     env.Sim(TDuration::Seconds(10));
 
     return PartitionTabletId;
+}
+
+// Sends UpdateVolumeConfig to the partition tablet and returns the response.
+NKikimrBlockStore::TUpdateVolumeConfigResponse SendUpdateVolumeConfig(
+    TEnvironmentSetup& env,
+    const NKikimrBlockStore::TVolumeConfig& volumeConfig,
+    ui64 txId)
+{
+    auto updateEvent =
+        std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
+    updateEvent->Record.MutableVolumeConfig()->CopyFrom(volumeConfig);
+    updateEvent->Record.SetTxId(txId);
+
+    const TActorId& edge = env.Runtime->AllocateEdgeActor(
+        env.Settings.ControllerNodeId,
+        __FILE__,
+        __LINE__);
+
+    env.Runtime->SendToPipe(
+        PartitionTabletId,
+        edge,
+        updateEvent.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+
+    auto response = env.WaitForEdgeActorEvent<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
+    UNIT_ASSERT(response);
+    return response->Get()->Record;
 }
 
 TPersistResultFuture SendVChunkConfigUpdate(
@@ -614,7 +652,9 @@ void BasicWriteRead(EWriteMode writeMode)
     StopFastPathService(env, partition, edge);
 }
 
-void ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode writeMode)
+void ShouldWriteAndReadBlocksInDifferentRegions(
+    EWriteMode writeMode,
+    ui32 blockSize = DefaultBlockSize)
 {
     TEnvironmentSetup env{{
         .NodeCount = 8,
@@ -627,8 +667,9 @@ void ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode writeMode)
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    const ui64 blockCount = 3 * BlocksPerRegion;
-    auto partition = CreatePartitionTablet(env, blockCount);
+    const ui64 blocksPerRegion = BlocksPerRegion(blockSize);
+    const ui64 blockCount = 3 * blocksPerRegion;
+    auto partition = CreatePartitionTablet(env, blockCount, blockSize);
 
     const TActorId& edge = runtime->AllocateEdgeActor(
         env.Settings.ControllerNodeId,
@@ -640,16 +681,13 @@ void ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode writeMode)
     // Write one block at the start of each of 3 regions
     const ui64 regionBlockIndices[] = {
         0,
-        BlocksPerRegion,
-        2 * BlocksPerRegion,
+        blocksPerRegion,
+        2 * blocksPerRegion,
     };
-    TString expectedData[4] = {
-        TString(1024, 'A') + TString(1024, 'B') + TString(1024, 'C') +
-            TString(1024, 'D'),
-        TString(1024, 'E') + TString(1024, 'F') + TString(1024, 'G') +
-            TString(1024, 'H'),
-        TString(1024, 'I') + TString(1024, 'J') + TString(1024, 'K') +
-            TString(1024, 'L'),
+    TString expectedData[3] = {
+        NUnitTest::RandomString(blockSize, 1),
+        NUnitTest::RandomString(blockSize, 2),
+        NUnitTest::RandomString(blockSize, 3),
     };
 
     for (int i = 0; i < 3; ++i) {
@@ -705,7 +743,7 @@ void RandomWrites(EWriteMode writeMode)
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    const ui64 blockCount = 3 * BlocksPerRegion;
+    const ui64 blockCount = 3 * BlocksPerRegion();
     auto partition = CreatePartitionTablet(env, blockCount);
 
     const TActorId& edge = runtime->AllocateEdgeActor(
@@ -762,7 +800,9 @@ void RandomWrites(EWriteMode writeMode)
     StopFastPathService(env, partition, edge);
 }
 
-void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
+void ShouldWriteAndReadMultipleBlocks(
+    EWriteMode writeMode,
+    ui32 blockSize = DefaultBlockSize)
 {
     TEnvironmentSetup env{{
         .NodeCount = 8,
@@ -775,7 +815,7 @@ void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    auto partition = CreatePartitionTablet(env);
+    auto partition = CreatePartitionTablet(env, 32768, blockSize);
 
     const TActorId& edge = runtime->AllocateEdgeActor(
         env.Settings.ControllerNodeId,
@@ -784,12 +824,22 @@ void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
 
     auto loadActorAdapter = GetLoadActorAdapterActorId(env, partition, edge);
 
-    TString expectedData =
-        NUnitTest::RandomString(DefaultBlockSize * 128, RandomNumber<ui32>());
+    const ui64 blocksPerStripe = DefaultStripeSize / blockSize;
+    UNIT_ASSERT(blocksPerStripe > 0);
 
+    // The load actor adapter forwards ranges to the fast path unsplit (the
+    // vhost path gets a splitter in TServer::CreateWrappers), so a request
+    // has to stay inside one stripe. Use the whole second stripe.
+    const ui32 blocksToWrite =
+        static_cast<ui32>(Min<ui64>(128, blocksPerStripe));
+    TString expectedData = NUnitTest::RandomString(
+        static_cast<size_t>(blockSize) * blocksToWrite,
+        RandomNumber<ui32>());
+
+    const ui64 startIndex = blocksPerStripe;
     {
         auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
-        request->Record.SetStartIndex(100);
+        request->Record.SetStartIndex(startIndex);
         request->Record.MutableBlocks()->AddBuffers(expectedData);
 
         runtime->Send(
@@ -807,8 +857,8 @@ void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
 
     {
         auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
-        request->Record.SetStartIndex(100);
-        request->Record.SetBlocksCount(128);
+        request->Record.SetStartIndex(startIndex);
+        request->Record.SetBlocksCount(blocksToWrite);
 
         runtime->Send(
             new IEventHandle(loadActorAdapter, edge, request.release()),
@@ -895,7 +945,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const ui64 partition = CreatePartitionTablet(
             env,
-            4 * BlocksPerRegion + 1   // blockCount
+            4 * BlocksPerRegion() + 1   // blockCount
         );
 
         const TActorId& edge = runtime->AllocateEdgeActor(
@@ -1235,8 +1285,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
         TActorId bootstrapperId;
-        const ui64 partition =
-            CreatePartitionTablet(env, 32768, &bootstrapperId);
+        const ui64 partition = CreatePartitionTablet(
+            env,
+            32768,
+            DefaultBlockSize,
+            &bootstrapperId);
 
         TVector<std::unique_ptr<IEventHandle>> blockedCommitResults;
         bool bootstrapperDeathObserved = false;
@@ -1327,6 +1380,34 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode::DirectWrite);
     }
 
+    Y_UNIT_TEST(ShouldWriteAndRead8KDifferentRegionsDirectPBufferFilling)
+    {
+        ShouldWriteAndReadBlocksInDifferentRegions(
+            EWriteMode::DirectWrite,
+            8_KB);
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndRead128KDifferentRegionsDirectPBufferFilling)
+    {
+        ShouldWriteAndReadBlocksInDifferentRegions(
+            EWriteMode::DirectWrite,
+            128_KB);
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndRead8KDifferentRegionsPBufferReplication)
+    {
+        ShouldWriteAndReadBlocksInDifferentRegions(
+            EWriteMode::IndirectWrite,
+            8_KB);
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndRead128KDifferentRegionsPBufferReplication)
+    {
+        ShouldWriteAndReadBlocksInDifferentRegions(
+            EWriteMode::IndirectWrite,
+            128_KB);
+    }
+
     Y_UNIT_TEST(RandomWritesPBufferReplication)
     {
         RandomWrites(EWriteMode::IndirectWrite);
@@ -1345,6 +1426,101 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
     Y_UNIT_TEST(ShouldWriteAndReadMultipleBlocksDirectPBufferFilling)
     {
         ShouldWriteAndReadMultipleBlocks(EWriteMode::DirectWrite);
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndRead8KDirectPBufferFilling)
+    {
+        ShouldWriteAndReadMultipleBlocks(EWriteMode::DirectWrite, 8_KB);
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndRead128KDirectPBufferFilling)
+    {
+        ShouldWriteAndReadMultipleBlocks(EWriteMode::DirectWrite, 128_KB);
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndRead8KPBufferReplication)
+    {
+        ShouldWriteAndReadMultipleBlocks(EWriteMode::IndirectWrite, 8_KB);
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndRead128KPBufferReplication)
+    {
+        ShouldWriteAndReadMultipleBlocks(EWriteMode::IndirectWrite, 128_KB);
+    }
+
+    Y_UNIT_TEST(ShouldRejectUnsupportedBlockSize)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        WaitForTabletBoot(env);
+
+        auto volumeConfig = CreateVolumeConfig(32768, 3);
+        auto updateEvent =
+            std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
+        updateEvent->Record.MutableVolumeConfig()->CopyFrom(volumeConfig);
+        updateEvent->Record.SetTxId(1);
+
+        const TActorId& edge = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        env.Runtime->SendToPipe(
+            PartitionTabletId,
+            edge,
+            updateEvent.release(),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        auto response = env.WaitForEdgeActorEvent<
+            NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
+        UNIT_ASSERT(
+            response->Get()->Record.GetStatus() == NKikimrBlockStore::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetTxId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            response->Get()->Record.GetOrigin(),
+            PartitionTabletId);
+    }
+
+    Y_UNIT_TEST(ShouldReplyOkToRepeatedAppliedVolumeConfig)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        CreatePartitionTablet(env);
+
+        const auto volumeConfig = CreateVolumeConfig(32768);
+        const auto response = SendUpdateVolumeConfig(env, volumeConfig, 2);
+        UNIT_ASSERT(response.GetStatus() == NKikimrBlockStore::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
+    }
+
+    Y_UNIT_TEST(ShouldReplyUpdateInProgressToNewerVolumeConfig)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        CreatePartitionTablet(env);
+
+        auto volumeConfig = CreateVolumeConfig(32768);
+        volumeConfig.SetVersion(1);
+        const auto response = SendUpdateVolumeConfig(env, volumeConfig, 2);
+        UNIT_ASSERT(
+            response.GetStatus() ==
+            NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
 
     // Test implementation for IndirectWrite write mode
@@ -2101,8 +2277,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
         TActorId bootstrapperId;
-        const ui64 tabletId =
-            CreatePartitionTablet(env, 32768, &bootstrapperId);
+        const ui64 tabletId = CreatePartitionTablet(
+            env,
+            32768,
+            DefaultBlockSize,
+            &bootstrapperId);
 
         const TActorId edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2180,8 +2359,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
         TActorId bootstrapperId;
-        const ui64 tabletId =
-            CreatePartitionTablet(env, 32768, &bootstrapperId);
+        const ui64 tabletId = CreatePartitionTablet(
+            env,
+            32768,
+            DefaultBlockSize,
+            &bootstrapperId);
 
         const TActorId edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,

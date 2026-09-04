@@ -89,6 +89,19 @@ namespace NKikimr {
             }
         }
 
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks) {
+            for (const TLevelSegmentPtr& seg : Segments) {
+                seg->ResolveHeapStripe(stripeChunks);
+            }
+        }
+
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            for (const TLevelSegmentPtr& seg : Segments) {
+                seg->ForEachStripeExtent(stripeChunks, callback);
+            }
+        }
+
         void SerializeToProto(NKikimrVDiskData::TLevelX &pb) const {
             for (const auto &x : Segments) {
                 auto sst = pb.AddSsts();
@@ -273,6 +286,19 @@ namespace NKikimr {
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (const TLevelSegmentPtr& seg : Segments) {
                 seg->GetOwnedChunks(chunks);
+            }
+        }
+
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks) {
+            for (const TLevelSegmentPtr& seg : Segments) {
+                seg->ResolveHeapStripe(stripeChunks);
+            }
+        }
+
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            for (const TLevelSegmentPtr& seg : Segments) {
+                seg->ForEachStripeExtent(stripeChunks, callback);
             }
         }
 

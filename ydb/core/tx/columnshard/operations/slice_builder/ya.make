@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/versions
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/engines/writer
+    ydb/core/tx/columnshard/tracing
 )
 
 END()

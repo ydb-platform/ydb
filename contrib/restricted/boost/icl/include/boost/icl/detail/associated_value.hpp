@@ -21,7 +21,7 @@ typename enable_if< mpl::and_< is_key_compare_equal<Type,CoType>
                              , mpl::and_<is_map<Type>, is_map<CoType> > >, 
                     bool>::type
 co_equal(typename Type::const_iterator left_, typename CoType::const_iterator right_, 
-         const Type* = 0, const CoType* = 0)
+         const Type*, const CoType*)
 {
     return co_value<Type>(left_) == co_value<CoType>(right_);
 }
@@ -31,7 +31,7 @@ typename enable_if< mpl::and_< is_key_compare_equal<Type,CoType>
                              , mpl::not_<mpl::and_<is_map<Type>, is_map<CoType> > > >,
                   bool>::type
 co_equal(typename Type::const_iterator, typename CoType::const_iterator,
-         const Type* = 0, const CoType* = 0)
+         const Type*, const CoType*)
 {
     return true;
 }

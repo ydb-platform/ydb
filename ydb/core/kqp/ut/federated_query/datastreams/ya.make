@@ -14,6 +14,7 @@ ENDIF()
 
 SRCS(
     common.cpp
+    datastreams_checkpoints_ut.cpp
     datastreams_ut.cpp
     datastreams_table_mode_ut.cpp
     datastreams_queries_restart_ut.cpp
@@ -26,6 +27,7 @@ SRCS(
 PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/threading/local_executor
+    ydb/core/base
     ydb/core/cms/console
     ydb/core/kqp
     ydb/core/kqp/ut/common
@@ -33,6 +35,7 @@ PEERDIR(
     ydb/core/sys_view/common
     ydb/core/protos
     ydb/core/testlib
+    ydb/library/grpc/server/actors
     ydb/library/testlib/common
     ydb/library/testlib/pq_helpers
     ydb/library/testlib/s3_recipe_helper

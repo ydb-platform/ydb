@@ -72,11 +72,14 @@ DDisk and Persistent Buffer checksums are enabled by default. Pass
 actors and checksum handling in DDisk. For client/server DDisk tests, pass the
 option to both processes so the client and server use the same mode.
 
+Pass `--force-ddisk-pdisk-fallback` to route DDisk direct I/O through the PDisk
+actor instead of io_uring.
+
 #### Parameters for `DDiskLoad`
 - `Tag` - a unique numeric identifier for the load source.
 - `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.
 - `DurationSeconds` - the duration of the load application in seconds.
-- `InFlight` - the number of concurrently sent requests.
+- `InFlight` - the number of concurrently sent requests. Background writes share this queue-depth budget with measured reads.
 - `InitInFlight` - the maximum number of concurrent initialization requests (defaults to `InFlight` if omitted).
 - `IntervalMsMin` and `IntervalMsMax` - interval mode settings; `0/0` means continuous load.
 - `ExpectedChunkSize` - expected chunk size in bytes; must be divisible by `IoSizeBytes`.
@@ -84,7 +87,8 @@ option to both processes so the client and server use the same mode.
 - `Areas` - the set of DDisk areas used by the load source; each `AreaSize` must be divisible by `IoSizeBytes`.
   Per-area `InitType` defaults to `INIT_ZEROES_FULL` (every slot is written before the measured load). Use `INIT_ZEROES_FIRST_BLOCK` only to preallocate chunks; with checksums enabled, unread blocks are then served from RAM as zeros and do not hit the device. `INIT_NONE` is rejected for read load.
 - `IsReadLoad` - if `true`, run read load; if `false`, run write load.
-- `SQPoll` / `IOPoll` - enable io_uring SQPOLL / IOPOLL for direct I/O.
+- `BackgroundWriteRatio` - unmeasured background writes per measured read during read load; `0` disables them and `1.0` issues one write per read. Background writes share `InFlight` and interval pacing with measured reads.
+- `BackgroundWriteSizeKiB` - background write size in KiB (default `4`); must be a power of two and at least 4. When background writes are enabled, `ExpectedChunkSize` and each `AreaSize` must be divisible by this size.
 
 ### Parameters for `InterconnectTestList`
 These describe network load generated through the actors library interconnect

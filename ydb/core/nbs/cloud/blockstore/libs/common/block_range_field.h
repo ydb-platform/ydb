@@ -24,11 +24,16 @@ public:
     // Returns true if the intervals have actually changed.
     bool Add(TBlockRange64 range);
     // Returns true if the intervals have actually changed.
+    bool Add(const TBlockRangeField& field);
+    // Returns true if the intervals have actually changed.
     bool Remove(TBlockRange64 range);
+    // Returns true if the intervals have actually changed.
+    bool Remove(const TBlockRangeField& field);
     // Returns true if the intervals have actually changed.
     bool Clear();
 
     [[nodiscard]] bool Overlaps(TBlockRange64 other) const;
+    [[nodiscard]] bool Overlaps(const TBlockRangeField& other) const;
 
     void Enumerate(TEnumerateFunc func) const;
 

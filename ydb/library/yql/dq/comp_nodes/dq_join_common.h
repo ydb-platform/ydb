@@ -390,6 +390,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
 
     static constexpr bool FlushOnYield = false;
 
+    // Hash joins pair build bucket i with probe bucket i. Cross has no keys, so it spills as a grid
+    // instead: build rows go round robin into the buckets, probe rows stay one stream. A probe row is
+    // matched against every in-memory build table, then stored once and replayed against every spilled
+    // build bucket.
+    static constexpr bool IsGrid = Join.Kind == EJoinKind::Cross;
+
     // Row-preserving side is hashed, so its rows are emitted by scanning the table after the probe is done
     static constexpr bool PreservedRowsInBuildTable() {
         return Join.Preserved == ESide::Build && (Join.Kind == EJoinKind::Left || LeftSemiOrOnly(Join.Kind));
@@ -400,7 +406,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     struct FetchingBuild {
         FetchingBuild(Self& self)
             : Build(std::move(self.Sources_).Build())
-            , Spiller(self.Spiller_, self.Layouts_.Build)
+            , Spiller(self.Spiller_, self.Layouts_.Build, IsGrid ? EBucketAssign::RoundRobin : EBucketAssign::Hash)
         {
             self.Logger_.LogDebug("FetchingBuild stage started");
         }
@@ -437,6 +443,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 std::accumulate(Spiller.GetState().Buckets.begin(), Spiller.GetState().Buckets.end(), 0,
                                 [&](int spilled, const SpillerType::Bucket& bucket) { return spilled += SpillerType::IsBucketSpilled(bucket); });
 
+            if constexpr (IsGrid) {
+                GridProbeBucket = Spiller.FirstSpilledBucket();
+            }
+
             self.Logger_.LogDebug(Sprintf("Probing stage started, in memory buckets: %i, spilled buckets: %i",
                                           inMemoryBuckets, spilledBuckets));
         }
@@ -449,6 +459,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         // Cursor of the post-probe scan over preserved rows left in the in-memory tables
         int PreservedBucketIndex = 0;
         size_t PreservedResumeIndex = 0;
+        // Grid only: build table the current probe row stopped at, and the bucket keeping the probe stream
+        int GridBuildBucket = 0;
+        std::optional<int> GridProbeBucket;
     };
 
     using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
@@ -475,6 +488,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     struct PairAndMetadata {
         TSpilledBucket Buckets;
         int BucketIndex;
+        // Grid replays the probe stream for every build bucket, so only the last pass may drop the blobs
+        bool IsLastPair = false;
         std::variant<TFutureTableData, TTableAndSomeData> Table = TFutureTableData{};
     };
 
@@ -482,11 +497,21 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         JoinPairsOfPartitions(Self& self, std::unordered_map<int, TSpilledBucket>&& pairs)
             : Pairs(std::move(pairs))
         {
-            self.Logger_.LogDebug(Sprintf("JoinPairsOfPartitions stage started, partitions count: %i", pairs.size()));
+            if constexpr (IsGrid) {
+                // The probe stream sits in one bucket, but that bucket is joined like any other, so
+                // move the keys out and share them with every pair.
+                for (auto& [_, bucket] : Pairs) {
+                    GridProbeKeys.insert(GridProbeKeys.end(), bucket.Probe.begin(), bucket.Probe.end());
+                    bucket.Probe.clear();
+                }
+            }
+            self.Logger_.LogDebug(Sprintf("JoinPairsOfPartitions stage started, partitions count: %i",
+                                          static_cast<int>(Pairs.size())));
         }
 
         std::unordered_map<int, TSpilledBucket> Pairs;
         std::optional<PairAndMetadata> SelectedPair;
+        TMKQLVector<ISpiller::TKey> GridProbeKeys;
     };
 
     class Sources {
@@ -536,6 +561,30 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         return Parse(std::move(*buff), Layouts_.SelectSide(side));
     }
 
+    // Joins one probe row with every in-memory build table, then stores it for the spilled ones.
+    // Returns false when the output filled up: GridBuildBucket and BuildCursor point at the table and
+    // the build row to continue this probe row from.
+    bool MatchGridRowInMemory(Probing& state, TSingleTuple probeRow, auto lookupToTable, auto isFull) {
+        auto& buckets = state.Spiller.GetState().Buckets;
+        for (; state.GridBuildBucket < std::ssize(buckets); ++state.GridBuildBucket) {
+            TTable* table = std::get_if<TTable>(&buckets[state.GridBuildBucket]);
+            if (!table || table->Empty()) {
+                continue;
+            }
+            if (!lookupToTable(*table, probeRow, state.BuildCursor)) {
+                return false;
+            }
+            if (isFull()) {
+                ++state.GridBuildBucket;
+                return false;
+            }
+        }
+        state.GridBuildBucket = 0;
+        if (state.GridProbeBucket) {
+            state.Spiller.AddRow({.Val = probeRow, .Side = ESide::Probe, .BucketIndex = *state.GridProbeBucket});
+        }
+        return true;
+    }
 
     EFetchResult MatchRows(TComputationContext& ctx, auto consume, auto isFull,
                            TPackedTuplePairFilter* filter = nullptr) {
@@ -567,7 +616,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
                 }
             };
-            if constexpr (Join.Kind == EJoinKind::Cross) {
+            if constexpr (IsGrid) {
                 if (!table.ForEachFrom(buildCursor, onMatch, isFull)) {
                     return false;
                 }
@@ -737,16 +786,23 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     if (idx++ < state.ResumeIndex) {
                         continue;
                     }
-                    int bucketIndex = Settings.BucketIndex(tuple);
-                    bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
-                    if (thisBucketSpilled) {
-                        state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
-                    } else {
-                        TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
-                        MKQL_ENSURE(thisTable, "sanity check");
-                        if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                    if constexpr (IsGrid) {
+                        if (!MatchGridRowInMemory(state, tuple, lookupToTable, isFull)) {
                             state.ResumeIndex = idx - 1;
                             return EFetchResult::One;
+                        }
+                    } else {
+                        int bucketIndex = Settings.BucketIndex(tuple);
+                        bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
+                        if (thisBucketSpilled) {
+                            state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
+                        } else {
+                            TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
+                            MKQL_ENSURE(thisTable, "sanity check");
+                            if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                                state.ResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
                         }
                     }
                     if (isFull()) {
@@ -777,7 +833,11 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 std::optional bucket = GetFrontOrNull(state.Pairs);
                 if (bucket.has_value()) {
                     state.SelectedPair =
-                        PairAndMetadata{.Buckets = std::move(bucket->second), .BucketIndex = bucket->first};
+                        PairAndMetadata{.Buckets = std::move(bucket->second), .BucketIndex = bucket->first,
+                                        .IsLastPair = state.Pairs.empty()};
+                    if constexpr (IsGrid) {
+                        state.SelectedPair->Buckets.Probe = state.GridProbeKeys;
+                    }
                     TFutureTableData data;
                     for (ISpiller::TKey key : state.SelectedPair->Buckets.Build) {
                         data.Futures.push_back(Spiller_->Extract(key));
@@ -804,9 +864,11 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 } else {
                     auto* table = std::get_if<TTableAndSomeData>(&state.SelectedPair->Table);
                     MKQL_ENSURE(table, "sanity check");
+                    const bool keepProbeBlobs = IsGrid && !state.SelectedPair->IsLastPair;
                     constexpr int MinFuturesInBuffer = 10;
                     while (table->Futures.size() < MinFuturesInBuffer && !currentProbe.empty()) {
-                        table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
+                        const ISpiller::TKey key = *GetBackOrNull(currentProbe);
+                        table->Futures.push_back(keepProbeBlobs ? Spiller_->Get(key) : Spiller_->Extract(key));
                     }
                     if (table->CurrentProbePack.has_value()) {
                         ui32 idx = 0;

@@ -2176,7 +2176,6 @@ private:
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
-        sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes", "AnsiInForEmptyOrNullableItemsCollections" });
         // PQ topic metadata is exposed as __ydb_-prefixed system columns (e.g. __ydb_offset,
         // __ydb_write_time). They must stay readable when named explicitly but must not leak into

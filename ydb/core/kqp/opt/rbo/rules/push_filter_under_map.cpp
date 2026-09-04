@@ -28,12 +28,12 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
     TVector<TExpression> pushedFilters;
     TVector<TExpression> remainingFilters;
 
     TVector<TInfoUnit> newMapColumns;
-    for (const auto & mapEl : map->MapElements) {
+    for (const auto & mapEl : map->GetMapElements()) {
         newMapColumns.push_back(mapEl.GetElementName());
     }
 
@@ -50,7 +50,7 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
     }
 
     filter->SetInput(map->GetInput());
-    filter->FilterExpr = MakeConjunction(pushedFilters, props.PgSyntax);
+    filter->SetFilterExpression(MakeConjunction(pushedFilters, props.PgSyntax));
     map->SetInput(filter);
 
     if (remainingFilters.size()) {

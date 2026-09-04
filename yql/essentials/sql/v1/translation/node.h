@@ -244,13 +244,9 @@ public:
     TPtr AstNode(TPtr node) const;
     TPtr AstNode(const TString& str) const;
 
-    template <typename TVal, typename... TVals>
-    void Add(TVal val, TVals... vals) {
-        DoAdd(AstNode(val));
-        Add(vals...);
-    }
-
-    void Add() {
+    template <typename... TVals>
+    void Add(TVals... vals) {
+        (DoAdd(AstNode(vals)), ...);
     }
 
     // Y() Q() L()
@@ -903,7 +899,6 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     TNodePtr Hop;
     TNodePtr Interval;
     TNodePtr Delay;
-    bool DataWatermarks;
 
     TIntrusivePtr<TLegacyHoppingWindowSpec> Clone() const;
     ~TLegacyHoppingWindowSpec() = default;
@@ -1281,13 +1276,14 @@ struct TTableSettings {
     TNodePtr PartitionByHashFunction;
     TMaybe<TIdentifier> StoreExternalBlobs;
     TNodePtr ExternalDataChannelsCount;
+    NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
 
     TNodePtr DataSourcePath;
     NYql::TResetableSetting<TNodePtr, void> Location;
     TVector<NYql::TResetableSetting<std::pair<TIdentifier, TNodePtr>, TIdentifier>> ExternalSourceParameters;
 
     bool IsSet() const {
-        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount;
+        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount || MetricsLevel;
     }
 };
 
@@ -1581,44 +1577,6 @@ struct TDropTopicParameters {
     bool MissingOk;
 };
 
-struct TCreateBackupCollectionParameters {
-    std::map<TString, TDeferredAtom> Settings;
-
-    bool Database;
-    TVector<TDeferredAtom> Tables;
-
-    bool ExistingOk;
-};
-
-struct TAlterBackupCollectionParameters {
-    enum class EDatabase {
-        Unchanged,
-        Add,
-        Drop,
-    };
-
-    std::map<TString, TDeferredAtom> Settings;
-    std::set<TString> SettingsToReset;
-
-    EDatabase Database = EDatabase::Unchanged;
-    TVector<TDeferredAtom> TablesToAdd;
-    TVector<TDeferredAtom> TablesToDrop;
-
-    bool MissingOk;
-};
-
-struct TDropBackupCollectionParameters {
-    bool MissingOk;
-};
-
-struct TBackupParameters {
-    bool Incremental = false;
-};
-
-struct TRestoreParameters {
-    TString At;
-};
-
 struct TStreamingQuerySettings {
     inline static constexpr char RESERVED_FEATURE_PREFIX[] = "__";
     inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
@@ -1785,38 +1743,6 @@ TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicPa
                          TScopedStatePtr scoped);
 TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
                         TScopedStatePtr scoped);
-
-TNodePtr BuildCreateBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TCreateBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildAlterBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TAlterBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildDropBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TDropBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-
-TNodePtr BuildBackup(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TBackupParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildRestore(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TRestoreParameters& params,
-    const TObjectOperatorContext& context);
 
 TNodePtr BuildCreateSecret(
     TPosition pos,

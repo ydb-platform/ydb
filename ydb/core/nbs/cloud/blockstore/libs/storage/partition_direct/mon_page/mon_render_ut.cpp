@@ -72,6 +72,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=chaos");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=localdb");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunk");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunkcounters");
@@ -163,6 +164,82 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "initializing");
     }
 
+    Y_UNIT_TEST(ChaosPageShowsNodeByDbgControls)
+    {
+        using EChaosMode = TChaosConfig::TChaosNodeConfig::EChaosMode;
+
+        const TMonPageData data{
+            .Page = EMonPage::Chaos,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs =
+                {
+                    TDbgSnapshot{
+                        .Index = 0,
+                        .Connections =
+                            {
+                                TConnectionSnapshot{
+                                    .DDiskId = {10, 100, 1},
+                                },
+                            },
+                    },
+                    TDbgSnapshot{
+                        .Index = 1,
+                        .Connections =
+                            {
+                                TConnectionSnapshot{
+                                    .DDiskId = {10, 101, 1},
+                                },
+                            },
+                    },
+                },
+            .Chaos =
+                TChaosConfig{
+                    .NodeConfigs =
+                        {
+                            {
+                                TChaosConfig::TDbgAndNodeId{
+                                    .NodeId = 10,
+                                    .DbgIndex = 1,
+                                },
+                                TChaosConfig::TChaosNodeConfig{
+                                    .Mode = EChaosMode::Disabled,
+                                },
+                            },
+                        },
+                },
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Chaos");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Node 10");
+        UNIT_ASSERT_STRING_CONTAINS(html, "DBG #0");
+        UNIT_ASSERT_STRING_CONTAINS(html, "DBG #1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "action=disable&node=10&dbg=0");
+        UNIT_ASSERT_STRING_CONTAINS(html, "action=enable&node=10&dbg=1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "chaos-toggle-on");
+        UNIT_ASSERT_STRING_CONTAINS(html, "chaos-toggle-off");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "title='Disable node 10 in all DBGs'");
+        UNIT_ASSERT(!html.Contains("All DBGs</th>"));
+        UNIT_ASSERT(!html.Contains(">Disable</button>"));
+        UNIT_ASSERT(!html.Contains(">Enable</button>"));
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='dbg' value='all'/>");
+    }
+
+    Y_UNIT_TEST(ChaosPageHandlesEmptyDbgList)
+    {
+        const TMonPageData data{
+            .Page = EMonPage::Chaos,
+            .TabletInfo = {.TabletId = 42},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "No Direct Block Groups.");
+    }
+
     Y_UNIT_TEST(DbgListShowsRollupAndDrilldownLinks)
     {
         const TMonPageData data{
@@ -188,18 +265,19 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
     Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
     {
+        constexpr ui32 BlockSize = 4096;
         auto dbg = MakeDbg(0);
         auto config = TVChunkConfig::MakeDefault(
             /*vChunkIndex*/ 17,
             /*hostCount*/ 5,
             /*primaryCount*/ 3);
         config.PromoteHost(3);
-        config.SetWatermark(3, 42);
+        config.SetWatermark(3, 42 * BlockSize);
         dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
 
         const TMonPageData data{
             .Page = EMonPage::Dbg,
-            .TabletInfo = {.TabletId = 42},
+            .TabletInfo = {.TabletId = 42, .BlockSize = BlockSize},
             .Dbgs = {std::move(dbg)},
         };
 
@@ -243,7 +321,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "<input type='hidden' name='action' value='addhost'/>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Add host");
         UNIT_ASSERT_STRING_CONTAINS(html, "Connections");
-        UNIT_ASSERT_STRING_CONTAINS(html, "DDisk session");
         // The DDisk id links to its actor page on the owning node (1).
         UNIT_ASSERT_STRING_CONTAINS(
             html,
@@ -256,7 +333,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "/node/1/actors/persistent_buffer?pb=");
         UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:18</a>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Locked");
-        UNIT_ASSERT_STRING_CONTAINS(html, "yes");
+        UNIT_ASSERT_STRING_CONTAINS(html, "connected");
     }
 
     Y_UNIT_TEST(DbgDetailNotFound)
@@ -644,8 +721,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         const TMonPageData data{
             .Page = EMonPage::VChunkCounters,
             .TabletInfo = {.TabletId = 42},
+            .SelectedDbg = 0,
             .VChunkStats = gathered,
-            .SelectedVChunkDbg = 0,
             .ShowVChunks = true,
         };
 
@@ -674,9 +751,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         TMonPageData data{
             .Page = EMonPage::VChunkCounters,
             .TabletInfo = {.TabletId = 42},
+            .SelectedDbg = 0,
             .VChunkStats = gathered,
             .VChunkStatsLimit = 1,
-            .SelectedVChunkDbg = 0,
             .ShowVChunks = true,
         };
 

@@ -28,8 +28,12 @@ class NetworkNemesis(MonitoredAgentActor):
         self._logger.info("Extracting fault (network)")
         client = LocalNetworkClient(port=19001)
         self._logger.info("Restoring node...")
-        client.clear_all_drops(match="19001")
+        rc = client.clear_all_drops(match="19001")
+        if rc:
+            self.on_failed_extract_fault()
+            raise RuntimeError("NetworkNemesis extract failed: iptables rc=%s" % rc)
         self.on_success_extract_fault()
+        self._logger.info("=== EXTRACT_FAULT SUCCESS: NetworkNemesis ===")
 
 
 class DnsNemesis(MonitoredAgentActor):
@@ -50,8 +54,12 @@ class DnsNemesis(MonitoredAgentActor):
         del payload
         self._logger.info("Extracting DNS isolation")
         client = LocalNetworkClient(port=19001)
-        client.clear_all_drops(match="53")
+        rc = client.clear_all_drops(match="53")
+        if rc:
+            self.on_failed_extract_fault()
+            raise RuntimeError("DnsNemesis extract failed: iptables rc=%s" % rc)
         self.on_success_extract_fault()
+        self._logger.info("=== EXTRACT_FAULT SUCCESS: DnsNemesis ===")
 
 
 class TimeSkewNemesis(MonitoredAgentActor):

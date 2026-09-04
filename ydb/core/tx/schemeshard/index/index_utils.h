@@ -167,16 +167,21 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const TVector<TString>& prefixColumns);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const TVector<TString>& prefixColumns);
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
+
+bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableInfo, const TString& columnName);
+bool IsVirtualGeneratedIndexColumn(const NKikimrSchemeOp::TTableDescription& tableDesc, const TString& columnName);
 
 void FillIndexTableColumns(
     const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
@@ -277,6 +282,24 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
+    for (const auto& columnName : indexKeys.KeyColumns) {
+        if (IsVirtualGeneratedIndexColumn(tableDesc, columnName)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "VIRTUAL generated column '" << columnName
+                                     << "' cannot be used as an index key";
+            return false;
+        }
+    }
+
+    for (const auto& columnName : indexKeys.DataColumns) {
+        if (IsVirtualGeneratedIndexColumn(tableDesc, columnName)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "VIRTUAL generated column '" << columnName
+                                     << "' cannot be used as an index data column";
+            return false;
+        }
+    }
+
     if (!IsCompatibleIndex(GetIndexType(indexDesc), baseTableColumns, indexKeys, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
@@ -306,10 +329,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 return false;
             }
 
-            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance ||
-                indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
+                // Old prefixed fulltext_relevance index requires updating stats in kqp/effects,
+                // but it's not implemented and won't be because the index type is EOL.
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = "Prefixed fulltext indexes with relevance are not supported";
+                error = "Only compact prefixed fulltext indexes with relevance are supported";
                 return false;
             }
 
@@ -380,6 +404,13 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+            if (NKikimr::NFulltext::HasSuperLemmer(indexDesc.GetFulltextIndexDescription().GetSettings())
+                && !AppData()->FeatureFlags.GetEnableSuperLemmer()) {
+                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+                error = "SuperLemmer support is disabled";
+                return false;
+            }
+
             if (!checkInvertedIndex("Fulltext")) {
                 return false;
             }

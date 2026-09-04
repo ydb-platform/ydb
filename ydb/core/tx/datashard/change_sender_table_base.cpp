@@ -372,3 +372,7 @@ IActor* CreateTableChangeSenderShard(
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -160,8 +160,9 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         auto& iam = *externalDataSourceDesc.MutableAuth()->MutableIam();
         iam.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
         iam.SetInitialTokenSecretName(GetSecretName(settings, "initial_token_secret"));
-        // Note: user must not be allowed to specify resource_id;
-        // database authorization relies on resource_id lookup;
+        if (auto fValue = settings.GetFeaturesExtractor().Extract("resource_id")) {
+            iam.SetResourceId(*fValue);
+        }
         if (const auto status =
             CheckOldSecretCreationAllowed(
                 disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail())

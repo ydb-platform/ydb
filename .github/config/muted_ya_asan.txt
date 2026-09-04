@@ -346,6 +346,7 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/indexes KqpUniqueIndex.UpdateOnNullInComplexFk
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
+ydb/core/kqp/ut/olap/types KqpOlapJson.BloomCategoryIndexesVariants[false,false,0,10,1000,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.AggregateKeyColumnsNotLeakedToInputMap
@@ -468,8 +469,11 @@ ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-True-2-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming/generic py3test.sole chunk
 ydb/tests/fq/streaming_optimize py3test.sole chunk
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[hopping_window-GroupByHoppingWindowTimeLimitBad-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopByStringKey-default.txt]
 ydb/tests/fq/yt/kqp_yt_file/part0 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_gs_and_having-default.txt]
 ydb/tests/fq/yt/kqp_yt_file/part1 py3test.sole chunk

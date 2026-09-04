@@ -1554,6 +1554,13 @@ private:
 
         auto sessionsLimitPerNode = TableServiceConfig.GetSessionsLimitPerNode();
         if (sessionsLimitPerNode && !LocalSessions->CheckDatabaseLimits(database, sessionsLimitPerNode)) {
+            const ui32 maxShutdownInFlight = TableServiceConfig
+                .GetSessionBalancerSettings().GetMaxSessionsShutdownInFlightSize();
+            if (LocalSessions->GetShutdownInFlightSize() < maxShutdownInFlight) {
+                StartSessionGraceShutdown(LocalSessions->PickIdleSessionToShutdown(
+                    database, TInstant::Now(), GetSessionIdleDuration()));
+            }
+
             TString error = TStringBuilder() << "Active sessions limit exceeded, maximum allowed: "
                 << sessionsLimitPerNode;
             KQP_PROXY_LOG_W(requestInfo << error);

@@ -357,6 +357,33 @@ public:
         return nullptr;
     }
 
+    TKqpSessionInfo* PickIdleSessionToShutdown(const TString& database, TInstant now,
+        TDuration minIdleDuration)
+    {
+        TKqpSessionInfo* candidate = nullptr;
+        TInstant candidateIdleSince;
+        auto it = OrderedSessions.lower_bound(std::make_pair(database, TString()));
+        while (it != OrderedSessions.end() && it->first.first == database) {
+            TKqpSessionInfo* sessionInfo = it->second;
+            const TInstant idleSince = sessionInfo->StateChangeAt
+                ? sessionInfo->StateChangeAt
+                : sessionInfo->SessionStartedAt;
+            if (sessionInfo->State == TKqpSessionInfo::IDLE
+                && !IsSessionIdle(sessionInfo)
+                && idleSince + minIdleDuration <= now
+                && !sessionInfo->Closing
+                && !IsPendingShutdown(sessionInfo->SessionId)
+                && (!candidate || idleSince < candidateIdleSince))
+            {
+                candidate = sessionInfo;
+                candidateIdleSince = idleSince;
+            }
+            ++it;
+        }
+
+        return candidate ? StartShutdownSession(candidate->SessionId) : nullptr;
+    }
+
     THashMap<TString, TKqpSessionInfo>::const_iterator begin() const {
         return LocalSessions.begin();
     }

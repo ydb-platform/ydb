@@ -33,6 +33,7 @@
 
 #include <memory>
 #include <exception>
+#include <limits>
 #include <list>
 
 using NYT::FormatValue;
@@ -568,6 +569,12 @@ public:
             !MemoryLayoutData_.LinearMemory,
             "WebAssembly AllocateDetachedBytes failed: no linear memory");
         const Uptr pageBytes = IR::numBytesPerPage;
+        // length + pageBytes - 1 must not wrap: a hostile size would ask
+        // growMemory for a tiny page count and hand back an undersized region.
+        THROW_ERROR_EXCEPTION_IF(
+            length > std::numeric_limits<Uptr>::max() - (pageBytes - 1),
+            "WebAssembly AllocateDetachedBytes failed: length %v overflows page rounding",
+            length);
         const Uptr pagesToGrow = (static_cast<Uptr>(length) + pageBytes - 1) / pageBytes;
         Uptr oldPages = 0;
         const auto growResult = Runtime::growMemory(

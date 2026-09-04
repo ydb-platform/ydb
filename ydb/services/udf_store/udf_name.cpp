@@ -3,7 +3,7 @@
 #include <util/string/ascii.h>
 
 #include <algorithm>
-#include <climits>
+#include <limits.h>
 
 namespace NKikimr::NUdfStore {
 

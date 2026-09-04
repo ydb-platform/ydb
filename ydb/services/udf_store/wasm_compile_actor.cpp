@@ -41,6 +41,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
                 Name_,
+                TUdfModule::TypeToString(EUdfType::WASM),
                 TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
                 "");
             break;
@@ -75,6 +76,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
                 Name_,
+                TUdfModule::TypeToString(EUdfType::WASM),
                 TUdfModule::CompileStatusToString(ECompileStatus::Ready),
                 "");
             break;
@@ -82,6 +84,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
                 Name_,
+                TUdfModule::TypeToString(EUdfType::WASM),
                 TUdfModule::CompileStatusToString(ECompileStatus::Failed),
                 ErrorMessage_);
             break;

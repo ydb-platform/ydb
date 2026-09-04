@@ -80,13 +80,23 @@ TType* BuildLeafDataType(IFunctionTypeInfoBuilder& builder, EUdfValueType type) 
     return builder.Null();
 }
 
+//! Keep in sync with MaxManifestTypeDepth in manifest.cpp: a tree that got
+//! past the parser (or was built by hand in a test) still must not recurse
+//! without bound while constructing MiniKQL types.
+constexpr ui32 MaxWasmTypeNodeDepth = 32;
+
 } // namespace
 
 TType* BuildTypeFromWasmTypeNode(
     IFunctionTypeInfoBuilder& builder,
     const TWasmTypeNode& node,
-    bool topLevel)
+    bool topLevel,
+    ui32 depth)
 {
+    if (depth > MaxWasmTypeNodeDepth) {
+        ythrow yexception()
+            << "Wasm type nesting exceeds " << MaxWasmTypeNodeDepth << " levels";
+    }
     switch (node.Kind) {
         case TWasmTypeNode::EKind::Leaf:
             if (node.Leaf == EUdfValueType::Null) {
@@ -104,27 +114,28 @@ TType* BuildTypeFromWasmTypeNode(
         case TWasmTypeNode::EKind::Optional: {
             Y_ENSURE(node.Item);
             return builder.Optional()
-                ->Item(BuildTypeFromWasmTypeNode(builder, *node.Item, /*topLevel*/ false))
+                ->Item(BuildTypeFromWasmTypeNode(builder, *node.Item, /*topLevel*/ false, depth + 1))
                 .Build();
         }
         case TWasmTypeNode::EKind::List: {
             Y_ENSURE(node.Item);
             return builder.List()
-                ->Item(BuildTypeFromWasmTypeNode(builder, *node.Item, /*topLevel*/ false))
+                ->Item(BuildTypeFromWasmTypeNode(builder, *node.Item, /*topLevel*/ false, depth + 1))
                 .Build();
         }
         case TWasmTypeNode::EKind::Dict: {
             Y_ENSURE(node.Key && node.Payload);
             return builder.Dict()
-                ->Key(BuildTypeFromWasmTypeNode(builder, *node.Key, /*topLevel*/ false))
-                .Value(BuildTypeFromWasmTypeNode(builder, *node.Payload, /*topLevel*/ false))
+                ->Key(BuildTypeFromWasmTypeNode(builder, *node.Key, /*topLevel*/ false, depth + 1))
+                .Value(BuildTypeFromWasmTypeNode(builder, *node.Payload, /*topLevel*/ false, depth + 1))
                 .Build();
         }
         case TWasmTypeNode::EKind::Tuple: {
             auto tuple = builder.Tuple(node.Members.size());
             for (const auto& member : node.Members) {
                 Y_ENSURE(member.Type);
-                tuple->Add(BuildTypeFromWasmTypeNode(builder, *member.Type, /*topLevel*/ false));
+                tuple->Add(BuildTypeFromWasmTypeNode(
+                    builder, *member.Type, /*topLevel*/ false, depth + 1));
             }
             return tuple->Build();
         }
@@ -134,7 +145,8 @@ TType* BuildTypeFromWasmTypeNode(
                 Y_ENSURE(member.Type);
                 members->AddField(
                     TStringRef(member.Name.data(), member.Name.size()),
-                    BuildTypeFromWasmTypeNode(builder, *member.Type, /*topLevel*/ false),
+                    BuildTypeFromWasmTypeNode(
+                        builder, *member.Type, /*topLevel*/ false, depth + 1),
                     nullptr);
             }
             return members->Build();
@@ -149,7 +161,8 @@ TType* BuildTypeFromWasmTypeNode(
                     Y_ENSURE(member.Type);
                     members->AddField(
                         TStringRef(member.Name.data(), member.Name.size()),
-                        BuildTypeFromWasmTypeNode(builder, *member.Type, /*topLevel*/ false),
+                        BuildTypeFromWasmTypeNode(
+                            builder, *member.Type, /*topLevel*/ false, depth + 1),
                         nullptr);
                 }
                 underlying = members->Build();
@@ -157,7 +170,8 @@ TType* BuildTypeFromWasmTypeNode(
                 auto tuple = builder.Tuple(node.Members.size());
                 for (const auto& member : node.Members) {
                     Y_ENSURE(member.Type);
-                    tuple->Add(BuildTypeFromWasmTypeNode(builder, *member.Type, /*topLevel*/ false));
+                    tuple->Add(BuildTypeFromWasmTypeNode(
+                        builder, *member.Type, /*topLevel*/ false, depth + 1));
                 }
                 underlying = tuple->Build();
             }
@@ -168,12 +182,12 @@ TType* BuildTypeFromWasmTypeNode(
         case TWasmTypeNode::EKind::Callable: {
             Y_ENSURE(node.CallableReturns);
             auto callable = builder.Callable(node.Members.size());
-            callable->Returns(
-                BuildTypeFromWasmTypeNode(builder, *node.CallableReturns, /*topLevel*/ false));
+            callable->Returns(BuildTypeFromWasmTypeNode(
+                builder, *node.CallableReturns, /*topLevel*/ false, depth + 1));
             for (const auto& arg : node.Members) {
                 Y_ENSURE(arg.Type);
-                callable->Arg(
-                    BuildTypeFromWasmTypeNode(builder, *arg.Type, /*topLevel*/ false));
+                callable->Arg(BuildTypeFromWasmTypeNode(
+                    builder, *arg.Type, /*topLevel*/ false, depth + 1));
             }
             return callable->Build();
         }

@@ -360,6 +360,7 @@ void SetUpsertArtifactChunkParams(
 TString BuildUpdateCompileStatusQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $name AS Utf8; "
+        << "DECLARE $type AS Utf8; "
         << "DECLARE $compile_status AS Utf8; "
         << "DECLARE $compile_error AS Utf8; "
         << "UPDATE `"
@@ -369,16 +370,18 @@ TString BuildUpdateCompileStatusQuery(const TString& tablePath) {
         << "compile_started_at = IF($compile_status = 'compiling', CurrentUtcTimestamp(), compile_started_at), "
         << "compile_finished_at = IF($compile_status = 'ready' OR $compile_status = 'failed', "
         << "CurrentUtcTimestamp(), compile_finished_at) "
-        << "WHERE name = $name;";
+        << "WHERE name = $name AND type = $type;";
 }
 
 void SetUpdateCompileStatusParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& name,
+    const TString& type,
     const TString& status,
     const TString& errorMessage)
 {
     (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
+    (*request.mutable_parameters())["$type"] = MakeUtf8Param(type);
     (*request.mutable_parameters())["$compile_status"] = MakeUtf8Param(status);
     (*request.mutable_parameters())["$compile_error"] = MakeUtf8Param(errorMessage);
 }

@@ -16,6 +16,8 @@ namespace NKikimr::NUdfStore::NWasm {
 //! Cap on bytes the bridge keeps resident in compartment linear memory.
 //! Exceeding it evicts pins untouched by the current Run; a single value
 //! larger than the budget is still pinned (the guest has to see it).
+//! Guest AllocResident and per-Run scratch share the same budget so a guest
+//! cannot grow the arena without bound by looping BridgeAllocResident.
 inline constexpr ui64 DefaultResidentBudgetBytes = 64ull << 20;
 
 //! Materialization cache over compartment linear memory, shared by every
@@ -103,6 +105,10 @@ public:
         return Evictions_;
     }
 
+    ui64 GuestBytes() const {
+        return GuestBytes_;
+    }
+
 private:
     struct TPin {
         NYql::NUdf::TUnboxedValue Owner;
@@ -140,6 +146,10 @@ private:
     THashMap<ui64 /*offset*/, ui64 /*block size*/> Blocks_;
     THashMap<ui64 /*block size*/, TVector<ui64 /*offset*/>> FreeBlocks_;
     THashSet<ui64 /*offset*/> GuestBlocks_;
+    //! Live bytes handed out through AllocGuest; counted against Budget_.
+    ui64 GuestBytes_ = 0;
+    //! Live bytes in ScratchBlocks_; counted against Budget_ until BeginRun.
+    ui64 ScratchBytes_ = 0;
     ui64 BumpOffset_ = 0;
     ui64 BumpRemaining_ = 0;
     ui64 ArenaBytes_ = 0;

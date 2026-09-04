@@ -125,9 +125,20 @@ void TCompartmentResidentCache::Free(ui64 offset) {
 }
 
 ui64 TCompartmentResidentCache::AllocGuest(ui64 length) {
+    if (length == 0) {
+        return 0;
+    }
+    const ui64 blockSize = BlockSizeFor(length);
+    if (GuestBytes_ + blockSize > Budget_) {
+        ythrow yexception()
+            << "Bridge: BridgeAllocResident of " << length
+            << " bytes would exceed the resident budget ("
+            << GuestBytes_ << " + " << blockSize << " > " << Budget_ << ")";
+    }
     const ui64 offset = Alloc(length);
     if (offset != 0) {
         GuestBlocks_.insert(offset);
+        GuestBytes_ += blockSize;
     }
     return offset;
 }
@@ -136,11 +147,19 @@ void TCompartmentResidentCache::FreeGuest(ui64 offset) {
     if (offset == 0) {
         return;
     }
-    if (!GuestBlocks_.erase(offset)) {
+    if (!GuestBlocks_.contains(offset)) {
         ythrow yexception()
             << "Bridge: BridgeFreeResident on offset " << offset
             << ", which was not returned by BridgeAllocResident";
     }
+    auto it = Blocks_.find(offset);
+    if (it == Blocks_.end()) {
+        ythrow yexception()
+            << "Bridge: resident free of unknown or already freed offset " << offset;
+    }
+    Y_ENSURE(GuestBytes_ >= it->second);
+    GuestBytes_ -= it->second;
+    GuestBlocks_.erase(offset);
     Free(offset);
 }
 
@@ -188,29 +207,40 @@ ui64 TCompartmentResidentCache::Pin(
         return existing->Offset;
     }
 
-    EvictFor(bytes.Size());
+    const ui64 blockSize = BlockSizeFor(bytes.Size());
+    // Budget is tracked in BlockSize units, so compare like with like.
+    EvictFor(blockSize);
 
     TPin pin;
     pin.Owner = owner;
     pin.Offset = AllocBlock(bytes.Size());
     pin.Length = bytes.Size();
-    pin.BlockSize = BlockSizeFor(bytes.Size());
+    pin.BlockSize = blockSize;
     pin.LastRun = CurrentRun_;
     WriteBytes(pin.Offset, bytes);
 
+    const ui64 offset = pin.Offset;
     Lru_.push_back(key);
     pin.LruIt = std::prev(Lru_.end());
     PinnedBytes_ += pin.BlockSize;
     Pins_.emplace(key, std::move(pin));
-    return Pins_.FindPtr(key)->Offset;
+    return offset;
 }
 
 ui64 TCompartmentResidentCache::PinScratch(TStringRef bytes) {
     if (bytes.Size() == 0) {
         return 0;
     }
+    const ui64 blockSize = BlockSizeFor(bytes.Size());
+    if (ScratchBytes_ + blockSize > Budget_) {
+        ythrow yexception()
+            << "Bridge: scratch pin of " << bytes.Size()
+            << " bytes would exceed the resident budget ("
+            << ScratchBytes_ << " + " << blockSize << " > " << Budget_ << ")";
+    }
     const ui64 offset = AllocBlock(bytes.Size());
     ScratchBlocks_.push_back(offset);
+    ScratchBytes_ += blockSize;
     WriteBytes(offset, bytes);
     return offset;
 }
@@ -267,6 +297,7 @@ void TCompartmentResidentCache::BeginRun() {
         Free(offset);
     }
     ScratchBlocks_.clear();
+    ScratchBytes_ = 0;
     ++CurrentRun_;
 }
 

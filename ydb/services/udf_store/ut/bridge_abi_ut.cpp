@@ -1371,4 +1371,43 @@ Y_UNIT_TEST(ResidentScratchIsReusedAcrossRuns) {
     UNIT_ASSERT_VALUES_EQUAL(resident.PinCount(), 0u);
 }
 
+Y_UNIT_TEST(AllocGuestRespectsResidentBudget) {
+    // Pins evict under pressure; guest AllocResident has nothing to evict, so
+    // the same budget has to refuse rather than grow linear memory forever.
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    constexpr ui64 kBudget = 1ull << 20;
+    TCompartmentResidentCache resident(compartment.get(), kBudget);
+
+    const ui64 first = resident.AllocGuest(kBudget / 2);
+    UNIT_ASSERT(first != 0);
+    UNIT_ASSERT(resident.GuestBytes() <= kBudget);
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        resident.AllocGuest(kBudget),
+        yexception,
+        "resident budget");
+
+    resident.FreeGuest(first);
+    UNIT_ASSERT_VALUES_EQUAL(resident.GuestBytes(), 0u);
+    // After freeing, the same budget is available again.
+    UNIT_ASSERT(resident.AllocGuest(kBudget / 2) != 0);
+}
+
+Y_UNIT_TEST(PinScratchRespectsResidentBudget) {
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    constexpr ui64 kBudget = 256ull << 10;
+    TCompartmentResidentCache resident(compartment.get(), kBudget);
+    resident.BeginRun();
+
+    const TString blob(kBudget + 1, 'S');
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        resident.PinScratch(TStringRef(blob.data(), blob.size())),
+        yexception,
+        "resident budget");
+}
+
 } // Y_UNIT_TEST_SUITE

@@ -286,4 +286,26 @@ Y_UNIT_TEST(AcceptWideTypesUnderPerFunctionBridgeOverride) {
     UNIT_ASSERT(parsed.Functions[0].CallingConvention == EWasmCallingConvention::Bridge);
 }
 
+Y_UNIT_TEST(RejectDeeplyNestedType) {
+    // A hostile manifest can nest optional/list forever; the parser must refuse
+    // before the stack or the shared_ptr chain blows up.
+    TString nested = R"({"value": "int64", "tag": "concrete_type"})";
+    for (int i = 0; i < 40; ++i) {
+        nested = TStringBuilder()
+            << R"({"value": "optional", "tag": "concrete_type", "item": )"
+            << nested << "}";
+    }
+    const TString manifest = TStringBuilder()
+        << R"({
+            "module_name": "Deep",
+            "calling_convention": "bridge",
+            "functions": [{
+                "name": "f",
+                "argument_types": [],
+                "result_type": )"
+        << nested
+        << "}]}";
+    UNIT_ASSERT_EXCEPTION_CONTAINS(ParseManifest(manifest), yexception, "Type nesting exceeds");
+}
+
 } // Y_UNIT_TEST_SUITE

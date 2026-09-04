@@ -93,6 +93,7 @@ TString BuildUpdateCompileStatusQuery(const TString& tablePath);
 void SetUpdateCompileStatusParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& name,
+    const TString& type,
     const TString& status,
     const TString& errorMessage);
 

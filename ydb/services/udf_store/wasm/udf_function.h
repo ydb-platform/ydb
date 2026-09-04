@@ -24,10 +24,13 @@ NYql::NUdf::TUnboxedValue ReadResultUnboxed(
 //! Build MiniKQL/UDF TType* from a recursive manifest type node. A leaf at the
 //! top level of an argument / result becomes Optional<data> (the shape
 //! unversioned_value always had); nested leaves are built verbatim.
+//! `depth` mirrors MaxManifestTypeDepth in the parser so a hand-built tree
+//! cannot blow the stack either.
 TType* BuildTypeFromWasmTypeNode(
     IFunctionTypeInfoBuilder& builder,
     const TWasmTypeNode& node,
-    bool topLevel = true);
+    bool topLevel = true,
+    ui32 depth = 0);
 
 //! Map a type node to bridge value/node kinds for registration.
 void BridgeKindsFromTypeNode(

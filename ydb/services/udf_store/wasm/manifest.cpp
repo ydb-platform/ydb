@@ -31,7 +31,16 @@ EUdfValueType LeafFromTypeNode(const TWasmTypeNode& node) {
     return node.Leaf;
 }
 
-TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& valueNode, TStringBuf where);
+//! Caps nesting of optional/list/dict/... so a hostile manifest cannot blow
+//! the stack in the parser, in BuildTypeFromWasmTypeNode, or while destroying
+//! the shared_ptr chain. Sibling FindVariantTypeIn walks wrappers at depth 8;
+//! this is the parse-time bound for the whole tree.
+constexpr ui32 MaxManifestTypeDepth = 32;
+
+TWasmTypeNodePtr ParseTypeNode(
+    const NJson::TJsonValue& valueNode,
+    TStringBuf where,
+    ui32 depth = 0);
 
 //! Elements of a tuple / members of a struct or variant. Named forms carry
 //! {"name": ..., "type": {...}}; unnamed ones are plain type nodes.
@@ -39,7 +48,8 @@ TVector<TWasmTypeNode::TMember> ParseTypeMembers(
     const NJson::TJsonValue& valueNode,
     TStringBuf field,
     bool named,
-    TStringBuf where)
+    TStringBuf where,
+    ui32 depth)
 {
     if (!valueNode.Has(field) || !valueNode[field].IsArray()) {
         ythrow yexception() << where << " type requires an array of " << field;
@@ -52,16 +62,25 @@ TVector<TWasmTypeNode::TMember> ParseTypeMembers(
                 ythrow yexception() << where << " member requires name and type";
             }
             member.Name = entry["name"].GetString();
-            member.Type = ParseTypeNode(entry["type"], where);
+            member.Type = ParseTypeNode(entry["type"], where, depth);
         } else {
-            member.Type = ParseTypeNode(entry, where);
+            member.Type = ParseTypeNode(entry, where, depth);
         }
         members.push_back(std::move(member));
     }
     return members;
 }
 
-TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& valueNode, TStringBuf where) {
+TWasmTypeNodePtr ParseTypeNode(
+    const NJson::TJsonValue& valueNode,
+    TStringBuf where,
+    ui32 depth)
+{
+    if (depth > MaxManifestTypeDepth) {
+        ythrow yexception()
+            << "Type nesting exceeds " << MaxManifestTypeDepth
+            << " levels in " << where;
+    }
     if (!valueNode.IsMap()) {
         ythrow yexception() << "Expected object for typed value in " << where;
     }
@@ -77,7 +96,7 @@ TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& valueNode, TStringBuf wh
         }
         auto node = std::make_shared<TWasmTypeNode>();
         node->Kind = TWasmTypeNode::EKind::Optional;
-        node->Item = ParseTypeNode(valueNode["item"], "optional.item");
+        node->Item = ParseTypeNode(valueNode["item"], "optional.item", depth + 1);
         return node;
     }
     if (valueStr == "list") {
@@ -86,7 +105,7 @@ TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& valueNode, TStringBuf wh
         }
         auto node = std::make_shared<TWasmTypeNode>();
         node->Kind = TWasmTypeNode::EKind::List;
-        node->Item = ParseTypeNode(valueNode["item"], "list.item");
+        node->Item = ParseTypeNode(valueNode["item"], "list.item", depth + 1);
         return node;
     }
     if (valueStr == "dict") {
@@ -95,29 +114,33 @@ TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& valueNode, TStringBuf wh
         }
         auto node = std::make_shared<TWasmTypeNode>();
         node->Kind = TWasmTypeNode::EKind::Dict;
-        node->Key = ParseTypeNode(valueNode["key"], "dict.key");
-        node->Payload = ParseTypeNode(valueNode["payload"], "dict.payload");
+        node->Key = ParseTypeNode(valueNode["key"], "dict.key", depth + 1);
+        node->Payload = ParseTypeNode(valueNode["payload"], "dict.payload", depth + 1);
         return node;
     }
     if (valueStr == "tuple") {
         auto node = std::make_shared<TWasmTypeNode>();
         node->Kind = TWasmTypeNode::EKind::Tuple;
-        node->Members = ParseTypeMembers(valueNode, "elements", /*named*/ false, "tuple");
+        node->Members = ParseTypeMembers(
+            valueNode, "elements", /*named*/ false, "tuple", depth + 1);
         return node;
     }
     if (valueStr == "struct") {
         auto node = std::make_shared<TWasmTypeNode>();
         node->Kind = TWasmTypeNode::EKind::Struct;
-        node->Members = ParseTypeMembers(valueNode, "members", /*named*/ true, "struct");
+        node->Members = ParseTypeMembers(
+            valueNode, "members", /*named*/ true, "struct", depth + 1);
         return node;
     }
     if (valueStr == "variant") {
         auto node = std::make_shared<TWasmTypeNode>();
         node->Kind = TWasmTypeNode::EKind::Variant;
         if (valueNode.Has("members")) {
-            node->Members = ParseTypeMembers(valueNode, "members", /*named*/ true, "variant");
+            node->Members = ParseTypeMembers(
+                valueNode, "members", /*named*/ true, "variant", depth + 1);
         } else {
-            node->Members = ParseTypeMembers(valueNode, "elements", /*named*/ false, "variant");
+            node->Members = ParseTypeMembers(
+                valueNode, "elements", /*named*/ false, "variant", depth + 1);
         }
         return node;
     }
@@ -137,8 +160,10 @@ TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& valueNode, TStringBuf wh
         }
         auto node = std::make_shared<TWasmTypeNode>();
         node->Kind = TWasmTypeNode::EKind::Callable;
-        node->Members = ParseTypeMembers(valueNode, "arguments", /*named*/ false, "callable");
-        node->CallableReturns = ParseTypeNode(valueNode["returns"], "callable.returns");
+        node->Members = ParseTypeMembers(
+            valueNode, "arguments", /*named*/ false, "callable", depth + 1);
+        node->CallableReturns = ParseTypeNode(
+            valueNode["returns"], "callable.returns", depth + 1);
         return node;
     }
 
@@ -416,6 +441,12 @@ void ExpandObjectsIntoFunctions(
                 ? method.ResultType
                 : MakeLeafTypeNode(method.Result);
             descriptor.Binding = method.Binding;
+            // Object methods always ride unversioned_value, even when the
+            // module's calling_convention is bridge: the create/call/destroy
+            // object framework talks TUnversionedValue, not bridge handles.
+            // type_config_callable is rejected above for the same reason;
+            // plain methods are accepted and stay on this convention, so a
+            // wide type in objects[].methods is still a hard error below.
             descriptor.CallingConvention = EWasmCallingConvention::UnversionedValue;
             descriptor.CreateExport = object.CreateExport;
             descriptor.CallExport = method.Export;
@@ -430,8 +461,6 @@ void ExpandObjectsIntoFunctions(
                     << "type_config_callable method '" << method.Name
                     << "' requires objects[].create_export";
             }
-            // Object methods always ride the unversioned_value convention, so
-            // a wide type in objects[].methods can never work.
             ValidateCallingConventionSignature(
                 descriptor.ArgTypes,
                 descriptor.ResultType,

@@ -94,7 +94,7 @@ namespace {
         return std::regex_search(message.cbegin(), message.cend(), match, messageRegex);
     }
 
-    // Extract QueryText from a single TLI record
+    // Extract queryText from a single TLI record
     std::optional<TString> ExtractQueryTextFromRecord(const TString& record) {
         size_t allPos = record.find("queryText=");
         if (allPos == TString::npos) {
@@ -417,9 +417,7 @@ namespace {
 
         auto [foundBreaker, matchingVictimIds] = ExtractMatchingFromBreakerDatashard(logs, patterns.BreakerDatashardMessage, data.BreakerSessionBreakerQuerySpanId);
         data.FoundBreakerRecordInDatashard = foundBreaker;
-        if (foundBreaker) {
-            data.MatchingDsBreakerVictimQuerySpanIds = matchingVictimIds;
-        }
+        data.MatchingDsBreakerVictimQuerySpanIds = matchingVictimIds;
 
         data.FoundVictimRecordInDatashard = CheckMatchingInVictimDatashard(logs, patterns.VictimDatashardMessage, data.VictimSessionVictimQuerySpanId);
 

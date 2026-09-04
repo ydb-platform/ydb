@@ -7,10 +7,17 @@ bool TProcessCategory::HasTasks() const {
 }
 
 std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
+    return ExtractTaskWithPrediction(counters, scopeIds, [](const TWorkerTaskPrepare&) {
+        return true;
+    });
+}
+
+std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters,
+    THashSet<TString>& scopeIds, const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter) {
     std::shared_ptr<TProcess> pMin;
     for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
         for (ui32 i = 0; i < it->second.size(); ++i) {
-            if (!it->second[i]->GetScope()->CheckToRun()) {
+            if (!it->second[i]->GetScope()->CheckToRun() || !taskFilter(it->second[i]->GetTasks().top())) {
                 continue;
             }
             pMin = it->second[i];

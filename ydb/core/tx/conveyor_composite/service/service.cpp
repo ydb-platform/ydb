@@ -192,7 +192,9 @@ void TDistributor::HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev) {
     TWorkloadManagerQueryIdentity identity(
         std::get<NKqp::NScheduler::NHdrf::TDatabaseId>(database->GetId()), poolId, ev->Cookie);
     auto context = std::make_shared<NKqp::NScheduler::TDqSchedulerContext>(query, poolId != NResourcePool::DEFAULT_POOL_ID);
-    Manager->SetWorkloadManagerQueryContext(identity, std::move(context));
+    if (Manager->SetWorkloadManagerQueryContext(identity, std::move(context))) {
+        Y_UNUSED(Manager->DrainTasks());
+    }
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterWorkloadManagerQuery::TPtr& ev) {
@@ -228,7 +230,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.ReceiveTaskDuration->Add(d.MicroSeconds());
     Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
+    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask(), ev->Get()->GetWorkloadManagerQueryIdentity());
     Y_UNUSED(Manager->DrainTasks());
     cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
 }

@@ -33,6 +33,12 @@ TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, co
     Counters->WorkersCountLimit->Set(WorkersCount);
 }
 
+TWorkersPool::~TWorkersPool() {
+    for (auto& [_, work] : PendingSchedulableWorks) {
+        work->StopExecution();
+    }
+}
+
 void TWorkersPool::RemoveFreeWorker(const ui64 workerIdx) {
     const auto it = std::find(ActiveWorkersIdx.begin(), ActiveWorkersIdx.end(), workerIdx);
     Y_ENSURE(it != ActiveWorkersIdx.end(), "free worker is missing: " << workerIdx);
@@ -152,7 +158,8 @@ bool TWorkersPool::HasFreeWorker() const {
     return !ActiveWorkersIdx.empty();
 }
 
-void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts) {
+void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts,
+    TSchedulableWorks&& schedulableWorks) {
     Y_ENSURE(HasFreeWorker(), "cannot run a task without a free worker");
     Y_ENSURE(tasksBatch.size(), "cannot run an empty task batch");
     const auto workerIdx = ActiveWorkersIdx.back();
@@ -160,7 +167,7 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletio
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 
     auto& worker = Workers[workerIdx];
-    worker.OnStartTask(std::move(completionContexts));
+    worker.OnStartTask(std::move(completionContexts), std::move(schedulableWorks));
     TActivationContext::Send(
         worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit()));
 }
@@ -183,7 +190,7 @@ bool TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
     return false;
 }
 
-bool TWorkersPool::DrainTasks() {
+bool TWorkersPool::DrainTasks(const TSchedulerContextGetter& schedulerContextGetter) {
     if (ActiveWorkersIdx.empty() || CategoryLinks.empty()) {
         return false;
     }
@@ -206,11 +213,52 @@ bool TWorkersPool::DrainTasks() {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
         TTaskCompletionContexts completionContexts;
+        TSchedulableWorks schedulableWorks;
+        THashSet<TWorkloadManagerQueryIdentity, TWorkloadManagerQueryIdentity::THash> approvedQueries;
+        THashSet<TWorkloadManagerQueryIdentity, TWorkloadManagerQueryIdentity::THash> deniedQueries;
         THashSet<TString> scopes;
+        const auto taskFilter = [&](const TWorkerTaskPrepare& task) {
+            const auto& identity = task.GetWorkloadManagerQueryIdentity();
+            if (!identity) {
+                return true;
+            }
+            if (approvedQueries.contains(*identity)) {
+                return true;
+            }
+            if (deniedQueries.contains(*identity)) {
+                return false;
+            }
+
+            TSchedulableWorkPtr work;
+            if (auto pendingIt = PendingSchedulableWorks.find(*identity); pendingIt != PendingSchedulableWorks.end()) {
+                work = std::move(pendingIt->second);
+                PendingSchedulableWorks.erase(pendingIt);
+            } else {
+                const auto schedulerContext = schedulerContextGetter(*identity);
+                if (!schedulerContext) {
+                    deniedQueries.emplace(*identity);
+                    return false;
+                }
+                work = schedulerContext->CreateSchedulableWork();
+                Y_ENSURE(work, "scheduler returned an empty schedulable work");
+            }
+
+            if (work->TryStartExecution(TMonotonic::Now())) {
+                PendingSchedulableWorks.emplace(*identity, std::move(work));
+                deniedQueries.emplace(*identity);
+                return false;
+            }
+
+            approvedQueries.emplace(*identity);
+            Y_ENSURE(schedulableWorks.emplace(*identity, std::move(work)).second,
+                "duplicate schedulable work for query " << identity->GetQueryId());
+            return true;
+        };
         while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
                procLocal.front().GetCategory()->HasTasks()) {
             std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
-            auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(procLocal.back().GetCounters(), scopes);
+            auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(
+                procLocal.back().GetCounters(), scopes, taskFilter);
             if (!task) {
                 procLocal.pop_back();
                 continue;
@@ -221,9 +269,9 @@ bool TWorkersPool::DrainTasks() {
             predicted += tasks.back().GetPredictedDuration();
             std::push_heap(procLocal.begin(), procLocal.end(), predHeap);
         }
-        newTask = true;
         if (tasks.size()) {
-            RunTask(std::move(tasks), std::move(completionContexts));
+            newTask = true;
+            RunTask(std::move(tasks), std::move(completionContexts), std::move(schedulableWorks));
         }
     }
     for (auto&& i : CategoryLinks) {
@@ -240,6 +288,19 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const
     const auto& worker = Workers[workerIdx];
     Y_ENSURE(worker.GetRunningTask(), "task result received from an idle worker: " << workerIdx);
 
+    THashMap<TWorkloadManagerQueryIdentity, TDuration, TWorkloadManagerQueryIdentity::THash> executionDurations;
+    for (const auto& task : result) {
+        if (const auto& identity = task.GetWorkloadManagerQueryIdentity()) {
+            executionDurations[*identity] += task.GetDuration();
+        }
+    }
+    for (const auto& [identity, work] : worker.GetSchedulableWorks()) {
+        const auto durationIt = executionDurations.find(identity);
+        Y_ENSURE(durationIt != executionDurations.end(),
+            "execution duration is missing for query " << identity.GetQueryId());
+        work->StopExecution(durationIt->second);
+    }
+
     THashSet<TString> scopeIds;
     for (auto&& t : result) {
         const auto& context = worker.GetCompletionContext(t.GetCategory());
@@ -249,6 +310,15 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const
         context.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
         context.GetCategory()->PutTaskResult(std::move(t), scopeIds);
     }
+}
+
+void TWorkersPool::RemovePendingSchedulableWork(const TWorkloadManagerQueryIdentity& identity) {
+    const auto workIt = PendingSchedulableWorks.find(identity);
+    if (workIt == PendingSchedulableWorks.end()) {
+        return;
+    }
+    workIt->second->StopExecution();
+    PendingSchedulableWorks.erase(workIt);
 }
 
 void TWorkersPool::ApplyTopologyUpdate(

@@ -39,6 +39,10 @@ public:
         --Size;
         return result;
     }
+    const TWorkerTaskPrepare& top() const {
+        Y_ABORT_UNLESS(Size);
+        return Tasks.rbegin()->second.front();
+    }
     ui32 size() const {
         return Size;
     }
@@ -108,8 +112,10 @@ public:
         CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
     }
 
-    void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category) {
-        TWorkerTaskPrepare wTask(std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId);
+    void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category,
+        std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity) {
+        TWorkerTaskPrepare wTask(
+            std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId, std::move(workloadManagerQueryIdentity));
         Tasks.push(std::move(wTask));
         WaitingTasksCount->Inc();
     }

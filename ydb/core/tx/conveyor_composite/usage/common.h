@@ -59,7 +59,8 @@ public:
     explicit TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
         const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId);
 
-    bool SendTaskToExecute(const std::shared_ptr<ITask>& task) const;
+    bool SendTaskToExecute(const std::shared_ptr<ITask>& task,
+        const std::optional<TWorkloadManagerQueryIdentity>& workloadManagerQueryIdentity = std::nullopt) const;
 
     void Finish();
 
@@ -90,6 +91,10 @@ private:
 public:
     explicit TWorkloadManagerQueryGuard(
         TWorkloadManagerQueryIdentity identity, const std::optional<NActors::TActorId>& actorId);
+
+    const TWorkloadManagerQueryIdentity& GetIdentity() const {
+        return Identity;
+    }
 
     void Finish();
 

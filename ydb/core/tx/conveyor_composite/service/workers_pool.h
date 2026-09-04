@@ -4,8 +4,15 @@
 #include "worker.h"
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+
+#include <functional>
 
 namespace NKikimr::NConveyorComposite {
+
+using TSchedulableWorkPtr = std::shared_ptr<NYql::NDq::IDqSchedulableWork>;
+using TSchedulableWorks = THashMap<TWorkloadManagerQueryIdentity, TSchedulableWorkPtr, TWorkloadManagerQueryIdentity::THash>;
+using TSchedulerContextGetter = std::function<NYql::NDq::IDqSchedulerContextPtr(const TWorkloadManagerQueryIdentity&)>;
 
 class TWeightedCategory {
 private:
@@ -59,6 +66,7 @@ private:
         YDB_READONLY(double, CPULimit, 1);
         YDB_READONLY(bool, StopRequested, false);
         TTaskCompletionContexts CompletionContexts;
+        TSchedulableWorks SchedulableWorks;
 
     public:
         TWorkerInfo(std::unique_ptr<TWorker>&& worker, const double cpuLimit)
@@ -74,23 +82,29 @@ private:
             StopRequested = true;
         }
 
-        void OnStartTask(TTaskCompletionContexts&& completionContexts) {
+        void OnStartTask(TTaskCompletionContexts&& completionContexts, TSchedulableWorks&& schedulableWorks) {
             Y_ENSURE(!RunningTask, "worker already has a running task");
             Y_ENSURE(!completionContexts.empty(), "worker task has no completion contexts");
             RunningTask = true;
             CompletionContexts = std::move(completionContexts);
+            SchedulableWorks = std::move(schedulableWorks);
         }
 
         void OnStopTask() {
             Y_ENSURE(RunningTask, "worker has no running task to stop");
             RunningTask = false;
             CompletionContexts.clear();
+            SchedulableWorks.clear();
         }
 
         const TTaskCompletionContext& GetCompletionContext(const ESpecialTaskCategory category) const {
             const auto it = CompletionContexts.find(category);
             Y_ENSURE(it != CompletionContexts.end(), "completion context is missing for category " << category);
             return it->second;
+        }
+
+        const TSchedulableWorks& GetSchedulableWorks() const {
+            return SchedulableWorks;
         }
     };
 
@@ -115,25 +129,30 @@ private:
     const NActors::TActorId DistributorId;
     const ui64 WorkersPoolId;
     std::optional<TWorkersUpdateState> WorkersUpdate;
+    TSchedulableWorks PendingSchedulableWorks;
 
     void RemoveFreeWorker(const ui64 workerIdx);
     void UpdateWorkerCPULimit(const ui64 workerIdx, const double newLimit);
     void IncreaseWorkers(const std::vector<double>& desiredCPULimits);
     void DecreaseWorkers(const std::vector<double>& desiredCPULimits);
     bool TryFinishWorkersUpdate();
-    void RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts);
+    void RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts,
+        TSchedulableWorks&& schedulableWorks);
 
 public:
     static constexpr double Eps = 1e-6;
 
     TWorkersPool(const TString& poolName, const ui64 workersPoolId, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
         const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories);
+    ~TWorkersPool();
 
     const std::shared_ptr<TWorkersPoolCounters>& GetCounters() const {
         return Counters;
     }
 
-    [[nodiscard]] bool DrainTasks();
+    [[nodiscard]] bool DrainTasks(const TSchedulerContextGetter& schedulerContextGetter);
+
+    void RemovePendingSchedulableWork(const TWorkloadManagerQueryIdentity& identity);
 
     void AddDeliveryDuration(const TDuration d) {
         DeliveringDuration.Add(d);

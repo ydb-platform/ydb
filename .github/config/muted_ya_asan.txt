@@ -229,6 +229,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPosti
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.BadRequest
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
+ydb/core/tx/datashard/ut_export ExportS3BufferTest.MaxBytesCapsUncompressedSizeWithZstd
 ydb/core/tx/datashard/ut_export ExportS3BufferTest.MinBufferSizeWithCompressionAndEncryption-parquet
 ydb/core/tx/datashard/ut_export unittest.sole chunk
 ydb/core/tx/datashard/ut_lock_rows DataShardLockRows.RandomizedDeadlockDetection

@@ -1,5 +1,9 @@
 #include "flat_executor_gclogic.h"
 #include "flat_sausage_grind.h"
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -31,6 +35,24 @@ TAutoPtr<NPageCollection::TSteppedCookieAllocator> MakeGCCookies(
         TArrayRef<const NPageCollection::TSlot>(slots)
     );
 }
+
+// Drives one SendCollectGarbage pass from inside the actor system, since the call
+// needs a real TActorContext to dispatch TEvCollectGarbage.
+class TCollectGarbageDriver : public NActors::TActorBootstrapped<TCollectGarbageDriver> {
+public:
+    TCollectGarbageDriver(TExecutorGCLogic* logic, NActors::TActorId done)
+        : Logic(logic), Done(done) {}
+
+    void Bootstrap(const NActors::TActorContext& ctx) {
+        Logic->SendCollectGarbage(ctx);
+        ctx.Send(Done, new NActors::TEvents::TEvWakeup());
+        Die(ctx);
+    }
+
+private:
+    TExecutorGCLogic* const Logic;
+    const NActors::TActorId Done;
+};
 
 } // namespace
 
@@ -313,6 +335,88 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         auto toCut = gcLogic.HistoryCutter.GetHistoryToCut(0);
         UNIT_ASSERT_C(toCut.empty(),
             "history entry [10, 100) must not be cuttable while gen-50 blob has a pending DoNotKeep mark");
+    }
+
+    // The precondition the sentinel guard relies on: generations below the first
+    // surviving history entry resolve to Max<ui32>().
+    Y_UNIT_TEST(GroupForGenerationReturnsSentinelBelowFirstEntry) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(31, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(10u, 77u); // first entry starts at gen 10
+
+        // A generation strictly below the first entry must resolve to Max<ui32>().
+        ui32 group = info->Channels[0].GroupForGeneration(5);
+        UNIT_ASSERT_VALUES_EQUAL_C(group, Max<ui32>(),
+            "GroupForGeneration must return Max<ui32>() for generations below the first history entry");
+    }
+
+    // SendCollectGarbage used to dereference &affectedGroups[GroupForGeneration(gen)]
+    // unchecked; below the first surviving entry that is Max<ui32>(), and the collect
+    // sent there ended in a BS error -> TEvPoison -> boot loop. Setup mirrors the state
+    // after a cut: one history entry from generation 10, GC marks left for 5 and 6.
+    // Ablation: drop the `if (vec)` guards and the sentinel proxy receives a collect.
+    Y_UNIT_TEST(SendCollectGarbageSkipsSentinelGroup) {
+        const ui64 tabletId = 32;
+        const ui32 channel = 2;
+        const ui32 survivingGroup = 77;
+        const ui32 survivingFromGen = 10;
+
+        TTestBasicRuntime runtime(1);
+        TAutoPtr<TAppPrepare> app = new TAppPrepare();
+        runtime.Initialize(app->Unwrap());
+
+        // Stand in for the BS proxies. Without these the collect requests resolve to no
+        // mailbox and are dropped before anything can observe them.
+        const auto survivingEdge = runtime.AllocateEdgeActor();
+        const auto sentinelEdge = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(survivingGroup), survivingEdge);
+        runtime.RegisterService(MakeBlobStorageProxyID(Max<ui32>()), sentinelEdge);
+
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(tabletId, TTabletTypes::Dummy);
+        info->Channels.resize(channel + 1);
+        for (ui32 ch = 0; ch <= channel; ++ch) {
+            info->Channels[ch].Channel = ch;
+            // Single entry: everything below survivingFromGen resolves to the sentinel.
+            info->Channels[ch].History.emplace_back(survivingFromGen, survivingGroup);
+        }
+
+        // Tablet generation must exceed the blob generations below so they are collectable.
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info, 20));
+        gcLogic.FollowersSyncComplete(true);
+
+        TGCBlobDelta delta;
+        // Generations 5 and 6 sit below the surviving entry -> sentinel group.
+        delta.Created.push_back(HistoryCutterUtBlob(tabletId, 5, channel));
+        delta.Deleted.push_back(HistoryCutterUtBlob(tabletId, 6, channel));
+        // Generation 12 resolves normally and must still be collected.
+        delta.Created.push_back(HistoryCutterUtBlob(tabletId, 12, channel));
+        TGCLogEntry entry(TGCTime(1, 1), delta);
+        gcLogic.ApplyLogEntry(entry);
+
+        // Count collect requests per proxy. GrabEdgeEvent cannot express "nothing
+        // arrived" -- it throws once the queue drains -- so observe and count instead.
+        THashMap<TActorId, ui32> collectsByProxy;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                ++collectsByProxy[ev->Recipient];
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto done = runtime.AllocateEdgeActor();
+        runtime.Register(new TCollectGarbageDriver(&gcLogic, done));
+        runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(done);
+
+        // The collect is dispatched before the driver's wakeup, so by now it has been observed.
+        UNIT_ASSERT_C(collectsByProxy[MakeBlobStorageProxyID(survivingGroup)] > 0,
+            "the surviving history entry must still receive its collect request");
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsByProxy.Value(MakeBlobStorageProxyID(Max<ui32>()), 0u), 0u,
+            "a collect request must never be addressed to the Max<ui32>() sentinel group");
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsByProxy.size(), 1u,
+            "collects must go to the surviving group only");
+        // The guard's second observable: monitoring reports both below-sentinel marks
+        // (the gen-5 keep and the gen-6 delete) as dropped.
+        UNIT_ASSERT_VALUES_EQUAL(gcLogic.TakeSentinelDroppedMarks(), 2u);
     }
 }
 

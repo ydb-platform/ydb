@@ -600,7 +600,7 @@ Y_UNIT_TEST(InsertAsDeprecated) {
             SELECT * FROM Input
             WITH WATERMARK AS (ts - Interval("PT1S"));
         )sql",
-        "<main>:6:18: Error: WATERMARK AS (expr) syntax is deprecated and no longer supported, use WATERMARK = expr\n");
+        "<main>:6:12: Error: extraneous input 'WITH' expecting {<EOF>, ';'}\n");
 }
 
 Y_UNIT_TEST(SelectAsDeprecated) {
@@ -611,7 +611,7 @@ Y_UNIT_TEST(SelectAsDeprecated) {
             SELECT * FROM Input
             WITH WATERMARK AS (ts - Interval("PT1S"));
         )sql",
-        "<main>:5:18: Error: WATERMARK AS (expr) syntax is deprecated and no longer supported, use WATERMARK = expr\n");
+        "<main>:5:12: Error: extraneous input 'WITH' expecting {<EOF>, ';'}\n");
 }
 
 Y_UNIT_TEST(InsertEquals) {

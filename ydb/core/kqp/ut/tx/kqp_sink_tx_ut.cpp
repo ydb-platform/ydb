@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         bool UsePragma;
 
     protected:
-        void Setup(TKikimrSettings& settings) override {   
+        void Setup(TKikimrSettings& settings) override {
             if (!UsePragma) {
                 settings.AppConfig.MutableTableServiceConfig()->SetDefaultTxMode([&]() {
                     if (Isolation == "SerializableRW") {
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     } else {
                         ythrow yexception() << "unknonw isolation: " << Isolation;
                     }
-                }());     
+                }());
             }
         }
 
@@ -512,8 +512,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
     class TDisableOnlineRO : public TTableDataModificationTester {
     protected:
-        void Setup(TKikimrSettings& settings) override {   
-            settings.AppConfig.MutableFeatureFlags()->SetDisableOnlineRO(true);     
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetDisableOnlineRO(true);
         }
 
         void DoExecute() override {
@@ -543,6 +543,165 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         TDisableOnlineRO tester;
         tester.SetIsOlap(false);
         tester.SetFillTables(true);
+        tester.Execute();
+    }
+
+    // Reads between upserts force a chain of uncommitted writes; results must be identical
+    // whether or not KQP attaches WriteSeqNum.
+    class TUncommittedWriteSeqNum : public TTableDataModificationTester {
+    protected:
+        YDB_ACCESSOR(bool, Enabled, true);
+        YDB_ACCESSOR(TString, Table, "/Root/KV");
+
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(Enabled);
+        }
+
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            auto tx = session.BeginTransaction(TTxSettings::SerializableRW())
+                .ExtractValueSync()
+                .GetTransaction();
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES (10u, "Ten"), (4000000010u, "BigTen");
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Forces the first flush; must observe the transaction's own writes
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 4000000010u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[4000000010u;["BigTen"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES (11u, "Eleven");
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // The second flush is chained onto the first
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 11u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[11u;["Eleven"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            auto commitResult = tx.Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 11u, 4000000010u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[11u;["Eleven"]];[4000000010u;["BigTen"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    // Keys 10 and 4000000010 land on different shards, so the commit goes through ValidateLocks.
+    Y_UNIT_TEST_TWIN(UncommittedWriteSeqNum, Enabled) {
+        TUncommittedWriteSeqNum tester;
+        tester.SetEnabled(Enabled);
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    // KQP must skip ColumnShard, which does not implement WriteSeqNum
+    Y_UNIT_TEST(UncommittedWriteSeqNumOlap) {
+        TUncommittedWriteSeqNum tester;
+        tester.SetEnabled(true);
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    // A resent uncommitted write is answered twice: with the original result and, once the
+    // shard has seen it, with IsDuplicate set. KQP must take only the first one.
+    class TUncommittedWriteSeqNumAnsweredTwice : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] {
+                return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::SerializableRW())
+                    .ExtractValueSync().GetTransaction(); });
+
+            size_t answeredTwice = 0;
+            auto answerTwice = [&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    const auto& record = ev->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
+                    if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                        && record.GetTxLocks().size() == 1
+                        && record.GetTxLocks(0).WriteSeqNumsSize() == 1)
+                    {
+                        auto again = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+                        again->Record = record;
+                        again->Record.SetIsDuplicate(true);
+                        runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
+                            again.release(), 0, ev->Cookie));
+                        ++answeredTwice;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+            auto saveObserver = runtime.SetObserverFunc(answerTwice);
+
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (10u, "Ten");
+                )", TTxControl::Tx(tx)).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Forces the flush, whose result is then delivered a second time
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key = 10u;
+                )", TTxControl::Tx(tx)).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            runtime.SetObserverFunc(saveObserver);
+            UNIT_ASSERT_C(answeredTwice > 0, answeredTwice);
+
+            auto commitResult = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key = 10u;
+                )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(UncommittedWriteSeqNumAnsweredTwice) {
+        TUncommittedWriteSeqNumAnsweredTwice tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
         tester.Execute();
     }
 }

@@ -416,6 +416,8 @@ struct TEvBlobStorage {
         EvRecoveryLogCutDone,
         EvFreshCompactionStarted,
         EvGetLogoBlobIndexStatResponseAck,
+        EvHugeQueryStripeChunks,
+        EvHugeStripeChunks,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

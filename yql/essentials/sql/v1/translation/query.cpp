@@ -325,6 +325,14 @@ INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSetti
     if (tableSettings.ExternalDataChannelsCount) {
         settings = L(settings, Q(Y(Q("externalDataChannelsCount"), tableSettings.ExternalDataChannelsCount)));
     }
+    if (const auto& metricsLevel = tableSettings.MetricsLevel) {
+        if (metricsLevel.IsSet()) {
+            settings = L(settings, Q(Y(Q("setMetricsLevel"), metricsLevel.GetValueSet())));
+        } else {
+            YQL_ENSURE(parsingMode != ETableSettingsParsingMode::Create, "Can't reset METRICS_LEVEL in create mode");
+            settings = L(settings, Q(Y(Q("resetMetricsLevel"), Q(Y()))));
+        }
+    }
 
     return settings;
 }

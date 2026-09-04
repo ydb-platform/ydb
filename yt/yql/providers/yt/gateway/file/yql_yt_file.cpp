@@ -1109,6 +1109,10 @@ public:
         return cluster;
     }
 
+    TString GetClusterYtName(const TString& cluster) const final {
+        return cluster;
+    }
+
     NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         Y_UNUSED(sessionId);
         Y_UNUSED(cluster);

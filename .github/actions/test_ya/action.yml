@@ -7,6 +7,10 @@ inputs:
     required: true
     default: "relwithdebinfo"
     description: "relwithdebinfo, release-asan, release-tsan"
+  target_platform:
+    default: ""
+    description: "target platform"
+    type: string
   test_type:
     required: false
     type: string
@@ -119,27 +123,45 @@ runs:
     - name: Init
       id: init
       shell: bash
+      env:
+        INPUT_BUILD_PRESET: ${{ inputs.build_preset }}
+        INPUT_TARGET_PLATFORM: ${{ inputs.target_platform }}
       run: |
         set -x
 
-        echo "$(pwd)/ydb/ci/scripts" >> $GITHUB_PATH
+        export_github_env() {
+          local name="$1"
+          local value="$2"
 
-        export TMP_DIR=$(pwd)/tmp
-        rm -rf $TMP_DIR
-        mkdir -p $TMP_DIR
-        echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
+          case "$value" in
+            *$'\n'*|*$'\r'*)
+              printf 'Cannot export %s: value contains a newline\n' "$name" >&2
+              return 1
+              ;;
+          esac
+
+          printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
+        }
+
+        echo "$(pwd)/ydb/ci/scripts" >> "$GITHUB_PATH"
+
+        export TMP_DIR="$(pwd)/tmp"
+        rm -rf "$TMP_DIR"
+        mkdir -p "$TMP_DIR"
+        export_github_env TMP_DIR "$TMP_DIR"
 
         # The whole dir will be uploaded to s3 with public (=wild internet) ACL
-        export PUBLIC_DIR=$TMP_DIR/results
-        echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
-        export PUBLIC_DIR_URL=$S3_URL_PREFIX
-        echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
-        mkdir -p $PUBLIC_DIR
+        export PUBLIC_DIR="$TMP_DIR/results"
+        export_github_env PUBLIC_DIR "$PUBLIC_DIR"
+        export PUBLIC_DIR_URL="$S3_URL_PREFIX"
+        export_github_env PUBLIC_DIR_URL "$PUBLIC_DIR_URL"
+        mkdir -p "$PUBLIC_DIR"
 
-        echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
-        echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
-        echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-
+        export_github_env LAST_BUILD_RESULTS_REPORT "$PUBLIC_DIR/last_report.json"
+        export_github_env SUMMARY_LINKS "$PUBLIC_DIR/summary_links.txt"
+        export_github_env BUILD_PRESET "$INPUT_BUILD_PRESET"
+        export_github_env TARGET_PLATFORM "$INPUT_TARGET_PLATFORM"
+        
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
 
     - name: Resolve analytics job name
@@ -246,7 +268,23 @@ runs:
             exit 1
             ;;
         esac
-
+        
+        if [ -n "$TARGET_PLATFORM" ]; then
+          case "$TARGET_PLATFORM" in
+            DEFAULT-LINUX-AARCH64)
+              params+=(
+                -DMKQL_DISABLE_CODEGEN=1
+                --target-platform=DEFAULT-LINUX-AARCH64
+              )
+              ;;
+            *)
+              params+=(
+                "--target-platform=$TARGET_PLATFORM"
+              )
+              ;;
+          esac
+        fi
+        
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ -z $TEST_RETRY_COUNT ]; then
@@ -677,7 +715,7 @@ runs:
     - name: build_stats
       shell: bash
       continue-on-error: true
-      if: always()
+      if: always() && inputs.target_platform == ''
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}"
@@ -688,7 +726,7 @@ runs:
     - name: show_build_size_diff
       shell: bash
       continue-on-error: true
-      if: always()
+      if: always() && inputs.target_platform == ''
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |

@@ -1894,6 +1894,44 @@ Y_UNIT_TEST_SUITE(TOlap) {
         CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeBytes", 0);
     }
 
+    Y_UNIT_TEST(DropColumnTableWithLocalIndexesViaDropTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        // Record the initial path count to verify cleanup later.
+        ui64 initialPathCount = DescribePath(runtime, "/MyRoot")
+            .GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("Table"));
+        env.TestWaitNotification(runtime, txId);
+
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/Table");
+
+        // 3 new paths: the table + 2 index children.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::PathsInsideDomain(initialPathCount + 3),
+        });
+
+        // Drop the table using DropTableRequest (ESchemeOpDropTable), which
+        auto* dropEv = DropTableRequest(txId, "/MyRoot", "Table");
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, dropEv);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusAccepted}});
+        env.TestWaitNotification(runtime, txId);
+
+        // Table and its index children should all be gone.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_bloom"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_ngram"), {NLs::PathNotExist});
+
+        // Path count must return to the initial value — no orphaned children.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::PathsInsideDomain(initialPathCount),
+        });
+    }
+
     Y_UNIT_TEST(MoveNonExistentTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

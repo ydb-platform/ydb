@@ -22,59 +22,22 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Validates a BSController add-host allocation response and, on success,
-// appends the newly granted DDisk/PBuffer to `result` (a copy of `current`).
-// Returns a retriable error - never aborts - for a failed or malformed
-// response: the add-host intent stays persisted and is replayed on recovery, so
-// a bad response must not crash-loop the tablet.
+// Builds in `updated` the connections the add will store in the local db.
 NProto::TError AddConnection(
-    const TDirectBlockGroupsConnections& current,
+    const TDirectBlockGroupsConnections& connections,
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
     size_t dbgId,
     ui32 expectedCurrent,
-    TDirectBlockGroupsConnections* result)
+    TDirectBlockGroupsConnections* updated)
 {
-    const auto& record = msg.Record;
-
-    if (record.GetStatus() != NKikimrProto::EReplyStatus::OK) {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController error: " << record.GetErrorReason());
+    const auto response = ValidateAllocationResponse(
+        msg,
+        dbgId,
+        static_cast<size_t>(expectedCurrent) + 1);
+    if (HasError(response.Error)) {
+        return response.Error;
     }
-
-    if (record.DirectBlockGroupsSize() != 1) {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController returned " << record.DirectBlockGroupsSize()
-                << " DirectBlockGroups, expected 1");
-    }
-
-    const auto& group = record.GetDirectBlockGroups(0);
-    if (group.GetDirectBlockGroupId() != dbgId) {
-        return MakeError(
-            E_REJECTED,
-            "BSController response is for a different DirectBlockGroup");
-    }
-
-    if (group.GetError()) {
-        return MakeError(
-            E_REJECTED,
-            "BSController reported an error for this DirectBlockGroup");
-    }
-
-    if (static_cast<ui32>(group.DDiskIdSize()) != expectedCurrent + 1 ||
-        static_cast<ui32>(group.PersistentBufferDDiskIdSize()) !=
-            expectedCurrent + 1)
-    {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController returned " << group.DDiskIdSize()
-                << " ddisks / " << group.PersistentBufferDDiskIdSize()
-                << " pbuffers, expected " << (expectedCurrent + 1));
-    }
+    const auto& group = *response.Group;
 
     const auto& newDDiskId = group.GetDDiskId(expectedCurrent);
     const auto& newPBufferId =
@@ -83,7 +46,7 @@ NProto::TError AddConnection(
     const TString newDDiskIdBytes = newDDiskId.SerializeAsString();
     const TString newPBufferIdBytes = newPBufferId.SerializeAsString();
     for (const auto& conn:
-         current.GetDirectBlockGroupConnections(dbgId).GetConnections())
+         connections.GetDirectBlockGroupConnections(dbgId).GetConnections())
     {
         if (conn.GetDDiskId().SerializeAsString() == newDDiskIdBytes ||
             conn.GetPersistentBufferDDiskId().SerializeAsString() ==
@@ -95,11 +58,13 @@ NProto::TError AddConnection(
         }
     }
 
-    *result = current;
-    auto* connection =
-        result->MutableDirectBlockGroupConnections(dbgId)->AddConnections();
+    *updated = connections;
+    auto* dbgConnections = updated->MutableDirectBlockGroupConnections(dbgId);
+    auto* connection = dbgConnections->AddConnections();
     connection->MutableDDiskId()->CopyFrom(newDDiskId);
     connection->MutablePersistentBufferDDiskId()->CopyFrom(newPBufferId);
+    dbgConnections->SetDBGConnectionsConfigGeneration(
+        dbgConnections->GetDBGConnectionsConfigGeneration() + 1);
     return {};
 }
 
@@ -131,6 +96,8 @@ void TPartitionActor::ExecuteStartAddHost(
     TTxPartition::TAddHostInProgress proto;
     proto.SetDirectBlockGroupId(args.DirectBlockGroupId);
     proto.SetNewHostIndex(args.NewHostIndex);
+    proto.SetDBGConnectionsConfigGeneration(
+        args.DBGConnectionsConfigGeneration);
     db.StoreAddHostInProgress(proto);
 }
 
@@ -188,11 +155,19 @@ void TPartitionActor::CompleteAddHostToDBG(
 
     Y_ABORT_UNLESS(FastPathService);
 
-    // The new connection was persisted at NewHostIndex; read its DDisk/PBuffer
-    // back out to hand to the DBG.
+    const auto& dbgConnections =
+        args.DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
+
+    // The generation must not change between restarts.
+    Y_ABORT_UNLESS(
+        static_cast<size_t>(args.NewHostIndex) + 1 ==
+            dbgConnections.ConnectionsSize(),
+        "AddHost plan points at %lu, the connection is at %lu",
+        static_cast<size_t>(args.NewHostIndex),
+        dbgConnections.ConnectionsSize() - 1);
+
     const auto& newConnection =
-        args.DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
-            .GetConnections(args.NewHostIndex);
+        dbgConnections.GetConnections(args.NewHostIndex);
 
     auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
     Y_ABORT_UNLESS(dbgPtr);
@@ -200,14 +175,16 @@ void TPartitionActor::CompleteAddHostToDBG(
     executor->ExecuteSimple(
         [dbgPtr,
          newHostIndex = args.NewHostIndex,
+         dbgConnectionsConfigGeneration =
+             dbgConnections.GetDBGConnectionsConfigGeneration(),
          newDDiskId = newConnection.GetDDiskId(),
          newPBufferId = newConnection.GetPersistentBufferDDiskId()]() mutable
         {
-            dbgPtr->OnAddHostResult(
-                {},
+            dbgPtr->OnAddHostSucceeded(
                 newHostIndex,
                 std::move(newDDiskId),
-                std::move(newPBufferId));
+                std::move(newPBufferId),
+                dbgConnectionsConfigGeneration);
         });
 
     AddHostInFlight.reset();
@@ -275,15 +252,16 @@ void TPartitionActor::HandleAddHostToDBG(
 
     const auto* msg = ev->Get();
     const size_t dbgId = msg->DirectBlockGroupId;
-    THostIndex newHostIndex = msg->NewHostIndex;
+    const ui32 dbgConnectionsConfigGeneration =
+        msg->DBGConnectionsConfigGeneration;
 
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle AddHost %s to dbgId=%lu",
+        "%s Handle AddHost to dbgId=%lu, DBG connections config generation %u",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(newHostIndex).c_str(),
-        dbgId);
+        dbgId,
+        dbgConnectionsConfigGeneration);
 
     // The request always carries a DBG's own index so an out-of-range dbgId is
     // a bug, not a bad request.
@@ -295,16 +273,18 @@ void TPartitionActor::HandleAddHostToDBG(
         dbgId,
         dbgCount);
 
-    if (newHostIndex == 0) {
-        // When a request comes from mon-page, need to find the newHostIndex.
-        const auto& dbgConn =
-            DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
-        newHostIndex = static_cast<ui32>(dbgConn.GetConnections().size());
-    }
-
-    if (!ValidateAddHostToDBGRequest(ctx, dbgId, newHostIndex)) {
+    if (!ValidateAddHostToDBGRequest(
+            ctx,
+            dbgId,
+            dbgConnectionsConfigGeneration))
+    {
         return;
     }
+
+    const auto newHostIndex = static_cast<THostIndex>(
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
+            .GetConnections()
+            .size());
 
     // Persist the intent before the BSController request (sent from the tx's
     // completion). A crash after the DDisk is allocated but before the
@@ -313,15 +293,21 @@ void TPartitionActor::HandleAddHostToDBG(
     AddHostInFlight = TAddHostInFlight{
         .DirectBlockGroupId = dbgId,
         .NewHostIndex = newHostIndex,
+        .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration,
     };
 
-    ExecuteTx(ctx, CreateTx<TStartAddHost>(dbgId, newHostIndex));
+    ExecuteTx(
+        ctx,
+        CreateTx<TStartAddHost>(
+            dbgId,
+            newHostIndex,
+            dbgConnectionsConfigGeneration));
 }
 
 bool TPartitionActor::ValidateAddHostToDBGRequest(
     const TActorContext& ctx,
     size_t dbgId,
-    THostIndex newHostIndex)
+    ui32 dbgConnectionsConfigGeneration)
 {
     if (AddHostInFlight.has_value()) {
         RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
@@ -348,13 +334,16 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         return false;
     }
 
-    if (newHostIndex != currentSize) {
+    if (dbgConnectionsConfigGeneration !=
+        dbgConn.GetDBGConnectionsConfigGeneration())
+    {
         RejectAddHost(
             ctx,
             dbgId,
             TStringBuilder()
-                << "AddHost " << PrintHostIndex(newHostIndex)
-                << " must append at the end. Current size=" << currentSize);
+                << "AddHost was decided on DBG connections config generation "
+                << dbgConnectionsConfigGeneration << ", the group is at "
+                << dbgConn.GetDBGConnectionsConfigGeneration());
         return false;
     }
 
@@ -382,7 +371,7 @@ void TPartitionActor::RejectAddHost(
     Y_ABORT_UNLESS(dbgPtr);
     auto executor = dbgPtr->GetExecutor();
     executor->ExecuteSimple([dbgPtr, error]()
-                            { dbgPtr->OnAddHostResult(error, 0, {}, {}); });
+                            { dbgPtr->OnAddHostFailed(error); });
 }
 
 void TPartitionActor::SendAllocateDDiskForAddHost(
@@ -404,12 +393,7 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     // re-sent request returns the same DDisk from BSController's persisted
     // allocation, so a retry (e.g. after a restart) is safe.
     const ui32 numDDisks = newHostIndex + 1;
-    auto request = std::make_unique<
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig->GetPersistentBufferDDiskPoolName());
-    request->Record.SetTabletId(TabletID());
+    auto request = MakeAllocateDDiskBlockGroupRequest();
 
     auto* op = request->Record.AddDirectBlockGroupOperations();
     op->SetDirectBlockGroupId(dbgId);

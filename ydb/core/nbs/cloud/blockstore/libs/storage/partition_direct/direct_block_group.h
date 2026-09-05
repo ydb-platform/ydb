@@ -217,13 +217,13 @@ public:
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) = 0;
 
-    // Result of the DBG's AddHost request. On success (empty error) applies the
-    // new host; on failure (e.g. rejected at MaxHostCount) logs the reason.
-    virtual void OnAddHostResult(
-        const NProto::TError& error,
+    virtual void OnAddHostSucceeded(
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnAddHostFailed(const NProto::TError& error) = 0;
 
     // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
     // by all DirectBlockGroups. Returns the delay before the operation may

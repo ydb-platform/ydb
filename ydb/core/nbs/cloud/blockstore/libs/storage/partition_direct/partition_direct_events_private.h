@@ -109,12 +109,12 @@ struct TEvPartitionDirectPrivate
     struct TEvAddHostToDBG
         : public NActors::TEventLocal<TEvAddHostToDBG, EvAddHostToDBG>
     {
-        size_t DirectBlockGroupId;
-        size_t NewHostIndex;
+        const size_t DirectBlockGroupId;
+        const ui32 DBGConnectionsConfigGeneration;
 
-        TEvAddHostToDBG(size_t dbgId, size_t newHostIndex)
+        TEvAddHostToDBG(size_t dbgId, ui32 dbgConnectionsConfigGeneration)
             : DirectBlockGroupId(dbgId)
-            , NewHostIndex(newHostIndex)
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
         {}
     };
 

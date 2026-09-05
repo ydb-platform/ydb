@@ -172,10 +172,15 @@ struct TTxPartition
     {
         const size_t DirectBlockGroupId;
         const THostIndex NewHostIndex;
+        const ui32 DBGConnectionsConfigGeneration;
 
-        TStartAddHost(size_t directBlockGroupId, THostIndex newHostIndex)
+        TStartAddHost(
+            size_t directBlockGroupId,
+            THostIndex newHostIndex,
+            ui32 dbgConnectionsConfigGeneration)
             : DirectBlockGroupId(directBlockGroupId)
             , NewHostIndex(newHostIndex)
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
         {}
 
         void Clear()

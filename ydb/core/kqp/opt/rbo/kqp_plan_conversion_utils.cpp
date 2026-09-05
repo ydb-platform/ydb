@@ -705,7 +705,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceColumns(TExprNode::T
         mapElements.emplace_back(outputColumn, inputIU, node->Pos(), &Ctx, &PlanProps);
     }
 
-    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements, true);
+    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements);
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr node) {

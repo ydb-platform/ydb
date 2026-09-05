@@ -68,8 +68,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
+        const auto checkpointId = GetStreamingQueryCheckpointId(queryName);
+        WaitCheckpointUpdate(checkpointId);
+
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+        WaitCheckpointUpdate(checkpointId);
 
         ExecQuery(fmt::format(R"(
             CREATE TABLE test_table2 (Key Int32 NOT NULL, PRIMARY KEY (Key));

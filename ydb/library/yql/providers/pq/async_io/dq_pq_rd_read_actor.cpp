@@ -864,6 +864,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         usedSpace += readyBatch.UsedSpace;
         freeSpace -= readyBatch.UsedSpace;
         Partitions[readyBatch.PartitionKey].Offset = readyBatch.NextOffset;
+        Partitions[readyBatch.PartitionKey].ValidateOffsetAgainstEnd = true;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
     } while (freeSpace > 0 && !ReadyBuffer.empty() && watermark.Empty());
 
@@ -983,6 +984,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         if (Parent->ReadyBuffer.empty()) {
             auto partitionKey = TPartitionKey { Cluster, partitionId };
             Parent->Partitions[partitionKey].Offset = itNextOffset->second;
+            Parent->Partitions[partitionKey].ValidateOffsetAgainstEnd = true;
         }
     }
 }

@@ -771,7 +771,18 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         {"logPrefix", LogPrefix});
 
     std::optional<ui64> minOffset;
-    for (const auto& [actorId, info] : Self.Clients) {
+    for (const auto& [_, info] : Self.Clients) {
+        if (info->NextMessageOffset && *info->NextMessageOffset > event.GetEndOffset()) {
+            event.Confirm(event.GetEndOffset());
+            Self.ThrowFatalError(TStatus::Fail(
+                EStatusId::BAD_REQUEST,
+                TStringBuilder() << "Requested offsets do not exist in the topic \"" << Self.TopicPath
+                    << "\": offset " << *info->NextMessageOffset << " for partition " << Self.PartitionId
+                    << " exceeds the end offset " << event.GetEndOffset()
+                    << ". The topic may have been recreated. Recreate or restart the streaming query \""
+                    << info->QueryId << "\"."));
+            return;
+        }
         if (!minOffset || (info->NextMessageOffset && *info->NextMessageOffset < *minOffset)) {
             minOffset = info->NextMessageOffset;
         }

@@ -1004,7 +1004,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         env.Runtime->SendToPipe(
             partition,
             sender,
-            new TEvPartitionDirectPrivate::TEvAddHostToDBG(0, 5),
+            new TEvPartitionDirectPrivate::TEvAddHostToDBG(0, 0),
             0,
             TTestActorSystem::GetPipeConfigWithRetries());
         runtime->DestroyActor(sender);
@@ -1017,6 +1017,21 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(
             static_cast<ui32>(DirectBlockGroupHostCount + 1),
             addHostNumDDisks);
+    }
+
+    // Restarts the node hosting the tablet (recreating the NBS service with
+    // the given config) and waits for the tablet to boot and replay.
+    static void RestartTabletNode(
+        TEnvironmentSetup & env,
+        std::unique_ptr<TScopedNbsService> & scopedService,
+        const NKikimrConfig::TNbsConfig& nbsConfig)
+    {
+        scopedService.reset();
+        env.RestartNode(env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(1));
+        scopedService = std::make_unique<TScopedNbsService>(nbsConfig);
+        WaitForTabletBoot(env);
+        env.Sim(TDuration::Seconds(10));
     }
 
     Y_UNIT_TEST(ShouldReplayInFlightAddHostAfterRestart)
@@ -1072,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             env.Runtime->SendToPipe(
                 partition,
                 sender,
-                new TEvPartitionDirectPrivate::TEvAddHostToDBG(0, 5),
+                new TEvPartitionDirectPrivate::TEvAddHostToDBG(0, 0),
                 0,
                 TTestActorSystem::GetPipeConfigWithRetries());
             runtime->DestroyActor(sender);
@@ -1081,15 +1096,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, addHostRequestCount);
 
         // Restart: the persisted intent must be replayed.
-        {
-            scopedService.reset();
-            env.RestartNode(env.Settings.ControllerNodeId);
-            env.Sim(TDuration::Seconds(1));
-            scopedService = std::make_unique<TScopedNbsService>(
-                CreateNbsConfig(EWriteMode::DirectWrite));
-        }
-        WaitForTabletBoot(env);
-        env.Sim(TDuration::Seconds(10));
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
 
         // The replay re-sent the BSController allocation request.
         UNIT_ASSERT_VALUES_EQUAL(2u, addHostRequestCount);
@@ -1358,6 +1368,454 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 EPersistResult::Cancelled,
                 future.GetValue());
         }
+    }
+
+    static void SendAddHostToDBG(
+        TEnvironmentSetup & env,
+        ui64 partition,
+        size_t dbgId,
+        ui32 connectionConfigGeneration)
+    {
+        const TActorId sender = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        env.Runtime->SendToPipe(
+            partition,
+            sender,
+            new TEvPartitionDirectPrivate::TEvAddHostToDBG(
+                dbgId,
+                connectionConfigGeneration),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        env.Runtime->DestroyActor(sender);
+    }
+
+    static void SendRemoveHostFromDBG(
+        TEnvironmentSetup & env,
+        ui64 partition,
+        size_t dbgId,
+        size_t hostIndex,
+        ui32 connectionConfigGeneration)
+    {
+        const TActorId sender = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        env.Runtime->SendToPipe(
+            partition,
+            sender,
+            new TEvPartitionDirectPrivate::TEvRemoveHostFromDBG(
+                dbgId,
+                hostIndex,
+                connectionConfigGeneration),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        env.Runtime->DestroyActor(sender);
+    }
+
+    Y_UNIT_TEST(ShouldReplayInFlightRemoveHostAfterRestartWhenNotApplied)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        ui32 deleteRequestCount = 0;
+        bool dropNextDeleteRequest = false;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                const auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() == 1 &&
+                    msg->Record.GetDirectBlockGroupOperations(0)
+                            .DeleteDDisksSize() > 0)
+                {
+                    ++deleteRequestCount;
+                    if (dropNextDeleteRequest) {
+                        dropNextDeleteRequest = false;
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Remove host 2 of the initial five; the deletion is dropped before
+        // BSController sees it, so the intent persists but nothing applies.
+        dropNextDeleteRequest = true;
+        SendRemoveHostFromDBG(env, partition, 0, 2, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, deleteRequestCount);
+
+        // Restart: the persisted intent re-sends the deletion, and this time
+        // BSController applies it.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+
+        UNIT_ASSERT_VALUES_EQUAL(2u, deleteRequestCount);
+    }
+
+    Y_UNIT_TEST(ShouldReplayInFlightRemoveHostAfterRestartWhenAlreadyApplied)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        ui32 deleteRequestCount = 0;
+        bool dropNextAllocationResult = false;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                const auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() == 1 &&
+                    msg->Record.GetDirectBlockGroupOperations(0)
+                            .DeleteDDisksSize() > 0)
+                {
+                    ++deleteRequestCount;
+                }
+            }
+            if (dropNextAllocationResult &&
+                type ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                dropNextAllocationResult = false;
+                return false;
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // BSController applies the deletion, but the RESULT is dropped: the
+        // connections are never persisted and the intent stays.
+        dropNextAllocationResult = true;
+        SendRemoveHostFromDBG(env, partition, 0, 2, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, deleteRequestCount);
+
+        // Restart: the replay re-sends the deletion; BSController answers
+        // NOT_FOUND (the ids are already deleted) and the removal is
+        // committed from the intent.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+
+        UNIT_ASSERT_VALUES_EQUAL(2u, deleteRequestCount);
+
+        // No freeze: slot 2 is simply dead now, and removing a live slot
+        // right away is accepted.
+        SendRemoveHostFromDBG(env, partition, 0, 1, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(3u, deleteRequestCount);
+
+        // Both intents are cleared: the next boot replays no remove and
+        // compacts the dead slots away.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+        UNIT_ASSERT_VALUES_EQUAL(3u, deleteRequestCount);
+    }
+
+    Y_UNIT_TEST(ShouldRejectSecondRemoveHostWhileInFlight)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        ui32 deleteRequestCount = 0;
+        bool dropNextAllocationResult = false;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                const auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() == 1 &&
+                    msg->Record.GetDirectBlockGroupOperations(0)
+                            .DeleteDDisksSize() > 0)
+                {
+                    ++deleteRequestCount;
+                }
+            }
+            if (dropNextAllocationResult &&
+                type ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                dropNextAllocationResult = false;
+                return false;
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // The first remove sticks in flight (its result is dropped).
+        dropNextAllocationResult = true;
+        SendRemoveHostFromDBG(env, partition, 0, 2, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, deleteRequestCount);
+
+        // A second membership op is rejected while the first is in flight.
+        SendRemoveHostFromDBG(env, partition, 0, 3, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, deleteRequestCount);
+    }
+    // A committed remove marks the slot dead without touching live indices,
+    // so further membership ops keep working in the same tablet run; the
+    // dead slots are compacted away at the next start.
+    Y_UNIT_TEST(ShouldComposeMembershipOpsWithoutRestart)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        ui32 deleteRequestCount = 0;
+        ui32 addRequestCount = 0;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                const auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() == 1) {
+                    const auto& op =
+                        msg->Record.GetDirectBlockGroupOperations(0);
+                    if (op.HasDefineDirectBlockGroup()) {
+                        ++addRequestCount;
+                    }
+                    if (op.DeleteDDisksSize() > 0) {
+                        ++deleteRequestCount;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Remove host 2: slot 2 becomes a dead slot [0,1,+2,3,4].
+        SendRemoveHostFromDBG(env, partition, 0, 2, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, deleteRequestCount);
+
+        // No freeze: an add right after the committed remove is accepted and
+        // takes the fresh slot 5. The remove moved the group to generation 1.
+        SendAddHostToDBG(env, partition, 0, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, addRequestCount);
+
+        // Another remove in the same run is accepted too: live slot 3 of
+        // [0,1,+2,3,4,5].
+        SendRemoveHostFromDBG(env, partition, 0, 3, 2);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(2u, deleteRequestCount);
+
+        // The restart compacts the dead slots away; no remove replays (both
+        // commits cleared their intents).
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+        UNIT_ASSERT_VALUES_EQUAL(2u, deleteRequestCount);
+    }
+
+    // A pending plan freezes the numbering: the start that finds an intent
+    // skips compaction, so the plan still names the slot it named when it was
+    // validated. The dead slot from the earlier removal survives that start.
+    Y_UNIT_TEST(ShouldNotCompactWhileRemoveHostIsPending)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> deletes;
+        bool dropNextDeleteRequest = false;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                const auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() == 1 &&
+                    msg->Record.GetDirectBlockGroupOperations(0)
+                            .DeleteDDisksSize() > 0)
+                {
+                    deletes.push_back(
+                        msg->Record.GetDirectBlockGroupOperations(0)
+                            .GetDeleteDDisks(0)
+                            .GetDDiskId());
+                    if (dropNextDeleteRequest) {
+                        dropNextDeleteRequest = false;
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Remove host 1: commits, slot 1 is dead.
+        SendRemoveHostFromDBG(env, partition, 0, 1, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, deletes.size());
+
+        // Start removing host 3, but BSC never sees the delete: the intent
+        // stays persisted.
+        dropNextDeleteRequest = true;
+        SendRemoveHostFromDBG(env, partition, 0, 3, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(2u, deletes.size());
+
+        // The restart does not compact: an intent is pending. The replay
+        // deletes the very DDisk the plan named.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+        UNIT_ASSERT_VALUES_EQUAL(3u, deletes.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            deletes[1].ShortDebugString(),
+            deletes[2].ShortDebugString());
+    }
+
+    // The same freeze protects an add: its plan names the slot after the dead
+    // one, and a start that compacted the dead slot away would shift it.
+    Y_UNIT_TEST(ShouldNotCompactWhileAddHostIsPending)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        ui32 addRequestCount = 0;
+        ui32 deleteRequestCount = 0;
+        bool dropNextAllocationResult = false;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                const auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() == 1) {
+                    const auto& op =
+                        msg->Record.GetDirectBlockGroupOperations(0);
+                    if (op.HasDefineDirectBlockGroup()) {
+                        ++addRequestCount;
+                    }
+                    if (op.DeleteDDisksSize() > 0) {
+                        ++deleteRequestCount;
+                    }
+                }
+            }
+            if (dropNextAllocationResult &&
+                type ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                dropNextAllocationResult = false;
+                return false;
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Remove host 2: commits, slot 2 is dead and the group is at
+        // generation 1.
+        SendRemoveHostFromDBG(env, partition, 0, 2, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, deleteRequestCount);
+
+        // Start an add whose result is dropped: BSController granted the disk,
+        // the plan is persisted, the connection is not.
+        dropNextAllocationResult = true;
+        SendAddHostToDBG(env, partition, 0, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, addRequestCount);
+
+        // The restart finds the plan and skips compaction, so the dead slot
+        // keeps its place and the plan still names slot 5. Had the numbering
+        // shifted, the commit would abort on the plan check.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+        UNIT_ASSERT_VALUES_EQUAL(2u, addRequestCount);
+
+        // The plan is finished, so the next start compacts and replays
+        // nothing.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+        UNIT_ASSERT_VALUES_EQUAL(2u, addRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(1u, deleteRequestCount);
     }
 
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
@@ -1799,19 +2257,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
         }
 
-        {
-            scopedService.reset();
-
-            env.RestartNode(env.Settings.ControllerNodeId);
-            env.Sim(TDuration::Seconds(1));
-
-            scopedService = std::make_unique<TScopedNbsService>(
-                CreateNbsConfig(EWriteMode::IndirectWrite));
-        }
-
-        WaitForTabletBoot(env);
-        // Wait for tablet to be restored
-        env.Sim(TDuration::Seconds(10));
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::IndirectWrite));
 
         {
             const TActorId& edge = runtime->AllocateEdgeActor(
@@ -2490,7 +2939,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         // See ShouldRequestDDiskAllocationForAddedHost for the throwaway
         // sender.
-        auto addHost = [&](size_t dbgId, size_t newHostIndex)
+        auto addHost = [&](size_t dbgId, ui32 connectionConfigGeneration)
         {
             const TActorId sender = runtime->AllocateEdgeActor(
                 env.Settings.ControllerNodeId,
@@ -2501,7 +2950,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 sender,
                 new TEvPartitionDirectPrivate::TEvAddHostToDBG(
                     dbgId,
-                    newHostIndex),
+                    connectionConfigGeneration),
                 0,
                 TTestActorSystem::GetPipeConfigWithRetries());
             runtime->DestroyActor(sender);
@@ -2510,10 +2959,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const auto defaultCount = static_cast<ui32>(DirectBlockGroupHostCount);
 
-        // Grow DBG 0, then DBG 1: each add sees its own group at the default
-        // size and grows only it.
-        addHost(0, 5);
-        addHost(1, 5);
+        // Grow DBG 0, then DBG 1: each add sees its own group at connection
+        // config generation 0 and grows only it.
+        addHost(0, 0);
+        addHost(1, 0);
 
         UNIT_ASSERT_VALUES_EQUAL(2u, roundTrips.size());
         UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[0].DbgId);
@@ -2533,8 +2982,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         // A third add probes DBG 0 after DBG 1's add: the partition must still
         // carry DBG 0's grown connections (request 7), and BSController must
-        // still hold its 6-disk group (result 7).
-        addHost(0, 6);
+        // still hold its 6-disk group (result 7). DBG 0 is at connection
+        // config generation 1 after its own add; DBG 1's add did not touch it.
+        addHost(0, 1);
 
         UNIT_ASSERT_VALUES_EQUAL(3u, roundTrips.size());
         UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[2].DbgId);
@@ -2548,17 +2998,12 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         // Restart and probe DBG 0 again: the persisted connections must carry
         // all three adds. Only the request is asserted - it is sent before
         // (and regardless of) BSController's capacity for one more disk.
-        {
-            scopedService.reset();
-            env.RestartNode(env.Settings.ControllerNodeId);
-            env.Sim(TDuration::Seconds(1));
-            scopedService = std::make_unique<TScopedNbsService>(
-                CreateNbsConfig(EWriteMode::DirectWrite));
-        }
-        WaitForTabletBoot(env);
-        env.Sim(TDuration::Seconds(10));
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
 
-        addHost(0, 7);
+        addHost(0, 2);
 
         UNIT_ASSERT_VALUES_EQUAL(4u, roundTrips.size());
         UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[3].DbgId);

@@ -18,7 +18,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     struct TAddHostRequest
     {
         size_t DirectBlockGroupId = 0;
-        size_t NewHostIndex = 0;
+        ui32 ConnectionConfigGeneration = 0;
+    };
+
+    struct TRemoveHostRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t HostIndex = 0;
+        ui32 ConnectionConfigGeneration = 0;
     };
 
     struct TUpdateConfigRequest
@@ -41,6 +48,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TVolumeConfigPtr VolumeConfig;
     bool DropScheduledCallbacks = false;
     TVector<TAddHostRequest> AddHostRequests;
+    TVector<TRemoveHostRequest> RemoveHostRequests;
     ui64 LsnGenerator = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
@@ -87,11 +95,24 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
     }
 
-    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override
+    void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 connectionConfigGeneration) override
     {
         AddHostRequests.push_back(TAddHostRequest{
             .DirectBlockGroupId = directBlockGroupId,
-            .NewHostIndex = newHostIndex});
+            .ConnectionConfigGeneration = connectionConfigGeneration});
+    }
+
+    void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
+        ui32 connectionConfigGeneration) override
+    {
+        RemoveHostRequests.push_back(TRemoveHostRequest{
+            .DirectBlockGroupId = directBlockGroupId,
+            .HostIndex = hostIndex,
+            .ConnectionConfigGeneration = connectionConfigGeneration});
     }
 
     ui64 GenerateLsn() override

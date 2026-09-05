@@ -42,6 +42,7 @@ struct TOracleMock: public IOracle
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskBroken(THostIndex hostIndex) override;
+    void OnHostRemoved(THostIndex hostIndex) override;
 
     TDuration GetHostReconnectDelay(THostIndex hostIndex) override;
 
@@ -140,13 +141,20 @@ public:
     using TDBGDumpHandler =
         std::function<NThreading::TFuture<TDBGDumpResponse>()>;
 
-    using TOnAddHostResultHandler = std::function<void(
-        const NProto::TError& error,
+    using TOnAddHostSucceededHandler = std::function<void(
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)>;
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 connectionConfigGeneration)>;
+    using TOnAddHostFailedHandler =
+        std::function<void(const NProto::TError& error)>;
     using TTakeCopyRangeBudgetHandler =
         std::function<TDuration(ui64 byteCount)>;
+
+    using TOnRemoveHostSucceededHandler = std::function<
+        void(THostIndex removeIndex, ui32 connectionConfigGeneration)>;
+    using TOnRemoveHostFailedHandler = std::function<
+        void(THostIndex removeIndex, const NProto::TError& error)>;
 
     TExecutorPtr Executor;
     TOracleMock Oracle;
@@ -161,7 +169,10 @@ public:
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
-    TOnAddHostResultHandler OnAddHostResultHandler;
+    TOnAddHostSucceededHandler OnAddHostSucceededHandler;
+    TOnAddHostFailedHandler OnAddHostFailedHandler;
+    TOnRemoveHostSucceededHandler OnRemoveHostSucceededHandler;
+    TOnRemoveHostFailedHandler OnRemoveHostFailedHandler;
     TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
@@ -250,11 +261,21 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
-    void OnAddHostResult(
-        const NProto::TError& error,
+    void OnAddHostSucceeded(
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 connectionConfigGeneration) override;
+
+    void OnAddHostFailed(const NProto::TError& error) override;
+
+    void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 connectionConfigGeneration) override;
+
+    void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) override;
 
     TDuration TakeCopyRangeBudget(ui64 byteCount) override;
 

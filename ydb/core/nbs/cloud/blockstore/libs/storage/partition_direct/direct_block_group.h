@@ -217,13 +217,28 @@ public:
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) = 0;
 
-    // Result of the DBG's AddHost request. On success (empty error) applies the
-    // new host; on failure (e.g. rejected at MaxHostCount) logs the reason.
-    virtual void OnAddHostResult(
-        const NProto::TError& error,
+    // The AddHost committed: applies the new host and adopts the connection
+    // config generation it was committed with.
+    virtual void OnAddHostSucceeded(
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 connectionConfigGeneration) = 0;
+
+    // The AddHost was refused, e.g. at MaxHostCount. Nothing changes in the
+    // group.
+    virtual void OnAddHostFailed(const NProto::TError& error) = 0;
+
+    // The RemoveHost committed: the slot goes dead and the group adopts the
+    // connection config generation it was committed with.
+    virtual void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 connectionConfigGeneration) = 0;
+
+    // The RemoveHost was refused. The slot stays as it is.
+    virtual void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) = 0;
 
     // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
     // by all DirectBlockGroups. Returns the delay before the operation may

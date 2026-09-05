@@ -210,6 +210,8 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
+    THostMask removedSlots,
+    ui32 connectionConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
@@ -227,15 +229,24 @@ TDirectBlockGroup::TDirectBlockGroup(
               .TabletId = diskDescription.TabletId,
               .Generation = diskDescription.Generation,
               .DBGIndex = DirectBlockGroupIndex})
+    , ConnectionConfigGeneration(connectionConfigGeneration)
+    , RemovedSlots(removedSlots)
     , Oracle(StorageConfig, this)
     , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(IsSupportedBlockSize(BlockSize));
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
-    Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
+    // A remove-host can shrink the group below the default host count.
+    Y_ASSERT(pbufferIds.size() >= QuorumDirectBlockGroupHostCount);
 
     for (THostIndex host = 0; host < ddisksIds.size(); ++host) {
         AddDDiskAndPBufferConnection(host, ddisksIds[host], pbufferIds[host]);
+    }
+
+    // A dead slot keeps its position so the numbering does not move, but it
+    // has no resources left in BSC.
+    for (const THostIndex slot: RemovedSlots) {
+        MarkSlotDead(slot);
     }
 }
 
@@ -1265,6 +1276,11 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     if (hostIndex >= PBufferConnections.size()) {
         return MakeFuture(TListPBufferResponse{.Error = MakeError(E_FAIL)});
     }
+    if (RemovedSlots.Get(hostIndex)) {
+        // The slot is dead: its pbuffer was drained before the removal and its
+        // resources are gone in BSC, so it holds nothing to restore.
+        return MakeFuture(TListPBufferResponse{});
+    }
 
     const auto& connection = PBufferConnections[hostIndex];
     // Hold a local copy of the connect future,
@@ -1310,24 +1326,25 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     return result;
 }
 
-void TDirectBlockGroup::OnAddHostResult(
-    const NProto::TError& error,
-    THostIndex newHostIndex,
-    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+void TDirectBlockGroup::OnAddHostFailed(const NProto::TError& error)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (HasError(error)) {
-        LOG_WARN(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s AddHost %s request failed: %s",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(newHostIndex).c_str(),
-            FormatError(error).Quote().c_str());
-        return;
-    }
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s AddHost request failed: %s",
+        LogTitle.GetWithTime().c_str(),
+        FormatError(error).Quote().c_str());
+}
+
+void TDirectBlockGroup::OnAddHostSucceeded(
+    THostIndex newHostIndex,
+    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+    ui32 connectionConfigGeneration)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     Y_ABORT_UNLESS(
         static_cast<size_t>(newHostIndex) == DDiskConnections.size(),
@@ -1342,16 +1359,52 @@ void TDirectBlockGroup::OnAddHostResult(
         newHostIndex,
         NBsController::TDDiskId(ddiskId),
         NBsController::TDDiskId(pbufferId));
+    ConnectionConfigGeneration = connectionConfigGeneration;
 
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s AddHost %s request OK",
+        "%s AddHost %s request OK, connection config generation %u",
         LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(newHostIndex).c_str());
+        PrintHostAndNode(newHostIndex).c_str(),
+        ConnectionConfigGeneration);
 
     DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
+}
+
+void TDirectBlockGroup::OnRemoveHostFailed(
+    THostIndex removeIndex,
+    const NProto::TError& error)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s RemoveHost %s request failed: %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(removeIndex).c_str(),
+        FormatError(error).c_str());
+}
+
+void TDirectBlockGroup::OnRemoveHostSucceeded(
+    THostIndex removeIndex,
+    ui32 connectionConfigGeneration)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(removeIndex < DDiskConnections.size());
+    Y_ABORT_UNLESS(DDiskConnections.size() == PBufferConnections.size());
+
+    MarkSlotDead(removeIndex);
+    ConnectionConfigGeneration = connectionConfigGeneration;
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s RemoveHost committed: slot %s is dead",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(removeIndex).c_str());
 }
 
 TDuration TDirectBlockGroup::TakeCopyRangeBudget(ui64 byteCount)
@@ -1455,21 +1508,103 @@ void TDirectBlockGroup::SetHostState(
     }
 }
 
-void TDirectBlockGroup::QueryAddHost(THostIndex newHostIndex)
+void TDirectBlockGroup::QueryAddHost()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(Service);
 
-    // No gate here: the authoritative MaxHostCount check is in the partition
-    // (the DBG's DDiskConnections count lags). The DBG just forwards.
+    // The position is chosen by the partition, which owns the persisted
+    // membership. This request only says which state it was asked from.
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s QueryAddHost %s",
+        "%s QueryAddHost, connection config generation %u",
         LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(newHostIndex).c_str());
+        ConnectionConfigGeneration);
 
-    Service->QueryAddHost(DirectBlockGroupIndex, newHostIndex);
+    Service->QueryAddHost(DirectBlockGroupIndex, ConnectionConfigGeneration);
+}
+
+void TDirectBlockGroup::QueryRemoveHost(THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    if (const auto reason = ValidateRemoveHost(hostIndex); !reason.empty()) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s RemoveHost rejected (hostIndex=%s): %s",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostAndNode(hostIndex).c_str(),
+            reason.c_str());
+        return;
+    }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s QueryRemoveHost %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str());
+
+    Service->QueryRemoveHost(
+        DirectBlockGroupIndex,
+        hostIndex,
+        ConnectionConfigGeneration);
+}
+
+TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const size_t slotCount = DDiskConnections.size();
+    if (hostIndex >= slotCount) {
+        return TStringBuilder()
+               << "host index is out of range (have " << slotCount << ")";
+    }
+    if (RemovedSlots.Get(hostIndex)) {
+        return "the slot is already removed";
+    }
+    const size_t liveCount = slotCount - RemovedSlots.Count();
+    if (liveCount - 1 < QuorumDirectBlockGroupHostCount) {
+        return TStringBuilder()
+               << "removal would drop the group below the "
+               << QuorumDirectBlockGroupHostCount << "-host quorum";
+    }
+
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk) {
+            continue;
+        }
+        const auto& cfg = vChunk->GetConfig();
+        if (cfg.GetHostCount() != slotCount) {
+            return TStringBuilder()
+                   << "vchunk " << cfg.GetVChunkIndex()
+                   << " config lags the connections (" << cfg.GetHostCount()
+                   << " vs " << slotCount << ")";
+        }
+        if (!cfg.GetDisabledHosts().Get(hostIndex)) {
+            return TStringBuilder() << "host is still enabled in vchunk "
+                                    << cfg.GetVChunkIndex();
+        }
+        // Removal is irreversible, so every vchunk must keep a quorum of
+        // healthy ddisks. The disabled host is not in that set already.
+        const auto healthyCount = cfg.GetHealthyDDisks().Count();
+        if (healthyCount < QuorumDirectBlockGroupHostCount) {
+            return TStringBuilder()
+                   << "vchunk " << cfg.GetVChunkIndex() << " has "
+                   << healthyCount << " healthy ddisks, below the "
+                   << QuorumDirectBlockGroupHostCount << "-host quorum";
+        }
+    }
+
+    if (GetPBuffersUsage(hostIndex).Size != 0) {
+        return "the removed host's pbuffer is not drained";
+    }
+
+    return {};
 }
 
 TCountAndSize TDirectBlockGroup::GetPBuffersUsage(THostIndex hostIndex) const
@@ -1534,11 +1669,15 @@ void TDirectBlockGroup::DoEstablishConnections()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     for (size_t i = 0; i < DDiskConnections.size(); ++i) {
-        DoEstablishConnection(i, EConnectionType::DDisk);
+        if (!RemovedSlots.Get(static_cast<THostIndex>(i))) {
+            DoEstablishConnection(i, EConnectionType::DDisk);
+        }
     }
 
     for (size_t i = 0; i < PBufferConnections.size(); ++i) {
-        DoEstablishConnection(i, EConnectionType::PBuffer);
+        if (!RemovedSlots.Get(static_cast<THostIndex>(i))) {
+            DoEstablishConnection(i, EConnectionType::PBuffer);
+        }
     }
 
     DoListPBuffers();
@@ -1720,6 +1859,10 @@ void TDirectBlockGroup::ReEstablishConnection(
     Y_ABORT_UNLESS(hostIndex < connections.size());
     TDDiskConnection& connection = connections[hostIndex];
 
+    if (RemovedSlots.Get(hostIndex)) {
+        return;   // nothing to reconnect to, the resources are deleted
+    }
+
     Counters.OnReconnect(ToDBGConnectionType(connectionType));
 
     if (BlockedGenerationDetected) {
@@ -1761,6 +1904,20 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
 
     // OnNodeDisconnected may be called only for DDisk
     ReEstablishConnection(EConnectionType::DDisk, hostIndex);
+}
+
+void TDirectBlockGroup::MarkSlotDead(THostIndex slot)
+{
+    Y_ABORT_UNLESS(slot < PBufferConnections.size());
+
+    RemovedSlots.Set(slot);
+    Oracle.OnHostRemoved(slot);
+
+    // BSC may grant the freed pbuffer id to a future host, so the map must not
+    // keep pointing the old id at this slot.
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId;
+    PBufferConnections[slot].HostConnection.DDiskId.Serialize(&pbufferId);
+    PBufferIdToHostIndex.erase(pbufferId);
 }
 
 bool TDirectBlockGroup::HasPBufferQuorum() const

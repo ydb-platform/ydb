@@ -63,6 +63,10 @@ void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
         NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
         AddHostInFlight.reset();
     }
+    if (RemoveHostInFlight) {
+        NTabletPipe::CloseClient(ctx, RemoveHostInFlight->BSPipeClient);
+        RemoveHostInFlight.reset();
+    }
 
     // Idempotent: no-op when the endpoint was never started.
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
@@ -225,6 +229,10 @@ void TPartitionActor::HandleAllocateResultDuringDelete(
         NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
         AddHostInFlight.reset();
     }
+    if (RemoveHostInFlight) {
+        NTabletPipe::CloseClient(ctx, RemoveHostInFlight->BSPipeClient);
+        RemoveHostInFlight.reset();
+    }
 }
 
 // Ignore update volume config during delete
@@ -295,6 +303,25 @@ void TPartitionActor::HandleFastPathServiceShutdownDuringDelete(
 }
 
 // Ignore add host to dbg during delete
+void TPartitionActor::HandleRemoveHostFromDBGDuringDelete(
+    const TEvPartitionDirectPrivate::TEvRemoveHostFromDBG::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const size_t dbgId = ev->Get()->DirectBlockGroupId;
+    const size_t hostIndex = ev->Get()->HostIndex;
+    if (FastPathService) {
+        RejectRemoveHost(ctx, dbgId, hostIndex, "partition is being deleted");
+        return;
+    }
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Drop RemoveHost during delete (dbgId=%lu): FastPathService stopped",
+        LogTitle.GetWithTime().c_str(),
+        dbgId);
+}
+
 void TPartitionActor::HandleAddHostToDBGDuringDelete(
     const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -359,6 +386,9 @@ STFUNC(TPartitionActor::StateDelete)
         HFunc(
             TEvPartitionDirectPrivate::TEvAddHostToDBG,
             HandleAddHostToDBGDuringDelete);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvRemoveHostFromDBG,
+            HandleRemoveHostFromDBGDuringDelete);
         // The Run() future is not cancelled by Stop(); ignore a late ready
         // signal
         IgnoreFunc(TEvPartitionDirectPrivate::TEvFastPathServiceReady);

@@ -11,8 +11,16 @@ message TDirectBlockGroupConnections {
     message TConnection {
         NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
         NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
+        // The host was removed. The entry keeps its position until the
+        // compaction at the next tablet start.
+        bool Removed = 3;
     }
+
     repeated TConnection Connections = 1;
+
+    // Bumped by every change of this group's membership. A request decided on
+    // an older generation was decided without seeing that change.
+    uint32 ConnectionConfigGeneration = 2;
 }
 
 message TDirectBlockGroupsConnections {
@@ -44,7 +52,20 @@ message TTabletInfo {
 }
 
 // An in-flight AddHost, persisted so it can be finished (replayed) on restart.
+// The plan is applied as it was validated, and ConnectionConfigGeneration is
+// the state it was decided on.
 message TAddHostInProgress {
     uint32 DirectBlockGroupId = 1;
     uint32 NewHostIndex = 2;
+    uint32 ConnectionConfigGeneration = 3;
+}
+
+// An in-flight RemoveHost, persisted so it can be finished (replayed) on
+// restart.
+message TRemoveHostInProgress {
+    uint32 DirectBlockGroupId = 1;
+    uint32 RemoveIndex = 2;
+    NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 3;
+    NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 4;
+    uint32 ConnectionConfigGeneration = 5;
 }

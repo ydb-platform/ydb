@@ -75,11 +75,26 @@ private:
     {
         size_t DirectBlockGroupId = 0;
         THostIndex NewHostIndex = InvalidHostIndex;
+        ui32 ConnectionConfigGeneration = 0;
         NActors::TActorId BSPipeClient;
     };
 
     // At most one add-host runs at a time across the whole partition.
     std::optional<TAddHostInFlight> AddHostInFlight;
+
+    struct TRemoveHostInFlight
+    {
+        size_t DirectBlockGroupId = 0;
+        THostIndex RemoveIndex = InvalidHostIndex;
+        NKikimrBlobStorage::NDDisk::TDDiskId DDiskId;
+        NKikimrBlobStorage::NDDisk::TDDiskId PBufferId;
+        ui32 ConnectionConfigGeneration = 0;
+        NActors::TActorId BSPipeClient;
+    };
+
+    // At most one remove-host runs at a time; mutually exclusive with
+    // AddHostInFlight.
+    std::optional<TRemoveHostInFlight> RemoveHostInFlight;
 
     // Batch persisting of vchunk configs.
     bool ExecutingUpdateVChunkConfig = false;
@@ -154,6 +169,15 @@ private:
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
+    [[nodiscard]] std::unique_ptr<
+        NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
+    MakeAllocateDDiskBlockGroupRequest() const;
+
+    // The number of slots that are not marked Removed.
+    [[nodiscard]] static size_t LiveHostCount(
+        const ::NYdb::NBS::PartitionDirect::NProto::
+            TDirectBlockGroupConnections& connections);
+
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
@@ -168,6 +192,15 @@ private:
     // Applies a single add-host allocation response: validate, append the new
     // connection, and persist it via TAddHostToDBG.
     void HandleAddHostAllocationResult(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Sends the in-flight remove's deletion to BSController.
+    void SendRemoveHostRequest(const NActors::TActorContext& ctx);
+
+    // Applies the deletion response; NOT_FOUND means already applied.
+    void HandleRemoveHostAllocationResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -258,6 +291,10 @@ private:
         const TEvPartitionDirectPrivate::TEvFastPathServiceShutdown::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleRemoveHostFromDBGDuringDelete(
+        const TEvPartitionDirectPrivate::TEvRemoveHostFromDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleAddHostToDBGDuringDelete(
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -273,15 +310,32 @@ private:
     bool ValidateAddHostToDBGRequest(
         const NActors::TActorContext& ctx,
         size_t dbgId,
-        THostIndex newHostIndex);
+        ui32 connectionConfigGeneration);
     void RejectAddHost(
         const NActors::TActorContext& ctx,
         size_t dbgId,
         const TString& message);
     void SendAllocateDDiskForAddHost(
         const NActors::TActorContext& ctx,
+        size_t dbgId);
+
+    void HandleRemoveHostFromDBG(
+        const TEvPartitionDirectPrivate::TEvRemoveHostFromDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Rejects (logs + notifies the DBG) and returns false if the RemoveHost
+    // request is invalid; true if it may proceed.
+    bool ValidateRemoveHostFromDBGRequest(
+        const NActors::TActorContext& ctx,
         size_t dbgId,
-        THostIndex newHostIndex);
+        size_t hostIndex,
+        ui32 connectionConfigGeneration);
+
+    void RejectRemoveHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        size_t hostIndex,
+        const TString& message);
 
     // Mon-page related methods.
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
@@ -304,5 +358,18 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TAllocationResponse
+{
+    NProto::TError Error;
+    const NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+        TDirectBlockGroup* Group = nullptr;
+};
+
+[[nodiscard]] TAllocationResponse ValidateAllocationResponse(
+    const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult&
+        msg,
+    size_t dbgId,
+    size_t expectedHostCount);
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -56,6 +56,11 @@ void TOracleMock::OnDDiskBroken(THostIndex hostIndex)
     Y_UNUSED(hostIndex);
 }
 
+void TOracleMock::OnHostRemoved(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+}
+
 TDuration TOracleMock::GetHostReconnectDelay(THostIndex hostIndex)
 {
     Y_UNUSED(hostIndex);
@@ -195,9 +200,21 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set DumpHandler");
         return NThreading::TFuture<TDBGDumpResponse>();
     };
-    OnAddHostResultHandler = [](const auto&...)
+    OnAddHostSucceededHandler = [](const auto&...)
     {
-        Y_ABORT_UNLESS(false, "Should set OnAddHostResultHandler");
+        Y_ABORT_UNLESS(false, "Should set OnAddHostSucceededHandler");
+    };
+    OnAddHostFailedHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnAddHostFailedHandler");
+    };
+    OnRemoveHostSucceededHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostSucceededHandler");
+    };
+    OnRemoveHostFailedHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostFailedHandler");
     };
     TakeCopyRangeBudgetHandler = [](ui64)
     {
@@ -389,17 +406,36 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
     return ListPBuffersHandler(hostIndex);
 }
 
-void TDirectBlockGroupMock::OnAddHostResult(
-    const NProto::TError& error,
+void TDirectBlockGroupMock::OnAddHostSucceeded(
     THostIndex newHostIndex,
     NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+    ui32 connectionConfigGeneration)
 {
-    OnAddHostResultHandler(
-        error,
+    OnAddHostSucceededHandler(
         newHostIndex,
         std::move(ddiskId),
-        std::move(pbufferId));
+        std::move(pbufferId),
+        connectionConfigGeneration);
+}
+
+void TDirectBlockGroupMock::OnAddHostFailed(const NProto::TError& error)
+{
+    OnAddHostFailedHandler(error);
+}
+
+void TDirectBlockGroupMock::OnRemoveHostSucceeded(
+    THostIndex removeIndex,
+    ui32 connectionConfigGeneration)
+{
+    OnRemoveHostSucceededHandler(removeIndex, connectionConfigGeneration);
+}
+
+void TDirectBlockGroupMock::OnRemoveHostFailed(
+    THostIndex removeIndex,
+    const NProto::TError& error)
+{
+    OnRemoveHostFailedHandler(removeIndex, error);
 }
 
 TDuration TDirectBlockGroupMock::TakeCopyRangeBudget(ui64 byteCount)

@@ -34,7 +34,9 @@ public:
     [[nodiscard]] virtual TCountAndSize GetPBuffersUsage(
         THostIndex hostIndex) const = 0;
 
-    virtual void QueryAddHost(THostIndex newHostIndex) = 0;
+    virtual void QueryAddHost() = 0;
+
+    virtual void QueryRemoveHost(THostIndex hostIndex) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

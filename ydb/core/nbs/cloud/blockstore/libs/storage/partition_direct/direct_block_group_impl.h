@@ -55,6 +55,8 @@ public:
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
+        THostMask removedSlots,
+        ui32 connectionConfigGeneration,
         NTransport::TStorageTransportPtr storageTransport,
         NMonitoring::TDynamicCounterPtr counters);
 
@@ -144,11 +146,21 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
-    void OnAddHostResult(
-        const NProto::TError& error,
+    void OnAddHostSucceeded(
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 connectionConfigGeneration) override;
+
+    void OnAddHostFailed(const NProto::TError& error) override;
+
+    void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 connectionConfigGeneration) override;
+
+    void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) override;
 
     TDuration TakeCopyRangeBudget(ui64 byteCount) override;
 
@@ -167,7 +179,8 @@ public:
         EHostState oldState,
         EHostState newState) override;
     TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const override;
-    void QueryAddHost(THostIndex newHostIndex) override;
+    void QueryAddHost() override;
+    void QueryRemoveHost(THostIndex hostIndex) override;
 
 private:
     friend struct TDBGFixture;
@@ -213,8 +226,17 @@ private:
         THostIndex hostIndex);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
+    // Takes the slot out of the runtime: nothing routes to it, nothing
+    // reconnects, its pbuffer id is free for BSC to grant again, and the
+    // oracle stops counting it as a host.
+    void MarkSlotDead(THostIndex slot);
+
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
+
+    // Returns the rejection reason, or an empty string when the host can
+    // be removed.
+    [[nodiscard]] TString ValidateRemoveHost(THostIndex hostIndex) const;
 
     [[nodiscard]] bool IsInitialized() const
     {
@@ -294,6 +316,14 @@ private:
     // DDiskConnections and PBufferConnections always have the same size.
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
+
+    // The connection config generation these connections were built from.
+    // Sent with every membership request so the partition can tell a decision
+    // made on a state this group has not seen yet.
+    ui32 ConnectionConfigGeneration = 0;
+
+    // Slots removed in this run: never reconnected, compacted at the start.
+    THostMask RemovedSlots;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;

@@ -448,6 +448,7 @@ message TStoragePDisk {
     string DecommitStatus = 10;
     uint64 SlotSize = 11;
     uint64 SlotCount = 12;
+    string MaintenanceStatus = 13;
     NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 50;
 }
 

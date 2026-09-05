@@ -7,6 +7,8 @@
 
 #include <ydb/library/aclib/user_context.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 using NTableIndex::NFulltext::TGen;
@@ -535,8 +537,10 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
 
     if (!Db.HasOpenTx(localTid, lockId)) {
         if (Db.HasRemovedTx(localTid, lockId)) {
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Committing removed changes lockId# " << lockId << " tid# " << localTid << " shard# " << Self.TabletID());
+            YDB_LOG_CRIT("Committing removed changes",
+                {"lockId", lockId},
+                {"tid", localTid},
+                {"shard", Self.TabletID()});
             Self.IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
         }
         return;
@@ -554,7 +558,10 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
     }
 
     if (VolatileTxId) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Scheduling commit of lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self.TabletID());
+        YDB_LOG_TRACE("Scheduling commit",
+            {"lockId", lockId},
+            {"localTid", localTid},
+            {"shard", Self.TabletID()});
         if (VolatileCommitTxIds.insert(lockId).second) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
@@ -567,7 +574,10 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
         return;
     }
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Committing changes lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self.TabletID());
+    YDB_LOG_TRACE("Committing changes",
+        {"lockId", lockId},
+        {"localTid", localTid},
+        {"shard", Self.TabletID()});
     Db.CommitTx(localTid, lockId, MvccVersion);
     Self.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(lockId, Db);
     CommittedTxIds.insert(lockId);

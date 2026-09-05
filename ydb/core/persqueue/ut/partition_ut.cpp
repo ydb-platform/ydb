@@ -2359,12 +2359,19 @@ Y_UNIT_TEST_F(SetOffsetsDoesNotStealSetOffsetReply, TPartitionFixture)
 
 namespace {
 
-TClientBlob MakeSetOffsetsTestBlob(const TString& data, ui64 seqNo, TInstant writeTs) {
+TClientBlob MakeSetOffsetsTestBlob(
+    const TString& data,
+    ui64 seqNo,
+    TInstant writeTs,
+    ui32 logicalMessageCount = 1,
+    bool isBatch = false)
+{
     TString sourceId = "src";
     TString payload = data;
     return TClientBlob(
         std::move(sourceId), seqNo, std::move(payload), TMaybe<TPartData>(),
-        writeTs, writeTs, 0, TString(), TString());
+        writeTs, writeTs, 0, TString(), TString(),
+        logicalMessageCount, isBatch);
 }
 
 TString PackSetOffsetsBatch(ui64 offset, const TVector<TClientBlob>& messages) {
@@ -2544,6 +2551,171 @@ Y_UNIT_TEST_F(SetOffsetsFromWrittenAtHonorsOffsetGapsInsideBlob, TPartitionFixtu
     })).Release());
 
     WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=5}}}});
+}
+
+// Timestamp before every message → StartOffset. Timestamp after every message → EndOffset.
+Y_UNIT_TEST_F(SetOffsetsFromWrittenAtBeforeAndAfterPartitionRange, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=3});
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 3u);
+    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(300);
+
+    CreateSession(client, session);
+
+    const auto ts0 = TInstant::Seconds(100);
+    const auto ts1 = TInstant::Seconds(200);
+    const auto ts2 = TInstant::Seconds(300);
+    const auto packed = PackSetOffsetsBatch(0, {
+        MakeSetOffsetsTestBlob("m0", 1, ts0),
+        MakeSetOffsetsTestBlob("m1", 2, ts1),
+        MakeSetOffsetsTestBlob("m2", 3, ts2),
+    });
+    cz.DataKeysBody[0].Size = Max<ui32>(cz.DataKeysBody[0].Size, packed.size());
+
+    auto waitSetOffsetsBlobRequest = [&]() {
+        TAutoPtr<IEventHandle> handle;
+        auto* blobRequest = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvBlobRequest>(
+            handle,
+            [](const TEvPQ::TEvBlobRequest& ev) {
+                return ev.Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForSetOffsets);
+            },
+            TDuration::Seconds(5));
+        UNIT_ASSERT(blobRequest);
+        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
+    };
+
+    auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
+        SendEvent(new TEvPQ::TEvSetOffsetsRequest(
+            "topic", client, partition.OriginalPartitionId,
+            NKikimrPQ::TEvSetOffsetsRequest::FROM_WRITTEN_AT, ts.MilliSeconds(), cookie));
+
+        auto blobRequest = waitSetOffsetsBlobRequest();
+        SendEvent(MakeSetOffsetsBlobResponse(*blobRequest, packed).Release());
+
+        WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=expectedOffset}}}});
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvSetOffsetsResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->GetCookie(), cookie);
+
+        SendGetOffset(cookie + 100, client);
+        WaitProxyResponse({.Cookie=cookie + 100, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=expectedOffset});
+    };
+
+    runAt(TInstant::Seconds(50), 1, 0);   // before first message
+    runAt(TInstant::Seconds(400), 2, 3);  // after last message → EndOffset
+}
+
+// Kafka batch is atomic: commit to the first offset of the batch or skip the whole batch.
+// Interior logical offsets of the batch are never chosen (batch body is not unpacked).
+Y_UNIT_TEST_F(SetOffsetsFromWrittenAtKafkaBatchIsAtomic, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    // Offsets: 0 (before), 1..3 (kafka batch LMC=3), 4 (after). Key.Count == total LMC == 5.
+    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=5});
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 5u);
+    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(300);
+
+    CreateSession(client, session);
+
+    const auto tsBefore = TInstant::Seconds(100);
+    const auto tsBatch = TInstant::Seconds(200);
+    const auto tsAfter = TInstant::Seconds(300);
+    const auto packed = PackSetOffsetsBatch(0, {
+        MakeSetOffsetsTestBlob("before", 1, tsBefore),
+        MakeSetOffsetsTestBlob("batch", 2, tsBatch, /*logicalMessageCount=*/3, /*isBatch=*/true),
+        MakeSetOffsetsTestBlob("after", 3, tsAfter),
+    });
+    cz.DataKeysBody[0].Size = Max<ui32>(cz.DataKeysBody[0].Size, packed.size());
+
+    // Pack/unpack must preserve kafka-batch atomicity before the partition path runs.
+    {
+        auto batches = GetUnpackedBatches(cz.DataKeysBody[0].Key, packed);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batches[0].Blobs.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(batches[0].Blobs[1].LogicalMessageCount, 3u);
+        UNIT_ASSERT(batches[0].Blobs[1].IsBatch);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(tsBatch, 0, batches), 1u);
+        // Sub-second deltas are fine for FindFirst; SetOffsets truncates to seconds when
+        // EnableSkipMessagesWithObsoleteTimestamp is on (the default).
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(tsBatch + TDuration::MilliSeconds(1), 0, batches), 4u);
+        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(tsAfter + TDuration::MilliSeconds(1), 0, batches).Defined());
+    }
+
+    auto waitSetOffsetsBlobRequest = [&]() {
+        TAutoPtr<IEventHandle> handle;
+        auto* blobRequest = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvBlobRequest>(
+            handle,
+            [](const TEvPQ::TEvBlobRequest& ev) {
+                return ev.Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForSetOffsets);
+            },
+            TDuration::Seconds(5));
+        UNIT_ASSERT(blobRequest);
+        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
+    };
+
+    auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
+        SendEvent(new TEvPQ::TEvSetOffsetsRequest(
+            "topic", client, partition.OriginalPartitionId,
+            NKikimrPQ::TEvSetOffsetsRequest::FROM_WRITTEN_AT, ts.MilliSeconds(), cookie));
+
+        auto blobRequest = waitSetOffsetsBlobRequest();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            blobRequest->Blobs.size(), 1u,
+            "expected a single candidate blob for SetOffsets");
+        UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs[0].Count, 5u);
+        {
+            TRequestedBlob probe(
+                blobRequest->Blobs[0].Offset,
+                blobRequest->Blobs[0].PartNo,
+                blobRequest->Blobs[0].Count,
+                blobRequest->Blobs[0].InternalPartsCount,
+                Max<ui32>(blobRequest->Blobs[0].Size, packed.size()),
+                packed,
+                blobRequest->Blobs[0].Key,
+                blobRequest->Blobs[0].CreationUnixTime);
+            auto batches = probe.GetBatches();
+            UNIT_ASSERT(batches);
+            auto found = FindFirstOffsetAtOrAfterTimestamp(ts, 0, *batches);
+            if (expectedOffset == 5) {
+                UNIT_ASSERT(!found.Defined());
+            } else {
+                UNIT_ASSERT(found.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(*found, expectedOffset);
+            }
+        }
+        SendEvent(MakeSetOffsetsBlobResponse(*blobRequest, packed).Release());
+
+        WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=expectedOffset}}}});
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvSetOffsetsResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->GetCookie(), cookie);
+
+        SendGetOffset(cookie + 100, client);
+        WaitProxyResponse({.Cookie=cookie + 100, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=expectedOffset});
+    };
+
+    // Use whole-second timestamps: SetOffsetsTimestamp truncates ms when
+    // EnableSkipMessagesWithObsoleteTimestamp is enabled (default).
+    runAt(tsBatch, 1, 1);                             // first offset of the batch
+    runAt(tsBatch + TDuration::Seconds(1), 2, 4);     // skip whole batch → message after
+    runAt(tsAfter + TDuration::Seconds(1), 3, 5);     // after last → EndOffset
 }
 
 // Compactification replies with IsInternal=true. Those must not be treated as timestamp-read

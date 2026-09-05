@@ -1487,12 +1487,26 @@ Y_UNIT_TEST_SUITE(FindFirstOffsetAtOrAfterTimestamp) {
             MakeSimpleBlob("a", 3, "after"),
         };
         // Batch occupies offsets 11,12,13. Do not unpack: either first of the batch or first after it.
+        // Interior offsets 12/13 are never returned.
         UNIT_ASSERT_VALUES_EQUAL(
             *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(102), 10, blobs), 11u);
         UNIT_ASSERT_VALUES_EQUAL(
             *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(102) + TDuration::MilliSeconds(1), 10, blobs), 14u);
         UNIT_ASSERT_VALUES_EQUAL(
             *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(103), 10, blobs), 14u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(101), 10, blobs), 10u); // before first
+        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(104), 10, blobs).Defined()); // after last
+    }
+
+    Y_UNIT_TEST(BeforeFirstAndAfterLastMessage) {
+        const TVector<TClientBlob> blobs = {
+            MakeSimpleBlob("a", 1, "m1"),
+            MakeSimpleBlob("a", 2, "m2"),
+        };
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(50), 10, blobs), 10u);
+        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(200), 10, blobs).Defined());
     }
 
     Y_UNIT_TEST(MultipartMessageUsesFirstPartTimestamp) {

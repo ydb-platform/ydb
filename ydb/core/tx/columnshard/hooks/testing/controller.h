@@ -60,6 +60,19 @@ private:
 
     public:
         void AddPathId(const TUnifiedPathId& pathId) {
+            // If this SchemeShardLocalPathId was previously mapped to a different InternalPathId
+            // (e.g., after a TRUNCATE generation swap), remove the stale mapping first.
+            if (const auto itOld = SchemeShardLocalToInternal.find(pathId.SchemeShardLocalPathId);
+                itOld != SchemeShardLocalToInternal.end() && itOld->second != pathId.InternalPathId) {
+                if (const auto itInternal = InternalToSchemeShardLocal.find(itOld->second);
+                    itInternal != InternalToSchemeShardLocal.end()) {
+                    itInternal->second.erase(pathId.SchemeShardLocalPathId);
+                    if (itInternal->second.empty()) {
+                        InternalToSchemeShardLocal.erase(itInternal);
+                    }
+                }
+                SchemeShardLocalToInternal.erase(itOld);
+            }
             AFL_VERIFY(InternalToSchemeShardLocal[pathId.InternalPathId].emplace(pathId.SchemeShardLocalPathId).second);
             AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).second);
         }
@@ -350,6 +363,7 @@ public:
     }
 
     ui64 GetNodePortionsCountLimitVerified(const ui64 tabletId = 0) const;
+    ui64 GetPortionsCount() const;
 
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);

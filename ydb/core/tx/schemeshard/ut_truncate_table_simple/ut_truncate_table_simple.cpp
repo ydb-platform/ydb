@@ -191,6 +191,43 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             {NLs::PathExist});
     }
 
+    Y_UNIT_TEST(TruncateReadOnlyColumnTableFails) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        // Source standalone column table.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Read-only backup copy of the column table.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableCopy"
+            CopyFromTable: "/MyRoot/ColumnTable"
+            IsBackup: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // TRUNCATE of the read-only backup copy must be rejected by the schemeshard.
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "ColumnTableCopy",
+                         {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableCopy"),
+            {NLs::PathExist});
+    }
+
     Y_UNIT_TEST(TruncateNonExistentTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -229,6 +266,135 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
                          {NKikimrScheme::StatusPreconditionFailed});
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(TruncateTableWithColumnFamilies) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            Columns { Name: "id" Type: "Uint64" FamilyName: "default" }
+            Columns { Name: "text" Type: "String" FamilyName: "alt" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: [ "id" ]
+            PartitionConfig {
+                ColumnFamilies {
+                    Id: 0
+                    ColumnCodec: ColumnCodecPlain
+                    ColumnCache: ColumnCacheNone
+                    ColumnCacheMode: ColumnCacheModeRegular
+                    StorageConfig {
+                        SysLog {}
+                        Log {}
+                    }
+                }
+                ColumnFamilies {
+                    Name: "alt"
+                    ColumnCodec: ColumnCodecLZ4
+                    ColumnCache: ColumnCacheNone
+                    ColumnCacheMode: ColumnCacheModeRegular
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Column families are allowed with TRUNCATE for row tables.
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(TruncateColumnTableWithTiering) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        options.EnableTieringInColumnShard(true);
+        options.RunFakeConfigDispatcher(true);
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tier1"
+            SourceType: "ObjectStorage"
+            Location: "http://fake.fake/fake"
+            Auth: {
+                Aws: {
+                    AwsAccessKeyIdSecretName: "secret"
+                    AwsSecretAccessKeySecretName: "secret"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+            TtlSettings {
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 3600
+                        EvictToExternalStorage {
+                            Storage: "/MyRoot/Tier1"
+                        }
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "ColumnTable",
+                         {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
+            {NLs::PathExist,
+             NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(3600), "/MyRoot/Tier1")});
+    }
+
+    Y_UNIT_TEST(TruncateColumnTablePreservesTtl) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+            TtlSettings {
+                Enabled {
+                    ColumnName: "timestamp"
+                    ExpireAfterSeconds: 3600
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
+            {NLs::PathExist,
+             NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(3600))});
+
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        // Pure TTL (delete action, no tiering) must survive TRUNCATE on the SchemeShard side.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
+            {NLs::PathExist,
+             NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(3600))});
     }
 
     Y_UNIT_TEST(TruncateTableWithIndexAndCdcStream) {

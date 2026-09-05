@@ -16,6 +16,7 @@ RECURSE(
     mixedpy
     nfs_backups
     node_broker
+    olap_truncate
     olap_workload
     oltp_workload
     reconfig_state_storage_workload

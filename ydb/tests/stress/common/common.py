@@ -123,7 +123,7 @@ class WorkloadBase:
             f()
         except Exception as e:
             logger.exception(f"FATAL: {e}")
-            os._exit(1)
+            raise
 
     def join(self, timeout: Optional[float] = None):
         for t in self.workload_entities:

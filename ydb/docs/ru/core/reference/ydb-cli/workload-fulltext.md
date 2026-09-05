@@ -118,7 +118,7 @@ fulltext            YDB fulltext workload
 
 При генерации текста параметры `--min-sentence-len` и `--max-sentence-len` используются для того чтобы случайно сгенерировать целевую длину текста, для генерации используется равномерное распределение.
 
-{% include [load_options](./_includes/workload/load_options.md) %}
+См. также [общие параметры команды import](#load_options) выше.
 
 ## Запуск нагрузки {#run}
 
@@ -164,7 +164,7 @@ fulltext            YDB fulltext workload
 | `--min-sentence-len <значение>` | Минимальное количество слов в генерируемом документе. | `100` |
 | `--max-sentence-len <значение>` | Максимальное количество слов в генерируемом документе. | `1000` |
 
-{% include [run_options](./_includes/workload/run_options.md) %}
+См. также [общие параметры для всех видов нагрузки](#run_options) выше.
 
 ## Построение модели цепи Маркова {#model}
 

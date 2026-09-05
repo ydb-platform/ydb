@@ -128,7 +128,7 @@ For more details on `--kmeans-tree-*` index building parameters, see [kmeans-tre
 
 {% endnote %}
 
-{% include [load_options](./_includes/workload/load_options.md) %}
+See also the [common import parameters](#load_options) listed above.
 
 ## Building a vector index {#build-index}
 
@@ -226,7 +226,7 @@ Continuously inserts new vector rows into the table, generating random embedding
 | `--prefixed` | Generate upserts with a `prefix` column (for prefixed indexes). | |
 | `--prefix-count <value>` | Number of distinct prefix values. Used only when `--prefixed` is set. | `1000` |
 
-{% include [run_options](./_includes/workload/run_options.md) %}
+See also the [common run parameters](#run_options) listed above.
 
 ## Cleaning up {#cleanup}
 

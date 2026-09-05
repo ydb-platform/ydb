@@ -540,8 +540,10 @@ protected:
     }
 
     void Reply(NProtoBuf::Message* proto, ui32 status = 0) override {
-        Y_UNUSED(proto, status);
-        Y_ABORT("Expected TLocalGrpcContext::Reply only for stream");
+        Y_UNUSED(status);
+        auto resp = dynamic_cast<TResponsePart*>(proto);
+        Y_ABORT_UNLESS(resp);
+        DoPushResponse(TResponsePart(*resp), EStreamCtrl::CONT);
     }
 
     void Reply(grpc::ByteBuffer* bytes, ui32 status = 0, EStreamCtrl ctrl = EStreamCtrl::CONT) override {

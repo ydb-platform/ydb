@@ -56,8 +56,8 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
-        "enable_dq_source_stream_lookup_join_local_lookups", False
-    )  # TODO YQ-5431
+        "enable_dq_source_stream_lookup_join_local_lookups", True
+    )
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
         "enable_dq_source_stream_lookup_join_shuffle_mode", True

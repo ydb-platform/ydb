@@ -64,7 +64,8 @@ private:
             // (e.g., after a TRUNCATE generation swap), remove the stale mapping first.
             if (const auto itOld = SchemeShardLocalToInternal.find(pathId.SchemeShardLocalPathId);
                 itOld != SchemeShardLocalToInternal.end() && itOld->second != pathId.InternalPathId) {
-                if (const auto itInternal = InternalToSchemeShardLocal.find(itOld->second); itInternal != InternalToSchemeShardLocal.end()) {
+                if (const auto itInternal = InternalToSchemeShardLocal.find(itOld->second);
+                    itInternal != InternalToSchemeShardLocal.end()) {
                     itInternal->second.erase(pathId.SchemeShardLocalPathId);
                     if (itInternal->second.empty()) {
                         InternalToSchemeShardLocal.erase(itInternal);
@@ -355,18 +356,10 @@ public:
         return ShardActuals.size();
     }
 
-    const ::NKikimr::NColumnShard::TColumnShard* GetShard() const {
-        TGuard<TMutex> g(Mutex);
-        if (ShardActuals.size() != 1) {
-            return nullptr;
-        }
-        return ShardActuals.begin()->second;
-    }
-
     const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
-        const auto* shard = GetShard();
-        AFL_VERIFY(shard);
-        return shard;
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ShardActuals.size() == 1);
+        return ShardActuals.begin()->second;
     }
 
     ui64 GetNodePortionsCountLimitVerified(const ui64 tabletId = 0) const;

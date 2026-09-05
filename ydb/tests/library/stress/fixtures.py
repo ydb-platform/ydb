@@ -19,11 +19,19 @@ class StressFixture:
 
     def setup_cluster(self, erasure=None, **kwargs):
         erasure = erasure or self.base_erasure
+        pq_config = kwargs.pop('pq_config', None)
         self.config = KikimrConfigGenerator(
             binary_paths=self.all_binary_paths,
             erasure=erasure,
             **kwargs,
         )
+        if pq_config:
+            dst = self.config.yaml_config.setdefault('pqconfig', {})
+            for key, value in pq_config.items():
+                if isinstance(value, dict) and isinstance(dst.get(key), dict):
+                    dst[key].update(value)
+                else:
+                    dst[key] = value
 
         self.cluster = KiKiMR(self.config)
         self.cluster.start()

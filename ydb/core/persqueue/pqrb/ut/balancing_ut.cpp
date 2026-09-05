@@ -47,6 +47,24 @@ Y_UNIT_TEST(PartitionStateMachine) {
     UNIT_ASSERT(partition.BalanceToOtherPipe());
     UNIT_ASSERT(!partition.NeedReleaseChildren());
     UNIT_ASSERT(partition.StopReading());
+    UNIT_ASSERT(!partition.ReadingFinished);
+    UNIT_ASSERT(!partition.BalanceToOtherPipe());
+}
+
+Y_UNIT_TEST(StopReadingClearsFinishAndKeepsCommit) {
+    NBalancing::TPartition partition;
+
+    UNIT_ASSERT(partition.SetFinishedState(/*scaleAwareSDK=*/true, /*startedReadingFromEndOffset=*/false));
+    UNIT_ASSERT(partition.SetCommittedState(1, 1));
+    UNIT_ASSERT(partition.ReadingFinished);
+    UNIT_ASSERT(partition.Commited);
+    UNIT_ASSERT(partition.IsInactive());
+
+    UNIT_ASSERT(!partition.StopReading());
+    UNIT_ASSERT(!partition.ReadingFinished);
+    UNIT_ASSERT(partition.Commited);
+    UNIT_ASSERT(partition.IsInactive());
+    UNIT_ASSERT(!partition.NeedReleaseChildren());
 }
 
 Y_UNIT_TEST(DestroyFreeFamilyOnRereadParentDoesNotCrash) {
@@ -217,5 +235,480 @@ Y_UNIT_TEST(BalancingUnsubscribeRemovesOnlyMatchingSubscription) {
 }
 
 } // Y_UNIT_TEST_SUITE(TPqrbBalancing)
+
+Y_UNIT_TEST_SUITE(TPqrbMergeBalancing) {
+
+Y_UNIT_TEST(CommitThenParentReleaseDoesNotReattachMergeChild) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.Commit(0);
+    env.Commit(1);
+
+    env.RegisterSession("session-child", {3});
+    env.AssertLocked(2, "session-child");
+
+    env.RegisterSession("session-pref", {1});
+    env.AssertLocked(0, "session-pref");
+    env.AssertLocked(2, "session-child");
+    UNIT_ASSERT_C(!env.SessionOf(1).empty(), "the other merge parent must stay assigned");
+}
+
+Y_UNIT_TEST(DisconnectResetsFinishUntilParentsAreFinishedAgain) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertSameSession({0, 1, 2});
+
+    env.RegisterSession("session-1");
+    env.AssertSameSession({0, 1, 2});
+
+    const TString owner = env.SessionOf(0);
+    UNIT_ASSERT_C(owner == "session-0" || owner == "session-1", owner);
+    const TString survivor = owner == "session-0" ? "session-1" : "session-0";
+
+    env.DisconnectSession(owner);
+    env.AssertLocked(0, survivor);
+    env.AssertLocked(1, survivor);
+    env.AssertNotLocked(2);
+
+    env.Finish(survivor, 0);
+    env.Finish(survivor, 1);
+    env.AssertSameSession({0, 1, 2});
+}
+
+Y_UNIT_TEST(SpecialParentJoinsCommonFamilyOnMerge) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+    env.Finish("session-pref", 1);
+    env.Finish("session-common", 0);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-common");
+    env.AssertLocked(2, "session-common");
+}
+
+Y_UNIT_TEST(SpecialParentJoinsCommonFamilyOnMergeAfterCommonFinish) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+    env.Finish("session-common", 0);
+    env.Finish("session-pref", 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-common");
+    env.AssertLocked(2, "session-common");
+}
+
+Y_UNIT_TEST(MergeFreeFamilyIntoReleasingKeepsPartitionMapping) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+
+    env.Finish("session-common", 0);
+
+    // A preferred session for the common parent forces that family to start
+    // releasing. Do not ack the release: the family stays Releasing.
+    env.RegisterSession("session-steal", {1}, /*pump=*/false);
+
+    env.Finish("session-pref", 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    // Completing the special family's merge-release while the common parent is
+    // still Releasing used to Destroy the free family without remapping, then
+    // crash in GetReadSessionsInfo: "Use of destroyed hash table".
+    env.AckRelease(env.Pipes.at("session-pref"), 1, "session-pref");
+    DispatchFor(env.tc);
+    env.SessionsInfo();
+
+    env.Pump();
+    env.AssertSameSession({0, 1});
+    UNIT_ASSERT_C(!env.SessionOf(2).empty(), "merge child must be assigned");
+}
+
+Y_UNIT_TEST(DisconnectPreferredDuringMergeDoesNotLeaveDanglingFamily) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+
+    env.Finish("session-common", 0);
+    env.RegisterSession("session-steal", {1}, /*pump=*/false);
+    env.Finish("session-pref", 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    // Disconnect while the preferred family is still waiting to merge. Reset(Merge)
+    // used to Destroy the family and still return true, so UnregisterReadingSession
+    // stuffed a dangling pointer into UnreadableFamilies and the next
+    // GetReadSessionsInfo crashed: "Use of destroyed hash table".
+    env.DisconnectSession("session-pref");
+    env.SessionsInfo();
+
+    env.Pump();
+    UNIT_ASSERT_C(!env.SessionOf(0).empty(), "parent 0 must stay assigned");
+}
+
+Y_UNIT_TEST(CommitThenRebalanceKeepsMergeChildIndependent) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertSameSession({0, 1, 2});
+
+    env.Commit(0);
+    env.Commit(1);
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+}
+
+} // Y_UNIT_TEST_SUITE(TPqrbMergeBalancing)
+
+Y_UNIT_TEST_SUITE(TPqrbSplitBalancing) {
+
+Y_UNIT_TEST(ChildrenStayUnlockedWhileParentIsActive) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+}
+
+Y_UNIT_TEST(ScaleAwareFinishLocksChildrenOnSameSession) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+}
+
+Y_UNIT_TEST(OldSdkFinishWithoutFromEndLeavesChildrenUnlocked) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/false);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+}
+
+Y_UNIT_TEST(OldSdkFinishFromEndKeepsChildrenInSeparateFamilies) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+}
+
+Y_UNIT_TEST(RereadLonelyParentWithoutCommitUnlocksChildren) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.Started("session-0", 0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(CommitThenParentReleaseDoesNotReattachSplitChildren) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.Commit(0);
+    env.RegisterSession("session-child", {2});
+    env.AssertLocked(1, "session-child");
+
+    env.RegisterSession("session-pref", {1});
+    env.AssertLocked(0, "session-pref");
+    env.AssertLocked(1, "session-child");
+    UNIT_ASSERT_C(!env.SessionOf(2).empty(), "the other split child must stay assigned");
+    UNIT_ASSERT_VALUES_UNEQUAL(env.SessionOf(2), env.SessionOf(0));
+}
+
+Y_UNIT_TEST(PreferredUnreadableChildIsLockedForPreferredSession) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.RegisterSession("session-child", {2});
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1, "session-child");
+    env.AssertNotLocked(2);
+
+    env.Finish("session-0", 0);
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1, "session-child");
+    env.AssertLocked(2, "session-0");
+}
+
+Y_UNIT_TEST(CommitThenRebalanceKeepsChildrenIndependent) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.Commit(0);
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+
+    const TString parentSession = env.SessionOf(0);
+    UNIT_ASSERT_C(!parentSession.empty(), "parent must stay assigned");
+    ui32 childrenWithParent = 0;
+    for (ui32 child : {1u, 2u}) {
+        const TString childSession = env.SessionOf(child);
+        UNIT_ASSERT_C(!childSession.empty(), "child " << child << " must stay assigned");
+        if (childSession == parentSession) {
+            ++childrenWithParent;
+        }
+    }
+    UNIT_ASSERT_C(childrenWithParent < 2,
+        "committed split children must not be glued back to the parent family on rebalance");
+}
+
+Y_UNIT_TEST(DisconnectResetsFinishUntilParentIsFinishedAgain) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.RegisterSession("session-1");
+    env.AssertSameSession({0, 1, 2});
+
+    const TString owner = env.SessionOf(0);
+    UNIT_ASSERT_C(owner == "session-0" || owner == "session-1", owner);
+    const TString survivor = owner == "session-0" ? "session-1" : "session-0";
+
+    env.DisconnectSession(owner);
+    env.AssertLocked(0, survivor);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish(survivor, 0);
+    env.AssertSameSession({0, 1, 2});
+    env.AssertLocked(0, survivor);
+    env.AssertLocked(1, survivor);
+    env.AssertLocked(2, survivor);
+}
+
+Y_UNIT_TEST(DisconnectKeepsCommitSoChildrenStayReadable) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+    env.Commit(0);
+
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+
+    env.DisconnectSession("session-0");
+    env.AssertLocked(0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+    UNIT_ASSERT_VALUES_EQUAL(env.SessionOf(0), TString("session-1"));
+    UNIT_ASSERT_VALUES_EQUAL(env.SessionOf(1), TString("session-1"));
+    UNIT_ASSERT_VALUES_EQUAL(env.SessionOf(2), TString("session-1"));
+}
+
+Y_UNIT_TEST(LastSessionDisconnectDropsFinishAndCommit) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.Commit(0);
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+
+    env.DisconnectSession("session-0");
+    env.RegisterSession("session-1");
+    env.AssertLocked(0, "session-1");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish("session-1", 0);
+    env.AssertSameSession({0, 1, 2});
+}
+
+Y_UNIT_TEST(OldSdkDisconnectResetsFinishOnParentSession) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.RegisterSession("session-1");
+
+    const TString parentSession = env.SessionOf(0);
+    UNIT_ASSERT_C(!parentSession.empty(), "parent must stay assigned after old-SDK finish");
+    env.DisconnectSession(parentSession);
+
+    const TString survivor = parentSession == "session-0" ? "session-1" : "session-0";
+    env.AssertLocked(0, survivor);
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+}
+
+Y_UNIT_TEST(ScaleAwareFinishCommitThenSecondCommonSessionKeepsChildrenIndependent) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.Commit(0);
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+
+    const TString parentSession = env.SessionOf(0);
+    UNIT_ASSERT_C(!parentSession.empty(), "parent must stay assigned after rebalance");
+    absl::flat_hash_set<TString> childSessions;
+    ui32 childrenWithParent = 0;
+    for (ui32 child : {1u, 2u}) {
+        const TString childSession = env.SessionOf(child);
+        UNIT_ASSERT_C(!childSession.empty(), "child " << child << " must stay assigned");
+        childSessions.insert(childSession);
+        if (childSession == parentSession) {
+            ++childrenWithParent;
+        }
+    }
+    UNIT_ASSERT_C(childrenWithParent < 2,
+        "committed split children must stay in their own families, not glued back to the parent");
+    UNIT_ASSERT_C(childSessions.size() == 2 || childrenWithParent == 0,
+        "independent child families must be able to sit on a different session than the parent");
+}
+
+} // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
+
+Y_UNIT_TEST_SUITE(TPqrbExplicitPartitionBalancing) {
+
+Y_UNIT_TEST(PreferredParentDoesNotGrowOnSplitFinish) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {1});
+    env.Split(0);
+    env.AssertLocked(0, "session-pref");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.Finish("session-pref", 0);
+    env.AssertLocked(0, "session-pref");
+    env.AssertLocked(1, "session-common");
+    env.AssertLocked(2, "session-common");
+    UNIT_ASSERT_VALUES_UNEQUAL(env.SessionOf(1), TString("session-pref"));
+    UNIT_ASSERT_VALUES_UNEQUAL(env.SessionOf(2), TString("session-pref"));
+}
+
+Y_UNIT_TEST(PreferredSplitChildrenStayLockedWhileParentIsActive) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-common");
+    env.Split(0);
+    env.RegisterSession("session-left", {2});
+    env.RegisterSession("session-right", {3});
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-left");
+    env.AssertLocked(2, "session-right");
+
+    env.Finish("session-common", 0);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-left");
+    env.AssertLocked(2, "session-right");
+}
+
+Y_UNIT_TEST(DisconnectPreferredUnreadableChildDoesNotAssignItToCommon) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-common");
+    env.Split(0);
+    env.RegisterSession("session-child", {2});
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-child");
+    env.AssertNotLocked(2);
+
+    env.DisconnectSession("session-child");
+    env.AssertLocked(0, "session-common");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+}
+
+Y_UNIT_TEST(TwoSpecialMergeParentsDoNotAbsorbEachOther) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-left", {1});
+    env.RegisterSession("session-right", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-left");
+    env.AssertLocked(1, "session-right");
+    env.AssertNotLocked(2);
+
+    env.Finish("session-left", 0);
+    env.Finish("session-right", 1);
+    env.AssertLocked(0, "session-left");
+    env.AssertLocked(1, "session-right");
+    env.AssertNotLocked(2);
+
+    env.RegisterSession("session-common");
+    env.AssertLocked(0, "session-left");
+    env.AssertLocked(1, "session-right");
+    env.AssertLocked(2, "session-common");
+}
+
+} // Y_UNIT_TEST_SUITE(TPqrbExplicitPartitionBalancing)
 
 } // namespace NKikimr::NPQ

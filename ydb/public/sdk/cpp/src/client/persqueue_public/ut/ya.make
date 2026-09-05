@@ -33,6 +33,7 @@ SRCS(
     compress_executor_ut.cpp
     compression_ut.cpp
     retry_policy_ut.cpp
+    write_session_connect_ut.cpp
 )
 
 END()

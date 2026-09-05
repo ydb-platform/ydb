@@ -464,8 +464,7 @@ TInternalPathId TTablesManager::GetOrCreateInternalPathId(const TSchemeShardLoca
     }
 }
 
-NKikimrTxColumnShard::TTableVersionInfo TTablesManager::LoadLastTableVersionInfo(
-    const TInternalPathId pathId, NIceDb::TNiceDb& db) const {
+NKikimrTxColumnShard::TTableVersionInfo TTablesManager::LoadLastTableVersionInfo(const TInternalPathId pathId, NIceDb::TNiceDb& db) const {
     const auto* table = Tables.FindPtr(pathId);
     AFL_VERIFY(table)("path_id", pathId);
     AFL_VERIFY(!table->GetVersions().empty())("path_id", pathId);
@@ -474,7 +473,8 @@ NKikimrTxColumnShard::TTableVersionInfo TTablesManager::LoadLastTableVersionInfo
     AFL_VERIFY(rowset.IsReady())("path_id", pathId)("version", version.DebugString());
     AFL_VERIFY(!rowset.EndOfSet())("path_id", pathId)("version", version.DebugString());
     NKikimrTxColumnShard::TTableVersionInfo versionInfo;
-    AFL_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()))("path_id", pathId)("version", version.DebugString());
+    AFL_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()))("path_id", pathId)(
+        "version", version.DebugString());
     return versionInfo;
 }
 
@@ -524,7 +524,7 @@ void TTablesManager::DropTable(
         }
         Schema::EraseTableInfoV1(db, pathId, schemeShardLocalPathId);
         table->Remove(schemeShardLocalPathId);
-        AFL_VERIFY(ForgetLivePathIdIfMatches(schemeShardLocalPathId, pathId));
+        ForgetLivePathIdVerified(schemeShardLocalPathId, pathId);
         ForgetGeneration(schemeShardLocalPathId, pathId);
         NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
     } else {
@@ -701,7 +701,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
     for (const auto& unifiedPathId : itTable->second.GetPathIds()) {
         const auto ss = unifiedPathId.GetSchemeShardLocalPathId();
-        AFL_VERIFY(ForgetLivePathIdIfMatches(ss, pathId));
+        ForgetLivePathIdVerified(ss, pathId);
         ForgetGeneration(ss, pathId);
     }
     // Clean up TTL history for the dropped path so Ttl does not accumulate
@@ -722,7 +722,7 @@ void TTablesManager::MoveTablePropose(const TSchemeShardLocalPathId srcSchemeSha
     const auto& internalPathId = ResolveInternalPathId(srcSchemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
     AFL_VERIFY(RenamingLocalToInternal.emplace(srcSchemeShardLocalPathId, *internalPathId).second)("src_internal_path_id", internalPathId);
-    AFL_VERIFY(ForgetLivePathIdIfMatches(srcSchemeShardLocalPathId, *internalPathId));
+    ForgetLivePathIdVerified(srcSchemeShardLocalPathId, *internalPathId);
 }
 
 void TTablesManager::CopyTablePropose(const TSchemeShardLocalPathId srcSchemeShardLocalPathId) {
@@ -811,8 +811,8 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     AddToHistory(dstSchemeShardLocalPathId, internalPathId);
 }
 
-bool TTablesManager::TruncateTableProgress(const TSchemeShardLocalPathId schemeShardLocalPathId,
-    const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
+bool TTablesManager::TruncateTableProgress(
+    const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     // Resolve old InternalPathId from fence.
     const auto* pInternalPathId = TruncatingLocalToInternal.FindPtr(schemeShardLocalPathId);
     AFL_VERIFY(pInternalPathId)("ss", schemeShardLocalPathId);
@@ -908,7 +908,7 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
         addrPred = addr;
         if (ignoreToVersion) {
             AFL_VERIFY(*ignoreToVersion == i.second->GetIndexInfo().GetVersion())("ignore_to", *ignoreToVersion)(
-                                              "next_version", i.second->GetIndexInfo().GetVersion());
+                                             "next_version", i.second->GetIndexInfo().GetVersion());
         }
         if (auto ignoreToVersion = index.MutableVersionedIndex().ExtractIgnoreSchemaVersionFor(i.second->GetIndexInfo().GetVersion())) {
             YDB_LOG_WARN("",

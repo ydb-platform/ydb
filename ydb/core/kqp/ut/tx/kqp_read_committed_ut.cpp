@@ -320,6 +320,124 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
+    // Verifies that Read Committed uses a fresh snapshot for each operation
+    // (ExecuteQuery) inside a long-running transaction and does not cache the
+    // snapshot from the first operation in the shared buffer lock actor.
+    // All TEvLockRows requests of one operation must carry that operation's own
+    // snapshot, and consecutive operations must observe different snapshots.
+    class TReadCommittedFreshSnapshotPerOperation : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            std::vector<std::pair<ui64, ui64>> lockSnapshots;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    auto* lockEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvLockRows>();
+                    const auto& snapshot = lockEv->Record.GetSnapshot();
+                    lockSnapshots.emplace_back(snapshot.GetStep(), snapshot.GetTxId());
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER {
+                runtime.SetObserverFunc(saveObserver);
+            };
+
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            // Begin a Read Committed transaction
+            {
+                auto future0 = Kikimr->RunInThreadPool([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                });
+                auto result0 = runtime.WaitFuture(future0);
+                UNIT_ASSERT_VALUES_EQUAL_C(result0.GetStatus(), EStatus::SUCCESS, result0.GetIssues().ToString());
+                auto tx1 = result0.GetTransaction();
+                UNIT_ASSERT(tx1);
+
+                // First write operation: the buffer lock actor caches its snapshot.
+                {
+                    auto future1 = Kikimr->RunInThreadPool([&] {
+                        return session1.ExecuteQuery(Q_(R"(
+                            UPDATE `/Root/Test` SET Amount = 100u WHERE Name == "Paul";
+                        )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                    });
+                    auto result1 = runtime.WaitFuture(future1);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+                }
+
+                UNIT_ASSERT(lockSnapshots.size() >= 1);
+                const auto firstSnapshot = lockSnapshots.front();
+
+                // Read Committed operations execute as immediate (uncoordinated) writes, so they
+                // don't advance the coordinator's read-step (TEvAcquireReadStep returns
+                // Max(LastSentStep, LastAcquired) without incrementing). To make the next
+                // operation observe a different (fresh) snapshot value, an independent
+                // coordinator-planned (serializable, read+write) transaction must move the
+                // time first; otherwise a correct implementation and the buggy one emit
+                // identical lock snapshots and the test cannot tell them apart.
+                // Serializable writes don't emit TEvLockRows, so only session1's
+                // operations contribute to lockSnapshots.
+                {
+                    auto futureCommit = Kikimr->RunInThreadPool([&] {
+                        return session2.ExecuteQuery(Q_(R"(
+                            UPDATE `/Root/Test` SET Amount = 7300ul WHERE Name == "Tony";
+                        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                    });
+                    auto resultCommit = runtime.WaitFuture(futureCommit);
+                    UNIT_ASSERT_VALUES_EQUAL_C(resultCommit.GetStatus(), EStatus::SUCCESS, resultCommit.GetIssues().ToString());
+                }
+
+                // Second write operation in the same transaction must acquire and use
+                // a fresh snapshot, and must not reuse the first operation's cached one.
+                {
+                    auto future2 = Kikimr->RunInThreadPool([&] {
+                        return session1.ExecuteQuery(Q_(R"(
+                            UPDATE `/Root/Test` SET Amount = 200u WHERE Name == "Paul";
+                        )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                    });
+                    auto result2 = runtime.WaitFuture(future2);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                }
+
+                UNIT_ASSERT(lockSnapshots.size() >= 2);
+
+                bool sawFreshSnapshot = false;
+                for (const auto& snapshot : lockSnapshots) {
+                    if (snapshot != firstSnapshot) {
+                        sawFreshSnapshot = true;
+                        break;
+                    }
+                }
+                UNIT_ASSERT_C(sawFreshSnapshot,
+                    "Read Committed must use a per-operation snapshot, but all TEvLockRows "
+                    "requests carried the same (cached) snapshot from the first operation");
+
+                {
+                    auto future3 = Kikimr->RunInThreadPool([&] {
+                        return tx1->Commit().ExtractValueSync();
+                    });
+                    auto result3 = runtime.WaitFuture(future3);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+                }
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TReadCommittedFreshSnapshotPerOperationOltp) {
+        TReadCommittedFreshSnapshotPerOperation tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     class TReadCommittedTakesLocks : public TTableDataModificationTester {
     public:
         TReadCommittedTakesLocks(TString effectQuery, size_t evReadsExpected, size_t evWritesExpected, size_t evLocksExpected)

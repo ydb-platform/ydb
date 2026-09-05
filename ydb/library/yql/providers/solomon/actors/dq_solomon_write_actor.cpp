@@ -123,6 +123,13 @@ public:
     {
         SINK_LOG_D("Init");
         EgressStats.Level = statsLevel;
+        switch (WriteParams.Shard.GetClusterType()) {
+            case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
+            case NSo::NProto::ESolomonClusterType::CT_MONITORING:
+                break;
+            default:
+                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(WriteParams.Shard.GetClusterType()));
+        }
     }
 
     STRICT_STFUNC(StateFunc,
@@ -340,32 +347,19 @@ private:
         metricsCount = 0;
     }
 
-    std::optional<NHttp::THttpOutgoingRequestPtr> BuildSolomonRequest(const TString& data) {
-        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Url);
-        
-        if (!FillAuth(httpRequest)) {
-            return {};
-        }
-
+    static NHttp::THttpOutgoingRequestPtr BuildSolomonRequest(const TString& data, const TString& url, auto clusterType, const auto& authToken) {
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(url);
         httpRequest->Set("x-client-id", "yandex-query");
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/json");
+        FillAuth(httpRequest, clusterType, authToken);
         httpRequest->Set<&NHttp::THttpRequest::Body>(data);
         return httpRequest;
     }
 
-    bool FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
+    static void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest, auto clusterType, const auto& authToken) {
         const TString authorizationHeader = "Authorization";
 
-        TString authToken;
-        try {
-            authToken = CredentialsProvider->GetAuthInfo();
-        } catch (const std::exception& ex) {
-            TIssues issues { TIssue(TStringBuilder() << "Failed to get auth token: " << ex.what()) };
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
-            return false;
-        }
-
-        switch (WriteParams.Shard.GetClusterType()) {
+        switch (clusterType) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
                 httpRequest->Set(authorizationHeader, "OAuth " + authToken);
                 break;
@@ -373,12 +367,8 @@ private:
                 httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
             default:
-                TIssues issues { TIssue(TStringBuilder() << "Invalid cluster type: " << ToString<ui32>(WriteParams.Shard.GetClusterType())) };
-                Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-                return false;
+                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(clusterType));
         }
-
-        return true;
     }
 
     bool TryToSendNextBatch() {
@@ -410,19 +400,38 @@ private:
             }
 
             const auto& metricsToSend = std::get<TMetricsToSend>(variant);
-            const auto httpRequest = BuildSolomonRequest(metricsToSend.Data);
-
-            if (!httpRequest) {
-                // BuildSolomonRequest failed (e.g. auth retrieval error).
-                // OnAsyncOutputError has already been called inside FillAuth.
-                // Restore FreeSpace so backpressure accounting stays consistent.
-                FreeSpace += metricsToSend.Data.size();
-                return false;
-            }
 
             const size_t bodySize = metricsToSend.Data.size();
             const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
-            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(*httpRequest), /*flags=*/0, Cookie);
+            CredentialsProvider->GetAuthInfoAsync().Subscribe([
+                actorSystem = NActors::TActivationContext::ActorSystem(),
+                selfId = SelfId(),
+                cookie = Cookie,
+                url = Url,
+                data = metricsToSend.Data,
+                clusterType = WriteParams.Shard.GetClusterType(),
+                httpSenderId](const NThreading::TFuture<std::string>& future) mutable {
+                    try {
+                        const auto& authToken = future.GetValue();
+                        auto httpRequest = BuildSolomonRequest(data, url, clusterType, authToken);
+                        actorSystem->Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, cookie);
+                    } catch(std::exception& ex) {
+                        // Assume GetAuthInfoAsync retries internally, no external retries needed
+                        actorSystem->Send(httpSenderId, new TEvents::TEvPoison()); // sender actor was unused, terminate explicitly
+                        // Fake error message to ourself
+                        actorSystem->Send(selfId, new TEvHttpBase::TEvSendResult(
+                                    IEventHandle::Downcast<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(new IEventHandle(
+                                        /*sender=*/{},
+                                        /*recipient=*/{},
+                                        new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(
+                                            /*outgoingRequest=*/{},
+                                            /*incomingResponse=*/{},
+                                            /*error=*/TStringBuilder() << "Failed to get auth token: " << ex.what()))),
+                                    /*retryCount=*/0, /*isTerminal=*/true),
+                                /*flags*/0,
+                                cookie);
+                    }
+            });
             SINK_LOG_T("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 
             *Metrics.SentMetrics += metricsToSend.MetricsCount;

@@ -35,6 +35,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     stage_task_counts,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import cli, decimal
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import analysis as plan_analysis
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import stages as stage_model
@@ -5945,7 +5946,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             }
 
         self.assertEqual(
-            relation_model._decimal_sum_state_lineages(
+            plan_analysis._decimal_sum_state_lineages(
                 exact,
                 exact.plan.node_map(),
                 parents(exact),
@@ -6003,7 +6004,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
         ):
             with self.subTest(description=description):
                 self.assertEqual(
-                    relation_model._decimal_sum_state_lineages(
+                    plan_analysis._decimal_sum_state_lineages(
                         snapshot,
                         snapshot.plan.node_map(),
                         parents(snapshot),
@@ -6103,7 +6104,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
         ):
             with self.subTest(description=description):
                 self.assertEqual(
-                    relation_model._decimal_sum_state_lineages(
+                    plan_analysis._decimal_sum_state_lineages(
                         snapshot,
                         nodes,
                         parent_map,

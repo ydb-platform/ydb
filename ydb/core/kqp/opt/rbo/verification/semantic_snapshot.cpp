@@ -7942,6 +7942,38 @@ const TTypeAnnotationNode* OutputType(IOperator& op, TStringBuf name) {
     return result;
 }
 
+struct TExactType {
+    TString Name;
+    bool Nullable = false;
+};
+
+TExactType ExactType(const TTypeAnnotationNode* type) {
+    TExactType result;
+    result.Name = TypeName(type, &result.Nullable);
+    return result;
+}
+
+bool SameType(const TExactType& left, const TExactType& right) {
+    return left.Name == right.Name && left.Nullable == right.Nullable;
+}
+
+void RequireOnlyMainConsumer(
+    const THashMap<const IOperator*, TVector<IOperator*>>& parents,
+    IOperator& producer,
+    IOperator& consumer,
+    TStringBuf label)
+{
+    const auto* consumers = parents.FindPtr(&producer);
+    if (!consumers || consumers->size() != 1 ||
+        consumers->front() != &consumer)
+    {
+        Unsupported(TStringBuilder()
+            << label << " must have exactly one audited consumer");
+    }
+}
+
+#include "q51_window_projection_audit_impl.h"
+
 TString Phase(EOpPhase phase) {
     switch (phase) {
         case EOpPhase::Undefined:
@@ -8175,6 +8207,13 @@ public:
         }
         PrepareDecimalAverageCarriers();
 
+        TVector<TIntrusivePtr<IOperator>> subplanRoots;
+        for (const auto& subplan : Subplans) {
+            subplanRoots.push_back(subplan.ExportedRoot);
+        }
+        AuditedQ51Windows.emplace(
+            TQ51WindowAdmission::Audit(Root.GetInput(), subplanRoots));
+
         // Subplan roots precede the main root so descriptors and consumer IDs
         // share one deterministic post-order node namespace.
         for (const auto& subplan : Subplans) {
@@ -8184,7 +8223,6 @@ public:
         ValidateCheckedConcatProjectionTopology();
         ValidateWholePartitionWindowProjectionTopology();
         ValidateGlobalRankProjectionTopology();
-        ValidateQ51WindowProjectionTopology();
         ValidateErrorOnNullProjectionTopology();
         const auto rootNames = OutputNames(*Root.GetInput());
         auto output = JsonArray();
@@ -8238,11 +8276,6 @@ public:
     }
 
 private:
-    struct TExactType {
-        TString Name;
-        bool Nullable = false;
-    };
-
     struct TDecimalAverageCarrierContract {
         TString LogicalType;
         TString SumType;
@@ -8322,16 +8355,6 @@ private:
             return BoolType;
         }
         Unsupported("Subplan descriptor has invalid details");
-    }
-
-    static TExactType ExactType(const TTypeAnnotationNode* type) {
-        TExactType result;
-        result.Name = TypeName(type, &result.Nullable);
-        return result;
-    }
-
-    static bool SameType(const TExactType& left, const TExactType& right) {
-        return left.Name == right.Name && left.Nullable == right.Nullable;
     }
 
     static THashSet<TString> ExpressionColumns(const TExpression& expression) {
@@ -9562,17 +9585,6 @@ private:
         TOpMap& map,
         const THashSet<TString>& inputNames);
 
-    void PrepareQ51WindowProjection(
-        TOpMap& map,
-        const THashSet<TString>& inputNames);
-
-    void CertifyQ51SumProjection(
-        TOpMap& map,
-        const TQ51ProjectionWindow& window,
-        const THashMap<const IOperator*, TVector<IOperator*>>& parents);
-
-    void ValidateQ51WindowProjectionTopology();
-
     void CertifyWholePartitionWindowProjection(
         TOpMap& map,
         const TWholePartitionWindow& window);
@@ -9588,12 +9600,6 @@ private:
         TString Type;
         std::array<TString, 2> Columns;
     };
-
-    static void RequireOnlyMainConsumer(
-        const THashMap<const IOperator*, TVector<IOperator*>>& parents,
-        IOperator& producer,
-        IOperator& consumer,
-        TStringBuf label);
 
     TQ49RatioReference TraceGlobalRankOrderToRatio(
         TOpMap& rankProject,
@@ -11383,7 +11389,6 @@ private:
                     OutputNames(*map.GetInput());
                 const auto inputNames =
                     VisibleInputNames(map, *map.GetInput());
-                PrepareQ51WindowProjection(map, inputNames);
                 PrepareGlobalRankProjection(map, inputNames);
                 THashSet<TString> renameSources;
                 for (const auto& element : map.MapElements) {
@@ -11421,11 +11426,10 @@ private:
                     }
                     auto column = JsonMap();
                     column["output"] = output;
-                    if (auto* window =
-                            PreparedQ51Windows.FindPtr(&element))
+                    if (const auto* expression =
+                            AuditedQ51Windows->FindExpression(element))
                     {
-                        column["expression"] =
-                            std::move(window->Expression);
+                        column["expression"] = *expression;
                     } else if (auto* rank =
                             PreparedGlobalRankWindows.FindPtr(&element))
                     {
@@ -12070,10 +12074,9 @@ private:
         PreparedGlobalRankWindows;
     THashMap<TOpMap*, TVector<TGlobalRankProjectionWindow>>
         GlobalRankProjectionWindows;
-    THashMap<const TMapElement*, TQ51Window>
-        PreparedQ51Windows;
-    THashMap<TOpMap*, TVector<TQ51ProjectionWindow>>
-        Q51ProjectionWindows;
+    // Set once before node export; only completed, read-only Q51 admission
+    // results reach serialization. Candidate maps belong to the auditor.
+    std::optional<TAuditedQ51WindowPlan> AuditedQ51Windows;
     THashMap<const IOperator*, TVector<IOperator*>>
         MainConsumers;
     THashMap<const IOperator*, TString> Ids;

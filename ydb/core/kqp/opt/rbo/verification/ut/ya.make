@@ -5,7 +5,10 @@ SIZE(MEDIUM)
 TEST_SRCS(
     test_checked_concat.py
     test_ir.py
+    test_analysis.py
+    test_join.py
     test_decimal.py
+    test_encoding_strategies.py
     test_limit.py
     test_logical_reference.py
     test_olap_filter.py

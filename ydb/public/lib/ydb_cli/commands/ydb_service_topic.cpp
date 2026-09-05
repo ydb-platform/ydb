@@ -691,7 +691,7 @@ namespace NYdb::NConsoleClient {
     TCommandTopicConsumerOffset::TCommandTopicConsumerOffset()
         : TClientCommandTree("offset", {}, "Consumer offset operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerCommitOffset>());
-        AddCommand(std::make_unique<TCommandTopicConsumerResetOffset>());
+        AddCommand(std::make_unique<TCommandTopicConsumerSetOffsets>());
     }
 
 
@@ -971,13 +971,13 @@ namespace NYdb::NConsoleClient {
         return EXIT_SUCCESS;
     }
 
-    TCommandTopicConsumerResetOffset::TCommandTopicConsumerResetOffset()
-        : TYdbCommand("reset", {}, "Reset consumer offsets on all topic partitions") {
+    TCommandTopicConsumerSetOffsets::TCommandTopicConsumerSetOffsets()
+        : TYdbCommand("set", {}, "Set consumer offsets on all topic partitions") {
     }
 
-    void TCommandTopicConsumerResetOffset::Config(TConfig& config) {
+    void TCommandTopicConsumerSetOffsets::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption('c', "consumer", "Consumer whose offsets will be reset")
+        config.Opts->AddLongOption('c', "consumer", "Consumer whose offsets will be set")
             .Required()
             .StoreResult(&ConsumerName_);
 
@@ -997,16 +997,16 @@ namespace NYdb::NConsoleClient {
         SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
-    void TCommandTopicConsumerResetOffset::Parse(TConfig& config) {
+    void TCommandTopicConsumerSetOffsets::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
         ParseTopicName(config, 0);
     }
 
-    int TCommandTopicConsumerResetOffset::Run(TConfig& config) {
+    int TCommandTopicConsumerSetOffsets::Run(TConfig& config) {
         auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
-        NYdb::NTopic::TResetOffsetSettings settings;
+        NYdb::NTopic::TSetOffsetsSettings settings;
         if (Position_ == "earliest") {
             settings.Earliest();
         } else if (Position_ == "latest") {
@@ -1018,7 +1018,7 @@ namespace NYdb::NConsoleClient {
                 << "'. It must be earliest, latest, or a timestamp.";
         }
 
-        TStatus status = topicClient.ResetOffset(TopicName, ConsumerName_, settings).GetValueSync();
+        TStatus status = topicClient.SetOffsets(TopicName, ConsumerName_, settings).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         Cout << "OK" << Endl;
         return EXIT_SUCCESS;

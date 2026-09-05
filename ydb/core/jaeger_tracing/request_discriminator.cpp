@@ -89,7 +89,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.StreamDirectRead.StartDirectReadPartitionSession", ERequestType::TOPIC_STREAMDIRECTREAD_START_DIRECT_READ_PARTITION_SESSION},
     {"Topic.StreamDirectRead.UpdateToken", ERequestType::TOPIC_STREAMDIRECTREAD_UPDATE_TOKEN},
     {"Topic.CommitOffset", ERequestType::TOPIC_COMMITOFFSET},
-    {"Topic.ResetOffset", ERequestType::TOPIC_RESETOFFSET},
+    {"Topic.SetOffsets", ERequestType::TOPIC_SETOFFSETS},
     {"Topic.UpdateOffsetsInTransaction", ERequestType::TOPIC_UPDATEOFFSETSINTRANSACTION},
     {"Topic.CreateTopic", ERequestType::TOPIC_CREATETOPIC},
     {"Topic.DescribeTopic", ERequestType::TOPIC_DESCRIBETOPIC},

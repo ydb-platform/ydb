@@ -231,8 +231,8 @@ message TEvTopicSqsActionMetrics {
     }
 }
 
-// To PQTablet: reset a consumer committed offset on a partition.
-message TEvResetOffsetRequest {
+// To PQTablet: set a consumer committed offset on a partition.
+message TEvSetOffsetsRequest {
     optional string Topic = 1;
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
@@ -249,7 +249,7 @@ message TEvResetOffsetRequest {
 }
 
 // From PQTablet
-message TEvResetOffsetResponse {
+message TEvSetOffsetsResponse {
     optional uint32 PartitionId = 1;
     optional Ydb.StatusIds.StatusCode Status = 2;
     optional string ErrorMessage = 3;

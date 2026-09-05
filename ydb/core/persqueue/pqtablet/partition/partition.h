@@ -178,7 +178,7 @@ public:
         ReadBlobsForCompaction = 0,
         WriteBlobsForCompaction,
         CompactificationWrite,
-        ReadBlobForResetOffset,
+        ReadBlobForSetOffsets,
         End
     };
 
@@ -678,7 +678,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
-            hFuncTraced(TEvPQ::TEvResetOffsetRequest, HandleOnInit);
+            hFuncTraced(TEvPQ::TEvSetOffsetsRequest, HandleOnInit);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
@@ -765,7 +765,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
-            hFuncTraced(TEvPQ::TEvResetOffsetRequest, Handle);
+            hFuncTraced(TEvPQ::TEvSetOffsetsRequest, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
@@ -1319,7 +1319,7 @@ private:
     void HandleOnInit(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
-    void HandleOnInit(TEvPQ::TEvResetOffsetRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvSetOffsetsRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
@@ -1328,7 +1328,7 @@ private:
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPConsumerState::TPtr&);
     void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
-    void Handle(TEvPQ::TEvResetOffsetRequest::TPtr&);
+    void Handle(TEvPQ::TEvSetOffsetsRequest::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
@@ -1370,22 +1370,22 @@ private:
 
     bool IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPAction) const;
 
-    ui64 ResolveResetOffset(const NKikimrPQ::TEvResetOffsetRequest& rec) const;
-    TInstant ResetOffsetTimestamp(const NKikimrPQ::TEvResetOffsetRequest& rec) const;
-    bool TryScheduleResetOffsetReply(const TEvPQ::TEvSetClientInfo& act, Ydb::StatusIds::StatusCode status, const TString& error);
-    void ProcessResetOffsetPendingEvents();
-    void BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev);
-    void FinishResetOffset(const TActorId& sender, ui64 cookie, ui32 partitionId, const TString& consumer, ui64 offset);
-    void ReplyResetOffset(const TActorId& sender, ui32 partitionId, Ydb::StatusIds::StatusCode status, TString message, ui64 cookie);
-    void RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev, TInstant timestamp);
-    void HandleResetOffsetBlobResponse(TEvPQ::TEvBlobResponse::TPtr& ev);
-    TMaybe<ui64> ScanHeadForResetOffset(const THead& head, TInstant timestamp) const;
-    TMaybe<ui64> ScanRequestedBlobsForResetOffset(const TVector<TRequestedBlob>& blobs, ui32 begin, ui32 end, TInstant timestamp) const;
+    ui64 ResolveSetOffsets(const NKikimrPQ::TEvSetOffsetsRequest& rec) const;
+    TInstant SetOffsetsTimestamp(const NKikimrPQ::TEvSetOffsetsRequest& rec) const;
+    bool TryScheduleSetOffsetsReply(const TEvPQ::TEvSetClientInfo& act, Ydb::StatusIds::StatusCode status, const TString& error);
+    void ProcessSetOffsetsPendingEvents();
+    void BeginSetOffsets(TEvPQ::TEvSetOffsetsRequest::TPtr& ev);
+    void FinishSetOffsets(const TActorId& sender, ui64 cookie, ui32 partitionId, const TString& consumer, ui64 offset);
+    void ReplySetOffsets(const TActorId& sender, ui32 partitionId, Ydb::StatusIds::StatusCode status, TString message, ui64 cookie);
+    void RequestSetOffsetsBlobs(TEvPQ::TEvSetOffsetsRequest::TPtr& ev, TInstant timestamp);
+    void HandleSetOffsetsBlobResponse(TEvPQ::TEvBlobResponse::TPtr& ev);
+    TMaybe<ui64> ScanHeadForSetOffsets(const THead& head, TInstant timestamp) const;
+    TMaybe<ui64> ScanRequestedBlobsForSetOffsets(const TVector<TRequestedBlob>& blobs, ui32 begin, ui32 end, TInstant timestamp) const;
     static Ydb::StatusIds::StatusCode PqErrorToYdbStatus(NPersQueue::NErrorCode::EErrorCode errorCode);
 
-    std::deque<TEvPQ::TEvResetOffsetRequest::TPtr> ResetOffsetPendingEvents;
+    std::deque<TEvPQ::TEvSetOffsetsRequest::TPtr> SetOffsetsPendingEvents;
 
-    struct TResetOffsetBlobRead {
+    struct TSetOffsetsBlobRead {
         struct TKeyRef {
             ui64 Offset = 0;
             TInstant Timestamp;
@@ -1400,14 +1400,14 @@ private:
         TVector<TKeyRef> CompactionKeys;
         TVector<TKeyRef> FastWriteKeys;
         // Holds blob-key tokens for the duration of the async KV read so compaction
-        // cannot delete those blobs until HandleResetOffsetBlobResponse completes.
+        // cannot delete those blobs until HandleSetOffsetsBlobResponse completes.
         TBlobKeyTokens BlobKeyTokens;
     };
-    std::optional<TResetOffsetBlobRead> ResetOffsetBlobRead;
+    std::optional<TSetOffsetsBlobRead> SetOffsetsBlobRead;
 
-    TMaybe<ui64> ResolveResetOffsetFromWrittenAt(
-        const TVector<TResetOffsetBlobRead::TKeyRef>& compactionRefs,
-        const TVector<TResetOffsetBlobRead::TKeyRef>& fastWriteRefs,
+    TMaybe<ui64> ResolveSetOffsetsFromWrittenAt(
+        const TVector<TSetOffsetsBlobRead::TKeyRef>& compactionRefs,
+        const TVector<TSetOffsetsBlobRead::TKeyRef>& fastWriteRefs,
         const TVector<TRequestedBlob>* blobs,
         TInstant timestamp) const;
 

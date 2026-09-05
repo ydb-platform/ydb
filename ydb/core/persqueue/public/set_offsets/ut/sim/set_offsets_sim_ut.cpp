@@ -1,7 +1,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/reset_offset/reset_offset.h>
+#include <ydb/core/persqueue/public/set_offsets/set_offsets.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/events.h>
@@ -21,7 +21,7 @@
 #include <optional>
 
 using namespace NKikimr::NPQ;
-using namespace NKikimr::NPQ::NResetOffset;
+using namespace NKikimr::NPQ::NSetOffsets;
 using NKikimr::TEvPQ;
 using NActors::IEventHandle;
 using NActors::TActorId;
@@ -31,7 +31,7 @@ using namespace NYdb::NTopic::NTests;
 
 namespace {
 
-using TCoreSettings = NKikimr::NPQ::NResetOffset::TResetOffsetSettings;
+using TCoreSettings = NKikimr::NPQ::NSetOffsets::TSetOffsetsSettings;
 
 struct TSimulatedSetup {
     THolder<TThreadPool> Pool;
@@ -113,7 +113,7 @@ struct TRegisteredActor {
 TRegisteredActor CreateActor(NActors::TTestActorRuntime& runtime, TCoreSettings settings) {
     TRegisteredActor registered;
     registered.Edge = runtime.AllocateEdgeActor();
-    registered.Actor = runtime.Register(CreateResetOffsetActor(registered.Edge, std::move(settings)));
+    registered.Actor = runtime.Register(CreateSetOffsetsActor(registered.Edge, std::move(settings)));
     runtime.EnableScheduleForActor(registered.Actor);
     runtime.DispatchEvents(NActors::TDispatchOptions(), TDuration::Zero());
     return registered;
@@ -125,20 +125,20 @@ void ExpectNoResetResult(NActors::TTestActorRuntime& runtime, const TActorId& ed
         runtime.SetDispatchTimeout(prev);
     };
     try {
-        auto ev = runtime.GrabEdgeEvent<TEvResetOffsetResult>(edge, TDuration::MilliSeconds(1));
+        auto ev = runtime.GrabEdgeEvent<TEvSetOffsetsResult>(edge, TDuration::MilliSeconds(1));
         UNIT_ASSERT(!ev);
     } catch (const NActors::TEmptyEventQueueException&) {
     }
 }
 
-THolder<TEvResetOffsetResult> WaitResult(
+THolder<TEvSetOffsetsResult> WaitResult(
     NActors::TTestActorRuntime& runtime,
     const TRegisteredActor& actor,
     TDuration timeout = TDuration::Seconds(30))
 {
-    auto ev = runtime.GrabEdgeEvent<TEvResetOffsetResult>(actor.Edge, timeout);
-    UNIT_ASSERT_C(ev, "TEvResetOffsetResult timed out");
-    return THolder<TEvResetOffsetResult>(ev->Release().Release());
+    auto ev = runtime.GrabEdgeEvent<TEvSetOffsetsResult>(actor.Edge, timeout);
+    UNIT_ASSERT_C(ev, "TEvSetOffsetsResult timed out");
+    return THolder<TEvSetOffsetsResult>(ev->Release().Release());
 }
 
 bool DispatchUntil(NActors::TTestActorRuntime& runtime, std::function<bool()> cond, TDuration timeout = TDuration::Seconds(10)) {
@@ -151,7 +151,7 @@ bool DispatchUntil(NActors::TTestActorRuntime& runtime, std::function<bool()> co
     return cond();
 }
 
-void AssertAllPartitionsSuccess(const THolder<TEvResetOffsetResult>& result) {
+void AssertAllPartitionsSuccess(const THolder<TEvSetOffsetsResult>& result) {
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Error);
     UNIT_ASSERT(!result->Partitions.empty());
     for (const auto& partition : result->Partitions) {
@@ -210,18 +210,18 @@ private:
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TResetOffsetActorSimTests) {
+Y_UNIT_TEST_SUITE(TSetOffsetsActorSimTests) {
 
 Y_UNIT_TEST(StaleSuccessAcceptedRegardlessOfCookie) {
     auto& setup = SimulatedCluster();
     auto& runtime = setup.GetRuntime();
     bool requested = false;
     auto watch = runtime.AddObserver<NKikimr::TEvPipeCache::TEvForward>([&](auto& ev) {
-        if (ev && ev->Get()->Ev && ev->Get()->Ev->Type() == TEvPQ::TEvResetOffsetRequest::EventType) {
+        if (ev && ev->Get()->Ev && ev->Get()->Ev->Type() == TEvPQ::TEvSetOffsetsRequest::EventType) {
             requested = true;
         }
     });
-    auto dropReal = runtime.AddObserver<TEvPQ::TEvResetOffsetResponse>([](auto& ev) {
+    auto dropReal = runtime.AddObserver<TEvPQ::TEvSetOffsetsResponse>([](auto& ev) {
         if (ev->Get()->GetCookie() != 999) {
             ev.Reset();
         }
@@ -230,7 +230,7 @@ Y_UNIT_TEST(StaleSuccessAcceptedRegardlessOfCookie) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     NActors::TDispatchOptions opts;
     opts.CustomFinalCondition = [&] { return requested; };
@@ -238,7 +238,7 @@ Y_UNIT_TEST(StaleSuccessAcceptedRegardlessOfCookie) {
     UNIT_ASSERT(requested);
 
     runtime.Send(new IEventHandle(actor.Actor, TActorId(),
-        new TEvPQ::TEvResetOffsetResponse(0, Ydb::StatusIds::SUCCESS, {}, 999)));
+        new TEvPQ::TEvSetOffsetsResponse(0, Ydb::StatusIds::SUCCESS, {}, 999)));
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
 }
 
@@ -246,8 +246,8 @@ Y_UNIT_TEST(StaleSuccessAcceptedRegardlessOfCookie) {
 Y_UNIT_TEST(SuccessAfterPipeBreakAccepted) {
     auto& setup = SimulatedCluster();
     auto& runtime = setup.GetRuntime();
-    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvResetOffsetRequest::EventType }, /*maxBreaks=*/1);
-    auto dropReal = runtime.AddObserver<TEvPQ::TEvResetOffsetResponse>([](auto& ev) {
+    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvSetOffsetsRequest::EventType }, /*maxBreaks=*/1);
+    auto dropReal = runtime.AddObserver<TEvPQ::TEvSetOffsetsResponse>([](auto& ev) {
         if (ev->Get()->GetCookie() != 999) {
             ev.Reset();
         }
@@ -256,7 +256,7 @@ Y_UNIT_TEST(SuccessAfterPipeBreakAccepted) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     NActors::TDispatchOptions opts;
     opts.CustomFinalCondition = [&] { return pipeBreak.BrokenCount() >= 1; };
@@ -267,7 +267,7 @@ Y_UNIT_TEST(SuccessAfterPipeBreakAccepted) {
     runtime.DispatchEvents(NActors::TDispatchOptions(), TDuration::Zero());
 
     runtime.Send(new IEventHandle(actor.Actor, TActorId(),
-        new TEvPQ::TEvResetOffsetResponse(0, Ydb::StatusIds::SUCCESS, {}, 999)));
+        new TEvPQ::TEvSetOffsetsResponse(0, Ydb::StatusIds::SUCCESS, {}, 999)));
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
 }
 
@@ -281,20 +281,20 @@ Y_UNIT_TEST(LateSuccessDuringWaitRetry) {
         if (!ev || !ev->Get()->Ev) {
             return;
         }
-        if (ev->Get()->Ev->Type() != TEvPQ::TEvResetOffsetRequest::EventType) {
+        if (ev->Get()->Ev->Type() != TEvPQ::TEvSetOffsetsRequest::EventType) {
             return;
         }
         if (!requestCookie) {
             requestCookie = ev->Cookie;
         }
     });
-    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvResetOffsetRequest::EventType }, /*maxBreaks=*/1);
+    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvSetOffsetsRequest::EventType }, /*maxBreaks=*/1);
 
     auto actor = CreateActor(runtime, {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     NActors::TDispatchOptions opts;
     opts.CustomFinalCondition = [&] { return pipeBreak.BrokenCount() >= 1 && requestCookie != 0; };
@@ -303,13 +303,13 @@ Y_UNIT_TEST(LateSuccessDuringWaitRetry) {
     UNIT_ASSERT_VALUES_UNEQUAL(requestCookie, 0u);
     runtime.DispatchEvents(NActors::TDispatchOptions(), TDuration::Zero());
 
-    auto dropRetryResponses = runtime.AddObserver<TEvPQ::TEvResetOffsetResponse>([requestCookie](auto& ev) {
+    auto dropRetryResponses = runtime.AddObserver<TEvPQ::TEvSetOffsetsResponse>([requestCookie](auto& ev) {
         if (ev->Get()->GetCookie() != requestCookie) {
             ev.Reset();
         }
     });
     runtime.Send(new IEventHandle(actor.Actor, TActorId(),
-        new TEvPQ::TEvResetOffsetResponse(0, Ydb::StatusIds::SUCCESS, {}, requestCookie)));
+        new TEvPQ::TEvSetOffsetsResponse(0, Ydb::StatusIds::SUCCESS, {}, requestCookie)));
     AssertAllPartitionsSuccess(WaitResult(runtime, actor, TDuration::Seconds(5)));
 }
 
@@ -324,7 +324,7 @@ Y_UNIT_TEST(PoisonDuringDescribe) {
         .DatabasePath = "/Root",
         .TopicName = "/Root/missing",
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     runtime.Send(new IEventHandle(actor.Actor, TActorId(), new NActors::TEvents::TEvPoison()));
     ExpectNoResetResult(runtime, actor.Edge);
@@ -336,18 +336,18 @@ Y_UNIT_TEST(PoisonDuringReset) {
     auto& runtime = setup.GetRuntime();
     bool requested = false;
     auto watch = runtime.AddObserver<NKikimr::TEvPipeCache::TEvForward>([&](auto& ev) {
-        if (ev && ev->Get()->Ev && ev->Get()->Ev->Type() == TEvPQ::TEvResetOffsetRequest::EventType) {
+        if (ev && ev->Get()->Ev && ev->Get()->Ev->Type() == TEvPQ::TEvSetOffsetsRequest::EventType) {
             requested = true;
         }
     });
-    auto dropResponses = runtime.AddObserver<TEvPQ::TEvResetOffsetResponse>([](auto& ev) {
+    auto dropResponses = runtime.AddObserver<TEvPQ::TEvSetOffsetsResponse>([](auto& ev) {
         ev.Reset();
     });
     auto actor = CreateActor(runtime, {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     NActors::TDispatchOptions opts;
     opts.CustomFinalCondition = [&] { return requested; };
@@ -375,7 +375,7 @@ Y_UNIT_TEST(UnhandledException) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     auto result = WaitResult(runtime, actor);
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::INTERNAL_ERROR);
@@ -386,12 +386,12 @@ Y_UNIT_TEST(UnhandledException) {
 Y_UNIT_TEST(PipeBreakThenSuccess) {
     auto& setup = SimulatedCluster();
     auto& runtime = setup.GetRuntime();
-    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvResetOffsetRequest::EventType }, /*maxBreaks=*/1);
+    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvSetOffsetsRequest::EventType }, /*maxBreaks=*/1);
     auto actor = CreateActor(runtime, {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
     UNIT_ASSERT_GE(pipeBreak.BrokenCount(), 1u);
@@ -401,12 +401,12 @@ Y_UNIT_TEST(PipeBreakThenSuccess) {
 Y_UNIT_TEST(PipeBreakExhausted) {
     auto& setup = SimulatedCluster();
     auto& runtime = setup.GetRuntime();
-    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvResetOffsetRequest::EventType });
+    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvSetOffsetsRequest::EventType });
     auto actor = CreateActor(runtime, {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     auto result = WaitResult(runtime, actor, TDuration::Seconds(30));
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
@@ -424,26 +424,26 @@ Y_UNIT_TEST(SchemeErrorFailsWholeRequest) {
         if (!ev || !ev->Get()->Ev) {
             return;
         }
-        if (ev->Get()->Ev->Type() != TEvPQ::TEvResetOffsetRequest::EventType) {
+        if (ev->Get()->Ev->Type() != TEvPQ::TEvSetOffsetsRequest::EventType) {
             return;
         }
         if (!requestCookie) {
             requestCookie = ev->Cookie;
         }
     });
-    auto dropReal = runtime.AddObserver<TEvPQ::TEvResetOffsetResponse>([](auto& ev) {
+    auto dropReal = runtime.AddObserver<TEvPQ::TEvSetOffsetsResponse>([](auto& ev) {
         ev.Reset();
     });
     auto actor = CreateActor(runtime, {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     UNIT_ASSERT(DispatchUntil(runtime, [&] { return requestCookie != 0; }));
 
     runtime.Send(new IEventHandle(actor.Actor, TActorId(),
-        new TEvPQ::TEvResetOffsetResponse(0, Ydb::StatusIds::SCHEME_ERROR, "Partition 0 not found", requestCookie)));
+        new TEvPQ::TEvSetOffsetsResponse(0, Ydb::StatusIds::SCHEME_ERROR, "Partition 0 not found", requestCookie)));
     auto result = WaitResult(runtime, actor);
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(result->Error, "not found");
@@ -455,11 +455,11 @@ Y_UNIT_TEST(UnknownPartitionResponseIgnored) {
     auto& runtime = setup.GetRuntime();
     bool requested = false;
     auto watch = runtime.AddObserver<NKikimr::TEvPipeCache::TEvForward>([&](auto& ev) {
-        if (ev && ev->Get()->Ev && ev->Get()->Ev->Type() == TEvPQ::TEvResetOffsetRequest::EventType) {
+        if (ev && ev->Get()->Ev && ev->Get()->Ev->Type() == TEvPQ::TEvSetOffsetsRequest::EventType) {
             requested = true;
         }
     });
-    auto dropReal = runtime.AddObserver<TEvPQ::TEvResetOffsetResponse>([](auto& ev) {
+    auto dropReal = runtime.AddObserver<TEvPQ::TEvSetOffsetsResponse>([](auto& ev) {
         if (ev->Get()->GetCookie() != 999) {
             ev.Reset();
         }
@@ -468,16 +468,16 @@ Y_UNIT_TEST(UnknownPartitionResponseIgnored) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     UNIT_ASSERT(DispatchUntil(runtime, [&] { return requested; }));
 
     runtime.Send(new IEventHandle(actor.Actor, TActorId(),
-        new TEvPQ::TEvResetOffsetResponse(99, Ydb::StatusIds::SUCCESS, {}, 999)));
+        new TEvPQ::TEvSetOffsetsResponse(99, Ydb::StatusIds::SUCCESS, {}, 999)));
     ExpectNoResetResult(runtime, actor.Edge);
 
     runtime.Send(new IEventHandle(actor.Actor, TActorId(),
-        new TEvPQ::TEvResetOffsetResponse(0, Ydb::StatusIds::SUCCESS, {}, 999)));
+        new TEvPQ::TEvSetOffsetsResponse(0, Ydb::StatusIds::SUCCESS, {}, 999)));
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
 }
 
@@ -491,7 +491,7 @@ Y_UNIT_TEST(StaleDeliveryProblemIgnored) {
         if (!ev || !ev->Get()->Ev) {
             return;
         }
-        if (ev->Get()->Ev->Type() != TEvPQ::TEvResetOffsetRequest::EventType) {
+        if (ev->Get()->Ev->Type() != TEvPQ::TEvSetOffsetsRequest::EventType) {
             return;
         }
         ++forwards;
@@ -501,7 +501,7 @@ Y_UNIT_TEST(StaleDeliveryProblemIgnored) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     UNIT_ASSERT(DispatchUntil(runtime, [&] { return forwards >= 1 && tabletId != 0; }));
     UNIT_ASSERT_VALUES_EQUAL(forwards, 1u);
@@ -517,4 +517,4 @@ Y_UNIT_TEST(StaleDeliveryProblemIgnored) {
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
 }
 
-} // TResetOffsetActorSimTests
+} // TSetOffsetsActorSimTests

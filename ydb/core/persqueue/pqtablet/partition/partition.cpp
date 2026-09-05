@@ -1095,7 +1095,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     }
 
     ProcessMLPPendingEvents();
-    ProcessResetOffsetPendingEvents();
+    ProcessSetOffsetsPendingEvents();
 
     ReportCounters(ctx, true);
 }
@@ -2233,8 +2233,8 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         BlobsForCompactionWereRead(response->GetBlobs());
         return;
     }
-    if (cookie == ERequestCookie::ReadBlobForResetOffset) {
-        HandleResetOffsetBlobResponse(ev);
+    if (cookie == ERequestCookie::ReadBlobForSetOffsets) {
+        HandleSetOffsetsBlobResponse(ev);
         return;
     }
     auto it = ReadInfo.find(cookie);
@@ -4719,7 +4719,7 @@ void TPartition::ScheduleReplyOk(const ui64 dst, bool internal)
 
 void TPartition::ScheduleReplyOk(const TEvPQ::TEvSetClientInfo& act)
 {
-    if (TryScheduleResetOffsetReply(act, Ydb::StatusIds::SUCCESS, {})) {
+    if (TryScheduleSetOffsetsReply(act, Ydb::StatusIds::SUCCESS, {})) {
         return;
     }
     ScheduleReplyOk(act.Cookie, act.IsInternal);
@@ -4760,7 +4760,7 @@ void TPartition::ScheduleReplyError(const TEvPQ::TEvSetClientInfo& act,
                                     NPersQueue::NErrorCode::EErrorCode errorCode,
                                     const TString& error)
 {
-    if (TryScheduleResetOffsetReply(act, PqErrorToYdbStatus(errorCode), error)) {
+    if (TryScheduleSetOffsetsReply(act, PqErrorToYdbStatus(errorCode), error)) {
         return;
     }
     ScheduleReplyError(act.Cookie, act.IsInternal, errorCode, error);

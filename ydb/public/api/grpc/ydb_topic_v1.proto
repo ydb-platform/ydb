@@ -115,8 +115,8 @@ service TopicService {
     // Single commit offset request.
     rpc CommitOffset(CommitOffsetRequest) returns (CommitOffsetResponse);
 
-    // Reset committed offsets for a consumer on all topic partitions (including inactive).
-    rpc ResetOffset(ResetOffsetRequest) returns (ResetOffsetResponse);
+    // Set committed offsets for a consumer on all topic partitions (including inactive).
+    rpc SetOffsets(SetOffsetsRequest) returns (SetOffsetsResponse);
 
     // Add information about offset ranges to the transaction.
     rpc UpdateOffsetsInTransaction(UpdateOffsetsInTransactionRequest) returns (UpdateOffsetsInTransactionResponse);

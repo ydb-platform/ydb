@@ -4,7 +4,7 @@ PY_SRCS(
     __init__.py
 )
 
-# TODO: drop BUNDLE/RESOURCE of ydb_cli after Python SDK ResetOffset is used.
+# TODO: drop BUNDLE/RESOURCE of ydb_cli after Python SDK SetOffsets is used.
 BUNDLE(
     ydb/apps/ydb NAME ydb_cli
 )

@@ -1,7 +1,7 @@
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-ENV(YDB_TEST_PATH="ydb/tests/stress/topic_reset_offset/topic_reset_offset")
+ENV(YDB_TEST_PATH="ydb/tests/stress/topic_set_offsets/topic_set_offsets")
 
 TEST_SRCS(
     test_workload.py
@@ -17,13 +17,13 @@ ENDIF()
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/tests/stress/topic_reset_offset
+    ydb/tests/stress/topic_set_offsets
 )
 
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress
-    ydb/tests/stress/topic_reset_offset/workload
+    ydb/tests/stress/topic_set_offsets/workload
 )
 
 END()

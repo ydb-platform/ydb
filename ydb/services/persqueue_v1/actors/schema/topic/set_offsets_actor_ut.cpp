@@ -7,7 +7,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
-#include <ydb/services/persqueue_v1/actors/reset_offset_actor.h>
+#include <ydb/services/persqueue_v1/actors/set_offsets_actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
@@ -118,8 +118,8 @@ void CreateTopic(NActors::TTestActorRuntime& runtime, const TString& path, ui32 
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
-Ydb::Topic::ResetOffsetRequest MakeResetRequest(const TString& path, const TString& consumer = "user") {
-    Ydb::Topic::ResetOffsetRequest request;
+Ydb::Topic::SetOffsetsRequest MakeSetOffsetsRequest(const TString& path, const TString& consumer = "user") {
+    Ydb::Topic::SetOffsetsRequest request;
     request.set_path(path);
     request.set_consumer(consumer);
     request.mutable_earliest();
@@ -128,87 +128,87 @@ Ydb::Topic::ResetOffsetRequest MakeResetRequest(const TString& path, const TStri
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TGrpcResetOffsetActorTests) {
+Y_UNIT_TEST_SUITE(TGrpcSetOffsetsActorTests) {
 
 Y_UNIT_TEST(HappyPath) {
-    auto setup = CreateSetup("GrpcResetOffsetHappy");
+    auto setup = CreateSetup("GrpcSetOffsetsHappy");
     auto& runtime = setup->GetRuntime();
     const TString path = "/Root/topic_reset_ok";
     CreateTopic(runtime, path);
 
-    auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-        runtime, MakeResetRequest(path), CreateResetOffsetActor, path);
+    auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+        runtime, MakeSetOffsetsRequest(path), CreateSetOffsetsActor, path);
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
 Y_UNIT_TEST(EmptyPosition) {
-    auto setup = CreateSetup("GrpcResetOffsetNoPosition");
+    auto setup = CreateSetup("GrpcSetOffsetsNoPosition");
     auto& runtime = setup->GetRuntime();
     const TString path = "/Root/topic_reset_no_pos";
     CreateTopic(runtime, path);
 
-    Ydb::Topic::ResetOffsetRequest request;
+    Ydb::Topic::SetOffsetsRequest request;
     request.set_path(path);
     request.set_consumer("user");
-    auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-        runtime, request, CreateResetOffsetActor, path);
+    auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+        runtime, request, CreateSetOffsetsActor, path);
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Position is required");
 }
 
 Y_UNIT_TEST(TopicMissing) {
-    auto setup = CreateSetup("GrpcResetOffsetMissingTopic");
+    auto setup = CreateSetup("GrpcSetOffsetsMissingTopic");
     auto& runtime = setup->GetRuntime();
-    Ydb::Topic::ResetOffsetRequest request = MakeResetRequest("/Root/no_such_topic");
-    auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-        runtime, request, CreateResetOffsetActor, "/Root/no_such_topic");
+    Ydb::Topic::SetOffsetsRequest request = MakeSetOffsetsRequest("/Root/no_such_topic");
+    auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+        runtime, request, CreateSetOffsetsActor, "/Root/no_such_topic");
     AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
 }
 
 Y_UNIT_TEST(ConsumerMissing) {
-    auto setup = CreateSetup("GrpcResetOffsetMissingConsumer");
+    auto setup = CreateSetup("GrpcSetOffsetsMissingConsumer");
     auto& runtime = setup->GetRuntime();
     const TString path = "/Root/topic_reset_no_cons";
     CreateTopic(runtime, path);
-    auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-        runtime, MakeResetRequest(path, "missing"), CreateResetOffsetActor, path);
+    auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+        runtime, MakeSetOffsetsRequest(path, "missing"), CreateSetOffsetsActor, path);
     AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR, "does not exist");
 }
 
 Y_UNIT_TEST(UnauthenticatedRejectedWhenRequired) {
-    auto setup = CreateSetup("GrpcResetOffsetUnauth");
+    auto setup = CreateSetup("GrpcSetOffsetsUnauth");
     auto& runtime = setup->GetRuntime();
     const TString path = "/Root/topic_reset_auth";
     CreateTopic(runtime, path);
     runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
 
-    auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-        runtime, MakeResetRequest(path), CreateResetOffsetActor, path);
+    auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+        runtime, MakeSetOffsetsRequest(path), CreateSetOffsetsActor, path);
     AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
 }
 
 Y_UNIT_TEST(AllPositions) {
-    auto setup = CreateSetup("GrpcResetOffsetPositions");
+    auto setup = CreateSetup("GrpcSetOffsetsPositions");
     auto& runtime = setup->GetRuntime();
     const TString path = "/Root/topic_reset_pos";
     CreateTopic(runtime, path);
 
     {
-        Ydb::Topic::ResetOffsetRequest request;
+        Ydb::Topic::SetOffsetsRequest request;
         request.set_path(path);
         request.set_consumer("user");
         request.mutable_latest();
-        auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-            runtime, request, CreateResetOffsetActor, path);
+        auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+            runtime, request, CreateSetOffsetsActor, path);
         AssertStatus(result, Ydb::StatusIds::SUCCESS);
     }
     {
-        Ydb::Topic::ResetOffsetRequest request;
+        Ydb::Topic::SetOffsetsRequest request;
         request.set_path(path);
         request.set_consumer("user");
         *request.mutable_from_written_at()->mutable_written_at() =
             ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
-        auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-            runtime, request, CreateResetOffsetActor, path);
+        auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+            runtime, request, CreateSetOffsetsActor, path);
         AssertStatus(result, Ydb::StatusIds::SUCCESS);
     }
 }
@@ -229,7 +229,7 @@ Y_UNIT_TEST(PartialFailListsPartitions) {
             if (!ev || !ev->Get()->Ev) {
                 return;
             }
-            if (ev->Get()->Ev->Type() != TEvPQ::TEvResetOffsetRequest::EventType) {
+            if (ev->Get()->Ev->Type() != TEvPQ::TEvSetOffsetsRequest::EventType) {
                 return;
             }
             ++broken;
@@ -244,11 +244,11 @@ Y_UNIT_TEST(PartialFailListsPartitions) {
             ev.Reset();
         });
 
-    auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-        runtime, MakeResetRequest(path), CreateResetOffsetActor, path, "/Root", TDuration::Seconds(30));
+    auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+        runtime, MakeSetOffsetsRequest(path), CreateSetOffsetsActor, path, "/Root", TDuration::Seconds(30));
     UNIT_ASSERT(result->ResultStatus);
     UNIT_ASSERT_VALUES_UNEQUAL(*result->ResultStatus, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_STRING_CONTAINS(result->Issues.ToString(), "Failed to reset offset for partitions");
+    UNIT_ASSERT_STRING_CONTAINS(result->Issues.ToString(), "Failed to set offsets for partitions");
     UNIT_ASSERT_GE(broken, 5u);
 }
 
@@ -269,7 +269,7 @@ Y_UNIT_TEST(TwoPartitionsOneFails) {
             if (!ev || !ev->Get()->Ev) {
                 return;
             }
-            if (ev->Get()->Ev->Type() != TEvPQ::TEvResetOffsetRequest::EventType) {
+            if (ev->Get()->Ev->Type() != TEvPQ::TEvSetOffsetsRequest::EventType) {
                 return;
             }
             const ui64 tabletId = ev->Get()->TabletId;
@@ -290,14 +290,14 @@ Y_UNIT_TEST(TwoPartitionsOneFails) {
             ev.Reset();
         });
 
-    auto result = DoActorRequest<Ydb::Topic::ResetOffsetRequest, Ydb::Topic::ResetOffsetResponse>(
-        runtime, MakeResetRequest(path), CreateResetOffsetActor, path, "/Root", TDuration::Seconds(30));
+    auto result = DoActorRequest<Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+        runtime, MakeSetOffsetsRequest(path), CreateSetOffsetsActor, path, "/Root", TDuration::Seconds(30));
     UNIT_ASSERT(result->ResultStatus);
     UNIT_ASSERT_VALUES_UNEQUAL(*result->ResultStatus, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_STRING_CONTAINS(result->Issues.ToString(), "Failed to reset offset for partitions");
+    UNIT_ASSERT_STRING_CONTAINS(result->Issues.ToString(), "Failed to set offsets for partitions");
     UNIT_ASSERT_GE(broken, 5u);
 }
 
-} // TGrpcResetOffsetActorTests
+} // TGrpcSetOffsetsActorTests
 
 } // namespace NKikimr::NGRpcProxy::V1

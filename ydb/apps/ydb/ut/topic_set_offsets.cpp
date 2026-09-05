@@ -5,9 +5,9 @@
 
 namespace NYdbCliTests {
 
-Y_UNIT_TEST_SUITE(YdbTopicResetOffset) {
+Y_UNIT_TEST_SUITE(YdbTopicSetOffsets) {
 
-Y_UNIT_TEST_F(ResetOffsetEarliestPrintsOk, TSupportedCodecsFixture) {
+Y_UNIT_TEST_F(SetOffsetsEarliestPrintsOk, TSupportedCodecsFixture) {
     const TString topicName = GetTopicName();
     const TString consumerName = GetConsumerName();
 
@@ -15,7 +15,7 @@ Y_UNIT_TEST_F(ResetOffsetEarliestPrintsOk, TSupportedCodecsFixture) {
     YdbTopicConsumerAdd(topicName, consumerName);
 
     TList<TString> cmd = {
-        "topic", "consumer", "offset", "reset",
+        "topic", "consumer", "offset", "set",
         "--consumer", consumerName,
         "--position", "earliest",
         topicName,
@@ -24,7 +24,7 @@ Y_UNIT_TEST_F(ResetOffsetEarliestPrintsOk, TSupportedCodecsFixture) {
     UNIT_ASSERT_STRING_CONTAINS(output, "OK");
 }
 
-Y_UNIT_TEST_F(ResetOffsetLatestPrintsOk, TSupportedCodecsFixture) {
+Y_UNIT_TEST_F(SetOffsetsLatestPrintsOk, TSupportedCodecsFixture) {
     const TString topicName = GetTopicName();
     const TString consumerName = GetConsumerName();
 
@@ -32,7 +32,7 @@ Y_UNIT_TEST_F(ResetOffsetLatestPrintsOk, TSupportedCodecsFixture) {
     YdbTopicConsumerAdd(topicName, consumerName);
 
     TList<TString> cmd = {
-        "topic", "consumer", "offset", "reset",
+        "topic", "consumer", "offset", "set",
         "--consumer", consumerName,
         "--position", "latest",
         topicName,
@@ -41,12 +41,12 @@ Y_UNIT_TEST_F(ResetOffsetLatestPrintsOk, TSupportedCodecsFixture) {
     UNIT_ASSERT_STRING_CONTAINS(output, "OK");
 }
 
-Y_UNIT_TEST_F(ResetOffsetMissingConsumerPrintsIssues, TSupportedCodecsFixture) {
+Y_UNIT_TEST_F(SetOffsetsMissingConsumerPrintsIssues, TSupportedCodecsFixture) {
     const TString topicName = GetTopicName();
     YdbTopicCreate(topicName);
 
     TList<TString> cmd = {
-        "topic", "consumer", "offset", "reset",
+        "topic", "consumer", "offset", "set",
         "--consumer", "missing-consumer",
         "--position", "earliest",
         topicName,
@@ -62,7 +62,7 @@ Y_UNIT_TEST_F(ResetOffsetMissingConsumerPrintsIssues, TSupportedCodecsFixture) {
     }
 }
 
-Y_UNIT_TEST_F(ResetOffsetTimestampPrintsOk, TSupportedCodecsFixture) {
+Y_UNIT_TEST_F(SetOffsetsTimestampPrintsOk, TSupportedCodecsFixture) {
     const TString topicName = GetTopicName();
     const TString consumerName = GetConsumerName();
 
@@ -70,7 +70,7 @@ Y_UNIT_TEST_F(ResetOffsetTimestampPrintsOk, TSupportedCodecsFixture) {
     YdbTopicConsumerAdd(topicName, consumerName);
 
     TList<TString> cmd = {
-        "topic", "consumer", "offset", "reset",
+        "topic", "consumer", "offset", "set",
         "--consumer", consumerName,
         "--position", "2099-01-01T00:00:00Z",
         topicName,
@@ -79,7 +79,7 @@ Y_UNIT_TEST_F(ResetOffsetTimestampPrintsOk, TSupportedCodecsFixture) {
     UNIT_ASSERT_STRING_CONTAINS(output, "OK");
 }
 
-Y_UNIT_TEST_F(ResetOffsetInvalidPositionFails, TSupportedCodecsFixture) {
+Y_UNIT_TEST_F(SetOffsetsInvalidPositionFails, TSupportedCodecsFixture) {
     const TString topicName = GetTopicName();
     const TString consumerName = GetConsumerName();
 
@@ -87,7 +87,7 @@ Y_UNIT_TEST_F(ResetOffsetInvalidPositionFails, TSupportedCodecsFixture) {
     YdbTopicConsumerAdd(topicName, consumerName);
 
     TList<TString> cmd = {
-        "topic", "consumer", "offset", "reset",
+        "topic", "consumer", "offset", "set",
         "--consumer", consumerName,
         "--position", "not-a-position",
         topicName,

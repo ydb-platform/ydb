@@ -16,7 +16,7 @@ void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPro
 void DoDescribeConsumerRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
-void DoResetOffsetRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoSetOffsetsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);

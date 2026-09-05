@@ -1,4 +1,4 @@
-#include "reset_offset_actor.h"
+#include "set_offsets_actor.h"
 
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -7,23 +7,23 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
-namespace NKikimr::NPQ::NResetOffset {
+namespace NKikimr::NPQ::NSetOffsets {
 
-TResetOffsetActor::TResetOffsetActor(const TActorId& parentId, const TResetOffsetSettings& settings)
+TSetOffsetsActor::TSetOffsetsActor(const TActorId& parentId, const TSetOffsetsSettings& settings)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
     , ParentId(parentId)
     , Settings(settings)
 {
 }
 
-void TResetOffsetActor::Bootstrap() {
+void TSetOffsetsActor::Bootstrap() {
     DoDescribe();
 }
 
-void TResetOffsetActor::DoDescribe() {
+void TSetOffsetsActor::DoDescribe() {
     YDB_LOG_DEBUG("Start describe",
         {"logPrefix", NPQ_LOG_PREFIX});
-    Become(&TResetOffsetActor::DescribeState);
+    Become(&TSetOffsetsActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
         .UserToken = Settings.UserToken,
@@ -33,7 +33,7 @@ void TResetOffsetActor::DoDescribe() {
         SelfId(), Settings.DatabasePath, { Settings.TopicName }, settings));
 }
 
-void TResetOffsetActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+void TSetOffsetsActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
         {"logPrefix", NPQ_LOG_PREFIX});
 
@@ -59,10 +59,10 @@ void TResetOffsetActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) 
             }
             if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
                 return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "ResetOffset is not supported for MLP consumer '" << Settings.Consumer << "'");
+                    TStringBuilder() << "SetOffsets is not supported for MLP consumer '" << Settings.Consumer << "'");
             }
             ResolvedConsumer = consumerConfig->GetName();
-            return DoReset();
+            return DoSet();
         }
         default: {
             auto status = NDescriber::Convert(topic.Status);
@@ -74,17 +74,17 @@ void TResetOffsetActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) 
     }
 }
 
-STFUNC(TResetOffsetActor::DescribeState) {
+STFUNC(TSetOffsetsActor::DescribeState) {
     switch (ev->GetTypeRewrite()) {
         hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     }
 }
 
-void TResetOffsetActor::DoReset() {
+void TSetOffsetsActor::DoSet() {
     YDB_LOG_DEBUG("Start reset",
         {"logPrefix", NPQ_LOG_PREFIX});
-    Become(&TResetOffsetActor::ResetState);
+    Become(&TSetOffsetsActor::SetState);
 
     for (auto& partition : TopicInfo.Info->Description.GetPartitions()) {
         auto partitionId = partition.GetPartitionId();
@@ -97,8 +97,8 @@ void TResetOffsetActor::DoReset() {
     ReplyIfPossible();
 }
 
-void TResetOffsetActor::Handle(TEvPQ::TEvResetOffsetResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvResetOffsetResponse",
+void TSetOffsetsActor::Handle(TEvPQ::TEvSetOffsetsResponse::TPtr& ev) {
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvSetOffsetsResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"ev", ev->Get()->Record.ShortDebugString()});
 
@@ -138,7 +138,7 @@ void TResetOffsetActor::Handle(TEvPQ::TEvResetOffsetResponse::TPtr& ev) {
     ReplyIfPossible();
 }
 
-void TResetOffsetActor::RetryIfPossible(ui32 partitionId, TPartitionStatus& partitionStatus) {
+void TSetOffsetsActor::RetryIfPossible(ui32 partitionId, TPartitionStatus& partitionStatus) {
     if (partitionStatus.Status == EPartitionStatus::InProgress && !partitionStatus.WaitRetry) {
         --PendingPartitions;
         if (partitionStatus.Backoff.HasMore()) {
@@ -151,7 +151,7 @@ void TResetOffsetActor::RetryIfPossible(ui32 partitionId, TPartitionStatus& part
     }
 }
 
-void TResetOffsetActor::MarkPartitionSuccess(TPartitionStatus& partitionStatus) {
+void TSetOffsetsActor::MarkPartitionSuccess(TPartitionStatus& partitionStatus) {
     if (partitionStatus.Status == EPartitionStatus::Success) {
         return;
     }
@@ -169,7 +169,7 @@ void TResetOffsetActor::MarkPartitionSuccess(TPartitionStatus& partitionStatus) 
     partitionStatus.Status = EPartitionStatus::Success;
 }
 
-void TResetOffsetActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+void TSetOffsetsActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
         {"logPrefix", NPQ_LOG_PREFIX});
 
@@ -195,7 +195,7 @@ void TResetOffsetActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     ReplyIfPossible();
 }
 
-void TResetOffsetActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
+void TSetOffsetsActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvents::TEvWakeup",
         {"logPrefix", NPQ_LOG_PREFIX});
 
@@ -215,16 +215,16 @@ void TResetOffsetActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     ReplyIfPossible();
 }
 
-STFUNC(TResetOffsetActor::ResetState) {
+STFUNC(TSetOffsetsActor::SetState) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPQ::TEvResetOffsetResponse, Handle);
+        hFunc(TEvPQ::TEvSetOffsetsResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     }
 }
 
-void TResetOffsetActor::RequestPartitionIfNeeded(ui32 partitionId, TPartitionStatus& status) {
+void TSetOffsetsActor::RequestPartitionIfNeeded(ui32 partitionId, TPartitionStatus& status) {
     if (status.Status == EPartitionStatus::Success || status.Status == EPartitionStatus::Error) {
         return;
     }
@@ -235,7 +235,7 @@ void TResetOffsetActor::RequestPartitionIfNeeded(ui32 partitionId, TPartitionSta
     status.WaitRetry = false;
     SendToTablet(
         status.TabletId,
-        new TEvPQ::TEvResetOffsetRequest(
+        new TEvPQ::TEvSetOffsetsRequest(
             Settings.TopicName,
             ResolvedConsumer,
             partitionId,
@@ -245,7 +245,7 @@ void TResetOffsetActor::RequestPartitionIfNeeded(ui32 partitionId, TPartitionSta
         status.Cookie);
 }
 
-void TResetOffsetActor::ReplyIfPossible() {
+void TSetOffsetsActor::ReplyIfPossible() {
     YDB_LOG_DEBUG("ReplyIfPossible: PendingPartitions PendingRetries",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"pendingPartitions", PendingPartitions},
@@ -257,21 +257,21 @@ void TResetOffsetActor::ReplyIfPossible() {
     ReplyResultAndDie();
 }
 
-void TResetOffsetActor::SendToTablet(ui64 tabletId, IEventBase* ev, ui64 cookie) {
+void TSetOffsetsActor::SendToTablet(ui64 tabletId, IEventBase* ev, ui64 cookie) {
     // SubscribeCookie is what TEvPipeCache puts on TEvDeliveryProblem::Cookie.
     auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev, tabletId, true, TabletCookies[tabletId]);
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery, cookie);
 }
 
-void TResetOffsetActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+void TSetOffsetsActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
     YDB_LOG_INFO("Reply error",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
-    Send(ParentId, new TEvResetOffsetResult(errorCode, std::move(errorMessage)));
+    Send(ParentId, new TEvSetOffsetsResult(errorCode, std::move(errorMessage)));
     PassAway();
 }
 
-void TResetOffsetActor::ReplyResultAndDie() {
+void TSetOffsetsActor::ReplyResultAndDie() {
     std::vector<TPartitionResult> results;
     results.reserve(Partitions.size());
     for (const auto& [partitionId, partitionStatus] : Partitions) {
@@ -281,7 +281,7 @@ void TResetOffsetActor::ReplyResultAndDie() {
             result.Status = Ydb::StatusIds::SUCCESS;
         } else {
             result.Status = partitionStatus.ErrorStatus;
-            result.Error = partitionStatus.Error.empty() ? "Failed to reset offset" : partitionStatus.Error;
+            result.Error = partitionStatus.Error.empty() ? "Failed to set offsets" : partitionStatus.Error;
         }
         results.push_back(std::move(result));
     }
@@ -289,11 +289,11 @@ void TResetOffsetActor::ReplyResultAndDie() {
         return lhs.PartitionId < rhs.PartitionId;
     });
 
-    Send(ParentId, new TEvResetOffsetResult(Ydb::StatusIds::SUCCESS, {}, std::move(results)));
+    Send(ParentId, new TEvSetOffsetsResult(Ydb::StatusIds::SUCCESS, {}, std::move(results)));
     PassAway();
 }
 
-void TResetOffsetActor::PassAway() {
+void TSetOffsetsActor::PassAway() {
     if (ChildActorId) {
         Send(ChildActorId, new TEvents::TEvPoison());
     }
@@ -301,14 +301,14 @@ void TResetOffsetActor::PassAway() {
     TBaseActor::PassAway();
 }
 
-bool TResetOffsetActor::OnUnhandledException(const std::exception& exc) {
-    Send(ParentId, new TEvResetOffsetResult(Ydb::StatusIds::INTERNAL_ERROR,
+bool TSetOffsetsActor::OnUnhandledException(const std::exception& exc) {
+    Send(ParentId, new TEvSetOffsetsResult(Ydb::StatusIds::INTERNAL_ERROR,
         TStringBuilder() << "Unhandled exception: " << exc.what()));
     return TBaseActor::OnUnhandledException(exc);
 }
 
-IActor* CreateResetOffsetActor(const NActors::TActorId& parentId, TResetOffsetSettings&& settings) {
-    return new TResetOffsetActor(parentId, std::move(settings));
+IActor* CreateSetOffsetsActor(const NActors::TActorId& parentId, TSetOffsetsSettings&& settings) {
+    return new TSetOffsetsActor(parentId, std::move(settings));
 }
 
-} // namespace NKikimr::NPQ::NResetOffset
+} // namespace NKikimr::NPQ::NSetOffsets

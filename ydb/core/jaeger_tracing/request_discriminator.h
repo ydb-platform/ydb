@@ -134,7 +134,7 @@ enum class ERequestType: size_t {
     DISTRIBUTED_STORAGE_STREAMSTORAGESTATE,
     DISTRIBUTED_STORAGE_REASSIGNVDISK,
 
-    TOPIC_RESETOFFSET,
+    TOPIC_SETOFFSETS,
 
     REQUEST_TYPES_CNT, // Add new types above this line
 };

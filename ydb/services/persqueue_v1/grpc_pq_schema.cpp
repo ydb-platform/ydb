@@ -2,7 +2,7 @@
 
 #include "actors/schema_actors.h"
 #include "actors/read_session_actor.h"
-#include "actors/reset_offset_actor.h"
+#include "actors/set_offsets_actor.h"
 
 #include <ydb/services/persqueue_v1/actors/schema/pqv1/actors.h>
 #include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
@@ -91,13 +91,13 @@ void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NG
     TActivationContext::Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), std::move(p));
 }
 
-void DoResetOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
-    auto p = dynamic_cast<TEvResetOffsetRequest*>(ctx.release());
+void DoSetOffsetsRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
+    auto p = dynamic_cast<TEvSetOffsetsRequest*>(ctx.release());
 
     EnsureReq(p);
 
-    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Reset Offset request");
-    f.RegisterActor(NKikimr::NGRpcProxy::V1::CreateResetOffsetActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Set Offsets request");
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::CreateSetOffsetsActor(p));
 }
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {

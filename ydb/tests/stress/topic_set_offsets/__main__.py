@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import argparse
 import logging
-from ydb.tests.stress.topic_reset_offset.workload import Workload
+from ydb.tests.stress.topic_set_offsets.workload import Workload
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Topic ResetOffset stress: write, read/commit and reset in parallel",
+        description="Topic SetOffsets stress: write, read/commit and set_offsets in parallel",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--endpoint", default="grpc://localhost:2135", help="YDB endpoint")

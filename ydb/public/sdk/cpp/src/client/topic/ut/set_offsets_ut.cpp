@@ -22,10 +22,10 @@ ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, const TString& topic, const T
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TResetOffsetSdkTests) {
+Y_UNIT_TEST_SUITE(TSetOffsetsSdkTests) {
 
 Y_UNIT_TEST(EarliestLatestTimestamp) {
-    TTopicSdkTestSetup setup("ResetOffsetSdk", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdk", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer");
     setup.Write("topic1", "m1", 0);
     setup.Write("topic1", "m2", 0);
@@ -34,66 +34,66 @@ Y_UNIT_TEST(EarliestLatestTimestamp) {
     const auto path = setup.GetFullTopicPath("topic1");
 
     {
-        auto status = client.ResetOffset(path, "consumer", TResetOffsetSettings().Latest()).GetValueSync();
+        auto status = client.SetOffsets(path, "consumer", TSetOffsetsSettings().Latest()).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer"), 2);
     }
     {
-        auto status = client.ResetOffset(path, "consumer", TResetOffsetSettings().Earliest()).GetValueSync();
+        auto status = client.SetOffsets(path, "consumer", TSetOffsetsSettings().Earliest()).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer"), 0);
     }
     {
-        auto status = client.ResetOffset(path, "consumer", TResetOffsetSettings().FromWrittenAt(TInstant::Now() + TDuration::Hours(1))).GetValueSync();
+        auto status = client.SetOffsets(path, "consumer", TSetOffsetsSettings().FromWrittenAt(TInstant::Now() + TDuration::Hours(1))).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer"), 2);
     }
 }
 
 Y_UNIT_TEST(MissingTopicAndConsumer) {
-    TTopicSdkTestSetup setup("ResetOffsetSdkErrors", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdkErrors", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer");
     TTopicClient client(setup.MakeDriver());
 
     {
-        auto status = client.ResetOffset("/Root/missing", "consumer", TResetOffsetSettings().Earliest()).GetValueSync();
+        auto status = client.SetOffsets("/Root/missing", "consumer", TSetOffsetsSettings().Earliest()).GetValueSync();
         UNIT_ASSERT(!status.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(status.GetStatus(), EStatus::SCHEME_ERROR);
     }
     {
-        auto status = client.ResetOffset(setup.GetFullTopicPath("topic1"), "no-such-consumer", TResetOffsetSettings().Earliest()).GetValueSync();
+        auto status = client.SetOffsets(setup.GetFullTopicPath("topic1"), "no-such-consumer", TSetOffsetsSettings().Earliest()).GetValueSync();
         UNIT_ASSERT(!status.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(status.GetStatus(), EStatus::SCHEME_ERROR);
     }
 }
 
 Y_UNIT_TEST(UnspecifiedPositionRejected) {
-    TTopicSdkTestSetup setup("ResetOffsetSdkNoPosition", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdkNoPosition", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer");
     TTopicClient client(setup.MakeDriver());
-    auto status = client.ResetOffset(setup.GetFullTopicPath("topic1"), "consumer", TResetOffsetSettings()).GetValueSync();
+    auto status = client.SetOffsets(setup.GetFullTopicPath("topic1"), "consumer", TSetOffsetsSettings()).GetValueSync();
     UNIT_ASSERT(!status.IsSuccess());
     UNIT_ASSERT_VALUES_EQUAL(status.GetStatus(), EStatus::BAD_REQUEST);
 }
 
 Y_UNIT_TEST(IdempotentLatest) {
-    TTopicSdkTestSetup setup("ResetOffsetSdkIdempotent", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdkIdempotent", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer");
     setup.Write("topic1", "m1", 0);
     setup.Write("topic1", "m2", 0);
 
     TTopicClient client(setup.MakeDriver());
     const auto path = setup.GetFullTopicPath("topic1");
-    UNIT_ASSERT_C(client.ResetOffset(path, "consumer", TResetOffsetSettings().Latest()).GetValueSync().IsSuccess(),
+    UNIT_ASSERT_C(client.SetOffsets(path, "consumer", TSetOffsetsSettings().Latest()).GetValueSync().IsSuccess(),
         "first latest");
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer"), 2);
-    UNIT_ASSERT_C(client.ResetOffset(path, "consumer", TResetOffsetSettings().Latest()).GetValueSync().IsSuccess(),
+    UNIT_ASSERT_C(client.SetOffsets(path, "consumer", TSetOffsetsSettings().Latest()).GetValueSync().IsSuccess(),
         "second latest");
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer"), 2);
 }
 
 Y_UNIT_TEST(OtherConsumerUnaffected) {
-    TTopicSdkTestSetup setup("ResetOffsetSdkTwoConsumers", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdkTwoConsumers", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer-a");
     TTopicClient client(setup.MakeDriver());
     const auto path = setup.GetFullTopicPath("topic1");
@@ -105,7 +105,7 @@ Y_UNIT_TEST(OtherConsumerUnaffected) {
     setup.Write("topic1", "m1", 0);
     setup.Write("topic1", "m2", 0);
 
-    UNIT_ASSERT_C(client.ResetOffset(path, "consumer-a", TResetOffsetSettings().Latest()).GetValueSync().IsSuccess(),
+    UNIT_ASSERT_C(client.SetOffsets(path, "consumer-a", TSetOffsetsSettings().Latest()).GetValueSync().IsSuccess(),
         "reset a");
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer-a"), 2);
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer-b"), 0);
@@ -113,7 +113,7 @@ Y_UNIT_TEST(OtherConsumerUnaffected) {
 
 Y_UNIT_TEST(ResetLatestAllPartitionsCommitted) {
     constexpr ui32 partitionCount = 1024;
-    TTopicSdkTestSetup setup("ResetOffsetSdkAllPartitions", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdkAllPartitions", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer", partitionCount);
 
     auto client = setup.MakeClient();
@@ -129,7 +129,7 @@ Y_UNIT_TEST(ResetLatestAllPartitionsCommitted) {
         UNIT_ASSERT_C(session->Close(), TStringBuilder() << "close partition " << partitionId);
     }
 
-    auto status = client.ResetOffset(path, "consumer", TResetOffsetSettings().Latest()).GetValueSync();
+    auto status = client.SetOffsets(path, "consumer", TSetOffsetsSettings().Latest()).GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
     auto descr = setup.DescribeConsumer("topic1", "consumer");
@@ -142,13 +142,13 @@ Y_UNIT_TEST(ResetLatestAllPartitionsCommitted) {
 }
 
 Y_UNIT_TEST(LatestSurvivesTabletReboot) {
-    TTopicSdkTestSetup setup("ResetOffsetSdkRebootLatest", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdkRebootLatest", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer");
     setup.Write("topic1", "m1", 0);
 
     TTopicClient client(setup.MakeDriver());
     const auto path = setup.GetFullTopicPath("topic1");
-    auto status = client.ResetOffset(path, "consumer", TResetOffsetSettings().Latest()).GetValueSync();
+    auto status = client.SetOffsets(path, "consumer", TSetOffsetsSettings().Latest()).GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
     auto assertCommittedAtEnd = [&] {
@@ -168,17 +168,17 @@ Y_UNIT_TEST(LatestSurvivesTabletReboot) {
 }
 
 Y_UNIT_TEST(RewindSurvivesTabletReboot) {
-    TTopicSdkTestSetup setup("ResetOffsetSdkRebootRewind", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdkRebootRewind", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer");
     setup.Write("topic1", "m1", 0);
     setup.Write("topic1", "m2", 0);
 
     TTopicClient client(setup.MakeDriver());
     const auto path = setup.GetFullTopicPath("topic1");
-    UNIT_ASSERT_C(client.ResetOffset(path, "consumer", TResetOffsetSettings().Latest()).GetValueSync().IsSuccess(),
+    UNIT_ASSERT_C(client.SetOffsets(path, "consumer", TSetOffsetsSettings().Latest()).GetValueSync().IsSuccess(),
         "latest");
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer"), 2);
-    UNIT_ASSERT_C(client.ResetOffset(path, "consumer", TResetOffsetSettings().Earliest()).GetValueSync().IsSuccess(),
+    UNIT_ASSERT_C(client.SetOffsets(path, "consumer", TSetOffsetsSettings().Earliest()).GetValueSync().IsSuccess(),
         "earliest");
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, "topic1", "consumer"), 0);
 
@@ -187,13 +187,13 @@ Y_UNIT_TEST(RewindSurvivesTabletReboot) {
 }
 
 Y_UNIT_TEST(RewindInactiveAfterSplit) {
-    TTopicSdkTestSetup setup("ResetOffsetSdkInactive", TTopicSdkTestSetup::MakeServerSettings(), false);
+    TTopicSdkTestSetup setup("SetOffsetsSdkInactive", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
     setup.Write(TEST_TOPIC, "before-split", 0);
 
     TTopicClient client(setup.MakeDriver());
     const auto path = setup.GetFullTopicPath(TEST_TOPIC);
-    auto committed = client.ResetOffset(path, TEST_CONSUMER, TResetOffsetSettings().Latest()).GetValueSync();
+    auto committed = client.SetOffsets(path, TEST_CONSUMER, TSetOffsetsSettings().Latest()).GetValueSync();
     UNIT_ASSERT_C(committed.IsSuccess(), committed.GetIssues().ToString());
 
     ui64 txId = 1000;
@@ -214,7 +214,7 @@ Y_UNIT_TEST(RewindInactiveAfterSplit) {
         Sleep(TDuration::MilliSeconds(200));
     }
 
-    auto status = client.ResetOffset(path, TEST_CONSUMER, TResetOffsetSettings().Earliest()).GetValueSync();
+    auto status = client.SetOffsets(path, TEST_CONSUMER, TSetOffsetsSettings().Earliest()).GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
     auto descr = setup.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER);
@@ -230,4 +230,4 @@ Y_UNIT_TEST(RewindInactiveAfterSplit) {
     UNIT_ASSERT(sawInactive);
 }
 
-} // TResetOffsetSdkTests
+} // TSetOffsetsSdkTests

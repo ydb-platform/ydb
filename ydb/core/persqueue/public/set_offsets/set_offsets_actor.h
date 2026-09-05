@@ -1,6 +1,6 @@
 #pragma once
 
-#include "reset_offset.h"
+#include "set_offsets.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/common/actor.h>
@@ -11,12 +11,12 @@
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
-namespace NKikimr::NPQ::NResetOffset {
+namespace NKikimr::NPQ::NSetOffsets {
 
-class TResetOffsetActor : public TBaseActor<TResetOffsetActor>
+class TSetOffsetsActor : public TBaseActor<TSetOffsetsActor>
                         , public TConstantLogPrefix {
 public:
-    TResetOffsetActor(const TActorId& parentId, const TResetOffsetSettings& settings);
+    TSetOffsetsActor(const TActorId& parentId, const TSetOffsetsSettings& settings);
 
     void Bootstrap();
     void PassAway() override;
@@ -43,11 +43,11 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr&);
     STFUNC(DescribeState);
 
-    void DoReset();
-    void Handle(TEvPQ::TEvResetOffsetResponse::TPtr&);
+    void DoSet();
+    void Handle(TEvPQ::TEvSetOffsetsResponse::TPtr&);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
-    STFUNC(ResetState);
+    STFUNC(SetState);
 
     void RequestPartitionIfNeeded(ui32 partitionId, TPartitionStatus& status);
     void RetryIfPossible(ui32 partitionId, TPartitionStatus& status);
@@ -62,7 +62,7 @@ private:
 
 private:
     const TActorId ParentId;
-    const TResetOffsetSettings Settings;
+    const TSetOffsetsSettings Settings;
 
     TActorId ChildActorId;
     TString ResolvedConsumer;
@@ -75,4 +75,4 @@ private:
     absl::flat_hash_map<ui64, ui64> TabletCookies;
 };
 
-} // namespace NKikimr::NPQ::NResetOffset
+} // namespace NKikimr::NPQ::NSetOffsets

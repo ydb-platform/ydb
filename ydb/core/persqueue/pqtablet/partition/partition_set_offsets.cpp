@@ -52,7 +52,7 @@ Ydb::StatusIds::StatusCode TPartition::PqErrorToYdbStatus(NPersQueue::NErrorCode
     }
 }
 
-TInstant TPartition::ResetOffsetTimestamp(const NKikimrPQ::TEvResetOffsetRequest& rec) const {
+TInstant TPartition::SetOffsetsTimestamp(const NKikimrPQ::TEvSetOffsetsRequest& rec) const {
     TInstant timestamp = TInstant::MilliSeconds(rec.GetTimestampMs());
     if (AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
         timestamp = TInstant::Seconds(timestamp.Seconds());
@@ -60,38 +60,38 @@ TInstant TPartition::ResetOffsetTimestamp(const NKikimrPQ::TEvResetOffsetRequest
     return timestamp;
 }
 
-ui64 TPartition::ResolveResetOffset(const NKikimrPQ::TEvResetOffsetRequest& rec) const {
+ui64 TPartition::ResolveSetOffsets(const NKikimrPQ::TEvSetOffsetsRequest& rec) const {
     switch (rec.GetPosition()) {
-        case NKikimrPQ::TEvResetOffsetRequest::EARLIEST:
+        case NKikimrPQ::TEvSetOffsetsRequest::EARLIEST:
             return GetStartOffset();
-        case NKikimrPQ::TEvResetOffsetRequest::LATEST:
+        case NKikimrPQ::TEvSetOffsetsRequest::LATEST:
             return GetEndOffset();
         default:
             return GetEndOffset();
     }
 }
 
-bool TPartition::TryScheduleResetOffsetReply(const TEvPQ::TEvSetClientInfo& act, Ydb::StatusIds::StatusCode status, const TString& error) {
-    if (!act.ResetOffsetReply) {
+bool TPartition::TryScheduleSetOffsetsReply(const TEvPQ::TEvSetClientInfo& act, Ydb::StatusIds::StatusCode status, const TString& error) {
+    if (!act.SetOffsetsReply) {
         return false;
     }
-    const auto& pending = *act.ResetOffsetReply;
-    Replies.emplace_back(pending.Sender, MakeHolder<TEvPQ::TEvResetOffsetResponse>(
+    const auto& pending = *act.SetOffsetsReply;
+    Replies.emplace_back(pending.Sender, MakeHolder<TEvPQ::TEvSetOffsetsResponse>(
         pending.PartitionId, status, TString(error), pending.Cookie).Release());
     return true;
 }
 
-void TPartition::ReplyResetOffset(
+void TPartition::ReplySetOffsets(
     const TActorId& sender,
     ui32 partitionId,
     Ydb::StatusIds::StatusCode status,
     TString message,
     ui64 cookie)
 {
-    Send(sender, new TEvPQ::TEvResetOffsetResponse(partitionId, status, std::move(message), cookie), 0, cookie);
+    Send(sender, new TEvPQ::TEvSetOffsetsResponse(partitionId, status, std::move(message), cookie), 0, cookie);
 }
 
-void TPartition::FinishResetOffset(
+void TPartition::FinishSetOffsets(
     const TActorId& sender,
     ui64 cookie,
     ui32 partitionId,
@@ -109,7 +109,7 @@ void TPartition::FinishResetOffset(
         TActorId{},
         TEvPQ::TEvSetClientInfo::ESCI_OFFSET);
     event->AllowInactiveRewind = true;
-    event->ResetOffsetReply = TEvPQ::TEvSetClientInfo::TResetOffsetReply{
+    event->SetOffsetsReply = TEvPQ::TEvSetClientInfo::TSetOffsetsReply{
         .Sender = sender,
         .Cookie = cookie,
         .PartitionId = partitionId,
@@ -118,7 +118,7 @@ void TPartition::FinishResetOffset(
     ProcessTxsAndUserActs(ActorContext());
 }
 
-TMaybe<ui64> TPartition::ScanHeadForResetOffset(const THead& head, TInstant timestamp) const {
+TMaybe<ui64> TPartition::ScanHeadForSetOffsets(const THead& head, TInstant timestamp) const {
     for (const auto& batch : head.GetBatches()) {
         TVector<TClientBlob> blobs;
         batch.UnpackTo(&blobs);
@@ -129,7 +129,7 @@ TMaybe<ui64> TPartition::ScanHeadForResetOffset(const THead& head, TInstant time
     return Nothing();
 }
 
-TMaybe<ui64> TPartition::ScanRequestedBlobsForResetOffset(
+TMaybe<ui64> TPartition::ScanRequestedBlobsForSetOffsets(
     const TVector<TRequestedBlob>& blobs,
     ui32 begin,
     ui32 end,
@@ -151,13 +151,13 @@ TMaybe<ui64> TPartition::ScanRequestedBlobsForResetOffset(
     return Nothing();
 }
 
-TMaybe<ui64> TPartition::ResolveResetOffsetFromWrittenAt(
-    const TVector<TResetOffsetBlobRead::TKeyRef>& compactionRefs,
-    const TVector<TResetOffsetBlobRead::TKeyRef>& fastWriteRefs,
+TMaybe<ui64> TPartition::ResolveSetOffsetsFromWrittenAt(
+    const TVector<TSetOffsetsBlobRead::TKeyRef>& compactionRefs,
+    const TVector<TSetOffsetsBlobRead::TKeyRef>& fastWriteRefs,
     const TVector<TRequestedBlob>* blobs,
     TInstant timestamp) const
 {
-    auto scanRefs = [&](const TVector<TResetOffsetBlobRead::TKeyRef>& refs) -> TMaybe<ui64> {
+    auto scanRefs = [&](const TVector<TSetOffsetsBlobRead::TKeyRef>& refs) -> TMaybe<ui64> {
         for (const auto& ref : refs) {
             if (!ref.RequestedIndex.Defined()) {
                 if (ref.Timestamp >= timestamp) {
@@ -169,7 +169,7 @@ TMaybe<ui64> TPartition::ResolveResetOffsetFromWrittenAt(
                 continue;
             }
             const ui32 index = *ref.RequestedIndex;
-            if (auto found = ScanRequestedBlobsForResetOffset(*blobs, index, index + 1, timestamp)) {
+            if (auto found = ScanRequestedBlobsForSetOffsets(*blobs, index, index + 1, timestamp)) {
                 return found;
             }
         }
@@ -182,19 +182,19 @@ TMaybe<ui64> TPartition::ResolveResetOffsetFromWrittenAt(
     if (auto found = scanRefs(compactionRefs)) {
         return found;
     }
-    if (auto found = ScanHeadForResetOffset(CompactionBlobEncoder.Head, timestamp)) {
+    if (auto found = ScanHeadForSetOffsets(CompactionBlobEncoder.Head, timestamp)) {
         return found;
     }
     if (auto found = scanRefs(fastWriteRefs)) {
         return found;
     }
-    if (auto found = ScanHeadForResetOffset(BlobEncoder.Head, timestamp)) {
+    if (auto found = ScanHeadForSetOffsets(BlobEncoder.Head, timestamp)) {
         return found;
     }
     return Nothing();
 }
 
-void TPartition::RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev, TInstant timestamp) {
+void TPartition::RequestSetOffsetsBlobs(TEvPQ::TEvSetOffsetsRequest::TPtr& ev, TInstant timestamp) {
     const auto& rec = ev->Get()->Record;
     TVector<const TDataKey*> compactionKeys;
     TVector<const TDataKey*> fastWriteKeys;
@@ -206,15 +206,15 @@ void TPartition::RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev,
     std::unordered_set<ui64> seenOffsets;
     TVector<TRequestedBlob> blobs;
     TBlobKeyTokens tokens;
-    TVector<TResetOffsetBlobRead::TKeyRef> compactionRefs;
-    TVector<TResetOffsetBlobRead::TKeyRef> fastWriteRefs;
+    TVector<TSetOffsetsBlobRead::TKeyRef> compactionRefs;
+    TVector<TSetOffsetsBlobRead::TKeyRef> fastWriteRefs;
 
-    auto collect = [&](const TVector<const TDataKey*>& keys, TVector<TResetOffsetBlobRead::TKeyRef>& refs) {
+    auto collect = [&](const TVector<const TDataKey*>& keys, TVector<TSetOffsetsBlobRead::TKeyRef>& refs) {
         for (const TDataKey* key : keys) {
             if (!seenOffsets.insert(key->Key.GetOffset()).second) {
                 continue;
             }
-            TResetOffsetBlobRead::TKeyRef ref;
+            TSetOffsetsBlobRead::TKeyRef ref;
             ref.Offset = key->Key.GetOffset();
             ref.Timestamp = key->Timestamp;
             // Count == 1: the blob is a single message. Offset is Key.GetOffset(),
@@ -243,9 +243,9 @@ void TPartition::RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev,
     const ui32 partitionId = Partition.OriginalPartitionId;
 
     if (blobs.empty()) {
-        TMaybe<ui64> found = ResolveResetOffsetFromWrittenAt(
+        TMaybe<ui64> found = ResolveSetOffsetsFromWrittenAt(
             compactionRefs, fastWriteRefs, nullptr, timestamp);
-        FinishResetOffset(
+        FinishSetOffsets(
             ev->Sender,
             replyCookie,
             partitionId,
@@ -254,7 +254,7 @@ void TPartition::RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev,
         return;
     }
 
-    ResetOffsetBlobRead = TResetOffsetBlobRead{
+    SetOffsetsBlobRead = TSetOffsetsBlobRead{
         .Sender = ev->Sender,
         .Cookie = replyCookie,
         .PartitionId = partitionId,
@@ -265,62 +265,62 @@ void TPartition::RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev,
         .BlobKeyTokens = std::move(tokens),
     };
 
-    YDB_LOG_DEBUG("Request blobs for ResetOffset FROM_WRITTEN_AT",
+    YDB_LOG_DEBUG("Request blobs for SetOffsets FROM_WRITTEN_AT",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"timestampMs", timestamp.MilliSeconds()},
         {"blobCount", blobs.size()});
 
     auto request = MakeHolder<TEvPQ::TEvBlobRequest>(
-        ERequestCookie::ReadBlobForResetOffset, Partition, std::move(blobs));
+        ERequestCookie::ReadBlobForSetOffsets, Partition, std::move(blobs));
     Send(BlobCache, request.Release());
 }
 
-void TPartition::HandleResetOffsetBlobResponse(TEvPQ::TEvBlobResponse::TPtr& ev) {
-    if (!ResetOffsetBlobRead) {
+void TPartition::HandleSetOffsetsBlobResponse(TEvPQ::TEvBlobResponse::TPtr& ev) {
+    if (!SetOffsetsBlobRead) {
         return;
     }
-    auto pending = std::move(*ResetOffsetBlobRead);
-    ResetOffsetBlobRead.reset();
+    auto pending = std::move(*SetOffsetsBlobRead);
+    SetOffsetsBlobRead.reset();
 
     const auto* response = ev->Get();
     if (HasError(*response)) {
-        ReplyResetOffset(
+        ReplySetOffsets(
             pending.Sender,
             pending.PartitionId,
             Ydb::StatusIds::GENERIC_ERROR,
             TStringBuilder() << "blob read failed: " << response->Error.ErrorStr,
             pending.Cookie);
-        ProcessResetOffsetPendingEvents();
+        ProcessSetOffsetsPendingEvents();
         return;
     }
 
-    TMaybe<ui64> found = ResolveResetOffsetFromWrittenAt(
+    TMaybe<ui64> found = ResolveSetOffsetsFromWrittenAt(
         pending.CompactionKeys,
         pending.FastWriteKeys,
         &response->GetBlobs(),
         pending.Timestamp);
 
-    FinishResetOffset(
+    FinishSetOffsets(
         pending.Sender,
         pending.Cookie,
         pending.PartitionId,
         pending.Consumer,
         found.GetOrElse(GetEndOffset()));
-    ProcessResetOffsetPendingEvents();
+    ProcessSetOffsetsPendingEvents();
 }
 
-void TPartition::BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
+void TPartition::BeginSetOffsets(TEvPQ::TEvSetOffsetsRequest::TPtr& ev) {
     const auto& rec = ev->Get()->Record;
     const ui32 partitionId = Partition.OriginalPartitionId;
     const ui64 replyCookie = rec.HasCookie() ? rec.GetCookie() : ev->Cookie;
 
-    if (rec.GetPosition() == NKikimrPQ::TEvResetOffsetRequest::POSITION_UNSPECIFIED) {
-        ReplyResetOffset(ev->Sender, partitionId, Ydb::StatusIds::BAD_REQUEST, "Position is required", replyCookie);
+    if (rec.GetPosition() == NKikimrPQ::TEvSetOffsetsRequest::POSITION_UNSPECIFIED) {
+        ReplySetOffsets(ev->Sender, partitionId, Ydb::StatusIds::BAD_REQUEST, "Position is required", replyCookie);
         return;
     }
 
     if (size_t count = GetUserActCount(rec.GetConsumer()); count > MAX_USER_ACTS) {
-        ReplyResetOffset(
+        ReplySetOffsets(
             ev->Sender,
             partitionId,
             Ydb::StatusIds::OVERLOADED,
@@ -329,42 +329,42 @@ void TPartition::BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
         return;
     }
 
-    if (rec.GetPosition() == NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT) {
-        RequestResetOffsetBlobs(ev, ResetOffsetTimestamp(rec));
+    if (rec.GetPosition() == NKikimrPQ::TEvSetOffsetsRequest::FROM_WRITTEN_AT) {
+        RequestSetOffsetsBlobs(ev, SetOffsetsTimestamp(rec));
         return;
     }
 
-    FinishResetOffset(ev->Sender, replyCookie, partitionId, rec.GetConsumer(), ResolveResetOffset(rec));
+    FinishSetOffsets(ev->Sender, replyCookie, partitionId, rec.GetConsumer(), ResolveSetOffsets(rec));
 }
 
-void TPartition::HandleOnInit(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
-    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvResetOffsetRequest",
+void TPartition::HandleOnInit(TEvPQ::TEvSetOffsetsRequest::TPtr& ev) {
+    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvSetOffsetsRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"ev", ev->Get()->Record.ShortDebugString()});
-    ResetOffsetPendingEvents.emplace_back(std::move(ev));
+    SetOffsetsPendingEvents.emplace_back(std::move(ev));
 }
 
-void TPartition::Handle(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvResetOffsetRequest",
+void TPartition::Handle(TEvPQ::TEvSetOffsetsRequest::TPtr& ev) {
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvSetOffsetsRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"ev", ev->Get()->Record.ShortDebugString()});
 
-    if (ResetOffsetBlobRead) {
-        ResetOffsetPendingEvents.emplace_back(std::move(ev));
+    if (SetOffsetsBlobRead) {
+        SetOffsetsPendingEvents.emplace_back(std::move(ev));
         return;
     }
-    BeginResetOffset(ev);
+    BeginSetOffsets(ev);
 }
 
-void TPartition::ProcessResetOffsetPendingEvents() {
-    YDB_LOG_DEBUG("Process ResetOffset pending events. Count",
+void TPartition::ProcessSetOffsetsPendingEvents() {
+    YDB_LOG_DEBUG("Process SetOffsets pending events. Count",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"count", ResetOffsetPendingEvents.size()});
+        {"count", SetOffsetsPendingEvents.size()});
 
-    while (!ResetOffsetPendingEvents.empty() && !ResetOffsetBlobRead) {
-        auto ev = std::move(ResetOffsetPendingEvents.front());
-        ResetOffsetPendingEvents.pop_front();
-        BeginResetOffset(ev);
+    while (!SetOffsetsPendingEvents.empty() && !SetOffsetsBlobRead) {
+        auto ev = std::move(SetOffsetsPendingEvents.front());
+        SetOffsetsPendingEvents.pop_front();
+        BeginSetOffsets(ev);
     }
 }
 

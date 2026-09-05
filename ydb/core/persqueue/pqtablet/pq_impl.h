@@ -101,7 +101,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
     void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
     void Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr&);
-    void Handle(TEvPQ::TEvResetOffsetRequest::TPtr&);
+    void Handle(TEvPQ::TEvSetOffsetsRequest::TPtr&);
 
     template<typename TEventHandle>
     bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);

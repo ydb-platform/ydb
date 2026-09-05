@@ -1,7 +1,7 @@
-#include "reset_offset_actor.h"
+#include "set_offsets_actor.h"
 
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
-#include <ydb/core/persqueue/public/reset_offset/reset_offset.h>
+#include <ydb/core/persqueue/public/set_offsets/set_offsets.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
 #include <google/protobuf/util/time_util.h>
@@ -13,57 +13,57 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 namespace {
 
-class TGrpcResetOffsetActor: public TGrpcProxyActor<TGrpcResetOffsetActor, NGRpcService::TEvResetOffsetRequest> {
-    using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TGrpcResetOffsetActor, NGRpcService::TEvResetOffsetRequest>;
+class TGrpcSetOffsetsActor: public TGrpcProxyActor<TGrpcSetOffsetsActor, NGRpcService::TEvSetOffsetsRequest> {
+    using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TGrpcSetOffsetsActor, NGRpcService::TEvSetOffsetsRequest>;
 
 public:
-    TGrpcResetOffsetActor(NGRpcService::IRequestOpCtx* request)
-        : TGrpcProxyActor<TGrpcResetOffsetActor, NGRpcService::TEvResetOffsetRequest>(request)
+    TGrpcSetOffsetsActor(NGRpcService::IRequestOpCtx* request)
+        : TGrpcProxyActor<TGrpcSetOffsetsActor, NGRpcService::TEvSetOffsetsRequest>(request)
     {
     }
 
     void DoAction() {
         const auto* proto = GetProtoRequest();
-        if (proto->position_case() == Ydb::Topic::ResetOffsetRequest::POSITION_NOT_SET) {
+        if (proto->position_case() == Ydb::Topic::SetOffsetsRequest::POSITION_NOT_SET) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Position is required");
         }
 
-        Become(&TGrpcResetOffsetActor::StateWork);
+        Become(&TGrpcSetOffsetsActor::StateWork);
 
-        NPQ::NResetOffset::TResetOffsetSettings settings;
+        NPQ::NSetOffsets::TSetOffsetsSettings settings;
         settings.DatabasePath = GetDatabase();
         settings.TopicName = proto->path();
         settings.Consumer = proto->consumer();
         settings.UserToken = GetUserToken();
 
         switch (proto->position_case()) {
-            case Ydb::Topic::ResetOffsetRequest::kEarliest:
-                settings.Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST;
+            case Ydb::Topic::SetOffsetsRequest::kEarliest:
+                settings.Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST;
                 break;
-            case Ydb::Topic::ResetOffsetRequest::kLatest:
-                settings.Position = NKikimrPQ::TEvResetOffsetRequest::LATEST;
+            case Ydb::Topic::SetOffsetsRequest::kLatest:
+                settings.Position = NKikimrPQ::TEvSetOffsetsRequest::LATEST;
                 break;
-            case Ydb::Topic::ResetOffsetRequest::kFromWrittenAt: {
-                settings.Position = NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT;
+            case Ydb::Topic::SetOffsetsRequest::kFromWrittenAt: {
+                settings.Position = NKikimrPQ::TEvSetOffsetsRequest::FROM_WRITTEN_AT;
                 const i64 timestampMs = ::google::protobuf::util::TimeUtil::TimestampToMilliseconds(
                     proto->from_written_at().written_at());
                 settings.TimestampMs = timestampMs < 0 ? 0 : static_cast<ui64>(timestampMs);
                 break;
             }
-            case Ydb::Topic::ResetOffsetRequest::POSITION_NOT_SET:
+            case Ydb::Topic::SetOffsetsRequest::POSITION_NOT_SET:
                 Y_ABORT("unreachable");
         }
 
-        Register(NPQ::NResetOffset::CreateResetOffsetActor(SelfId(), std::move(settings)));
+        Register(NPQ::NSetOffsets::CreateSetOffsetsActor(SelfId(), std::move(settings)));
     }
 
 private:
-    void Handle(NPQ::NResetOffset::TEvResetOffsetResult::TPtr& ev) {
+    void Handle(NPQ::NSetOffsets::TEvSetOffsetsResult::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(ev->Get()->Status, ev->Get()->Error);
         }
 
-        std::vector<const NPQ::NResetOffset::TPartitionResult*> failedPartitions;
+        std::vector<const NPQ::NSetOffsets::TPartitionResult*> failedPartitions;
         for (const auto& partition : ev->Get()->Partitions) {
             if (partition.Status != Ydb::StatusIds::SUCCESS) {
                 failedPartitions.push_back(&partition);
@@ -78,7 +78,7 @@ private:
         for (size_t i = 0; i < failedPartitions.size(); ++i) {
             const auto& partition = *failedPartitions[i];
             if (i == 0) {
-                failed << "Failed to reset offset for partitions: ";
+                failed << "Failed to set offsets for partitions: ";
                 errorStatus = partition.Status;
             } else {
                 failed << ", ";
@@ -96,12 +96,12 @@ private:
             return ReplyWithError(errorStatus, failed);
         }
 
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Topic::ResetOffsetResult());
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Topic::SetOffsetsResult());
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NResetOffset::TEvResetOffsetResult, Handle);
+            hFunc(NPQ::NSetOffsets::TEvSetOffsetsResult, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }
@@ -110,8 +110,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateResetOffsetActor(NGRpcService::IRequestOpCtx* request) {
-    return new TGrpcResetOffsetActor(request);
+NActors::IActor* CreateSetOffsetsActor(NGRpcService::IRequestOpCtx* request) {
+    return new TGrpcSetOffsetsActor(request);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1

@@ -110,7 +110,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             nullptr)
 
     SETUP_TOPIC_METHOD(CommitOffset, DoCommitOffsetRequest, RLSWITCH(Rps), TOPIC_COMMITOFFSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), nullptr);
-    SETUP_TOPIC_METHOD(ResetOffset, DoResetOffsetRequest, RLSWITCH(Rps), TOPIC_RESETOFFSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), nullptr);
+    SETUP_TOPIC_METHOD(SetOffsets, DoSetOffsetsRequest, RLSWITCH(Rps), TOPIC_SETOFFSETS, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), nullptr);
     SETUP_TOPIC_METHOD(DropTopic, DoDropTopicRequest, RLSWITCH(Rps), TOPIC_DROPTOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
     SETUP_TOPIC_METHOD(CreateTopic, DoCreateTopicRequest, RLSWITCH(Rps), TOPIC_CREATETOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
     SETUP_TOPIC_METHOD(AlterTopic, DoAlterTopicRequest, RLSWITCH(Rps), TOPIC_ALTERTOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);

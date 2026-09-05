@@ -1,6 +1,6 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/reset_offset/reset_offset.h>
+#include <ydb/core/persqueue/public/set_offsets/set_offsets.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/aclib/aclib.h>
@@ -15,7 +15,7 @@
 #include <memory>
 
 using namespace NKikimr::NPQ;
-using namespace NKikimr::NPQ::NResetOffset;
+using namespace NKikimr::NPQ::NSetOffsets;
 using NKikimr::TEvPQ;
 using NActors::IEventHandle;
 using NActors::TActorId;
@@ -24,7 +24,7 @@ using namespace NYdb::NTopic::NTests;
 
 namespace {
 
-using TCoreSettings = NKikimr::NPQ::NResetOffset::TResetOffsetSettings;
+using TCoreSettings = NKikimr::NPQ::NSetOffsets::TSetOffsetsSettings;
 
 std::atomic<ui64> TopicSeq{0};
 std::unique_ptr<TTopicSdkTestSetup> ClusterInstance;
@@ -36,7 +36,7 @@ TString UniqueName(TStringBuf prefix) {
 TTopicSdkTestSetup& Cluster() {
     if (!ClusterInstance) {
         ClusterInstance = std::make_unique<TTopicSdkTestSetup>(
-            "ResetOffsetActorTests", TTopicSdkTestSetup::MakeServerSettings(), false);
+            "SetOffsetsActorTests", TTopicSdkTestSetup::MakeServerSettings(), false);
         // Default TTestServer logs PERSQUEUE at DEBUG (idle persist every ~100ms).
         // Under ASAN that races with KQP compile and blows up the last test in the chunk.
         ClusterInstance->GetServer().EnableLogs(
@@ -57,20 +57,20 @@ struct TRegisteredActor {
 TRegisteredActor CreateActor(NActors::TTestActorRuntime& runtime, TCoreSettings settings) {
     TRegisteredActor registered;
     registered.Edge = runtime.AllocateEdgeActor();
-    registered.Actor = runtime.Register(CreateResetOffsetActor(registered.Edge, std::move(settings)));
+    registered.Actor = runtime.Register(CreateSetOffsetsActor(registered.Edge, std::move(settings)));
     runtime.EnableScheduleForActor(registered.Actor);
     runtime.DispatchEvents(NActors::TDispatchOptions(), TDuration::Zero());
     return registered;
 }
 
-THolder<TEvResetOffsetResult> WaitResult(
+THolder<TEvSetOffsetsResult> WaitResult(
     NActors::TTestActorRuntime& runtime,
     const TRegisteredActor& actor,
     TDuration timeout = TDuration::Seconds(30))
 {
-    auto ev = runtime.GrabEdgeEvent<TEvResetOffsetResult>(actor.Edge, timeout);
-    UNIT_ASSERT_C(ev, "TEvResetOffsetResult timed out");
-    return THolder<TEvResetOffsetResult>(ev->Release().Release());
+    auto ev = runtime.GrabEdgeEvent<TEvSetOffsetsResult>(actor.Edge, timeout);
+    UNIT_ASSERT_C(ev, "TEvSetOffsetsResult timed out");
+    return THolder<TEvSetOffsetsResult>(ev->Release().Release());
 }
 
 void AssertRequestError(
@@ -84,7 +84,7 @@ void AssertRequestError(
     UNIT_ASSERT_STRING_CONTAINS(result->Error, substring);
 }
 
-void AssertAllPartitionsSuccess(const THolder<TEvResetOffsetResult>& result) {
+void AssertAllPartitionsSuccess(const THolder<TEvSetOffsetsResult>& result) {
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Error);
     UNIT_ASSERT(!result->Partitions.empty());
     for (const auto& partition : result->Partitions) {
@@ -115,7 +115,7 @@ ui64 DescribeTabletId(TTopicSdkTestSetup& setup, const TString& topic) {
 
 } // namespace
 
-class TResetOffsetActorSuite: public TTestBase {
+class TSetOffsetsActorSuite: public TTestBase {
 public:
     void GlobalSuiteTearDown() override {
         // Destroy while the unittest runtime is still alive. A leaked TTestServer
@@ -124,7 +124,7 @@ public:
     }
 };
 
-Y_UNIT_TEST_SUITE_IMPL(TResetOffsetActorTests, TResetOffsetActorSuite) {
+Y_UNIT_TEST_SUITE_IMPL(TSetOffsetsActorTests, TSetOffsetsActorSuite) {
 
 Y_UNIT_TEST(TopicNotExists) {
     auto& setup = Cluster();
@@ -133,7 +133,7 @@ Y_UNIT_TEST(TopicNotExists) {
         .DatabasePath = "/Root",
         .TopicName = "/Root/topic_not_exists",
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     AssertRequestError(runtime, actor, Ydb::StatusIds::SCHEME_ERROR, "does not exist");
 }
@@ -149,7 +149,7 @@ Y_UNIT_TEST(TopicWithoutConsumer) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "consumer_not_exists",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     AssertRequestError(runtime, actor, Ydb::StatusIds::SCHEME_ERROR, "does not exist");
 }
@@ -170,7 +170,7 @@ Y_UNIT_TEST(Unauthorized) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
         .UserToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{}),
     });
     auto result = WaitResult(runtime, actor);
@@ -195,7 +195,7 @@ Y_UNIT_TEST(MlpConsumerRejected) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "mlp-consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     AssertRequestError(runtime, actor, Ydb::StatusIds::BAD_REQUEST, "MLP");
 }
@@ -211,7 +211,7 @@ Y_UNIT_TEST(EmptyTopicEarliest) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 0);
@@ -228,7 +228,7 @@ Y_UNIT_TEST(EmptyTopicLatest) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::LATEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::LATEST,
     });
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 0);
@@ -245,7 +245,7 @@ Y_UNIT_TEST(ManyPartitions) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::LATEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::LATEST,
     });
     auto result = WaitResult(runtime, actor);
     AssertAllPartitionsSuccess(result);
@@ -270,7 +270,7 @@ Y_UNIT_TEST(RewindActiveAfterWrite) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 0);
@@ -290,7 +290,7 @@ Y_UNIT_TEST(SkipToEnd) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::LATEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::LATEST,
     });
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 2);
@@ -321,7 +321,7 @@ Y_UNIT_TEST(TimestampBeforeInsideAfter) {
             .DatabasePath = "/Root",
             .TopicName = TString{setup.GetFullTopicPath(topic)},
             .Consumer = "consumer",
-            .Position = NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+            .Position = NKikimrPQ::TEvSetOffsetsRequest::FROM_WRITTEN_AT,
             .TimestampMs = ts.MilliSeconds(),
         });
         AssertAllPartitionsSuccess(WaitResult(runtime, actor));
@@ -344,9 +344,9 @@ Y_UNIT_TEST(StaleCookieIgnored) {
         .DatabasePath = "/Root",
         .TopicName = TString{setup.GetFullTopicPath(topic)},
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvSetOffsetsRequest::EARLIEST,
     });
-    runtime.Send(new IEventHandle(actor.Actor, TActorId(), new TEvPQ::TEvResetOffsetResponse(0, Ydb::StatusIds::GENERIC_ERROR, "stale", 999)));
+    runtime.Send(new IEventHandle(actor.Actor, TActorId(), new TEvPQ::TEvSetOffsetsResponse(0, Ydb::StatusIds::GENERIC_ERROR, "stale", 999)));
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
 }
 
@@ -363,18 +363,18 @@ Y_UNIT_TEST(TabletDirectEarliestLatest) {
     auto edge = setup.GetRuntime().AllocateEdgeActor();
 
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
-        new TEvPQ::TEvResetOffsetRequest(path, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::LATEST));
+        new TEvPQ::TEvSetOffsetsRequest(path, "consumer", 0, NKikimrPQ::TEvSetOffsetsRequest::LATEST));
     {
-        auto latest = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
+        auto latest = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvSetOffsetsResponse>(edge, TDuration::Seconds(30));
         UNIT_ASSERT(latest);
         UNIT_ASSERT_VALUES_EQUAL(latest->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
     }
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 1);
 
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
-        new TEvPQ::TEvResetOffsetRequest(path, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::EARLIEST));
+        new TEvPQ::TEvSetOffsetsRequest(path, "consumer", 0, NKikimrPQ::TEvSetOffsetsRequest::EARLIEST));
     {
-        auto earliest = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
+        auto earliest = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvSetOffsetsResponse>(edge, TDuration::Seconds(30));
         UNIT_ASSERT(earliest);
         UNIT_ASSERT_VALUES_EQUAL(earliest->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
     }
@@ -393,8 +393,8 @@ Y_UNIT_TEST(TabletDirectUnspecifiedPosition) {
     auto edge = setup.GetRuntime().AllocateEdgeActor();
 
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
-        new TEvPQ::TEvResetOffsetRequest(path, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::POSITION_UNSPECIFIED));
-    auto response = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
+        new TEvPQ::TEvSetOffsetsRequest(path, "consumer", 0, NKikimrPQ::TEvSetOffsetsRequest::POSITION_UNSPECIFIED));
+    auto response = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvSetOffsetsResponse>(edge, TDuration::Seconds(30));
     UNIT_ASSERT(response);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->GetStatus(), Ydb::StatusIds::BAD_REQUEST);
 }
@@ -411,8 +411,8 @@ Y_UNIT_TEST(TabletDirectUnknownPartition) {
     auto edge = setup.GetRuntime().AllocateEdgeActor();
 
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
-        new TEvPQ::TEvResetOffsetRequest(path, "consumer", 999, NKikimrPQ::TEvResetOffsetRequest::EARLIEST, 0, 42));
-    auto response = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
+        new TEvPQ::TEvSetOffsetsRequest(path, "consumer", 999, NKikimrPQ::TEvSetOffsetsRequest::EARLIEST, 0, 42));
+    auto response = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvSetOffsetsResponse>(edge, TDuration::Seconds(30));
     UNIT_ASSERT(response);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->GetStatus(), Ydb::StatusIds::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(response->Get()->GetErrorMessage(), "not found");
@@ -434,9 +434,9 @@ Y_UNIT_TEST(TabletDirectResetDoesNotStealCommit) {
     const ui64 tabletId = DescribeTabletId(setup, topic);
     auto edge = setup.GetRuntime().AllocateEdgeActor();
     NKikimr::ForwardToTablet(setup.GetRuntime(), tabletId, edge,
-        new TEvPQ::TEvResetOffsetRequest(path, "consumer", 0, NKikimrPQ::TEvResetOffsetRequest::EARLIEST, 0, 1));
+        new TEvPQ::TEvSetOffsetsRequest(path, "consumer", 0, NKikimrPQ::TEvSetOffsetsRequest::EARLIEST, 0, 1));
     {
-        auto reset = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(edge, TDuration::Seconds(30));
+        auto reset = setup.GetRuntime().GrabEdgeEvent<TEvPQ::TEvSetOffsetsResponse>(edge, TDuration::Seconds(30));
         UNIT_ASSERT(reset);
         UNIT_ASSERT_VALUES_EQUAL(reset->Get()->GetStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(reset->Get()->GetCookie(), 1u);
@@ -447,4 +447,4 @@ Y_UNIT_TEST(TabletDirectResetDoesNotStealCommit) {
     UNIT_ASSERT_VALUES_EQUAL(GetCommittedOffset(setup, topic, "consumer"), 1);
 }
 
-} // TResetOffsetActorTests
+} // TSetOffsetsActorTests

@@ -7,7 +7,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     schema_ops_ut.cpp
-    reset_offset_actor_ut.cpp
+    set_offsets_actor_ut.cpp
 )
 
 PEERDIR(

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Parallel write / read-commit / ResetOffset stress workload.
+"""Parallel write / read-commit / SetOffsets stress workload.
 
-TODO: rewrite this test onto the Python SDK TopicClient.reset_offset (or
-equivalent) as soon as the SDK exposes ResetOffset. Drop the bundled ydb CLI,
-ydb_cli resource, subprocess reset sessions, and CLI position parsing. Drive
+TODO: rewrite this test onto the Python SDK TopicClient.set_offsets (or
+equivalent) as soon as the SDK exposes SetOffsets. Drop the bundled ydb CLI,
+ydb_cli resource, subprocess set_offsets sessions, and CLI position parsing. Drive
 earliest / latest / FROM_WRITTEN_AT from the same Python process as writers
 and readers.
 """
@@ -23,7 +23,7 @@ import uuid
 from library.python import resource
 import ydb
 
-logger = logging.getLogger("YdbTopicResetOffsetWorkload")
+logger = logging.getLogger("YdbTopicSetOffsetsWorkload")
 
 
 class Workload:
@@ -34,7 +34,7 @@ class Workload:
         self.writers = writers
         self.consumers = [f"consumer-{i}" for i in range(consumers)]
         self.readers_per_consumer = readers_per_consumer
-        self.topic_name = f"reset_offset_{uuid.uuid1()}".replace("-", "_")
+        self.topic_name = f"set_offsets_{uuid.uuid1()}".replace("-", "_")
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.stop = threading.Event()
         self.started_at = 0.0
@@ -44,8 +44,8 @@ class Workload:
         self.stats = {
             "written": 0,
             "read_commits": 0,
-            "reset_ok": {"earliest": 0, "latest": 0, "timestamp": 0},
-            "reset_fail": {"earliest": 0, "latest": 0, "timestamp": 0},
+            "set_ok": {"earliest": 0, "latest": 0, "timestamp": 0},
+            "set_fail": {"earliest": 0, "latest": 0, "timestamp": 0},
             "reader_reconnects": 0,
         }
         self._unpack_resource("ydb_cli")
@@ -65,7 +65,7 @@ class Workload:
 
     def _unpack_resource(self, name):
         self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())
-        self.working_dir = os.path.join(self.tempdir.name, "topic_reset_offset_ydb_cli")
+        self.working_dir = os.path.join(self.tempdir.name, "topic_set_offsets_ydb_cli")
         os.makedirs(self.working_dir, exist_ok=True)
         path_to_unpack = os.path.join(self.working_dir, name)
         with open(path_to_unpack, "wb") as f:
@@ -178,14 +178,14 @@ class Workload:
         ts = random.uniform(self.started_at, now if now > self.started_at else now + 1)
         return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    def _reset_once(self, kind, consumer):
-        # TODO: call Python SDK reset_offset here instead of spawning ydb CLI.
+    def _set_once(self, kind, consumer):
+        # TODO: call Python SDK set_offsets here instead of spawning ydb CLI.
         position = self._timestamp_position() if kind == "timestamp" else kind
         cmd = [
             self.cli_path,
             "--endpoint", self.endpoint,
             "--database", self.database,
-            "topic", "consumer", "offset", "reset",
+            "topic", "consumer", "offset", "set",
             "--consumer", consumer,
             "--position", position,
             self.topic_name,
@@ -203,8 +203,8 @@ class Workload:
                     proc.kill()
                 if self.stop.is_set():
                     return
-                self._inc("reset_fail", kind)
-                logger.info("reset %s consumer=%s position=%s timed out", kind, consumer, position)
+                self._inc("set_fail", kind)
+                logger.info("set_offsets %s consumer=%s position=%s timed out", kind, consumer, position)
                 return
             try:
                 stdout, stderr = proc.communicate(timeout=min(0.2, remaining))
@@ -212,22 +212,22 @@ class Workload:
             except subprocess.TimeoutExpired:
                 continue
         if proc.returncode == 0:
-            self._inc("reset_ok", kind)
+            self._inc("set_ok", kind)
             return
-        self._inc("reset_fail", kind)
+        self._inc("set_fail", kind)
         logger.info(
-            "reset %s consumer=%s position=%s failed rc=%s stderr=%s",
+            "set_offsets %s consumer=%s position=%s failed rc=%s stderr=%s",
             kind, consumer, position, proc.returncode, (stderr or stdout or "")[-500:],
         )
 
-    def _reset_loop(self, kind):
+    def _set_loop(self, kind):
         try:
             while not self.stop.wait(timeout=random.uniform(0.3, 1.0)):
                 consumer = random.choice(self.consumers)
-                self._reset_once(kind, consumer)
+                self._set_once(kind, consumer)
         except Exception as exc:
             if not self.stop.is_set():
-                self._add_error(f"reset-{kind}", exc)
+                self._add_error(f"set_offsets-{kind}", exc)
 
     def _log_stats(self):
         with self.stats_lock:
@@ -248,7 +248,7 @@ class Workload:
                     daemon=True,
                 ))
         for kind in ("earliest", "latest", "timestamp"):
-            threads.append(threading.Thread(target=self._reset_loop, args=(kind,), name=f"reset-{kind}", daemon=True))
+            threads.append(threading.Thread(target=self._set_loop, args=(kind,), name=f"set_offsets-{kind}", daemon=True))
 
         for thread in threads:
             thread.start()
@@ -270,8 +270,8 @@ class Workload:
             stats = {
                 "written": self.stats["written"],
                 "read_commits": self.stats["read_commits"],
-                "reset_ok": dict(self.stats["reset_ok"]),
-                "reset_fail": dict(self.stats["reset_fail"]),
+                "set_ok": dict(self.stats["set_ok"]),
+                "set_fail": dict(self.stats["set_fail"]),
                 "reader_reconnects": self.stats["reader_reconnects"],
             }
 
@@ -283,8 +283,8 @@ class Workload:
         if stats["read_commits"] == 0:
             problems.append("no messages were read/committed")
         for kind in ("earliest", "latest", "timestamp"):
-            if stats["reset_ok"][kind] == 0:
-                problems.append(f"no successful reset to {kind}")
+            if stats["set_ok"][kind] == 0:
+                problems.append(f"no successful set_offsets to {kind}")
         if problems:
             raise AssertionError("\n".join(problems) + f"\nstats={stats}")
         logger.info("workload finished stats=%s", stats)

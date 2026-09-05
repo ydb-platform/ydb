@@ -16,7 +16,7 @@ namespace NKikimr::NUdfStore {
 void TWasmCompileActor::Bootstrap() {
     Become(&TWasmCompileActor::StateMain);
     ModuleKind_ = WasmArtifactKindToString(EWasmArtifactKind::Module);
-    ExecuteQuery(NTableQuery::BuildSelectModuleByMd5Query(ModulesTablePath_), true);
+    ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
 }
 
 void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
@@ -32,12 +32,16 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
 
     switch (Step_) {
         case EStep::ReadModuleSource:
-            NTableQuery::SetSelectModuleByMd5Params(request, Md5_);
+            NTableQuery::SetSelectModuleByNameParams(
+                request,
+                Name_,
+                TUdfModule::TypeToString(EUdfType::WASM));
             break;
         case EStep::MarkCompiling:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                ModuleSource_.Uid,
+                Name_,
+                TUdfModule::TypeToString(EUdfType::WASM),
                 TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
                 "");
             break;
@@ -51,7 +55,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 WasmArtifactKindToString(EWasmArtifactKind::Library));
             break;
         case EStep::DeleteArtifactChunks:
-            NTableQuery::SetDeleteArtifactChunksParams(request, Md5_, ModuleKind_);
+            NTableQuery::SetDeleteArtifactChunksParams(request, Name_, ModuleKind_);
             break;
         case EStep::UpsertModuleArtifact:
             NTableQuery::SetUpsertArtifactParams(request, ArtifactRow_);
@@ -61,7 +65,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
             const auto& chunk = PendingChunkWrites_[NextChunkWriteIndex_];
             NTableQuery::SetUpsertArtifactChunkParams(
                 request,
-                Md5_,
+                Name_,
                 ModuleKind_,
                 chunk.BlobKind,
                 chunk.ChunkIdx,
@@ -71,14 +75,16 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
         case EStep::UpdateMetaReady:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                ModuleSource_.Uid,
+                Name_,
+                TUdfModule::TypeToString(EUdfType::WASM),
                 TUdfModule::CompileStatusToString(ECompileStatus::Ready),
                 "");
             break;
         case EStep::UpdateMetaFailed:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                ModuleSource_.Uid,
+                Name_,
+                TUdfModule::TypeToString(EUdfType::WASM),
                 TUdfModule::CompileStatusToString(ECompileStatus::Failed),
                 ErrorMessage_);
             break;
@@ -105,10 +111,19 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
         switch (Step_) {
             case EStep::ReadModuleSource: {
                 if (!NTableQuery::ParseModuleSourceResponse(response, ModuleSource_)) {
-                    ReplyError(TStringBuilder() << "WASM module row not found for md5=" << Md5_);
+                    ReplyError(TStringBuilder() << "WASM module row not found for name=" << Name_);
                     return;
                 }
                 ParsedManifest_ = NWasm::ParseManifest(Manifest_);
+                // The row name is the module's identity, so it must be the name
+                // the manifest declares; otherwise the artifact would be
+                // published under a name the loader never looks up.
+                if (ParsedManifest_.ModuleName != Name_) {
+                    ReplyError(TStringBuilder()
+                        << "WASM module row name=" << Name_
+                        << " does not match manifest module_name=" << ParsedManifest_.ModuleName);
+                    return;
+                }
                 Step_ = EStep::MarkCompiling;
                 ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
                 return;
@@ -121,20 +136,20 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
             case EStep::ReadModuleChunks: {
                 TVector<TString> chunks;
                 if (!NTableQuery::ParseSourceChunksResponse(response, chunks)) {
-                    ReplyError(TStringBuilder() << "Failed to read module source chunks for md5=" << Md5_);
+                    ReplyError(TStringBuilder() << "Failed to read module source chunks for name=" << Name_);
                     return;
                 }
-                if (chunks.size() != ModuleSource_.ChunkCount) {
+                TString joinError;
+                if (!JoinAndVerifyBlobs(
+                        chunks,
+                        ModuleSource_.ChunkCount,
+                        ModuleSource_.Size,
+                        ModuleSource_.Md5,
+                        ModuleSource_.Body,
+                        joinError))
+                {
                     ReplyError(TStringBuilder()
-                        << "Module source chunk_count mismatch for md5=" << Md5_
-                        << ": meta=" << ModuleSource_.ChunkCount << " actual=" << chunks.size());
-                    return;
-                }
-                ModuleSource_.Body = JoinBlobs(chunks);
-                if (ModuleSource_.Size != 0 && ModuleSource_.Body.size() != ModuleSource_.Size) {
-                    ReplyError(TStringBuilder()
-                        << "Module source size mismatch for md5=" << Md5_
-                        << ": meta=" << ModuleSource_.Size << " actual=" << ModuleSource_.Body.size());
+                        << "Module source is corrupted for name=" << Name_ << ": " << joinError);
                     return;
                 }
                 Step_ = EStep::ReadLibraryArtifact;
@@ -195,15 +210,17 @@ void TWasmCompileActor::ValidateExports() {
     const auto format = NWasm::DetectBytecodeFormat(ParsedManifest_.ModuleExtension);
     const auto exports = NWasm::CollectWasmExports(ModuleSource_.Body, format);
 
-    auto requireExport = [&](const TString& exportName) {
+    auto requireExport = [&](const TString& exportName) -> const NWasm::TWasmExportSignature* {
         if (exportName.empty()) {
-            return;
+            return nullptr;
         }
-        if (!exports.contains(exportName)) {
+        const auto* signature = exports.FindPtr(exportName);
+        if (!signature) {
             ythrow yexception()
-                << "Wasm module for UDF '" << Md5_
+                << "Wasm module for UDF '" << Name_
                 << "' does not export function '" << exportName << "'";
         }
+        return signature;
     };
 
     for (const auto& descriptor : ParsedManifest_.Functions) {
@@ -211,8 +228,31 @@ void TWasmCompileActor::ValidateExports() {
             requireExport(descriptor.CreateExport);
             requireExport(descriptor.CallExport);
             requireExport(descriptor.DestroyExport);
-        } else {
-            requireExport(TString(NWasm::PlainWasmExport(descriptor)));
+            continue;
+        }
+
+        const TString exportName(NWasm::PlainWasmExport(descriptor));
+        const auto* signature = requireExport(exportName);
+        if (!signature
+            || descriptor.CallingConvention != NWasm::EWasmCallingConvention::Bridge)
+        {
+            continue;
+        }
+        // A bridge export is called as (ctx, resultPtr, arg handles...) and
+        // writes its result through resultPtr, so a mismatch here means the
+        // manifest and the module disagree about the argument list. Catching
+        // it at registration beats a WAVM type error on the first row.
+        const size_t expectedParams = descriptor.ArgTypes.size() + 2;
+        if (signature->ParamCount != expectedParams || signature->ResultCount != 0) {
+            ythrow yexception()
+                << "Wasm export '" << exportName << "' for UDF '" << Name_
+                << "' has " << signature->ParamCount << " parameters and "
+                << signature->ResultCount << " results, but calling_convention="
+                << NWasm::CallingConventionAsStr(descriptor.CallingConvention)
+                << " with " << descriptor.ArgTypes.size()
+                << " declared arguments needs " << expectedParams
+                << " parameters (context, result pointer, one per argument)"
+                   " and no results";
         }
     }
 }
@@ -242,7 +282,7 @@ void TWasmCompileActor::CompileUserModule() {
         }
 
         ArtifactRow_ = NTableQuery::TWasmArtifactRow{
-            .Id = Md5_,
+            .Id = Name_,
             .Kind = ModuleKind_,
             .SourceMd5 = ModuleSource_.Md5,
             .Version = ModuleSource_.Version,
@@ -287,22 +327,22 @@ void TWasmCompileActor::FailAndPersist(const TString& message) {
 
 void TWasmCompileActor::ReplyError(const TString& message) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TWasmCompileActor: " << message;
-    Send(ReplyTo_, new TEvWasmCompileResponse(false, Md5_, message));
+    Send(ReplyTo_, new TEvWasmCompileResponse(false, Name_, message));
     PassAway();
 }
 
 void TWasmCompileActor::ReplyDeferred(const TString& reason) {
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileActor: deferred WASM UDF '" << Md5_ << "': " << reason;
-    Send(ReplyTo_, new TEvWasmCompileResponse(false, Md5_, reason, true));
+        << "TWasmCompileActor: deferred WASM UDF '" << Name_ << "': " << reason;
+    Send(ReplyTo_, new TEvWasmCompileResponse(false, Name_, reason, true));
     PassAway();
 }
 
 void TWasmCompileActor::ReplySuccess() {
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileActor: compiled WASM UDF '" << Md5_
+        << "TWasmCompileActor: compiled WASM UDF '" << Name_
         << "' for cpu_spec='" << CpuSpec_ << "'";
-    Send(ReplyTo_, new TEvWasmCompileResponse(true, Md5_));
+    Send(ReplyTo_, new TEvWasmCompileResponse(true, Name_));
     PassAway();
 }
 

@@ -1,0 +1,25 @@
+(module
+    (import "env" "memory" (memory i64 8 2097152))
+    (import "env" "BridgeDictLookup" (func $lookup (param i64 i64) (result i64)))
+    (import "env" "BridgeIsNull" (func $is_null (param i64) (result i32)))
+    (import "env" "BridgeMakeNull" (func $make_null (result i64)))
+    (import "env" "BridgeGetInt64" (func $get_i64 (param i64) (result i64)))
+    (import "env" "BridgeMakeInt64" (func $make_i64 (param i64) (result i64)))
+    (import "env" "BridgeMakeOptional" (func $make_opt (param i64) (result i64)))
+    (import "env" "BridgeUnref" (func $unref (param i64)))
+
+    (func $dict_lookup (param $ctx i64) (param $result i64) (param $dict i64) (param $key i64)
+        (local $payload i64)
+        (local $inner i64)
+        (local.set $payload (call $lookup (local.get $dict) (local.get $key)))
+        (if (i32.eqz (call $is_null (local.get $payload)))
+            (then
+                (local.set $inner (call $make_i64 (call $get_i64 (local.get $payload))))
+                (call $unref (local.get $payload))
+                (i64.store (local.get $result) (call $make_opt (local.get $inner)))
+                (call $unref (local.get $inner)))
+            (else
+                (i64.store (local.get $result) (call $make_null))))
+    )
+    (export "dict_lookup" (func $dict_lookup))
+)

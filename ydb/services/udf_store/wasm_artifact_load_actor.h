@@ -27,7 +27,7 @@ private:
     };
 
     NActors::TActorId ReplyTo_;
-    TString Md5_;
+    TString Name_;
     TString Manifest_;
     TString ArtifactTablePath_;
     TString ArtifactChunksTablePath_;
@@ -53,13 +53,13 @@ private:
 public:
     TWasmArtifactLoadActor(
         const NActors::TActorId& replyTo,
-        const TString& md5,
+        const TString& name,
         const TString& manifest,
         const TString& artifactTablePath,
         const TString& artifactChunksTablePath,
         TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
         : ReplyTo_(replyTo)
-        , Md5_(md5)
+        , Name_(name)
         , Manifest_(manifest)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)

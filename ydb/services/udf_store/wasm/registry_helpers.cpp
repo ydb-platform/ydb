@@ -23,20 +23,46 @@ namespace {
 //
 // Heap starts above a reserved low region so UDF data segments (e.g. at 1024)
 // are not clobbered by the first malloc used for argument/result marshalling.
+//
+// malloc goes through "sbrk" rather than bumping the heap global directly,
+// because the host moves that same break past regions it pins into linear
+// memory (see IWebAssemblyCompartment::ReserveGuestHeapBelow). A stub without
+// "sbrk" would let the resident cache and malloc hand out the same bytes.
+//
+// That fence leaves the break at the top of linear memory, so "sbrk" has to
+// grow memory itself before handing anything out -- a pure pointer bump would
+// return an offset the guest cannot store to. Real libc sbrk does the same.
 constexpr TStringBuf DefaultRegistrySdkWast = R"WAST(
 (module
     (import "env" "memory" (memory i64 8 2097152))
     (global $heap (mut i64) (i64.const 65536))
-    (func $malloc (param $n i64) (result i64)
+    (func $sbrk (param $n i64) (result i64)
         (local $p i64)
+        (local $break i64)
+        (local $pages i64)
         (local.set $p (global.get $heap))
-        (global.set $heap
+        (local.set $break
             (i64.and
                 (i64.add (i64.add (local.get $p) (local.get $n)) (i64.const 7))
                 (i64.const -8)))
+        (local.set $pages
+            (i64.sub
+                (i64.shr_u
+                    (i64.add (local.get $break) (i64.const 65535))
+                    (i64.const 16))
+                (memory.size)))
+        (if (i64.gt_s (local.get $pages) (i64.const 0))
+            (then
+                (if (i64.eq (memory.grow (local.get $pages)) (i64.const -1))
+                    (then (return (i64.const -1))))))
+        (global.set $heap (local.get $break))
         (local.get $p)
     )
+    (func $malloc (param $n i64) (result i64)
+        (call $sbrk (local.get $n))
+    )
     (func $free (param $p i64))
+    (export "sbrk" (func $sbrk))
     (export "malloc" (func $malloc))
     (export "free" (func $free))
 )
@@ -79,6 +105,30 @@ EUdfValueType ParseValueType(TStringBuf type) {
     if (type == "null") {
         return EUdfValueType::Null;
     }
+    if (type == "int32") {
+        return EUdfValueType::Int32;
+    }
+    if (type == "uint32") {
+        return EUdfValueType::Uint32;
+    }
+    if (type == "float") {
+        return EUdfValueType::Float;
+    }
+    if (type == "utf8") {
+        return EUdfValueType::Utf8;
+    }
+    if (type == "date") {
+        return EUdfValueType::Date;
+    }
+    if (type == "datetime") {
+        return EUdfValueType::Datetime;
+    }
+    if (type == "timestamp") {
+        return EUdfValueType::Timestamp;
+    }
+    if (type == "decimal") {
+        return EUdfValueType::Decimal;
+    }
     ythrow yexception() << "Unsupported wasm UDF descriptor type: " << type;
 }
 
@@ -96,6 +146,22 @@ const char* ValueTypeToString(EUdfValueType type) {
             return "boolean";
         case EUdfValueType::String:
             return "string";
+        case EUdfValueType::Int32:
+            return "int32";
+        case EUdfValueType::Uint32:
+            return "uint32";
+        case EUdfValueType::Float:
+            return "float";
+        case EUdfValueType::Utf8:
+            return "utf8";
+        case EUdfValueType::Date:
+            return "date";
+        case EUdfValueType::Datetime:
+            return "datetime";
+        case EUdfValueType::Timestamp:
+            return "timestamp";
+        case EUdfValueType::Decimal:
+            return "decimal";
     }
     return "unknown";
 }
@@ -273,8 +339,33 @@ void InvokeUdfExport(
         args);
 }
 
-THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {
-    THashSet<TString> exports;
+namespace {
+
+void CollectFunctionExports(
+    const WAVM::IR::Module& module,
+    THashMap<TString, TWasmExportSignature>& exports)
+{
+    for (const auto& exportItem : module.exports) {
+        if (exportItem.kind != WAVM::IR::ExternKind::function) {
+            continue;
+        }
+        // Function exports index the joint import+definition space; the type
+        // they name is an index into the module's type section.
+        const auto& functionType = module.types[module.functions.getType(exportItem.index).index];
+        exports[TString(exportItem.name)] = TWasmExportSignature{
+            .ParamCount = functionType.params().size(),
+            .ResultCount = functionType.results().size(),
+        };
+    }
+}
+
+} // namespace
+
+THashMap<TString, TWasmExportSignature> CollectWasmExports(
+    TStringBuf bytes,
+    EBytecodeFormat format)
+{
+    THashMap<TString, TWasmExportSignature> exports;
 
     using namespace WAVM;
     using namespace WAVM::IR;
@@ -288,11 +379,7 @@ THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {
         if (!WAST::parseModule(bytes.data(), bytes.size() + 1, module, errors)) {
             ythrow yexception() << "Failed to parse WAST module";
         }
-        for (const auto& exportItem : module.exports) {
-            if (exportItem.kind == ExternKind::function) {
-                exports.insert(TString(exportItem.name));
-            }
-        }
+        CollectFunctionExports(module, exports);
         return exports;
     }
 
@@ -311,12 +398,7 @@ THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {
     {
         ythrow yexception() << "Failed to load wasm binary module: " << loadError.message;
     }
-    const auto& irModule = Runtime::getModuleIR(wasmModule);
-    for (const auto& exportItem : irModule.exports) {
-        if (exportItem.kind == ExternKind::function) {
-            exports.insert(TString(exportItem.name));
-        }
-    }
+    CollectFunctionExports(Runtime::getModuleIR(wasmModule), exports);
     return exports;
 }
 

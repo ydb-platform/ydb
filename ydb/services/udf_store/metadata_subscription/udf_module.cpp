@@ -112,10 +112,10 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfModule::GetColumnDescription() 
         return col;
     };
     return {
+        makeCol(NameColName, "Utf8"),
         makeCol(UidColName, "Utf8"),
         makeCol(Md5ColName, "Utf8"),
         makeCol(SizeColName, "Uint64"),
-        makeCol(NameColName, "Utf8"),
         makeCol(TypeColName, "Utf8"),
         makeCol(ManifestColName, "Json"),
         makeCol(VersionColName, "Uint64"),
@@ -129,7 +129,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfModule::GetColumnDescription() 
 }
 
 TVector<TString> TUdfModule::GetPk() {
-    return {UidColName};
+    return {NameColName};
 }
 
 bool TUdfModule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {

@@ -42,11 +42,11 @@ struct TPendingChunkWrite {
     TString Data;
 };
 
-TString BuildSelectModuleByMd5Query(const TString& tablePath);
-void SetSelectModuleByMd5Params(Ydb::Table::ExecuteDataQueryRequest& request, const TString& md5);
-
 TString BuildSelectModuleByNameQuery(const TString& tablePath);
-void SetSelectModuleByNameParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name);
+void SetSelectModuleByNameParams(
+    Ydb::Table::ExecuteDataQueryRequest& request,
+    const TString& name,
+    const TString& type);
 
 bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModuleSourceRow& row);
 
@@ -92,7 +92,8 @@ void SetUpsertArtifactChunkParams(
 TString BuildUpdateCompileStatusQuery(const TString& tablePath);
 void SetUpdateCompileStatusParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& uid,
+    const TString& name,
+    const TString& type,
     const TString& status,
     const TString& errorMessage);
 

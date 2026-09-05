@@ -186,4 +186,126 @@ Y_UNIT_TEST(RejectEmptyManifest) {
     UNIT_ASSERT_EXCEPTION(ParseManifest(""), yexception);
 }
 
+Y_UNIT_TEST(RejectWideLeafUnderUnversionedValue) {
+    // int32 has no TUnversionedValue slot, so it can only travel over the
+    // bridge. Rejecting it here beats failing on the first row.
+    const TString manifest = R"({
+        "module_name": "Bad",
+        "calling_convention": "unversioned_value",
+        "functions": [
+            {
+                "name": "x",
+                "argument_types": [{"value": "int32", "tag": "concrete_type"}],
+                "result_type": {"value": "int64", "tag": "concrete_type"}
+            }
+        ]
+    })";
+    UNIT_ASSERT_EXCEPTION_CONTAINS(ParseManifest(manifest), yexception, "int32");
+}
+
+Y_UNIT_TEST(RejectContainerResultUnderUnversionedValue) {
+    const TString manifest = R"({
+        "module_name": "Bad",
+        "functions": [
+            {
+                "name": "x",
+                "argument_types": [],
+                "result_type": {
+                    "value": "dict",
+                    "key": {"value": "string", "tag": "concrete_type"},
+                    "payload": {"value": "int64", "tag": "concrete_type"}
+                }
+            }
+        ]
+    })";
+    UNIT_ASSERT_EXCEPTION_CONTAINS(ParseManifest(manifest), yexception, "result_type");
+}
+
+Y_UNIT_TEST(RejectWideTypeInObjectMethod) {
+    // Object methods are always unversioned_value, whatever the module says.
+    const TString manifest = R"({
+        "module_name": "Bad",
+        "calling_convention": "bridge",
+        "objects": [
+            {
+                "name": "Ctx",
+                "create_export": "ctx_create",
+                "methods": [
+                    {
+                        "name": "Apply",
+                        "export": "ctx_apply",
+                        "yql_binding": "plain",
+                        "argument_types": [{"value": "float", "tag": "concrete_type"}],
+                        "result_type": {"value": "string", "tag": "concrete_type"}
+                    }
+                ]
+            }
+        ]
+    })";
+    UNIT_ASSERT_EXCEPTION_CONTAINS(ParseManifest(manifest), yexception, "float");
+}
+
+Y_UNIT_TEST(AcceptWideTypesUnderBridge) {
+    const TString manifest = R"({
+        "module_name": "Good",
+        "calling_convention": "bridge",
+        "functions": [
+            {
+                "name": "lookup",
+                "argument_types": [
+                    {
+                        "value": "dict",
+                        "key": {"value": "string", "tag": "concrete_type"},
+                        "payload": {"value": "int64", "tag": "concrete_type"}
+                    },
+                    {"value": "int32", "tag": "concrete_type"}
+                ],
+                "result_type": {"value": "utf8", "tag": "concrete_type"}
+            }
+        ]
+    })";
+    const auto parsed = ParseManifest(manifest);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions.size(), 1u);
+    UNIT_ASSERT(parsed.Functions[0].CallingConvention == EWasmCallingConvention::Bridge);
+}
+
+Y_UNIT_TEST(AcceptWideTypesUnderPerFunctionBridgeOverride) {
+    const TString manifest = R"({
+        "module_name": "Mixed",
+        "calling_convention": "unversioned_value",
+        "functions": [
+            {
+                "name": "lookup",
+                "calling_convention": "bridge",
+                "argument_types": [{"value": "int32", "tag": "concrete_type"}],
+                "result_type": {"value": "int64", "tag": "concrete_type"}
+            }
+        ]
+    })";
+    const auto parsed = ParseManifest(manifest);
+    UNIT_ASSERT(parsed.Functions[0].CallingConvention == EWasmCallingConvention::Bridge);
+}
+
+Y_UNIT_TEST(RejectDeeplyNestedType) {
+    // A hostile manifest can nest optional/list forever; the parser must refuse
+    // before the stack or the shared_ptr chain blows up.
+    TString nested = R"({"value": "int64", "tag": "concrete_type"})";
+    for (int i = 0; i < 40; ++i) {
+        nested = TStringBuilder()
+            << R"({"value": "optional", "tag": "concrete_type", "item": )"
+            << nested << "}";
+    }
+    const TString manifest = TStringBuilder()
+        << R"({
+            "module_name": "Deep",
+            "calling_convention": "bridge",
+            "functions": [{
+                "name": "f",
+                "argument_types": [],
+                "result_type": )"
+        << nested
+        << "}]}";
+    UNIT_ASSERT_EXCEPTION_CONTAINS(ParseManifest(manifest), yexception, "Type nesting exceeds");
+}
+
 } // Y_UNIT_TEST_SUITE

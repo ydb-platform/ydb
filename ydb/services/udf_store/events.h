@@ -51,17 +51,17 @@ struct TEvReadBodyResponse : public NActors::TEventLocal<TEvReadBodyResponse, Ev
 struct TEvWasmCompileResponse : public NActors::TEventLocal<TEvWasmCompileResponse, EvWasmCompileResponse> {
     bool Success;
     bool Deferred = false;
-    TString Md5;
+    TString Name;
     TString ErrorMessage;
 
     TEvWasmCompileResponse(
         bool success,
-        const TString& md5,
+        const TString& name,
         const TString& errorMessage = {},
         bool deferred = false)
         : Success(success)
         , Deferred(deferred)
-        , Md5(md5)
+        , Name(name)
         , ErrorMessage(errorMessage)
     {}
 };

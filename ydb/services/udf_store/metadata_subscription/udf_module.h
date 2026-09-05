@@ -25,10 +25,13 @@ enum class ECompileStatus {
 
 class TUdfModule: public NMetadata::NModifications::TObject<TUdfModule> {
 public:
-    static inline const TString UidColName = "uid"; // Utf8 (PK)
+    // A module is identified by its name: for a WASM UDF that is the manifest's
+    // module_name, i.e. the name YQL queries call it by, and for a library it is
+    // the library name. md5 is only a checksum of the uploaded body.
+    static inline const TString NameColName = "name"; // Utf8 (PK)
+    static inline const TString UidColName = "uid"; // Utf8
     static inline const TString Md5ColName = "md5"; // Utf8
     static inline const TString SizeColName = "size"; // Uint64
-    static inline const TString NameColName = "name"; // Utf8
     static inline const TString TypeColName = "type"; // Utf8 (EUdfType)
     static inline const TString ManifestColName = "manifest"; // Json
     static inline const TString VersionColName = "version"; // Uint64
@@ -92,10 +95,10 @@ public:
     TString SerializeToString() const;
 
     bool operator<(const TUdfModule& other) const {
-        return Uid < other.Uid;
+        return Name < other.Name;
     }
     bool operator==(const TUdfModule& other) const {
-        return Uid == other.Uid;
+        return Name == other.Name;
     }
 };
 

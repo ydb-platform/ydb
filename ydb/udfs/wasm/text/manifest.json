@@ -1,0 +1,44 @@
+{
+  "module_name": "Text",
+  "calling_convention": "unversioned_value",
+  "module_extension": "wasm",
+  "required_libraries": ["sdk"],
+  "functions": [
+    {
+      "name": "count_letters",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "count_digits",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "count_upper",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "text_length",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "byte_at",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"},
+        {"value": "int64", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    }
+  ]
+}

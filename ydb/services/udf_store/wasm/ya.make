@@ -3,6 +3,9 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ../cpu_spec.cpp
+    bridge_host.cpp
+    bridge_node_table.cpp
+    bridge_resident.cpp
     compartment_manager.cpp
     call_stack.cpp
     host.cpp

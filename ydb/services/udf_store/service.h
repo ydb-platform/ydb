@@ -18,6 +18,11 @@
 namespace NKikimr::NUdfStore {
 
 struct TPendingUdf {
+    //! Identity of the module: for a WASM UDF the manifest's module_name, i.e.
+    //! the name YQL calls it by.
+    TString Name;
+    //! Content hash of the uploaded body. Used to notice a replace of the same
+    //! name and, for native UDFs, to verify the KV download. Not an identity.
     TString Md5;
     ui64 ExpectedSize = 0;
     EUdfType Type = EUdfType::NATIVE_UNSAFE;
@@ -50,6 +55,7 @@ private:
     bool WasmCompileInProgress = false;
     bool WasmLoadInProgress = false;
     bool LibraryCompileInProgress = false;
+    // Names of the modules currently loaded on this node.
     THashSet<TString> LoadedUdfs;
     THashMap<TString, ui32> FetchRetryCounts;
     // Libraries whose compile finished in DB but CurrentSnapshot may still say pending.
@@ -61,11 +67,10 @@ private:
     std::deque<TPendingUdf> PendingWasmCompile;
     std::deque<TPendingUdf> PendingWasmLoad;
     std::deque<TPendingLibrary> PendingLibraryCompile;
-    THashMap<TString, TString> LoadedWasmModuleNames;
 
-    bool IsMd5Pending(const TString& md5, EUdfType type) const;
+    bool IsNamePending(const TString& name, EUdfType type) const;
     bool IsLibraryPending(const TString& name) const;
-    void EnqueueNativeUdfIfNeeded(const TString& md5, ui64 expectedSize);
+    void EnqueueNativeUdfIfNeeded(const TUdfModule& udf);
     void EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot = nullptr);
     void EnqueueWasmLoadIfNeeded(const TUdfModule& udf);
     void EnqueueLibraryCompileIfNeeded(const TUdfModule& library);
@@ -76,7 +81,7 @@ private:
     void FetchNextWasmCompile();
     void FetchNextWasmLoad();
     void FetchNextLibraryCompile();
-    void UnloadWasmUdf(const TString& md5);
+    void UnloadWasmUdf(const TString& name);
     static TString GetModuleExtensionFromManifest(TStringBuf manifest);
     void EnsureArtifactTable();
 

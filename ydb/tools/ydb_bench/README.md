@@ -14,7 +14,8 @@ The tool provides four benchmarks:
 - `ping-bench`: pairwise actor ping throughput;
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
-- `local-ydb`: a local static/dynamic YDB cluster driven by `ydb workload kv`.
+- `local-ydb`: a local static/dynamic YDB cluster driven by the `kv`, `stock`,
+  or `log` YDB CLI workload.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -123,15 +124,20 @@ specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
 
 `load.parameter` selects the one monotonic YDB CLI setting controlled by the
-benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. A
-`values` list measures exact points. For adaptive runs, `search` defines the
-range and resolution. `maximize-throughput` uses a discrete ternary search and,
-after confirming a plateau, selects the lowest CPU-saturated load within the
-configured throughput tolerance of the best saturated measurement. A plateau
-is confirmed only when the selected role's CPU is saturated. `latency-slo` uses
-the configured `multiplier` to find the first failing point, then a binary
-search to find the highest load whose millisecond percentile, error count, and
-achieved-rate ratio satisfy the SLO. For example:
+benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. The
+`kv` and `stock` workloads accept either parameter; `log` searches `threads`
+because its CLI does not expose `--rate`. Log throughput is the number of
+successful batches per second; `rows-per-operation` controls how many rows are
+written by each batch. Its default `ttl-minutes: 0` is a zero-minute table TTL,
+not disabled TTL. A `values` list measures exact points. For adaptive runs,
+`search` defines the range and resolution. `maximize-throughput` uses a
+discrete ternary search and, after confirming a plateau, selects the lowest
+CPU-saturated load within the configured throughput tolerance of the best
+saturated measurement. A plateau is confirmed only when the selected role's
+CPU is saturated. `latency-slo` uses the configured `multiplier` to find the
+first failing point, then a binary search to find the highest load whose
+millisecond percentile, error count, and achieved-rate ratio satisfy the SLO.
+For example:
 
 ```yaml
     load:
@@ -152,10 +158,15 @@ achieved-rate ratio satisfy the SLO. For example:
 Set `load.allow-errors: true` when request-level errors reported by
 `ydb workload` are an expected part of the experiment. Such points remain
 eligible for selection and the error counts stay in CSV, manifests, tables,
-and charts. The flag does not hide or tolerate a failed CLI process, timeout,
-malformed output, cluster failure, or workload setup/cleanup failure. For a
-latency SLO, it disables the `max-errors` rejection while keeping the latency
-and achieved-rate checks active.
+and charts, provided every repetition completed at least one successful
+operation. A repetition with zero successful operations makes the whole point
+ineligible, even when errors are allowed. It remains in the raw repetition and
+attempt diagnostics, but is omitted from summary comparison rows and its
+latency is not plotted as a zero. The flag does not hide or tolerate a failed
+CLI process, timeout, malformed output, cluster failure, or workload
+setup/cleanup failure. For a latency SLO, it disables the `max-errors`
+rejection while keeping the successful-operation, latency, and achieved-rate
+checks active.
 
 The previous flat `mode`, `start`, and `slo` fields remain accepted for config
 compatibility, but newly generated YAML uses `search` and `objective`.
@@ -174,6 +185,12 @@ source while the search measurements remain intact for diagnostics. Latency
 holdout metrics are evaluated with the same aggregate SLO contract as a search
 point. A throughput holdout is diagnostic: its request-error acceptance,
 throughput drift, and CPU saturation do not claim statistical reproducibility.
+
+Workloads with geometry-scoped datasets initialize and import once for each
+dynamic-node count, reuse that dataset across every search attempt at the same
+geometry, and clean it before adding nodes. The final geometry remains open for
+verification and is cleaned only after the holdout finishes. Shared setup and
+cleanup commands are stored under that geometry's `workload/commands.json`.
 
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.

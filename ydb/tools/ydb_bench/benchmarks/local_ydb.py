@@ -20,8 +20,8 @@ DIMENSIONS = (
 METRICS = tuple(
     MetricDefinition(name, unit)
     for name, unit in (
-        ("transactions", "transactions"),
-        ("throughput", "transactions/s"),
+        ("transactions", "operations"),
+        ("throughput", "operations/s"),
         ("retries", "retries"),
         ("errors", "errors"),
         ("p50_ms", "ms"),
@@ -72,6 +72,8 @@ def parse_cli_metrics(stdout):
                     math.isfinite(result[name]) for name in ("throughput", "p50_ms", "p95_ms", "p99_ms", "pmax_ms")
                 ):
                     raise ValueError("non-finite workload metric")
+                if any(value < 0 for value in result.values()):
+                    raise ValueError("negative workload metric")
                 return result
             except ValueError:
                 break
@@ -106,6 +108,8 @@ def summarize_metrics(repetition_rows, benchmark):
     result = []
     for key in sorted(grouped):
         rows = grouped[key]
+        if any(row["transactions"] == 0 for row in rows):
+            continue
         record = {"affinity_mode": "roles"}
         record.update({item.name: value for item, value in zip(benchmark.dimensions, key)})
         record["samples"] = len(rows)

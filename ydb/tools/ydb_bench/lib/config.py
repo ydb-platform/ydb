@@ -11,6 +11,12 @@ from yaml.constructor import ConstructorError
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
 from ydb.tools.ydb_bench.lib.actors_core import RunConfiguration
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
+    allowed_load_parameters,
+    all_load_parameters,
+    normalize_workload,
+    workload_config_schema,
+)
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
@@ -103,46 +109,7 @@ def _profile_schema(benchmark):
             "additionalProperties": False,
             "required": ["workload", "load"],
             "properties": {
-                "workload": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["type", "operation"],
-                    "properties": {
-                        "type": {"enum": ["kv", "stock"]},
-                        "operation": {
-                            "enum": [
-                                "upsert",
-                                "select",
-                                "read-rows",
-                                "mixed",
-                                "user-hist",
-                                "rand-user-hist",
-                                "add-rand-order",
-                                "put-rand-order",
-                                "put-same-order",
-                            ]
-                        },
-                        "options": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "min-partitions": {"type": "integer", "minimum": 1},
-                                "max-partitions": {"type": "integer", "minimum": 1},
-                                "partition-size-mb": {"type": "integer", "minimum": 1},
-                                "init-upserts": {"type": "integer", "minimum": 0},
-                                "max-first-key": {"type": "integer", "minimum": 1},
-                                "value-size": {"type": "integer", "minimum": 1},
-                                "columns": {"type": "integer", "minimum": 2},
-                                "rows-per-query": {"type": "integer", "minimum": 1},
-                                "products": {"type": "integer", "minimum": 1, "maximum": 500000},
-                                "quantity": {"type": "integer", "minimum": 1},
-                                "orders": {"type": "integer", "minimum": 0},
-                                "auto-partition": {"enum": [0, 1]},
-                                "limit": {"type": "integer", "minimum": 1},
-                            },
-                        },
-                    },
-                },
+                "workload": workload_config_schema(),
                 "geometry": {
                     "type": "object",
                     "additionalProperties": False,
@@ -169,7 +136,7 @@ def _profile_schema(benchmark):
                         # compatibility with configs written before search and
                         # objective became separate concepts.
                         "mode": {"enum": ["points", "maximize-throughput", "latency-slo"]},
-                        "parameter": {"enum": ["rate", "threads"]},
+                        "parameter": {"enum": list(all_load_parameters())},
                         "allow-errors": {"type": "boolean"},
                         "values": {
                             "type": "array",
@@ -539,53 +506,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     if perf_enabled:
         _config_error(location, "does not support --perf; CPU utilization is collected per process role")
 
-    workload = _mapping(value.get("workload"), location + ".workload", ("type", "operation", "options"))
-    for required in ("type", "operation"):
-        if required not in workload:
-            _config_error(location + ".workload", "missing required field: {}".format(required))
-    workload_type = _choice(workload["type"], ("kv", "stock"), location + ".workload.type")
-    operations = {
-        "kv": ("upsert", "select", "read-rows", "mixed"),
-        "stock": ("user-hist", "rand-user-hist", "add-rand-order", "put-rand-order", "put-same-order"),
-    }
-    operation = _choice(workload["operation"], operations[workload_type], location + ".workload.operation")
-    if workload_type == "kv":
-        option_defaults = {
-            "min-partitions": 40,
-            "max-partitions": 1000,
-            "partition-size-mb": 2000,
-            "init-upserts": 0 if operation == "upsert" else 1000,
-            "max-first-key": 65536,
-            "value-size": 64,
-            "columns": 2,
-            "rows-per-query": 1,
-        }
-    else:
-        option_defaults = {
-            "min-partitions": 40,
-            "products": 100,
-            "quantity": 1000,
-            "orders": 100,
-            "auto-partition": 1,
-            "limit": 10,
-        }
-    raw_options = _mapping(workload.get("options"), location + ".workload.options", tuple(option_defaults))
-    options = {}
-    for name, default in option_defaults.items():
-        raw = raw_options.get(name, default)
-        options[name] = (
-            _nonnegative_integer(raw, location + ".workload.options." + name)
-            if name in ("init-upserts", "orders", "auto-partition")
-            else _positive_integer(raw, location + ".workload.options." + name)
-        )
-    if workload_type == "kv" and options["max-partitions"] < options["min-partitions"]:
-        _config_error(location + ".workload.options.max-partitions", "must not be below min-partitions")
-    if workload_type == "kv" and options["columns"] < 2:
-        _config_error(location + ".workload.options.columns", "must be at least 2")
-    if workload_type == "stock" and options["products"] > 500000:
-        _config_error(location + ".workload.options.products", "must not exceed 500000")
-    if workload_type == "stock" and options["auto-partition"] not in (0, 1):
-        _config_error(location + ".workload.options.auto-partition", "must be 0 or 1")
+    workload = normalize_workload(value.get("workload"), location + ".workload")
 
     geometry = _mapping(
         value.get("geometry"),
@@ -652,7 +573,11 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     )
     if "parameter" not in load:
         _config_error(location + ".load", "missing required field: parameter")
-    parameter = _choice(load["parameter"], ("rate", "threads"), location + ".load.parameter")
+    parameter = _choice(
+        load["parameter"],
+        allowed_load_parameters(workload["type"]),
+        location + ".load.parameter",
+    )
     legacy_fields = {
         "mode",
         "start",
@@ -865,7 +790,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         threads=(client_threads,),
         parameters={
             "local_ydb": {
-                "workload": {"type": workload_type, "operation": operation, "options": options},
+                "workload": workload,
                 "geometry": geometry_config,
                 "client": {"threads": client_threads},
                 "load": load_config,

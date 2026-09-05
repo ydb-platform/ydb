@@ -4544,452 +4544,7 @@ NJson::TJsonValue NullableDateYearExpr(
     return result;
 }
 
-class TRestrictedConcatAuditor;
-
-class TRestrictedConcatAuditToken {
-    friend class TRestrictedConcatAuditor;
-
-private:
-    TRestrictedConcatAuditToken() = default;
-};
-
-class TRestrictedFloatingPredicateAuditor;
-
-class TRestrictedFloatingPredicateAuditToken {
-    friend class TRestrictedFloatingPredicateAuditor;
-
-private:
-    TRestrictedFloatingPredicateAuditToken() = default;
-};
-
-class TPassiveDoubleCarrierAuditor;
-
-class TPassiveDoubleCarrierAuditToken {
-    friend class TPassiveDoubleCarrierAuditor;
-
-private:
-    TPassiveDoubleCarrierAuditToken() = default;
-};
-
-enum class ERestrictedFloatingConstant : ui8 {
-    PointNine,
-    OnePointTwo,
-    TwoThirds,
-    ThreeHalves,
-};
-
-struct TRestrictedFloatingConstant {
-    ERestrictedFloatingConstant Kind;
-    TStringBuf Fingerprint;
-};
-
-std::optional<TRestrictedFloatingConstant> RecognizeRestrictedFloatingConstant(
-    const TExprNode& node)
-{
-    // Tags name the exact IEEE-754 binary64 payload produced by YQL parsing
-    // and constant folding.  The two division spellings are admitted only as
-    // aliases of the directly observed folded literals.
-    const auto literal = [](const TExprNode& value)
-        -> std::optional<TStringBuf>
-    {
-        if (!value.IsCallable("Double") ||
-            value.ChildrenSize() != 1 ||
-            !value.Child(0)->IsAtom())
-        {
-            return std::nullopt;
-        }
-        return value.Child(0)->Content();
-    };
-
-    if (const auto value = literal(node)) {
-        if (*value == "0.9") {
-            return TRestrictedFloatingConstant{
-                ERestrictedFloatingConstant::PointNine,
-                "yql-double-bits-3feccccccccccccd-v1"};
-        }
-        if (*value == "1.2") {
-            return TRestrictedFloatingConstant{
-                ERestrictedFloatingConstant::OnePointTwo,
-                "yql-double-bits-3ff3333333333333-v1"};
-        }
-        if (*value == "0.6666666666666666") {
-            return TRestrictedFloatingConstant{
-                ERestrictedFloatingConstant::TwoThirds,
-                "yql-double-bits-3fe5555555555555-v1"};
-        }
-        if (*value == "1.5") {
-            return TRestrictedFloatingConstant{
-                ERestrictedFloatingConstant::ThreeHalves,
-                "yql-double-bits-3ff8000000000000-v1"};
-        }
-        return std::nullopt;
-    }
-
-    if (!node.IsCallable("/") || node.ChildrenSize() != 2) {
-        return std::nullopt;
-    }
-    const auto left = literal(*node.Child(0));
-    const auto right = literal(*node.Child(1));
-    if (left && right && *left == "2.0" && *right == "3.0") {
-        return TRestrictedFloatingConstant{
-            ERestrictedFloatingConstant::TwoThirds,
-            "yql-double-bits-3fe5555555555555-v1"};
-    }
-    if (left && right && *left == "3.0" && *right == "2.0") {
-        return TRestrictedFloatingConstant{
-            ERestrictedFloatingConstant::ThreeHalves,
-            "yql-double-bits-3ff8000000000000-v1"};
-    }
-    return std::nullopt;
-}
-
-class TOpaqueExpressionEncoder {
-public:
-    TOpaqueExpressionEncoder(
-        const TExprNode* rowArgument,
-        const THashSet<TString>& visibleColumns,
-        TVector<const TExprNode*> boundArguments = {})
-        : RowArgument(rowArgument)
-        , VisibleColumns(visibleColumns)
-        , BoundArguments(std::move(boundArguments))
-    {
-    }
-
-    TOpaqueExpressionEncoder(
-        TRestrictedConcatAuditToken,
-        const TExprNode* rowArgument,
-        const THashSet<TString>& visibleColumns)
-        : RowArgument(rowArgument)
-        , VisibleColumns(visibleColumns)
-        , AllowRestrictedConcat(true)
-    {
-    }
-
-    TOpaqueExpressionEncoder(
-        TRestrictedFloatingPredicateAuditToken,
-        const TExprNode* rowArgument,
-        const THashSet<TString>& visibleColumns,
-        const TExprNode* restrictedFloatingComparison,
-        const TExprNode* restrictedFloatingConstant)
-        : RowArgument(rowArgument)
-        , VisibleColumns(visibleColumns)
-        , RestrictedFloatingComparison(restrictedFloatingComparison)
-        , RestrictedFloatingConstantNode(restrictedFloatingConstant)
-    {
-    }
-
-    TOpaqueExpressionEncoder(
-        TPassiveDoubleCarrierAuditToken,
-        const TExprNode* rowArgument,
-        const THashSet<TString>& visibleColumns,
-        const TExprNode* passiveDoubleRoot,
-        const TExprNode* passiveDoubleDivision,
-        const TExprNode* passiveDoubleConstant)
-        : RowArgument(rowArgument)
-        , VisibleColumns(visibleColumns)
-        , PassiveDoubleRoot(passiveDoubleRoot)
-        , PassiveDoubleDivision(passiveDoubleDivision)
-        , PassiveDoubleConstantNode(passiveDoubleConstant)
-    {
-    }
-
-    void Validate(const TExprNode& node) {
-        AllowNestedIfPresent = true;
-        TStringBuilder fingerprint;
-        EncodeRoot(node, fingerprint);
-    }
-
-    NJson::TJsonValue Export(
-        const TExprNode& node,
-        TExactScalarBudget& budget,
-        size_t argumentDepth)
-    {
-        bool nullable = false;
-        const TString resultType = [&] {
-            if (&node != PassiveDoubleRoot) {
-                return ScalarTypeName(node, &nullable);
-            }
-            if (!IsExactDataAnnotation(
-                    node.GetTypeAnn(),
-                    NUdf::EDataSlot::Double,
-                    true))
-            {
-                Unsupported(
-                    "Audited passive Double root lost Optional<Double> type");
-            }
-            nullable = true;
-            return TString("Double");
-        }();
-
-        TStringBuilder fingerprint;
-        EncodeRoot(node, fingerprint);
-
-        budget.Charge(argumentDepth, ExternalArguments.size());
-        auto args = JsonArray();
-        for (const auto& argument : ExternalArguments) {
-            args.AppendValue(argument.IsBound
-                ? BoundExpr(argument.Depth)
-                : ColumnExpr(argument.Column));
-        }
-
-        auto result = JsonMap();
-        result["kind"] =
-            &node == PassiveDoubleRoot ? "opaque_double" : "opaque";
-        result["fingerprint"] = TString(fingerprint);
-        result["type"] = resultType;
-        result["nullable"] = nullable;
-        result["args"] = std::move(args);
-        return result;
-    }
-
-private:
-    static constexpr size_t MaxNodes = 256;
-    static constexpr size_t MaxDepth = 64;
-    static constexpr size_t MaxFingerprintBytes = 64 * 1024;
-
-    struct TExternalArgument {
-        bool IsBound;
-        TString Column;
-        size_t Depth;
-    };
-
-    void EncodeRoot(const TExprNode& node, TStringBuilder& fingerprint) {
-        if (!node.IsCallable()) {
-            Unsupported("Opaque scalar root is not a callable");
-        }
-        AppendIdentityField(
-            fingerprint,
-            "format",
-            &node == PassiveDoubleRoot
-                ? TStringBuf("yql-passive-double-v1")
-                : TStringBuf("yql-opaque-v1"));
-        Encode(node, fingerprint, 0);
-        if (fingerprint.size() > MaxFingerprintBytes) {
-            Unsupported("Opaque scalar fingerprint exceeds the audit limit");
-        }
-    }
-
-    TString TypeFingerprint(const TExprNode& node) const {
-        return node.GetTypeAnn() ? FormatType(node.GetTypeAnn()) : TString("<none>");
-    }
-
-    void CheckSafeNode(const TExprNode& node) {
-        if (++NodeCount > MaxNodes) {
-            Unsupported("Opaque scalar exceeds the node audit limit");
-        }
-        CheckScalarSafetyMetadata(node);
-    }
-
-    void EncodeMember(const TExprNode& node, TStringBuilder& out) {
-        if (node.ChildrenSize() != 2 || !node.Child(1)->IsAtom()) {
-            Unsupported("Malformed Member expression");
-        }
-        const TString column(node.Child(1)->Content());
-        if (node.Child(0) != RowArgument || !VisibleColumns.contains(column)) {
-            Unsupported(TStringBuilder() << "Member does not reference the input row column " << column);
-        }
-        ScalarTypeName(node);
-        CheckSafeNode(*node.Child(1));
-
-        const size_t index = ExternalIndex(
-            TStringBuilder() << "column:" << column.size() << ":" << column,
-            {false, column, 0});
-
-        AppendIdentityField(out, "node", "member");
-        AppendIdentityField(out, "type", TypeFingerprint(node));
-        AppendIdentityField(out, "argument", ToString(index));
-    }
-
-    size_t BoundDepth(const TExprNode& node) const {
-        const auto it = std::find(BoundArguments.begin(), BoundArguments.end(), &node);
-        if (it == BoundArguments.end()) {
-            Unsupported("Opaque scalar contains a free Argument");
-        }
-        return static_cast<size_t>(it - BoundArguments.begin());
-    }
-
-    size_t ExternalIndex(TString key, TExternalArgument argument) {
-        const auto [it, inserted] = ExternalIndices.emplace(
-            std::move(key),
-            ExternalArguments.size());
-        if (inserted) {
-            ExternalArguments.push_back(std::move(argument));
-        }
-        return it->second;
-    }
-
-    void EncodeBound(const TExprNode& node, TStringBuilder& out) {
-        bool nullable = false;
-        ScalarTypeName(node, &nullable);
-        if (nullable) {
-            Unsupported("IfPresent bound argument must be non-nullable");
-        }
-        const size_t depth = BoundDepth(node);
-        const size_t index = ExternalIndex(
-            TStringBuilder() << "bound:" << depth,
-            {true, {}, depth});
-        AppendIdentityField(out, "node", "bound");
-        AppendIdentityField(out, "type", TypeFingerprint(node));
-        AppendIdentityField(out, "argument", ToString(index));
-    }
-
-    void EncodeIfPresent(
-        const TExprNode& node,
-        TStringBuilder& out,
-        size_t depth)
-    {
-        if (!AllowNestedIfPresent) {
-            Unsupported("Opaque scalar cannot hide an IfPresent binder");
-        }
-        const auto signature = CheckIfPresentCallable(node);
-        const auto& handler = *node.Child(1);
-        const auto& arguments = *handler.Child(0);
-        CheckSafeNode(handler);
-        CheckSafeNode(arguments);
-        CheckSafeNode(*signature.Argument);
-
-        AppendIdentityField(out, "node", "callable");
-        AppendIdentityField(out, "content", "IfPresent");
-        AppendIdentityField(out, "type", TypeFingerprint(node));
-        AppendIdentityField(out, "children", "3");
-        Encode(*signature.Optional, out, depth + 1);
-
-        AppendIdentityField(out, "node", "lambda");
-        AppendIdentityField(out, "argument_type", TypeFingerprint(*signature.Argument));
-        AppendIdentityField(out, "result_type", TypeFingerprint(*signature.Present));
-        AppendIdentityField(out, "children", "1");
-        if (BoundArguments.size() >= MaxIfPresentBindingDepth) {
-            Unsupported("IfPresent binding depth exceeds the audit limit");
-        }
-        BoundArguments.insert(BoundArguments.begin(), signature.Argument);
-        Encode(*signature.Present, out, depth + 1);
-        BoundArguments.erase(BoundArguments.begin());
-
-        Encode(*signature.Missing, out, depth + 1);
-    }
-
-    void Encode(
-        const TExprNode& node,
-        TStringBuilder& out,
-        size_t depth,
-        bool allowExactUint32LiteralConversion = false)
-    {
-        if (depth > MaxDepth) {
-            Unsupported("Opaque scalar exceeds the nesting audit limit");
-        }
-        CheckSafeNode(node);
-
-        if (node.IsCallable("Member")) {
-            EncodeMember(node, out);
-            return;
-        }
-        if (node.IsArgument()) {
-            EncodeBound(node, out);
-            return;
-        }
-        if (node.IsCallable("IfPresent")) {
-            EncodeIfPresent(node, out, depth);
-            return;
-        }
-        if (&node == RestrictedFloatingConstantNode && depth == 1) {
-            const auto constant =
-                RecognizeRestrictedFloatingConstant(node);
-            if (!constant) {
-                Unsupported(
-                    "Audited floating constant has no canonical tag");
-            }
-            AppendIdentityField(
-                out,
-                "node",
-                "restricted-floating-constant");
-            AppendIdentityField(
-                out,
-                "content",
-                constant->Fingerprint);
-            AppendIdentityField(out, "type", TypeFingerprint(node));
-            AppendIdentityField(out, "children", "0");
-            return;
-        }
-        if (&node == PassiveDoubleConstantNode) {
-            AppendIdentityField(
-                out,
-                "node",
-                "passive-double-constant");
-            AppendIdentityField(
-                out,
-                "content",
-                "yql-double-bits-4008000000000000-v1");
-            AppendIdentityField(out, "type", TypeFingerprint(node));
-            AppendIdentityField(out, "children", "0");
-            return;
-        }
-
-        switch (node.Type()) {
-            case TExprNode::Callable:
-                if (node.IsCallable("Concat")) {
-                    if (!AllowRestrictedConcat) {
-                        Unsupported("Unsupported scalar callable Concat");
-                    }
-                } else {
-                    const bool auditedFloatingPredicateRoot =
-                        &node == RestrictedFloatingComparison && depth == 0;
-                    const bool auditedPassiveDoubleCallable =
-                        &node == PassiveDoubleRoot ||
-                        &node == PassiveDoubleDivision;
-                    if (!auditedFloatingPredicateRoot &&
-                        !auditedPassiveDoubleCallable)
-                    {
-                        CheckOpaqueCallable(
-                            node,
-                            allowExactUint32LiteralConversion);
-                    }
-                }
-                AppendIdentityField(out, "node", "callable");
-                AppendIdentityField(out, "content", node.Content());
-                break;
-            case TExprNode::Atom:
-                AppendIdentityField(out, "node", "atom");
-                AppendIdentityField(out, "content", node.Content());
-                AppendIdentityField(out, "flags", ToString(node.GetFlagsToCompare()));
-                break;
-            case TExprNode::List:
-                Unsupported("Opaque scalar contains an unsupported List node");
-            case TExprNode::Lambda:
-                Unsupported("Opaque scalar contains a nested Lambda");
-            case TExprNode::Argument:
-                Unsupported("Opaque scalar contains a free Argument");
-            case TExprNode::Arguments:
-                Unsupported("Opaque scalar contains an Arguments node");
-            case TExprNode::World:
-                Unsupported("Opaque scalar contains World");
-        }
-
-        AppendIdentityField(out, "type", TypeFingerprint(node));
-        AppendIdentityField(out, "children", ToString(node.ChildrenSize()));
-        for (size_t index = 0; index < node.ChildrenSize(); ++index) {
-            Encode(
-                *node.Child(index),
-                out,
-                depth + 1,
-                node.IsCallable("Substring") && index > 0);
-        }
-    }
-
-private:
-    const TExprNode* RowArgument;
-    const THashSet<TString>& VisibleColumns;
-    TVector<const TExprNode*> BoundArguments;
-    THashMap<TString, size_t> ExternalIndices;
-    TVector<TExternalArgument> ExternalArguments;
-    size_t NodeCount = 0;
-    bool AllowNestedIfPresent = false;
-    bool AllowRestrictedConcat = false;
-    const TExprNode* RestrictedFloatingComparison = nullptr;
-    const TExprNode* RestrictedFloatingConstantNode = nullptr;
-    const TExprNode* PassiveDoubleRoot = nullptr;
-    const TExprNode* PassiveDoubleDivision = nullptr;
-    const TExprNode* PassiveDoubleConstantNode = nullptr;
-};
+#include "opaque_expression_audit_impl.h"
 
 bool IsPassiveDoubleCarrierCandidate(const TExprNode& node) {
     return node.IsCallable({"*", "/"}) &&
@@ -5015,16 +4570,13 @@ public:
         size_t argumentDepth)
     {
         const auto shape = AuditRoot(root);
-        auto result = TOpaqueExpressionEncoder(
+        auto result = TOpaqueSourceAuditor(
             TPassiveDoubleCarrierAuditToken{},
             RowArgument,
             VisibleColumns,
             &root,
             shape.FloatingDivision,
-            shape.DoubleConstant).Export(
-                root,
-                budget,
-                argumentDepth);
+            shape.DoubleConstant).AuditOpaque(root).Export(budget, argumentDepth);
         if (result["args"].GetArraySafe().size() != 3) {
             Fail("expression must expose exactly three nullable Int64 inputs");
         }
@@ -5198,9 +4750,9 @@ private:
             AuditTotal(
                 *root.Child(0),
                 "average numerator");
-            TOpaqueExpressionEncoder(
+            TOpaqueSourceAuditor(
                 RowArgument,
-                VisibleColumns).Validate(*root.Child(0));
+                VisibleColumns).RequireExactLoweringSource(*root.Child(0));
             return {&root, root.Child(1)};
         }
 
@@ -5221,9 +4773,9 @@ private:
         CheckFloatingDivision(floatingDivision);
         AuditDeviationRatio(*floatingDivision.Child(0));
         AuditHundred(*root.Child(1));
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             RowArgument,
-            VisibleColumns).Validate(*floatingDivision.Child(0));
+            VisibleColumns).RequireExactLoweringSource(*floatingDivision.Child(0));
         return {
             &floatingDivision,
             floatingDivision.Child(1),
@@ -5260,12 +4812,12 @@ public:
         size_t argumentDepth)
     {
         Validate(root);
-        return TOpaqueExpressionEncoder(
+        return TOpaqueSourceAuditor(
             TRestrictedFloatingPredicateAuditToken{},
             RowArgument,
             VisibleColumns,
             &root,
-            root.Child(1)).Export(root, budget, argumentDepth);
+            root.Child(1)).AuditOpaque(root).Export(budget, argumentDepth);
     }
 
     void Validate(const TExprNode& root) const {
@@ -5590,10 +5142,10 @@ public:
         size_t argumentDepth)
     {
         Audit(root);
-        auto result = TOpaqueExpressionEncoder(
+        auto result = TOpaqueSourceAuditor(
             TRestrictedConcatAuditToken{},
             RowArgument,
-            VisibleColumns).Export(root, budget, argumentDepth);
+            VisibleColumns).AuditOpaque(root).Export(budget, argumentDepth);
         if (MaximumBytes > MaxConcatResultBytes) {
             result["kind"] = "checked_concat";
         }
@@ -5926,10 +5478,10 @@ NJson::TJsonValue ExportExprNode(
         // and the Unwrap error path is unreachable.  Validate the complete
         // Coalesce subtree with the closed opaque audit; validating Unwrap
         // itself would deliberately fail that audit's positive callable list.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(*node.Child(0));
+            boundArguments).RequireExactLoweringSource(*node.Child(0));
         if (boundArguments.size() >= MaxIfPresentBindingDepth) {
             Unsupported(
                 "Exact Date Unwrap binding depth exceeds the audit limit");
@@ -5972,10 +5524,10 @@ NJson::TJsonValue ExportExprNode(
         // A complete conversion of a direct non-null integer literal is itself
         // a non-null constant. Keep the exact converted type and value rather
         // than assigning this closed literal a zero-argument opaque identity.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
         auto result = LiteralExpr(*convert.Source);
         result["type"] = convert.ResultType;
         return result;
@@ -5985,10 +5537,10 @@ NJson::TJsonValue ExportExprNode(
         // Just of either a direct Date literal or a complete integer-literal
         // Convert is always present. Preserve the Optional result shape with
         // an explicit unreachable NULL branch.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
         const TString resultType = ScalarTypeName(*argument);
 
         budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
@@ -6026,10 +5578,10 @@ NJson::TJsonValue ExportExprNode(
             exact,
             rowArgument,
             visibleColumns);
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
         if (boundArguments.size() >= MaxIfPresentBindingDepth) {
             Unsupported(
                 "Exact Uint64 Just/Coalesce zero binding depth exceeds the audit limit");
@@ -6086,10 +5638,10 @@ NJson::TJsonValue ExportExprNode(
         // Just of a non-null value is always present. Keep the static
         // Optional<Uint64> result in the normalized IR, but expose its exact
         // runtime presence instead of hiding it behind an opaque fingerprint.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
         budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
         auto condition = JsonMap();
         condition["kind"] = "literal";
@@ -6123,10 +5675,10 @@ NJson::TJsonValue ExportExprNode(
         // unreachable NULL branch preserves the source Optional type in the
         // normalized IR and output schema while the true condition makes
         // runtime presence exact.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
         const TString resultType = ScalarTypeName(*argument);
 
         budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
@@ -6166,7 +5718,7 @@ NJson::TJsonValue ExportExprNode(
         // only the reviewed two-literal String membership/complement trees used
         // by TPCH q12.  Larger Boolean trees retain their shared opaque identity.
         if (exactCoalesce.Kind == EExactCoalesceFalseArgument::Comparison) {
-            TOpaqueExpressionEncoder encoder(
+            TOpaqueSourceAuditor sourceAudit(
                 rowArgument,
                 visibleColumns,
                 boundArguments);
@@ -6185,17 +5737,17 @@ NJson::TJsonValue ExportExprNode(
                         "Exact Coalesce false allows unordered children only on equality");
                 }
                 CheckScalarSafetyMetadata(*argument, true);
-                encoder.Validate(*argument->Child(0));
-                encoder.Validate(*argument->Child(1));
+                sourceAudit.RequireExactLoweringSource(*argument->Child(0));
+                sourceAudit.RequireExactLoweringSource(*argument->Child(1));
             } else {
-                encoder.Validate(node);
+                sourceAudit.RequireExactLoweringSource(node);
             }
         } else if (
             exactCoalesce.Kind ==
             EExactCoalesceFalseArgument::BinaryStringMembership)
         {
             // Validate the two direct leaves separately so their equality
-            // commutativity markers never relax the global opaque encoder.
+            // commutativity markers never relax the closed source audit.
             ValidateExactBinaryStringMembership(
                 *argument,
                 rowArgument,
@@ -6204,10 +5756,10 @@ NJson::TJsonValue ExportExprNode(
             // The whole Coalesce tree is deterministic and total, while the
             // canonical predicate exporter below assigns the inner operation
             // the same opaque identity as its pushed OLAP spelling.
-            TOpaqueExpressionEncoder(
+            TOpaqueSourceAuditor(
                 rowArgument,
                 visibleColumns,
-                boundArguments).Validate(node);
+                boundArguments).RequireExactLoweringSource(node);
         }
         if (boundArguments.size() >= MaxIfPresentBindingDepth) {
             Unsupported("Exact Coalesce false binding depth exceeds the audit limit");
@@ -6248,10 +5800,10 @@ NJson::TJsonValue ExportExprNode(
             exact,
             rowArgument,
             visibleColumns);
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
         if (boundArguments.size() >= MaxIfPresentBindingDepth) {
             Unsupported(
                 "Exact Decimal Coalesce zero binding depth exceeds the audit limit");
@@ -6513,10 +6065,10 @@ NJson::TJsonValue ExportExprNode(
         // opaque expressions, while giving this fixed conversion its exact
         // runtime value. Dynamic String-to-Date casts deliberately fail the
         // direct-literal gate in ParseDateSafeCast.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
         return result;
     }
 
@@ -6525,10 +6077,10 @@ NJson::TJsonValue ExportExprNode(
 
         // Keep the same closed-world totality and metadata audit as opaque
         // expressions while assigning this checked conversion an exact value.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
 
         auto result = JsonMap();
         result["kind"] = "cast_integral";
@@ -6553,10 +6105,10 @@ NJson::TJsonValue ExportExprNode(
 
             // Keep the closed-world safety and metadata audit even though this
             // fixed conversion is normalized to a literal or typed NULL.
-            TOpaqueExpressionEncoder(
+            TOpaqueSourceAuditor(
                 rowArgument,
                 visibleColumns,
-                boundArguments).Validate(node);
+                boundArguments).RequireExactLoweringSource(node);
             return result;
         }
 
@@ -6567,10 +6119,10 @@ NJson::TJsonValue ExportExprNode(
 
         // Retain the closed-world node checks used by opaque expressions while
         // assigning this reviewed cast shape an exact verifier meaning.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
 
         auto result = JsonMap();
         result["kind"] = "cast_decimal";
@@ -6609,10 +6161,10 @@ NJson::TJsonValue ExportExprNode(
         // generic expression the same stable uninterpreted identity as the
         // pushed OLAP spelling. The direct operand grammar keeps that bridge
         // small and makes argument order visible in the IR.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
         return CanonicalStringPredicateExpr(
             node.Content(),
             nullable,
@@ -6886,10 +6438,10 @@ NJson::TJsonValue ExportExprNode(
         {
             // Keep the old closed-world and safety checks even though the result
             // now has a concrete verifier meaning instead of an opaque identity.
-            TOpaqueExpressionEncoder(
+            TOpaqueSourceAuditor(
                 rowArgument,
                 visibleColumns,
-                boundArguments).Validate(node);
+                boundArguments).RequireExactLoweringSource(node);
 
             TStringBuf kind;
             if (node.IsCallable("+")) {
@@ -6921,10 +6473,10 @@ NJson::TJsonValue ExportExprNode(
         // Retain the closed-world node checks used by opaque expressions.
         // Integral division is total in MiniKQL because its invalid arithmetic
         // cases produce Optional NULL rather than an observable failure.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
 
         auto result = BinaryExpr(
             "div",
@@ -6944,10 +6496,10 @@ NJson::TJsonValue ExportExprNode(
 
         // Retain the same closed-world node checks as opaque expressions while
         // giving the admitted Decimal arithmetic an exact verifier meaning.
-        TOpaqueExpressionEncoder(
+        TOpaqueSourceAuditor(
             rowArgument,
             visibleColumns,
-            boundArguments).Validate(node);
+            boundArguments).RequireExactLoweringSource(node);
 
         const TStringBuf kind = node.IsCallable("DecimalMul") ? "mul" : "div";
         auto result = BinaryExpr(
@@ -6963,10 +6515,10 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
-    return TOpaqueExpressionEncoder(
+    return TOpaqueSourceAuditor(
         rowArgument,
         visibleColumns,
-        boundArguments).Export(node, budget, normalizedDepth + 1);
+        boundArguments).AuditOpaque(node).Export(budget, normalizedDepth + 1);
 }
 
 NJson::TJsonValue ExportExprWithBudget(

@@ -6,7 +6,8 @@ proof is about the accepted model, not unbounded SQL equivalence or runtime
 execution. The exporter and every encoding strategy are part of the trusted path.
 
 Start with [the semantic contract](PLAN.md), [the audit map](TRUSTED_CORE.md),
-or [the benchmark runbook](BENCHMARK_COVERAGE.md). The
+[the findings and regression ledger](FINDINGS.md), or
+[the benchmark runbook](BENCHMARK_COVERAGE.md). The
 [historical archive](history/README.md) preserves the previous milestone journals;
 historical test counts and workload outcomes are not current guarantees.
 

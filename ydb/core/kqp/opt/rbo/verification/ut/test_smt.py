@@ -668,9 +668,33 @@ class SmtTest(unittest.TestCase):
             formula.index("(assert v_1)"),
         )
 
-    def test_python_boolean_is_not_an_smt_boolean(self):
-        with self.assertRaises(smt.SmtError):
-            smt.and_(True)  # type: ignore[arg-type]
+    def test_boolean_connectives_are_typed_and_compact_wide_junctions(self):
+        first = smt.symbol("first", smt.BOOL)
+        second = smt.symbol("second", smt.BOOL)
+        equal_copy = smt.symbol("first", smt.BOOL)
+        repeated = (first,) * smt._BOOLEAN_COMPACTION_WIDTH
+        for connective, neutral, terminal in (
+            (smt.and_, smt.TRUE, smt.FALSE),
+            (smt.or_, smt.FALSE, smt.TRUE),
+        ):
+            with self.subTest(connective=connective.__name__):
+                self.assertIs(connective(), neutral)
+                self.assertIs(connective(first, neutral), first)
+                self.assertIs(connective(first, terminal), terminal)
+                self.assertEqual(len(connective(*repeated).arguments), len(repeated))
+                self.assertIs(connective(*repeated, first), first)
+                result = connective(
+                    *repeated, connective(second, first), second, equal_copy,
+                )
+                self.assertEqual(
+                    tuple(map(id, result.arguments)),
+                    tuple(map(id, (first, second, equal_copy))),
+                )
+                self.assertIs(connective(terminal, smt.ONE), terminal)
+                for invalid in (True, smt.ONE):
+                    for args in ((invalid,), (first, invalid), (invalid, terminal)):
+                        with self.assertRaises(smt.SmtError):
+                            connective(*args)  # type: ignore[arg-type]
 
     def test_integer_modulo_is_typed_and_constant_folded(self):
         value = smt.symbol("value", smt.INT)

@@ -5,6 +5,7 @@
 #include <library/cpp/yt/logging/tag.h>
 #include <library/cpp/yt/logging/tagged_payload.h>
 
+#include <library/cpp/yt/string/format.h>
 #include <library/cpp/yt/string/raw_formatter.h>
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -266,6 +267,55 @@ TEST(TLoggingTagListTest, Add)
     tags.AddFormat("Range", "%v-%v", 1, 9);
 
     EXPECT_EQ(ReadTags(tags.GetPayload()), (TTags{{"Count", "42"}, {"Range", "1-9"}}));
+}
+
+TEST(TLoggingTagListBuilderTest, AppendsToTarget)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilder(&tags).With("Key", 1);
+    EXPECT_EQ(ToString(tags), "Key: 1");
+}
+
+TEST(TLoggingTagListBuilderTest, ChainKeepsOrder)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilder(&tags)
+        .With("First", 1)
+        .WithFormat("Second", "%.2f", 1.5)
+        .With("Third", "value");
+    EXPECT_EQ(ToString(tags), "First: 1, Second: 1.50, Third: value");
+}
+
+TEST(TLoggingTagListBuilderTest, SkipsTagOnFalseCondition)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilder(&tags)
+        .WithIf(false, "Skipped", 1)
+        .WithIf(true, "Kept", 2)
+        .WithFormatIf(false, "SkippedFormat", "%x", 255)
+        .WithFormatIf(true, "KeptFormat", "%x", 255);
+    EXPECT_EQ(ToString(tags), "Kept: 2, KeptFormat: ff");
+}
+
+TEST(TLoggingTagListBuilderTest, SplicesList)
+{
+    auto spliced = TLoggingTagList()
+        .With("Inner", 1)
+        .With("Other", 2);
+
+    TLoggingTagList tags;
+    TLoggingTagListBuilder(&tags)
+        .With("Outer", 0)
+        .With(spliced);
+    EXPECT_EQ(ToString(tags), "Outer: 0, Inner: 1, Other: 2");
+}
+
+TEST(TLoggingTagListBuilderTest, AccumulatesAcrossBuilders)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilder(&tags).With("First", 1);
+    TLoggingTagListBuilder(&tags).With("Second", 2);
+    EXPECT_EQ(ToString(tags), "First: 1, Second: 2");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

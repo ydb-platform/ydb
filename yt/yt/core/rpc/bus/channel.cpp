@@ -923,21 +923,17 @@ private:
 
             requestControl->ProfileRequest(requestMessage);
 
-            // NB: The trailing request info is a caller-supplied, pre-formatted tag list
-            // (see SetRequestInfo), so it has to be spliced into the message text as-is.
-            YT_LOG_DEBUG("Request sent (RequestId: %v, Method: %v.%v, Timeout: %v, TrackingLevel: %v, "
-                "ChecksummedPartCount: %v, MultiplexingBand: %v, Endpoint: %v, BodySize: %v, AttachmentsSize: %v%v)",
-                requestId,
-                requestControl->GetService(),
-                requestControl->GetMethod(),
-                requestControl->GetTimeout(),
-                busOptions.TrackingLevel,
-                busOptions.ChecksummedPartCount,
-                options.MultiplexingBand,
-                Bus_->GetEndpointDescription(),
-                GetMessageBodySize(requestMessage),
-                GetTotalMessageAttachmentSize(requestMessage),
-                !request->GetRequestInfo().empty() ? std::string(Format(", %v", request->GetRequestInfo())) : std::string());
+            YT_TLOG_DEBUG("Request sent")
+                .With("RequestId", requestId)
+                .WithFormat("Method", "%v.%v", requestControl->GetService(), requestControl->GetMethod())
+                .With("Timeout", requestControl->GetTimeout())
+                .With("TrackingLevel", busOptions.TrackingLevel)
+                .With("ChecksummedPartCount", busOptions.ChecksummedPartCount)
+                .With("MultiplexingBand", options.MultiplexingBand)
+                .With("Endpoint", Bus_->GetEndpointDescription())
+                .With("BodySize", GetMessageBodySize(requestMessage))
+                .With("AttachmentsSize", GetTotalMessageAttachmentSize(requestMessage))
+                .With(request->GetLoggingTags());
         }
 
 

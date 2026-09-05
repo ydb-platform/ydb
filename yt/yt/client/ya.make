@@ -54,6 +54,7 @@ SRCS(
     api/rpc_proxy/journal_reader.cpp
     api/rpc_proxy/journal_writer.cpp
     api/rpc_proxy/public.cpp
+    api/rpc_proxy/request_annotations.cpp
     api/rpc_proxy/row_batch_reader.cpp
     api/rpc_proxy/row_batch_writer.cpp
     api/rpc_proxy/row_stream.cpp

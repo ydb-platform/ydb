@@ -246,6 +246,8 @@ struct TEvPQ {
         EvTopicSqsActionMetrics,
         EvProcessBatchKeys,
         EvProcessBatchKeysResult,
+        EvSetOffsetsRequest,
+        EvSetOffsetsResponse,
         EvEnd,
     };
 
@@ -489,6 +491,14 @@ struct TEvPQ {
         TActorId PipeClient;
         std::optional<TString> CommittedMetadata;
         bool IsInternal = false;
+        bool AllowInactiveRewind = false;
+        // SetOffsets replies via this, not via Cookie / TEvProxyResponse.
+        struct TSetOffsetsReply {
+            TActorId Sender;
+            ui64 Cookie = 0;
+            ui32 PartitionId = 0;
+        };
+        std::optional<TSetOffsetsReply> SetOffsetsReply;
     };
 
 
@@ -1827,6 +1837,70 @@ struct TEvPQ {
 
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvSetOffsetsRequest : TEventPB<TEvSetOffsetsRequest, NKikimrPQ::TEvSetOffsetsRequest, EvSetOffsetsRequest> {
+        TEvSetOffsetsRequest() = default;
+
+        TEvSetOffsetsRequest(
+            const TString& topic,
+            const TString& consumer,
+            ui32 partitionId,
+            NKikimrPQ::TEvSetOffsetsRequest::EPosition position,
+            ui64 timestampMs = 0,
+            ui64 cookie = 0)
+        {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            Record.SetPosition(position);
+            if (timestampMs) {
+                Record.SetTimestampMs(timestampMs);
+            }
+            if (cookie) {
+                Record.SetCookie(cookie);
+            }
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvSetOffsetsResponse : TEventPB<TEvSetOffsetsResponse, NKikimrPQ::TEvSetOffsetsResponse, EvSetOffsetsResponse> {
+        TEvSetOffsetsResponse() = default;
+
+        TEvSetOffsetsResponse(
+            ui32 partitionId,
+            Ydb::StatusIds::StatusCode status,
+            TString errorMessage = {},
+            ui64 cookie = 0)
+        {
+            Record.SetPartitionId(partitionId);
+            Record.SetStatus(status);
+            if (!errorMessage.empty()) {
+                Record.SetErrorMessage(std::move(errorMessage));
+            }
+            if (cookie) {
+                Record.SetCookie(cookie);
+            }
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
+        Ydb::StatusIds::StatusCode GetStatus() const {
+            return Record.GetStatus();
+        }
+
+        const TString& GetErrorMessage() const {
+            return Record.GetErrorMessage();
+        }
+
+        ui64 GetCookie() const {
+            return Record.GetCookie();
         }
     };
 

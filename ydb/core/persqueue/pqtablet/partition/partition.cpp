@@ -1095,6 +1095,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     }
 
     ProcessMLPPendingEvents();
+    ProcessSetOffsetsPendingEvents();
 
     ReportCounters(ctx, true);
 }
@@ -2230,6 +2231,10 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
             }
         }
         BlobsForCompactionWereRead(response->GetBlobs());
+        return;
+    }
+    if (cookie == ERequestCookie::ReadBlobForSetOffsets) {
+        HandleSetOffsetsBlobResponse(ev);
         return;
     }
     auto it = ReadInfo.find(cookie);
@@ -4470,7 +4475,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         case TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE:
             return;
         default:
-            ScheduleReplyError(act.Cookie, act.IsInternal,
+            ScheduleReplyError(act,
                                NPersQueue::NErrorCode::WRONG_COOKIE,
                                "request to deleted read rule");
             return;
@@ -4514,7 +4519,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
                  && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
 
-        ScheduleReplyError(act.Cookie, act.IsInternal,
+        ScheduleReplyError(act,
                            NPersQueue::NErrorCode::WRONG_COOKIE,
                            TStringBuilder() << "set offset in already dead session " << act.SessionId << " actual is " << userInfo.Session);
 
@@ -4522,14 +4527,14 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     }
 
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && IsCommitOffsetForbiddenForMLPConsumer(act.ClientId, act.MLPRequest)) {
-        ScheduleReplyError(act.Cookie, act.IsInternal,
+        ScheduleReplyError(act,
                            NPersQueue::NErrorCode::BAD_REQUEST,
                            TStringBuilder() << "set offset for consumer is forbidden");
         return;
     }
 
     if (!act.SessionId.empty() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && (i64)act.Offset <= userInfo.Offset) { //this is stale request, answer ok for it
-        ScheduleReplyOk(act.Cookie, act.IsInternal);
+        ScheduleReplyOk(act);
         return;
     }
 
@@ -4558,7 +4563,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     if (offset > GetEndOffset()) {
         if (strictCommitOffset) {
             TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-            ScheduleReplyError(act.Cookie, act.IsInternal,
+            ScheduleReplyError(act,
                             NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
                             TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << GetEndOffset());
 
@@ -4582,9 +4587,9 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 */
     }
 
-    if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(GetEndOffset()) == userInfo.Offset && offset < GetEndOffset()) {
+    if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(GetEndOffset()) == userInfo.Offset && offset < GetEndOffset() && !act.AllowInactiveRewind) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-        ScheduleReplyError(act.Cookie, act.IsInternal,
+        ScheduleReplyError(act,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
                            TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " for inactive partition");
 
@@ -4653,7 +4658,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                                            offset,
                                            ts.first, ts.second, ui ? ui->AnyCommits : false);
         } else {
-            ScheduleReplyOk(act.Cookie, act.IsInternal);
+            ScheduleReplyOk(act);
         }
 
         if (createSession) {
@@ -4712,6 +4717,14 @@ void TPartition::ScheduleReplyOk(const ui64 dst, bool internal)
                          MakeReplyOk(dst, internal).Release());
 }
 
+void TPartition::ScheduleReplyOk(const TEvPQ::TEvSetClientInfo& act)
+{
+    if (TryScheduleSetOffsetsReply(act, Ydb::StatusIds::SUCCESS, {})) {
+        return;
+    }
+    ScheduleReplyOk(act.Cookie, act.IsInternal);
+}
+
 void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                                 const i64 offset,
                                                 const TInstant writeTimestamp,
@@ -4741,6 +4754,16 @@ void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
                                         errorCode,
                                         error,
                                         internal).Release());
+}
+
+void TPartition::ScheduleReplyError(const TEvPQ::TEvSetClientInfo& act,
+                                    NPersQueue::NErrorCode::EErrorCode errorCode,
+                                    const TString& error)
+{
+    if (TryScheduleSetOffsetsReply(act, PqErrorToYdbStatus(errorCode), error)) {
+        return;
+    }
+    ScheduleReplyError(act.Cookie, act.IsInternal, errorCode, error);
 }
 
 void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,

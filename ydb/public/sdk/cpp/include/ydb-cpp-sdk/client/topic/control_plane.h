@@ -1080,4 +1080,33 @@ struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSet
     FLUENT_SETTING_OPTIONAL(std::string, ReadSessionId);
 };
 
+// Settings for set offsets request.
+struct TSetOffsetsSettings : public TOperationRequestSettings<TSetOffsetsSettings> {
+    TSetOffsetsSettings& Earliest() {
+        Position_ = EPosition::Earliest;
+        return *this;
+    }
+
+    TSetOffsetsSettings& Latest() {
+        Position_ = EPosition::Latest;
+        return *this;
+    }
+
+    TSetOffsetsSettings& FromWrittenAt(TInstant writtenAt) {
+        Position_ = EPosition::FromWrittenAt;
+        FromWrittenAt_ = writtenAt;
+        return *this;
+    }
+
+    enum class EPosition {
+        Unspecified,
+        Earliest,
+        Latest,
+        FromWrittenAt,
+    };
+
+    EPosition Position_ = EPosition::Unspecified;
+    TInstant FromWrittenAt_ = TInstant::Zero();
+};
+
 }  // namespace NYdb::NTopic

@@ -31,6 +31,7 @@ RECURSE(
     testshard_workload
     topic
     topic_balancing
+    topic_set_offsets
     topic_kafka
     sqs_topic
     transfer

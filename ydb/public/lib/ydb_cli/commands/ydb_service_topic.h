@@ -206,6 +206,19 @@ namespace NYdb::NConsoleClient {
         ui64 Offset_;
     };
 
+    class TCommandTopicConsumerSetOffsets: public TYdbCommand, public TCommandWithTopicName {
+    public:
+        TCommandTopicConsumerSetOffsets();
+        void Config(TConfig& config) override;
+        void Parse(TConfig& config) override;
+        int Run(TConfig& config) override;
+
+    private:
+        TString ConsumerName_;
+        TString Position_;
+        TMaybe<TInstant> FromWrittenAt_;
+    };
+
 
     class TCommandWithTransformBody {
     protected:

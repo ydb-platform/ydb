@@ -5,7 +5,6 @@ items:
   href: columns.md
   items:
   - { name: FAMILY,     href: family.md,          when: backend_name == "YDB"   }
-  - { name: NOT NULL,   href: not_null.md,        when: backend_name == "YDB"   }
 - { name: SET,        href: set.md,             when: backend_name == "YDB"   }
 - { name: CHANGEFEED, href: changefeed.md,      when: feature_changefeed and backend_name == "YDB" }
 - { name: RENAME,     href: rename.md,          when: feature_map_tables      }

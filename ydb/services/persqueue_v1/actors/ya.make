@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
+    ydb/core/persqueue/public/dataplane
     ydb/core/persqueue/public/reset_offset
     ydb/core/persqueue/writer
     ydb/core/protos
@@ -65,12 +66,6 @@ SRCS(
     schema_actors.h
     schema_actors.cpp
     update_offsets_in_transaction_actor.cpp
-    partition_writer.h
-    partition_writer.cpp
-    partition_writer_cache_actor.h
-    partition_writer_cache_actor.cpp
-    deferred_destination_upsert_actor.h
-    deferred_destination_upsert_actor.cpp
 )
 
 END()

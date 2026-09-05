@@ -3,5 +3,13 @@ items:
   include: { mode: link, path: ../troubleshooting/toc_p.yaml }
 - name: Обслуживание кластера
   items:
-  - name: Встроенный UI
-    include: { mode: link, path: ../reference/embedded-ui/toc_p.yaml }
+  - name: "{{ ydb-ui-name }}"
+    include: { mode: link, path: ../reference/ydb-ui/toc_p.yaml }
+  - name: Управление дисковой подсистемой кластера
+    include: { mode: link, path: manual/toc_p.yaml }
+  - name: Изменение конфигурации акторной системы
+    href: ../devops/configuration-management/configuration-v1/change_actorsystem_configs.md
+  - name: Обслуживание без простоев
+    href: ../devops/concepts/maintenance-without-downtime.md
+  - name: Обновление конфигурации через CMS
+    href: ../devops/configuration-management/configuration-v1/cms.md

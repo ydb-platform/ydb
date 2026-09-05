@@ -28,6 +28,7 @@ SRCS(
     console_interaction.h
     console_interaction.cpp
     ddisk.cpp
+    ddisk_info.cpp
     defs.h
     diff.h
     disk_metrics.cpp

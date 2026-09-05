@@ -613,9 +613,10 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
         return IGraphTransformer::TStatus(TStatus::Error);
     }
     const auto joinType = joinTypeNode.Content();
-    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly") {
+    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly" &&
+        joinType != "Cross") {
         ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
-                    << ", supported: Inner, Left, LeftSemi, LeftOnly"));
+                    << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -646,6 +647,16 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
         ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
+    if (joinType == "Cross") {
+        if (leftKeysNode.ChildrenSize() != 0) {
+            ctx.AddError(TIssue(ctx.GetPosition(leftKeysNode.Pos()),
+                                "Specifying key columns is not allowed for cross join"));
+            return IGraphTransformer::TStatus(TStatus::Error);
+        }
+    } else if (leftKeysNode.ChildrenSize() == 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(leftKeysNode.Pos()), "At least one key column must be specified"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
 
     std::vector<const TTypeAnnotationNode*> resultItems;
 
@@ -666,6 +677,15 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
         }
     }
 
+    TTypeAnnotationNode::TListType rightFilterItemTypes;
+    rightFilterItemTypes.reserve(rightItemTypes.size());
+    for (auto itemType : rightItemTypes) {
+        if (joinType == "Left" && itemType->GetKind() != ETypeAnnotationKind::Optional) {
+            itemType = ctx.MakeType<TOptionalExprType>(itemType);
+        }
+        rightFilterItemTypes.push_back(itemType);
+    }
+
     // Left filter.
     if (childrenSize > TDqBlockHashJoinCore::idx_LeftFilter) {
         auto& leftFilter = node->ChildRef(TDqBlockHashJoinCore::idx_LeftFilter);
@@ -684,11 +704,11 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     // Right filter.
     if (childrenSize > TDqBlockHashJoinCore::idx_RightFilter) {
         auto& rightFilter = node->ChildRef(TDqBlockHashJoinCore::idx_RightFilter);
-        auto status = ConvertToLambda(rightFilter, ctx, rightItemTypes.size());
+        auto status = ConvertToLambda(rightFilter, ctx, rightFilterItemTypes.size());
         if (status.Level != TStatus::Ok) {
             return status;
         }
-        if (!UpdateLambdaAllArgumentsTypes(rightFilter, rightItemTypes, ctx)) {
+        if (!UpdateLambdaAllArgumentsTypes(rightFilter, rightFilterItemTypes, ctx)) {
             return TStatus::Error;
         }
         if (!rightFilter->GetTypeAnn()) {
@@ -699,7 +719,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     // Common filter.
     if (childrenSize > TDqBlockHashJoinCore::idx_CommonFilter) {
         auto commonInputs = leftItemTypes;
-        commonInputs.insert(commonInputs.end(), rightItemTypes.begin(), rightItemTypes.end());
+        commonInputs.insert(commonInputs.end(), rightFilterItemTypes.begin(), rightFilterItemTypes.end());
         auto& commonFilter = node->ChildRef(TDqBlockHashJoinCore::idx_CommonFilter);
         auto status = ConvertToLambda(commonFilter, ctx, commonInputs.size());
         if (status.Level != TStatus::Ok) {
@@ -1372,12 +1392,22 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
     }
-    auto* input = node->Child(TDqPhyLength::idx_Input);
-    auto* aggName = node->Child(TDqPhyLength::idx_Name);
 
-    TVector<const TItemExprType*> aggTypes;
-    if (!EnsureAtom(*aggName, ctx)) {
+    auto* input = node->Child(TDqPhyLength::idx_Input);
+    if (input->GetTypeAnn() && input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        node->SetTypeAnn(input->GetTypeAnn());
+        return TStatus::Ok;
+    }
+    if (!EnsureAnySeqType(*input, ctx)) {
         return TStatus::Error;
+    }
+
+    auto* aggName = node->Child(TDqPhyLength::idx_Name);
+    if (bool isUniversal; !EnsureAtomOrUniversal(*aggName, ctx, isUniversal)) {
+        return TStatus::Error;
+    } else if (isUniversal) {
+        node->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+        return TStatus::Ok;
     }
 
     TVector<const TItemExprType*> structItems;

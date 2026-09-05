@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
@@ -15,6 +16,18 @@
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Result of an asynchronous request to persist partition state.
+// Cancelled means the partition stopped before it could confirm completion.
+enum class EPersistResult
+{
+    Success,
+    Cancelled,
+};
+using TPersistResultFuture = NThreading::TFuture<EPersistResult>;
+using TPersistResultPromise = NThreading::TPromise<EPersistResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -31,8 +44,14 @@ struct IPartitionDirectService
 
     // Asynchronously persists the given vchunk config to the partition's
     // local DB. Caller must ensure cfg.IsValid().
-    virtual NThreading::TFuture<void> UpdateVChunkConfig(
+    virtual TPersistResultFuture UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
+
+    // Asynchronously persists the given TDirtyMapStateProto to the partition's
+    // local DB.
+    virtual TPersistResultFuture UpdateDirtyMapState(
+        ui32 vChunkIndex,
+        TDirtyMapStateProto state) = 0;
 
     // Query the addition of a new host to the group. The request is idempotent
     // and can be repeated multiple times.
@@ -59,6 +78,11 @@ struct IPartitionDirectService
     virtual bool TryAdvancePBufferBarrier(
         const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
         ui64 lsn) = 0;
+
+    // Reserves byteCount from the disk-wide range-copy bandwidth budget.
+    // Returns the delay before the operation may start. Zero means it may start
+    // immediately or throttling is disabled. Called from DBG executor threads.
+    virtual TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

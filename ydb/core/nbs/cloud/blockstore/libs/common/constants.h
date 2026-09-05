@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/bitops.h>
 #include <util/generic/fwd.h>
 #include <util/generic/size_literals.h>
 
@@ -23,6 +24,14 @@ constexpr ui32 DefaultBlockSize = 4_KB;
 // The maximum possible volume block size.
 constexpr ui32 MaxBlockSize = 128_KB;
 
+// A volume block size the partition can serve: a power of two between the
+// DDisk integrity unit (DefaultBlockSize) and MaxBlockSize inclusive.
+constexpr bool IsSupportedBlockSize(ui32 blockSize)
+{
+    return blockSize >= DefaultBlockSize && blockSize <= MaxBlockSize &&
+           IsPowerOf2(blockSize);
+}
+
 // Keep the value less than MaxBufferSize in
 // cloud/blockstore/libs/rdma/iface/client.h
 constexpr ui32 MaxSubRequestSize = 4_MB;
@@ -35,6 +44,14 @@ constexpr size_t DirectBlockGroupsCount = 32;
 
 // The size of the data copied at a time.
 constexpr ui64 CopyRangeSize = 1_MB;
+
+// The amount of copied data between copy progress notifications.
+constexpr ui64 CopyProgressSaveInterval = 8_MB;
+
+// Max allowed VChunk size.
+constexpr ui64 MaxVChunkSize = RegionSize / DirectBlockGroupsCount;
+// Max allowed VChunk block count (when block size is minimum).
+constexpr ui64 MaxVChunkBlockCount = MaxVChunkSize / DefaultBlockSize;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -83,6 +84,13 @@ void DumpToFile(
     }
 }
 
+ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
+{
+    Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
+    Y_ABORT_UNLESS(storageConfig.GetStripeSize() % blockSize == 0);
+    return blockSize;
+}
+
 TVector<TRegionPtr> CreateRegions(
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
@@ -90,16 +98,14 @@ TVector<TRegionPtr> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
-    const TVChunkConfigByIndex& vChunkConfigs,
-    const TStorageConfig& storageConfig,
-    NMonitoring::TDynamicCounterPtr counters)
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates,
+    const TStorageConfig& storageConfig)
 {
+    blockSize = CheckedBlockSize(blockSize, storageConfig);
     const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
-        NMonitoring::TDynamicCounterPtr regionCounters =
-            counters->GetSubgroup("region", ToString(i));
-
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
             traceService,
@@ -108,9 +114,10 @@ TVector<TRegionPtr> CreateRegions(
             i,
             directBlockGroups,
             vChunkConfigs,
+            dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
-            storageConfig.GetVChunkSize(),
-            regionCounters);
+            blockSize,
+            storageConfig.GetVChunkSize());
     }
 
     return regions;
@@ -127,7 +134,9 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    TVChunkConfigByIndex vChunkConfigs,
+    TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates,
     TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
     ITimerPtr timer,
@@ -139,6 +148,7 @@ TFastPathService::TFastPathService(
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
+    , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
           this,
           this,
@@ -147,11 +157,8 @@ TFastPathService::TFastPathService(
           blockSize,
           DirectBlockGroups,
           vChunkConfigs,
-          *StorageConfig,
-          MakeCountersChain(
-              counters,
-              StorageConfig->GetDDiskPoolName(),
-              DiskDescription)))
+          dirtyMapStates,
+          *StorageConfig))
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TFastPathService{
@@ -160,9 +167,14 @@ TFastPathService::TFastPathService(
               .Generation = DiskDescription.Generation})
     , TraceSamplePeriod(StorageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
-          std::move(counters),
+          counters,
           StorageConfig->GetDDiskPoolName(),
           DiskDescription))
+    , VChunkCounters(MakeCountersChain(
+          std::move(counters),
+          StorageConfig->GetDDiskPoolName(),
+          DiskDescription,
+          "vchunk"))
     , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
           .DiskId = DiskDescription.DiskId,
           .BlockSize = blockSize,
@@ -170,6 +182,17 @@ TFastPathService::TFastPathService(
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
+    Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
+
+    const ui64 copyRangeBandwidth =
+        StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
+    if (copyRangeBandwidth) {
+        CopyRangeBucket.emplace(
+            ActorSystem->Timestamp(),
+            copyRangeBandwidth,
+            copyRangeBandwidth);
+    }
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -204,8 +227,15 @@ NThreading::TFuture<void> TFastPathService::Run()
         region->Run();
     }
     ScheduleDirtyMapDebugPrint();
+    ScheduleVChunkCountersUpdate();
 
     return NThreading::WaitAll(initialReadyFutures);
+}
+
+IDirectBlockGroupPtr TFastPathService::GetDirectBlockGroup(ui32 dbgIndex) const
+{
+    return dbgIndex >= DirectBlockGroups.size() ? nullptr
+                                                : DirectBlockGroups[dbgIndex];
 }
 
 NThreading::TFuture<void> TFastPathService::Stop()
@@ -395,11 +425,24 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
-NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
+TPersistResultFuture TFastPathService::UpdateVChunkConfig(
     const TVChunkConfig& cfg)
 {
     auto event =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+    auto result = event->UpdateCompleted.GetFuture();
+    ActorSystem->Send(PartitionActorId, event.release());
+    return result;
+}
+
+TPersistResultFuture TFastPathService::UpdateDirtyMapState(
+    ui32 vChunkIndex,
+    TDirtyMapStateProto state)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>(
+            vChunkIndex,
+            std::move(state));
     auto result = event->UpdateCompleted.GetFuture();
     ActorSystem->Send(PartitionActorId, event.release());
     return result;
@@ -446,6 +489,16 @@ bool TFastPathService::TryAdvancePBufferBarrier(
     return false;
 }
 
+TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
+{
+    if (!CopyRangeBucket) {
+        return {};
+    }
+
+    auto guard = Guard(CopyRangeBucketLock);
+    return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
+}
+
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     return {
@@ -455,6 +508,62 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
             Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
     };
+}
+
+void TFastPathService::SetNodeChaosMode(
+    ui32 nodeId,
+    std::optional<ui32> dbgIndex,
+    TChaosConfig::TChaosNodeConfig::EChaosMode mode)
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s SetChaosNodeMode %s %s %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintNodeId(nodeId).c_str(),
+        dbgIndex ? PrintDbgId(*dbgIndex).c_str() : "all",
+        ToString(mode).c_str());
+
+    auto apply = [&](TChaosConfig::TDbgAndNodeId id)
+    {
+        if (id.DbgIndex >= DirectBlockGroups.size()) {
+            return;
+        }
+        ChaosConfig.NodeConfigs[id].Mode = mode;
+
+        auto controller = id.DbgIndex < ChaosInjectorControls.size()
+                              ? ChaosInjectorControls[id.DbgIndex]
+                              : nullptr;
+        if (!controller) {
+            return;
+        }
+        switch (mode) {
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Disabled: {
+                controller->DisableNode(nodeId);
+                break;
+            }
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Enabled: {
+                controller->EnableNode(nodeId);
+                break;
+            }
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Partial: {
+                break;
+            }
+        }
+    };
+
+    if (!dbgIndex) {
+        for (ui32 i = 0; i < DirectBlockGroups.size(); ++i) {
+            const auto id =
+                TChaosConfig::TDbgAndNodeId{.NodeId = nodeId, .DbgIndex = i};
+            apply(id);
+        }
+    } else {
+        const auto id = TChaosConfig::TDbgAndNodeId{
+            .NodeId = nodeId,
+            .DbgIndex = *dbgIndex};
+        apply(id);
+    }
 }
 
 NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
@@ -479,6 +588,10 @@ NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
             for (const auto& future: futures) {
                 snapshots.push_back(future.GetValue());
             }
+            Sort(
+                snapshots,
+                [](const TDbgSnapshot& lhs, const TDbgSnapshot& rhs)
+                { return lhs.Index < rhs.Index; });
             return snapshots;
         });
 }
@@ -508,6 +621,42 @@ TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
     executor->ExecuteSimple([vchunk = std::move(vchunk), promise]() mutable
                             { promise.SetValue(vchunk->BuildMonSnapshot()); });
     return future;
+}
+
+NThreading::TFuture<TVChunkStatsGatherResult>
+TFastPathService::GatherVChunkStats(
+    EVChunkStatsDetail detail,
+    std::optional<size_t> dbgIndex) const
+{
+    TVector<NThreading::TFuture<TVChunkStatsGatherResult>> futures;
+    futures.reserve(DirectBlockGroups.size());
+    for (size_t i = 0; i < DirectBlockGroups.size(); ++i) {
+        const auto dbgDetail = (detail == EVChunkStatsDetail::PerVChunk &&
+                                (!dbgIndex || *dbgIndex == i))
+                                   ? EVChunkStatsDetail::PerVChunk
+                                   : EVChunkStatsDetail::TotalOnly;
+        futures.push_back(DirectBlockGroups[i]->GatherVChunkStats(dbgDetail));
+    }
+
+    return NThreading::WaitAll(futures).Apply(
+        [futures](const auto&)
+        {
+            TVChunkStatsGatherResult result;
+            result.PerDbg.reserve(futures.size());
+            for (const auto& future: futures) {
+                const auto& part = future.GetValue();
+                result.Total.Accumulate(part.Total);
+                result.PerDbg.push_back(TVChunkDbgStats{
+                    .DbgIndex = part.DbgIndex,
+                    .Stats = part.Total,
+                });
+                result.PerVChunk.insert(
+                    result.PerVChunk.end(),
+                    part.PerVChunk.begin(),
+                    part.PerVChunk.end());
+            }
+            return result;
+        });
 }
 
 void TFastPathService::OnRegionStopped(size_t regionIndex)
@@ -546,8 +695,8 @@ void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 
 void TFastPathService::PBufferCleanup()
 {
-    // Pull the smallest inflight lsn from every DirectBlockGroup. Each group
-    // writes its own result slot; the last responder computes the global
+    // Pull the smallest inflight record id from every DirectBlockGroup. Each
+    // group writes its own result slot; the last responder computes the global
     // minimum (see FinishPBufferCleanup).
     const size_t dbgCount = DirectBlockGroups.size();
     CleanupGather.SafeBarriers.assign(dbgCount, std::nullopt);
@@ -556,7 +705,7 @@ void TFastPathService::PBufferCleanup()
     for (size_t i = 0; i < dbgCount; ++i) {
         DirectBlockGroups[i]->GatherSafeBarrierForErase().Subscribe(
             [weakSelf = weak_from_this(), i]   //
-            (const NThreading::TFuture<std::optional<ui64>>& f)
+            (const NThreading::TFuture<std::optional<TPBufferKey>>& f)
             {
                 if (auto self = weakSelf.lock()) {
                     self->OnGatherSafeBarrierForErase(i, f.GetValue());
@@ -567,7 +716,7 @@ void TFastPathService::PBufferCleanup()
 
 void TFastPathService::OnGatherSafeBarrierForErase(
     size_t dbgIndex,
-    std::optional<ui64> safeBarrier)
+    std::optional<TPBufferKey> safeBarrier)
 {
     CleanupGather.SafeBarriers[dbgIndex] = safeBarrier;
     if (CleanupGather.PendingResponses.fetch_sub(1) == 1) {
@@ -577,7 +726,7 @@ void TFastPathService::OnGatherSafeBarrierForErase(
 
 void TFastPathService::FinishPBufferCleanup()
 {
-    std::optional<ui64> globalMin;
+    std::optional<TPBufferKey> globalMin;
     for (const auto& safeBarrier: CleanupGather.SafeBarriers) {
         if (safeBarrier && (!globalMin || *safeBarrier < *globalMin)) {
             globalMin = safeBarrier;
@@ -586,15 +735,15 @@ void TFastPathService::FinishPBufferCleanup()
 
     CleanupGather.Active.store(false);
 
-    if (!globalMin || *globalMin == 0) {
-        // 0 is the blocking bound: some vchunk has not finished restoring its
-        // dirty map, so its records are not accounted for yet. Skip the tick.
+    // Lsn 0 is the blocking bound: some vchunk has not finished restoring its
+    // dirty map, so its records are not accounted for yet. Skip the tick.
+    if (!globalMin || globalMin->Lsn == 0) {
         return;
     }
 
-    LastSafeBarrier.store(*globalMin);
+    LastSafeBarrier.store(globalMin->Lsn);
 
-    const ui64 cleanupBound = *globalMin - 1;
+    const ui64 cleanupBound = globalMin->Lsn - 1;
     for (const auto& dbg: DirectBlockGroups) {
         dbg->BarrierEraseFromPBuffer(cleanupBound);
     }
@@ -661,6 +810,42 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
 
     ScheduleDirtyMapDebugPrint();
     ++DumpCount;
+}
+
+void TFastPathService::ScheduleVChunkCountersUpdate()
+{
+    auto delay = StorageConfig->GetVChunkCountersUpdateInterval();
+    if (!delay || !Scheduler) {
+        return;
+    }
+
+    ScheduleAfterDelay(
+        nullptr,
+        delay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->QueryVChunkStats();
+            }
+        });
+}
+
+void TFastPathService::QueryVChunkStats()
+{
+    GatherVChunkStats(EVChunkStatsDetail::TotalOnly)
+        .Subscribe(
+            [weakSelf = weak_from_this()](const auto& future)
+            {
+                if (auto self = weakSelf.lock()) {
+                    self->OnVChunkStats(future.GetValue());
+                }
+            });
+}
+
+void TFastPathService::OnVChunkStats(const TVChunkStatsGatherResult& result)
+{
+    VChunkCounters.Publish(result.Total);
+    ScheduleVChunkCountersUpdate();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

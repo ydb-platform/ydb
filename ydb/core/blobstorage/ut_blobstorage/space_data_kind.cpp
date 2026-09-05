@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/base/blobstorage_data_kind.h>
+#include <ydb/core/base/blobstorage_write_source.h>
 
 #include <util/random/random.h>
 
@@ -70,6 +71,80 @@ struct TSpaceColorEnv {
             status = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge)->Get()->Record.GetStatus();
         });
         return status;
+    }
+};
+
+// Leaves a blob in the group with only its data parts written, so that reading it back with
+// MustRestoreFirst makes DSProxy reconstruct and write out the parities.
+struct TPartialBlobEnv {
+    TEnvironmentSetup Env;
+    TIntrusivePtr<TBlobStorageGroupInfo> Info;
+    TString Data;
+    ui32 NextStep = 1;
+
+    TPartialBlobEnv()
+        : Env(TEnvironmentSetup::TSettings{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        })
+    {
+        Env.CreateBoxAndPool(1, 1);
+        Env.Sim(TDuration::Minutes(1));
+
+        auto groups = Env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        Info = Env.GetGroupInfo(groups.front());
+
+        Data.resize(1024);
+        for (size_t i = 0; i < Data.size(); ++i) {
+            Data[i] = RandomNumber<ui8>();
+        }
+    }
+
+    TLogoBlobID WriteDataPartsOnly() {
+        const TLogoBlobID fullId(1, 1, NextStep++, 0, Data.size(), 0);
+
+        TDataPartSet partSet;
+        Info->Type.SplitData((TErasureType::ECrcMode)fullId.CrcMode(), Data, partSet);
+
+        for (ui32 part = 1; part <= Info->Type.DataParts(); ++part) {
+            const TVDiskID vdiskId = Info->CreateVDiskID(Info->GetTopology().GetVDiskInSubgroup(part - 1,
+                fullId.Hash()));
+            Env.PutBlob(vdiskId, TLogoBlobID(fullId, part),
+                partSet.Parts[part - 1].OwnedString.ConvertToString());
+        }
+
+        return fullId;
+    }
+
+    // Reads the blob back through DSProxy and returns the data kind of every write the read
+    // provoked.
+    std::vector<TDataKind::E> RestoreWriteKinds(TLogoBlobID id, TDataKind::E dataKind) {
+        std::vector<TDataKind::E> kinds;
+        Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPut) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVPut>()->Record;
+                if (WriteSourceFromProto(record.GetWriteSourceOp()) == TWriteSource::DSProxyGetAccelerate) {
+                    kinds.push_back(record.GetDataKind());
+                }
+            }
+            return true;
+        };
+
+        const TActorId sender = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        Env.Runtime->WrapInActorContext(sender, [&] {
+            auto ev = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::EGetHandleClass::FastRead, true /*mustRestoreFirst*/);
+            ev->DataKind = dataKind;
+            SendToBSProxy(sender, Info->GroupID, ev.release());
+        });
+        auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), Data);
+
+        Env.Runtime->FilterFunction = nullptr;
+        return kinds;
     }
 };
 
@@ -147,6 +222,20 @@ Y_UNIT_TEST_SUITE(SpaceDataKind) {
         // still be able to come up at RED, otherwise nobody can delete anything.
         UNIT_ASSERT_VALUES_EQUAL(env.Put(TDataKind::SYSTEM, true), NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(env.Put(TDataKind::USER, true), NKikimrProto::OUT_OF_SPACE);
+    }
+
+    // A tablet reading its own log during boot asks for MustRestoreFirst, and DSProxy answers by
+    // writing the parts it could not find. That write has to be admitted like the tablet's own
+    // writes, or a system tablet cannot get up in a group that has run out of space.
+    Y_UNIT_TEST(RestoreWriteInheritsTheKindOfTheRead) {
+        TPartialBlobEnv env;
+        for (const auto dataKind : {TDataKind::USER, TDataKind::SYSTEM}) {
+            const auto kinds = env.RestoreWriteKinds(env.WriteDataPartsOnly(), dataKind);
+            UNIT_ASSERT_C(!kinds.empty(), "the read restored nothing, so it proves nothing");
+            for (const auto kind : kinds) {
+                UNIT_ASSERT_EQUAL(kind, dataKind);
+            }
+        }
     }
 
     Y_UNIT_TEST(BlackStopsEverything) {

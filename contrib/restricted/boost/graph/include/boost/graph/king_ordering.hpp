@@ -14,8 +14,8 @@
 #include <deque>
 #include <vector>
 #include <algorithm>
+#include <cstddef>
 #include <boost/config.hpp>
-#include <boost/bind/bind.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/graph/detail/sparse_ordering.hpp>
 #include <boost/graph/graph_utility.hpp>
@@ -34,7 +34,7 @@ namespace detail
     {
     public:
         bfs_king_visitor(OutputIterator* iter, Buffer* b, Compare compare,
-            PseudoDegreeMap deg, std::vector< int > loc, VecMap color,
+            PseudoDegreeMap deg, std::vector< std::ptrdiff_t > loc, VecMap color,
             VertexIndexMap vertices)
         : permutation(iter)
         , Qptr(b)
@@ -49,8 +49,6 @@ namespace detail
         template < typename Vertex, typename Graph >
         void finish_vertex(Vertex, Graph& g)
         {
-            using namespace boost::placeholders;
-
             typename graph_traits< Graph >::out_edge_iterator ei, ei_end;
             Vertex v, w;
 
@@ -61,11 +59,12 @@ namespace detail
             reverse_iterator rbegin = Qptr->rbegin();
 
             // heap the vertices already there
-            std::make_heap(rbegin, rend, boost::bind< bool >(comp, _2, _1));
+            std::make_heap(rbegin, rend, [this](const auto& first, const auto& second) { return comp(second, first); });
 
-            unsigned i = 0;
+            std::ptrdiff_t i = 0;
 
-            for (i = index_begin; i != Qptr->size(); ++i)
+            for (i = index_begin; i != static_cast< std::ptrdiff_t >(Qptr->size());
+                 ++i)
             {
                 colors[get(vertex_map, (*Qptr)[i])] = 1;
                 Qlocation[get(vertex_map, (*Qptr)[i])] = i;
@@ -104,10 +103,10 @@ namespace detail
 
     protected:
         // this function replaces pop_heap, and tracks state information
-        template < typename Vertex > void percolate_down(int offset)
+        template < typename Vertex > void percolate_down(std::ptrdiff_t offset)
         {
-            int heap_last = index_begin + offset;
-            int heap_first = Qptr->size() - 1;
+            std::ptrdiff_t heap_last = index_begin + offset;
+            std::ptrdiff_t heap_first = Qptr->size() - 1;
 
             // pop_heap functionality:
             // swap first, last
@@ -117,21 +116,21 @@ namespace detail
             std::swap(Qlocation[heap_first], Qlocation[heap_last]);
 
             // set drifter, children
-            int drifter = heap_first;
-            int drifter_heap = Qptr->size() - drifter;
+            std::ptrdiff_t drifter = heap_first;
+            std::ptrdiff_t drifter_heap = Qptr->size() - drifter;
 
-            int right_child_heap = drifter_heap * 2 + 1;
-            int right_child = Qptr->size() - right_child_heap;
+            std::ptrdiff_t right_child_heap = drifter_heap * 2 + 1;
+            std::ptrdiff_t right_child = Qptr->size() - right_child_heap;
 
-            int left_child_heap = drifter_heap * 2;
-            int left_child = Qptr->size() - left_child_heap;
+            std::ptrdiff_t left_child_heap = drifter_heap * 2;
+            std::ptrdiff_t left_child = Qptr->size() - left_child_heap;
 
             // check that we are staying in the heap
             bool valid = (right_child < heap_last) ? false : true;
 
             // pick smallest child of drifter, and keep in mind there might only
             // be left child
-            int smallest_child = (valid
+            std::ptrdiff_t smallest_child = (valid
                                      && get(degree, (*Qptr)[left_child])
                                          > get(degree, (*Qptr)[right_child]))
                 ? right_child
@@ -167,17 +166,20 @@ namespace detail
 
         // this is like percolate down, but we always compare against the
         // parent, as there is only a single choice
-        template < typename Vertex > void percolate_up(int vertex, int offset)
+        template < typename Vertex >
+        void percolate_up(std::ptrdiff_t vertex, std::ptrdiff_t offset)
         {
 
-            int child_location = Qlocation[vertex];
-            int heap_child_location = Qptr->size() - child_location;
-            int heap_parent_location = (int)(heap_child_location / 2);
-            unsigned parent_location = Qptr->size() - heap_parent_location;
+            std::ptrdiff_t child_location = Qlocation[vertex];
+            std::ptrdiff_t heap_child_location = Qptr->size() - child_location;
+            std::ptrdiff_t heap_parent_location
+                = (std::ptrdiff_t)(heap_child_location / 2);
+            std::ptrdiff_t parent_location
+                = Qptr->size() - heap_parent_location;
 
             bool valid = (heap_parent_location != 0
                 && child_location > index_begin + offset
-                && parent_location < Qptr->size());
+                && parent_location < static_cast< std::ptrdiff_t >(Qptr->size()));
 
             while (valid
                 && comp((*Qptr)[child_location], (*Qptr)[parent_location]))
@@ -192,7 +194,7 @@ namespace detail
 
                 child_location = parent_location;
                 heap_child_location = heap_parent_location;
-                heap_parent_location = (int)(heap_child_location / 2);
+                heap_parent_location = (std::ptrdiff_t)(heap_child_location / 2);
                 parent_location = Qptr->size() - heap_parent_location;
                 valid = (heap_parent_location != 0
                     && child_location > index_begin + offset);
@@ -200,11 +202,11 @@ namespace detail
         }
 
         OutputIterator* permutation;
-        int index_begin;
+        std::ptrdiff_t index_begin;
         Buffer* Qptr;
         PseudoDegreeMap degree;
         Compare comp;
-        std::vector< int > Qlocation;
+        std::vector< std::ptrdiff_t > Qlocation;
         VecMap colors;
         VertexIndexMap vertex_map;
     };
@@ -252,7 +254,7 @@ OutputIterator king_ordering(const Graph& g,
     for (vertices_size_type i = 0; i < num_vertices(g); i++)
         colors[i] = 0;
 
-    std::vector< int > loc(num_vertices(g));
+    std::vector< std::ptrdiff_t > loc(num_vertices(g));
 
     // create the visitor
     Visitor vis(&permutation, &Q, comp, pseudo_degree, loc, colors, index_map);

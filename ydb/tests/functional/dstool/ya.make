@@ -8,6 +8,7 @@ REQUIREMENTS(cpu:4)
 TEST_SRCS(
     conftest.py
     test_canonical_requests.py
+    test_static_vdisk_evict.py
 )
 
 PEERDIR(

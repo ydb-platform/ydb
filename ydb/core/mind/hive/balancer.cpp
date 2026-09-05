@@ -231,11 +231,60 @@ protected:
         Tablets.clear();
     }
 
+    bool IsTabletSuitableForBalancing(const TTabletInfo* tablet, TInstant now) const {
+        if (!tablet->IsGoodForBalancer(now)) {
+            return false;
+        }
+        if (Settings.FilterObjectId && tablet->GetObjectId() != *Settings.FilterObjectId) {
+            return false;
+        }
+        if (!tablet->HasMetric(Settings.ResourceToBalance)) {
+            return false;
+        }
+        if (tablet->IsPinnedToNode()) {
+            // The tablet accounts for most of its node's usage, so moving it would only relocate the
+            // load. Leave it where it is and let the balancer drain the rest of the node instead.
+            return false;
+        }
+        return true;
+    }
+
+    // Tablets we would rather not move are ordered last: system tablets because restarting them is
+    // disruptive, high-impact tablets because they are the cause of their node's load, so evicting
+    // their cheaper neighbours is what actually relieves the node.
+    int GetMoveReluctance(const TTabletInfo* tablet) const {
+        if (tablet->IsHighImpact()) {
+            return 2;
+        }
+        if (Hive->GetLessSystemTabletsMoves() && THive::IsSystemTablet(tablet->GetTabletType())) {
+            return 1;
+        }
+        return 0;
+    }
+
+    void BalanceTabletsByStrategy(std::vector<TTabletInfo*>::iterator first, std::vector<TTabletInfo*>::iterator last) {
+        switch (Hive->GetTabletBalanceStrategy()) {
+        case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
+            BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(first, last, Settings.ResourceToBalance);
+            break;
+        case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM:
+            BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(first, last, Settings.ResourceToBalance);
+            break;
+        case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST:
+            BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(first, last, Settings.ResourceToBalance);
+            break;
+        case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM:
+            BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(first, last, Settings.ResourceToBalance);
+            break;
+        }
+    }
+
     std::optional<TFullTabletId> GetNextTablet(TInstant now) {
         for (; Tablets.empty() || NextTablet == Tablets.end(); ++NextNode) {
             if (NextNode == Nodes.end()) {
                 return std::nullopt;
             }
+            Tablets.clear();
             TNodeInfo* node = Hive->FindNode(*NextNode);
             if (node == nullptr) {
                 continue;
@@ -251,9 +300,7 @@ protected:
             std::vector<TTabletInfo*> tablets;
             tablets.reserve(nodeTablets.size());
             for (TTabletInfo* tablet : nodeTablets) {
-                if (tablet->IsGoodForBalancer(now) &&
-                    (!Settings.FilterObjectId || tablet->GetObjectId() == *Settings.FilterObjectId) &&
-                    tablet->HasMetric(Settings.ResourceToBalance)) {
+                if (IsTabletSuitableForBalancing(tablet, now)) {
                     tablet->UpdateWeight();
                     tablets.emplace_back(tablet);
                 }
@@ -263,39 +310,22 @@ protected:
                 {"nodeId", node->Id},
                 {"tabletsCount", tablets.size()},
                 {"nodeTabletsCount", nodeTablets.size()});
-            if (!tablets.empty()) {
-                // avoid moving system tablets if possible
-                std::vector<TTabletInfo*>::iterator partitionIt;
-                if (Hive->GetLessSystemTabletsMoves()) {
-                    partitionIt = std::partition(tablets.begin(), tablets.end(), [](TTabletInfo* tablet) {
-                        return !THive::IsSystemTablet(tablet->GetTabletType());
-                    });
-                } else {
-                    partitionIt = tablets.end();
-                }
-                switch (Hive->GetTabletBalanceStrategy()) {
-                case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
-                    break;
-                case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
-                    break;
-                case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(partitionIt, tablets.end(), Settings.ResourceToBalance);
-                    break;
-                case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
-                    break;
-                }
-                Tablets.clear();
-                Tablets.reserve(tablets.size());
-                for (auto tablet : tablets) {
-                    Tablets.push_back(tablet->GetFullTabletId());
-                }
+            std::stable_sort(tablets.begin(), tablets.end(), [this](const TTabletInfo* a, const TTabletInfo* b) -> bool {
+                return GetMoveReluctance(a) < GetMoveReluctance(b);
+            });
+            // Order within each reluctance group separately, so that the balancer exhausts the tablets
+            // it is most willing to move before it considers the next group at all.
+            for (auto groupBegin = tablets.begin(); groupBegin != tablets.end();) {
+                int reluctance = GetMoveReluctance(*groupBegin);
+                auto groupEnd = std::find_if(groupBegin, tablets.end(), [&](const TTabletInfo* tablet) -> bool {
+                    return GetMoveReluctance(tablet) != reluctance;
+                });
+                BalanceTabletsByStrategy(groupBegin, groupEnd);
+                groupBegin = groupEnd;
+            }
+            Tablets.reserve(tablets.size());
+            for (auto tablet : tablets) {
+                Tablets.push_back(tablet->GetFullTabletId());
             }
             NextTablet = Tablets.begin();
         }

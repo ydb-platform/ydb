@@ -549,8 +549,11 @@ public:
 
     TError GetCanceledError() const
     {
-        return TError(NYT::EErrorCode::Canceled, "RPC request is canceled")
-            << ThrottledError_;
+        auto error = TError(NYT::EErrorCode::Canceled, "RPC request is canceled");
+        if (ThrottledError_) {
+            error.Add(*ThrottledError_);
+        }
+        return error;
     }
 
     void Cancel() override
@@ -698,7 +701,7 @@ public:
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Error handling streaming payload")
                 .With("RequestId", RequestId_)
-                .With(TError(ex));
+                .With(ex);
             RequestAttachmentsStream_->Abort(ex);
         }
     }
@@ -723,7 +726,7 @@ public:
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Error handling streaming feedback")
                 .With("RequestId", RequestId_)
-                .With(TError(ex));
+                .With(ex);
             stream->Abort(ex);
         }
     }
@@ -1674,7 +1677,7 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 
 void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 {
-    ++QueueSize_;
+    QueueSize_.fetch_add(1, std::memory_order::relaxed);
     QueueByteSize_.fetch_add(requestTotalSize);
 
     RuntimeInfo_->QueueSize.fetch_add(1, std::memory_order::relaxed);
@@ -1683,16 +1686,16 @@ void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 
 void TRequestQueue::DecrementQueueSize(i64 requestTotalSize)
 {
-    auto newQueueSize = --QueueSize_;
+    auto oldQueueSize = QueueSize_.fetch_sub(1, std::memory_order::relaxed);
     auto oldQueueByteSize = QueueByteSize_.fetch_sub(requestTotalSize);
 
-    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueSize > 0);
     YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 
-    newQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
+    oldQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
     oldQueueByteSize = RuntimeInfo_->QueueByteSize.fetch_sub(requestTotalSize);
 
-    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueSize > 0);
     YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 }
 
@@ -1917,25 +1920,27 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
 
     if (incomingRequest.RequestQueue->IsQueueSizeLimitExceeded()) {
         incomingRequest.RuntimeInfo->RequestQueueSizeLimitErrorCounter.Increment();
-        ReplyError(
-            TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue size limit exceeded")
-                << TErrorAttribute("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
-                << TErrorAttribute("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
-                << TErrorAttribute("queue", incomingRequest.RequestQueue->GetName())
-                << incomingRequest.ThrottledError,
-            std::move(incomingRequest));
+        auto error = TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue size limit exceeded")
+            .With("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
+            .With("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
+            .With("queue", incomingRequest.RequestQueue->GetName());
+        if (incomingRequest.ThrottledError) {
+            error.Add(*incomingRequest.ThrottledError);
+        }
+        ReplyError(std::move(error), std::move(incomingRequest));
         return;
     }
 
     if (incomingRequest.RequestQueue->IsQueueByteSizeLimitExceeded()) {
         incomingRequest.RuntimeInfo->RequestQueueByteSizeLimitErrorCounter.Increment();
-        ReplyError(
-            TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue bytes size limit exceeded")
-                << TErrorAttribute("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
-                << TErrorAttribute("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
-                << TErrorAttribute("queue", incomingRequest.RequestQueue->GetName())
-                << incomingRequest.ThrottledError,
-            std::move(incomingRequest));
+        auto error = TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue bytes size limit exceeded")
+            .With("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
+            .With("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
+            .With("queue", incomingRequest.RequestQueue->GetName());
+        if (incomingRequest.ThrottledError) {
+            error.Add(*incomingRequest.ThrottledError);
+        }
+        ReplyError(std::move(error), std::move(incomingRequest));
         return;
     }
 
@@ -2054,7 +2059,8 @@ void TServiceBase::ReplyError(TError error, TIncomingRequest&& incomingRequest)
         logLevel = NLogging::ELogLevel::Warning;
     }
 
-    YT_LOG_EVENT(Logger, logLevel, richError);
+    YT_TLOG_EVENT(Logger, logLevel, "Request failed")
+        .With(richError);
 
     auto errorMessage = CreateErrorResponseMessage(incomingRequest.RequestId, richError);
     YT_UNUSED_FUTURE(incomingRequest.ReplyBus->Send(errorMessage));
@@ -2072,8 +2078,11 @@ void TServiceBase::OnRequestAuthenticated(
     --AuthenticationQueueSize_;
 
     if (!authResultOrError.IsOK()) {
+        auto error = authResultOrError.FindMatching(NRpc::EErrorCode::TransientFailure)
+            ? TError(NRpc::EErrorCode::TransientFailure, "Transient failure while authenticating request")
+            : TError(NRpc::EErrorCode::AuthenticationError, "Request authentication failed");
         ReplyError(
-            TError(NRpc::EErrorCode::AuthenticationError, "Request authentication failed")
+            std::move(error)
                 .With(authResultOrError),
             std::move(incomingRequest));
         return;
@@ -2950,7 +2959,7 @@ void TServiceBase::DoConfigure(
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error configuring RPC service %v",
             ServiceId_.ServiceName)
-            .With(TError(ex));
+            .With(ex);
     }
 }
 
@@ -2970,7 +2979,7 @@ void TServiceBase::Configure(
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error parsing RPC service %v config",
                 ServiceId_.ServiceName)
-                .With(TError(ex));
+                .With(ex);
         }
     } else {
         config = New<TServiceConfig>();

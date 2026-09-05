@@ -32,13 +32,13 @@ void THttpProxyTestMock::InitAll(const TInitParameters initParameters) {
     InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic, initParameters.EnableAccessServiceV2Interface);
 }
 
-TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) const {
+TString THttpProxyTestMock::FormAuthorizationStr(const TString& region, const TString& service) const {
     if (!SendAuthorizationStr) {
         return "";
     }
     return TStringBuilder() <<
         "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/" << region <<
-        "/service/aws4_request, SignedHeaders=host;x-amz-date, Signature="
+        "/" << service << "/aws4_request, SignedHeaders=host;x-amz-date, Signature="
         "5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b)__";
 }
 
@@ -270,7 +270,8 @@ THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handl
                                 const TString& host, const TString& date, const TString& userAgent,
                                 const TString& acceptEncoding,
                                 const IOutputStream::TPart& body, const TString& authorizationStr,
-                                const TString& contentType) {
+                                const TString& contentType,
+                                const TVector<std::pair<TString, TString>>& extraHeaders) {
     TNetworkAddress addr("::", HttpServicePort);
     TSocket sock(addr);
     TSocketOutput so(sock);
@@ -308,6 +309,12 @@ THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handl
     if (!contentType.empty()) {
         parts.push_back(IOutputStream::TPart(TStringBuf("Content-Type:")));
         parts.push_back(IOutputStream::TPart(TStringBuf(contentType)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
+    for (const auto& [name, value] : extraHeaders) {
+        parts.push_back(IOutputStream::TPart(TStringBuf(name)));
+        parts.push_back(IOutputStream::TPart(TStringBuf(":")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(value)));
         parts.push_back(IOutputStream::TPart::CrLf());
     }
     parts.push_back(IOutputStream::TPart::CrLf());
@@ -357,10 +364,11 @@ NJson::TJsonMap THttpProxyTestMock::CreateQueueWithSecurityToken(NJson::TJsonMap
 THttpResult THttpProxyTestMock::SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
                             const TString& host, const TString& date, const TString& userAgent,
                             const TString& acceptEncoding, const TString& authorizationStr,
-                            const TString& contentType) {
+                            const TString& contentType,
+                            const TVector<std::pair<TString, TString>>& extraHeaders) {
     TString jsonStr = NJson::WriteJson(value);
     return SendHttpRequestRawSpecified(handler, target, host, date, userAgent, acceptEncoding,
-                                {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType);
+                                {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType, extraHeaders);
 }
 
 THttpResult THttpProxyTestMock::SendPing() {
@@ -948,6 +956,8 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
     const auto setupAccessServiceMock = [&](auto& asMock) {
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+        asMock.AuthenticateData["service"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["service"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
         asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
         asMock.AuthenticateData["user@builtin"].Response.mutable_subject()->mutable_user_account()->set_id("user1_id");
@@ -1065,6 +1075,8 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     httpProxyConfig.Config = config;
     httpProxyConfig.CredentialsProvider = credentialsProvider;
     httpProxyConfig.UseSDK = GetEnv("INSIDE_YDB").empty();
+
+    AppData(as)->HttpProxyConfig.CopyFrom(config.GetHttpConfig());
 
     actorId = as->Register(NKikimr::NHttpProxy::CreateHttpProxy(httpProxyConfig));
     as->RegisterLocalService(MakeHttpProxyID(), actorId);

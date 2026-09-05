@@ -1,0 +1,16 @@
+#include "pbuffer_key.h"
+
+#include <util/string/builder.h>
+
+namespace NYdb::NBS::NBlockStore {
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString TPBufferKey::Print() const
+{
+    return TStringBuilder() << Generation << ":" << Lsn;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace NYdb::NBS::NBlockStore

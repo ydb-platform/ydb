@@ -236,10 +236,6 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
 
     auto& appData = runtime.GetAppData();
-    // Use the l-buckets optimizer: it merges identical-key portions in a single bucket and, unlike the
-    // tiling (LSM) optimizer, honours CompactionMemoryLimit when sizing a compaction task - which is how we
-    // throttle recovery to a couple of portions per wave below.
-    appData.ColumnShardConfig.SetDefaultCompactionPreset("l-buckets");
     appData.FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
 
     // Each identical upsert batch lands as one small portion contributing ~perPortionBytes of small-blobs
@@ -767,6 +763,87 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSuccess});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics("s2");
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogram) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkEqHeight = [&](const TSet<TString>& expectedNames) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/EqHeightColumnTable");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            TSet<TString> names;
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
+                names.insert(stat.GetName());
+                UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                UNIT_ASSERT(stat.TypesSize() > 0);
+                for (const auto type : stat.GetTypes()) {
+                    UNIT_ASSERT_EQUAL(
+                        static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                        NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+        };
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "h1" ColumnNames: "key1" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkEqHeight({"h1"});
+
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkEqHeight({"h1"});
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightColumnTable"
+            UpsertMultiColumnStatistics { Name: "h2" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkEqHeight({"h1", "h2"});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogramRejectsJson) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "js" Type: "Json" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "js" Type: "Json" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            UpsertMultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
     }
 
     Y_UNIT_TEST(CreateTable) {
@@ -1815,6 +1892,44 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsCount", 0);
         CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeBytes", 0);
+    }
+
+    Y_UNIT_TEST(DropColumnTableWithLocalIndexesViaDropTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        // Record the initial path count to verify cleanup later.
+        ui64 initialPathCount = DescribePath(runtime, "/MyRoot")
+            .GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("Table"));
+        env.TestWaitNotification(runtime, txId);
+
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/Table");
+
+        // 3 new paths: the table + 2 index children.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::PathsInsideDomain(initialPathCount + 3),
+        });
+
+        // Drop the table using DropTableRequest (ESchemeOpDropTable)
+        auto* dropEv = DropTableRequest(++txId, "/MyRoot", "Table");
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, dropEv);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusAccepted}});
+        env.TestWaitNotification(runtime, txId);
+
+        // Table and its index children should all be gone.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_bloom"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_ngram"), {NLs::PathNotExist});
+
+        // Path count must return to the initial value — no orphaned children.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::PathsInsideDomain(initialPathCount),
+        });
     }
 
     Y_UNIT_TEST(MoveNonExistentTable) {

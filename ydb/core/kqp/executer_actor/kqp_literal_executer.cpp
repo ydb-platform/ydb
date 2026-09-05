@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -93,6 +94,7 @@ public:
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), 0);
+        TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -199,6 +201,15 @@ public:
         protoTask.SetStageId(task.StageId.StageId);
         protoTask.SetEnableSpilling(false); // TODO: enable spilling
         protoTask.MutableProgram()->CopyFrom(stage.GetProgram()); // it's not good...
+
+        std::optional<NUdfStore::NWasm::TQueryCompartmentScope> wasmScope;
+        std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
+        if (stage.WasmUdfModulesSize() > 0) {
+            wasmScope.emplace(NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules()));
+            if (wasmScope->HasHandle()) {
+                wasmGuard.emplace(wasmScope->MakeTlsGuard());
+            }
+        }
 
         TaskId2StageId[task.Id] = task.StageId.StageId;
 

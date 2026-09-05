@@ -27,14 +27,14 @@ namespace NActors {
 
     void TCpuManager::SetupShared() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared");
-        bool hasSharedThread = false;
+        bool needsSharedPool = false;
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
-            if (cfg.HasSharedThread) {
-                hasSharedThread = true;
+            if (cfg.HasSharedThread || cfg.AllThreadsAreShared) {
+                needsSharedPool = true;
                 break;
             }
         }
-        if (!hasSharedThread) {
+        if (!needsSharedPool) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared: no shared threads, skipping");
             return;
         }
@@ -237,6 +237,20 @@ namespace NActors {
             }
         }
         return pools;
+    }
+
+    std::optional<TCpuMask> TCpuManager::GetExecutorPoolAffinity(ui32 poolId) const {
+        if (poolId >= ExecutorPoolCount) {
+            return std::nullopt;
+        }
+
+        // The same mask the pool's own worker threads pin themselves to.
+        const TAffinity* affinity = Executors[poolId]->Affinity();
+        if (!affinity || affinity->Empty()) {
+            return std::nullopt;
+        }
+
+        return static_cast<TCpuMask>(*affinity);
     }
 
     void TCpuManager::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const {

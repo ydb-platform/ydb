@@ -139,13 +139,14 @@ struct intrusive_slist_type
 //!   for the default allocator
 #ifdef BOOST_CONTAINER_DOXYGEN_INVOKED
 template <class T, class Allocator = void >
+class slist
 #else
 template <class T, class Allocator>
-#endif
 class slist
    : protected dtl::node_alloc_holder
       < typename real_allocator<T, Allocator>::type
       , typename dtl::intrusive_slist_type<typename real_allocator<T, Allocator>::type>::type>
+#endif
 {
    #ifndef BOOST_CONTAINER_DOXYGEN_INVOKED
    typedef typename real_allocator<T, Allocator>::type      ValueAllocator;
@@ -176,12 +177,12 @@ class slist
    //////////////////////////////////////////////
 
    typedef T                                                                  value_type;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::pointer          pointer;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::const_pointer    const_pointer;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::reference        reference;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::const_reference  const_reference;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::size_type        size_type;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::difference_type  difference_type;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::pointer          pointer;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::const_pointer    const_pointer;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::reference        reference;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::const_reference  const_reference;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::size_type        size_type;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::difference_type  difference_type;
    typedef ValueAllocator                                                                  allocator_type;
    typedef BOOST_CONTAINER_IMPDEF(NodeAlloc)                                  stored_allocator_type;
    typedef BOOST_CONTAINER_IMPDEF(iterator_impl)                              iterator;
@@ -298,7 +299,7 @@ class slist
    //! <b>Throws</b>: If allocator_type's default constructor
    //!
    //! <b>Complexity</b>: Linear to the elements x contains.
-   slist(const slist& x, const allocator_type &a)
+   slist(const slist& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : AllocHolder(a)
    { this->insert_after(this->cbefore_begin(), x.begin(), x.end()); }
 
@@ -308,7 +309,7 @@ class slist
    //! <b>Throws</b>: If allocation or value_type's copy constructor throws.
    //!
    //! <b>Complexity</b>: Constant if a == x.get_allocator(), linear otherwise.
-   slist(BOOST_RV_REF(slist) x, const allocator_type &a)
+   slist(BOOST_RV_REF(slist) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : AllocHolder(a)
    {
       slist & sr = x;
@@ -1682,10 +1683,16 @@ inline typename slist<T, A>::size_type erase_if(slist<T, A>& c, Pred pred)
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows an `slist` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the element type from the value type
+//! of `InpIt` and using the default allocator.
 template <typename InpIt>
 slist(InpIt, InpIt) ->
    slist<typename iterator_traits<InpIt>::value_type>;
 
+//! <b>Deduction guide</b>: allows an `slist` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the element type from the value type
+//! of `InpIt` and taking the allocator type from the supplied allocator.
 template <typename InpIt, typename Allocator>
 slist(InpIt, InpIt, Allocator const&) ->
    slist<typename iterator_traits<InpIt>::value_type, Allocator>;
@@ -1704,7 +1711,7 @@ template <class T, class Allocator>
 struct has_trivial_destructor_after_move<boost::container::slist<T, Allocator> >
 {
    typedef typename boost::container::slist<T, Allocator>::allocator_type allocator_type;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::pointer pointer;
+   typedef typename boost::container::allocator_traits<allocator_type>::pointer pointer;
    BOOST_STATIC_CONSTEXPR bool value = ::boost::has_trivial_destructor_after_move<allocator_type>::value &&
                              ::boost::has_trivial_destructor_after_move<pointer>::value;
 };

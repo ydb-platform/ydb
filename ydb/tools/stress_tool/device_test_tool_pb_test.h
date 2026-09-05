@@ -181,7 +181,8 @@ protected:
                 ddiskId->SetNodeId(1);
                 ddiskId->SetPDiskId(Devices[d].PDiskIdNum);
                 ddiskId->SetDDiskSlotId(Devices[d].PBSlotId);
-                ctx.Register(CreatePersistentBufferWriterLoadTest(record.GetPersistentBufferWriteLoad(), ctx.SelfID, Counters, d, d));
+                ctx.Register(CreatePersistentBufferWriterLoadTest(record.GetPersistentBufferWriteLoad(),
+                    ctx.SelfID, Counters, d, d, !Cfg.DisableDDiskChecksums));
                 break;
             }
             default:
@@ -230,7 +231,10 @@ protected:
 
         ui32 deviceIdx = static_cast<ui32>(ev->Get()->Tag);
         Y_ABORT_UNLESS(deviceIdx < Devices.size());
-        PendingResults[deviceIdx] = {ev->Get()->Report, ev->Get()->ErrorReason};
+        PendingResults[deviceIdx] = {
+            ev->Get()->ErrorReason == "OK" ? ev->Get()->Report : nullptr,
+            ev->Get()->ErrorReason
+        };
         ++ReceivedResults;
 
         if (ReceivedResults == Devices.size()) {
@@ -285,6 +289,10 @@ struct TPersistentBufferTest : public TPDiskTest<ChunkSize> {
             TBase::DoBasicSetup();
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
+            NDDisk::TDDiskConfig ddiskConfig;
+            ddiskConfig.EnableChecksums = !TBase::Cfg.DisableDDiskChecksums;
+            ddiskConfig.ForcePDiskFallback = TBase::Cfg.ForcePDiskFallback;
+            TBase::Printer->AddGlobalParam("DDiskChecksums", ddiskConfig.EnableChecksums ? "on" : "off");
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(1, i + 1, PersistentBufferSlotId);
@@ -299,9 +307,12 @@ struct TPersistentBufferTest : public TPDiskTest<ChunkSize> {
                     NKikimrBlobStorage::TVDiskKind::Default,
                     1000,
                     "ddisk_pool");
-                NDDisk::TPersistentBufferFormat pbFormat{512, 512, 128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
+                NDDisk::TPersistentBufferFormat pbFormat{
+                    TBase::Cfg.PersistentBufferChunks,
+                    TBase::Cfg.PersistentBufferChunks,
+                    128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
                 TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat),
-                    NDDisk::TDDiskConfig{}, TBase::Counters),
+                    NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),
                     TMailboxType::Revolving, 1);
                 TBase::Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(ddiskId, std::move(ddiskSetup)));
             }

@@ -1,4 +1,5 @@
 #include "tablet_impl.h"
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -12,6 +13,7 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
     const ui32 BlockedGeneration;
     const bool Leader;
     TIntrusivePtr<TTabletStorageInfo> Info;
+    const NKikimrBlobStorage::TDataKind::E DataKind;
     const TTabletChannelInfo *ChannelInfo;
     ui64 CurrentHistoryIndex;
 
@@ -28,6 +30,10 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
         const ui32 group = ChannelInfo->History[CurrentHistoryIndex].GroupID;
         const ui32 minGeneration = ChannelInfo->History[CurrentHistoryIndex].FromGeneration;
         auto request = MakeHolder<TEvBlobStorage::TEvDiscover>(Info->TabletID, minGeneration, ReadBody, true, TInstant::Max(), BlockedGeneration, Leader);
+        // With ReadBody set this discover reads the entry back with MustRestoreFirst, which makes
+        // BlobStorage rewrite the parts it is missing; the tablet cannot boot if that write is
+        // rejected, so it is admitted as whatever the tablet itself writes.
+        request->DataKind = DataKind;
         SendToBSProxy(SelfId(), group, request.Release());
     }
 
@@ -74,6 +80,7 @@ public:
         , BlockedGeneration(blockedGeneration)
         , Leader(leader)
         , Info(info)
+        , DataKind(DataKindByTabletType(info->TabletType))
         , ChannelInfo(Info->ChannelInfo(0))
         , CurrentHistoryIndex(ChannelInfo->History.size())
     {

@@ -84,7 +84,6 @@ private:
         GroupsProto_.pop();
     }
 
-private:
     TStack<NProto::TCounterGroup*> GroupsProto_;
     bool HasAnyCounters_;
     bool Invalidate_;
@@ -265,7 +264,6 @@ private:
         }
     }
 
-private:
     TSensorsGroupPtr Sensors_;
     const TMaybe<TString> UserName_;
 

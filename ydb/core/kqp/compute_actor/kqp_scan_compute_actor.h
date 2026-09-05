@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -62,6 +63,7 @@ private:
 
     TLocksHashSet Locks;
     TLocksHashSet BrokenLocks;
+    std::optional<NUdfStore::NWasm::TQueryCompartmentScope> WasmQueryCompartment_;
 
     ui64 CalcMkqlMemoryLimit() override {
         return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ChannelBufferSize;
@@ -75,7 +77,7 @@ public:
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }
 
-    TKqpScanComputeActor(NScheduler::TSchedulableActorOptions schedulableOptions, const TActorId& executerId, ui64 txId,
+    TKqpScanComputeActor(NScheduler::TSchedulableOptions schedulableOptions, const TActorId& executerId, ui64 txId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);
@@ -83,6 +85,10 @@ public:
     ~TKqpScanComputeActor();
 
     STFUNC(StateFunc) {
+        std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
+        if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
+            wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
+        }
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvScanExchange::TEvSendData, Handle);

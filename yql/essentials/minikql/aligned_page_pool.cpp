@@ -130,7 +130,6 @@ private:
         Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
     }
 
-private:
     T& Provider_;
     const size_t PageSize_;
     std::atomic<ui64> Count_ = 0;

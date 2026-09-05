@@ -494,10 +494,10 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         }
         source->MutableStageData().AddFilter(std::move(filter));
         Step.Next();
-        const auto convActorId = source->GetContext()->GetCommonContext()->GetConveyorProcessId();
-        const auto scanActorId = source->GetContext()->GetCommonContext()->GetScanActorId();
+        const auto& commonContext = *source->GetContext()->GetCommonContext();
+        const auto scanActorId = commonContext.GetScanActorId();
         auto task = std::make_shared<TStepAction>(std::move(source), std::move(Step), scanActorId, false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convActorId);
+        commonContext.SendTaskToExecute(task);
     }
 }
 

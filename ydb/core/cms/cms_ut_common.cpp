@@ -375,6 +375,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             pdiskConfig.SetPath(pdiskPath);
             pdiskConfig.SetGuid(1);
             pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+            pdiskConfig.SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
 
             if (node.VDisksMoved) {
                 continue;
@@ -682,9 +683,25 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     }
 
     SetObserverFunc([](TAutoPtr<IEventHandle> &event) -> auto {
+        bool forwardToFakeService = false;
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
-            || event->Type == TEvBlobStorage::EvControllerConfigRequest
-            || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
+                || event->Type == TEvBlobStorage::EvControllerConfigRequest) {
+            // DDisk pool configuration is handled by the real BSC in these tests.
+            // Keep the old fake-service routing for all other CMS/BSC requests.
+            forwardToFakeService = true;
+            if (const auto* request = event->Get<TEvBlobStorage::TEvControllerConfigRequest>()) {
+                for (const auto& command : request->Record.GetRequest().GetCommand()) {
+                    if (command.HasDefineDDiskPool()) {
+                        forwardToFakeService = false;
+                        break;
+                    }
+                }
+            }
+        } else if (event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
+            forwardToFakeService = true;
+        }
+
+        if (forwardToFakeService) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
                 event = IEventHandle::Forward(std::move(event), fakeId);
@@ -785,6 +802,20 @@ TString TCmsTestEnv::PDiskName(ui32 nodeIndex, ui32 pdiskIndex)
     return Sprintf("pdisk-%" PRIu32 "-%" PRIu32, id.NodeId, id.DiskId);
 }
 
+void TCmsTestEnv::RestartBSController()
+{
+    Register(CreateTabletKiller(MakeBSControllerID()));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back(&IsTabletActiveEvent, 1);
+    DispatchEvents(options);
+}
+
+void TCmsTestEnv::SendRestartBSController()
+{
+    Register(CreateTabletKiller(MakeBSControllerID()));
+}
+
 void TCmsTestEnv::RestartCms()
 {
     Register(CreateTabletKiller(CmsId));
@@ -877,6 +908,165 @@ TCmsTestEnv::RequestState(const NKikimrCms::TClusterStateRequest &request,
     UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus().GetCode(), code);
 
     return rec.GetState();
+}
+
+NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult
+TCmsTestEnv::RequestBSControllerDDiskInfoList()
+{
+    auto event = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoListTablets>();
+    SendToPipe(MakeBSControllerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
+TCmsTestEnv::RequestBSControllerDDiskInfo(ui64 tabletId)
+{
+    auto event = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
+    event->Record.SetTabletId(tabletId);
+    SendToPipe(MakeBSControllerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult
+TCmsTestEnv::RequestDDiskInfoList()
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskInfoListRequest>();
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskInfoListResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
+TCmsTestEnv::RequestDDiskInfo(ui64 tabletId)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskInfoGetRequest>();
+    event->Record.SetTabletId(tabletId);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskInfoGetResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrCms::TDDiskTabletListResponse
+TCmsTestEnv::RequestDDiskTabletList(const NKikimrCms::TDDiskTabletListRequest &request)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskTabletListRequest>();
+    event->Record.CopyFrom(request);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskTabletListResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrCms::TDDiskDiskListResponse
+TCmsTestEnv::RequestDDiskDiskList(const NKikimrCms::TDDiskDiskListRequest &request)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskDiskListRequest>();
+    event->Record.CopyFrom(request);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskDiskListResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
+TCmsTestEnv::WaitForDDiskInfo(ui64 tabletId, ui64 revision, TDuration timeout)
+{
+    const TInstant deadline = GetCurrentTime() + timeout;
+    while (GetCurrentTime() < deadline) {
+        auto snapshot = RequestDDiskInfo(tabletId);
+        if (snapshot.GetStatus() == NKikimrProto::OK
+                && snapshot.GetRevision() >= revision) {
+            return snapshot;
+        }
+
+        DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
+    }
+
+    auto snapshot = RequestDDiskInfo(tabletId);
+    UNIT_FAIL(TStringBuilder() << "Timed out waiting for CMS DDisk snapshot tablet# "
+        << tabletId << " revision# " << revision << " last# "
+        << snapshot.ShortDebugString());
+    return snapshot;
+}
+
+void TCmsTestEnv::ConfigureDDiskPool(ui32 numGroups)
+{
+    NKikimrBlobStorage::TConfigRequest request;
+
+    auto* hostConfig = request.AddCommand()->MutableDefineHostConfig();
+    hostConfig->SetHostConfigId(1);
+    auto* drive = hostConfig->AddDrive();
+    drive->SetPath("pdisk0.dat");
+    drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+
+    auto* box = request.AddCommand()->MutableDefineBox();
+    box->SetBoxId(1);
+    for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+        auto* host = box->AddHost();
+        host->MutableKey()->SetNodeId(GetNodeId(nodeIndex));
+        host->SetHostConfigId(1);
+    }
+
+    auto* cmd = request.AddCommand()->MutableDefineDDiskPool();
+    cmd->SetBoxId(1);
+    cmd->SetName("ddisk_pool");
+    auto* geometry = cmd->MutableGeometry();
+    geometry->SetRealmLevelBegin(10);
+    geometry->SetRealmLevelEnd(20);
+    geometry->SetDomainLevelBegin(10);
+    geometry->SetDomainLevelEnd(40);
+    geometry->SetNumFailRealms(1);
+    geometry->SetNumFailDomainsPerFailRealm(5);
+    geometry->SetNumVDisksPerFailDomain(1);
+    cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+    cmd->SetNumDDiskGroups(numGroups);
+
+    auto event = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    event->Record.MutableRequest()->CopyFrom(request);
+    SendToPipe(MakeBSControllerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    auto response = GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(Sender);
+    UNIT_ASSERT(response);
+    if (!response->Get()->Record.GetResponse().GetSuccess()) {
+        UNIT_FAIL(TStringBuilder() << "ConfigureDDiskPool failed: "
+            << response->Get()->Record.GetResponse().ShortDebugString());
+    }
+}
+
+NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult
+TCmsTestEnv::AllocateDDiskBlockGroup(ui64 tabletId, ui64 directBlockGroupId, ui32 targetNumVChunks)
+{
+    auto event = MakeHolder<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    auto& record = event->Record;
+    record.SetDDiskPoolName("ddisk_pool");
+    record.SetPersistentBufferDDiskPoolName("ddisk_pool");
+    record.SetTabletId(tabletId);
+    auto* query = record.AddQueries();
+    query->SetDirectBlockGroupId(directBlockGroupId);
+    query->SetTargetNumVChunks(targetNumVChunks);
+
+    SendToPipe(MakeBSControllerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
+    auto response = GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(Sender);
+    UNIT_ASSERT(response);
+    return response->Get()->Record;
 }
 
 TCmsTestEnv::TListNodes

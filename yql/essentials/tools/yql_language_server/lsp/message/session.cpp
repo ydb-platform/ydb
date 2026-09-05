@@ -18,6 +18,8 @@ YQL_DERIVE_JSON_TO(NLsp::TCompletionOptions);
 
 YQL_DERIVE_JSON_TO(NLsp::TDocumentFormattingOptions);
 
+YQL_DERIVE_JSON_TO(NLsp::TDiagnosticOptions);
+
 YQL_DERIVE_JSON_TO(NLsp::TServerCapabilities);
 
 YQL_DERIVE_JSON_TO(NLsp::TServerInfo);

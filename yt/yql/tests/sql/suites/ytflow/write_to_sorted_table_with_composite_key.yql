@@ -7,9 +7,10 @@ pragma Engine = "ytflow";
 pragma Ytflow.Cluster = "plato";
 pragma Ytflow.PipelinePath = "pipelines/test";
 
-insert into Output
+replace into Output
 select
     key_a,
     key_b || "_b" as key_b,
     value as kv_value
-from Input;
+from Input
+order by key_b, key_a;

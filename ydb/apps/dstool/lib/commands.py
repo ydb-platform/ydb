@@ -193,6 +193,9 @@ def run_command(command_map, args):
         output.add_line('Group Selection Error: {}'.format(ex))
         output.print(args)
         sys.exit(1)
+    except common.InvalidParameterError:
+        # InvalidParameterError is rendered with command usage by main().
+        raise
     except Exception as ex:
         output.add_line('Unexpected Error: {}'.format(ex))
         output.print(args)

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "blobstorage_executor_pool_mapping.h"
+
 #include <ydb/library/actors/core/invoke.h>
 
 #include <ydb/core/base/statestorage.h>
@@ -143,6 +145,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TNodeWardenServiceSet DynamicServices; // these are controlled by BSC
 
         std::map<TPDiskKey, TPDiskRecord> LocalPDisks;
+        TBlobStorageExecutorPoolMapping PDiskToBlobStorageExecutorPool;
         TIntrusiveList<TPDiskRecord, TUnreportedMetricTag> PDisksWithUnreportedMetrics;
         std::map<ui64, ui32> PDiskRestartRequests;
         ui64 LastShredCookie = 0;
@@ -349,6 +352,12 @@ namespace NKikimr::NStorage {
             TString *configWarning = nullptr);
         static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize,
             ui64 unitSizeInBytes, ui32 maxSlots);
+        void UpdateBlobStorageExecutorPoolMapping();
+        // Engaged when the PDisk placement feature is enabled; disengaged means "no
+        // assignment" and callers register actors on the System pool without pinning.
+        std::optional<ui32> GetBlobStorageExecutorPoolId(ui32 pdiskId);
+        void ApplyBlobStorageExecutorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig,
+            std::optional<ui32> blobStorageExecutorPoolId);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
@@ -361,7 +370,7 @@ namespace NKikimr::NStorage {
         using TServiceSetPDisk = NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk;
 
         void MergeServiceSetPDisks(NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to,
-            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from);
+            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from, TVector<TServiceSetPDisk>& pdisksToRestart);
 
         void ApplyServiceSetPDisks();
 
@@ -435,7 +444,7 @@ namespace NKikimr::NStorage {
 
         void ReportLatencies();
         void Handle(TEvGroupStatReport::TPtr ev);
-        void StartAggregator(const TActorId& vdiskServiceId, ui32 groupId);
+        void StartAggregator(const TActorId& vdiskServiceId, ui32 groupId, ui32 actorPoolId);
         void StopAggregator(const TActorId& vdiskServiceId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

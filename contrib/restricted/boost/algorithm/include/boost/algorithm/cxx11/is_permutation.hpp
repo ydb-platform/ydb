@@ -100,7 +100,7 @@ namespace detail {
 }
 /// \endcond
 
-/// \fn is_permutation ( ForwardIterator1 first, ForwardIterator1 last, ForwardIterator2 first2, BinaryPredicate p )
+/// \fn is_permutation ( ForwardIterator1 first1, ForwardIterator1 last1, ForwardIterator2 first2, BinaryPredicate p )
 /// \brief Tests to see if the sequence [first,last) is a permutation of the sequence starting at first2
 ///
 /// \param first1   The start of the input sequence
@@ -127,11 +127,11 @@ bool is_permutation ( ForwardIterator1 first1, ForwardIterator1 last1,
     return true;
 }
 
-/// \fn is_permutation ( ForwardIterator1 first, ForwardIterator1 last, ForwardIterator2 first2 )
+/// \fn is_permutation ( ForwardIterator1 first1, ForwardIterator1 last1, ForwardIterator2 first2 )
 /// \brief Tests to see if the sequence [first,last) is a permutation of the sequence starting at first2
 ///
 /// \param first1   The start of the input sequence
-/// \param last2    One past the end of the input sequence
+/// \param last1    One past the end of the input sequence
 /// \param first2   The start of the second sequence
 /// \note           This function is part of the C++2011 standard library.
 template< class ForwardIterator1, class ForwardIterator2 >

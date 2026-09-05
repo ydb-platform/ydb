@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
@@ -247,6 +248,8 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
         auto container =
             NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
+    } else if (!HasAppData()) {
+        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
     } else if (AppDataVerified().ColumnShardConfig.HasDefaultCompactionConstructor()) {
         auto container = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(
             AppDataVerified().ColumnShardConfig.GetDefaultCompactionConstructor());
@@ -497,11 +500,11 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
+    const i64 maxBlobSize = opStorage->GetBlobSplitSettings().GetMaxBlobSize();
     for (auto&& chunk : chunks) {
-        if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+        if ((i64)chunk->GetPackedSize() > maxBlobSize) {
             return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
-                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" +
-                                           ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
+                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" + ::ToString(maxBlobSize) + ")");
         }
     }
     if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {

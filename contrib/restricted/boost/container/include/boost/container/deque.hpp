@@ -252,7 +252,7 @@ class deque : public deque_impl<T, Allocator, false, Options>
    //!   throws or T's copy constructor throws.
    //!
    //! <b>Complexity</b>: Linear to the elements x contains.
-   deque(const deque& x, const allocator_type &a)
+   deque(const deque& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_type(x, a)
    {}
 
@@ -263,7 +263,7 @@ class deque : public deque_impl<T, Allocator, false, Options>
    //! <b>Throws</b>: If allocation or T's copy constructor throws.
    //!
    //! <b>Complexity</b>: Constant if a == x.get_allocator(), linear otherwise.
-   deque(BOOST_RV_REF(deque) x, const allocator_type &a)
+   deque(BOOST_RV_REF(deque) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_type(boost::move(static_cast<base_type&>(x)), a)
    {}
 
@@ -948,8 +948,14 @@ class deque : public deque_impl<T, Allocator, false, Options>
 };
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
+//! <b>Deduction guide</b>: allows a `deque` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the element type from the value type
+//! of `InputIterator` and using the default allocator.
 template <typename InputIterator>
 deque(InputIterator, InputIterator) -> deque<typename iterator_traits<InputIterator>::value_type>;
+//! <b>Deduction guide</b>: allows a `deque` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the element type from the value type
+//! of `InputIterator` and taking the allocator type from the supplied allocator.
 template <typename InputIterator, typename Allocator>
 deque(InputIterator, InputIterator, Allocator const&) -> deque<typename iterator_traits<InputIterator>::value_type, Allocator>;
 #endif

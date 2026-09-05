@@ -1879,6 +1879,50 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         )", EnableIndexStreamWrite);
     }
 
+    Y_UNIT_TEST_TWIN(VectorIndexRebuildCustomParallel, EnableIndexStreamWrite) {
+        auto serverSettings = TKikimrSettings()
+            .SetUseRealThreads(false);
+        if (EnableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        }
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoOnlyCreateTableForVectorIndex(db); });
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteSchemeQuery(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index1
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )")).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        ui32 capturedParallel = 0;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSchemeShard::TEvIndexBuilder::TEvCreateRequest::EventType) {
+                capturedParallel = ev->Get<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>()
+                    ->Record.GetSettings().max_shards_in_flight();
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        result = kikimr.RunCall([&] {
+            return session.ExecuteSchemeQuery(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX index1
+                    WITH (levels=2, clusters=2, parallel=2);
+            )")).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
+    }
+
     Y_UNIT_TEST_TWIN(SecondaryIndexBuildCustomParallel, EnableIndexStreamWrite) {
         DoTestCustomParallel(R"(
             ALTER TABLE `/Root/TestTable`

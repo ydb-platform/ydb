@@ -458,14 +458,12 @@ namespace NKafka {
     }
 
     TMaybe<TString> TTransactionActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        TStringBuilder builder = TStringBuilder() << "Received error on request to KQP. Last sent request: " << GetAsStr(LastSentToKqpRequest) << ". Reason: ";
-        if (ev->Cookie != KqpCookie) {
-            return builder << "Unexpected cookie in TEvQueryResponse. Expected KQP Cookie: " << KqpCookie << ", Actual: " << ev->Cookie << ".";
-        } else if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            return builder << "Unexpected YDB status in TEvQueryResponse. Expected YDB SUCCESS status, Actual: " << ev->Get()->Record.GetYdbStatus() << ".";
-        } else {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             return {};
         }
+        return TStringBuilder() << "Received error on request to KQP. Last sent request: " << GetAsStr(LastSentToKqpRequest)
+            << ". Reason: Unexpected YDB status in TEvQueryResponse. Expected YDB SUCCESS status, Actual: "
+            << ev->Get()->Record.GetYdbStatus() << ".";
     }
 
     TMaybe<TProducerState> TTransactionActor::ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response) {

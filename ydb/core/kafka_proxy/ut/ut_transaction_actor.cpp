@@ -26,6 +26,10 @@ namespace {
                 ReturnSuccessOnCommit = success;
             }
 
+            void SetCreateSessionResponse(bool success) {
+                ReturnSuccessOnCreateSession = success;
+            }
+
         private:
             STFUNC(StateFunc) {
                 switch (ev->GetTypeRewrite()) {
@@ -36,8 +40,10 @@ namespace {
 
             void Handle(NKqp::TEvKqp::TEvCreateSessionRequest::TPtr& ev, const TActorContext& ctx) {
                 auto response = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
-                response->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
-                response->Record.MutableResponse()->SetSessionId("123");
+                response->Record.SetYdbStatus(ReturnSuccessOnCreateSession ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE);
+                if (ReturnSuccessOnCreateSession) {
+                    response->Record.MutableResponse()->SetSessionId("123");
+                }
                 Send(new IEventHandle(ev->Sender, ctx.SelfID, response.Release(), 0, ev->Cookie));
             }
 
@@ -158,6 +164,7 @@ namespace {
             i32 ProducerEpochToReturn = 0;
             TMaybe<std::unordered_map<TString, i32>> ConsumerGenerationsToReturn = Nothing();
             bool ReturnSuccessOnCommit = true;
+            bool ReturnSuccessOnCreateSession = true;
         };
 
     class TTransactionActorFixture : public NUnitTest::TBaseFixture {
@@ -621,6 +628,27 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
 
             DummyKqpActor->SetCommitResponse(true);
+            auto retry = SendEndTxnRequest(true, correlationId + 1);
+            UNIT_ASSERT(retry != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            const auto& retryResult = static_cast<const NKafka::TEndTxnResponseData&>(*retry->Response);
+            UNIT_ASSERT_VALUES_EQUAL(retryResult.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(OnEndTxnWithCommitAndCreateSessionFailure_shouldReturnCOORDINATOR_NOT_AVAILABLE) {
+            ui64 correlationId = 654;
+            DummyKqpActor->SetCreateSessionResponse(false);
+
+            auto response = SendEndTxnRequest(true, correlationId);
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+            const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+
+            DummyKqpActor->SetCreateSessionResponse(true);
             auto retry = SendEndTxnRequest(true, correlationId + 1);
             UNIT_ASSERT(retry != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);

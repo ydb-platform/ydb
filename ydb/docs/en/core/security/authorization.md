@@ -2,23 +2,28 @@
 
 ## Basic concepts
 
-Authorization in {{ ydb-short-name }} is based on the concepts of:
+Authorization in {{ ydb-short-name }} is based on the following concepts:
 
 * [Access object](../concepts/glossary.md#access-object)
 * [Access subject](../concepts/glossary.md#access-subject)
-* [Access right](../concepts/glossary.md#access-right)
-* [Access control list](../concepts/glossary.md#access-acl)
+* [Access rights](../concepts/glossary.md#access-right)
+* [Access list](../concepts/glossary.md#access-acl)
 * [Owner](../concepts/glossary.md#access-owner)
 * [User](../concepts/glossary.md#access-user)
 * [Group](../concepts/glossary.md#access-group)
 
-Regardless of the [authentication](https://en.wikipedia.org/wiki/Authentication) method, [authorization](https://en.wikipedia.org/wiki/Authorization) is always performed on the server side of {{ ydb-short-name }} based on the stored information about access objects and rights. Access rights determine the set of operations available to perform.
+Regardless of the [authentication](https://en.wikipedia.org/wiki/Authentication) method, [authorization](https://en.wikipedia.org/wiki/Authorization) is always performed on the server side of {{ ydb-short-name }} based on the information about objects and access rights stored in it. Access rights determine the set of operations that can be performed.
 
-Authorization is performed for each user action: the rights are not cached, as they can be revoked or granted at any time.
+Authorization is performed for every user action: their rights are not cached, as they can be revoked or granted at any time.
 
 ## User {#user}
 
-To create, alter, and delete users in {{ ydb-short-name }}, the following commands are available:
+Users in {{ ydb-short-name }} can be created in different sources:
+
+- local users in {{ ydb-short-name }} databases
+- external users from third-party directory access services.
+
+To create, modify, and delete [local users](../concepts/glossary.md#access-user), {{ ydb-short-name }} provides the following commands:
 
 * [{#T}](../yql/reference/syntax/create-user.md)
 * [{#T}](../yql/reference/syntax/alter-user.md)
@@ -28,54 +33,57 @@ To create, alter, and delete users in {{ ydb-short-name }}, the following comman
 
 {% note info %}
 
-There is a separate user `root` with maximum rights. It is created during the initial deployment of the cluster, during which a password must be set immediately. It is not recommended to use this account long-term; instead, users with limited rights should be created.
+The `root` user with maximum privileges is set apart. This user is created during the initial cluster deployment, during which a password must be set immediately. Further use of this account is not recommended; instead, you should create users with limited privileges.
 
-More about initial deployment:
+For more details on initial deployment:
 
 * [Ansible](../devops/deployment-options/ansible/initial-deployment/index.md)
 * [Kubernetes](../devops/deployment-options/kubernetes/initial-deployment.md)
 * [Manually](../devops/deployment-options/manual/initial-deployment/index.md)
+* [{#T}](./builtin-security.md)
 
 {% endnote %}
 
-{{ ydb-short-name }} allows working with [users](../concepts/glossary.md#access-user) from different directories and systems, and they differ by [SID](../concepts/glossary.md#access-sid) using a suffix.
+### SID {#sid}
 
-The suffix `@<subsystem>` identifies the "user source" or "auth domain", within which the uniqueness of all `login` is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap-auth-provider), user names will be `user1@ldap` and `user2@ldap`.
-If a `login` without a suffix is specified, it implies users directly created in the {{ ydb-short-name }} cluster.
+{{ ydb-short-name }} allows working with [users](../concepts/glossary.md#access-user) from different directories and systems, and they are distinguished by [SID](../concepts/glossary.md#access-sid) using a suffix.
+
+The `@<auth-domain>` suffix identifies the 'user source', within which the uniqueness of all logins or user identifiers is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap-auth-provider), user SIDs will be `user1@ldap` and `user2@ldap`.<br/>
+Local users have an empty auth-domain. If a user SID does not contain a suffix, it refers to a local user created and existing directly in the {{ ydb-short-name }} cluster.
 
 ## Group {#group}
 
-Any [user](../concepts/glossary.md#access-user) can be included in or excluded from a certain [access group](../concepts/glossary.md#access-group). Once a user is included in a group, they receive all the rights to [database objects](../concepts/glossary.md#access-object) that were provided to the access group.
-With access groups in {{ ydb-short-name }}, business roles for user applications can be implemented by pre-configuring the required access rights to the necessary objects.
+Any [user](../concepts/glossary.md#access-user) can be added to a particular [access group](../concepts/glossary.md#access-group) or removed from it. As soon as a user is added to a group, they receive all rights to [database objects](../concepts/glossary.md#access-object) that were granted to the access group.
+Using access groups, {{ ydb-short-name }} can implement business roles of user applications by pre-configuring the required access rights to the necessary objects.
 
 {% note info %}
 
-An access group can be empty when it does not include any users.
+An access group can be empty, meaning no users are included in it.
 
 Access groups can be nested.
 
 {% endnote %}
 
-To create, alter, and delete [groups](../concepts/glossary.md#access-group), the following types of YQL queries are available:
+The following types of YQL queries are available for creating, modifying, and deleting [groups](../concepts/glossary.md#access-group):
 
 * [{#T}](../yql/reference/syntax/create-group.md)
 * [{#T}](../yql/reference/syntax/alter-group.md)
 * [{#T}](../yql/reference/syntax/drop-group.md)
 
-## Right {#right}
+## Access rights {#right}
 
-[Rights](../concepts/glossary.md#access-right) in {{ ydb-short-name }} are tied not to the [subject](../concepts/glossary.md#access-subject), but to the [access object](../concepts/glossary.md#access-object).
+In {{ ydb-short-name }}, [access rights](../concepts/glossary.md#access-right) are tied not to the [subject](../concepts/glossary.md#access-subject), but to the [access object](../concepts/glossary.md#access-object).
 
-Each access object has a list of permissions — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — it stores all the rights provided to [access subjects](../concepts/glossary.md#subject) (users and groups) for the object.
+Each access object has a list of rights — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — it stores all rights granted to [access subjects](../concepts/glossary.md#subject) (users and groups) on the object.
 
-By default, rights are inherited from parents to descendants in the access objects tree.
+By default, rights are inherited from parents to children along the access object tree.
 
-The following types of YQL queries are used for managing rights:
+The following types of YQL queries are used to manage rights:
 
 * [{#T}](../yql/reference/syntax/grant.md).
 * [{#T}](../yql/reference/syntax/revoke.md).
 
-The following CLI commands are used for managing rights:
+The following CLI commands are used to manage rights:
 
 * [chown](../reference/ydb-cli/commands/scheme-permissions.md#chown)
 * [grant](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
@@ -90,55 +98,54 @@ The following CLI commands are used to view the ACL of an access object:
 * [describe](../reference/ydb-cli/commands/scheme-describe.md)
 * [list](../reference/ydb-cli/commands/scheme-permissions.md#list)
 
-## Object Owner {#owner}
+## Object owner {#owner}
 
-Each access object has an [owner](../concepts/glossary.md#access-owner). By default, it becomes the [access subject](../concepts/glossary.md#access-subject) who created the [access object](../concepts/glossary.md#access-object).
+Each access object has an [owner](../concepts/glossary.md#access-owner). By default, it is the [access subject](../concepts/glossary.md#access-subject) that created the [access object](../concepts/glossary.md#access-object).
 
 {% note info %}
 
-For the owner, [permission lists](../concepts/glossary.md#access-control-list) on this [access object](../concepts/glossary.md#access-object) are not checked.
+For the owner, [access control lists](../concepts/glossary.md#access-control-list) are not checked for the given [access object](../concepts/glossary.md#access-object).
 
-They have a full set of rights on the object.
+The owner has the full set of rights on the object.
 
 {% endnote %}
 
-An object owner exists for the entire cluster and each database.
+The object owner also exists for the cluster as a whole and for each database.
 
-The owner can be changed using the CLI command [`chown`](../reference/ydb-cli/commands/scheme-permissions.md#chown).
+You can change the owner using the CLI command [`chown`](../reference/ydb-cli/commands/scheme-permissions.md#chown).
 
-The owner of an object can be viewed using the CLI command [`describe`](../reference/ydb-cli/commands/scheme-describe.md).
+You can view the object owner using the CLI command [`describe`](../reference/ydb-cli/commands/scheme-describe.md).
 
 ## Access level lists {#access-level-lists}
 
-In addition to [access control lists](../concepts/glossary.md#access-control-list) that control access to specific [scheme objects](../concepts/glossary.md#scheme-object), {{ ydb-short-name }} uses [access level lists](../concepts/glossary.md#access-level-list) to define hierarchical access levels for cluster-wide operations.
+In addition to [access control lists](../concepts/glossary.md#access-control-list) that control access to specific [schema objects](../concepts/glossary.md#scheme-object), {{ ydb-short-name }} uses [access level lists](../concepts/glossary.md#access-level-list) to define hierarchical access levels to cluster-wide operations.
 
-For operations where both [access control lists](../concepts/glossary.md#access-control-list) and [access level lists](../concepts/glossary.md#access-level-list) are checked, both checks are applied together: an action is allowed only if both checks allow it, and denied if either check fails. For other operations, only the corresponding check mechanism is used.
+For operations that check both [access control lists](../concepts/glossary.md#access-control-list) and [access level lists](../concepts/glossary.md#access-level-list), both mechanisms are applied together: an action is available only if both checks allow it, and is unavailable if at least one check fails. For other operations, only the corresponding check mechanism is applied.
 
-### Hierarchy of access levels
+### Access level hierarchy
 
-Access level lists form a hierarchy (used by the [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions; ordered from lower to higher privileges):
+Access level lists form a hierarchy that is used in [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions (ordered from least to most privileges):
 
-- `database_allowed_sids` (`Database`) - access to operations within a specific database scope
-- `viewer_allowed_sids` (`Viewer`) - read-only access to cluster-wide state
-- `monitoring_allowed_sids` (`Monitoring`) - access to operational actions in {{ ydb-ui-name }}
-- `administration_allowed_sids` (`Administration`) - administrative actions on the cluster and databases
+- `database_allowed_sids` (`Database`): access to operations in the context of a specific database.
+- `viewer_allowed_sids` (`Viewer`): access to viewing the cluster-wide state.
+- `monitoring_allowed_sids` (`Monitoring`): access to operational actions in {{ ydb-ui-name }}.
+- `administration_allowed_sids` (`Administration`): administrative actions on the cluster and databases.
 
-Higher levels automatically include all lower level privileges, so a subject only needs to appear in one list. For example, presence in `administration_allowed_sids` automatically grants `monitoring`, `viewer`, and `database` privileges.
-See [Access level descriptions](#access-level-descriptions) for details.
+A higher level automatically includes all lower ones, so a subject only needs to be present in one list. For example, being in `administration_allowed_sids` automatically grants the privileges of `monitoring`, `viewer`, and `database`.
+Details on each level are in the section [Description of access levels](#access-level-descriptions).
 
 Additionally, there are two separate access level lists for specific operations:
 
-- `bootstrap_allowed_sids` — allows cluster bootstrap operations
-- `register_dynamic_node_allowed_sids` — allows node registration in the cluster
+- `bootstrap_allowed_sids` — allows cluster initialization operations.
+- `register_dynamic_node_allowed_sids` — allows node registration in the cluster.
 
-### Access level descriptions {#access-level-descriptions}
+### Description of access levels {#access-level-descriptions}
 
-Access level lists are configured in the [security configuration](../reference/configuration/security_config.md#security-access-levels) and determine privileges for:
+Access level lists are configured in [security configuration](../reference/configuration/security_config.md#security-access-levels) and define privileges for:
 
-- **Database** (presence in `database_allowed_sids`) — access only within a specific database scope. Subjects can open {{ ydb-ui-name }} and work with that database data, but cannot run cluster-wide requests (for example, listing cluster nodes). Requests without a specified database are forbidden.
-- **Viewer** (presence in `viewer_allowed_sids`) — read-only access to cluster-wide state: subjects can open [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md) pages and diagnostics, but cannot run actions that change system state.
-- **Monitoring** (presence in `monitoring_allowed_sids`) — access to operational actions in {{ ydb-ui-name }}, including actions that can change system state. For example, backup, database restore, or executing YQL statements from {{ ydb-ui-name }}.
-- **Administration** (presence in `administration_allowed_sids`) — Full administrative access to the cluster and its databases. Also used for config changes, scheme operations requiring admin privileges, and other administrative checks.
-- **Register node** (presence in `register_dynamic_node_allowed_sids`) — a separate (non-hierarchical) level for dynamic node registration in the cluster. It does not automatically grant `database`/`viewer`/`monitoring`/`administration` privileges. For technical reasons, if this list is configured (non-empty), it must include `root@builtin`.
-- **Bootstrap** (presence in `bootstrap_allowed_sids`) — a separate (non-hierarchical) level only for cluster bootstrap operations. It is used in an uninitialized state, when the authentication subsystem is not yet functional. Bootstrap is allowed if the subject is in `bootstrap_allowed_sids` or `administration_allowed_sids`; `bootstrap` by itself does not grant full administrative privileges.
-
+- **Database** (presence in `database_allowed_sids`) — access only in the context of a specific database. You can open {{ ydb-ui-name }} and work with the data of this database, but you cannot run cluster-wide queries (for example, view the list of cluster nodes). Queries without specifying a database are prohibited.
+- **Viewer** (presence in `viewer_allowed_sids`) — read-only access to the cluster-wide state: you can view the pages [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md) and diagnostic information, but you cannot run actions that change the system state.
+- **Monitoring** (presence in `monitoring_allowed_sids`) — access to operational actions in {{ ydb-ui-name }}, including actions that can change the system state. For example, starting a backup, restoring a database, or running YQL queries via {{ ydb-ui-name }}.
+- **Administration** (presence in `administration_allowed_sids`) — grants the right to perform administrative actions on databases or the cluster. Full administrative access to the cluster and its databases. Also used for changing configuration, schema operations that require administrative rights, and other administrative checks.
+- **Register node** (presence in `register_dynamic_node_allowed_sids`) — a separate (non-hierarchical) level for registering dynamic nodes in the cluster. It does not automatically grant the rights `database`/`viewer`/`monitoring`/`administration`. For technical reasons, if the list is specified (not empty), it must include `root@builtin`.
+- **Bootstrap** (presence in `bootstrap_allowed_sids`) — a separate (non-hierarchical) level only for cluster initialization operations. Used in an uninitialized state when the authentication subsystem is not yet functioning. Initialization is allowed if the subject is in `bootstrap_allowed_sids` or `administration_allowed_sids`, while `bootstrap` itself does not grant full administrative privileges.

@@ -364,8 +364,12 @@ public:
             return false;
         }
 
-        auto source = ExternalSourceFactory->GetOrCreate(metadata.ExternalSource.Type);
-        auto it = Types.DataSourceMap.find(source->GetName());
+        // For YDB topics the provider is always PQ; the connection type
+        // string ("Ydb") no longer encodes the object kind.
+        const TString providerName = metadata.ExternalSource.IsTopic
+            ? TString{NYql::PqProviderName}
+            : ExternalSourceFactory->GetOrCreate(metadata.ExternalSource.Type)->GetName();
+        auto it = Types.DataSourceMap.find(providerName);
         if (it == Types.DataSourceMap.end()) {
             ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
@@ -826,7 +830,12 @@ public:
                 }
                 if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
+                    // For YDB topics route to the PQ provider directly via the
+                    // IsTopic flag; otherwise resolve the provider from the
+                    // connection type string.
+                    const TString providerName = tableDesc.Metadata->ExternalSource.IsTopic
+                        ? TString{NYql::PqProviderName}
+                        : ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type)->GetName();
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)
@@ -834,10 +843,10 @@ public:
                             .Repeat(TExprStep::RewriteIO);
                     auto readArgs = read->ChildrenList();
                     readArgs[1] = Build<TCoDataSource>(ctx, node->Pos())
-                                    .Category(ctx.NewAtom(node->Pos(), source->GetName()))
+                                    .Category(ctx.NewAtom(node->Pos(), providerName))
                                     .FreeArgs()
                                         .Add(readArgs[1]->ChildrenList()[1])
-                                    .Build()
+                                        .Build()
                                     .Done().Ptr();
                     readArgs[2] = ctx.NewCallable(node->Pos(), "MrTableConcat", { readArgs[2] });
                     auto newRead = ctx.ChangeChildren(*read, std::move(readArgs));

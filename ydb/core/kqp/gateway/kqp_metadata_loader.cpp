@@ -426,7 +426,16 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
     }
 
     tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalTable;
-    tableMeta->ExternalSource.Type = description.GetSourceType();
+    // Legacy persisted metadata may carry "YdbTopics" as the source type,
+    // encoding the object kind (topic) inside a YDB connection. Canonicalize
+    // it to the connection type "Ydb" and signal the topic kind via IsTopic,
+    // so the EDS layer only deals with connection types.
+    if (description.GetSourceType() == "YdbTopics") {
+        tableMeta->ExternalSource.Type = ToString(NYql::EDatabaseType::Ydb);
+        tableMeta->ExternalSource.IsTopic = true;
+    } else {
+        tableMeta->ExternalSource.Type = description.GetSourceType();
+    }
     tableMeta->ExternalSource.TableLocation = description.GetLocation();
     tableMeta->ExternalSource.TableContent = description.GetContent();
     tableMeta->ExternalSource.DataSourcePath = description.GetDataSourcePath();
@@ -453,7 +462,16 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     tableMeta->Attributes = entry.Attributes;
 
     tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalDataSource;
-    tableMeta->ExternalSource.Type = description.GetSourceType();
+    // Legacy persisted metadata may carry "YdbTopics" as the source type,
+    // encoding the object kind (topic) inside a YDB connection. Canonicalize
+    // it to the connection type "Ydb" and signal the topic kind via IsTopic,
+    // so the EDS layer only deals with connection types.
+    if (description.GetSourceType() == "YdbTopics") {
+        tableMeta->ExternalSource.Type = ToString(NYql::EDatabaseType::Ydb);
+        tableMeta->ExternalSource.IsTopic = true;
+    } else {
+        tableMeta->ExternalSource.Type = description.GetSourceType();
+    }
     tableMeta->ExternalSource.DataSourceLocation = description.GetLocation();
     tableMeta->ExternalSource.DataSourceInstallation = description.GetInstallation();
     tableMeta->ExternalSource.DataSourceAuth = description.GetAuth();
@@ -557,7 +575,10 @@ TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavi
 
     auto& source = metadata->ExternalSource;
     source.SourceType = NYql::ESourceType::ExternalDataSource;
-    source.Type = ToString(NYql::EDatabaseType::YdbTopics);
+    // The connection type is always "Ydb"; the fact that the object is a
+    // topic is carried by the IsTopic flag, not by the type string.
+    source.Type = ToString(NYql::EDatabaseType::Ydb);
+    source.IsTopic = true;
     source.TableLocation = topicName;
     source.DataSourcePath = cluster;
     source.DataSourceAuth.MutableNone();
@@ -1383,7 +1404,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
 
                                         if (*value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                                            // The connection type stays "Ydb"; mark the
+                                            // object as a topic for provider routing.
+                                            externalDataSourceMetadata.Metadata->ExternalSource.IsTopic = true;
                                         }
                                         f(externalDataSourceMetadata);
                                     });

@@ -1,0 +1,155 @@
+"""Task-local window values for admitted partitions and unstable sort choices.
+
+Callers validate the window shape, admit construction bounds, and allocate
+independent constrained ordinals for each ordered definition. These kernels
+only consume slot-aligned value columns, row presence, and those ordinals;
+they neither choose task routing nor publish an observable output sequence.
+"""
+
+from __future__ import annotations
+
+from typing import Callable
+
+from . import aggregate, decimal, smt
+from .scalar import Value
+
+
+ValueComparison = Callable[[Value, Value], smt.Term]
+
+
+def rank_values(
+    present: tuple[smt.Term, ...],
+    keys: tuple[Value, ...],
+    ordinals: tuple[smt.Term, ...],
+    less: ValueComparison,
+) -> tuple[Value, ...]:
+    """Rank is one plus preceding rows; Decimal NaNs do not form peer ties.
+
+    Ordinary equal keys share a rank and leave gaps. Each NaN instead counts
+    earlier NaNs in this definition's independent unstable order.
+    """
+
+    result: list[Value] = []
+    for candidate_index, candidate_key in enumerate(keys):
+        candidate_nan = smt.eq(candidate_key.value, smt.int_value(decimal.NAN))
+        preceding = tuple(
+            smt.ite(
+                smt.and_(
+                    other_present,
+                    smt.or_(
+                        less(other_key, candidate_key),
+                        smt.and_(
+                            candidate_nan,
+                            smt.eq(other_key.value, smt.int_value(decimal.NAN)),
+                            smt.lt(ordinals[other_index], ordinals[candidate_index]),
+                        ),
+                    ),
+                ),
+                smt.ONE,
+                smt.ZERO,
+            )
+            for other_index, (other_present, other_key) in enumerate(zip(present, keys))
+        )
+        result.append(Value("Uint64", smt.FALSE, smt.add(smt.ONE, *preceding)))
+    return tuple(result)
+
+
+def whole_partition_decimal(
+    kind: str,
+    output_type: str,
+    values: tuple[Value, ...],
+    present: tuple[smt.Term, ...],
+    partitions: tuple[tuple[Value, ...], ...],
+    candidate_partition: tuple[Value, ...],
+    not_distinct: ValueComparison,
+) -> Value:
+    """Unordered SUM/AVG over the candidate's complete null-safe partition."""
+
+    assert kind in {"window_sum", "window_avg"}
+    guarded_values = tuple(
+        (
+            smt.and_(
+                row_present,
+                *(
+                    not_distinct(candidate, key)
+                    for candidate, key in zip(candidate_partition, partition)
+                ),
+                smt.not_(value.is_null),
+            ),
+            value,
+        )
+        for value, row_present, partition in zip(values, present, partitions)
+    )
+    if kind == "window_sum":
+        return aggregate.decimal_sum(
+            guarded_values, output_type, True, "Decimal window sum",
+        )
+    return aggregate.finish_decimal_average(
+        tuple((guard, value.value) for guard, value in guarded_values),
+        tuple(smt.ite(guard, smt.ONE, smt.ZERO) for guard, _value in guarded_values),
+        sum_type=output_type,
+        count_type="Uint64",
+        output_type=output_type,
+        output_nullable=True,
+        finite_abs_bound=sum(
+            aggregate.decimal_finite_abs_bound(value) for _guard, value in guarded_values
+        ),
+        count_bound=len(guarded_values),
+        carry_state=False,
+        operation="Decimal window avg",
+    )
+
+
+def rows_prefix_values(
+    kind: str,
+    output_type: str,
+    values: tuple[Value, ...],
+    present: tuple[smt.Term, ...],
+    partitions: tuple[Value, ...],
+    ordinals: tuple[smt.Term, ...],
+    not_distinct: ValueComparison,
+) -> tuple[Value, ...]:
+    """SUM/MAX over ROWS UNBOUNDED PRECEDING .. CURRENT ROW.
+
+    The current row is included by ordinal <=, not by comparing sort-key values:
+    equal-key peers can have different frames in an unstable sort.
+    """
+
+    result: list[Value] = []
+    for candidate_index, candidate_partition in enumerate(partitions):
+        guarded_values = tuple(
+            (
+                smt.and_(
+                    row_present,
+                    not_distinct(candidate_partition, partition),
+                    smt.not_(smt.lt(ordinals[candidate_index], ordinals[row_index])),
+                    smt.not_(value.is_null),
+                ),
+                value,
+            )
+            for row_index, (row_present, partition, value) in enumerate(
+                zip(present, partitions, values)
+            )
+        )
+        if kind == "window_rows_sum":
+            value = aggregate.decimal_sum(
+                guarded_values, output_type, True, "q51 running Decimal SUM",
+            )
+        else:
+            guards = tuple(guard for guard, _value in guarded_values)
+            value = Value(
+                output_type,
+                smt.not_(smt.or_(*guards)),
+                decimal.aggregate_max(
+                    tuple((guard, item.value) for guard, item in guarded_values)
+                ),
+                decimal_finite_abs_bound=max(
+                    (
+                        aggregate.decimal_finite_abs_bound(item)
+                        for _guard, item in guarded_values
+                    ),
+                    default=0,
+                ),
+            )
+        result.append(value)
+    return tuple(result)

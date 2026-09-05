@@ -289,6 +289,8 @@ def _render_scope(root: Term, context: _RenderContext) -> str:
             by_level.setdefault(levels[structural_id], []).append(
                 structural_id
             )
+    # Build wrappers separately instead of repeatedly copying the growing body.
+    prefixes = []
     for level in sorted(by_level, reverse=True):
         rendered_bindings = []
         for structural_id in by_level[level]:
@@ -303,8 +305,8 @@ def _render_scope(root: Term, context: _RenderContext) -> str:
                 f"({aliases[structural_id]} {definition})"
             )
         bindings = " ".join(rendered_bindings)
-        body = f"(let ({bindings}) {body})"
-    return body
+        prefixes.append(f"(let ({bindings}) ")
+    return "".join(reversed(prefixes)) + body + ")" * len(prefixes)
 
 
 def _render_identity_scope(root: Term, context: _RenderContext) -> str:
@@ -381,6 +383,7 @@ def _render_identity_scope(root: Term, context: _RenderContext) -> str:
     for identity in discovery:
         if identity in candidates:
             by_level.setdefault(levels[identity], []).append(identity)
+    prefixes = []
     for level in sorted(by_level, reverse=True):
         rendered_bindings = []
         for identity in by_level[level]:
@@ -394,8 +397,8 @@ def _render_identity_scope(root: Term, context: _RenderContext) -> str:
                 f"({aliases[identity]} {definition})"
             )
         bindings = " ".join(rendered_bindings)
-        body = f"(let ({bindings}) {body})"
-    return body
+        prefixes.append(f"(let ({bindings}) ")
+    return "".join(reversed(prefixes)) + body + ")" * len(prefixes)
 
 
 def _render_unshared(term: Term, context: _RenderContext) -> str:
@@ -618,6 +621,10 @@ FALSE = bool_value(False)
 ZERO = int_value(0)
 ONE = int_value(1)
 
+# Flattening can give shared predicates enormous fan-in. Compact only wide
+# junctions: even equivalent rewrites can disturb quantified solver heuristics.
+_BOOLEAN_COMPACTION_WIDTH = 4096
+
 
 def not_(term: Term) -> Term:
     _require(term, BOOL)
@@ -642,6 +649,9 @@ def and_(*terms: Term) -> Term:
             flat.extend(term.arguments)
         else:
             flat.append(term)
+    if len(flat) > _BOOLEAN_COMPACTION_WIDTH:
+        # A AND A = A; identity avoids hashing whole subexpressions.
+        flat = list({id(term): term for term in flat}.values())
     if not flat:
         return TRUE
     if len(flat) == 1:
@@ -661,6 +671,9 @@ def or_(*terms: Term) -> Term:
             flat.extend(term.arguments)
         else:
             flat.append(term)
+    if len(flat) > _BOOLEAN_COMPACTION_WIDTH:
+        # A OR A = A; identity avoids hashing whole subexpressions.
+        flat = list({id(term): term for term in flat}.values())
     if not flat:
         return FALSE
     if len(flat) == 1:

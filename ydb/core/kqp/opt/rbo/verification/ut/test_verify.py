@@ -34,7 +34,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     parse_snapshot,
     stage_task_counts,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import cli, decimal
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import aggregate, cli, decimal
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import analysis as plan_analysis
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
@@ -4980,27 +4980,22 @@ class DirectUniqueRhsJoinTest(unittest.TestCase):
                 ):
                     self.assertEqual(len(self._evaluate(snapshot).rows), 2)
 
-    def test_delayed_factor_schedule_matches_explicit_inner_join_order(self):
-        delayed = delayed_unique_rhs_filter_chain_snapshot(deferred=True)
-        explicit = explicit_deferred_unique_rhs_chain_snapshot()
-        self.assertFalse(
-            _restricted_domain_has_model(
-                build_logical_kernel_problem_for_tests(
-                    delayed,
-                    explicit,
-                    2,
-                ).script
-            )
-        )
-        self.assertTrue(
-            _restricted_domain_has_model(
-                build_logical_kernel_problem_for_tests(
-                    delayed,
-                    explicit_deferred_unique_rhs_chain_snapshot(mutate=True),
-                    2,
-                ).script
-            )
-        )
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
+    def test_delayed_unique_join_rewrites_match_explicit_plans(self):
+        # Use the solver for these multi-table domains; exhaustive interpretation
+        # must not rely on syntactic cancellation to make 2^24 assignments cheap.
+        for name, delayed, explicit in (
+            ("schedule", delayed_unique_rhs_filter_chain_snapshot(deferred=True),
+             explicit_deferred_unique_rhs_chain_snapshot),
+            ("rebase", rebased_unique_seed_filter_snapshot(),
+             explicit_rebased_unique_seed_snapshot),
+        ):
+            for mutate, expected in ((False, "unsat"), (True, "sat")):
+                with self.subTest(case=name, mutate=mutate):
+                    problem = build_logical_kernel_problem_for_tests(
+                        delayed, explicit(mutate=mutate), 2, 10_000,
+                    )
+                    self.assertEqual(verifier.query_solver(problem, SOLVER).status, expected)
 
     def test_delayed_filter_rebases_a_certified_unique_seed(self):
         snapshot = rebased_unique_seed_filter_snapshot()
@@ -5026,25 +5021,6 @@ class DirectUniqueRhsJoinTest(unittest.TestCase):
                 self._evaluate(
                     rebased_unique_seed_filter_snapshot(unique_key=())
                 )
-
-        self.assertFalse(
-            _restricted_domain_has_model(
-                build_logical_kernel_problem_for_tests(
-                    snapshot,
-                    explicit_rebased_unique_seed_snapshot(),
-                    2,
-                ).script
-            )
-        )
-        self.assertTrue(
-            _restricted_domain_has_model(
-                build_logical_kernel_problem_for_tests(
-                    snapshot,
-                    explicit_rebased_unique_seed_snapshot(mutate=True),
-                    2,
-                ).script
-            )
-        )
 
     def test_delayed_unique_seed_rebase_continues_factor_schedule(self):
         snapshot = rebased_unique_seed_filter_chain_snapshot()
@@ -7021,13 +6997,13 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     for index in range(len(inputs))
                 )
                 partials = tuple(
-                    relation_model._wrap_sum(raw, scalar_type)
+                    aggregate.wrap_sum(raw, scalar_type)
                     for raw in raw_terms
                 )
-                lifted = relation_model._wrap_sum(
+                lifted = aggregate.wrap_sum(
                     smt.add(
                         *(
-                            relation_model._unwrap_sum(
+                            aggregate.unwrap_sum(
                                 Value(scalar_type, smt.FALSE, partial)
                             )
                             for partial in partials

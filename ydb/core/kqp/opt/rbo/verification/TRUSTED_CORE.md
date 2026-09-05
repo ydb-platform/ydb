@@ -5,6 +5,8 @@ This is the current review map. The full
 [external runtime assumptions](contracts/EXTERNAL_ASSUMPTIONS.md) are maintained
 separately so their exact restrictions remain visible without milestone history.
 The [archive](history/README.md) is evidence history, not the current contract.
+The [findings ledger](FINDINGS.md) separates current runtime reproductions,
+fixed regressions, bounded routing findings, and model false positives.
 
 ## What is trusted
 
@@ -14,15 +16,19 @@ The [archive](history/README.md) is evidence history, not the current contract.
 | [ir.py](rbo_verifier/ir.py), [analysis.py](rbo_verifier/analysis.py), [window_admission.py](rbo_verifier/window_admission.py) | Strict versioned decoding, immutable validated plan facts shared across evaluations, and mandatory normalized-window capability checks. |
 | [types.py](rbo_verifier/types.py), [scalar.py](rbo_verifier/scalar.py), [decimal.py](rbo_verifier/decimal.py), [string_order.py](rbo_verifier/string_order.py) | Domains, NULLs, scalar semantics, closed opaque identities, and certified aggregate/value metadata. |
 | [join.py](rbo_verifier/join.py), [relation.py](rbo_verifier/relation.py) | Operator semantics, baseline and optimized encodings, family composition, and equality of bags/sequences/result languages. |
+| [aggregate.py](rbo_verifier/aggregate.py), [window.py](rbo_verifier/window.py) | Typed group reductions and task-local window values over admitted presences, values, and ordinals; grouping, routing, choices, and provenance stay with their callers. |
 | [value_transport.py](rbo_verifier/value_transport.py), [stages.py](rbo_verifier/stages.py) | Explicit scalar/physical-state/proof-hint transport, task execution, routing, locality, and occurrence/certificate propagation. |
 | [sort_strategy.py](rbo_verifier/sort_strategy.py) | Pure cost/certificate-based encoding selection; choosing an encoding still affects the trusted proof path. |
 | [sort_network.py](rbo_verifier/sort_network.py), [smt.py](rbo_verifier/smt.py) | Exact network topology, typed owned terms, binder hygiene, structural sharing, and SMT serialization. |
 | [verify.py](rbo_verifier/verify.py) | Shared database, model-domain observation, exact solver portfolio, one-deadline status interpretation, and witness extraction. |
 
 Private exporter helpers include [read ranges](read_range_predicate_impl.h),
+[opaque-expression audit and identity](opaque_expression_audit_impl.h),
 [window leaves](window_expression_export_impl.h), and the audited window
 [projection plan](q51_window_projection_audit_impl.h). They remain part of the
 same trusted exporter, not independent serialization APIs.
+The shared [RelationError boundary](rbo_verifier/errors.py) classifies unsupported
+relational semantics consistently across the extracted kernels and their callers.
 
 Certificates and optimized encodings are trusted even if private, separated into
 modules, or covered by differential tests. A fast path that removes rows,

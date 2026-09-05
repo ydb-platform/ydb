@@ -8,7 +8,7 @@ try:
 except ImportError:
     yatest_common = None
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import aggregate, decimal, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     SnapshotError,
@@ -454,7 +454,7 @@ class WindowAverageTest(unittest.TestCase):
                 for value in inputs
                 if -decimal.INF < value < decimal.INF
             )
-            result = relation_model._finish_decimal_average(
+            result = aggregate.finish_decimal_average(
                 tuple((smt.TRUE, smt.int_value(value)) for value in inputs),
                 tuple(smt.ONE for _value in inputs),
                 sum_type="Decimal(35,2)",
@@ -713,7 +713,7 @@ class WindowAverageTest(unittest.TestCase):
             evaluator.root()
 
         with self.assertRaisesRegex(RelationError, "sum may overflow"):
-            relation_model._finish_decimal_average(
+            aggregate.finish_decimal_average(
                 ((smt.TRUE, smt.ONE),),
                 (smt.ONE,),
                 sum_type="Decimal(35,2)",
@@ -726,7 +726,7 @@ class WindowAverageTest(unittest.TestCase):
                 operation="test avg",
             )
         with self.assertRaisesRegex(RelationError, "count may wrap"):
-            relation_model._finish_decimal_average(
+            aggregate.finish_decimal_average(
                 ((smt.TRUE, smt.ONE),),
                 (smt.ONE,),
                 sum_type="Decimal(35,2)",

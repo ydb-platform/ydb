@@ -19643,6 +19643,58 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(renamedArgs[1]["column"].GetStringSafe(), "renamed.y");
     }
 
+    Y_UNIT_TEST(OpaqueIdentityByteLimitAlsoAppliesToExactLowering) {
+        const auto exportSource = [](size_t bytes, bool exact, bool unsafeTail = false) {
+            TExportTestContext ctx;
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            auto predicate = TypedCallable(ctx, "EndsWith", {
+                TypedMember(ctx, "a.x", ScalarType(ctx, NUdf::EDataSlot::String, true)),
+                TypedLiteral(ctx, "String", TString(bytes, 'x'),
+                    ScalarType(ctx, NUdf::EDataSlot::String)),
+            }, ScalarType(ctx, NUdf::EDataSlot::Bool, true));
+            return ExportTypedMapExpressionResult(ctx, "a", "String", true,
+                TypedCallable(ctx, "Coalesce", {
+                    predicate,
+                    TypedLiteral(ctx, "Bool", exact ? "false" : "true", boolType),
+                }, boolType),
+                [unsafeTail](TExprNode& root) {
+                    if (unsafeTail) {
+                        root.Child(1)->SetSideEffects(ESideEffects::General);
+                    }
+                });
+        };
+        const auto expressionOf = [](const TSemanticSnapshotExportResult& result) {
+            const auto snapshot = ParseSupported(result);
+            return FindNode(snapshot, "project")["columns"].GetArraySafe().back()["expression"];
+        };
+
+        // Both source forms have the same identity layout, except that the exact
+        // Coalesce(false) spelling adds one byte. Five-digit payload lengths keep
+        // the length prefix fixed as we move from this sample to the audit cap.
+        constexpr size_t maxBytes = 64 * 1024;
+        const auto sample = expressionOf(exportSource(10'000, false));
+        UNIT_ASSERT_VALUES_EQUAL(sample["kind"].GetStringSafe(), "opaque");
+        const size_t overhead = sample["fingerprint"].GetStringSafe().size() - 10'000;
+        for (const bool exact : {false, true}) {
+            const size_t atLimit = maxBytes - overhead - (exact ? 1 : 0);
+            const auto admitted = expressionOf(exportSource(atLimit, exact));
+            UNIT_ASSERT_VALUES_EQUAL(
+                admitted["kind"].GetStringSafe(), exact ? "if_present" : "opaque");
+            if (!exact) {
+                UNIT_ASSERT_VALUES_EQUAL(admitted["fingerprint"].GetStringSafe().size(), maxBytes);
+            }
+            for (const bool unsafeTail : {false, true}) {
+                const auto rejected = exportSource(atLimit + 1, exact, unsafeTail);
+                UNIT_ASSERT(!rejected.IsSupported());
+                // A byte-overflowing identity must not short-circuit later
+                // source metadata checks in either sink mode.
+                UNIT_ASSERT_STRING_CONTAINS(rejected.UnsupportedReason, unsafeTail
+                    ? "side-effecting or CSE-unsafe"
+                    : "Opaque scalar fingerprint exceeds the audit limit");
+            }
+        }
+    }
+
     Y_UNIT_TEST(OpaqueExpressionFingerprintPreservesStructureAndRepetition) {
         const auto exportBinary = [](
             TStringBuf callable,

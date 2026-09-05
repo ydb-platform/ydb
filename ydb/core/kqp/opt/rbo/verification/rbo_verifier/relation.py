@@ -7,7 +7,10 @@ from itertools import combinations, permutations
 from math import factorial
 from typing import Callable, Iterator, Literal, Mapping, TypeAlias
 
+from . import aggregate as aggregate_kernel
 from . import decimal, join as join_kernel, smt, sort_network, sort_strategy
+from . import window as window_kernel
+from .errors import RelationError
 from .analysis import AnalysisError, AnalyzedPlan, analyze_snapshot
 from .ir import (
     Aggregate,
@@ -327,10 +330,6 @@ class WitnessCell:
 class WitnessRow:
     present: smt.Term
     cells: Mapping[str, WitnessCell]
-
-
-class RelationError(ValueError):
-    """A valid snapshot uses relational semantics not modeled by this evaluator."""
 
 
 MAX_OUTCOME_ALTERNATIVES = 256
@@ -1065,45 +1064,14 @@ class Evaluator:
                 _ordinal_constraints(relation.rows, ordinals, order)
             )
             choices = _merge_choices(choices, rank_choices)
-            for candidate_index, candidate in enumerate(relation.rows):
-                candidate_key = candidate.values[order_item.column]
-                candidate_nan = smt.eq(
-                    candidate_key.value,
-                    smt.int_value(decimal.NAN),
-                )
-                preceding = tuple(
-                    smt.ite(
-                        smt.and_(
-                            other.present,
-                            smt.or_(
-                                _ordered_value_less(
-                                    other.values[order_item.column],
-                                    candidate_key,
-                                    order_item,
-                                ),
-                                smt.and_(
-                                    candidate_nan,
-                                    smt.eq(
-                                        other.values[order_item.column].value,
-                                        smt.int_value(decimal.NAN),
-                                    ),
-                                    smt.lt(
-                                        ordinals[other_index],
-                                        ordinals[candidate_index],
-                                    ),
-                                ),
-                            ),
-                        ),
-                        smt.ONE,
-                        smt.ZERO,
-                    )
-                    for other_index, other in enumerate(relation.rows)
-                )
-                relational_values[candidate_index][rank] = Value(
-                    "Uint64",
-                    smt.FALSE,
-                    smt.add(smt.ONE, *preceding),
-                )
+            values = window_kernel.rank_values(
+                tuple(row.present for row in relation.rows),
+                tuple(row.values[order_item.column] for row in relation.rows),
+                ordinals,
+                lambda left, right: _ordered_value_less(left, right, order_item),
+            )
+            for row_values, value in zip(relational_values, values):
+                row_values[rank] = value
         return (
             replace(
                 source,
@@ -1180,54 +1148,17 @@ class Evaluator:
                 )
             )
             choices = _merge_choices(choices, window_choices)
-            for candidate_index, candidate in enumerate(source.rows):
-                guarded_values = tuple(
-                    (
-                        smt.and_(
-                            row.present,
-                            self.scalar.not_distinct(
-                                candidate.values[partition],
-                                row.values[partition],
-                            ),
-                            smt.not_(
-                                smt.lt(
-                                    ordinals[candidate_index],
-                                    ordinals[row_index],
-                                )
-                            ),
-                            smt.not_(row.values[window.window_input].is_null),
-                        ),
-                        row.values[window.window_input],
-                    )
-                    for row_index, row in enumerate(source.rows)
-                )
-                if window.kind == "window_rows_sum":
-                    value = _decimal_sum_value(
-                        guarded_values,
-                        window.result_type,
-                        True,
-                        "q51 running Decimal SUM",
-                    )
-                else:
-                    guards = tuple(guard for guard, _value in guarded_values)
-                    value = Value(
-                        window.result_type,
-                        smt.not_(smt.or_(*guards)),
-                        decimal.aggregate_max(
-                            tuple(
-                                (guard, item.value)
-                                for guard, item in guarded_values
-                            )
-                        ),
-                        decimal_finite_abs_bound=max(
-                            (
-                                _decimal_finite_abs_bound(item)
-                                for _guard, item in guarded_values
-                            ),
-                            default=0,
-                        ),
-                    )
-                relational_values[candidate_index][window] = value
+            values = window_kernel.rows_prefix_values(
+                window.kind,
+                window.result_type,
+                tuple(row.values[window.window_input] for row in source.rows),
+                tuple(row.present for row in source.rows),
+                tuple(row.values[partition] for row in source.rows),
+                ordinals,
+                self.scalar.not_distinct,
+            )
+            for row_values, value in zip(relational_values, values):
+                row_values[window] = value
         return (
             replace(
                 source,
@@ -1249,54 +1180,21 @@ class Evaluator:
         source: Relation,
         candidate: Row,
     ) -> Value:
-        """Exact unordered whole-partition SUM/AVG for one Project input row."""
-
         assert expression.kind in {"window_sum", "window_avg"}
         assert expression.window_input is not None
         assert expression.partition_by is not None
         assert expression.result_type is not None
-        guarded_values = tuple(
-            (
-                smt.and_(
-                    row.present,
-                    *(
-                        self.scalar.not_distinct(
-                            candidate.values[partition],
-                            row.values[partition],
-                        )
-                        for partition in expression.partition_by
-                    ),
-                    smt.not_(row.values[expression.window_input].is_null),
-                ),
-                row.values[expression.window_input],
-            )
-            for row in source.rows
-        )
-        if expression.kind == "window_sum":
-            return _decimal_sum_value(
-                guarded_values,
-                expression.result_type,
-                True,
-                "Decimal window sum",
-            )
-        finite_abs_bound = sum(
-            _decimal_finite_abs_bound(value)
-            for _guard, value in guarded_values
-        )
-        return _finish_decimal_average(
-            tuple((guard, value.value) for guard, value in guarded_values),
+        return window_kernel.whole_partition_decimal(
+            expression.kind,
+            expression.result_type,
+            tuple(row.values[expression.window_input] for row in source.rows),
+            tuple(row.present for row in source.rows),
             tuple(
-                smt.ite(guard, smt.ONE, smt.ZERO)
-                for guard, _value in guarded_values
+                tuple(row.values[key] for key in expression.partition_by)
+                for row in source.rows
             ),
-            sum_type=expression.result_type,
-            count_type="Uint64",
-            output_type=expression.result_type,
-            output_nullable=True,
-            finite_abs_bound=finite_abs_bound,
-            count_bound=len(guarded_values),
-            carry_state=False,
-            operation="Decimal window avg",
+            tuple(candidate.values[key] for key in expression.partition_by),
+            self.scalar.not_distinct,
         )
 
     def _aggregate(self, node: Aggregate, source: Relation) -> Relation:
@@ -1565,140 +1463,36 @@ class Evaluator:
         source: Relation,
         matches: tuple[smt.Term, ...],
     ) -> Value:
-        non_null = tuple(
-            smt.and_(matches[index], smt.not_(row.values[trait.input].is_null))
-            for index, row in enumerate(source.rows)
-        )
+        values = tuple(row.values[trait.input] for row in source.rows)
         if trait.distinct:
-            pair_count = len(source.rows) * (len(source.rows) - 1) // 2
             _require_relation_row_pairs(
-                pair_count,
+                len(source.rows) * (len(source.rows) - 1) // 2,
                 "distinct aggregate",
             )
-            distinct_non_null: list[smt.Term] = []
-            for index, (guard, row) in enumerate(zip(non_null, source.rows)):
-                earlier_equal = tuple(
-                    smt.and_(
-                        non_null[earlier_index],
-                        self.scalar.aggregate_equal(
-                            row.values[trait.input],
-                            source.rows[earlier_index].values[trait.input],
-                        ),
-                    )
-                    for earlier_index in range(index)
-                )
-                distinct_non_null.append(
-                    smt.and_(
-                        guard,
-                        smt.not_(smt.or_(*earlier_equal)),
-                    )
-                )
-            non_null = tuple(distinct_non_null)
-        if trait.function == "count":
-            return Value(
-                trait.output_type,
-                smt.FALSE,
-                smt.add(*(smt.ite(guard, smt.ONE, smt.ZERO) for guard in non_null)),
-            )
-        if trait.function in {"max", "min"}:
-            guarded_values = tuple(
-                (guard, row.values[trait.input])
-                for guard, row in zip(non_null, source.rows)
-                if guard != smt.FALSE
-            )
-            if not decimal.is_type(trait.output_type):
-                return Value(
-                    trait.output_type,
-                    smt.not_(smt.or_(*non_null))
-                    if trait.output_nullable
-                    else smt.FALSE,
-                    _integral_extremum(
-                        tuple(
-                            (guard, value.value)
-                            for guard, value in guarded_values
-                        ),
-                        maximum=trait.function == "max",
-                    ),
-                )
-            reducer = (
-                decimal.aggregate_max
-                if trait.function == "max"
-                else decimal.aggregate_min
-            )
-            return Value(
-                trait.output_type,
-                smt.not_(smt.or_(*non_null)) if trait.output_nullable else smt.FALSE,
-                reducer(
-                    tuple((guard, value.value) for guard, value in guarded_values)
-                ),
-                decimal_finite_abs_bound=max(
-                    (_decimal_finite_abs_bound(value) for _, value in guarded_values),
-                    default=0,
-                ),
-            )
-        if trait.function == "sum":
-            if decimal.is_type(trait.output_type):
-                if (
-                    (node.id, trait.output)
-                    in self._context.decimal_sum_state_consumers
-                ):
-                    combined = self._combined_decimal_sum_value(
-                        trait,
-                        source,
-                        matches,
-                    )
-                    if combined is not None:
-                        return combined
-                guarded_values = tuple(
-                    (guard, row.values[trait.input])
-                    for guard, row in zip(non_null, source.rows)
-                    if guard != smt.FALSE
-                )
-                return _decimal_sum_value(
-                    guarded_values,
-                    trait.output_type,
-                    trait.output_nullable,
-                    "Decimal sum",
-                    carry_state=(
-                        (node.id, trait.output)
-                        in self._context.decimal_sum_state_producers
-                    ),
-                )
-            total = smt.add(
-                *(
-                    smt.ite(
-                        guard,
-                        _unwrap_sum(row.values[trait.input]),
-                        smt.ZERO,
-                    )
-                    for guard, row in zip(non_null, source.rows)
-                )
-            )
-            return Value(
-                trait.output_type,
-                (
-                    smt.not_(smt.or_(*non_null))
-                    if trait.output_nullable and not trait.unwrap
-                    else smt.FALSE
-                ),
-                _wrap_sum(total, trait.output_type),
-            )
-        if trait.function == "avg":
-            assert trait.state is not None
-            if trait.state.kind == "integral_double_v1":
-                return self._integral_average_value(
-                    node,
-                    trait,
-                    source,
-                    non_null,
-                )
-            return self._decimal_average_value(
-                node,
-                trait,
-                source,
-                non_null,
-            )
-        raise AssertionError(f"unsupported aggregate function {trait.function!r}")
+        non_null = aggregate_kernel.non_null_membership(
+            values,
+            matches,
+            distinct=trait.distinct,
+            equal=self.scalar.aggregate_equal,
+        )
+        if (
+            trait.function == "sum"
+            and decimal.is_type(trait.output_type)
+            and (node.id, trait.output) in self._context.decimal_sum_state_consumers
+        ):
+            combined = self._combined_decimal_sum_value(trait, source, matches)
+            if combined is not None:
+                return combined
+        return aggregate_kernel.reduce(
+            trait,
+            node.phase,
+            values,
+            non_null,
+            integral_average=self.scalar.integral_int64_average,
+            carry_sum_state=(
+                (node.id, trait.output) in self._context.decimal_sum_state_producers
+            ),
+        )
 
     def _combined_decimal_sum_value(
         self,
@@ -1706,174 +1500,24 @@ class Evaluator:
         source: Relation,
         matches: tuple[smt.Term, ...],
     ) -> Value | None:
-        """Consume one complete matching set of private partial SUM states."""
+        """Admit a complete matching set of private partial SUM states."""
 
         input_column = next(
-            column
-            for column in source.columns
-            if column.name == trait.input
+            column for column in source.columns if column.name == trait.input
         )
         guarded_states: list[tuple[smt.Term, DecimalSumState]] = []
         for match, row in zip(matches, source.rows):
             if row.present == smt.FALSE:
                 continue
             value = row.values[trait.input]
-            state = _validated_decimal_sum_state(
-                value,
-                input_column.nullable,
-            )
-            if (
-                state is None
-                or state.sum_type != trait.output_type
-            ):
+            state = _validated_decimal_sum_state(value, input_column.nullable)
+            if state is None or state.sum_type != trait.output_type:
                 return None
             non_null = smt.and_(match, smt.not_(value.is_null))
             if non_null != smt.FALSE:
                 guarded_states.append((non_null, state))
-
-        finite_abs_bound = sum(
-            state.finite_abs_bound
-            for _guard, state in guarded_states
-        )
-        result_type = decimal.parse_type(trait.output_type)
-        assert result_type is not None
-        if finite_abs_bound >= 10**result_type.precision:
-            raise RelationError(
-                f"Decimal sum may overflow its {trait.output_type} accumulator "
-                "within the current bound; non-associative overflow is not modeled"
-            )
-        state = decimal.combine_sum_states_with_headroom(
-            tuple(guarded_states),
-            trait.output_type,
-        )
-        return _finish_decimal_sum_value(
-            state,
-            trait.output_nullable,
-            carry_state=False,
-        )
-
-    def _decimal_average_value(
-        self,
-        node: Aggregate,
-        trait: AggregateTrait,
-        source: Relation,
-        non_null: tuple[smt.Term, ...],
-    ) -> Value:
-        assert trait.state is not None and trait.state.kind == "decimal"
-        guarded_sums: list[tuple[smt.Term, smt.Term]] = []
-        count_terms: list[smt.Term] = []
-        finite_abs_bound = 0
-        count_bound = 0
-        for guard, row in zip(non_null, source.rows):
-            if guard == smt.FALSE:
-                continue
-            value = row.values[trait.input]
-            if node.phase == "final":
-                state = value.average_metadata
-                if (
-                    not isinstance(state, DecimalAverageState)
-                    or state.sum_type != trait.state.sum_type
-                ):
-                    raise RelationError(
-                        "final avg input does not carry its validated "
-                        "intermediate Decimal state"
-                    )
-                guarded_sums.append((guard, state.sum))
-                finite_abs_bound += state.finite_abs_bound
-                count_bound += state.count_bound
-                count_terms.append(smt.ite(guard, state.count, smt.ZERO))
-            else:
-                guarded_sums.append((guard, value.value))
-                finite_abs_bound += _decimal_finite_abs_bound(value)
-                count_bound += 1
-                count_terms.append(smt.ite(guard, smt.ONE, smt.ZERO))
-
-        return _finish_decimal_average(
-            tuple(guarded_sums),
-            tuple(count_terms),
-            sum_type=trait.state.sum_type,
-            count_type=trait.state.count_type,
-            output_type=trait.output_type,
-            output_nullable=trait.output_nullable,
-            finite_abs_bound=finite_abs_bound,
-            count_bound=count_bound,
-            carry_state=node.phase == "intermediate",
-            operation="Decimal avg",
-        )
-
-    def _integral_average_value(
-        self,
-        node: Aggregate,
-        trait: AggregateTrait,
-        source: Relation,
-        non_null: tuple[smt.Term, ...],
-    ) -> Value:
-        assert trait.state is not None
-        assert trait.state.kind == "integral_double_v1"
-        assert trait.state.exact_when_count_at_most == 2
-
-        count_terms: list[smt.Term] = []
-        count_bound = 0
-        minimum = smt.int_value((1 << 63) - 1)
-        maximum = smt.int_value(-(1 << 63))
-        for guard, row in zip(non_null, source.rows):
-            if guard == smt.FALSE:
-                continue
-            value = row.values[trait.input]
-            if node.phase == "final":
-                state = value.average_metadata
-                if not isinstance(state, IntegralAverageState):
-                    raise RelationError(
-                        "final integral avg input does not carry its validated "
-                        "intermediate state"
-                    )
-                member_count = state.count
-                member_minimum = state.minimum
-                member_maximum = state.maximum
-                count_bound += state.count_bound
-            else:
-                member_count = smt.ONE
-                member_minimum = value.value
-                member_maximum = value.value
-                count_bound += 1
-
-            count_terms.append(smt.ite(guard, member_count, smt.ZERO))
-            minimum = smt.ite(
-                guard,
-                smt.ite(smt.lt(member_minimum, minimum), member_minimum, minimum),
-                minimum,
-            )
-            maximum = smt.ite(
-                guard,
-                smt.ite(smt.lt(maximum, member_maximum), member_maximum, maximum),
-                maximum,
-            )
-
-        if count_bound >= 1 << 64:
-            raise RelationError(
-                "integral avg count may wrap its Uint64 accumulator "
-                "within the current bound"
-            )
-        count = smt.add(*count_terms)
-        result = self.scalar.integral_int64_average(count, minimum, maximum)
-        return Value(
-            trait.output_type,
-            (
-                smt.not_(smt.or_(*non_null))
-                if trait.output_nullable
-                else smt.FALSE
-            ),
-            result,
-            average_metadata=(
-                IntegralAverageState(
-                    count=count,
-                    minimum=minimum,
-                    maximum=maximum,
-                    count_bound=count_bound,
-                )
-                if node.phase == "intermediate"
-                else IntegralAverageCertificate(count)
-            ),
+        return aggregate_kernel.combine_decimal_sum(
+            tuple(guarded_states), trait.output_type, trait.output_nullable,
         )
 
     def _same_group(self, node: Aggregate, left: Row, right: Row) -> smt.Term:
@@ -3010,50 +2654,6 @@ class Evaluator:
         return tuple(self.schemas[node_id].values())
 
 
-def _wrap_sum(value: smt.Term, scalar_type: str) -> smt.Term:
-    modulus = 1 << 64
-    if scalar_type == "Uint64":
-        return smt.mod(value, modulus)
-    if scalar_type == "Int64":
-        sign = 1 << 63
-        return smt.add(
-            smt.mod(smt.add(value, smt.int_value(sign)), modulus),
-            smt.int_value(-sign),
-        )
-    raise RelationError(f"sum output type {scalar_type!r} is not modeled")
-
-
-def _integral_extremum(
-    guarded_values: tuple[tuple[smt.Term, smt.Term], ...],
-    *,
-    maximum: bool,
-) -> smt.Term:
-    level = list(guarded_values)
-    if not level:
-        return smt.ZERO
-    while len(level) > 1:
-        next_level = []
-        for index in range(0, len(level), 2):
-            if index + 1 == len(level):
-                next_level.append(level[index])
-                continue
-            left_present, left = level[index]
-            right_present, right = level[index + 1]
-            right_better = (
-                smt.lt(left, right) if maximum else smt.lt(right, left)
-            )
-            choose_right = smt.and_(
-                right_present,
-                smt.or_(smt.not_(left_present), right_better),
-            )
-            next_level.append((
-                smt.or_(left_present, right_present),
-                smt.ite(choose_right, right, left),
-            ))
-        level = next_level
-    return level[0][1]
-
-
 def _whole_partition_decimal_window_expression(expression: Expr) -> Expr | None:
     """Return the one validated relation-dependent leaf below an expression."""
 
@@ -3069,159 +2669,6 @@ def _whole_partition_decimal_window_expression(expression: Expr) -> Expr | None:
     )
     assert len(matches) <= 1
     return matches[0] if matches else None
-
-
-def _decimal_sum_value(
-    guarded_values: tuple[tuple[smt.Term, Value], ...],
-    output_type: str,
-    output_nullable: bool,
-    operation: str,
-    *,
-    carry_state: bool = False,
-) -> Value:
-    """Build one exact Decimal SUM after proving accumulator headroom."""
-
-    finite_abs_bound = sum(
-        _decimal_finite_abs_bound(value)
-        for _guard, value in guarded_values
-    )
-    result_type = decimal.parse_type(output_type)
-    assert result_type is not None
-    if finite_abs_bound >= 10**result_type.precision:
-        raise RelationError(
-            f"{operation} may overflow its {output_type} accumulator "
-            "within the current bound; non-associative overflow is not modeled"
-        )
-    state = decimal.summarize_sum_with_headroom(
-        tuple((guard, value.value) for guard, value in guarded_values),
-        output_type,
-        finite_abs_bound,
-    )
-    return _finish_decimal_sum_value(
-        state,
-        output_nullable,
-        carry_state=carry_state,
-    )
-
-
-def _finish_decimal_sum_value(
-    state: DecimalSumState,
-    output_nullable: bool,
-    *,
-    carry_state: bool,
-) -> Value:
-    """Materialize one Decimal SUM scalar and optionally retain its summary."""
-
-    return Value(
-        state.sum_type,
-        smt.not_(state.any_non_null) if output_nullable else smt.FALSE,
-        decimal.finish_sum_state(state),
-        decimal_finite_abs_bound=state.finite_abs_bound,
-        decimal_sum_state=state if carry_state else None,
-    )
-
-
-
-def _finish_decimal_average(
-    guarded_sums: tuple[tuple[smt.Term, smt.Term], ...],
-    count_terms: tuple[smt.Term, ...],
-    *,
-    sum_type: str,
-    count_type: str,
-    output_type: str,
-    output_nullable: bool,
-    finite_abs_bound: int,
-    count_bound: int,
-    carry_state: bool,
-    operation: str,
-) -> Value:
-    """Finish an exact Decimal AVG from audited sum/count contributions."""
-
-    if len(guarded_sums) != len(count_terms):
-        raise AssertionError("Decimal average sum/count contributions disagree")
-    accumulator = decimal.parse_type(sum_type)
-    result = decimal.parse_type(output_type)
-    assert accumulator is not None and result is not None
-    if finite_abs_bound >= 10**accumulator.precision:
-        raise RelationError(
-            f"{operation} sum may overflow its {sum_type} accumulator "
-            "within the current bound; non-associative overflow is not modeled"
-        )
-    if count_bound >= 1 << 64:
-        raise RelationError(
-            f"{operation} count may wrap its Uint64 accumulator "
-            "within the current bound"
-        )
-
-    total = decimal.sum_with_headroom(
-        guarded_sums,
-        sum_type,
-        finite_abs_bound,
-    )
-    count = smt.add(*count_terms)
-    average = decimal.narrow_same_scale(
-        decimal.divide(total, count, sum_type, count_type),
-        sum_type,
-        output_type,
-    )
-    return Value(
-        output_type,
-        smt.eq(count, smt.ZERO) if output_nullable else smt.FALSE,
-        average,
-        decimal_finite_abs_bound=min(
-            finite_abs_bound,
-            10**result.precision - 1,
-        ),
-        average_metadata=(
-            DecimalAverageState(
-                sum_type=sum_type,
-                sum=total,
-                count=count,
-                finite_abs_bound=finite_abs_bound,
-                count_bound=count_bound,
-            )
-            if carry_state
-            else None
-        ),
-    )
-
-
-def _decimal_finite_abs_bound(value: Value) -> int:
-    if value.decimal_finite_abs_bound is not None:
-        return value.decimal_finite_abs_bound
-    decimal_type = decimal.parse_type(value.type)
-    if decimal_type is None:
-        raise RelationError(f"Decimal sum input type {value.type!r} is not modeled")
-    return 10**decimal_type.precision - 1
-
-
-def _unwrap_sum(value: Value) -> smt.Term:
-    """Canonicalize nested partial sums before applying the same final wrap."""
-
-    modulus = smt.int_value(1 << 64)
-    term = value.value
-    if (
-        value.type == "Uint64"
-        and term.operation == "mod"
-        and term.arguments[1] == modulus
-    ):
-        return term.arguments[0]
-    if value.type != "Int64" or term.operation != "+" or len(term.arguments) != 2:
-        return term
-
-    sign = smt.int_value(1 << 63)
-    wrapped, offset = term.arguments
-    if (
-        offset != smt.int_value(-(1 << 63))
-        or wrapped.operation != "mod"
-        or wrapped.arguments[1] != modulus
-    ):
-        return term
-    shifted = wrapped.arguments[0]
-    if shifted.operation != "+" or len(shifted.arguments) != 2:
-        return term
-    raw, shift = shifted.arguments
-    return raw if shift == sign else term
 
 
 def _derived_occurrence(

@@ -60,12 +60,12 @@ private:
 
     public:
         void AddPathId(const TUnifiedPathId& pathId) {
-            // During truncation, the same SchemeShardLocalPathId is re-registered with a new InternalPathId.
-            // Remove the old mapping if it exists before adding the new one.
-            auto itOld = SchemeShardLocalToInternal.find(pathId.SchemeShardLocalPathId);
-            if (itOld != SchemeShardLocalToInternal.end()) {
-                auto itInternal = InternalToSchemeShardLocal.find(itOld->second);
-                if (itInternal != InternalToSchemeShardLocal.end()) {
+            // If this SchemeShardLocalPathId was previously mapped to a different InternalPathId
+            // (e.g., after a TRUNCATE generation swap), remove the stale mapping first.
+            if (const auto itOld = SchemeShardLocalToInternal.find(pathId.SchemeShardLocalPathId);
+                itOld != SchemeShardLocalToInternal.end() && itOld->second != pathId.InternalPathId) {
+                if (const auto itInternal = InternalToSchemeShardLocal.find(itOld->second);
+                    itInternal != InternalToSchemeShardLocal.end()) {
                     itInternal->second.erase(pathId.SchemeShardLocalPathId);
                     if (itInternal->second.empty()) {
                         InternalToSchemeShardLocal.erase(itInternal);

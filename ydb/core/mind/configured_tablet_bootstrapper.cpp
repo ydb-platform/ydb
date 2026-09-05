@@ -781,9 +781,11 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     case TTabletTypes::Dummy:
         createFunc = &CreateSimpleTablet;
         break;
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     case TTabletTypes::DbsController:
         createFunc = &NYdb::NBS::NBlockStore::NStorage::NDbsController::CreateDbsControllerTablet;
         break;
+#endif
     default:
         return nullptr;
     }

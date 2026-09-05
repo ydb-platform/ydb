@@ -12,7 +12,7 @@ from ydb.tests.functional.nbs.lib.fixtures.markers import known_bug
 
 
 def _block_size_params():
-    reason = 'Non 4 KiB block size fails IO'
+    reason = 'Eager vchunk metadata at 2^31 blocks'
     params = []
     for block_size in SUPPORTED_BLOCK_SIZES:
         if block_size == DEFAULT_BLOCK_SIZE:
@@ -23,7 +23,7 @@ def _block_size_params():
 
 
 class TestF1_25MaxDiskSize(NbsCase):
-    """F1.25 — max-size disk IO at 4 KiB; larger sizes are xfail without create."""
+    """F1.25 — max-size disk size for different block sizes"""
 
     @pytest.mark.timeout(300, func_only=True)
     @pytest.mark.parametrize('block_size', _block_size_params())

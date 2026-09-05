@@ -162,6 +162,7 @@ TDBGFixture::MakeDirectBlockGroup(
         std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
         executor,
         DiskDescription,
+        DefaultBlockSize,
         directBlockGroupIndex,
         ddisksIds,
         pbufferIds,

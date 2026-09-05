@@ -146,7 +146,7 @@ message TFeatureFlags {
     optional bool ExtendedVDiskCounters = 120 [default = true, (RequireRestart) = true];
     optional bool ExtendedPDiskSensors = 121 [default = true, (RequireRestart) = true];
     optional bool EnableStableNodeNames = 122 [default = false];
-    optional bool EnableBackupService = 123 [default = false];
+    optional bool EnableBackupService = 123 [default = true];
     optional bool EnableVolatileTransactionArbiters = 124 [default = true];
     optional bool EnableGraphShard = 125 [default = false];
     optional bool EnableExternalSourceSchemaInference = 126 [default = true];
@@ -380,5 +380,5 @@ message TFeatureFlags {
     optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
     // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
     // size-class slots. Reads of the stripe format work even when this flag is off.
-    optional bool EnableVDiskHeapAllocator = 324 [default = false];
+    optional bool EnableVDiskHeapAllocator = 324 [default = false, (RequireRestart) = true];
 }

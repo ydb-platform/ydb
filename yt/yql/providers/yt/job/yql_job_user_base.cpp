@@ -158,7 +158,8 @@ void TYqlUserJobBase::DoImpl() {
 
     TLambdaBuilder builder(FunctionRegistry.Get(), *Alloc,
         Env.Get(), RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), &JobCountersProvider,
-        SecureParamsProvider.Get(), LogProvider.Get(), LangVer, RuntimeSettings);
+        SecureParamsProvider.Get(), LogProvider.Get(), LangVer, RuntimeSettings,
+        BridgeMode, BridgeMode == NKikimr::NUdf::EBridgeMode::OutProcess ? TString("./udf_bridge") : TString());
 
     TType* itemType = nullptr;
     if (InputType) {

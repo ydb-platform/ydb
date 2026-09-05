@@ -127,6 +127,21 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         });
     }
 
+    // Stops on the first accepted match. Semi/only joins only need existence, so
+    // walking the rest of a duplicate chain is wasted work.
+    bool LookupAny(TSingleTuple row, std::predicate<TSingleTuple> auto accept) {
+        if (Empty()) {
+            return false;
+        }
+        auto iterator = Table_.Find(row.PackedData, row.OverflowBegin);
+        while (const ui8* tuplePackedData = Table_.NextMatch(iterator, row.OverflowBegin)) {
+            if (accept(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()})) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool ForEachFrom(size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
                      std::predicate auto isFull) const {
         const size_t nTuples = static_cast<size_t>(BuildData_.NTuples);

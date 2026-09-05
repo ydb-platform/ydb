@@ -100,6 +100,22 @@ bool HasAnyAffectedRows(const NYdb::NQuery::TExecuteQueryResult& result) {
     return false;
 }
 
+bool HasAnyAffectedRowsField(const NYdb::NQuery::TExecuteQueryResult& result) {
+    auto stats = result.GetStats();
+    if (!stats) {
+        return false;
+    }
+    const auto& proto = NYdb::TProtoAccessor::GetProto(*stats);
+    for (const auto& phase : proto.query_phases()) {
+        for (const auto& tableAccess : phase.table_access()) {
+            if (tableAccess.has_affected_rows()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
@@ -302,6 +318,8 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
 
             auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(affectedRows, 0u);
+            UNIT_ASSERT_C(HasAnyAffectedRowsField(result),
+                "affected_rows field should be present (with 0) for read-only query when collect_affected_rows is enabled");
         }
     }
 
@@ -633,6 +651,7 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
 
             auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(affectedRows, static_cast<ui64>(AffectedRows));
+            UNIT_ASSERT_VALUES_EQUAL(HasAnyAffectedRowsField(result), static_cast<bool>(AffectedRows));
         }
 
         {
@@ -647,6 +666,7 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
 
             auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(affectedRows, static_cast<ui64>(AffectedRows));
+            UNIT_ASSERT_VALUES_EQUAL(HasAnyAffectedRowsField(result), static_cast<bool>(AffectedRows));
         }
     }
 }

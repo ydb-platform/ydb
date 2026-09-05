@@ -6,11 +6,9 @@ from time import time
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.tpcc_deviation import (
-    METRICS as TPCC_DEVIATION_METRICS,
     DeviationCheckResult,
     check_tpcc_deviation,
-    key_measurement_description,
-    key_measurement_intervals,
+    key_measurement_specs,
 )
 from ydb.tests.olap.lib.allure_utils import time_interval_str
 from ydb.tests.olap.lib.utils import get_external_param
@@ -127,18 +125,17 @@ class TpccSuiteBase(LoadSuiteBase):
     @classmethod
     def _tpcc_deviation_key_measurements(cls) -> list[LoadSuiteBase.KeyMeasurement]:
         """Degradation against the baseline, present only when the check has run."""
-        intervals = [
-            LoadSuiteBase.KeyMeasurement.Interval(color, min, max)
-            for color, min, max in key_measurement_intervals()
-        ]
         return [
             LoadSuiteBase.KeyMeasurement(
-                metric.signal,
-                f'TPC-C {metric.name} degradation, %',
-                intervals,
-                key_measurement_description(metric),
+                spec.name,
+                spec.caption,
+                [
+                    LoadSuiteBase.KeyMeasurement.Interval(color, min, max)
+                    for color, min, max in spec.intervals
+                ],
+                spec.description,
             )
-            for metric in TPCC_DEVIATION_METRICS
+            for spec in key_measurement_specs()
         ]
 
     @classmethod

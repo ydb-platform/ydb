@@ -25,6 +25,8 @@ public:
 
     const TString& GetRegion() const;
 
+    const TString& GetService() const;
+
     const TString& GetAccessKeyId() const;
 
     TString CalcSignature(const TString& secretKey) const;

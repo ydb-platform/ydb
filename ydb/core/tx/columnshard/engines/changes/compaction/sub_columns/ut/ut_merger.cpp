@@ -175,4 +175,46 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
         UNIT_ASSERT_VALUES_EQUAL(values, "xxxx;<null>;yyyy;<null>;");
         UNIT_ASSERT_VALUES_EQUAL(RenderDocs(merged), RenderDocs(BuildChunk(docs, settings)));
     }
+
+    // Bug-triggering scenario:
+    // Source portions expose an ancestor and its child as separated columns.
+    // The unselected path must move to Others in merged portion; it must never be remapped to the selected path.
+    Y_UNIT_TEST(ChildAndAncestorPathMix) {
+        auto settings = MakeSettings();
+        settings.SetColumnsLimit(1);
+        const std::vector<TString> ancestorDocs = {
+            R"({"a":["xxxxxxxxxxxxxxxx"]})",
+            R"({"a":["yyyyyyyyyyyyyyyy"]})",
+        };
+        const std::vector<TString> childDocs = {
+            R"({"a":{"b":1}})",
+            R"({"a":{"b":2}})",
+        };
+
+        {
+            auto merged = MergeChunks({ BuildChunk(ancestorDocs, settings), BuildChunk(childDocs, settings) }, settings);
+            const auto& stats = merged->GetColumnsData().GetStats();
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnNameString(0), R"("a")");
+            UNIT_ASSERT_VALUES_EQUAL(
+                RenderDocs(merged), R"({"a":["xxxxxxxxxxxxxxxx"]};{"a":["yyyyyyyyyyyyyyyy"]};{"a":{"b":1}};{"a":{"b":2}};)");
+        }
+
+        const std::vector<TString> scalarAncestorDocs = {
+            R"({"a":1})",
+            R"({"a":2})",
+        };
+        const std::vector<TString> largeChildDocs = {
+            R"({"a":{"b":"xxxxxxxxxxxxxxxx"}})",
+            R"({"a":{"b":"yyyyyyyyyyyyyyyy"}})",
+        };
+
+        {
+            auto merged = MergeChunks({ BuildChunk(scalarAncestorDocs, settings), BuildChunk(largeChildDocs, settings) }, settings);
+            const auto& stats = merged->GetColumnsData().GetStats();
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnNameString(0), R"("a"."b")");
+            UNIT_ASSERT_VALUES_EQUAL(RenderDocs(merged), R"({"a":1};{"a":2};{"a":{"b":"xxxxxxxxxxxxxxxx"}};{"a":{"b":"yyyyyyyyyyyyyyyy"}};)");
+        }
+    }
 }

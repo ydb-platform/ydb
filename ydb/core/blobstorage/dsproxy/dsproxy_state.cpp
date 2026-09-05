@@ -316,6 +316,8 @@ namespace NKikimr {
         for (const auto& [actorId, _] : ActiveRequests) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
         }
+        StoragePoolInFlightRequests.clear();
+        SendInFlightLatencySnapshot(true);
         if (Sessions) { // may be null if not properly configured yet
             Sessions->Poison();
         }

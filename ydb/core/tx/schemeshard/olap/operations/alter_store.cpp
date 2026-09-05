@@ -1,7 +1,11 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/olap/store/store.h>
+#include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 
 #include "checks.h"
 
@@ -630,3 +634,4 @@ ISubOperation::TPtr CreateAlterOlapStore(TOperationId id, TTxState::ETxState sta
 }
 
 }
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>

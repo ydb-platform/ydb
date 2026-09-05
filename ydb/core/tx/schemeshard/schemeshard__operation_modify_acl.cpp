@@ -1,5 +1,6 @@
+#include "schemeshard__operation_helpers.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include "schemeshard_path.h"
 
 #include <ydb/core/base/auth.h>
 
@@ -8,9 +9,9 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool CheckSidExistsOrIsNonYdb(const std::unordered_map<TString, NLogin::TLoginProvider::TSidRecord>& sids, const TString& sid) {
+bool CheckSidExistsOrIsNonYdb(const TSchemeShard& ss, const TString& sid) {
     // non-YDB user's sid format is <login>@<subsystem>
-    return sid.Contains('@') || sids.contains(sid);
+    return sid.Contains('@') || NOperationHelpers::SidExists(ss, sid);
 }
 
 class TModifyACL: public TSubOperationBase {
@@ -18,8 +19,8 @@ public:
     using TSubOperationBase::TSubOperationBase;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const TTabletId ssId = context.SS->SelfTabletId();
-        const TString databaseName = CanonizePath(context.SS->RootPathElements);
+        const TTabletId ssId = NOperationHelpers::GetTabletId(*context.SS);
+        const TString databaseName = NOperationHelpers::GetRootPath(*context.SS);
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetModifyACL();
@@ -54,14 +55,14 @@ public:
         }
 
         TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr, path->PathType)) {
+        if (!NOperationHelpers::CheckApplyIf(*context.SS, Transaction, errStr, path->PathType)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
         bool isAdmin = (context.UserToken && IsAdministrator(AppData(), context.UserToken.Get()));
 
-        if (acl && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+        if (acl && NOperationHelpers::IsStrictAclCheckEnabled()) {
             NACLib::TDiffACL diffACL(acl);
             for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
                 if (static_cast<NACLib::EDiffType>(diffACE.GetDiffType()) == NACLib::EDiffType::Add) {
@@ -70,7 +71,7 @@ public:
                     // - or target sid is an external one (not a ydb-local)
                     // - or target sid is a local one and exist in this database
                     const auto& targetSid = diffACE.GetACE().GetSID();
-                    bool allowed = (isAdmin || CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, targetSid));
+                    bool allowed = (isAdmin || CheckSidExistsOrIsNonYdb(*context.SS, targetSid));
                     if (!allowed) {
                         result->SetError(NKikimrScheme::StatusPreconditionFailed,
                             TStringBuilder() << "SID " << targetSid << " not found in database `" << databaseName << "`");
@@ -79,12 +80,12 @@ public:
                 } // remove diff type is allowed in any case
             }
         }
-        if (owner && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+        if (owner && NOperationHelpers::IsStrictAclCheckEnabled()) {
             // ownership transfer is allowed if:
             // - subject is a cluster administrator
             // - or target sid is an external one (not a ydb-local)
             // - or target sid is a local one and exist in this database
-            bool allowed = (isAdmin || CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, owner));
+            bool allowed = (isAdmin || CheckSidExistsOrIsNonYdb(*context.SS, owner));
             if (!allowed) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
                     TStringBuilder() << "Owner SID " << owner << " not found in database `" << databaseName << "`");
@@ -94,7 +95,7 @@ public:
 
         THashSet<TPathId> subTree;
         if (acl || (owner && path.Base()->IsTable())) {
-            subTree = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
+            subTree = NOperationHelpers::ListSubTree(*context.SS, path.Base()->PathId, context.Ctx);
         }
 
         THashSet<TPathId> affectedPaths;
@@ -103,7 +104,7 @@ public:
         if (acl) {
             ++path.Base()->ACLVersion;
             path.Base()->ApplyACL(acl);
-            context.SS->PersistACL(db, path.Base());
+            NOperationHelpers::PersistACL(*context.SS, db, path.Base());
 
             for (const auto& pathId : subTree) {
                 context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -119,20 +120,19 @@ public:
             }
 
             for (const auto& pathId : pathIds) {
-                if (!context.SS->PathsById.contains(pathId)) {
+                auto pathEl = NOperationHelpers::FindPathElement(*context.SS, pathId);
+                if (!pathEl) {
                     Y_VERIFY_DEBUG_S(false, "unreachable");
                     continue;
                 }
 
-                auto pathEl = context.SS->PathsById.at(pathId);
-
                 pathEl->Owner = owner;
-                context.SS->PersistOwner(db, pathEl);
+                NOperationHelpers::PersistOwner(*context.SS, db, pathEl);
 
                 ++pathEl->DirAlterVersion;
-                context.SS->PersistPathDirAlterVersion(db, pathEl);
+                NOperationHelpers::PersistPathDirAlterVersion(*context.SS, db, pathEl);
 
-                context.SS->ClearDescribePathCaches(pathEl);
+                NOperationHelpers::ClearDescribePathCaches(*context.SS, pathEl);
                 context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
             }
 
@@ -142,8 +142,8 @@ public:
         if ((acl && !path.Base()->IsPQGroup()) || owner) {
             const auto parent = path.Parent();
             ++parent.Base()->DirAlterVersion;
-            context.SS->PersistPathDirAlterVersion(db, parent.Base());
-            context.SS->ClearDescribePathCaches(parent.Base());
+            NOperationHelpers::PersistPathDirAlterVersion(*context.SS, db, parent.Base());
+            NOperationHelpers::ClearDescribePathCaches(*context.SS, parent.Base());
             context.OnComplete.PublishToSchemeBoard(OperationId, parent.Base()->PathId);
         }
 

@@ -39,11 +39,11 @@ struct TStatsId {
 
 template<typename TEvPeriodicStats>
 struct TStatsQueueItem {
-    typename TEvPeriodicStats::TPtr Ev;
+    TAutoPtr<TEventHandle<TEvPeriodicStats>> Ev;
     TStatsId Id;
     TMonotonic Ts;
 
-    TStatsQueueItem(typename TEvPeriodicStats::TPtr ev, const TStatsId& id)
+    TStatsQueueItem(TAutoPtr<TEventHandle<TEvPeriodicStats>> ev, const TStatsId& id)
             : Ev(ev)
             , Id(id)
             , Ts(AppData()->MonotonicTimeProvider->Now())
@@ -62,7 +62,7 @@ enum EStatsQueueStatus {
 template<typename TEvent>
 class TStatsQueue {
 public:
-    using TEventPtr = typename TEvent::TPtr;
+    using TEventPtr = TAutoPtr<TEventHandle<TEvent>>;
     using TItem = TStatsQueueItem<TEvent>;
     using TStatsMap = THashMap<TStatsId, TItem*, TStatsId::THash>;
     using TStatsQ = TStatsQueue<TEvent>;

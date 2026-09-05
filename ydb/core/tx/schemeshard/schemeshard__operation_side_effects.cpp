@@ -1,4 +1,6 @@
+#include "schemeshard_info_types.h"
 #include "schemeshard__operation_side_effects.h"
+#include "schemeshard__operation_part.h"
 
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"

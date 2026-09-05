@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>

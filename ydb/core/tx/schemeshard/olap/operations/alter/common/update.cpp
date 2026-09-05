@@ -1,3 +1,5 @@
+#include <ydb/core/tx/schemeshard/olap/table/table.h>
+
 #include "update.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
@@ -50,3 +52,4 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& conte
 }
 
 }
+#include <ydb/core/tx/schemeshard/olap/table/table.h>

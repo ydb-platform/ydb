@@ -1,3 +1,4 @@
+#include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard_impl.h"
 #include "schemeshard_set_column_constraint.h"
 #include <util/string/split.h>

@@ -1,3 +1,7 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/olap/table/table.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_db_changes.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_memory_changes.h>
 #include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>

@@ -1,3 +1,4 @@
+#include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard__operation_common.h"
 #include "schemeshard_private.h"
 

@@ -1,4 +1,8 @@
+#include "schemeshard_info_types.h"
 #include "schemeshard_path_describer.h"
+
+#include "olap/store/store.h"
+#include "olap/table/table.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>

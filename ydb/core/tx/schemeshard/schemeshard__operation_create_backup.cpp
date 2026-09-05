@@ -1,4 +1,6 @@
+#include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard__operation_backup_restore_common.h"
+#include "olap/table/table.h"
 #include "schemeshard_billing_helpers.h"
 
 namespace NKikimr {

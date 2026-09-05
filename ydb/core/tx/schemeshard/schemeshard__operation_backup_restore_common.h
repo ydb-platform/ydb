@@ -1,4 +1,8 @@
 #pragma once
+
+#include <ydb/core/tx/columnshard/columnshard.h>
+
+#include "olap/table/table.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_billing_helpers.h"

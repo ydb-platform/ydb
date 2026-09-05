@@ -1,4 +1,7 @@
+#include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard__operation_incremental_restore_finalize.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 
 #include "schemeshard__operation_base.h"
 #include "schemeshard__operation_common.h"

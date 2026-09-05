@@ -1,3 +1,4 @@
+#include "schemeshard_info_types.h"
 #include "schemeshard__root_shred_manager.h"
 
 #include <ydb/core/base/counters.h>
@@ -611,4 +612,3 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteShredBSC(TEvBlo
 }
 
 } // NKikimr::NSchemeShard
-

@@ -2,6 +2,14 @@
 
 namespace NKikimr::NSchemeShard {
 
+TTablesStorage::TTableCreatedGuard::TTableCreatedGuard(TTablesStorage& owner, const TPathId& id)
+    : TTableCreateOperator(std::make_shared<TColumnTableInfo>())
+    , PathId(id)
+    , Owner(owner)
+{
+    Y_ABORT_UNLESS(!Owner.contains(id));
+}
+
 void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
     for (auto&& s : object->GetColumnShards()) {
         AFL_VERIFY(TablesByShard[s].AddId(pathId));

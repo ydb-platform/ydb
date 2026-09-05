@@ -1,4 +1,24 @@
+#include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include "schemeshard_info_types.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/filestore/core/filestore.h>
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
+
+#include "olap/manager/manager.h"
+
 #include "schemeshard_generated_column_utils.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
@@ -50,6 +70,23 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+bool TSchemeShard::IsServerlessDomain(TIntrusivePtr<TSubDomainInfo> domainInfo) const {
+    const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
+    return !IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != ParentDomainId;
+}
+
+bool TSchemeShard::IsServerlessDomain(const TPath& domain) const {
+    return IsServerlessDomain(domain.DomainInfo());
+}
+
+bool TSchemeShard::IsServerlessDomainGlobal(
+        TPathId domainPathId,
+        TIntrusiveConstPtr<TSubDomainInfo> domainInfo) const
+{
+    const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
+    return IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != domainPathId;
+}
 
 const ui64 NEW_TABLE_ALTER_VERSION = 1;
 
@@ -5577,6 +5614,8 @@ TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx
     return clientId;
 }
 
+TSchemeShard::~TSchemeShard() = default;
+
 TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -5607,6 +5646,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             COUNTER_PQ_STATS_QUEUE_SIZE,
             COUNTER_PQ_STATS_WRITTEN,
             COUNTER_PQ_STATS_BATCH_LATENCY)
+    , ExternalSourceFactory(NExternalSource::CreateExternalSourceFactory({}))
     , AllowDataColumnForIndexTable(0, 0, 1)
     , LoginProvider(NLogin::TPasswordComplexity({
             .MinLength = AppData()->AuthConfig.GetPasswordComplexity().GetMinLength(),

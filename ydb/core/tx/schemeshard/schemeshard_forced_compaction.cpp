@@ -1,3 +1,4 @@
+#include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard_forced_compaction.h"
 
 #include "schemeshard_impl.h"

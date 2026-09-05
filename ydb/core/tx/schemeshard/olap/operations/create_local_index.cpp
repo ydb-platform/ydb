@@ -1,3 +1,5 @@
+#include <ydb/core/tx/schemeshard/schemeshard__operation_db_changes.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_memory_changes.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>

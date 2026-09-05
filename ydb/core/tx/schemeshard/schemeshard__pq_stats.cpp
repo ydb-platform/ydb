@@ -1,3 +1,5 @@
+#include <ydb/core/persqueue/events/global.h>
+#include "schemeshard_info_types.h"
 #include "schemeshard__stats_impl.h"
 #include "schemeshard_impl.h"
 

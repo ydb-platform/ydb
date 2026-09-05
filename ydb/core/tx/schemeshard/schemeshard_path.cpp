@@ -1,4 +1,6 @@
+#include "schemeshard_info_types.h"
 #include "schemeshard_path.h"
+#include "olap/table/table.h"
 
 #include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"

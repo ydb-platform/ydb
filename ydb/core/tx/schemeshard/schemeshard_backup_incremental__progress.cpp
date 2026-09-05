@@ -1,3 +1,4 @@
+#include <ydb/core/persqueue/events/global.h>
 #include "schemeshard_continuous_backup_cleaner.h"
 #include "schemeshard_impl.h"
 

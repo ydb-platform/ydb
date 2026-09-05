@@ -1,3 +1,4 @@
+#include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard__tenant_shred_manager.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>

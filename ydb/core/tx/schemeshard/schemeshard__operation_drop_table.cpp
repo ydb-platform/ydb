@@ -1,4 +1,8 @@
+#include <ydb/core/tx/datashard/datashard.h>
+#include "schemeshard_info_types.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation.h"
 #include "schemeshard_impl.h"

@@ -1,4 +1,5 @@
 #include "schemeshard_audit_log.h"
+#include "olap/table/table.h"
 #include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"

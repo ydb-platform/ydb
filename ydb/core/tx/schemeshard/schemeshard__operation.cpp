@@ -1,3 +1,9 @@
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
+#include "schemeshard_info_types.h"
 #include "schemeshard__operation.h"
 
 #include "schemeshard__dispatch_op.h"
@@ -10,11 +16,15 @@
 #include "schemeshard_operation_factory.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 #include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/test_tablet/events.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>

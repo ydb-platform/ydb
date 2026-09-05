@@ -1,7 +1,14 @@
+#include "schemeshard_info_types.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__operation_helpers.h"
 
 #include "schemeshard__tenant_shred_manager.h"
 
+#include "olap/store/store.h"
+
+#include <ydb/core/base/path.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
@@ -17,6 +24,104 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+TActorId TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr>::GetSource(
+        const TEvDataShard::TEvSchemaChanged__HandlePtr& ev)
+{
+    return TActorId{ev->Get()->GetSource()};
+}
+
+std::optional<ui32> TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr>::GetGeneration(
+        const TEvDataShard::TEvSchemaChanged__HandlePtr& ev)
+{
+    return {ev->Get()->GetGeneration()};
+}
+
+bool TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr>::HasOpResult(
+        const TEvDataShard::TEvSchemaChanged__HandlePtr& ev)
+{
+    return ev->Get()->Record.HasOpResult();
+}
+
+TString TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr>::GetName() {
+    return "TEvDataShard::TEvSchemaChanged";
+}
+
+TActorId TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr>::GetSource(
+        const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev)
+{
+    return TActorId{ev->Sender};
+}
+
+std::optional<ui32> TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr>::GetGeneration(
+        const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& /* ev */)
+{
+    return std::nullopt;
+}
+
+bool TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr>::HasOpResult(
+        const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& /* ev */)
+{
+    return false;
+}
+
+TString TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr>::GetName() {
+    return "TEvColumnShard::TEvNotifyTxCompletionResult";
+}
+
+namespace NOperationHelpers {
+
+TTabletId GetTabletId(const TSchemeShard& ss) {
+    return ss.SelfTabletId();
+}
+
+TString GetRootPath(const TSchemeShard& ss) {
+    return CanonizePath(ss.RootPathElements);
+}
+
+bool CheckApplyIf(
+        TSchemeShard& ss,
+        const TTxTransaction& transaction,
+        TString& error,
+        TPathElement::EPathType pathType)
+{
+    return ss.CheckApplyIf(transaction, error, pathType);
+}
+
+bool IsStrictAclCheckEnabled() {
+    return AppData()->FeatureFlags.GetEnableStrictAclCheck();
+}
+
+bool SidExists(const TSchemeShard& ss, const TString& sid) {
+    return ss.LoginProvider.Sids.contains(sid);
+}
+
+THashSet<TPathId> ListSubTree(TSchemeShard& ss, TPathId pathId, const TActorContext& ctx) {
+    return ss.ListSubTree(pathId, ctx);
+}
+
+TPathElement::TPtr FindPathElement(const TSchemeShard& ss, TPathId pathId) {
+    const auto it = ss.PathsById.find(pathId);
+    return it != ss.PathsById.end() ? it->second : nullptr;
+}
+
+void PersistACL(TSchemeShard& ss, NIceDb::TNiceDb& db, const TPathElement::TPtr& path) {
+    ss.PersistACL(db, path);
+}
+
+void PersistOwner(TSchemeShard& ss, NIceDb::TNiceDb& db, const TPathElement::TPtr& path) {
+    ss.PersistOwner(db, path);
+}
+
+void PersistPathDirAlterVersion(TSchemeShard& ss, NIceDb::TNiceDb& db, const TPathElement::TPtr& path) {
+    ss.PersistPathDirAlterVersion(db, path);
+}
+
+void ClearDescribePathCaches(TSchemeShard& ss, const TPathElement::TPtr& path) {
+    ss.ClearDescribePathCaches(path);
+}
+
+} // namespace NOperationHelpers
 
 THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss)
 {

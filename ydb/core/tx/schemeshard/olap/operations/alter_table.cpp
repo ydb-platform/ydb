@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 

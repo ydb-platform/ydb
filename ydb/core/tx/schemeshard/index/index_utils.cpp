@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/scheme_types/scheme_type_registry.h>
 
 namespace NKikimr {
 namespace NTableIndex {
@@ -268,7 +269,7 @@ void FillIndexImplTableColumns(
                 column->ClearDefaultValue();
             }
         } else {
-            static_assert(dependent_false<TColumn>::value);
+            static_assert(TDependentFalse<TColumn>);
         }
         if (column) {
             ui32 order = i++;

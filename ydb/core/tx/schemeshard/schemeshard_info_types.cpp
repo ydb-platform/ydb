@@ -23,6 +23,7 @@
 #include <ydb/core/util/pb.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
 
 #include <util/generic/algorithm.h>
 

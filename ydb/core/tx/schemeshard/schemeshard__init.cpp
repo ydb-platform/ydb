@@ -1,7 +1,14 @@
+#include "schemeshard_info_types.h"
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include "schemeshard__backup_collection_common.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_impl.h"
+
+#include "olap/manager/manager.h"
+
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>

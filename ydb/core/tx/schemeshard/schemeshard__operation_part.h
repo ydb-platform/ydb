@@ -1,8 +1,8 @@
 #pragma once
 
-#include "schemeshard__operation_db_changes.h"
-#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard_modify_scheme.h"
 #include "schemeshard__operation_side_effects.h"
+#include "schemeshard_path_element.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
@@ -12,6 +12,7 @@
 #include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
+#include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
@@ -91,6 +92,8 @@ namespace NSchemeShard {
 
 class TSchemeShard;
 class TPath;
+class TMemoryChanges;
+class TStorageChanges;
 
 struct TOperationContext {
 public:

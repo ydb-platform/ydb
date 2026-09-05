@@ -1,8 +1,12 @@
+#include "schemeshard_info_types.h"
 #include "schemeshard__operation_memory_changes.h"
 
 #include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
+
+TMemoryChanges::TMemoryChanges() = default;
+TMemoryChanges::~TMemoryChanges() = default;
 
 template <typename I, typename C, typename H>
 static void GrabNew(const I& id, const C& cont, H& holder) {

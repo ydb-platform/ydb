@@ -1,3 +1,4 @@
+#include "schemeshard_info_types.h"
 #include "common/validation.h"
 #include "schemeshard_info_types.h"
 

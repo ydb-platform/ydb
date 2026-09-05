@@ -1,4 +1,6 @@
 #include "schemeshard__operation_restore_backup_collection.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__op_traits.h"

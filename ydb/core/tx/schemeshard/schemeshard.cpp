@@ -3,6 +3,22 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_types.h"
 
+#include <ydb/library/ydb_issue/issue_helpers.h>
+
+namespace NKikimr::NSchemeShard::TEvSchemeShard {
+
+void TEvModifySchemeTransactionResult::AddWarning(const TString& text) {
+    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::WARNING, text);
+    NYql::IssueToMessage(issue, Record.AddIssues());
+}
+
+void TEvModifySchemeTransactionResult::AddNotice(const TString& text) {
+    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::INFO, text);
+    NYql::IssueToMessage(issue, Record.AddIssues());
+}
+
+} // namespace NKikimr::NSchemeShard::TEvSchemeShard
+
 namespace NKikimr {
 namespace NSchemeShard {
     TEvSchemeShard::TEvInitTenantSchemeShard::TEvInitTenantSchemeShard(

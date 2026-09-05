@@ -1,3 +1,5 @@
+#include <ydb/core/tx/datashard/datashard.h>
+#include "schemeshard_info_types.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
 

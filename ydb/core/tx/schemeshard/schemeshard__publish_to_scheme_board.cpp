@@ -1,4 +1,6 @@
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_path_describer.h"
 
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>

@@ -1,5 +1,7 @@
 #include "schemeshard_import_getters.h"
 
+#include <ydb/core/base/path.h>
+
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
 #include "schemeshard_xxport__helpers.h"

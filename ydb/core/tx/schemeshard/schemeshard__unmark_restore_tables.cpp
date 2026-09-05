@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "olap/table/table.h"
 
 namespace NKikimr::NSchemeShard {
 

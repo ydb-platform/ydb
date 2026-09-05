@@ -1,7 +1,5 @@
 #pragma once
 
-#include "olap/schema/schema.h"
-#include "olap/schema/update.h"
 #include "schemeshard_identificators.h"
 #include "schemeshard_info_types_helpers.h"
 #include "schemeshard_path_element.h"
@@ -38,12 +36,12 @@
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/test_shard_control.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
-#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/util/counted_leaky_bucket.h>
@@ -64,6 +62,9 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr {
+
+bool PartitionConfigHasExternalBlobsEnabled(const NKikimrSchemeOp::TPartitionConfig& partitionConfig);
+
 namespace NSchemeShard {
 using namespace NTableIndex;
 
@@ -1959,6 +1960,7 @@ enum class EPathCategory : ui8 {
     System,
 };
 
+#ifndef SCHEMESHARD_INFO_TYPES_WITHOUT_SUBDOMAIN
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     using TPtr = TIntrusivePtr<TSubDomainInfo>;
     using TConstPtr = TIntrusiveConstPtr<TSubDomainInfo>;
@@ -2829,6 +2831,7 @@ private:
         return tablets;
     }
 };
+#endif
 
 struct TBlockStorePartitionInfo : public TSimpleRefCount<TBlockStorePartitionInfo> {
     using TPtr = TIntrusivePtr<TBlockStorePartitionInfo>;

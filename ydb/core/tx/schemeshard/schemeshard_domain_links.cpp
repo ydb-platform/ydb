@@ -1,3 +1,4 @@
+#include "schemeshard_info_types.h"
 #include "schemeshard_domain_links.h"
 
 #include "schemeshard_impl.h"

@@ -1,5 +1,11 @@
+#include <ydb/core/tx/datashard/datashard.h>
+#include "schemeshard_info_types.h"
 #include "schemeshard__stats_impl.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
+
+#include "olap/store/store.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>

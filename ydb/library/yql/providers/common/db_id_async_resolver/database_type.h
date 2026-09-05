@@ -25,7 +25,6 @@ enum class EDatabaseType {
     Prometheus,
     MongoDB,
     OpenSearch,
-    YdbTopics,
 };
 
 std::set<TString> GetAllExternalDataSourceTypes();

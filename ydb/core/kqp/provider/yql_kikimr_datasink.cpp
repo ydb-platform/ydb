@@ -1054,11 +1054,16 @@ public:
                 .Repeat(TExprStep::RewriteIO);
 
         YQL_ENSURE(ExternalSourceFactory);
-        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(externalSource.Type);
+        // For YDB topics route to the PQ provider directly via the IsTopic
+        // flag; otherwise resolve the provider from the connection type.
+        const auto externalSourceInfo = ExternalSourceFactory->GetOrCreate(externalSource.Type);
+        const TString providerName = externalSource.IsTopic
+            ? TString{NYql::PqProviderName}
+            : externalSourceInfo->GetName();
         if (externalSource.SourceType == ESourceType::ExternalDataSource) {
             auto writeArgs = node->ChildrenList();
             writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())
-                            .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
+                            .Category(ctx.NewAtom(node->Pos(), providerName))
                             .FreeArgs()
                                 .Add(writeArgs[1]->ChildrenList()[1])
                             .Build()

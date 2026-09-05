@@ -74,9 +74,6 @@ struct TExternalDataSource : public IExternalSource {
             }
         }
 
-        if (proto.GetSourceType() == ToString(NYql::EDatabaseType::YdbTopics)) {
-            throw TExternalSourceException() << "External source with type " << proto.GetSourceType() << " is not allowed, use " << ToString(NYql::EDatabaseType::Ydb)  << " source type to read from topics ";
-        }
         ValidateHostname(HostnamePatterns, proto.GetLocation());
     }
 

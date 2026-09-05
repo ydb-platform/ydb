@@ -852,6 +852,11 @@ struct TExternalSource {
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
     TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
     ui64 WriteOperations = 0;
+    // True when the underlying object is a YDB topic (or CDC stream).
+    // Decouples the read/write provider routing (PQ vs Generic) from the
+    // EDS connection type string, so that ExternalSource.Type always
+    // describes the connection (e.g. "Ydb") and never the object kind.
+    bool IsTopic = false;
 };
 
 enum EMetaSerializationType : ui64 {

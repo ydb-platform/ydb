@@ -175,11 +175,17 @@ common:
   - from: /operations/manage-users-attr.md
     to: /dev/custom-attributes.md
   - from: /operations/query_plans_optimization.md
-    to: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
   - from: /dev/query-plans-optimization.md
-    to: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
   - from: /dev/query-hints.md
-    to: /dev/query-execution-optimization/query-hints.md
+    to: /dev/optimization/hints.md
+  - from: /dev/query-execution-optimization/index.md
+    to: /dev/optimization/index.md
+  - from: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
+  - from: /dev/query-execution-optimization/query-hints.md
+    to: /dev/optimization/hints.md
   - from: /best_practices/cdc.md
     to: /dev/cdc.md
   - from: /best_practices/pk-olap-scalability.md

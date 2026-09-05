@@ -186,6 +186,7 @@ bool IsCreate(ETxType t) {
         case TxRotateCdcStreamAtTable:
             return false; // IsCreate
         case TxTruncateTable:
+        case TxTruncateColumnTable:
             return false; // IsCreate
         case TxInvalid:
         case TxAllocatePQ:
@@ -329,6 +330,7 @@ bool IsDrop(ETxType t) {
         case TxMoveSequence:
             return false; // IsDrop
         case TxTruncateTable:
+        case TxTruncateColumnTable:
             return false; // IsDrop
         case TxInvalid:
         case TxAllocatePQ:
@@ -469,6 +471,7 @@ bool CanDeleteParts(ETxType t) {
         case TxAlterStreamingQuery:
         case TxIncrementalRestoreFinalize:
         case TxTruncateTable:
+        case TxTruncateColumnTable:
             return false; // CanDeleteParts
         case TxInvalid:
         case TxAllocatePQ:

@@ -71,8 +71,10 @@ void CreateSecret(const TString& secretName, const TString& secretValue, TSessio
     UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, queryResult.GetStatus(), queryResult.GetIssues().ToString());
 }
 
-void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bool createSecondaryIndex = false) {
+void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bool createSecondaryIndex = false, bool columnTable = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
+    // featureFlags.SetEnableTruncateTable(true);
+    featureFlags.SetEnableTruncateColumnTable(true);
     TKikimrRunner kikimr(featureFlags);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -80,14 +82,16 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
     auto queryClient = kikimr.GetQueryClient();
 
     {
+        const auto store = columnTable ? "COLUMN" : "ROW";
         TString query = Sprintf(R"(
             CREATE TABLE %s (
-                k Uint32,
+                k Uint32 NOT NULL,
                 v String,
                 PRIMARY KEY(k)
-            );
+            )
+            WITH (STORE = %s)
         )"
-        , tablePath.c_str());
+        , tablePath.c_str(), store);
 
         auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -113,7 +117,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
         )"
         , tablePath.c_str());
 
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
@@ -125,7 +129,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
 
         if (useQueryClient) {
             auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         } else {
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -138,7 +142,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
         )"
         , tablePath.c_str());
 
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto resultSet = result.GetResultSet(0);
@@ -14769,20 +14773,20 @@ END DO)",
             result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableFullPathTableClient) {
-        TestTruncateTable("`/Root/TestTable`", false);
+    Y_UNIT_TEST_TWIN(SimpleTruncateTableFullPathTableClient, ColumnTable) {
+        TestTruncateTable("`/Root/TestTable`", false, false, ColumnTable);
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableNameOnlyTableClient) {
-        TestTruncateTable("TestTable", false);
+    Y_UNIT_TEST_TWIN(SimpleTruncateTableNameOnlyTableClient, ColumnTable) {
+        TestTruncateTable("TestTable", false, false, ColumnTable);
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableFullPathQueryClient) {
-        TestTruncateTable("`/Root/TestTable`", true);
+    Y_UNIT_TEST_TWIN(SimpleTruncateTableFullPathQueryClient, ColumnTable) {
+        TestTruncateTable("`/Root/TestTable`", true, false, ColumnTable);
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableNameOnlyQueryClient) {
-        TestTruncateTable("TestTable", true);
+    Y_UNIT_TEST_TWIN(SimpleTruncateTableNameOnlyQueryClient, ColumnTable) {
+        TestTruncateTable("TestTable", true, false, ColumnTable);
     }
 
     Y_UNIT_TEST(TruncateTableWithSecondaryIndex) {
@@ -14993,6 +14997,194 @@ END DO)",
             )").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path `/Root/WrongTable` does not exist");
+        }
+    }
+
+    Y_UNIT_TEST(TruncateColumnTableInStoreFails) {
+        // TRUNCATE is only supported for standalone column tables. A column table that belongs to a
+        // column store (TABLESTORE) must be rejected on propose (both on SchemeShard and column shard).
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableTruncateColumnTable(true);
+        TKikimrRunner kikimr(runnerSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLESTORE `/Root/TestStore` (
+                    k Uint32 NOT NULL,
+                    v String,
+                    PRIMARY KEY (k)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestStore/TestTable` (
+                    k Uint32 NOT NULL,
+                    v String,
+                    PRIMARY KEY (k)
+                )
+                PARTITION BY HASH (k)
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/TestStore/TestTable`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TRUNCATE TABLE is not supported for column tables in a column store");
+        }
+    }
+
+    Y_UNIT_TEST(TruncateColumnTableWithTieringFails) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.SetEnableTieringInColumnShard(true);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableTruncateColumnTable(true);
+        TTestHelper testHelper(runnerSettings);
+        auto session = testHelper.GetSession();
+
+        testHelper.CreateTier("tier1");
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Utf8),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableWithTiering")
+            .SetPrimaryKey({"created_at", "id"})
+            .SetSharding({"created_at"})
+            .SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        testHelper.SetTiering(testTable.GetName(), "/Root/tier1", "created_at");
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/ColumnTableWithTiering`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot truncate column table with tiering");
+        }
+
+        {
+            auto desc = session.DescribeTable(testTable.GetName()).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(),
+                "/Root/tier1");
+        }
+    }
+
+    Y_UNIT_TEST(TruncateColumnTablePreservesTtl) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableTruncateColumnTable(true);
+        TTestHelper testHelper(runnerSettings);
+        auto session = testHelper.GetSession();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Utf8),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableWithTtl")
+            .SetPrimaryKey({"created_at", "id"})
+            .SetSharding({"created_at"})
+            .SetSchema(schema)
+            .SetTTL("created_at", "Interval(\"PT1H\")");
+        testHelper.CreateTable(testTable);
+
+        {
+            auto desc = session.DescribeTable(testTable.GetName()).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            UNIT_ASSERT_VALUES_EQUAL(
+                desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(),
+                TDuration::Hours(1));
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/ColumnTableWithTtl`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto desc = session.DescribeTable(testTable.GetName()).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            UNIT_ASSERT_VALUES_EQUAL(
+                desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(),
+                TDuration::Hours(1));
+        }
+    }
+
+    Y_UNIT_TEST(TruncateTableWithColumnFamilies) {
+        // Column families are allowed with TRUNCATE for row tables (the former forbid was removed).
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TableWithFamilies` (
+                    Key Uint64,
+                    Value1 String FAMILY Family1,
+                    Value2 Uint32,
+                    PRIMARY KEY (Key),
+                    FAMILY Family1 (
+                        COMPRESSION = "off"
+                    )
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                UPSERT INTO `/Root/TableWithFamilies` (Key, Value1, Value2) VALUES (1, "a", 10);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/TableWithFamilies`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT COUNT(*) FROM `/Root/TableWithFamilies`;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto rows = result.GetResultSetParser(0);
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser(0).GetUint64(), 0);
         }
     }
 

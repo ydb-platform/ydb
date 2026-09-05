@@ -363,6 +363,7 @@ public:
     }
 
     ui64 GetNodePortionsCountLimitVerified(const ui64 tabletId = 0) const;
+    ui64 GetPortionsCount() const;
 
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);

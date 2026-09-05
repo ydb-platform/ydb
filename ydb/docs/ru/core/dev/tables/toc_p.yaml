@@ -1,0 +1,8 @@
+items:
+- name: Строковые
+  href: partitioning/index.md
+  include:
+    mode: link
+    path: partitioning/toc_p.yaml
+- name: Колоночные
+  href: partitioning/column-oriented.md

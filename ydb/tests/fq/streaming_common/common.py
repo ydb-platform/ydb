@@ -53,6 +53,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
@@ -64,7 +65,6 @@ def get_ydb_config(request, enable_fq_connector=None):
     )
 
     extra_feature_flags = {
-        "enable_external_data_sources",
         "enable_streaming_queries_counters",
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
@@ -72,12 +72,19 @@ def get_ydb_config(request, enable_fq_connector=None):
         "allow_ydb_requests_without_database",
         "enable_updating_partitions_on_streaming_query_restart",
     }
+    disabled_feature_flags = []
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
+    else:
+        disabled_feature_flags.append("enable_shared_reading_in_streaming_queries")
+
     if enable_shared_reading_structured_json_parsing:
         extra_feature_flags.add("enable_shared_reading_structured_json_parsing")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+    else:
+        disabled_feature_flags.append("enable_streaming_queries")
+
     if enable_dq_source_stream_lookup_join_local_lookups:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
     if enable_dq_source_stream_lookup_join_fullscan:
@@ -85,7 +92,6 @@ def get_ydb_config(request, enable_fq_connector=None):
     if enable_dq_source_stream_lookup_join_shuffle_mode:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_shuffle_mode")
 
-    disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
@@ -99,6 +105,11 @@ def get_ydb_config(request, enable_fq_connector=None):
         disabled_feature_flags.append("enable_access_service_v2_interface")
 
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
+
+    if enable_external_data_sources:
+        extra_feature_flags.add("enable_external_data_sources")
+    else:
+        disabled_feature_flags.append("enable_external_data_sources")
 
     replication_config = {
         "iam_service_control": {
@@ -580,7 +591,8 @@ class StreamingTestBase(TestYdsBase):
         endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)
         self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared=shared)
+        if not local_topics:
+            self.create_source(kikimr, source_name, shared=shared)
 
         if local_topics:
             return f"`{self.input_topic}`", endpoint

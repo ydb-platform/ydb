@@ -252,6 +252,24 @@ message TRlPath {
     optional string ResourcePath = 2;
 }
 
+message TProxyRequestHop {
+    optional uint32 NodeId = 1;
+    optional uint32 TargetNodeId = 2;
+    optional uint64 DurationUs = 3;
+}
+
+message TUserFacingTraceRequest {
+    optional NActorsProto.TTraceId TraceId = 1;
+    repeated TProxyRequestHop ProxyRequestHops = 2;
+    optional uint64 OriginSentAtUs = 3;
+}
+
+message TUserFacingTraceResult {
+    optional string Name = 1;
+    optional string Operation = 2;
+    optional string Coverage = 3;
+}
+
 message TEvQueryRequest {
     optional TQueryRequest Request = 1;
     optional string TraceId = 2;
@@ -263,6 +281,7 @@ message TEvQueryRequest {
     repeated Ydb.Issue.IssueMessage QueryIssues = 7;
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;
     optional NActorsProto.TActorId CancelationActor = 9;
+    optional TUserFacingTraceRequest UserFacingTrace = 10;
 }
 
 message TParameterBinding {
@@ -335,6 +354,12 @@ message TEvQueryResponse {
     reserved 5; // (deprecated) ForcedNewEngine
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
+    optional TUserFacingTraceResult UserFacingTrace = 8;
+}
+
+message TEvUserFacingTraceCompletion {
+    optional Ydb.StatusIds.StatusCode YdbStatus = 1;
+    optional TUserFacingTraceResult UserFacingTrace = 2;
 }
 
 message TCloseSessionRequest {
@@ -931,6 +956,8 @@ message TKqpTableSinkSettings {
     optional bool SkipMissingRows = 28;
     optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
     optional bool CollectAffectedRows = 30;
+    // Non-zero only for an execution that requested buffer lookup diagnostics.
+    optional uint64 BufferLookupDiagnosticsExecutionId = 31;
 }
 
 message TReadVectorTopK {

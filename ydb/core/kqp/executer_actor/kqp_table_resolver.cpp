@@ -29,7 +29,9 @@ public:
         , TxId(txId)
         , UserToken(userToken)
         , SkipUnresolvedNames(skipUnresolvedNames)
-        , TasksGraph(tasksGraph) {}
+        , TasksGraph(tasksGraph)
+        , Diagnostics(tasksGraph.GetMeta().CollectTimeline
+            ? std::make_unique<TTableResolverDiagnosticsCapture>() : nullptr) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -65,6 +67,9 @@ private:
     }
 
     void HandleResolveNames(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (Diagnostics) {
+            Diagnostics->OnNavigateFinished();
+        }
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -228,6 +233,9 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (Diagnostics) {
+            Diagnostics->OnNavigateFinished();
+        }
         AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
@@ -270,6 +278,9 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
+        if (Diagnostics) {
+            Diagnostics->OnResolveKeysFinished();
+        }
         AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
@@ -468,15 +479,24 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
+            if (Diagnostics) {
+                Diagnostics->OnNavigateStarted();
+            }
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
             Become(&TKqpTableResolver::ResolveNamesState);
             return;
         }
 
         if (requestNavigate->ResultSet.size()) {
+            if (Diagnostics) {
+                Diagnostics->OnNavigateStarted();
+            }
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
         } else {
             NavigationFinished = true;
+        }
+        if (Diagnostics) {
+            Diagnostics->OnResolveKeysStarted();
         }
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         Become(&TKqpTableResolver::ResolveKeysState);
@@ -519,6 +539,7 @@ private:
         replyEv->Status = status;
         replyEv->Issues.AddIssue(std::move(issue));
         replyEv->CpuTime = CpuTime;
+        AttachDiagnostics(*replyEv);
         Send(Owner, replyEv.release());
         PassAway();
     }
@@ -529,9 +550,19 @@ private:
         }
         auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->CpuTime = CpuTime;
+        AttachDiagnostics(*replyEv);
 
         Send(Owner, replyEv.release());
         PassAway();
+    }
+
+    void AttachDiagnostics(TEvKqpExecuter::TEvTableResolveStatus& reply) {
+        if (!Diagnostics) {
+            return;
+        }
+        auto snapshot = Diagnostics->Finish();
+        reply.NavigateWindow = snapshot.Navigate;
+        reply.ResolveKeysWindow = snapshot.ResolveKeys;
     }
 
 private:
@@ -548,6 +579,7 @@ private:
 
     // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API).
     TKqpTasksGraph& TasksGraph;
+    std::unique_ptr<TTableResolverDiagnosticsCapture> Diagnostics;
 
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;

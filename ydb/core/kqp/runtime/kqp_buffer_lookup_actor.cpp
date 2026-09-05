@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
+#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
@@ -78,6 +79,8 @@ public:
         , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId)
+        , ShardReadDiagnostics(Settings.CollectShardDiagnostics
+            ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(Settings.ParentTraceId), "LookupActor") {
     }
 
@@ -335,6 +338,9 @@ public:
     }
 
     void StartTableRead(ui64 cookie, ui64 shardId, bool isUniqueCheck, bool failOnUniqueCheck, THolder<TEvDataShard::TEvRead> request) {
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnStart(shardId);
+        }
         Settings.Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -436,6 +442,12 @@ public:
         auto& read = readIt->second;
         const auto shardId = read.ShardId;
         const auto cookie = read.LookupCookie;
+
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnFinish(shardId, record.GetRowCount(), read.RetryAttempts,
+                record.HasNodeId() ? record.GetNodeId() : 0,
+                record.GetStatus().GetCode(), record.GetFinished());
+        }
 
         auto& shardState = ShardToState.at(shardId);
 
@@ -808,10 +820,20 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
+        }
         if (LookupActorSpan) {
             LookupActorSpan.EndError(message);
         }
         Settings.Callbacks->OnLookupError(statusCode, id, message, subIssues);
+    }
+
+    void ResetShardDiagnostics(bool collect) override {
+        ShardReadDiagnostics = collect
+            ? std::make_unique<TShardReadDiagnosticsCollector>()
+            : nullptr;
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) override {
@@ -833,14 +855,19 @@ public:
         ReadRowsCount = 0;
         ReadBytesCount = 0;
 
-        // Add lock stats for broken locks
-        if (BrokenLocksCount > 0) {
+        if (BrokenLocksCount > 0 || (ShardReadDiagnostics && !ShardReadDiagnostics->Empty())) {
             NKqpProto::TKqpTaskExtraStats extraStats;
             if (stats->HasExtra()) {
                 stats->GetExtra().UnpackTo(&extraStats);
             }
-            extraStats.MutableLockStats()->SetBrokenAsVictim(
-                extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
+            if (BrokenLocksCount > 0) {
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
+            }
+            if (ShardReadDiagnostics) {
+                ShardReadDiagnostics->Export(extraStats, 0);
+                ResetShardDiagnostics(true);
+            }
             stats->MutableExtra()->PackFrom(extraStats);
             BrokenLocksCount = 0;
         }
@@ -868,6 +895,7 @@ private:
     THashMap<ui64, TLookupState> CookieToLookupState;
     THashMap<ui64, TShardState> ShardToState;
     THashMap<ui64, TReadState> ReadIdToState;
+    std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
 
     ui64 ReadId = 0;
 

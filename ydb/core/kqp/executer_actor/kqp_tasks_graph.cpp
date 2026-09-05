@@ -8,6 +8,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/control.h>
+#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
@@ -1718,7 +1719,6 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                     inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
                 }
             } else if (input.Meta.FullTextSourceSettings) {
-
                 if (snapshot.IsValid()) {
                     input.Meta.FullTextSourceSettings->MutableSnapshot()->SetStep(snapshot.Step);
                     input.Meta.FullTextSourceSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
@@ -1902,6 +1902,9 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
 
     for (const auto& [paramName, paramValue] : task.Meta.TaskParams) {
         (*result->MutableTaskParams())[paramName] = paramValue;
+    }
+    if (GetMeta().CollectShardDiagnostics) {
+        (*result->MutableTaskParams())[ShardReadDiagnosticsTaskParam] = "true";
     }
 
     for (const auto& readRange : task.Meta.ReadRanges) {
@@ -3354,6 +3357,9 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
     settings.SetCollectAffectedRows(
         GetMeta().CollectAffectedRows && !settings.GetIsIndexImplTable());
 
+    if (GetMeta().CollectBufferLookupDiagnostics) {
+        settings.SetBufferLookupDiagnosticsExecutionId(GetMeta().ExecuterId.LocalId());
+    }
         // Use per-transaction QuerySpanId if available (for deferred effects),
         // otherwise fall back to global QuerySpanId; apply per-table suppression.
         {

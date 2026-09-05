@@ -3,9 +3,11 @@
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
+#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
+#include <ydb/core/kqp/common/events/query.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/common/kqp_query_text_cache_events.h>
@@ -109,6 +111,59 @@ bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
         }
     }
     return false;
+}
+
+std::optional<TExecutionDiagnosticsPolicy> MakeExecutionDiagnosticsPolicy(const TKqpQueryState* queryState) {
+    if (!queryState || !queryState->UserFacingTrace) {
+        return std::nullopt;
+    }
+    return queryState->UserFacingTrace->GetDiagnosticsPolicy();
+}
+
+TUserFacingQueryMetrics BuildUserFacingQueryMetrics(const TKqpQueryStats& stats) {
+    TUserFacingQueryMetrics result;
+    result.ConsumedRu = CalcRequestUnit(stats);
+    result.LocksBrokenAsBreaker = stats.LocksBrokenAsBreaker;
+    result.LocksBrokenAsVictim = stats.LocksBrokenAsVictim;
+    for (const auto& execution : stats.Executions) {
+        for (const auto& table : execution.GetTables()) {
+            result.RowsRead += table.GetReadRows();
+            result.RowsWritten += table.GetWriteRows();
+            result.BytesRead += table.GetReadBytes();
+        }
+    }
+    return result;
+}
+
+IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
+        const TString& statusCode, NKikimrKqp::TEvQueryResponse* response = nullptr) {
+    auto context = std::move(state.UserFacingTrace);
+    if (!context) {
+        return nullptr;
+    }
+
+    TUserFacingQueryCompletion completion;
+    completion.FallbackName = FallbackUserFacingQueryName(state.GetType(), state.GetAction());
+    if (state.RequestEv && state.RequestEv->GetQuerySize() <= MaxUserFacingQueryTextSize) {
+        completion.QueryText = state.RequestEv->ExtractQuery();
+    }
+    if (state.UserRequestContext) {
+        completion.PoolId = state.UserRequestContext->PoolId;
+    }
+    completion.Metrics = BuildUserFacingQueryMetrics(state.QueryStats);
+    completion.Success = success;
+    completion.StatusCode = statusCode;
+
+    auto snapshot = context->DetachSnapshot(std::move(completion));
+    if (response) {
+        auto* trace = response->MutableUserFacingTrace();
+        trace->SetName(snapshot.RootName);
+        trace->SetOperation(snapshot.Operation);
+        if (snapshot.ExecutionDelegated) {
+            trace->SetCoverage("routing_session_only");
+        }
+    }
+    return CreateUserFacingTraceRendererActor(std::move(snapshot));
 }
 
 class TRequestFail : public yexception {
@@ -346,6 +401,9 @@ public:
         Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
             "Cannot send to workload manager: PoolConfig is already resolved");
 
+        if (QueryState->UserFacingTrace) {
+            QueryState->UserFacingTrace->StartAdmission();
+        }
         Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
             QueryState->QueryId,
             QueryState->UserRequestContext->DatabaseId,
@@ -361,6 +419,9 @@ public:
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        if (QueryState->UserFacingTrace) {
+            QueryState->UserFacingTrace->MarkExecutionDelegated();
+        }
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
                 FederatedQuerySetup, ModuleResolverState, Counters, Settings.QueryService, GUCSettings));
@@ -675,6 +736,9 @@ public:
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
                 {"traceId", TraceId()});
+            if (QueryState && QueryState->UserFacingTrace) {
+                QueryState->UserFacingTrace->FinishAdmission(Ydb::StatusIds::UNAVAILABLE);
+            }
             ContinueAfterWmAdmission();
             return;
         }
@@ -718,6 +782,10 @@ public:
             return;
         }
         QueryState->ContinueTime = TInstant::Now();
+        if (QueryState->UserFacingTrace) {
+            QueryState->UserFacingTrace->FinishAdmission(
+                ev->Get()->Status, QueryState->ContinueTime);
+        }
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             YDB_LOG_TRACE("Failed to place request in resource pool, feature flag is disabled",
@@ -884,6 +952,7 @@ public:
 
         // quick path
         if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx, QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
+            MarkCompileCacheHit();
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             // even if we have successfully compilation result, it doesn't mean anything
@@ -909,7 +978,43 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
 
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+        SendCompileServiceRequest(ev.release());
+    }
+
+    void MarkCompileStart() {
+        if (!QueryState || !QueryState->UserFacingTrace) {
+            return;
+        }
+        QueryState->UserFacingTrace->BeginCompile();
+    }
+
+    void MarkCompileCacheHit() {
+        if (!QueryState || !QueryState->UserFacingTrace) {
+            return;
+        }
+        QueryState->UserFacingTrace->RecordCompileCacheHit(
+            QueryState->CompileResult->Status);
+    }
+
+    void MarkCompileEnd(TEvKqp::TEvCompileResponse& response) {
+        if (!QueryState || !QueryState->UserFacingTrace) {
+            return;
+        }
+        QueryState->UserFacingTrace->FinishCompile(
+            response.Stats.FromCache, response.CompileResult->Status,
+            std::move(response.CompileDiagnostics), response.CompileActorDiagnostic);
+    }
+
+    void MarkSplitEnd(const TEvKqp::TEvSplitResponse& response) {
+        if (!QueryState || !QueryState->UserFacingTrace) {
+            return;
+        }
+        QueryState->UserFacingTrace->FinishSplit(response.Status);
+    }
+
+    void SendCompileServiceRequest(IEventBase* request) {
+        MarkCompileStart();
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), request, 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
     }
 
@@ -922,8 +1027,7 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
 
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-            QueryState->KqpSessionSpan.GetTraceId());
+        SendCompileServiceRequest(ev.release());
         Become(&TKqpSessionActor::ExecuteState);
     }
 
@@ -951,8 +1055,7 @@ public:
 
             auto txCtx = GetTxContextForCompilation();
             auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, txCtx);
-            Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-                QueryState->KqpSessionSpan.GetTraceId());
+            SendCompileServiceRequest(ev.release());
             return;
         }
 
@@ -968,6 +1071,7 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
+        MarkCompileEnd(*ev->Get());
 
         // saving compile response and checking that compilation status
         // is success.
@@ -978,8 +1082,7 @@ public:
                 if (!QueryState->HasTxControl()) {
                     YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE || QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN);
                     auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
-                    Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-                        QueryState->KqpSessionSpan.GetTraceId());
+                    SendCompileServiceRequest(ev.release());
                 } else {
                     NYql::TIssues issues;
                     ReplyQueryError(
@@ -1017,6 +1120,7 @@ public:
 
         // quick path
         if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx, QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
+            MarkCompileCacheHit();
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             QueryState->CompileResult->IncUsage();
@@ -1042,8 +1146,7 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
 
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
-            QueryState->KqpSessionSpan.GetTraceId());
+        SendCompileServiceRequest(request.release());
     }
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev) {
@@ -1055,6 +1158,7 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
+        MarkSplitEnd(*ev->Get());
         if (!QueryState->SaveAndCheckSplitResult(ev->Get())) {
             ReplySplitError(ev->Get());
             return;
@@ -1695,6 +1799,7 @@ public:
             }
 
             request.StatsMode = queryState->GetStatsMode();
+            request.DiagnosticsPolicy = MakeExecutionDiagnosticsPolicy(queryState);
             request.CollectAffectedRows = queryState->GetCollectAffectedRows();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();
@@ -2342,7 +2447,7 @@ public:
                 .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
-                .Alloc = std::move(alloc)
+                .Alloc = std::move(alloc),
             };
 
             settings.UserCtx = CreateUserContext();
@@ -2773,6 +2878,10 @@ public:
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
+        if (QueryState->UserFacingTrace) {
+            QueryState->UserFacingTrace->AddExecutions(ev->ExecutionTraces,
+                ev->ExecutionTraceTotals, ev->ExecutionTracesDropped);
+        }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
         QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
@@ -2937,7 +3046,11 @@ public:
         }
 
         if (ExecuterId) {
-            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
+            Send(ExecuterId, new TEvKqpBuffer::TEvError{
+                msg.StatusCode,
+                std::move(msg.Issues),
+                std::move(msg.Stats),
+                std::move(msg.CommitDiagnostics)}, IEventHandle::FlagTrackDelivery);
         } else {
             // No executer to forward to; emit victim TLI stats directly since
             // ProcessExecuterResult (which normally handles this) won't be called.
@@ -2984,7 +3097,11 @@ public:
                 {"traceId", TraceId()});
         }
 
-        Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
+        Send(ExecuterId, new TEvKqpBuffer::TEvError{
+            msg.StatusCode,
+            std::move(msg.Issues),
+            std::move(msg.Stats),
+            std::move(msg.CommitDiagnostics)}, IEventHandle::FlagTrackDelivery);
     }
 
     void CollectSystemViewQueryStats(const TKqpQueryStats* stats, TDuration queryDuration,
@@ -3391,7 +3508,26 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
+        if (request->Get()->Record.HasUserFacingTrace()
+                && request->Get()->Record.GetUserFacingTrace().HasTraceId()) {
+            TString traceName = NKikimrKqp::EQueryAction_Name(request->Get()->GetAction());
+            constexpr TStringBuf actionPrefix = "QUERY_ACTION_";
+            if (traceName.StartsWith(actionPrefix)) {
+                traceName = traceName.substr(actionPrefix.size());
+            }
+            auto* trace = response->Record.MutableUserFacingTrace();
+            trace->SetName(traceName);
+            trace->SetOperation(traceName);
+            trace->SetCoverage("rejected_before_query_state");
+        }
+
+        IActor* userFacingRenderer = CreateRejectedUserFacingTraceRendererActor(
+            *request->Get(), ydbStatus);
+
         Send(request->Sender, response.release(), 0, proxyRequestId);
+        if (userFacingRenderer) {
+            Register(userFacingRenderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+        }
     }
 
     void ReplyResolveError(const TEvKqpExecuter::TEvTableResolveStatus& ev) {
@@ -3494,7 +3630,13 @@ public:
 
         KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record, responseByteSize));
 
+        IActor* userFacingRenderer = CreateUserFacingTraceRenderer(*QueryState,
+            status == Ydb::StatusIds::SUCCESS, Ydb::StatusIds::StatusCode_Name(status), &record);
+
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
+        if (userFacingRenderer) {
+            Register(userFacingRenderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+        }
         YDB_LOG_DEBUG("Sent query response back to proxy",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -3795,8 +3937,24 @@ public:
             {"isFinal", isFinal},
             {"traceId", TraceId()});
 
-        if (QueryResponse)
+        if (QueryResponse) {
             Reply();
+        } else if (QueryState && QueryState->UserFacingTrace) {
+            if (QueryState->KqpSessionSpan) {
+                QueryState->KqpSessionSpan.EndError("Request ended without a response");
+            }
+            NKikimrKqp::TEvQueryResponse traceSummary;
+            if (IActor* renderer = CreateUserFacingTraceRenderer(*QueryState, /*success*/ false,
+                    Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::CANCELLED), &traceSummary)) {
+                Register(renderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+
+                auto completion = MakeHolder<TEvKqp::TEvUserFacingTraceCompletion>();
+                completion->Record.SetYdbStatus(Ydb::StatusIds::CANCELLED);
+                completion->Record.MutableUserFacingTrace()->CopyFrom(
+                    traceSummary.GetUserFacingTrace());
+                Send(QueryState->Sender, completion.Release(), 0, QueryState->ProxyRequestId);
+            }
+        }
 
         if (CleanupCtx)
             Counters->ReportSessionActorCleanupLatency(Settings.DbCounters, TInstant::Now() - CleanupCtx->Start);

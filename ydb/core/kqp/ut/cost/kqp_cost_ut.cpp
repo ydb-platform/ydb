@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <format>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -2435,23 +2436,19 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             }
         });
 
-        // Change status of TEvTxResponse to set retriable error status for first maxRetries responses
-        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
-        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
-            if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
-                if (executerIds.find(ev->Sender) == executerIds.end()) {
-                    return;
-                }
-
-                if (ev->Get()->Record.GetResponse().GetStatus() == Ydb::StatusIds::SUCCESS) {
-                    if (retryCount < maxRetries) {
-                        // Set retriable error status to trigger retry
-                        ev->Get()->Record.MutableResponse()->SetStatus(Ydb::StatusIds::OVERLOADED);
-                        ++retryCount;
-                    }
-                }
+        auto injectBufferError = [&](auto& ev) {
+            if (partitionedId && executerIds.contains(ev->Sender) && retryCount < maxRetries) {
+                auto error = std::make_unique<TEvKqpBuffer::TEvError>(
+                    NYql::NDqProto::StatusIds::OVERLOADED,
+                    NYql::TIssues{NYql::TIssue("Test retriable buffer error")},
+                    std::nullopt);
+                runtime.Send(new IEventHandle(*partitionedId, ev->Recipient, error.release()));
+                ev.Reset();
+                ++retryCount;
             }
-        });
+        };
+        const auto commitObserver = runtime.AddObserver<TEvKqpBuffer::TEvCommit>(injectBufferError);
+        const auto flushObserver = runtime.AddObserver<TEvKqpBuffer::TEvFlush>(injectBufferError);
 
         const auto query = R"(
             BATCH UPDATE `/Root/TestTable`

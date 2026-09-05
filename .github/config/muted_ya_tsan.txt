@@ -110,7 +110,6 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Partition
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_ProducerId
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_SeqNo
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_WriteTimestamp
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.NullableColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingJsonMessage
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTable
@@ -126,7 +125,6 @@ ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
 ydb/core/transfer/ut/functional Transfer.DescribeTransferWithErrorTopicNotFound
 ydb/core/transfer/ut/functional Transfer.DropTransfer
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
-ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Remote
 ydb/core/transfer/ut/functional Transfer.PausedAfterError
 ydb/core/transfer/ut/functional unittest.sole chunk
 ydb/core/transfer/ut/row_table Transfer_RowTable.ComplexKey
@@ -136,10 +134,8 @@ ydb/core/transfer/ut/row_table Transfer_RowTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/transfer_metrics TransferMetrics.TestDescribeTransfer
 ydb/core/transfer/ut/transfer_metrics unittest.sole chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
-ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-true
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
 ydb/core/tx/tx_proxy/ut_schemereq unittest.[*/*] chunk
-ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.CreateDummyTabletsInDifferentDomains
 ydb/library/actors/http/ut HttpProxy.RequestAfter307
 ydb/library/actors/http/ut HttpProxy.StreamingResponseWithProgress1
 ydb/library/actors/http/ut unittest.sole chunk
@@ -147,8 +143,6 @@ ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/services/config/ut unittest.sole chunk
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDiscoverClusters
-ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk
-ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Int8]
 ydb/tests/fq/http_api py3test.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/backup unittest.sole chunk
@@ -166,7 +160,6 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_resize
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_infer_pdisk_slot_count
-ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_populate
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_set_status_inactive
 ydb/tests/functional/encryption py3test.sole chunk
@@ -633,8 +626,6 @@ ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[15]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[16]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[17]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[19]
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[1]
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[20]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[7]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[8]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[9]
@@ -808,7 +799,6 @@ ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnComp
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/cdc/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareIndexPerformance.test_vector
-ydb/tests/stress/fulltext_workload/tests py3test.sole chunk
 ydb/tests/stress/fulltext_workload/tests test_workload.py.TestYdbFulltextWorkload.test
 ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
@@ -832,7 +822,6 @@ ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tests/stress/remove_storage_groups/tests test_workload.py.TestYdbAlterStorageWorkload.test
 ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test

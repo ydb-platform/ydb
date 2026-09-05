@@ -4027,7 +4027,12 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
     if (taskCountHint) {
         taskCount = std::min<ui32>(taskCount, taskCountHint);
     } else if (resourceSnapshotSize) {
-        taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
+        if (externalSource.GetType() == NYql::PqSource) {
+            const ui32 tasksByThread = TStagePredictor::GetUsableThreads();
+            taskCount = std::min<ui32>(taskCount, tasksByThread * resourceSnapshotSize);
+        } else {
+            taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
+        }
     }
 
     for (ui32 i = 0; i < taskCount; ++i) {

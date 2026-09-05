@@ -502,11 +502,32 @@ class StreamingTestBase(TestYdsBase):
         timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
         checkpoints_count=2,
     ) -> None:
+
         path = f"{kikimr.get_database_name()}/{query_name}"
-        print(f"wait_completed_checkpoints {path}")
-        wait_completed_checkpoints(
-            kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
-        )
+        try:
+            wait_completed_checkpoints(
+                kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
+            )
+        except AssertionError as error:
+            diagnostics = "failed to retrieve Status / Issues"
+            try:
+                result_sets = kikimr.ydb_client.query(
+                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+                )
+                diagnostics = (
+                    "\n".join(
+                        "Status: {status}\nIssues:\n{issues}".format(
+                            status=row["Status"],
+                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                        )
+                        for row in result_sets[0].rows
+                    )
+                    if result_sets
+                    else []
+                )
+            except Exception as diagnostics_error:
+                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
+            raise AssertionError(f"{error}\n{diagnostics}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(

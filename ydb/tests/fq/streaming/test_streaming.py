@@ -8,7 +8,7 @@ from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, max_json_depth
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, get_sensors, max_json_depth
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
@@ -2423,3 +2423,54 @@ FROM `{table_name}`"""
         assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize(
+        "max_tasks_per_stage, expected_actor_count",
+        [(1, 1), (0, 20), (50, 27)],
+        ids=["max_tasks_1", "default", "max_tasks_50"],
+    )
+    def test_pq_source_actor_count(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        max_tasks_per_stage: int,
+        expected_actor_count: int,
+    ) -> None:
+
+        partitions_count = 100
+        test_name = f"test_pq_source_actor_count_{max_tasks_per_stage or 'default'}"
+        inp, out, _ = self.get_io_names(
+            kikimr,
+            test_name,
+            True,
+            entity_name,
+            partitions_count=partitions_count,
+        )
+        query_name = test_name
+        path = f"/Root/{query_name}"
+
+        kikimr.ydb_client.query(
+            f"""
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                {f'PRAGMA ydb.MaxTasksPerStage = "{max_tasks_per_stage}";' if max_tasks_per_stage else ''}
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;
+            """
+        )
+        self.wait_completed_checkpoints(kikimr, path)
+
+        def streaming_query_tasks_count():
+            return sum(
+                get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
+                    {"path": path, "subsystem": "streaming_queries", "sensor": "streaming.query.tasks.count"}
+                )
+                or 0
+                for node_id in kikimr.cluster.nodes
+            )
+
+        assert wait_for(lambda: streaming_query_tasks_count() == expected_actor_count, timeout_seconds=60, step_seconds=1), (
+            f"Expected {expected_actor_count} streaming query tasks, got {streaming_query_tasks_count()}"
+        )
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

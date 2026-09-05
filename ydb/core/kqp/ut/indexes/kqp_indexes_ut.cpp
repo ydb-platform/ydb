@@ -7712,6 +7712,169 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
 
+    Y_UNIT_TEST(IndexLifecycleInvalidatesCachedReadAndWritePlans) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto scheme = [&](const TString& query) {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+        scheme(R"sql(
+            CREATE TABLE `/Root/IndexLifecycle` (
+                Key Int64,
+                Value Int64,
+                Payload Utf8,
+                PRIMARY KEY (Key)
+            );
+        )sql");
+
+        const TString writeQuery = R"sql(
+            DECLARE $key AS Int64;
+            DECLARE $value AS Int64;
+            UPSERT INTO `/Root/IndexLifecycle` (Key, Value, Payload)
+            VALUES ($key, $value, "payload");
+        )sql";
+        const auto execWrite = [&](i64 key, i64 value, bool fromCache) {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$key").Int64(key).Build()
+                .AddParam("$value").Int64(value).Build()
+                .Build();
+            auto settings = TExecDataQuerySettings()
+                .KeepInQueryCache(true)
+                .CollectQueryStats(ECollectQueryStatsMode::Basic);
+            auto result = session.ExecuteDataQuery(
+                writeQuery, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            const auto stats = TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+        };
+
+        const TString readQuery = R"sql(
+            DECLARE $value AS Int64;
+            SELECT Key FROM `/Root/IndexLifecycle` VIEW `value_idx`
+            WHERE Value = $value ORDER BY Key;
+        )sql";
+        const auto execRead = [&](i64 value, const TString& expected, std::optional<bool> fromCache) {
+            auto params = db.GetParamsBuilder().AddParam("$value").Int64(value).Build().Build();
+            auto settings = TExecDataQuerySettings()
+                .KeepInQueryCache(true)
+                .CollectQueryStats(ECollectQueryStatsMode::Basic);
+            auto result = session.ExecuteDataQuery(
+                readQuery, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            if (!fromCache) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            const auto stats = TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), *fromCache);
+        };
+
+        // Before ADD, the write plan only touches the main table and the explicit VIEW is absent.
+        execWrite(1, 10, false);
+        execWrite(1, 10, true);
+        execRead(10, {}, std::nullopt);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/IndexLifecycle`
+            ADD INDEX value_idx GLOBAL ON (Value);
+        )sql");
+        // ADD invalidates the cached write plan so subsequent writes maintain the new index.
+        execWrite(2, 20, false);
+        execWrite(2, 20, true);
+        execRead(20, "[[[2]]]", false);
+        execRead(20, "[[[2]]]", true);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/IndexLifecycle` DROP INDEX value_idx;
+        )sql");
+        // Neither a stale index write nor a cached VIEW plan may survive DROP.
+        execWrite(3, 30, false);
+        execRead(20, {}, std::nullopt);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/IndexLifecycle`
+            ADD INDEX value_idx GLOBAL ON (Value);
+        )sql");
+        // Recreate with the same name must compile against the new index path and include the row
+        // written while no index existed (the build backfills it).
+        execWrite(4, 40, false);
+        execRead(30, "[[[3]]]", false);
+        execRead(40, "[[[4]]]", true);
+    }
+
+    Y_UNIT_TEST(UniqueIndexLifecycleInvalidatesCachedWritePlan) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        featureFlags.SetEnableOnlineAddUniqueIndex(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto scheme = [&](const TString& query) {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+        scheme(R"sql(
+            CREATE TABLE `/Root/UniqueLifecycle` (
+                Key Int64,
+                Value Int64,
+                PRIMARY KEY (Key)
+            );
+        )sql");
+
+        const TString writeQuery = R"sql(
+            DECLARE $key AS Int64;
+            DECLARE $value AS Int64;
+            UPSERT INTO `/Root/UniqueLifecycle` (Key, Value) VALUES ($key, $value);
+        )sql";
+        const auto execWrite = [&](i64 key, i64 value, EStatus status, std::optional<bool> fromCache = std::nullopt) {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$key").Int64(key).Build()
+                .AddParam("$value").Int64(value).Build()
+                .Build();
+            auto settings = TExecDataQuerySettings()
+                .KeepInQueryCache(true)
+                .CollectQueryStats(ECollectQueryStatsMode::Basic);
+            auto result = session.ExecuteDataQuery(
+                writeQuery, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            if (fromCache) {
+                const auto stats = TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), *fromCache);
+            }
+        };
+
+        execWrite(1, 10, EStatus::SUCCESS, false);
+        execWrite(1, 10, EStatus::SUCCESS, true);
+        scheme(R"sql(
+            ALTER TABLE `/Root/UniqueLifecycle`
+            ADD INDEX unique_idx GLOBAL UNIQUE ON (Value);
+        )sql");
+
+        // The post-ADD execution recompiles with uniqueness enforcement.
+        execWrite(2, 20, EStatus::SUCCESS, false);
+        execWrite(3, 10, EStatus::PRECONDITION_FAILED);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/UniqueLifecycle` DROP INDEX unique_idx;
+        )sql");
+        // A duplicate is legal while the unique index is absent; a stale cached plan must not reject it.
+        execWrite(3, 10, EStatus::SUCCESS, false);
+        execWrite(3, 30, EStatus::SUCCESS, true);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/UniqueLifecycle`
+            ADD INDEX unique_idx GLOBAL UNIQUE ON (Value);
+        )sql");
+        // Recreating under the same name invalidates the no-index plan and enforces uniqueness again.
+        execWrite(4, 40, EStatus::SUCCESS, false);
+        execWrite(5, 10, EStatus::PRECONDITION_FAILED);
+    }
+
     Y_UNIT_TEST(TruncateTableWithAsyncIndexFails) {
         NKikimrConfig::TFeatureFlags featureFlags;
         TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags));

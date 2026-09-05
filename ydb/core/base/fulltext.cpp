@@ -947,15 +947,21 @@ void AddVarintWithFlag(TVector<ui8>& buf, ui64 num, bool flag) {
 ui64 ReadVarint(TConstArrayRef<ui8> buf, size_t& pos) {
     ui64 r = 0;
     ui32 o = 0;
+    bool terminated = false;
     while (pos < buf.size()) {
         ui64 c = buf[pos++];
-        r |= ((c & 0x7F) << o);
+        const ui64 payload = c & 0x7F;
+        Y_ENSURE(payload <= (Max<ui64>() >> o), "Fulltext delta contains an overflowing varint");
+        r |= (payload << o);
         if (!(c & 0x80)) {
+            Y_ENSURE(o == 0 || payload != 0, "Fulltext delta contains a non-canonical varint");
+            terminated = true;
             break;
         }
         o += 7;
         Y_ENSURE(o < 64);
     }
+    Y_ENSURE(terminated, "Fulltext delta contains a truncated varint");
     return r;
 }
 
@@ -968,7 +974,9 @@ ui64 ReadVarintWithFlag(TConstArrayRef<ui8> buf, size_t& pos, bool& flag) {
     flag = !!(c & 0x40);
     ui64 r = c & 0x3F;
     if (c & 0x80) {
-        r |= ReadVarint(buf, pos) << 6;
+        const ui64 tail = ReadVarint(buf, pos);
+        Y_ENSURE(tail <= (Max<ui64>() >> 6), "Fulltext delta contains an overflowing flagged varint");
+        r |= tail << 6;
     }
     return r;
 }
@@ -988,16 +996,26 @@ bool TDeltaReader::Read(ui64& docId, ui32& freq) {
     }
     ui64 prevPos = Pos;
     bool hasFreq = false;
-    if (WithFreq) {
-        docId = LastId + ReadVarintWithFlag(Buf, Pos, hasFreq);
-    } else {
-        docId = LastId + ReadVarint(Buf, Pos);
-    }
+    const ui64 delta = WithFreq
+        ? ReadVarintWithFlag(Buf, Pos, hasFreq)
+        : ReadVarint(Buf, Pos);
     if (!prevPos && Sign) {
-        // Decode first item as zigzag
-        docId = (docId >> 1) ^ -(docId & 1);
+        // Decode first item as zigzag. Every ui64 representation maps to one valid i64 value.
+        docId = (delta >> 1) ^ -(delta & 1);
+    } else if (Sign) {
+        // Signed postings are ordered as i64, while their positive delta intentionally uses modular
+        // ui64 arithmetic when crossing -1 -> 0.
+        docId = LastId + delta;
+        Y_ENSURE(static_cast<i64>(docId) > static_cast<i64>(LastId),
+            "Fulltext delta contains an overflowing signed document id");
+    } else {
+        Y_ENSURE(delta <= Max<ui64>() - LastId, "Fulltext delta contains an overflowing document id");
+        docId = LastId + delta;
     }
-    freq = hasFreq ? ReadVarint(Buf, Pos) : 1;
+    const ui64 decodedFreq = hasFreq ? ReadVarint(Buf, Pos) : 1;
+    Y_ENSURE(decodedFreq <= Max<ui32>(), "Fulltext delta contains an overflowing frequency");
+    Y_ENSURE(!hasFreq || decodedFreq > 1, "Fulltext delta contains a non-canonical frequency");
+    freq = static_cast<ui32>(decodedFreq);
     if (Sign ? ((i64)docId > (i64)MaxId) : (docId > MaxId)) {
         Pos = prevPos;
         return false;
@@ -1140,7 +1158,8 @@ void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr) {
     ui64 docId = 0;
     ui32 freq = 1;
     if (rdr.Reader->Read(docId, freq)) {
-        Items.push_back(TItem{docId, (rdr.Added ? (i32)freq : -(i32)freq), rdrId});
+        const i64 signedFreq = static_cast<i64>(freq);
+        Items.push_back(TItem{docId, rdr.Added ? signedFreq : -signedFreq, rdrId});
         std::push_heap(Items.begin(), Items.end(), Sign ? CompareSigned : CompareItems);
     }
 }
@@ -1168,7 +1187,8 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
                 // Finished, item has positive frequency (not canceled by updates)
                 // Leave NextItem as is
                 docId = cur.DocId;
-                freq = cur.Freq;
+                Y_ENSURE(cur.Freq <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
+                freq = static_cast<ui32>(cur.Freq);
                 return true;
             } else {
                 // Scan the next item
@@ -1180,7 +1200,8 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
     if (cur.Freq > 0) {
         // Finished, item has positive frequency (not canceled by updates)
         docId = cur.DocId;
-        freq = cur.Freq;
+        Y_ENSURE(cur.Freq <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
+        freq = static_cast<ui32>(cur.Freq);
         return true;
     }
     return false;

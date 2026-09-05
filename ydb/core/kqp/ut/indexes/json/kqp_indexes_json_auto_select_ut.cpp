@@ -1,4 +1,9 @@
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_ut_common.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/tx/datashard/datashard.h>
+
+#include <random>
 
 namespace NKikimr::NKqp {
 
@@ -6,6 +11,99 @@ using namespace NYdb::NQuery;
 using namespace NYdb;
 
 namespace {
+
+TKikimrRunner KikimrCompactJsonAutoSelect() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableJsonIndexAutoSelect(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(
+        NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    return TKikimrRunner(settings);
+}
+
+void ExecuteSuccess(TQueryClient& db, const std::string& query) {
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void UpdateJsonFeatureFlagsOnNodes(TKikimrRunner& kikimr, bool enableJsonIndex, bool enableAutoSelect,
+    const TVector<ui32>& nodeIndexes)
+{
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+    NKikimrConfig::TAppConfig config;
+    auto* featureFlags = config.MutableFeatureFlags();
+    featureFlags->SetEnableJsonIndex(enableJsonIndex);
+    featureFlags->SetEnableJsonIndexAutoSelect(enableAutoSelect);
+    config.MutableTableServiceConfig()->SetBackportMode(
+        NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+    for (const ui32 nodeIndex : nodeIndexes) {
+        UNIT_ASSERT_C(nodeIndex < runtime.GetNodeCount(), "invalid node index " << nodeIndex);
+        const auto edgeActor = runtime.AllocateEdgeActor(nodeIndex);
+        const auto nodeId = runtime.GetNodeId(nodeIndex);
+
+        // In production the FeatureFlagsConfigurator updates node-local AppData before subscribers
+        // consume the same dispatcher snapshot. Mirror that ordering on every selected node.
+        runtime.GetAppData(nodeIndex).UpdateRuntimeFlags(*featureFlags);
+
+        for (const auto& service : {
+                MakeKqpProxyID(nodeId),
+                MakeKqpCompileServiceID(nodeId)}) {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *request->Record.MutableConfig() = config;
+            runtime.Send(service, edgeActor, request.Release());
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+                edgeActor, TDuration::Seconds(10));
+            UNIT_ASSERT_C(response,
+                "KQP service must acknowledge the FeatureFlags update on node " << nodeIndex);
+        }
+    }
+}
+
+void UpdateJsonFeatureFlags(TKikimrRunner& kikimr, bool enableJsonIndex, bool enableAutoSelect) {
+    TVector<ui32> nodeIndexes;
+    const ui32 nodeCount = kikimr.GetTestServer().GetRuntime()->GetNodeCount();
+    nodeIndexes.reserve(nodeCount);
+    for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+        nodeIndexes.push_back(nodeIndex);
+    }
+    UpdateJsonFeatureFlagsOnNodes(kikimr, enableJsonIndex, enableAutoSelect, nodeIndexes);
+}
+
+void UpdateJsonAutoSelectConfig(TKikimrRunner& kikimr, bool enabled) {
+    UpdateJsonFeatureFlags(kikimr, /*enableJsonIndex=*/true, enabled);
+}
+
+void ValidateCompactAutoSelectResults(TQueryClient& db, const std::string& predicate,
+    const TString& expected, const std::string& tableName = "TestTable")
+{
+    ValidateAutoSelect(db, predicate, "json_idx", tableName);
+
+    const auto execute = [&](const std::string& view) {
+        const auto query = std::format(
+            "SELECT Key FROM {}{} WHERE {} ORDER BY Key;",
+            tableName, view, predicate);
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return FormatResultSetYson(result.GetResultSet(0));
+    };
+
+    const auto autoSelected = execute("");
+    const auto explicitIndex = execute(" VIEW json_idx");
+    const auto fullScan = execute(" VIEW PRIMARY KEY");
+
+    CompareYson(expected, autoSelected);
+    CompareYson(fullScan, explicitIndex);
+    CompareYson(fullScan, autoSelected);
+}
 
 void ValidateOneOfTwoIndexesSelected(TQueryClient& db, const std::string& predicate,
     const TString& idxA, const TString& idxB, const std::string& tableName = "TestTable")
@@ -41,6 +139,465 @@ TString ExecuteAndAssertJsonPlan(TQueryClient& db, const TString& sql, size_t ex
     CompareYson(expectedYson, actual, sql);
     return actual;
 }
+  
+TString ExecuteKeys(TQueryClient& db, const std::string& view = {}) {
+    const auto query = std::format(R"(
+        SELECT Key FROM TestTable{} WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;
+    )", view);
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return FormatResultSetYson(result.GetResultSet(0));
+}
+
+void ValidateLifecycleResults(TQueryClient& db) {
+    const auto primary = ExecuteKeys(db, " VIEW PRIMARY KEY");
+    const auto automatic = ExecuteKeys(db);
+    CompareYson(R"([[[1u]];[[3u]]])", primary);
+    CompareYson(primary, automatic);
+}
+
+std::string GetSelectedJsonIndex(TQueryClient& db, const std::string& idxA, const std::string& idxB) {
+    const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    auto result = db.ExecuteQuery(
+        R"(SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;)",
+        TTxControl::NoTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetPlan()
+        && NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true),
+        "Failed to parse explain plan");
+
+    const int countA = CountPlanNodesByKv(planJson, "Index", TString(idxA));
+    const int countB = CountPlanNodesByKv(planJson, "Index", TString(idxB));
+    UNIT_ASSERT_VALUES_EQUAL_C(countA + countB, 1,
+        "Expected exactly one JSON index read, got " << countA << " + " << countB);
+    return countA == 1 ? idxA : idxB;
+}
+
+void ValidateDifferentialResults(TQueryClient& db, const std::string& predicate,
+    const std::string& declarations = {}, const TParams& params = TParamsBuilder().Build())
+{
+    const auto makeQuery = [&](const std::string& view) {
+        return declarations + std::format(
+            "\nSELECT Key FROM TestTable{} WHERE {} ORDER BY Key;",
+            view, predicate);
+    };
+
+    const auto execute = [&](const std::string& view) {
+        auto result = db.ExecuteQuery(makeQuery(view), TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(),
+            "Query failed for predicate [" + predicate + "] and view [" + view + "]: "
+                + result.GetIssues().ToString());
+        return FormatResultSetYson(result.GetResultSet(0));
+    };
+
+    const auto primary = execute(" VIEW PRIMARY KEY");
+    const auto explicitIndex = execute(" VIEW json_idx");
+    const auto autoSelected = execute("");
+
+    CompareYson(primary, explicitIndex);
+    CompareYson(primary, autoSelected);
+
+    const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    auto explain = db.ExecuteQuery(makeQuery(""), TTxControl::NoTx(), params, settings).ExtractValueSync();
+    UNIT_ASSERT_C(explain.IsSuccess(),
+        "Explain failed for predicate [" + predicate + "]: " + explain.GetIssues().ToString());
+    UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetPlan(),
+        "Explain plan is empty for predicate [" + predicate + "]");
+
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &planJson, true),
+        "Failed to parse explain plan for predicate [" + predicate + "]");
+    UNIT_ASSERT_C(CountPlanNodesByKv(planJson, "Index", "json_idx") == 1,
+        "json_idx was not auto-selected for predicate [" + predicate + "]");
+}
+
+void TestDifferentialJsonCorrectness(const std::string& jsonType) {
+    auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteSuccess(db, std::format(R"(
+        CREATE TABLE TestTable (
+            Key Uint64,
+            Text {},
+            PRIMARY KEY (Key),
+            INDEX json_idx GLOBAL USING json ON (Text)
+        );
+    )", jsonType));
+
+    ExecuteSuccess(db, std::format(R"(
+        UPSERT INTO TestTable (Key, Text) VALUES
+            (1, {}('{{"kind":"plain","number":0,"nested":{{"items":[{{"name":"alpha","score":1}},{{"name":"beta","score":2}}]}}}}')),
+            (2, {}('{{"kind":"unicode","label":"Привет 🌍","number":2147483647,"nested":{{"items":[{{"name":"бета","score":-2}}]}}}}')),
+            (3, {}('{{"kind":"limits","number":-2147483648,"nested":{{"object":{{"enabled":true}}}}}}')),
+            (4, {}('{{"kind":"array","number":1.5,"nested":{{"items":[]}},"mixed":[null,false,{{"value":"x"}}]}}')),
+            (5, {}('{{}}')),
+            (6, NULL);
+    )", jsonType, jsonType, jsonType, jsonType, jsonType));
+
+    // This complements the generated JSON corpus: it verifies the optimizer-selected
+    // path as well as explicit index access, while retaining primary scan as oracle.
+    const std::vector<std::string> predicates = {
+        R"(JSON_EXISTS(Text, '$.kind'))",
+        R"(JSON_EXISTS(Text, '$.nested.items[*].name'))",
+        R"(JSON_EXISTS(Text, '$.mixed[*].value'))",
+        R"(JSON_VALUE(Text, '$.nested.object.enabled' RETURNING Bool))",
+        R"(JSON_VALUE(Text, '$.label' RETURNING Utf8) == "Привет 🌍"u)",
+        R"(JSON_VALUE(Text, '$.number' RETURNING Int64) == 2147483647)",
+        R"(JSON_VALUE(Text, '$.number' RETURNING Int64) == -2147483648)",
+        R"(JSON_VALUE(Text, '$.number' RETURNING Double) BETWEEN -2.0 AND 2.0)",
+    };
+
+    for (const auto& predicate : predicates) {
+        ValidateDifferentialResults(db, predicate);
+    }
+
+    ValidateDifferentialResults(db,
+        R"(JSON_EXISTS(Text, '$.nested.items[*] ? (@.score == $score)' PASSING $score AS score))",
+        "DECLARE $score AS Int64;",
+        TParamsBuilder().AddParam("$score").Int64(2).Build().Build());
+}
+
+TString ExecuteShapeQuery(TQueryClient& db, const std::string& query) {
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << "\nQuery:\n" << query);
+    return FormatResultSetYson(result.GetResultSet(0));
+}
+
+int CountJsonIndexReads(TQueryClient& db, const std::string& query) {
+    const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << "\nQuery:\n" << query);
+    UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetPlan(), "Explain plan is empty");
+
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true),
+        "Failed to parse explain plan");
+    return CountPlanNodesByKv(planJson, "Index", "json_idx");
+}
+
+void TestJsonQueryShapes(const std::string& jsonType) {
+    auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteSuccess(db, std::format(R"(
+        CREATE TABLE TestTable (
+            Key Uint64,
+            Text {},
+            PRIMARY KEY (Key),
+            INDEX json_idx GLOBAL USING json ON (Text)
+        );
+        CREATE TABLE Labels (
+            Key Uint64,
+            Label Utf8,
+            PRIMARY KEY (Key)
+        );
+    )", jsonType));
+    ExecuteSuccess(db, std::format(R"(
+        UPSERT INTO TestTable (Key, Text) VALUES
+            (1, {}('{{"tag":"wanted"}}')),
+            (2, {}('{{"other":1}}')),
+            (3, {}('{{"tag":"wanted","other":2}}')),
+            (4, {}('{{}}'));
+        UPSERT INTO Labels (Key, Label) VALUES
+            (1, "one"u), (2, "two"u), (4, "four"u);
+    )", jsonType, jsonType, jsonType, jsonType));
+
+    const std::vector<std::tuple<std::string, std::string, std::string, int>> cases = {
+        {
+            "CTE",
+            R"($filtered = SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag');
+                SELECT Key FROM $filtered ORDER BY Key;)",
+            R"($filtered = SELECT Key FROM TestTable VIEW PRIMARY KEY WHERE JSON_EXISTS(Text, '$.tag');
+                SELECT Key FROM $filtered ORDER BY Key;)",
+            1,
+        },
+        {
+            "subquery",
+            R"(SELECT Key FROM (
+                    SELECT Key, Text FROM TestTable WHERE JSON_EXISTS(Text, '$.tag'))
+                ORDER BY Key;)",
+            R"(SELECT Key FROM (
+                    SELECT Key, Text FROM TestTable VIEW PRIMARY KEY WHERE JSON_EXISTS(Text, '$.tag'))
+                ORDER BY Key;)",
+            1,
+        },
+        {
+            "JOIN",
+            R"(SELECT t.Key FROM TestTable AS t
+                INNER JOIN Labels AS l ON t.Key = l.Key
+                WHERE JSON_EXISTS(t.Text, '$.tag') ORDER BY t.Key;)",
+            R"(SELECT t.Key FROM TestTable VIEW PRIMARY KEY AS t
+                INNER JOIN Labels AS l ON t.Key = l.Key
+                WHERE JSON_EXISTS(t.Text, '$.tag') ORDER BY t.Key;)",
+            // JSON auto-select currently stays conservative across JOINs.
+            0,
+        },
+        {
+            "UNION ALL",
+            R"(SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag')
+                UNION ALL
+                SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.missing')
+                ORDER BY Key;)",
+            R"(SELECT Key FROM TestTable VIEW PRIMARY KEY WHERE JSON_EXISTS(Text, '$.tag')
+                UNION ALL
+                SELECT Key FROM TestTable VIEW PRIMARY KEY WHERE JSON_EXISTS(Text, '$.missing')
+                ORDER BY Key;)",
+            2,
+        },
+    };
+
+    for (const auto& [name, automatic, primary, expectedIndexReads] : cases) {
+        const auto expected = ExecuteShapeQuery(db, primary);
+        const auto actual = ExecuteShapeQuery(db, automatic);
+        CompareYson(expected, actual);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountJsonIndexReads(db, automatic), expectedIndexReads,
+            name << " has an unexpected auto-select plan");
+    }
+}
+
+void TestJsonEdgeCorpus(const std::string& jsonType) {
+    auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteSuccess(db, std::format(R"(
+        CREATE TABLE TestTable (
+            Key Uint64,
+            Text {},
+            PRIMARY KEY (Key),
+            INDEX json_idx GLOBAL USING json ON (Text)
+        );
+    )", jsonType));
+
+    const std::string largeValue(2048, 'x');
+    ExecuteSuccess(db, std::format(R"(
+        UPSERT INTO TestTable (Key, Text) VALUES
+            (1, {}('{{"a":{{"b":{{"c":{{"d":{{"e":{{"f":{{"g":{{"value":"deep"}}}}}}}}}}}}}}}}')),
+            (2, {}('{{"payload":"{}","object":{{"left":1,"right":2}}}}')),
+            (3, {}('{{"duplicate":"first","duplicate":"last"}}')),
+            (4, {}('{{"label":"café"}}')),
+            (5, {}('{{"label":"café"}}'));
+    )", jsonType, jsonType, largeValue, jsonType, jsonType, jsonType));
+
+    const std::vector<std::string> predicates = {
+        R"(JSON_VALUE(Text, '$.a.b.c.d.e.f.g.value' RETURNING Utf8) == "deep"u)",
+        std::format(R"(JSON_VALUE(Text, '$.payload' RETURNING Utf8) == "{}"u)", largeValue),
+        R"(JSON_EXISTS(Text, '$.object.left') AND JSON_EXISTS(Text, '$.object.right'))",
+        R"(JSON_VALUE(Text, '$.duplicate' RETURNING Utf8) == "last"u)",
+        R"(JSON_VALUE(Text, '$.label' RETURNING Utf8) == "café"u)",
+        R"(JSON_VALUE(Text, '$.label' RETURNING Utf8) == "café"u)",
+    };
+    for (const auto& predicate : predicates) {
+        ValidateDifferentialResults(db, predicate);
+    }
+
+    // An ambiguous duplicate member produces no JSON_VALUE under the default
+    // error handling for both storage types. Unicode strings are compared as
+    // their original code point sequences; no normalization occurs.
+    CompareYson(R"([])", ExecuteShapeQuery(db,
+        R"(SELECT Key FROM TestTable VIEW PRIMARY KEY
+            WHERE JSON_VALUE(Text, '$.duplicate' RETURNING Utf8) == "last"u ORDER BY Key;)"));
+    CompareYson(R"([[[4u]]])", ExecuteShapeQuery(db,
+        R"(SELECT Key FROM TestTable VIEW PRIMARY KEY
+            WHERE JSON_VALUE(Text, '$.label' RETURNING Utf8) == "café"u ORDER BY Key;)"));
+    CompareYson(R"([[[5u]]])", ExecuteShapeQuery(db,
+        R"(SELECT Key FROM TestTable VIEW PRIMARY KEY
+            WHERE JSON_VALUE(Text, '$.label' RETURNING Utf8) == "café"u ORDER BY Key;)"));
+}
+
+struct TGeneratedJsonPredicate {
+    std::string Predicate;
+    std::string Declarations;
+    TParams Params = TParamsBuilder().Build();
+};
+
+std::vector<std::optional<std::string>> GenerateJsonPropertyDocuments(ui64 seed) {
+    std::mt19937_64 random(seed);
+    std::vector<std::optional<std::string>> documents = {std::nullopt};
+    static const std::array kinds = {"alpha", "beta", "gamma"};
+
+    for (ui32 caseId = 1; caseId < 25; ++caseId) {
+        const auto kind = kinds[random() % kinds.size()];
+        const i64 number = static_cast<i64>(random() % 21) - 10;
+        const bool flag = random() % 2;
+        switch (caseId % 8) {
+            case 0:
+                documents.emplace_back("{}");
+                break;
+            case 1: {
+                const TString json = TStringBuilder()
+                    << R"({"kind":")" << kind
+                    << R"(","n":)" << number
+                    << R"(,"flag":)" << (flag ? "true" : "false")
+                    << R"(,"tag":"deep","a":{"b":{"c":{"d":{"value":)" << number
+                    << "}}}}}";
+                documents.emplace_back(std::string(json.data(), json.size()));
+                break;
+            }
+            case 2:
+                documents.emplace_back(std::format(
+                    R"({{"kind":"{}","n":{},"tag":"array","items":[null,{{"value":{}}},true,"x"]}})",
+                    kind, number, number));
+                break;
+            case 3:
+                documents.emplace_back(std::format(
+                    R"({{"kind":"{}","n":{},"tag":"unicode","label":"{}"}})",
+                    kind, number, caseId % 2 ? "café" : "café"));
+                break;
+            case 4:
+                documents.emplace_back(std::format(
+                    R"({{"kind":"{}","n":{},"duplicate":"first","duplicate":"last"}})",
+                    kind, number));
+                break;
+            case 5:
+                documents.emplace_back(caseId % 16 == 5
+                    ? R"({"kind":"boundary","n":9223372036854775807,"tag":"max"})"
+                    : R"({"kind":"boundary","n":-9223372036854775808,"tag":"min"})");
+                break;
+            case 6:
+                documents.emplace_back(std::format(
+                    R"({{"kind":"{}","n":{},"flag":{},"tag":"object","object":{{"left":{},"right":{}}}}})",
+                    kind, number, flag, number, -number));
+                break;
+            case 7:
+                documents.emplace_back(std::format(
+                    R"({{"kind":"{}","n":{},"flag":{},"tag":"mixed","nested":[[{}],{{"kind":"{}"}}]}})",
+                    kind, number, flag, number, kinds[random() % kinds.size()]));
+                break;
+        }
+    }
+    return documents;
+}
+
+std::vector<TGeneratedJsonPredicate> GenerateJsonPropertyPredicates(ui64 seed) {
+    std::mt19937_64 random(seed ^ 0x9E3779B97F4A7C15ULL);
+    std::vector<TGeneratedJsonPredicate> cases;
+    static const std::array paths = {"kind", "tag", "flag", "items", "object"};
+    static const std::array kinds = {"alpha", "beta", "gamma", "boundary"};
+
+    for (ui32 caseId = 0; caseId < 16; ++caseId) {
+        const auto pathA = paths[random() % paths.size()];
+        const auto pathB = paths[random() % paths.size()];
+        const auto kind = kinds[random() % kinds.size()];
+        const i64 number = static_cast<i64>(random() % 11) - 5;
+
+        switch (caseId % 8) {
+            case 0:
+                cases.push_back({.Predicate = std::format("JSON_EXISTS(Text, '$.{}')", pathA)});
+                break;
+            case 1:
+                cases.push_back({.Predicate = std::format(
+                    R"(JSON_VALUE(Text, '$.kind' RETURNING Utf8) == "{}"u)", kind)});
+                break;
+            case 2:
+                cases.push_back({.Predicate = std::format(
+                    "JSON_VALUE(Text, '$.n' RETURNING Int64) >= {}", number)});
+                break;
+            case 3:
+                cases.push_back({.Predicate = std::format(
+                    R"(JSON_EXISTS(Text, '$.{}') AND JSON_VALUE(Text, '$.kind' RETURNING Utf8) != "missing"u)",
+                    pathA)});
+                break;
+            case 4:
+                cases.push_back({.Predicate = std::format(
+                    "JSON_EXISTS(Text, '$.{}') OR JSON_EXISTS(Text, '$.{}')", pathA, pathB)});
+                break;
+            case 5:
+                cases.push_back({.Predicate = std::format(
+                    "JSON_EXISTS(Text, '$.{}') AND Data >= {}", pathA, number)});
+                break;
+            case 6: {
+                TGeneratedJsonPredicate generated;
+                generated.Predicate =
+                    R"(JSON_EXISTS(Text, '$.n ? (@ >= $v)' PASSING $v AS v))";
+                generated.Declarations = "DECLARE $v AS Int64;";
+                generated.Params = TParamsBuilder()
+                    .AddParam("$v").Int64(number).Build().Build();
+                cases.push_back(std::move(generated));
+                break;
+            }
+            case 7: {
+                TGeneratedJsonPredicate generated;
+                generated.Predicate =
+                    R"(JSON_EXISTS(Text, '$.kind ? (@ == $v)' PASSING $v AS v))";
+                generated.Declarations = "DECLARE $v AS Utf8;";
+                generated.Params = TParamsBuilder()
+                    .AddParam("$v").Utf8(kind).Build().Build();
+                cases.push_back(std::move(generated));
+                break;
+            }
+        }
+    }
+    return cases;
+}
+
+void TestGeneratedJsonPropertyCorpus(const std::string& jsonType, bool compact, ui64 seed) {
+    auto kikimr = compact
+        ? KikimrCompactJsonAutoSelect()
+        : Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteSuccess(db, std::format(R"(
+        CREATE TABLE TestTable (
+            Key Uint64,
+            Text {},
+            Data Int64,
+            PRIMARY KEY (Key),
+            INDEX json_idx GLOBAL USING json ON (Text)
+        );
+    )", jsonType));
+
+    const auto documents = GenerateJsonPropertyDocuments(seed);
+    std::string values;
+    for (size_t key = 0; key < documents.size(); ++key) {
+        if (!values.empty()) {
+            values += ",";
+        }
+        values += std::format("({}, {}, {})", key,
+            documents[key] ? std::format("{}('{}')", jsonType, *documents[key]) : "NULL",
+            static_cast<i64>(key % 9) - 4);
+    }
+    ExecuteSuccess(db, "UPSERT INTO TestTable (Key, Text, Data) VALUES " + values + ";");
+
+    const auto cases = GenerateJsonPropertyPredicates(seed);
+    for (size_t caseId = 0; caseId < cases.size(); ++caseId) {
+        const auto& generated = cases[caseId];
+        const std::string context = std::format(
+            "seed={}, case={}, type={}, compact={}, predicate=[{}]",
+            seed, caseId, jsonType, compact, generated.Predicate);
+        const auto makeQuery = [&](const std::string& view) {
+            return generated.Declarations + std::format(
+                "\nSELECT Key FROM TestTable{} WHERE {} ORDER BY Key;",
+                view, generated.Predicate);
+        };
+        const auto execute = [&](const std::string& view) {
+            auto result = db.ExecuteQuery(
+                makeQuery(view), TTxControl::NoTx(), generated.Params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                context << ", view=[" << view << "], issues=" << result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        const auto primary = execute(" VIEW PRIMARY KEY");
+        const auto explicitIndex = execute(" VIEW json_idx");
+        const auto automatic = execute("");
+        CompareYson(primary, explicitIndex, TString(context + ", explicit"));
+        CompareYson(primary, automatic, TString(context + ", automatic"));
+
+        const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+        auto explain = db.ExecuteQuery(
+            makeQuery(""), TTxControl::NoTx(), generated.Params, settings).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), context << ", explain: " << explain.GetIssues().ToString());
+        UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetPlan(),
+            context << ", missing explain plan");
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &planJson, true),
+            context << ", invalid explain JSON");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            CountPlanNodesByKv(planJson, "Index", "json_idx"), 1, context);
+    }
+}
 
 } // namespace
 
@@ -65,6 +622,45 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "json_idx"), 0);
             UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "json_idx_2"), 0);
         }, /* enableJsonIndexAutoSelect */ true);
+    }
+    Y_UNIT_TEST(GeneratedPropertyCorpusJsonLegacy) {
+        TestGeneratedJsonPropertyCorpus("Json", false, 0x4A534F4E1001ULL);
+    }
+
+    Y_UNIT_TEST(GeneratedPropertyCorpusJsonDocumentLegacy) {
+        TestGeneratedJsonPropertyCorpus("JsonDocument", false, 0x4A534F4E1002ULL);
+    }
+
+    Y_UNIT_TEST(GeneratedPropertyCorpusJsonCompact) {
+        TestGeneratedJsonPropertyCorpus("Json", true, 0x4A534F4E2001ULL);
+    }
+
+    Y_UNIT_TEST(GeneratedPropertyCorpusJsonDocumentCompact) {
+        TestGeneratedJsonPropertyCorpus("JsonDocument", true, 0x4A534F4E2002ULL);
+    }
+
+    Y_UNIT_TEST(QueryShapesJson) {
+        TestJsonQueryShapes("Json");
+    }
+
+    Y_UNIT_TEST(QueryShapesJsonDocument) {
+        TestJsonQueryShapes("JsonDocument");
+    }
+
+    Y_UNIT_TEST(EdgeCorpusJson) {
+        TestJsonEdgeCorpus("Json");
+    }
+
+    Y_UNIT_TEST(EdgeCorpusJsonDocument) {
+        TestJsonEdgeCorpus("JsonDocument");
+    }
+
+    Y_UNIT_TEST(DifferentialCorrectnessJson) {
+        TestDifferentialJsonCorrectness("Json");
+    }
+
+    Y_UNIT_TEST(DifferentialCorrectnessJsonDocument) {
+        TestDifferentialJsonCorrectness("JsonDocument");
     }
 
     Y_UNIT_TEST(JsonExists) {
@@ -262,6 +858,182 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
     }
 
+    Y_UNIT_TEST(SchemaLifecycleInvalidatesCachedAutoSelectPlan) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag":"red"}')),
+                (2, JsonDocument('{"other":1}')),
+                (3, JsonDocument('{"tag":"blue"}'));
+        )");
+
+        // Execute the exact same text repeatedly through one client to warm the
+        // compiled-query cache before every schema transition.
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text);");
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx"));
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable DROP INDEX json_idx;");
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX json_idx_recreated GLOBAL USING json ON (Text);");
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx_recreated");
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx_recreated"));
+    }
+
+    Y_UNIT_TEST(BuildingReadyDroppedLifecycleInvalidatesCachedPlan) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableJsonIndexAutoSelect(true);
+        auto kikimr = TKikimrRunner(TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetUseRealThreads(false));
+        auto db = kikimr.GetQueryClient();
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            ExecuteSuccess(db, R"(
+                CREATE TABLE TestTable (
+                    Key Uint64,
+                    Text JsonDocument,
+                    PRIMARY KEY (Key)
+                );
+            )");
+            ExecuteSuccess(db, R"(
+                UPSERT INTO TestTable (Key, Text) VALUES
+                    (1, JsonDocument('{"tag":"red"}')),
+                    (2, JsonDocument('{"other":1}')),
+                    (3, JsonDocument('{"tag":"blue"}'));
+            )");
+
+            // Warm the same query text through the same client before the index exists.
+            ValidateLifecycleResults(db);
+            ValidateLifecycleResults(db);
+            UNIT_ASSERT_VALUES_EQUAL(CountJsonIndexReads(db,
+                R"(SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;)"), 0);
+            return true;
+        });
+
+        TVector<TAutoPtr<IEventHandle>> capturedEvents;
+        size_t captured = 0;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (captured == 0 &&
+                ev->GetTypeRewrite() == TEvDataShard::TEvBuildFulltextIndexRequest::EventType)
+            {
+                ++captured;
+                capturedEvents.push_back(ev.Release());
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+        NYdb::NQuery::TAsyncExecuteQueryResult addIndexFuture;
+        kikimr.RunCall([&] {
+            addIndexFuture = db.ExecuteQuery(
+                "ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text);",
+                TTxControl::NoTx());
+            return true;
+        });
+        runtime->WaitFor("JSON index build paused", [&] { return captured == 1; });
+
+        kikimr.RunCall([&] {
+            // BUILDING indexes must not leak into a cached or freshly explained plan.
+            ValidateLifecycleResults(db);
+            ValidateLifecycleResults(db);
+            UNIT_ASSERT_VALUES_EQUAL(CountJsonIndexReads(db,
+                R"(SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;)"), 0);
+            return true;
+        });
+
+        for (auto& ev : capturedEvents) {
+            runtime->Send(ev.Release());
+        }
+        capturedEvents.clear();
+        runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
+        kikimr.RunCall([&] {
+            const auto result = addIndexFuture.GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            // READY must invalidate the scan plan and make the index eligible.
+            ValidateLifecycleResults(db);
+            ValidateLifecycleResults(db);
+            UNIT_ASSERT_VALUES_EQUAL(CountJsonIndexReads(db,
+                R"(SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;)"), 1);
+            CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx"));
+
+            ExecuteSuccess(db, "ALTER TABLE TestTable DROP INDEX json_idx;");
+
+            // The same cached query remains correct after the index is fully dropped.
+            ValidateLifecycleResults(db);
+            ValidateLifecycleResults(db);
+            UNIT_ASSERT_VALUES_EQUAL(CountJsonIndexReads(db,
+                R"(SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;)"), 0);
+            return true;
+        });
+    }
+
+    Y_UNIT_TEST(SameColumnIndexesLifecycleUsesSingleIndexRead) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx_a GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag":"red"}')),
+                (2, JsonDocument('{"other":1}')),
+                (3, JsonDocument('{"tag":"blue"}'));
+        )");
+
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx_a");
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX json_idx_b GLOBAL USING json ON (Text);");
+        const auto initiallySelected = GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b");
+        UNIT_ASSERT_VALUES_EQUAL(GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b"), initiallySelected);
+        UNIT_ASSERT_VALUES_EQUAL(GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b"), initiallySelected);
+        ValidateLifecycleResults(db);
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx_a"));
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx_b"));
+
+        const std::string remaining = initiallySelected == "json_idx_a" ? "json_idx_b" : "json_idx_a";
+        ExecuteSuccess(db, "ALTER TABLE TestTable DROP INDEX " + initiallySelected + ";");
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", TString(remaining));
+        UNIT_ASSERT_VALUES_EQUAL(GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b"), remaining);
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX " + initiallySelected + " GLOBAL USING json ON (Text);");
+        ValidateLifecycleResults(db);
+        const auto selectedAfterRecreate = GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b");
+        UNIT_ASSERT_VALUES_EQUAL(GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b"), selectedAfterRecreate);
+    }
+
     Y_UNIT_TEST(Negation) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // JE
@@ -305,6 +1077,174 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))");
             ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
         }, /* enableJsonIndexAutoSelect */ false);
+    }
+
+    Y_UNIT_TEST(DynamicFlagInvalidatesCompileCache) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag":"red"}')),
+                (2, JsonDocument('{"other":1}')),
+                (3, JsonDocument('{"tag":"blue"}'));
+        )");
+
+        // Execute the identical query through one client twice so its compiled index-read plan is cached.
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+
+        UpdateJsonAutoSelectConfig(kikimr, /* enabled */ false);
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx"));
+
+        UpdateJsonAutoSelectConfig(kikimr, /* enabled */ true);
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+    }
+
+    Y_UNIT_TEST(DynamicFlagInvalidatesCompileCacheOnEveryNode) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableJsonIndexAutoSelect(true);
+        auto settings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetNodeCount(2);
+        settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(
+            NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag":"red"}')),
+                (2, JsonDocument('{"other":1}')),
+                (3, JsonDocument('{"tag":"blue"}'));
+        )");
+
+        const TString query = R"(
+            SELECT Key FROM TestTable
+            WHERE JSON_EXISTS(Text, '$.tag')
+            ORDER BY Key;
+        )";
+        const TString expected = R"([[[1u]];[[3u]]])";
+
+        const auto assertSession = [&](TSession& session, bool expectIndex) {
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+
+            const auto explainSettings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+            auto explain = session.ExecuteQuery(query, TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            NJson::TJsonValue planJson;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &planJson, true),
+                "failed to parse JSON auto-select plan");
+            const int indexReads = CountPlanNodesByKv(planJson, "Index", "json_idx");
+            UNIT_ASSERT_VALUES_EQUAL_C(indexReads, expectIndex ? 1 : 0,
+                "unexpected plan after a multi-node feature flag update: "
+                    << *explain.GetStats()->GetPlan());
+        };
+
+        auto firstSessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(firstSessionResult.IsSuccess(), firstSessionResult.GetIssues().ToString());
+        auto firstSession = firstSessionResult.GetSession();
+        auto secondSessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(secondSessionResult.IsSuccess(), secondSessionResult.GetIssues().ToString());
+        auto secondSession = secondSessionResult.GetSession();
+
+        // Warm identical successful plans in old sessions. Depending on session placement these populate
+        // one or both node-local caches; invalidation is nevertheless delivered and acknowledged on both.
+        assertSession(firstSession, /*expectIndex=*/true);
+        assertSession(firstSession, /*expectIndex=*/true);
+        assertSession(secondSession, /*expectIndex=*/true);
+
+        // Deliver OFF in reverse node order. Only after both nodes acknowledge it may any session be used:
+        // this models asynchronous dispatcher delivery without making an assertion inside the skew window.
+        UpdateJsonFeatureFlagsOnNodes(kikimr, true, false, {1, 0});
+        assertSession(firstSession, /*expectIndex=*/false);
+        assertSession(secondSession, /*expectIndex=*/false);
+        auto disabledClient = kikimr.GetQueryClient();
+        auto disabledSessionResult = disabledClient.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(disabledSessionResult.IsSuccess(), disabledSessionResult.GetIssues().ToString());
+        auto disabledSession = disabledSessionResult.GetSession();
+        assertSession(disabledSession, /*expectIndex=*/false);
+
+        // Re-enable in the opposite order and verify both old sessions and a newly allocated session.
+        UpdateJsonFeatureFlagsOnNodes(kikimr, true, true, {0, 1});
+        assertSession(firstSession, /*expectIndex=*/true);
+        assertSession(secondSession, /*expectIndex=*/true);
+        auto enabledClient = kikimr.GetQueryClient();
+        auto enabledSessionResult = enabledClient.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(enabledSessionResult.IsSuccess(), enabledSessionResult.GetIssues().ToString());
+        auto enabledSession = enabledSessionResult.GetSession();
+        assertSession(enabledSession, /*expectIndex=*/true);
+    }
+
+    Y_UNIT_TEST(DynamicCreationGatePreservesExistingIndex) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag":"red"}')),
+                (2, JsonDocument('{"other":1}')),
+                (3, JsonDocument('{"tag":"blue"}'));
+        )");
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+
+        UpdateJsonFeatureFlags(kikimr, /*enableJsonIndex=*/false, /*enableAutoSelect=*/true);
+
+        // EnableJsonIndex is a creation gate. A Ready object must remain usable and maintained.
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (4, JsonDocument('{"tag":"green"}'));
+        )");
+        CompareYson(R"([[[1u]];[[3u]];[[4u]]])", ExecuteKeys(db, " VIEW PRIMARY KEY"));
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx"));
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db));
+
+        auto rejected = db.ExecuteQuery(R"(
+            ALTER TABLE TestTable ADD INDEX rejected_idx GLOBAL USING json ON (Text);
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!rejected.IsSuccess(), rejected.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "JSON index support is disabled");
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable DROP INDEX json_idx;");
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+
+        UpdateJsonFeatureFlags(kikimr, /*enableJsonIndex=*/true, /*enableAutoSelect=*/true);
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX recreated_idx GLOBAL USING json ON (Text);");
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "recreated_idx");
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW recreated_idx"));
     }
 
     Y_UNIT_TEST(PassingInJE) {
@@ -886,6 +1826,141 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateNoAutoSelect(db,
             R"(Tenant = "acme"u AND UserId > 0 AND JSON_EXISTS(Text, '$.kind'))",
             "json_idx", "TestTable");
+    }
+
+    Y_UNIT_TEST(CompactJsonDocument) {
+        auto kikimr = KikimrCompactJsonAutoSelect();
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag": "red", "size": 10}')),
+                (2, JsonDocument('{"tag": "blue", "size": 20}')),
+                (3, JsonDocument('{"tag": "red"}')),
+                (4, JsonDocument('{}'));
+        )");
+
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_VALUE(Text, '$.tag' RETURNING Utf8) == "red"u)",
+            R"([[[1u]];[[3u]]])");
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_EXISTS(Text, '$.size'))",
+            R"([[[1u]];[[2u]]])");
+    }
+
+    Y_UNIT_TEST(CompactJsonMultiShardBuildAndDml) {
+        auto kikimr = KikimrCompactJsonAutoSelect();
+        auto db = kikimr.GetQueryClient();
+
+        // Explicit boundaries make the build scan four main-table shards. SQL
+        // ALTER does not support replacing PARTITION_AT_KEYS, so the lifecycle
+        // below exercises deterministic multi-shard build/read/DML without a
+        // timing-dependent auto-partitioning split.
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key)
+            ) WITH (
+                PARTITION_AT_KEYS = (10, 20, 30)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1,  JsonDocument('{"tag":"red"}')),
+                (9,  JsonDocument('{"other":1}')),
+                (10, JsonDocument('{"tag":"red"}')),
+                (11, JsonDocument('{"tag":"blue"}')),
+                (19, JsonDocument('{"tag":"red"}')),
+                (20, JsonDocument('{"other":2}')),
+                (21, JsonDocument('{"tag":"red"}')),
+                (29, JsonDocument('{"tag":"blue"}')),
+                (30, JsonDocument('{"tag":"red"}')),
+                (31, JsonDocument('{}'));
+        )");
+
+        // Building after the data is present covers snapshot ingestion from all
+        // four partitions into a compact JSON index.
+        ExecuteSuccess(db,
+            "ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text);");
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_VALUE(Text, '$.tag' RETURNING Utf8) == "red"u)",
+            R"([[[1u]];[[10u]];[[19u]];[[21u]];[[30u]]])");
+
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (9,  JsonDocument('{"tag":"red"}')),
+                (19, JsonDocument('{"other":19}')),
+                (25, JsonDocument('{"tag":"blue"}')),
+                (40, JsonDocument('{"tag":"red"}'));
+            DELETE FROM TestTable WHERE Key = 21;
+        )");
+
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_VALUE(Text, '$.tag' RETURNING Utf8) == "red"u)",
+            R"([[[1u]];[[9u]];[[10u]];[[30u]];[[40u]]])");
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_EXISTS(Text, '$.other'))",
+            R"([[[19u]];[[20u]]])");
+    }
+
+    Y_UNIT_TEST(CompactPrefixedJsonDocument) {
+        auto kikimr = KikimrCompactJsonAutoSelect();
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Tenant Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Tenant, Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Tenant, Text) VALUES
+                (1, 10, JsonDocument('{"tag": "red"}')),
+                (2, 10, JsonDocument('{"tag": "blue"}')),
+                (3, 20, JsonDocument('{"tag": "red"}')),
+                (4, 20, JsonDocument('{}'));
+        )");
+
+        ValidateCompactAutoSelectResults(db,
+            R"(Tenant = 10 AND JSON_VALUE(Text, '$.tag' RETURNING Utf8) == "red"u)",
+            R"([[[1u]]])");
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))");
+    }
+
+    Y_UNIT_TEST(CompactJsonDocumentWithStringPkRowId) {
+        auto kikimr = KikimrCompactJsonAutoSelect();
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Utf8 NOT NULL,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                ("alpha"u, JsonDocument('{"enabled": true}')),
+                ("beta"u, JsonDocument('{"enabled": false}')),
+                ("gamma"u, JsonDocument('{"enabled": true}'));
+        )");
+
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_VALUE(Text, '$.enabled' RETURNING Bool))",
+            R"([["alpha"];["gamma"]])");
     }
 }
 

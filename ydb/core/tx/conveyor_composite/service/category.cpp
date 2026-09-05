@@ -7,10 +7,17 @@ bool TProcessCategory::HasTasks() const {
 }
 
 std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
+    return ExtractTaskWithPrediction(counters, scopeIds, [](const TWorkerTaskPrepare&) {
+        return true;
+    });
+}
+
+std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters,
+    THashSet<TString>& scopeIds, const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter) {
     std::shared_ptr<TProcess> pMin;
     for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
         for (ui32 i = 0; i < it->second.size(); ++i) {
-            if (!it->second[i]->GetScope()->CheckToRun()) {
+            if (!it->second[i]->GetScope()->CheckToRun() || !it->second[i]->HasTask(taskFilter)) {
                 continue;
             }
             pMin = it->second[i];
@@ -28,7 +35,7 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
     if (!pMin) {
         return std::nullopt;
     }
-    auto result = pMin->ExtractTaskWithPrediction(counters);
+    auto result = pMin->ExtractTaskWithPrediction(counters, taskFilter);
     if (pMin->GetTasksCount()) {
         WeightedProcesses[pMin->GetWeightedUsage()].emplace_back(pMin);
     }

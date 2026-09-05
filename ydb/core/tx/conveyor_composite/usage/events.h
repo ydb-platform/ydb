@@ -15,6 +15,8 @@ struct TEvExecution {
         EvNewTask = EventSpaceBegin(TKikimrEvents::ES_CONVEYOR_COMPOSITE),
         EvRegisterProcess,
         EvUnregisterProcess,
+        EvRegisterWorkloadManagerQuery,
+        EvUnregisterWorkloadManagerQuery,
         EvEnd
     };
 
@@ -26,11 +28,13 @@ struct TEvExecution {
         YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
         YDB_READONLY(ui64, InternalProcessId, 0);
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
+        YDB_READONLY_DEF(std::optional<TWorkloadManagerQueryIdentity>, WorkloadManagerQueryIdentity);
 
     public:
         TEvNewTask() = default;
 
-        explicit TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 processId);
+        explicit TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 processId,
+            std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity = std::nullopt);
     };
 
     class TEvRegisterProcess: public NActors::TEventLocal<TEvRegisterProcess, EvRegisterProcess> {
@@ -59,6 +63,28 @@ struct TEvExecution {
         explicit TEvUnregisterProcess(const ESpecialTaskCategory category, const ui64 internalProcessId)
             : Category(category)
             , InternalProcessId(internalProcessId) {
+        }
+    };
+
+    class TEvRegisterWorkloadManagerQuery:
+        public NActors::TEventLocal<TEvRegisterWorkloadManagerQuery, EvRegisterWorkloadManagerQuery> {
+    private:
+        YDB_READONLY_DEF(TWorkloadManagerQueryIdentity, Identity);
+
+    public:
+        explicit TEvRegisterWorkloadManagerQuery(TWorkloadManagerQueryIdentity identity)
+            : Identity(std::move(identity)) {
+        }
+    };
+
+    class TEvUnregisterWorkloadManagerQuery:
+        public NActors::TEventLocal<TEvUnregisterWorkloadManagerQuery, EvUnregisterWorkloadManagerQuery> {
+    private:
+        YDB_READONLY_DEF(TWorkloadManagerQueryIdentity, Identity);
+
+    public:
+        explicit TEvUnregisterWorkloadManagerQuery(TWorkloadManagerQueryIdentity identity)
+            : Identity(std::move(identity)) {
         }
     };
 };

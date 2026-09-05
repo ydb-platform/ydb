@@ -26,12 +26,14 @@ public:
 protected:
     std::optional<TDuration> TryStartExecution(TMonotonic now) override;
     void StopExecution() override;
+    void StopExecution(TDuration executionDuration) override;
     void RegisterForResume(const NActors::TActorId& actorId) override;
     NYql::NDq::TWorkScope GetWorkScope() const override { return Scope; }
 
     bool StartExecution(TMonotonic now);
     TDuration CalculateDelay(TMonotonic now) const;
     void StopExecution(bool& forcedResume);
+    void StopExecution(TDuration executionDuration, bool& forcedResume);
 
     static inline TMonotonic Now() {
         return TMonotonic::Now();

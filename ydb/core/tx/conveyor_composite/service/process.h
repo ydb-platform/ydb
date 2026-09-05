@@ -14,6 +14,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <functional>
 #include <queue>
 
 namespace NKikimr::NConveyorComposite {
@@ -39,30 +40,11 @@ public:
         --Size;
         return result;
     }
+    TWorkerTaskPrepare pop(const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter);
+    const TWorkerTaskPrepare& top() const;
+    bool has(const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter) const;
     ui32 size() const {
         return Size;
-    }
-};
-
-class TProcessOrdered {
-private:
-    YDB_READONLY(ui64, ProcessId, 0);
-    YDB_READONLY(ui64, CPUTime, 0);
-
-public:
-    TProcessOrdered(const ui64 processId, const ui64 cpuTime)
-        : ProcessId(processId)
-        , CPUTime(cpuTime) {
-    }
-
-    bool operator<(const TProcessOrdered& item) const {
-        if (CPUTime < item.CPUTime) {
-            return true;
-        }
-        if (item.CPUTime < CPUTime) {
-            return false;
-        }
-        return ProcessId < item.ProcessId;
     }
 };
 
@@ -76,7 +58,6 @@ private:
     std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TPositiveControlInteger InProgressTasksCount;
     TAverageCalcer<TDuration> AverageTaskDuration;
-    ui32 LinksCount = 0;
     TDuration BaseWeight = TDuration::Zero();
 
 public:
@@ -99,10 +80,6 @@ public:
         WaitingTasksCount->Sub(Tasks.size());
     }
 
-    bool HasTasks() const {
-        return Tasks.size();
-    }
-
     ui32 GetTasksCount() const {
         return Tasks.size();
     }
@@ -116,24 +93,19 @@ public:
         return std::move(result).BuildTask(signals->GetTaskSignals(taskClass));
     }
 
+    TWorkerTask ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& signals,
+        const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter);
+
+    bool HasTask(const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter) const;
+
     void PutTaskResult(TWorkerTaskResult&& result) {
         CPUUsage->Exchange(result.GetPredictedDuration(), result.GetStart(), result.GetFinish());
         AverageTaskDuration.Add(result.GetDuration());
         InProgressTasksCount.Dec();
     }
 
-    [[nodiscard]] bool DecRegistration() {
-        AFL_VERIFY(LinksCount);
-        --LinksCount;
-        return LinksCount == 0;
-    }
-
     double GetWeight() const {
         return 1.0;
-    }
-
-    void IncRegistration() {
-        ++LinksCount;
     }
 
     TProcess(
@@ -143,11 +115,12 @@ public:
         , WaitingTasksCount(waitingTasksCount) {
         AFL_VERIFY(WaitingTasksCount);
         CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
-        IncRegistration();
     }
 
-    void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category) {
-        TWorkerTaskPrepare wTask(std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId);
+    void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category,
+        std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity) {
+        TWorkerTaskPrepare wTask(
+            std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId, std::move(workloadManagerQueryIdentity));
         Tasks.push(std::move(wTask));
         WaitingTasksCount->Inc();
     }

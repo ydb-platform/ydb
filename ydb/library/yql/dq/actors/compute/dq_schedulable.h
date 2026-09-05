@@ -36,6 +36,10 @@ struct IDqSchedulableWork {
     // Called after the unit finishes; releases the quota.
     virtual void StopExecution() = 0;
 
+    // Called after the unit finishes with the externally measured execution
+    // duration; releases the quota and attributes the supplied CPU usage.
+    virtual void StopExecution(TDuration executionDuration) = 0;
+
     // Subscribe on wake-up when quota frees up. The actor will receive
     // TEvWakeup from the scheduler.
     virtual void RegisterForResume(const NActors::TActorId& actorId) = 0;

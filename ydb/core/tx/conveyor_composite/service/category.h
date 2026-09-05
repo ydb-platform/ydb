@@ -7,6 +7,8 @@
 
 #include <ydb/library/accessor/positive_integer.h>
 
+#include <functional>
+
 namespace NKikimr::NConveyorComposite {
 
 class TProcessCategory: public TNonCopyable {
@@ -18,17 +20,16 @@ private:
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
     std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
-    const NConfig::TCategory Config;
 
     [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);
 
 public:
-    ui32 GetWaitingQueueSize() const {
+    ui64 GetWaitingQueueSize() const {
         return WaitingTasksCount->Val();
     }
+
     TProcessCategory(const NConfig::TCategory& config, TCounters& counters)
-        : Category(config.GetCategory())
-        , Config(config) {
+        : Category(config.GetCategory()) {
         Counters = counters.GetCategorySignals(Category);
         RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)));
         Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
@@ -38,7 +39,8 @@ public:
         UnregisterProcess(0);
     }
 
-    void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task) {
+    void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task,
+        std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity) {
         auto it = Processes.find(internalProcessId);
         AFL_VERIFY(it != Processes.end())("process_id", internalProcessId);
         if (!it->second->GetTasks().size()) {
@@ -47,7 +49,7 @@ public:
             }
             WeightedProcesses[it->second->GetWeightedUsage()].emplace_back(it->second);
         }
-        it->second->RegisterTask(std::move(task), Category);
+        it->second->RegisterTask(std::move(task), Category, std::move(workloadManagerQueryIdentity));
     }
 
     void PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds);
@@ -72,7 +74,13 @@ public:
     }
 
     bool HasTasks() const;
+    void ApplyConfig(const NConfig::TCategory& config) {
+        Y_ENSURE(config.GetCategory() == Category, "category config type mismatch");
+        Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
+    }
     std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds);
+    std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds,
+        const std::function<bool(const TWorkerTaskPrepare&)>& taskFilter);
     TProcessScope& MutableProcessScope(const TString& scopeName);
     TProcessScope* MutableProcessScopeOptional(const TString& scopeName);
     std::shared_ptr<TProcessScope> GetProcessScopePtrVerified(const TString& scopeName) const;

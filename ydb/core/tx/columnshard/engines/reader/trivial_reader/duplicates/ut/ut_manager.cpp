@@ -241,8 +241,9 @@ public:
 };
 
 void EnableDeduplicationConveyorFlag() {
-    std::unique_ptr<NActors::IActor> unusedDistributor(
-        NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
+    const auto protoConfig = NConveyorComposite::NConfig::TConfig::BuildDefaultProto();
+    std::unique_ptr<NActors::IActor> unusedDistributor(NConveyorComposite::CreateService(
+        NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig).DetachResult(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
     Y_UNUSED(unusedDistributor);
 }
 
@@ -288,7 +289,7 @@ std::shared_ptr<TReadContext> MakeTestReadContext(const TSnapshot& requestSnapsh
     NColumnShard::TConcreteScanCounters scanCounters(NColumnShard::TScanCounters(), nullptr);
 
     return std::make_shared<TReadContext>(TTestStoragesManager::GetInstance(), dataAccessorsManager, columnDataManager, scanCounters,
-        readMetadata, scanActorId, scanActorId, TComputeShardingPolicy(), 0, NConveyorComposite::TCPULimitsConfig(), nullptr);
+        readMetadata, scanActorId, scanActorId, TComputeShardingPolicy(), 0, NConveyorComposite::TCPULimitsConfig(), std::nullopt, nullptr);
 }
 
 struct TManagerSetupResult {

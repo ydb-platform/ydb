@@ -17,6 +17,9 @@ from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     all_load_parameters,
     all_slo_percentiles,
     normalize_workload,
+    validate_workload_profile,
+    workload_definition,
+    workload_effective_warmup_seconds,
     workload_config_schema,
 )
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
@@ -550,7 +553,10 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     }
 
     client = _mapping(value.get("client"), location + ".client", ("threads",))
-    client_threads = _positive_integer(client.get("threads", 64), location + ".client.threads")
+    client_threads = _positive_integer(
+        client.get("threads", workload_definition(workload["type"]).default_client_threads),
+        location + ".client.threads",
+    )
 
     load = _mapping(
         value.get("load"),
@@ -769,6 +775,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         "repetitions": _positive_integer(measurement.get("repetitions", 3), location + ".measurement.repetitions"),
         "verification_repetitions": verification_repetitions,
     }
+    validate_workload_profile(workload, load_config, measurement_config, location)
 
     affinity = _mapping(value.get("affinity"), location + ".affinity", ("ydb-cli", "static-nodes", "dynamic-nodes"))
     affinity_config = {
@@ -786,7 +793,8 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
 
     attempts = len(load_config.get("values", ())) or 64
     measurement_runs = attempts * measurement_config["repetitions"] + measurement_config["verification_repetitions"]
-    computed_timeout = 300 + measurement_runs * (measurement_config["warmup"] + measurement_config["duration"] + 10)
+    effective_warmup = workload_effective_warmup_seconds(workload, measurement_config["warmup"])
+    computed_timeout = 300 + measurement_runs * (effective_warmup + measurement_config["duration"] + 10)
     timeout_explicit = "timeout" in value
     timeout = _timeout(value.get("timeout", computed_timeout), location + ".timeout")
     return RunConfiguration(

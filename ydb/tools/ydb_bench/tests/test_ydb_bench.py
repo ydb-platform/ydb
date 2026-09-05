@@ -278,6 +278,49 @@ class YdbBenchTest(unittest.TestCase):
         )
 
     @staticmethod
+    def _tpcc_result_payload(
+        warehouses=2,
+        max_sessions=20,
+        threads=2,
+        warmup_seconds=2,
+        time_seconds=12,
+        measure_start_ts=1000,
+        new_orders=120,
+        latency_transaction="Payment",
+        selected_ok=300,
+    ):
+        full_percentile_values = {"50": 101, "90": 102, "95": 103, "99": 104, "99.9": 105}
+        admitted_percentile_values = {"50": 11, "90": 12, "95": 13, "99": 14, "99.9": 15}
+        pure_percentile_values = {"50": 1, "90": 2, "95": 3, "99": 4, "99.9": 5}
+        transactions = {}
+        for index, name in enumerate(("NewOrder", "Delivery", "OrderStatus", "Payment", "StockLevel")):
+            ok_count = new_orders if name == "NewOrder" else 100 + index
+            if name == latency_transaction:
+                ok_count = selected_ok
+            transactions[name] = {
+                "ok_count": ok_count,
+                "failed_count": index,
+                "percentiles": dict(full_percentile_values),
+                "percentiles_ms": dict(admitted_percentile_values),
+                "percentiles_pure": dict(pure_percentile_values),
+            }
+        return {
+            "summary": {
+                "name": "Total",
+                "time_seconds": time_seconds,
+                "measure_start_ts": measure_start_ts,
+                "warehouses": warehouses,
+                "new_orders": transactions["NewOrder"]["ok_count"],
+                "tpmc": 25.5,
+                "efficiency": 80.25,
+                "max_sessions": max_sessions,
+                "threads": threads,
+                "warmup_seconds": warmup_seconds,
+            },
+            "transactions": transactions,
+        }
+
+    @staticmethod
     def _synthetic_profile_workload(
         cleanup_names=("clean",),
         measurement_window=(101.0, 109.0),
@@ -434,7 +477,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(workload_schema, local_ydb_workloads.workload_config_schema())
 
         catalog = local_ydb_workloads.web_workload_catalog()
-        self.assertEqual([item["type"] for item in catalog], ["kv", "stock", "log"])
+        self.assertEqual([item["type"] for item in catalog], ["kv", "stock", "log", "tpcc", "topic"])
         self.assertEqual(catalog[0]["operations"], ["upsert", "select", "read-rows", "mixed"])
         self.assertEqual(catalog[0]["load_parameters"], ["rate", "threads"])
         self.assertEqual(catalog[1]["default_operation"], "put-rand-order")
@@ -442,13 +485,34 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(catalog[2]["operations"], ["insert", "upsert", "bulk-upsert"])
         self.assertEqual(catalog[2]["load_parameters"], ["threads"])
         self.assertEqual(catalog[2]["options"][4]["choices"], ["row", "column"])
-        self.assertEqual([item["result_schema_id"] for item in catalog], ["generic-total-v1"] * 3)
+        self.assertEqual(
+            [item["result_schema_id"] for item in catalog],
+            ["generic-total-v1"] * 3 + ["tpcc-json-v2", "topic-total-v1"],
+        )
         self.assertEqual(
             [item["throughput_unit"] for item in catalog],
-            ["requests/s", "transactions/s", "batches/s"],
+            ["requests/s", "transactions/s", "batches/s", "new orders/s", "messages/s"],
         )
-        self.assertTrue(all(item["reports_errors"] for item in catalog))
+        self.assertTrue(all(item["reports_errors"] for item in catalog[:4]))
+        self.assertFalse(catalog[4]["reports_errors"])
         self.assertEqual(catalog[0]["slo_metrics"]["p99"], "p99_ms")
+        self.assertEqual(catalog[3]["load_parameters"], ["max-sessions"])
+        self.assertEqual(catalog[3]["slo_metrics"]["p999"], "p999_ms")
+        self.assertEqual(catalog[3]["default_client_threads"], 2)
+        self.assertEqual(catalog[3]["minimum_duration_seconds"], 2)
+        self.assertEqual(
+            catalog[3]["load_limits"],
+            {"max-sessions": {"option": "warehouses", "multiplier": 10}},
+        )
+        self.assertEqual(catalog[4]["operations"], ["full"])
+        self.assertEqual(catalog[4]["load_parameters"], ["rate"])
+        self.assertEqual(catalog[4]["slo_metrics"], {"p99": "full_p99_ms"})
+        self.assertEqual(catalog[4]["default_client_threads"], 1)
+        self.assertEqual(catalog[4]["minimum_duration_seconds"], 2)
+        self.assertEqual(
+            {option["name"]: option["default"] for option in catalog[4]["options"]},
+            {"partitions": 128, "consumers": 1, "message-size": 10240, "codec": "raw"},
+        )
         catalog_parameters = tuple(
             dict.fromkeys(parameter for definition in catalog for parameter in definition["load_parameters"])
         )
@@ -485,7 +549,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(stock["options"]["orders"], 100)
 
         invalid = (
-            ({"type": [], "operation": "upsert"}, r"workload\.type.*must be one of kv, stock, log"),
+            ({"type": [], "operation": "upsert"}, r"workload\.type.*must be one of kv, stock, log, tpcc, topic"),
             ({"type": "kv", "operation": "put-rand-order"}, r"workload\.operation.*must be one of upsert"),
             (
                 {"type": "stock", "operation": "put-rand-order", "options": {"products": 500001}},
@@ -503,6 +567,181 @@ class YdbBenchTest(unittest.TestCase):
         for workload, message in invalid:
             with self.subTest(workload=workload), self.assertRaisesRegex(BenchmarkError, message):
                 local_ydb_workloads.normalize_workload(workload, "local-ydb.profile.workload")
+
+    def test_local_ydb_tpcc_defaults_warmup_and_profile_validation(self):
+        loaded = load_config(self._config("""
+            local-ydb:
+              tpcc-smoke:
+                workload: {type: tpcc, operation: run}
+                load: {parameter: max-sessions, values: [1, 100]}
+                measurement: {warmup: 0, duration: 2, repetitions: 1}
+        """))
+        profile = loaded.runs[0].parameters["local_ydb"]
+        self.assertEqual(
+            profile["workload"]["options"],
+            {
+                "warehouses": 10,
+                "import-threads": 0,
+                "compact": False,
+                "tx-mode": "serializable-rw",
+                "latency-transaction": "NewOrder",
+                "no-delays": False,
+                "highres-histogram": False,
+            },
+        )
+        self.assertEqual(profile["client"]["threads"], 2)
+        self.assertEqual(profile["load"]["values"], [1, 100])
+        self.assertEqual(local_ydb_workloads.workload_effective_warmup_seconds(profile["workload"], 0), 2)
+        self.assertEqual(local_ydb_workloads.workload_effective_warmup_seconds(profile["workload"], 1), 2)
+        self.assertEqual(local_ydb_workloads.workload_effective_warmup_seconds(profile["workload"], 7), 7)
+
+        invalid_profiles = (
+            (
+                """
+                local-ydb:
+                  invalid-tpcc:
+                    workload: {type: tpcc, operation: run}
+                    load: {parameter: max-sessions, values: [101]}
+                """,
+                "load.values\\[0\\].*warehouses \\* 10",
+            ),
+            (
+                """
+                local-ydb:
+                  invalid-tpcc:
+                    workload: {type: tpcc, operation: run}
+                    load:
+                      parameter: max-sessions
+                      search: {start: 1, maximum: 101}
+                      objective: {type: maximize-throughput}
+                """,
+                "load.search.maximum.*warehouses \\* 10",
+            ),
+            (
+                """
+                local-ydb:
+                  invalid-tpcc:
+                    workload: {type: tpcc, operation: run}
+                    load: {parameter: max-sessions, values: [1]}
+                    measurement: {duration: 1}
+                """,
+                "measurement.duration.*at least 2",
+            ),
+        )
+        for index, (body, message) in enumerate(invalid_profiles):
+            with self.subTest(index=index), self.assertRaisesRegex(BenchmarkError, message):
+                load_config(self._config(body, "invalid-tpcc-{}.yaml".format(index)))
+
+    def test_local_ydb_topic_defaults_and_profile_validation(self):
+        loaded = load_config(self._config("""
+            local-ydb:
+              topic-smoke:
+                workload: {type: topic, operation: full}
+                load: {parameter: rate, values: [100]}
+                measurement: {warmup: 1, duration: 2, repetitions: 1}
+        """))
+        profile = loaded.runs[0].parameters["local_ydb"]
+        self.assertEqual(
+            profile["workload"]["options"],
+            {"partitions": 128, "consumers": 1, "message-size": 10240, "codec": "raw"},
+        )
+        self.assertEqual(profile["client"]["threads"], 1)
+        self.assertEqual(profile["load"], {"parameter": "rate", "allow_errors": False, "values": [100]})
+        definition = local_ydb_workloads.workload_definition("topic")
+        self.assertEqual((definition.dataset_scope, definition.warmup_mode), ("sample", "inline"))
+
+        latency = (
+            load_config(
+                self._config(
+                    """
+            local-ydb:
+              topic-latency:
+                workload: {type: topic, operation: full}
+                load:
+                  parameter: rate
+                  search: {start: 10, maximum: 100, multiplier: 2}
+                  objective: {type: latency-slo, percentile: p99, max-ms: 20, max-errors: 0}
+                measurement: {duration: 2}
+        """,
+                    "topic-latency.yaml",
+                )
+            )
+            .runs[0]
+            .parameters["local_ydb"]
+        )
+        self.assertEqual(latency["load"]["objective"]["latency_metric"], "full_p99_ms")
+
+        invalid_profiles = (
+            (
+                """
+                local-ydb:
+                  invalid-topic:
+                    workload: {type: topic, operation: full}
+                    load: {parameter: rate, allow-errors: true, values: [10]}
+                    measurement: {duration: 2}
+                """,
+                "load.allow-errors.*must be false",
+            ),
+            (
+                """
+                local-ydb:
+                  invalid-topic:
+                    workload: {type: topic, operation: full}
+                    load:
+                      parameter: rate
+                      search: {start: 10, maximum: 100, multiplier: 2}
+                      objective: {type: latency-slo, percentile: p99, max-ms: 20, max-errors: 1}
+                    measurement: {duration: 2}
+                """,
+                "load.objective.max-errors.*must be zero",
+            ),
+            (
+                """
+                local-ydb:
+                  invalid-topic:
+                    workload: {type: topic, operation: full}
+                    load: {parameter: rate, values: [10]}
+                    measurement: {duration: 1}
+                """,
+                "measurement.duration.*at least 2",
+            ),
+            (
+                """
+                local-ydb:
+                  invalid-topic:
+                    workload: {type: topic, operation: full, options: {codec: snappy}}
+                    load: {parameter: rate, values: [10]}
+                    measurement: {duration: 2}
+                """,
+                "codec.*must be one of raw, gzip, zstd",
+            ),
+            (
+                """
+                local-ydb:
+                  invalid-topic:
+                    workload: {type: topic, operation: full}
+                    load: {parameter: threads, values: [1]}
+                    measurement: {duration: 2}
+                """,
+                "load.parameter.*must be one of rate",
+            ),
+            (
+                """
+                local-ydb:
+                  invalid-topic:
+                    workload: {type: topic, operation: full}
+                    load:
+                      parameter: rate
+                      search: {start: 10, maximum: 100, multiplier: 2}
+                      objective: {type: latency-slo, percentile: p95, max-ms: 20}
+                    measurement: {duration: 2}
+                """,
+                "percentile.*must be one of p99",
+            ),
+        )
+        for index, (body, message) in enumerate(invalid_profiles):
+            with self.subTest(index=index), self.assertRaisesRegex(BenchmarkError, message):
+                load_config(self._config(body, "invalid-topic-{}.yaml".format(index)))
 
     def test_local_ydb_workload_registry_supports_typed_options(self):
         definition = local_ydb_workloads.WorkloadDefinition(
@@ -738,6 +977,262 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(cleanup[0].argv, tuple(base + ["clean"]))
         self.assertIsNone(cleanup[0].timeout_seconds)
 
+    def test_local_ydb_tpcc_builds_golden_prepare_run_and_cleanup_plans(self):
+        cli_context = local_ydb_workloads.WorkloadCli(
+            Path("/tmp/ydb cli"),
+            "grpc://benchmark-host.example:2135",
+            "/Root/bench",
+        )
+        workload = local_ydb_workloads.normalize_workload(
+            {
+                "type": "tpcc",
+                "operation": "run",
+                "options": {
+                    "warehouses": 12,
+                    "import-threads": 0,
+                    "compact": True,
+                    "tx-mode": "snapshot-rw",
+                    "latency-transaction": "Payment",
+                    "no-delays": True,
+                    "highres-histogram": True,
+                },
+            },
+            "workload",
+        )
+        base = [
+            Path("/tmp/ydb cli"),
+            "--endpoint",
+            "grpc://benchmark-host.example:2135",
+            "--database",
+            "/Root/bench",
+            "workload",
+            "tpcc",
+            "--path",
+            "tpcc-dataset",
+        ]
+        prepare = local_ydb_workloads.build_prepare_plan(cli_context, "tpcc-dataset", workload)
+        self.assertEqual(
+            prepare,
+            (
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "init",
+                    tuple(base + ["init", "--warehouses", 12]),
+                    120,
+                ),
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "import",
+                    tuple(
+                        base
+                        + [
+                            "import",
+                            "--warehouses",
+                            12,
+                            "--threads",
+                            0,
+                            "--no-tui",
+                            "--compact",
+                        ]
+                    ),
+                    720,
+                ),
+            ),
+        )
+
+        run = local_ydb_workloads.build_run_plan(
+            cli_context,
+            "tpcc-dataset",
+            workload,
+            "max-sessions",
+            50,
+            30,
+            3,
+            warmup_seconds=0,
+        )
+        self.assertEqual(
+            run.argv,
+            tuple(
+                base
+                + [
+                    "run",
+                    "--warehouses",
+                    12,
+                    "--warmup",
+                    "2s",
+                    "--time",
+                    "30s",
+                    "--max-sessions",
+                    50,
+                    "--threads",
+                    3,
+                    "--format",
+                    "Json",
+                    "--no-tui",
+                    "--tx-mode",
+                    "snapshot-rw",
+                    "--no-delays",
+                    "--highres-histogram",
+                ]
+            ),
+        )
+        self.assertEqual(run.timeout_seconds, 92)
+        self.assertEqual(run.progress_duration_seconds, 32)
+        requested_warmup = local_ydb_workloads.build_run_plan(
+            cli_context,
+            "tpcc-dataset",
+            workload,
+            "max-sessions",
+            50,
+            30,
+            3,
+            warmup_seconds=7,
+        )
+        self.assertEqual(requested_warmup.argv[requested_warmup.argv.index("--warmup") + 1], "7s")
+        self.assertEqual(requested_warmup.timeout_seconds, 97)
+
+        cleanup = local_ydb_workloads.build_cleanup_plan(cli_context, "tpcc-dataset", workload)
+        self.assertEqual(
+            cleanup,
+            (
+                local_ydb_workloads.WorkloadCommandPlan("clean", tuple(base + ["clean"]), 300),
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "rmdir",
+                    (
+                        Path("/tmp/ydb cli"),
+                        "--endpoint",
+                        "grpc://benchmark-host.example:2135",
+                        "--database",
+                        "/Root/bench",
+                        "scheme",
+                        "rmdir",
+                        "--recursive",
+                        "--force",
+                        "/Root/bench/tpcc-dataset",
+                    ),
+                    300,
+                ),
+            ),
+        )
+        absolute_cleanup = local_ydb_workloads.build_cleanup_plan(cli_context, "/Root/other", workload)
+        self.assertEqual(absolute_cleanup[1].argv[-1], "/Root/other")
+
+    def test_local_ydb_topic_builds_golden_prepare_run_and_cleanup_plans(self):
+        cli_context = local_ydb_workloads.WorkloadCli(
+            Path("/tmp/ydb cli"),
+            "grpc://benchmark-host.example:2135",
+            "/Root/bench",
+        )
+        workload = local_ydb_workloads.normalize_workload(
+            {
+                "type": "topic",
+                "operation": "full",
+                "options": {"partitions": 16, "consumers": 2, "message-size": 4096, "codec": "zstd"},
+            },
+            "workload",
+        )
+        base = [
+            Path("/tmp/ydb cli"),
+            "--endpoint",
+            "grpc://benchmark-host.example:2135",
+            "--database",
+            "/Root/bench",
+            "workload",
+            "topic",
+        ]
+        prepare = local_ydb_workloads.build_prepare_plan(cli_context, "topic-sample-01", workload)
+        self.assertEqual(
+            prepare,
+            (
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "init",
+                    tuple(
+                        base
+                        + [
+                            "init",
+                            "--topic",
+                            "topic-sample-01",
+                            "--partitions",
+                            16,
+                            "--consumers",
+                            2,
+                            "--consumer-prefix",
+                            "ydb-bench-consumer",
+                        ]
+                    ),
+                    120,
+                ),
+            ),
+        )
+
+        direct_run = local_ydb_workloads.build_run_argv(
+            cli_context,
+            "topic-sample-01",
+            workload,
+            "rate",
+            5000,
+            30,
+            3,
+        )
+        expected_run = base + [
+            "run",
+            "full",
+            "--topic",
+            "topic-sample-01",
+            "--seconds",
+            30,
+            "--warmup",
+            0,
+            "--window",
+            1,
+            "--print-timestamp",
+            "--percentile",
+            99,
+            "--producer-threads",
+            3,
+            "--consumer-threads",
+            3,
+            "--consumers",
+            2,
+            "--consumer-prefix",
+            "ydb-bench-consumer",
+            "--message-size",
+            4096,
+            "--message-rate",
+            5000,
+            "--codec",
+            "zstd",
+        ]
+        self.assertEqual(direct_run, expected_run)
+        self.assertNotIn("--use-tx", direct_run)
+
+        run = local_ydb_workloads.build_run_plan(
+            cli_context,
+            "topic-sample-01",
+            workload,
+            "rate",
+            5000,
+            30,
+            3,
+            warmup_seconds=7,
+        )
+        expected_run[expected_run.index("--seconds") + 1] = 37
+        expected_run[expected_run.index("--warmup") + 1] = 7
+        self.assertEqual(run.argv, tuple(expected_run))
+        self.assertEqual(run.timeout_seconds, 67)
+        self.assertEqual(run.progress_duration_seconds, 37)
+
+        cleanup = local_ydb_workloads.build_cleanup_plan(cli_context, "topic-sample-01", workload)
+        self.assertEqual(
+            cleanup,
+            (
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "clean",
+                    tuple(base + ["clean", "--topic", "topic-sample-01"]),
+                    120,
+                ),
+            ),
+        )
+        self.assertEqual(local_ydb_workloads.workload_table_path("topic", "topic-sample-01"), "topic-sample-01")
+
     def test_local_ydb_workload_registry_validates_lifecycle_metadata_and_plans(self):
         definition = local_ydb_workloads.WorkloadDefinition(
             name="inline",
@@ -760,6 +1255,15 @@ class YdbBenchTest(unittest.TestCase):
             local_ydb_workloads._validate_catalog((replace(definition, dataset_scope="attempt"),))
         with self.assertRaisesRegex(ValueError, "inline warmup requires"):
             local_ydb_workloads._validate_catalog((replace(definition, run_plan_builder=None),))
+        with self.assertRaisesRegex(ValueError, "default client threads"):
+            local_ydb_workloads._validate_catalog((replace(definition, default_client_threads=0),))
+        string_limit = replace(
+            definition,
+            options=(local_ydb_workloads.WorkloadOption("scale", "auto", kind="string"),),
+            load_limits=(("sessions", "scale", 10),),
+        )
+        with self.assertRaisesRegex(ValueError, "invalid load limit"):
+            local_ydb_workloads._validate_catalog((string_limit,))
         with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"inline": definition}):
             with self.assertRaisesRegex(BenchmarkError, "CPU measurement window"):
                 local_ydb_workloads.build_run_plan(
@@ -812,6 +1316,134 @@ class YdbBenchTest(unittest.TestCase):
                         1,
                         warmup_seconds=1,
                     )
+
+    def test_local_ydb_tpcc_geometry_lifecycle_reuses_dataset_and_cpu_window(self):
+        workload = local_ydb_workloads.normalize_workload(
+            {
+                "type": "tpcc",
+                "operation": "run",
+                "options": {
+                    "warehouses": 2,
+                    "latency-transaction": "Payment",
+                },
+            },
+            "workload",
+        )
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command, **_kwargs: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {}
+        monitor.summary.return_value = {
+            "static_cpu_mean": 1,
+            "static_cpu_max": 2,
+            "dynamic_cpu_mean": 3,
+            "dynamic_cpu_max": 4,
+            "cli_cpu_mean": 5,
+            "cli_cpu_max": 6,
+            "host_cpu_mean": 7,
+            "host_cpu_max": 8,
+        }
+        payload = self._tpcc_result_payload(
+            warehouses=2,
+            max_sessions=20,
+            threads=2,
+            warmup_seconds=1,
+            time_seconds=10,
+            new_orders=100,
+        )
+        topology_record = CpuTopology(
+            allowed_cpus=(0,),
+            numa_nodes=((0, (0,)),),
+            chiplets=(),
+            physical_cores=((0,),),
+        )
+        progress = []
+        with mock.patch.object(local_ydb, "LinuxCpuMonitor", return_value=monitor), mock.patch.object(
+            local_ydb,
+            "run_command",
+            side_effect=lambda command, *_args, **_kwargs: self._local_ydb_command_result(
+                command,
+                json.dumps(payload),
+            ),
+        ) as execute:
+            lifecycle = local_ydb.WorkloadLifecycle(
+                cluster,
+                local_ydb_workloads.WorkloadCli(cluster.ydb_cli, cluster.client_endpoint, cluster.database),
+                workload,
+                {"parameter": "max-sessions"},
+                {"warmup": 0, "duration": 10},
+                2,
+                LOCAL_YDB_BENCHMARK,
+                topology_record,
+                {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
+                None,
+                lambda phase, **fields: progress.append({"phase": phase, **fields}),
+            )
+            lifecycle.open_profile(self.root / "tpcc-profile", "ignored-profile-path")
+            lifecycle.open_geometry(self.root / "tpcc-geometry", "tpcc-dataset", 1)
+            first_metrics, first_commands = lifecycle.run_sample(
+                20,
+                1,
+                1,
+                2,
+                self.root / "tpcc-repeat-1",
+                "ignored-sample-path-1",
+                {"attempt": 1},
+            )
+            second_metrics, second_commands = lifecycle.run_sample(
+                20,
+                1,
+                2,
+                2,
+                self.root / "tpcc-repeat-2",
+                "ignored-sample-path-2",
+                {"attempt": 1},
+                purpose="verification",
+            )
+            lifecycle.close_geometry()
+            lifecycle.close_profile()
+
+        self.assertEqual(cluster.init_workload.call_count, 2)
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(cluster._run.call_count, 2)
+        self.assertEqual(
+            [call.args[0][-1] for call in cluster._run.call_args_list], ["clean", "/Root/bench/tpcc-dataset"]
+        )
+        self.assertTrue(all(call.kwargs["timeout"] == 300 for call in cluster._run.call_args_list))
+        self.assertEqual([command["phase"] for command in first_commands], ["measuring"])
+        self.assertEqual([command["phase"] for command in second_commands], ["verification-measuring"])
+        run_argv = execute.call_args_list[0].args[0]
+        self.assertEqual(run_argv[run_argv.index("--warmup") + 1], "1s")
+        self.assertEqual(run_argv[run_argv.index("--threads") + 1], 2)
+        self.assertEqual(first_metrics["throughput"], 10)
+        self.assertEqual(second_metrics["transactions"], 300)
+        self.assertEqual(monitor.summary.call_count, 2)
+        for call in monitor.summary.call_args_list:
+            self.assertEqual(call.kwargs, {"started_at_unix": 1001.0, "finished_at_unix": 1010.0})
+        details = json.loads((self.root / "tpcc-repeat-1" / "workload-result.json").read_text(encoding="utf-8"))
+        self.assertEqual(details["schema_id"], "tpcc-json-v2")
+        self.assertEqual(details["details"], payload)
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            [
+                "initializing-workload",
+                "preparing-import",
+                "measuring",
+                "verification-measuring",
+                "cleaning-workload",
+                "cleaning-rmdir",
+            ],
+        )
 
     def test_local_ydb_profile_inline_lifecycle_prepares_once_and_cleans_once(self):
         definition, workload = self._synthetic_profile_workload()
@@ -1516,6 +2148,355 @@ class YdbBenchTest(unittest.TestCase):
                 20 nan 0 0 1 2 3 4
             """)
 
+    def test_local_ydb_tpcc_json_result_uses_uncapped_throughput_and_admitted_latency(self):
+        workload = local_ydb_workloads.normalize_workload(
+            {
+                "type": "tpcc",
+                "operation": "run",
+                "options": {"warehouses": 2, "latency-transaction": "Payment"},
+            },
+            "workload",
+        )
+        request = local_ydb_workloads.WorkloadRunRequest("max-sessions", 20, 10, 2, 2, None)
+        payload = self._tpcc_result_payload()
+        command_result = self._local_ydb_command_result(
+            ("ydb", "workload", "tpcc", "run"),
+            json.dumps(payload),
+        )
+        result = local_ydb_workloads.parse_workload_result("tpcc", command_result, workload, request)
+        self.assertEqual(
+            result.metrics,
+            {
+                "transactions": 300,
+                "new_orders": 120,
+                "throughput": 10,
+                "tpcc_tpmc": 25.5,
+                "efficiency_pct": 80.25,
+                "errors": 10,
+                "p50_ms": 11,
+                "p90_ms": 12,
+                "p95_ms": 13,
+                "p99_ms": 14,
+                "p999_ms": 15,
+            },
+        )
+        self.assertEqual(result.details, payload)
+        self.assertEqual(result.measurement_window, (1001.0, 1010.0))
+        schema = local_ydb_workloads.workload_result_schema("tpcc")
+        self.assertEqual(schema["schema_id"], "tpcc-json-v2")
+        self.assertEqual(schema["throughput_unit"], "new orders/s")
+        self.assertEqual(schema["slo_metrics"]["p999"], "p999_ms")
+        self.assertNotIn("p99.9", schema["slo_metrics"])
+
+        zero_payload = self._tpcc_result_payload(new_orders=0, selected_ok=0)
+        for name in ("NewOrder", "Payment"):
+            transaction = zero_payload["transactions"][name]
+            for field in ("percentiles", "percentiles_ms", "percentiles_pure"):
+                transaction[field] = {key: 0 for key in transaction[field]}
+        zero_result = local_ydb_workloads.parse_workload_result(
+            "tpcc",
+            self._local_ydb_command_result(("ydb",), json.dumps(zero_payload)),
+            workload,
+            request,
+        )
+        self.assertEqual(zero_result.metrics["transactions"], 0)
+        self.assertEqual(zero_result.metrics["new_orders"], 0)
+        self.assertEqual(zero_result.metrics["throughput"], 0)
+        self.assertEqual(zero_result.metrics["p999_ms"], 0)
+
+        no_new_orders = self._tpcc_result_payload(new_orders=0, selected_ok=300)
+        for field in ("percentiles", "percentiles_ms", "percentiles_pure"):
+            no_new_orders["transactions"]["NewOrder"][field] = {
+                key: 0 for key in no_new_orders["transactions"]["NewOrder"][field]
+            }
+        no_new_orders_result = local_ydb_workloads.parse_workload_result(
+            "tpcc",
+            self._local_ydb_command_result(("ydb",), json.dumps(no_new_orders)),
+            workload,
+            request,
+        )
+        self.assertEqual(no_new_orders_result.metrics["transactions"], 0)
+        self.assertEqual(no_new_orders_result.metrics["p99_ms"], 14)
+        aggregated = local_ydb._aggregate_measurements(
+            [no_new_orders_result.metrics],
+            local_ydb_workloads.workload_definition("tpcc").result_adapter.metrics,
+        )
+        passed, reason = load_control.evaluate_load(
+            {
+                "parameter": "max-sessions",
+                "allow_errors": True,
+                "search": {"start": 1, "maximum": 20},
+                "objective": {"type": "latency-slo"},
+            },
+            20,
+            aggregated,
+        )
+        self.assertFalse(passed)
+        self.assertIn("zero successful operations", reason)
+
+    def test_local_ydb_tpcc_json_result_rejects_malformed_or_inconsistent_output(self):
+        workload = local_ydb_workloads.normalize_workload(
+            {
+                "type": "tpcc",
+                "operation": "run",
+                "options": {"warehouses": 2, "latency-transaction": "Payment"},
+            },
+            "workload",
+        )
+        request = local_ydb_workloads.WorkloadRunRequest("max-sessions", 20, 10, 2, 2, None)
+
+        def changed(change):
+            value = self._tpcc_result_payload()
+            change(value)
+            return json.dumps(value)
+
+        invalid = (
+            ("not json", "malformed"),
+            (" " * (1024 * 1024 + 1), "exceeds 1048576 bytes"),
+            (json.dumps({"error": "Stopped before measurements"}), "fatal error.*Stopped before measurements"),
+            (json.dumps({"summary": {}}), r"field \$.*missing.*transactions"),
+            (
+                changed(lambda value: value["summary"].__setitem__("unexpected", 1)),
+                "summary.*unknown fields: unexpected",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("threads", True)),
+                "summary.threads.*integer",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("tpmc", float("nan"))),
+                "summary.tpmc.*finite number",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("efficiency", -1)),
+                "summary.efficiency.*finite number",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("warehouses", 3)),
+                "summary.warehouses.*configured warehouses",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("max_sessions", 19)),
+                "summary.max_sessions.*requested load",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("threads", 1)),
+                "summary.threads.*requested client threads",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("warmup_seconds", 3)),
+                "summary.warmup_seconds.*effective warmup",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("time_seconds", 9)),
+                "summary.time_seconds.*measurement window",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("time_seconds", 71)),
+                "summary.time_seconds.*measurement window",
+            ),
+            (
+                changed(lambda value: value["summary"].__setitem__("new_orders", 119)),
+                "summary.new_orders.*NewOrder.ok_count",
+            ),
+            (
+                changed(lambda value: value["transactions"]["Payment"]["percentiles"].update({"90": 7, "95": 3})),
+                "Payment.percentiles.*monotonic",
+            ),
+            (
+                changed(lambda value: value["transactions"]["Payment"]["percentiles"].__setitem__("50", 0)),
+                "Payment.*percentiles must be positive",
+            ),
+            (
+                changed(lambda value: value["transactions"]["Payment"]["percentiles"].__setitem__("50", True)),
+                "Payment.percentiles.50.*integer",
+            ),
+            (
+                changed(lambda value: value["transactions"].__setitem__("Extra", {})),
+                "transactions.*unknown fields: Extra",
+            ),
+        )
+        for stdout, message in invalid:
+            with self.subTest(message=message), self.assertRaisesRegex(BenchmarkError, message):
+                local_ydb_workloads.parse_workload_result(
+                    "tpcc",
+                    self._local_ydb_command_result(("ydb",), stdout),
+                    workload,
+                    request,
+                )
+
+    def test_local_ydb_topic_total_result_normalizes_aggregate_consumer_rate(self):
+        workload = local_ydb_workloads.normalize_workload(
+            {"type": "topic", "operation": "full", "options": {"consumers": 2}},
+            "workload",
+        )
+        request = local_ydb_workloads.WorkloadRunRequest("rate", 150, 10, 3, 4, None)
+        stdout = """
+Window\tWrite speed\tWrite time\tInflight\tLag\t\tLag time\tRead speed\tFull time\tTimestamp
+#\tmsg/s\tMB/s\tpercentile,ms\tpercentile,msg\tpercentile,msg\tpercentile,ms\tmsg/s\tMB/s\tpercentile,ms
+4\t0\t0\t0\t\t0\t\t0\t\t0\t\t0\t0\t0\t2026-08-25T10:00:04Z
+13\t0\t0\t0\t\t0\t\t0\t\t0\t\t0\t0\t0\t2026-08-25T10:00:13Z
+Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
+"""
+        result = local_ydb_workloads.parse_workload_result(
+            "topic",
+            self._local_ydb_command_result(("ydb", "workload", "topic", "run", "full"), stdout),
+            workload,
+            request,
+        )
+        self.assertEqual(
+            result.metrics,
+            {
+                "transactions": 900,
+                "throughput": 90,
+                "write_messages_s": 120,
+                "write_mib_s": 1,
+                "write_p99_ms": 4,
+                "inflight_p99_messages": 7,
+                "lag_p99_messages": 8,
+                "lag_p99_ms": 9,
+                "read_messages_s": 180,
+                "read_per_consumer_messages_s": 90,
+                "read_mib_s": 2,
+                "full_p99_ms": 12,
+            },
+        )
+        self.assertEqual(result.details, {"percentile": 99, "total": result.metrics})
+        self.assertEqual(result.measurement_window, (1787652004.0, 1787652013.0))
+        passed, reason = load_control.evaluate_load(
+            {
+                "parameter": "rate",
+                "allow_errors": False,
+                "search": {"start": 10, "maximum": 150},
+                "objective": {
+                    "type": "latency-slo",
+                    "percentile": "p99",
+                    "latency_metric": "full_p99_ms",
+                    "max_ms": 20,
+                    "max_errors": 0,
+                    "min_achieved_rate_ratio": 0.98,
+                },
+            },
+            150,
+            result.metrics,
+        )
+        self.assertFalse(passed)
+        self.assertIn("achieved rate ratio 0.6000", reason)
+
+        schema = local_ydb_workloads.workload_result_schema("topic")
+        self.assertEqual(schema["schema_id"], "topic-total-v1")
+        self.assertEqual(schema["throughput_unit"], "messages/s")
+        self.assertEqual(schema["slo_metrics"], {"p99": "full_p99_ms"})
+        self.assertFalse(schema["reports_errors"])
+        self.assertEqual(
+            {metric["name"]: metric["unit"] for metric in schema["metrics"]}["read_messages_s"],
+            "deliveries/s",
+        )
+
+        zero_result = local_ydb_workloads.parse_workload_result(
+            "topic",
+            self._local_ydb_command_result(
+                ("ydb",),
+                """
+4 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:04Z
+13 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:13Z
+Total 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:14Z
+""",
+            ),
+            workload,
+            request,
+        )
+        self.assertEqual(zero_result.metrics["transactions"], 0)
+        self.assertEqual(zero_result.metrics["throughput"], 0)
+        aggregated = local_ydb._aggregate_measurements(
+            [zero_result.metrics],
+            local_ydb_workloads.workload_definition("topic").result_adapter.metrics,
+        )
+        passed, reason = load_control.evaluate_load(
+            {"parameter": "rate", "allow_errors": False, "values": [150]},
+            150,
+            aggregated,
+        )
+        self.assertFalse(passed)
+        self.assertIn("zero successful operations", reason)
+
+    def test_local_ydb_topic_total_result_rejects_ambiguous_or_unsafe_output(self):
+        workload = local_ydb_workloads.normalize_workload(
+            {"type": "topic", "operation": "full"},
+            "workload",
+        )
+        request = local_ydb_workloads.WorkloadRunRequest("rate", 100, 2, 1, 1, None)
+
+        def row(index, timestamp, metrics="1 2 3 4 5 6 7 8 9"):
+            return "{} {} {}".format(index, metrics, timestamp)
+
+        start = row(2, "2026-08-25T10:00:02Z")
+        finish = row(3, "2026-08-25T10:00:03Z")
+        total = row("Total", "2026-08-25T10:00:04Z")
+        valid = "\n".join((start, finish, total))
+        invalid = (
+            (None, "is not text"),
+            ("\ud800", "not valid UTF-8 text"),
+            ("\n".join((start, finish)), "exactly one Total row"),
+            (valid + "\n" + total, "exactly one Total row"),
+            ("\n".join((start, finish, "Total 1 2 3 4 5 6 7 8 9")), "Total row.*11 columns"),
+            (valid + " extra", "Total row.*11 columns"),
+            (
+                "\n".join((start, finish, row("Total", "2026-08-25T10:00:04Z", "-1 2 3 4 5 6 7 8 9"))),
+                "Total row metrics.*unsigned 64-bit",
+            ),
+            (
+                "\n".join((start, finish, row("Total", "2026-08-25T10:00:04Z", "1.0 2 3 4 5 6 7 8 9"))),
+                "Total row metrics.*unsigned 64-bit",
+            ),
+            (
+                "\n".join((start, finish, row("Total", "2026-08-25T10:00:04Z", "١ 2 3 4 5 6 7 8 9"))),
+                "Total row metrics.*unsigned 64-bit",
+            ),
+            (
+                "\n".join(
+                    (start, finish, row("Total", "2026-08-25T10:00:04Z", "000000000000000000001 2 3 4 5 6 7 8 9"))
+                ),
+                "Total row metrics.*unsigned 64-bit",
+            ),
+            (
+                "\n".join(
+                    (start, finish, row("Total", "2026-08-25T10:00:04Z", "18446744073709551616 2 3 4 5 6 7 8 9"))
+                ),
+                "Total row metrics.*unsigned 64-bit",
+            ),
+            ("\n".join((finish, total)), "window row for index 2"),
+            ("\n".join((start, start, finish, total)), "window row for index 2"),
+            ("\n".join((row("٢", "2026-08-25T10:00:02Z"), finish, total)), "window row for index 2"),
+            ("\n".join(("2 1 2 3 4 5 6 7 8 9", finish, total)), "window row 2.*11 columns"),
+            (
+                "\n".join((row(2, "2026-08-25T10:00:02Z", "-1 2 3 4 5 6 7 8 9"), finish, total)),
+                "window row 2 metrics.*unsigned 64-bit",
+            ),
+            ("\n".join((start, finish, row("Total", "2026-08-25T10:00:04"))), "Total row timestamp.*ISO UTC"),
+            ("\n".join((row(2, "2026-08-25T10:00:02+00:00"), finish, total)), "window row 2 timestamp.*ISO UTC"),
+            ("\n".join((row(2, "2026-02-30T10:00:02Z"), finish, total)), "window row 2 timestamp.*ISO UTC"),
+            ("\n".join((row(2, "2026-08-25T10:00:03Z"), finish, total)), "timestamps must be increasing"),
+            ("x" * (1024 * 1024 + 1), "exceeds 1048576 bytes"),
+        )
+        for stdout, message in invalid:
+            with self.subTest(message=message), self.assertRaisesRegex(BenchmarkError, message):
+                local_ydb_workloads.parse_workload_result(
+                    "topic",
+                    self._local_ydb_command_result(("ydb",), stdout),
+                    workload,
+                    request,
+                )
+
+        short_request = replace(request, duration_seconds=1)
+        with self.assertRaisesRegex(BenchmarkError, "duration of at least two seconds"):
+            local_ydb_workloads.parse_workload_result(
+                "topic",
+                self._local_ydb_command_result(("ydb",), valid),
+                workload,
+                short_request,
+            )
+
     def test_local_ydb_result_adapter_rejects_invalid_metric_mappings(self):
         metric_schema = (
             local_ydb_workloads.WorkloadMetric("throughput", "widgets/s", required=True),
@@ -2014,7 +2995,10 @@ class YdbBenchTest(unittest.TestCase):
             "threads:{values:[1,2,4,8,16,32,64],start:1,maximum:256}",
             web._JS,
         )
-        self.assertIn("localYdbLoadForWorkload(config.load,parameters)", web._JS)
+        self.assertIn(
+            "localYdbLoadForWorkload(config.load,parameters,nextDefinition,config.workload)",
+            web._JS,
+        )
         self.assertIn("log:'batches/s'", web._JS)
         transactions = next(metric for metric in LOCAL_YDB_BENCHMARK.metrics if metric.name == "transactions")
         throughput = next(metric for metric in LOCAL_YDB_BENCHMARK.metrics if metric.name == "throughput")
@@ -2052,7 +3036,7 @@ class YdbBenchTest(unittest.TestCase):
     def test_local_ydb_web_builder_resets_only_incompatible_load_parameters(self):
         start = web._JS.index("const localYdbLoadDefaults=")
         finish = web._JS.index("function defaultLocalYdbWorkload", start)
-        unit_start = web._JS.index("function localLegacyResultSchema")
+        unit_start = web._JS.index("function localSearchAxisLabel")
         unit_finish = web._JS.index("function localAttemptRows", unit_start)
         script = web._JS[start:finish] + web._JS[unit_start:unit_finish] + """
             const points=localYdbResetLoadParameter(
@@ -2069,9 +3053,34 @@ class YdbBenchTest(unittest.TestCase):
               objective:{type:'maximize-throughput',target_role:'dynamic'}
             };
             const compatible=localYdbLoadForWorkload(custom,['rate','threads']);
+            const tpccDefinition={
+              load_parameters:['max-sessions'],default_client_threads:2,
+              load_limits:{'max-sessions':{option:'warehouses',multiplier:10}}
+            };
+            const topicDefinition={load_parameters:['rate'],default_client_threads:1,load_limits:{}};
+            const tpccWorkload={options:{warehouses:10}};
+            const switchedToTpcc=localYdbLoadForWorkload(
+              custom,tpccDefinition.load_parameters,tpccDefinition,tpccWorkload
+            );
+            const warehouseOnePoints=localYdbClampLoad(
+              {...switchedToTpcc,values:[1,8,16,64]},tpccDefinition,{options:{warehouses:1}}
+            );
+            const warehouseOneSearch=localYdbClampLoad({
+              parameter:'max-sessions',allow_errors:false,
+              search:{start:32,maximum:100,multiplier:2,resolution_percent:2},
+              objective:{type:'maximize-throughput',target_role:'dynamic'}
+            },tpccDefinition,{options:{warehouses:1}});
+            const switchedBack=localYdbLoadForWorkload(
+              switchedToTpcc,['rate','threads'],{load_limits:{}},{options:{}}
+            );
             process.stdout.write(JSON.stringify({
               points,automatic,compatible,same_reference:compatible===custom,
-              units:['kv','stock','log','future'].map(localYdbThroughputUnit)
+              switchedToTpcc,warehouseOnePoints,warehouseOneSearch,switchedBack,
+              tpccThreads:localYdbDefaultClientThreads(tpccDefinition),
+              topicThreads:localYdbDefaultClientThreads(topicDefinition),
+              fallbackThreads:localYdbDefaultClientThreads({}),
+              units:['kv','stock','log','topic','future'].map(localYdbThroughputUnit),
+              axes:['kv','stock','topic'].map(workload=>localSearchAxisLabel('rate',workload))
             }));
         """
         completed = subprocess.run(
@@ -2109,7 +3118,32 @@ class YdbBenchTest(unittest.TestCase):
                 "objective": {"type": "maximize-throughput", "target_role": "dynamic"},
             },
         )
-        self.assertEqual(result["units"], ["requests/s", "transactions/s", "batches/s", "operations/s"])
+        self.assertEqual(
+            result["switchedToTpcc"],
+            {
+                "parameter": "max-sessions",
+                "allow_errors": False,
+                "search": {"start": 1, "maximum": 100, "multiplier": 4, "resolution_percent": 9},
+                "objective": {"type": "maximize-throughput", "target_role": "dynamic"},
+            },
+        )
+        self.assertEqual(result["warehouseOnePoints"]["values"], [1, 8, 10])
+        self.assertEqual(result["warehouseOneSearch"]["search"]["start"], 10)
+        self.assertEqual(result["warehouseOneSearch"]["search"]["maximum"], 10)
+        self.assertEqual(result["switchedBack"]["parameter"], "rate")
+        self.assertEqual(result["switchedBack"]["search"]["start"], 1000)
+        self.assertEqual(result["switchedBack"]["search"]["maximum"], 100000)
+        self.assertEqual(result["tpccThreads"], 2)
+        self.assertEqual(result["topicThreads"], 1)
+        self.assertEqual(result["fallbackThreads"], 64)
+        self.assertEqual(
+            result["units"],
+            ["requests/s", "transactions/s", "batches/s", "messages/s", "operations/s"],
+        )
+        self.assertEqual(
+            result["axes"],
+            ["Offered rate (requests/s)", "Offered rate (transactions/s)", "Offered rate (messages/s)"],
+        )
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB validity UI test")
     def test_local_ydb_web_hides_latency_for_empty_measurements(self):
@@ -2264,6 +3298,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result["first_default"], "p90")
         self.assertIn("document.querySelector('#local-load-allow-errors')?.checked", web._JS)
         self.assertIn("workloadDefinition.reports_errors?localInteger('local-slo-max-errors',0):0", web._JS)
+        self.assertIn("config.load.objective.max_errors=0", web._JS)
+        self.assertIn("Applied to both producer and consumer thread counts", web._JS)
 
     def test_local_ydb_stock_commands_do_not_use_kv_path_option(self):
         cli_context = local_ydb_workloads.WorkloadCli(
@@ -2528,6 +3564,128 @@ class YdbBenchTest(unittest.TestCase):
             self.assertEqual(command[command.index("--threads") + 1], "2")
             self.assertEqual(command[command.index("--rows") + 1], "25")
             self.assertNotIn("--rate", command)
+
+    def test_local_ydb_topic_uses_fresh_sample_dataset_and_inline_cpu_window(self):
+        workload = local_ydb_workloads.normalize_workload(
+            {"type": "topic", "operation": "full", "options": {"partitions": 4, "consumers": 2}},
+            "workload",
+        )
+        output = """
+2 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:12Z
+3 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:13Z
+Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
+"""
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command, **_kwargs: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {}
+        monitor.summary.return_value = {
+            "static_cpu_mean": 1,
+            "dynamic_cpu_mean": 2,
+            "cli_cpu_mean": 3,
+            "host_cpu_mean": 4,
+        }
+        topology = CpuTopology(
+            allowed_cpus=(0,),
+            numa_nodes=((0, (0,)),),
+            chiplets=(),
+            physical_cores=((0,),),
+        )
+        progress = []
+        with mock.patch.object(local_ydb, "LinuxCpuMonitor", return_value=monitor), mock.patch.object(
+            local_ydb,
+            "run_command",
+            side_effect=lambda command, *_args, **_kwargs: self._local_ydb_command_result(command, output),
+        ) as execute:
+            lifecycle = local_ydb.WorkloadLifecycle(
+                cluster,
+                local_ydb_workloads.WorkloadCli(cluster.ydb_cli, cluster.client_endpoint, cluster.database),
+                workload,
+                {"parameter": "rate", "allow_errors": False},
+                {"warmup": 1, "duration": 2},
+                2,
+                LOCAL_YDB_BENCHMARK,
+                topology,
+                {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
+                None,
+                lambda phase, **fields: progress.append({"phase": phase, **fields}),
+            )
+            lifecycle.open_profile(self.root / "topic-profile", "ignored-profile-topic")
+            first_metrics, first_commands = lifecycle.run_sample(
+                150,
+                1,
+                1,
+                2,
+                self.root / "topic-repeat-1",
+                "topic-sample-1",
+                {"attempt": 1},
+            )
+            second_metrics, second_commands = lifecycle.run_sample(
+                150,
+                1,
+                2,
+                2,
+                self.root / "topic-repeat-2",
+                "topic-sample-2",
+                {"attempt": 1},
+                purpose="verification",
+            )
+            lifecycle.close_profile()
+
+        self.assertEqual(cluster.init_workload.call_count, 2)
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(cluster._run.call_count, 2)
+        self.assertEqual([len(first_commands), len(second_commands)], [3, 3])
+        self.assertEqual(
+            [command["phase"] for command in first_commands],
+            ["initializing-workload", "measuring", "cleaning-workload"],
+        )
+        self.assertEqual(
+            [command["phase"] for command in second_commands],
+            ["verification-initializing", "verification-measuring", "verification-cleanup"],
+        )
+        for commands, topic_path in ((first_commands, "topic-sample-1"), (second_commands, "topic-sample-2")):
+            for command in commands:
+                argv = command["argv"]
+                self.assertEqual(argv[argv.index("--topic") + 1], topic_path)
+            run = commands[1]["argv"]
+            self.assertEqual(run[run.index("--seconds") + 1], "3")
+            self.assertEqual(run[run.index("--warmup") + 1], "1")
+            self.assertEqual(run[run.index("--producer-threads") + 1], "2")
+            self.assertEqual(run[run.index("--consumer-threads") + 1], "2")
+        self.assertEqual([call.args[2] for call in execute.call_args_list], [33, 33])
+        self.assertTrue(all(call.kwargs["timeout"] == 120 for call in cluster._run.call_args_list))
+        self.assertTrue(all(call.kwargs["ignore_cancellation"] for call in cluster._run.call_args_list))
+        self.assertEqual(first_metrics["throughput"], 90)
+        self.assertEqual(second_metrics["transactions"], 180)
+        self.assertEqual(
+            monitor.summary.call_args_list,
+            [
+                mock.call(started_at_unix=1787652012.0, finished_at_unix=1787652013.0),
+                mock.call(started_at_unix=1787652012.0, finished_at_unix=1787652013.0),
+            ],
+        )
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            [
+                "initializing-workload",
+                "measuring",
+                "cleaning-workload",
+                "verification-initializing",
+                "verification-measuring",
+                "verification-cleanup",
+            ],
+        )
 
     def test_local_ydb_command_record_preserves_argv_and_affinity(self):
         result = runner.CommandResult(
@@ -3600,20 +4758,15 @@ class YdbBenchTest(unittest.TestCase):
     def test_local_ydb_database_status_requires_running_state(self):
         status = """Database /Root/bench status:
   State: RUNNING
+  Allocated pools:
+    ssd: 1/1
+  Allocated units:
   Registered units:
-    host:1234 - dynamic
-    host:5678 - dynamic
   Data size hard quota: 0
+  Data size soft quota: 0
 """
-        self.assertEqual(local_ydb._registered_database_units(status), {"host:1234", "host:5678"})
-        self.assertTrue(local_ydb._database_status_ready(status, {"host:1234", "host:5678"}))
-        self.assertFalse(local_ydb._database_status_ready(status, {"host:1234", "host:9999"}))
-        self.assertFalse(
-            local_ydb._database_status_ready(
-                status.replace("RUNNING", "PENDING_RESOURCES"),
-                {"host:1234"},
-            )
-        )
+        self.assertTrue(local_ydb._database_status_ready(status))
+        self.assertFalse(local_ydb._database_status_ready(status.replace("RUNNING", "PENDING_RESOURCES")))
 
     def test_local_ydb_static_nodes_use_self_management(self):
         config = local_ydb._cluster_config(
@@ -3663,7 +4816,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(config["config"]["host_configs"][0]["ssd"], ["SectorMap:map_0:64:NONE"])
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
 
-    def test_local_ydb_scaling_waits_for_every_new_registered_node(self):
+    def test_local_ydb_scaling_waits_for_database_and_every_new_node(self):
         cluster_directory = self.root / "scaling-cluster"
         cluster_directory.mkdir()
         cluster = local_ydb.LocalYdbCluster(
@@ -3691,7 +4844,7 @@ class YdbBenchTest(unittest.TestCase):
             cluster, "_wait_for_port"
         ) as wait_for_port, mock.patch.object(cluster, "_wait_database_ready") as wait_database, mock.patch.object(
             cluster, "_wait_tenant_ready"
-        ), mock.patch.object(
+        ) as wait_tenant, mock.patch.object(
             local_ydb, "start_managed_process", side_effect=(mock.Mock(pid=101), mock.Mock(pid=102))
         ):
             cluster.add_dynamic_nodes(2)
@@ -3700,7 +4853,8 @@ class YdbBenchTest(unittest.TestCase):
             wait_for_port.call_args_list,
             [mock.call(2136, "dynamic node 1"), mock.call(2137, "dynamic node 2")],
         )
-        wait_database.assert_called_once_with({"benchmark-host:19002", "benchmark-host:19003"})
+        wait_database.assert_called_once_with()
+        wait_tenant.assert_called_once_with(30)
 
     def test_local_ydb_tenant_readiness_checks_every_dynamic_node(self):
         cluster_directory = self.root / "tenant-ready-cluster"
@@ -6621,7 +7775,10 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"Failed workload requests are allowed", script)
                 self.assertIn(b"editor.model?.local_ydb_workloads", script)
                 self.assertIn(b"definition.load_parameters", script)
-                self.assertIn(b"config.load=localYdbLoadForWorkload(config.load,parameters)", script)
+                self.assertIn(
+                    b"config.load=localYdbLoadForWorkload(config.load,parameters,nextDefinition,config.workload)",
+                    script,
+                )
                 self.assertIn(b"log:'batches/s'", script)
                 self.assertIn(b"function localResultSchema", script)
                 self.assertIn(b"result_schema_id:schema.schema_id", script)

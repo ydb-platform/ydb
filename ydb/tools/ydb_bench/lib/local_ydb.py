@@ -37,6 +37,7 @@ from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     build_run_plan,
     parse_workload_result,
     workload_definition,
+    workload_effective_warmup_seconds,
     workload_result_schema,
 )
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
@@ -170,26 +171,8 @@ def _set_process_affinity(pid, mask, proc_root=Path("/proc")):
     raise BenchmarkError("cannot update dynamic node CPU affinity: thread list did not stabilize")
 
 
-def _registered_database_units(output):
-    units = set()
-    in_registered_units = False
-    for line in output.splitlines():
-        stripped = line.strip()
-        if stripped == "Registered units:":
-            in_registered_units = True
-            continue
-        if not in_registered_units:
-            continue
-        if line.startswith("    ") and " - " in stripped:
-            units.add(stripped.split(" - ", 1)[0])
-            continue
-        if stripped:
-            break
-    return units
-
-
-def _database_status_ready(output, expected_units=()):
-    return "State: RUNNING" in output and set(expected_units).issubset(_registered_database_units(output))
+def _database_status_ready(output):
+    return any(line.strip() == "State: RUNNING" for line in output.splitlines())
 
 
 def _operation_ready(response):
@@ -604,7 +587,7 @@ class LocalYdbCluster:
             time.sleep(0.2)
         raise BenchmarkError("{} did not become ready in {} seconds".format(description, timeout))
 
-    def _wait_database_ready(self, expected_units, timeout=120):
+    def _wait_database_ready(self, timeout=120):
         command = [
             self.ydbd,
             "-s",
@@ -622,7 +605,7 @@ class LocalYdbCluster:
             if (
                 not last_result.exit_code
                 and not last_result.timed_out
-                and _database_status_ready(last_result.stdout, expected_units)
+                and _database_status_ready(last_result.stdout)
             ):
                 atomic_write_text(self.directory / "database-status.txt", last_result.stdout)
                 return
@@ -680,8 +663,7 @@ class LocalYdbCluster:
         self._progress("waiting-for-database", dynamic_nodes=final_count)
         for index, node in enumerate(self.dynamic_nodes[start_index:], start_index + 1):
             self._wait_for_port(node["grpc_port"], "dynamic node {}".format(index))
-        expected_units = {"{}:{}".format(self.hostname, node["ic_port"]) for node in self.dynamic_nodes}
-        self._wait_database_ready(expected_units)
+        self._wait_database_ready()
         self._wait_tenant_ready(min(self.timeout, 600))
         self._progress("cluster-ready", dynamic_nodes=final_count)
 
@@ -1120,7 +1102,8 @@ class WorkloadLifecycle:
 
     def _run_workload(self, state, load, dynamic_nodes, repetition, commands):
         phases = self._phases(state.purpose)
-        warmup = self.measurement["warmup"]
+        configured_warmup = self.measurement["warmup"]
+        warmup = workload_effective_warmup_seconds(self.workload, configured_warmup)
         if warmup and self.definition.warmup_mode == "separate":
             warmup_plan = build_run_plan(
                 self.workload_cli,
@@ -1198,6 +1181,8 @@ class WorkloadLifecycle:
             }
             if self.definition.warmup_mode == "inline":
                 progress_fields["inline_warmup_seconds"] = warmup
+                if warmup != configured_warmup:
+                    progress_fields["configured_warmup_seconds"] = configured_warmup
             self.progress(phases["measure"], **progress_fields)
             result = run_command(
                 plan.argv,

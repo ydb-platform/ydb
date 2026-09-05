@@ -12,10 +12,9 @@
 
 namespace NYql {
 
-class TUserDataStorage : public TThrRefBase {
+class TUserDataStorage: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TUserDataStorage>;
-
 
     TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex);
     void SetTokenResolver(TTokenResolver tokenResolver);
@@ -71,7 +70,6 @@ public:
 private:
     void TryFillUserDataUrl(TUserDataBlock& block) const;
     TUserDataBlock& RegisterLink(const TUserDataKey& key, TFileLinkPtr link);
-
 
     THoldingFileStorage FileStorage_;
     TUserDataTable UserData_;

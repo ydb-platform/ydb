@@ -33,7 +33,7 @@ void EnumFolderContent(DataMapType& data, const TString& folderPath, ui32 maxFil
     }
 }
 
-}
+} // namespace
 
 namespace NYql {
 
@@ -54,8 +54,8 @@ void TUserDataStorage::SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessi
 }
 
 void TUserDataStorage::SetUserDataTable(TUserDataTable data) {
-     UserData_ = std::move(data);
-     FillUserDataUrls();
+    UserData_ = std::move(data);
+    FillUserDataUrls();
 }
 
 void TUserDataStorage::AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block) {
@@ -150,7 +150,7 @@ bool TUserDataStorage::ContainsUserDataFolder(const TStringBuf& name) const {
 }
 
 TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount) const {
-    return FindUserDataFolder(UserData_,name,maxFileCount);
+    return FindUserDataFolder(UserData_, name, maxFileCount);
 }
 
 TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount) {
@@ -229,8 +229,8 @@ THoldingFileStorage& TUserDataStorage::GetHoldingFileStorage() {
 }
 
 TUserDataBlock* TUserDataStorage::FreezeUdfNoThrow(const TUserDataKey& key,
-                                                    TString& errorMessage,const TString& customUdfPrefix,
-                                                    NUdf::ELogLevel logLevel, const TStringBuf& alias) {
+                                                   TString& errorMessage, const TString& customUdfPrefix,
+                                                   NUdf::ELogLevel logLevel, const TStringBuf& alias) {
     TUserDataBlock* block = FreezeNoThrow(key, errorMessage);
     if (!block) {
         return nullptr;
@@ -396,4 +396,4 @@ TVector<TString> TUserDataStorage::GetLibraries() const {
     return result;
 }
 
-}
+} // namespace NYql

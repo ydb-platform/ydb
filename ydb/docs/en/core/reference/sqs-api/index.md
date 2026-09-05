@@ -2,8 +2,6 @@
 
 {{ ydb-short-name }} supports working with [topics](../../concepts/datamodel/topic.md) via the [SQS](https://en.wikipedia.org/wiki/Amazon_Simple_Queue_Service) protocol.
 
-{% include [x](_includes/limitations.md) %}
-
 A single topic can be used simultaneously via multiple protocols. For example, writes can be performed using the Topic API, and reads using the SQS API, and vice versa.
 
 When creating a topic with the `CreateQueue` SQS API command, the topic is created with [auto-partitioning](../../concepts/datamodel/topic.md#autopartitioning_modes) enabled: with one partition and the automatic ability to increase up to 10 active partitions. Auto-partitioning parameters can be changed via [YQL](../../yql/reference/syntax/alter-topic.md) or [YDB CLI](../ydb-cli/topic-alter.md).
@@ -43,11 +41,11 @@ Example of a message with compressed content:
 
 When writing to a topic via the SQS protocol, messages are evenly distributed across partitions. This guarantees that all messages with the same `MessageGroupId` end up in the same partition.
 
-For writing via the SQS protocol, message deduplication is supported by `DeduplicationMessageId`, and if `DeduplicationMessageId` is not passed, by message content. Deduplication by content can be enabled with the `CreateQueue` and `SetQueueAttributes` commands by specifying the `ContentBasedDeduplication` parameter.
+For FIFO queues, message deduplication is supported by `MessageDeduplicationId`. If `MessageDeduplicationId` is not passed, deduplication by message content is available only when `ContentBasedDeduplication` is enabled (via the `CreateQueue` and `SetQueueAttributes` commands).
 
-Deduplication by content is implemented over a 5-minute window: a message with a duplicate `DeduplicationMessageId` can be written again after 5 minutes or more.
+Deduplication is implemented over a 5-minute window: a message with a duplicate `MessageDeduplicationId` can be written again after 5 minutes or more.
 
-There is a limit on the number of messages that can be written to a topic partition with content-based deduplication enabled: 500 messages per second. If you need to write more messages to the topic, increase the number of partitions. The topic limit is calculated as 500 messages/sec/partition × number of partitions. For example, to write 10 thousand messages per second, create a topic with 20 partitions.
+There is a limit on the number of messages that can be written to a FIFO queue partition: 1000 messages per second. If you need to write more messages, increase the number of partitions. The queue limit is calculated as 1000 messages/sec/partition × number of partitions. For example, to write 10 thousand messages per second, create a FIFO queue with 10 partitions.
 
 ## Documentation sections
 

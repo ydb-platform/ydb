@@ -13,14 +13,15 @@ enum class ESource {
 };
 
 template <ESource Source, typename TGetTransformer, typename TFinish>
-class TDataProposalsInspector : public TGraphTransformerBase {
+class TDataProposalsInspector: public TGraphTransformerBase {
 public:
     TDataProposalsInspector(const TTypeAnnotationContext& types, TGetTransformer getTransformer,
-        TFinish finish)
+                            TFinish finish)
         : Types_(types)
         , GetTransformer_(getTransformer)
         , Finish_(finish)
-    {}
+    {
+    }
 
 private:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -91,7 +92,6 @@ private:
         TExprNode::TPtr newRoot;
         TStatus status = GetTransformer_(provider).Transform(input, newRoot, ctx);
 
-
         if (status.Level == TStatus::Ok || status.Level == TStatus::Repeat) {
             if (newRoot && newRoot != input) {
                 NewRoots_.push_back(newRoot);
@@ -160,15 +160,16 @@ private:
 };
 
 template <ESource Source, typename TGetTransformer, typename TFinish>
-class TSpecificDataProposalsInspector : public TGraphTransformerBase {
+class TSpecificDataProposalsInspector: public TGraphTransformerBase {
 public:
     TSpecificDataProposalsInspector(const TTypeAnnotationContext& types, TString provider, TGetTransformer getTransformer,
-        TFinish finish)
+                                    TFinish finish)
         : Types_(types)
         , Provider_(std::move(provider))
         , GetTransformer_(getTransformer)
         , Finish_(finish)
-    {}
+    {
+    }
 
 private:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -230,7 +231,6 @@ private:
         TExprNode::TPtr newRoot;
         TStatus status = GetTransformer_(provider).Transform(input, newRoot, ctx);
 
-
         if (status.Level == TStatus::Ok || status.Level == TStatus::Repeat) {
             if (newRoot && newRoot != input) {
                 NewRoots_.push_back(newRoot);
@@ -272,8 +272,8 @@ private:
         PendingProviders_.clear();
         if (NewRoots_.empty()) {
             return hasRepeats
-                ? TStatus::Repeat
-                : TStatus::Ok;
+                       ? TStatus::Repeat
+                       : TStatus::Ok;
         }
 
         ChooseRoot(std::move(input), output);
@@ -294,17 +294,17 @@ private:
     TExprNode::TListType NewRoots_;
 };
 
-auto DefaultFinish = [](TExprContext&){};
+auto DefaultFinish = [](TExprContext&) {};
 
 template <ESource Source, typename TGetTransformer, typename TFinish = decltype(DefaultFinish)>
 TAutoPtr<IGraphTransformer> CreateDataProposalsInspector(const TTypeAnnotationContext& types,
-    TGetTransformer getTransformer, TFinish finish = DefaultFinish) {
+                                                         TGetTransformer getTransformer, TFinish finish = DefaultFinish) {
     return new TDataProposalsInspector<Source, TGetTransformer, TFinish>(types, getTransformer, finish);
 }
 
 template <ESource Source, typename TGetTransformer, typename TFinish = decltype(DefaultFinish)>
 TAutoPtr<IGraphTransformer> CreateSpecificDataProposalsInspector(const TTypeAnnotationContext& types, const TString& provider,
-    TGetTransformer getTransformer, TFinish finish = DefaultFinish) {
+                                                                 TGetTransformer getTransformer, TFinish finish = DefaultFinish) {
     return new TSpecificDataProposalsInspector<Source, TGetTransformer, TFinish>(types, provider, getTransformer, finish);
 }
 
@@ -314,12 +314,11 @@ TAutoPtr<IGraphTransformer> CreateConfigureTransformer(const TTypeAnnotationCont
     return CreateDataProposalsInspector<ESource::DataSource>(
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
-        return provider->GetConfigurationTransformer();
-    },
+            return provider->GetConfigurationTransformer();
+        },
         [](TExprContext& ctx) {
-        ctx.Step.Done(TExprStep::ELevel::Configure);
-    }
-    );
+            ctx.Step.Done(TExprStep::ELevel::Configure);
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateIODiscoveryTransformer(const TTypeAnnotationContext& types) {
@@ -330,8 +329,7 @@ TAutoPtr<IGraphTransformer> CreateIODiscoveryTransformer(const TTypeAnnotationCo
         },
         [](TExprContext& ctx) {
             ctx.Step.Done(TExprStep::ELevel::DiscoveryIO);
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateEpochsTransformer(const TTypeAnnotationContext& types) {
@@ -342,8 +340,7 @@ TAutoPtr<IGraphTransformer> CreateEpochsTransformer(const TTypeAnnotationContext
         },
         [](TExprContext& ctx) {
             ctx.Step.Done(TExprStep::ELevel::Epochs);
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateLogicalDataProposalsInspector(const TTypeAnnotationContext& types) {
@@ -351,8 +348,7 @@ TAutoPtr<IGraphTransformer> CreateLogicalDataProposalsInspector(const TTypeAnnot
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetLogicalOptProposalTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreatePhysicalDataProposalsInspector(const TTypeAnnotationContext& types) {
@@ -360,8 +356,7 @@ TAutoPtr<IGraphTransformer> CreatePhysicalDataProposalsInspector(const TTypeAnno
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetPhysicalOptProposalTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreatePhysicalFinalizers(const TTypeAnnotationContext& types) {
@@ -369,8 +364,7 @@ TAutoPtr<IGraphTransformer> CreatePhysicalFinalizers(const TTypeAnnotationContex
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetPhysicalFinalizingTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateTableMetadataLoader(const TTypeAnnotationContext& types) {
@@ -381,8 +375,7 @@ TAutoPtr<IGraphTransformer> CreateTableMetadataLoader(const TTypeAnnotationConte
         },
         [](TExprContext& ctx) {
             ctx.Step.Done(TExprStep::LoadTablesMetadata);
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnnotationContext& types) {
@@ -390,8 +383,7 @@ TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnno
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetFinalizingTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationContext& types) {
@@ -399,8 +391,7 @@ TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationConte
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetPlanInfoTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateRecaptureDataProposalsInspector(const TTypeAnnotationContext& types, const TString& provider) {
@@ -412,8 +403,7 @@ TAutoPtr<IGraphTransformer> CreateRecaptureDataProposalsInspector(const TTypeAnn
         },
         [](TExprContext& ctx) {
             ctx.Step.Done(TExprStep::Recapture);
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateStatisticsProposalsInspector(const TTypeAnnotationContext& types, const TString& provider) {
@@ -422,8 +412,7 @@ TAutoPtr<IGraphTransformer> CreateStatisticsProposalsInspector(const TTypeAnnota
         provider,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetStatisticsProposalTransformer();
-        }
-    );
+        });
 }
 
 } // namespace NYql

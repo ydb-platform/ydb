@@ -34,6 +34,10 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, 
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
+_LOCAL_YDB_ACTIVITY_LIMIT = 200
+_EVENT_LOG_RECORD_BYTES = 4 * 1024 * 1024
+_LOCAL_YDB_ACTIVITY_RESPONSE_BYTES = 512 * 1024
+_MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
 _HTML = (
     "<!doctype html><html lang=en><meta charset=utf-8>"
     '<meta name=viewport content="width=device-width,initial-scale=1">'
@@ -157,7 +161,18 @@ _CSS = (
 .local-command-entry{margin:.55rem 0;padding:.55rem;border:1px solid #e4e7ec;border-radius:5px;background:var(--panel)}
 .local-profile-config{margin:.8rem 0;padding:.7rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
 .local-profile-config pre{max-height:24rem;overflow:auto;white-space:pre;margin:.7rem 0 0}
+.local-activity{margin:.8rem 0;padding:.7rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
+.local-activity>summary{cursor:pointer}.local-activity-log{max-height:20rem;overflow:auto;margin:.65rem 0 0;padding:0;list-style:none}
+.local-activity-item{display:grid;grid-template-columns:6.5rem minmax(10rem,1fr);gap:.35rem .75rem;padding:.45rem 0;border-top:1px solid #e4e7ec}
+.local-activity-item:first-child{border-top:0}.local-activity-time{color:var(--muted);font-variant-numeric:tabular-nums}
+.local-activity-command{grid-column:2;margin:.15rem 0}.local-activity-command summary{cursor:pointer;color:var(--muted)}
 .attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
+.comparison-delta{font-weight:650}.comparison-delta.good{color:var(--good)}.comparison-delta.bad{color:var(--bad)}
+.verification-badge{display:inline-flex;align-items:center;margin-left:.35rem;padding:.08rem .42rem;border:1px solid #d0d5dd}
+.verification-badge{border-radius:999px;background:var(--panel);color:var(--text);font-size:.75rem;font-weight:650;vertical-align:middle}
+.verification-badge.bad{border-color:#fecdca;background:#fff0f0;color:var(--bad)}
+.verification-summary{margin:.7rem 0;padding:.65rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:var(--panel);color:var(--text)}
+.verification-summary.bad{border-color:#fecdca;background:#fff0f0;color:var(--bad)}
 @media(max-width:900px){.local-live{grid-template-columns:1fr 1fr}.local-charts{grid-template-columns:1fr}}
 """
     '.status.queued{color:var(--warn)}\n'
@@ -228,7 +243,7 @@ _JS = (
     "function defaultLocalYdb(){return {workload:defaultLocalYdbWorkload('kv'),"
     "geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},client"
     ":{threads:64},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:10,duration:30,rep"
-    "etitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
+    "etitions:3,verification_repetitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
     ",cpus:null},dynamic_nodes:{mode:'none',cpus:null}}}}\n"
     "function serializeLocalYdb(lines,profile){const config=profile.local_ydb,workload=config.workload;lines.push('    work"
     "load:','      type: '+workload.type,'      operation: '+workload.operation,'      options:');for(const [key,value] of "
@@ -244,7 +259,8 @@ _JS = (
     "jectiveKeys))lines.push('        '+yamlKey+': '+config.load.objective[key]);else{lines.push('        percentile: '+config.load.o"
     "bjective.percentile);for(const [key,yamlKey] of Object.entries(localYdbSloKeys))lines.push('        '+yamlKey+': '+con"
     "fig.load.objective[key])}}lines.push('    measurement:','      warmup: '+config.measurement.warmup,' "
-    "     duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,'    affinity:');f"
+    "     duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,"
+    "'      verification-repetitions: '+(config.measurement.verification_repetitions??0),'    affinity:');f"
     "or(const [key,yamlKey] of Object.entries(localYdbAffinityKeys)){const role=config.affinity[key];lines.push('      '+yam"
     "lKey+':','        mode: '+role.mode);if(role.cpus!==null&&role.cpus!==undefined)lines.push('        cpus: '+role.cpus)}"
     "if(profile.timeout!==null&&profile.timeout!==undefined&&profile.timeout!=='')lines.push('    timeout: '+profile.timeo"
@@ -400,6 +416,12 @@ function localYdbProfileEditor(profile){
     localField('local-measurement-duration','Duration (seconds)',measurement.duration,'','type=number min=1')+
     localField('local-measurement-repetitions','Repetitions',measurement.repetitions,'','type=number min=1')+
     localField(
+      'local-measurement-verification-repetitions','Verification repetitions',
+      measurement.verification_repetitions??0,
+      'Independent holdout measurements at the selected load; 0 disables verification.',
+      'type=number min=0 max=20'
+    )+
+    localField(
       'local-timeout','Timeout (seconds)',profile.timeout??'','empty selects the computed timeout','type=number min=1'
     )+'</div><h3>Role affinity</h3>'+affinity+
     '<div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div></div>'
@@ -409,7 +431,12 @@ function localNumber(id,minimum=1){
   if(!Number.isFinite(value)||value<minimum)throw Error(id+' must be a number not below '+minimum+'.');
   return value
 }
-function localInteger(id,minimum=1){const value=localNumber(id,minimum);if(!Number.isSafeInteger(value))throw Error(id+' must be an integer.');return value}
+function localInteger(id,minimum=1,maximum=null){
+  const value=localNumber(id,minimum);
+  if(!Number.isSafeInteger(value))throw Error(id+' must be an integer.');
+  if(maximum!==null&&value>maximum)throw Error(id+' must not exceed '+maximum+'.');
+  return value
+}
 function localCpu(id,mode){
   if(mode==='none')return null;
   const raw=document.querySelector('#'+id).value.trim();
@@ -524,7 +551,8 @@ function bindLocalYdbEditor(profile){
     config.measurement={
       warmup:localInteger('local-measurement-warmup',0),
       duration:localInteger('local-measurement-duration'),
-      repetitions:localInteger('local-measurement-repetitions')
+      repetitions:localInteger('local-measurement-repetitions'),
+      verification_repetitions:localInteger('local-measurement-verification-repetitions',0,20)
     };
     for(const key of Object.keys(localYdbAffinityKeys)){
       const mode=document.querySelector('#local-affinity-'+key+'-mode').value;
@@ -752,7 +780,8 @@ function addProfile(){
     '><line class=chart-axis x1="\'+left+\'" y1="\'+top+\'" x2="\'+left+\'" y2="\'+(top+plotHeight)+\'"/><text class=chart-label x="\''
     '+(left+plotWidth/2)+\'" y="\'+(height-5)+\'" text-anchor=middle>\'+esc(xName)+\'</text>\';\n'
     '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],segments=[];let segment=[]'
-    ';for(const x of xValues){const row=item.rows.get(String(x)),y=valueFor(item,row);if(Number.isFinite(y)){segment.push({x'
+    ';const plottedX=item.connectMeasuredPoints?xValues.filter(x=>item.rows.has(String(x))):xValues;for(const x of plottedX){'
+    'const row=item.rows.get(String(x)),y=valueFor(item,row);if(Number.isFinite(y)){segment.push({x'
     ',y,row});continue}if(segment.length){segments.push(segment);segment=[]}}if(segment.length)segments.push(segment);for(con'
     'st points of segments)svg+=\'<polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+'
     '\',\'+yPos(point.y)).join(\' \')+\'"/>\';for(const point of segments.flat())svg+=\'<circle class=chart-point fill="\'+color+\'"'
@@ -814,8 +843,10 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
   }
 }
 """
-    "async function loadChartData(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);ret"
-    "urn api('/api/chart-data?'+query)}\n"
+    "async function loadChartData(runIds,benchmark=null){const query=new URLSearchParams;for(const run of runIds)query.append"
+    "('run',run);if(benchmark)query.set('benchmark',benchmark);return api('/api/chart-data?'+query)}\n"
+    "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);return api('/api/local-ydb-comparison?'+query)}\n"
+    "async function loadLocalYdbActivity(runId,profile,after){const query=new URLSearchParams({profile,after:String(after)});return api('/api/runs/'+enc(runId)+'/local-ydb-activity?'+query)}\n"
     "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
     "em=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts"
     '[0]&&!value.startsWith(parts[0]))return false;for(const part of parts){if(!part)continue;const found=value.indexOf(part,'
@@ -995,12 +1026,195 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'rt.open=false}}\n'
     '  renderBoard()\n'
     '}\n'
+    "function localComparisonKey(item){return JSON.stringify([item.run,item.profile])}\n"
+    "function localComparisonId(item){return item.run+' / '+item.profile}\n"
+    'function localComparisonConfig(item){\n'
+    '  const parameters=item.parameters||{},workload=parameters.workload||{},geometry=parameters.geometry||{},client=parameters.client||{};\n'
+    '  const measurement=parameters.measurement||{},load=parameters.load||{},objective=load.objective||{};\n'
+    "  const values={\n"
+    "    'Workload':workload.type??'—','Operation':workload.operation??'—','Load parameter':load.parameter??'—',\n"
+    "    'Load values':JSON.stringify(localComparisonStable(load.values??null)),\n"
+    "    'Objective':objective.type??'points','Warmup seconds':measurement.warmup??'—',\n"
+    "    'Duration seconds':measurement.duration??'—','Repetitions':measurement.repetitions??'—',\n"
+    "    'Verification repetitions':measurement.verification_repetitions??0,\n"
+    "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"
+    "    'Initial dynamic nodes':geometry.dynamic_nodes??'—','Maximum dynamic nodes':geometry.max_dynamic_nodes??'—',\n"
+    "    'Storage groups':geometry.storage_groups??'—','Disk size GiB':geometry.disk_size_gb??'—','YDB CLI threads':client.threads??'—',\n"
+    "    'Affinity config':JSON.stringify(localComparisonStable(parameters.affinity??null)),\n"
+    "    'YDB CLI CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.ydb_cli??null)),\n"
+    "    'Static CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.static_nodes??null)),\n"
+    "    'Dynamic CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.dynamic_nodes??null))\n"
+    "  };for(const [name,value] of Object.entries(workload.options||{}))values['Option '+name]=value;\n"
+    "  for(const [name,value] of Object.entries(load.search||{}))values['Search '+name]=value;\n"
+    "  for(const [name,value] of Object.entries(objective))values['Objective '+name]=value;\n"
+    "  values['Allow errors']=Boolean(load.allow_errors);return values\n"
+    '}\n'
+    'function localComparisonContext(item){return {\n'
+    "  'Host':item.platform?.uname?.node??'—','CPU':item.platform?.cpu_model??'—',\n"
+    "  'Kernel':item.platform?.uname?.release??'—','CPU topology':JSON.stringify(localComparisonStable(item.cpu_topology??null)),\n"
+    "  'YDB CLI build':item.binaries?.ydb_cli?.sha256??'—'\n"
+    '}}\n'
+    "function localComparisonBuild(item){return {'ydbd':item.binaries?.ydbd?.sha256??'—','Tool revision':item.tool_revision??'—'}}\n"
+    'function localComparisonStable(value){\n'
+    "  if(Array.isArray(value))return value.map(localComparisonStable);\n"
+    "  if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value)\n"
+    '    .sort(([left],[right])=>left.localeCompare(right))\n'
+    '    .map(([name,item])=>[name,localComparisonStable(item)]));\n'
+    '  return value\n'
+    '}\n'
+    'function localComparisonSemantic(item){\n'
+    '  const parameters=item.parameters||{},load=parameters.load||{},objective=load.objective||{type:\'points\'};return localComparisonStable({\n'
+    '    workload:parameters.workload||{},parameter:load.parameter,objective:objective.type,\n'
+    "    latency_percentile:objective.type==='latency-slo'?objective.percentile:null\n"
+    '  })\n'
+    '}\n'
+    'function localResultMetrics(result){\n'
+    "  const verified=Boolean(result?.metrics_source==='verification'&&result?.verified_metrics&&\n"
+    "    typeof result.verified_metrics==='object');\n"
+    "  return {metrics:(verified?result.verified_metrics:result?.selected_metrics)||{},verified,source:verified?'Holdout':'Search'}\n"
+    '}\n'
+    'function localVerificationCount(result,parameters={},verification={}){\n'
+    '  return result?.verification_repetitions??verification?.configured_repetitions??verification?.completed_repetitions??\n'
+    '    parameters?.measurement?.verification_repetitions??0\n'
+    '}\n'
+    'function localVerificationBadge(result,parameters={},verification={}){\n'
+    '  const view=localResultMetrics(result);if(!view.verified)return \'\';\n'
+    '  const repetitions=localVerificationCount(result,parameters,verification);\n'
+    '  const accepted=result?.holdout_accepted??verification?.accepted;\n'
+    "  return '<span class=\"verification-badge '+(accepted===false?'bad':'')+'\" title=\"Independent holdout measurements\">Holdout'+\n"
+    "    (repetitions?' · '+esc(repetitions):'')+'</span>'\n"
+    '}\n'
+    'function localComparisonDelta(value,baseline,lowerIsBetter=false,compatible=true){\n'
+    "  if(!compatible)return '<span class=muted>incompatible</span>';\n"
+    "  if(value===null||value===undefined||value===''||baseline===null||baseline===undefined||baseline==='')return '—';\n"
+    '  const current=Number(value),reference=Number(baseline);\n'
+    "  if(!Number.isFinite(current)||!Number.isFinite(reference))return '—';\n"
+    "  if(reference===0){if(current===0)return '<span class=\"comparison-delta\">0</span>';\n"
+    "    return lowerIsBetter?'<span class=\"comparison-delta bad\">+'+metricLabel(current)+'</span>':'—'};\n"
+    '  const delta=(current/reference-1)*100,good=lowerIsBetter?delta<0:delta>0,bad=lowerIsBetter?delta>0:delta<0;\n'
+    "  return '<span class=\"comparison-delta '+(good?'good':bad?'bad':'')+'\">'+(delta>0?'+':'')+delta.toFixed(1)+'%</span>'\n"
+    '}\n'
+    'function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseline){\n'
+    "  if(!chartData){container.innerHTML='<div class=empty>Search curves are unavailable because summary data could not be loaded.</div>';return}\n"
+    '  const entries=new Map((comparisonData.entries||[]).map(item=>[localComparisonKey(item),item]));\n'
+    '  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline)),groups=[];\n'
+    '  for(const series of chartData.series||[]){\n'
+    "    if(series.benchmark!=='local-ydb'||series.affinity!=='roles')continue;\n"
+    '    const entry=entries.get(JSON.stringify([series.run,series.profile]));\n'
+    '    if(!entry||JSON.stringify(localComparisonSemantic(entry))!==baselineSemantic)continue;\n'
+    '    const byNodes=new Map;\n'
+    '    for(const row of series.rows||[]){\n'
+    '      const load=chartNumber(row.load);if(!Number.isFinite(load))continue;\n'
+    "      const dynamicNodes=String(row.dynamic_nodes??entry.result?.dynamic_nodes??'—');\n"
+    '      if(!byNodes.has(dynamicNodes))byNodes.set(dynamicNodes,new Map);\n'
+    '      byNodes.get(dynamicNodes).set(String(load),row)\n'
+    '    }\n'
+    '    for(const [dynamicNodes,rows] of byNodes)groups.push({\n'
+    "      rows,label:localComparisonId(entry)+' · '+dynamicNodes+' dynamic',connectMeasuredPoints:true\n"
+    '    })\n'
+    '  }\n'
+    '  groups.sort((left,right)=>left.label.localeCompare(right.label,undefined,{numeric:true}));\n'
+    '  groups.forEach((group,index)=>group.colorIndex=index);\n'
+    '  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]\n'
+    '    .sort((left,right)=>left-right);\n'
+    "  if(!xValues.length){container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';return}\n"
+    "  const percentile=baseline.parameters?.load?.objective?.percentile||'p99';\n"
+    '  const specifications=[\n'
+    "    ['throughput','median_throughput','Achieved throughput'],\n"
+    "    ['latency_ms','median_'+percentile+'_ms',percentile+' latency (ms)'],\n"
+    "    ['static_cpu','median_static_cpu_mean','Static node CPU (%)'],\n"
+    "    ['dynamic_cpu','median_dynamic_cpu_mean','Dynamic node CPU (%)'],\n"
+    "    ['cli_cpu','median_cli_cpu_mean','YDB CLI CPU (%)'],\n"
+    "    ['errors','max_errors','Maximum errors per repetition']\n"
+    '  ].filter(([,metric])=>groups.some(group=>[...group.rows.values()]\n'
+    '    .some(row=>Number.isFinite(chartNumber(row[metric])))));\n'
+    "  if(!specifications.length){container.innerHTML='<div class=empty>No numeric local YDB search metrics are available.</div>';return}\n"
+    '  const seriesByMetric=Object.fromEntries(specifications.map(([alias,metric])=>[\n'
+    '    alias,groups.map(group=>({...group,metric}))\n'
+    ']));\n'
+    '  const xName=localSearchAxisLabel(\n'
+    "    baseline.parameters?.load?.parameter||'load',baseline.parameters?.workload?.type\n"
+    '  );\n'
+    "  const legend='<div class=chart-legend>'+groups.map(group=>'<span><i class=\"legend-swatch chart-bg-'+\n"
+    "    group.colorIndex%chartColors.length+'\"></i>'+esc(group.label)+'</span>').join('')+'</div>';\n"
+    "  container.innerHTML='<h3>Search curves</h3><p class=muted>Lines connect each profile&apos;s own measured loads; no values are synthesized at loads measured only by another profile.</p>'+\n"
+    "    legend+'<div class=local-charts>'+specifications.map(([alias,,title])=>\n"
+    '      localChart(title,alias,xName,xValues,seriesByMetric[alias])\n'
+    "    ).join('')+'</div>';\n"
+    '  bindChartTooltips(\n'
+    '    container,xName,xValues,seriesByMetric,specifications.map(([alias])=>alias),chartColors,true\n'
+    '  )\n'
+    '}\n'
+    'function mountLocalYdbComparison(container,data,chartData=null){\n'
+    "  const entries=data.entries||[];if(!entries.length){container.closest('.card').hidden=true;return}\n"
+    '  const previous=container.dataset.baseline;\n'
+    '  const baseline=entries.find(item=>localComparisonKey(item)===previous)||\n'
+    '    entries.find(item=>Object.keys(localResultMetrics(item.result).metrics).length)||entries[0];\n'
+    '  container.dataset.baseline=localComparisonKey(baseline);const baselineView=localResultMetrics(baseline.result);\n'
+    '  const baselineMetrics=baselineView.metrics;\n'
+    "  const percentile=baseline.parameters?.load?.objective?.percentile||'p99',latencyMetric=percentile+'_ms';\n"
+    '  const baselineConfig=localComparisonConfig(baseline),baselineContext=localComparisonContext(baseline);\n'
+    '  const baselineBuild=localComparisonBuild(baseline);\n'
+    '  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline));\n'
+    '  const rows=entries.map(item=>{\n'
+    '    const metricView=localResultMetrics(item.result),metrics=metricView.metrics,config=localComparisonConfig(item);\n'
+    '    const context=localComparisonContext(item),build=localComparisonBuild(item);\n'
+    '    const semanticCompatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;\n'
+    '    const sameMetricSource=metricView.source===baselineView.source,compatible=semanticCompatible&&sameMetricSource;\n'
+    '    const differences=[...new Set([...Object.keys(baselineConfig),...Object.keys(config)])].sort()\n'
+    '      .filter(name=>String(config[name])!==String(baselineConfig[name]));\n'
+    '    const contextDifferences=[...new Set([...Object.keys(baselineContext),...Object.keys(context)])].sort()\n'
+    '      .filter(name=>String(context[name])!==String(baselineContext[name]));\n'
+    '    const buildDifferences=[...new Set([...Object.keys(baselineBuild),...Object.keys(build)])].sort()\n'
+    '      .filter(name=>String(build[name])!==String(baselineBuild[name]));\n'
+    "    const details=[...differences.map(name=>'<li><strong>'+esc(name)+':</strong> '+esc(baselineConfig[name])+\n"
+    "      ' → '+esc(config[name])+'</li>'),...contextDifferences.map(name=>'<li><strong>'+esc(name)+':</strong> '+\n"
+    "      esc(baselineContext[name])+' → '+esc(context[name])+'</li>'),...buildDifferences.map(name=>'<li><strong>'+\n"
+    "      esc(name)+':</strong> '+esc(baselineBuild[name])+' → '+esc(build[name])+'</li>')];\n"
+    "    if(!sameMetricSource)details.unshift('<li><strong>Metric source:</strong> '+esc(baselineView.source)+' → '+\n"
+    "      esc(metricView.source)+'</li>');\n"
+    "    const comparisonState=!semanticCompatible?'Incompatible workload':!sameMetricSource?'Incompatible metric source':\n"
+    "      differences.length||contextDifferences.length?'Comparable with warnings':'Comparable · build changed';\n"
+    "    const differenceText=item===baseline?'Baseline':details.length?'<details><summary class=\"'+\n"
+    "      (compatible?'':'attempt-fail')+'\">'+comparisonState+' · '+differences.length+' config · '+\n"
+    "      contextDifferences.length+' environment · '+buildDifferences.length+' build'+\n"
+    "      (sameMetricSource?'':' · metric source')+'</summary><ul>'+\n"
+    "      details.join('')+'</ul></details>':'Same configuration, environment and build';\n"
+    "    return '<tr><td>'+esc(localComparisonId(item))+'</td><td>'+esc(item.state??'—')+\n"
+    "      localVerificationBadge(item.result,item.parameters,item.verification)+'</td><td>'+esc(metricView.source)+\n"
+    "      '</td><td><code>'+\n"
+    "      esc(String(item.binaries?.ydbd?.sha256??'—').slice(0,12))+'</code></td><td>'+\n"
+    "      esc(metricLabel(item.result?.selected_load??'—'))+'</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics.throughput??'—'))+' '+localComparisonDelta(metrics.throughput,baselineMetrics.throughput,false,compatible)+'</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics[latencyMetric]??'—'))+' ms '+localComparisonDelta(metrics[latencyMetric],baselineMetrics[latencyMetric],true,compatible)+'</td>'+\n"
+    "      '<td>'+esc(metrics.errors??'—')+' '+localComparisonDelta(metrics.errors,baselineMetrics.errors,true,compatible)+'</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics.static_cpu_mean??'—'))+'%</td><td>'+esc(metricLabel(metrics.dynamic_cpu_mean??'—'))+'%</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics.cli_cpu_mean??'—'))+'%</td><td>'+esc(item.result?.dynamic_nodes??'—')+'</td><td>'+differenceText+'</td></tr>'\n"
+    '  }).join(\'\');\n'
+    "  container.innerHTML='<div class=run-section-title><h2>Local YDB baseline comparison</h2><label>Baseline <select id=local-comparison-baseline>'+\n"
+    "    entries.map(item=>'<option value=\"'+esc(localComparisonKey(item))+'\" '+(item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label></div>'+\n"
+    "    '<p class=muted>Deltas compare metrics only when both rows use the same source: search or independent holdout. Expand configuration differences before interpreting a regression.</p>'+\n"
+    "    '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+\n"
+    "    '<th>Metric source</th><th>ydbd</th><th>Selected load</th><th>Throughput</th><th>'+esc(percentile)+'</th><th>Errors</th>'+\n"
+    "    '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+\n"
+    "    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+\n"
+    "    '<div id=local-comparison-curves></div>';\n"
+    '  mountLocalYdbComparisonCurves(\n'
+    "    container.querySelector('#local-comparison-curves'),data,chartData,baseline\n"
+    '  );\n'
+    "  container.querySelector('#local-comparison-baseline').onchange=event=>{\n"
+    '    container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data,chartData)\n'
+    '  }\n'
+    '}\n'
     """
 const localPhaseLabels={
   'preparing-cluster':'Preparing cluster','starting-static-nodes':'Starting static nodes','waiting-for-static-nodes':'Waiting for static nodes',
   'bootstrapping-cluster':'Bootstrapping cluster','creating-database':'Creating database','starting-dynamic-nodes':'Starting dynamic nodes',
   'waiting-for-database':'Waiting for database','cluster-ready':'Cluster ready','initializing-workload':'Initializing workload',
   'warming-up':'Warming up','measuring':'Measuring','cleaning-workload':'Cleaning workload','evaluating-attempt':'Evaluating attempt',
+  'verification-initializing':'Preparing verification workload','verification-warmup':'Warming up verification',
+  'verification-measuring':'Measuring verification','verification-cleanup':'Cleaning verification workload',
+  'verification-evaluating':'Evaluating verification','verification-completed':'Verification completed',
   'scaling-dynamic-nodes':'Scaling dynamic nodes','stopping-cluster':'Stopping cluster','finishing':'Writing results',
   completed:'Completed',failed:'Failed',cancelled:'Cancelled'
 };
@@ -1022,6 +1236,52 @@ function localCommandDetails(item,open){
       '</code></pre></div>'
     ).join('')+'</details>'
 }
+function localActivityTime(value){
+  const date=new Date(value);
+  return Number.isFinite(date.valueOf())?date.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'
+}
+function localActivityLabel(item){
+  if(item.type==='step-started')return 'Profile started';
+  if(item.type==='step-finished')return 'Profile '+(item.state||'finished');
+  return localPhaseLabel(item.phase)
+}
+function localActivityContext(item){
+  const verification=item.verification&&typeof item.verification==='object'?item.verification:null;
+  return [
+    item.search_stage?'stage '+item.search_stage:null,
+    item.attempt?'attempt #'+item.attempt:null,
+    item.repetition?'repetition '+item.repetition+'/'+(item.repetitions||'?'):null,
+    item.load!==undefined?(item.parameter||'load')+' '+metricLabel(item.load):null,
+    item.dynamic_nodes!==undefined?item.dynamic_nodes+' dynamic':null,
+    item.target_dynamic_nodes!==undefined?'target '+item.target_dynamic_nodes+' dynamic':null,
+    item.passed===true?'passed':item.passed===false?'failed':null,
+    verification?.completed_repetitions!==undefined?
+      'verification '+verification.completed_repetitions+'/'+(verification.configured_repetitions||'?'):null,
+    verification?.accepted===true?'holdout accepted':verification?.accepted===false?'holdout rejected':null,
+    item.decision||verification?.decision||item.reason||item.error||null
+  ].filter(Boolean).join(' · ')
+}
+function localActivityLog(events,truncated,open,error=''){
+  const rows=events.map(item=>{
+    const command=item.current_command?.argv?.length?'<details class=local-activity-command><summary>Command</summary>'+
+      '<pre class=local-command-code><code>'+esc(localCommandText(item.current_command))+'</code></pre></details>':'';
+    const context=localActivityContext(item);
+    return '<li class=local-activity-item><time class=local-activity-time datetime="'+esc(item.at||'')+'">'+
+      esc(localActivityTime(item.at))+'</time><div><strong>'+esc(localActivityLabel(item))+'</strong>'+
+      (context?'<div class=muted>'+esc(context)+'</div>':'')+'</div>'+command+'</li>'
+  }).join('');
+  return '<details class=local-activity data-local-activity'+(open?' open':'')+'><summary><strong>Recent activity</strong> '+
+    '<span class=muted>'+events.length+' events</span></summary>'+
+    (truncated?'<p class=muted>Earlier activity was omitted; recent events are bounded for display.</p>':'')+
+    (error?'<p class="notice error">'+esc(error)+'</p>':'')+
+    (rows?'<ol class=local-activity-log data-local-activity-log>'+rows+'</ol>':
+      '<p class=muted>No profile activity has been recorded yet.</p>')+'</details>'
+}
+function localRestoreActivityScroll(container,scrollTop,pinned){
+  const log=container.querySelector('[data-local-activity-log]');
+  if(!log)return;
+  log.scrollTop=pinned?log.scrollHeight:Math.min(scrollTop,Math.max(0,log.scrollHeight-log.clientHeight))
+}
 function localProfileDetails(data,open){
   const configuration={
     parameters:data.parameters||{},timeout_seconds:data.timeout_seconds??null,role_affinity:data.role_affinity||{}
@@ -1030,6 +1290,51 @@ function localProfileDetails(data,open){
     '><summary><strong>Launch parameters</strong> <span class=muted>Normalized profile and effective CPU affinity; '+
     'exact commands are listed per attempt.</span></summary><pre><code>'+esc(JSON.stringify(configuration,null,2))+
     '</code></pre></details>'
+}
+function localVerificationSummary(data){
+  const result=data.result||{},view=localResultMetrics(result);
+  const verification=data.verification||{},repetitions=localVerificationCount(
+    result,data.parameters,verification
+  );
+  if(!view.verified){
+    if(verification.status==='running'||verification.status==='pending'){
+      return '<div class=notice><strong>Verification in progress.</strong> '+
+        esc(verification.completed_repetitions??0)+'/'+esc(repetitions)+
+        ' independent repetitions completed; KPIs still show the search measurement.</div>'
+    }
+    if(verification.status==='skipped'){
+      return '<div class=notice><strong>Search measurement only.</strong> Verification was skipped: '+
+        esc(verification.reason||'no feasible load was selected')+'.</div>'
+    }
+    if(verification.status==='failed'||verification.status==='cancelled'){
+      return '<div class="notice error"><strong>Verification '+esc(verification.status)+'.</strong> '+
+        esc(verification.error||'The independent holdout did not complete')+
+        '. KPIs remain based on the search measurement.</div>'
+    }
+    return '<div class=notice><strong>Search measurement only.</strong> Configure verification repetitions to '+
+      'publish independent holdout metrics.</div>'
+  }
+  const detail=repetitions?
+    repetitions+' independent holdout repetition'+(Number(repetitions)===1?'':'s'):
+    'Independent holdout measurements';
+  const outcomes=[];
+  if(verification.decision){
+    outcomes.push((verification.evaluation_kind==='objective'?'Objective':'Validity check')+': '+verification.decision)
+  }
+  if(verification.throughput_delta_percent!==null&&verification.throughput_delta_percent!==undefined&&
+      Number.isFinite(Number(verification.throughput_delta_percent)))outcomes.push(
+    (Number(verification.throughput_delta_percent)>0?'+':'')+
+      Number(verification.throughput_delta_percent).toFixed(1)+'% throughput vs search'
+  );
+  if(verification.saturated_repetitions!==undefined)outcomes.push(
+    verification.saturated_repetitions+'/'+repetitions+' CPU-saturated'
+  );
+  const failed=(result.holdout_accepted??verification.accepted)===false;
+  return '<div class="verification-summary '+(failed?'bad':'')+'">'+localVerificationBadge(
+    result,data.parameters,verification
+  )+' <strong>Reported metrics come from the independent holdout.</strong> '+esc(detail)+
+    ' at the selected load.'+(outcomes.length?' '+esc(outcomes.join(' · '))+'.':'')+
+    ' Search measurements remain available in the attempt history.</div>'
 }
 function localElapsed(started,finished=null){
   const value=Date.parse(started),end=finished?Date.parse(finished):Date.now();
@@ -1058,20 +1363,43 @@ function localChart(title,metric,xName,xValues,series){
     svgChart(metric,xName,xValues,series,chartColors)+'</section>'
 }
 function localBestRows(attempts,objective,xField='attempt'){
-  let bestLoad=null,bestThroughput=-Infinity,currentStage=null;const rows=new Map;
+  let bestLoad=null,currentStage=null,stageAttempts=[];const rows=new Map;
   for(const item of attempts){
-    if(currentStage!==item.search_stage){currentStage=item.search_stage;bestLoad=null;bestThroughput=-Infinity}
+    if(currentStage!==item.search_stage){currentStage=item.search_stage;bestLoad=null;stageAttempts=[]}
+    stageAttempts.push(item);
     if(item.passed){
-      if(objective==='latency-slo'){if(bestLoad===null||item.load>bestLoad)bestLoad=item.load}
-      else if(Number(item.throughput)>bestThroughput){bestThroughput=Number(item.throughput);bestLoad=item.load}
+      if(objective?.type==='latency-slo'){
+        if(bestLoad===null||item.load>bestLoad)bestLoad=item.load
+      }else if(objective?.type==='maximize-throughput'){
+        const saturated=stageAttempts.filter(value=>value.passed&&value.target_cpu_saturated);
+        if(saturated.length){
+          const bestThroughput=Math.max(...saturated.map(value=>Number(value.throughput)));
+          const minimumThroughput=bestThroughput*(1-Number(objective.plateau_gain_percent||0)/100);
+          bestLoad=Math.min(...saturated.filter(value=>Number(value.throughput)>=minimumThroughput).map(value=>value.load))
+        }
+      }else{
+        const best=stageAttempts.filter(value=>value.passed).sort(
+          (left,right)=>Number(right.throughput)-Number(left.throughput)||left.load-right.load
+        )[0];
+        bestLoad=best?.load??null
+      }
     }
-    rows.set(String(item[xField]),{...item,current_best:bestLoad,passed_load:item.passed?item.load:null,failed_load:item.passed?null:item.load})
+    rows.set(String(item[xField]),{...item,current_best:bestLoad,failed_load:item.passed?null:item.load})
   }
   return rows
 }
 function renderLocalYdbProfile(container,data){
+  const previousActivity=container.querySelector('[data-local-activity]');
+  const previousActivityLog=container.querySelector('[data-local-activity-log]');
+  const activityOpen=previousActivity?previousActivity.open:['running','preparing'].includes(data.state);
+  const activityScrollTop=previousActivityLog?.scrollTop||0;
+  const activityPinned=!previousActivityLog||
+    previousActivityLog.scrollHeight-previousActivityLog.scrollTop-previousActivityLog.clientHeight<8;
   if(data.state==='preparing'){
-    container.innerHTML='<div class=notice>Preparing local YDB profile and extracting binaries…</div>';return
+    container.innerHTML='<div class=notice>Preparing local YDB profile and extracting binaries…</div>'+localActivityLog(
+      data.activity||[],Boolean(data.activity_truncated),activityOpen,data.activity_error||''
+    );
+    localRestoreActivityScroll(container,activityScrollTop,activityPinned);return
   }
   const openCommandAttempts=new Set(
     [...container.querySelectorAll('[data-command-attempt][open]')].map(details=>details.dataset.commandAttempt)
@@ -1079,7 +1407,7 @@ function renderLocalYdbProfile(container,data){
   const profileConfigOpen=container.querySelector('[data-local-profile-config][open]')!==null;
   const progress=data.progress||{},attempts=data.attempts||[],searches=data.searches||[];
   const result=data.result||null,parameters=data.parameters||{},loadConfig=parameters.load||{};
-  const objective=loadConfig.objective?.type||'points';
+  const objective=loadConfig.objective||{type:'points'};
   const phaseElapsed=localElapsed(progress.phase_started_at);
   const phaseDuration=Number(progress.phase_duration_seconds);
   const profileElapsed=localElapsed(data.started_at,data.finished_at);
@@ -1110,11 +1438,15 @@ function renderLocalYdbProfile(container,data){
       '<pre class=local-command-code><code>'+esc(localCommandText(progress.current_command))+
       '</code></pre></section>'
   }
+  html+=localActivityLog(
+    data.activity||[],Boolean(data.activity_truncated),activityOpen,data.activity_error||''
+  );
   if(result){
-    const selected=result.selected_metrics||{};
+    const selected=localResultMetrics(result).metrics;
     const latencyMetric=(loadConfig.objective?.percentile||'p99')+'_ms';
     const selectedLabel=result.selected_load===null||result.selected_load===undefined?
       '—':metricLabel(result.selected_load);
+    html+=localVerificationSummary(data);
     html+='<div class=local-kpis>'+localKpi(
       localOutcomeLabel(result.outcome),selectedLabel,result.parameter||loadConfig.parameter,true
     )+localKpi('Achieved throughput',metricLabel(selected.throughput??'—'),'transactions/s')+
@@ -1170,10 +1502,13 @@ function renderLocalYdbProfile(container,data){
       suffix:xAxis==='parameter'&&stages.length>1?
         ' · stage '+item.search_stage+' · '+item.dynamic_nodes+' dynamic':''
     }));
+    const bestLabel=objective.type==='latency-slo'?'Highest passing':
+      (objective.type==='maximize-throughput'?'Plateau candidate':'Best observed');
     const candidateSeries=groups.flatMap(group=>[
       {rows:group.bestRows,metric:'load',label:'Candidate'+group.suffix,colorIndex:7},
-      {rows:group.bestRows,metric:'current_best',label:'Current best'+group.suffix,colorIndex:0},
-      {rows:group.bestRows,metric:'passed_load',label:'Passed'+group.suffix,colorIndex:10},
+      {rows:group.bestRows,metric:'current_best',label:bestLabel+group.suffix,colorIndex:0},
+      {rows:group.bestRows,metric:'search_low',label:'Search low'+group.suffix,colorIndex:10},
+      {rows:group.bestRows,metric:'search_high',label:'Search high'+group.suffix,colorIndex:9},
       {rows:group.bestRows,metric:'failed_load',label:'Failed'+group.suffix,colorIndex:8}
     ]);
     const throughputSeries=groups.flatMap(group=>{
@@ -1205,12 +1540,14 @@ function renderLocalYdbProfile(container,data){
       {rows:group.rows,metric:'errors',label:'Errors'+group.suffix,colorIndex:8},
       {rows:group.rows,metric:'retries',label:'Retries'+group.suffix,colorIndex:1}
     ]);
+    const showSearchProgress=xAxis==='attempt';
+    const chartSeries={
+      throughput:throughputSeries,latency_ms:latencySeries,cpu_percent:cpuSeries,errors:errorSeries
+    };
+    if(showSearchProgress)chartSeries.load=candidateSeries;
     chartBinding={
       xName,xValues,
-      series:{
-        load:candidateSeries,throughput:throughputSeries,latency_ms:latencySeries,
-        cpu_percent:cpuSeries,errors:errorSeries
-      }
+      series:chartSeries
     };
     const axisHelp=xAxis==='parameter'?
       'Points are ordered by the searched parameter; geometry stages remain separate.':
@@ -1221,7 +1558,10 @@ function renderLocalYdbProfile(container,data){
       '<button type=button data-local-chart-x=parameter class="'+(xAxis==='parameter'?'primary':'')+
       '" aria-pressed="'+(xAxis==='parameter')+'">'+esc(searchAxisLabel)+'</button></div></div>'+
       '<p class=muted>'+esc(axisHelp)+'</p><div class=local-charts>'+
-      localChart('Candidate and current best','load',xName,xValues,candidateSeries)+
+      (showSearchProgress?localChart(
+        objective.type==='maximize-throughput'?'Ternary search progress':'Load search progress',
+        'load',xName,xValues,candidateSeries
+      ):'')+
       localChart('Offered and achieved throughput','throughput',xName,xValues,throughputSeries)+
       localChart('Latency','latency_ms',xName,xValues,latencySeries)+
       localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+
@@ -1241,6 +1581,7 @@ function renderLocalYdbProfile(container,data){
       ).join('')+'</tbody></table></div>';
   }else html+='<div class=empty>No completed search attempts yet. The timeline will appear after the first measurement.</div>';
   container.innerHTML=html;
+  localRestoreActivityScroll(container,activityScrollTop,activityPinned);
   for(const axisButton of container.querySelectorAll('[data-local-chart-x]'))axisButton.onclick=()=>{
     container.dataset.localYdbXAxis=axisButton.dataset.localChartX;renderLocalYdbProfile(container,data)
   };
@@ -1250,12 +1591,25 @@ function renderLocalYdbProfile(container,data){
   )
 }
 async function mountLocalYdbProfile(container,runId,profile,runState){
-  let loading=false,terminal=false;
+  let loading=false,terminal=false,activity=[],activityAfter=0,activityTruncated=false;
   const scheduleRunRefresh=()=>{if(['running','queued'].includes(runState)&&!refreshTimer)refreshTimer=setTimeout(()=>renderRun(runId,'local-ydb/'+profile),700)};
   const refresh=async()=>{
     if(loading)return;loading=true;
     try{
-      const data=await api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile));
+      const [data,activityUpdate]=await Promise.all([
+        api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile)),
+        loadLocalYdbActivity(runId,profile,activityAfter).catch(error=>({error:error.message}))
+      ]);
+      if(activityUpdate.error)data.activity_error='Recent activity could not be loaded: '+activityUpdate.error;
+      else{
+        const merged=new Map(activity.map(item=>[item.sequence,item]));
+        for(const item of activityUpdate.events||[])merged.set(item.sequence,item);
+        activity=[...merged.values()].sort((left,right)=>left.sequence-right.sequence);
+        if(activity.length>200){activity=activity.slice(-200);activityTruncated=true}
+        activityTruncated=activityTruncated||Boolean(activityUpdate.truncated);
+        if(Number.isSafeInteger(activityUpdate.after))activityAfter=Math.max(activityAfter,activityUpdate.after)
+      }
+      data.activity=activity;data.activity_truncated=activityTruncated;
       renderLocalYdbProfile(container,data);terminal=!['running','preparing'].includes(data.state);
       if(terminal&&refreshTimer){clearInterval(refreshTimer);refreshTimer=null}
       if(terminal)scheduleRunRefresh()
@@ -1323,12 +1677,12 @@ async function mountLocalYdbProfile(container,runId,profile,runState){
     "card run-tree\"><details'+open+'><summary><strong>Execution details</strong> — affinity, cases and artifacts</summary><"
     "table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details></section>'}\n"
     "    const running=(run.steps||[]).find(step=>step.state==='running'),live=['running','queued','failed','recovery_requir"
-    "ed'].includes(run.state);\n"
+    "ed'].includes(run.state),showLiveOutput=activeBenchmark!=='local-ydb';\n"
     "    if(live)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
     "sc(running.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repe"
-    "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+'<h3>Live stdout"
-    "</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><pre class=log>'+esc"
-    "(run.tail?.stderr||'No stderr captured yet.')+'</pre></section>';content+='</div>';\n"
+    "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+(showLiveOutput"
+    "?'<h3>Live stdout</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><p"
+    "re class=log>'+esc(run.tail?.stderr||'No stderr captured yet.')+'</pre>':'')+'</section>';content+='</div>';\n"
     "    app.innerHTML=shell('runs',content);\n"
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,activeProfile);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
@@ -1398,14 +1752,25 @@ async function mountLocalYdbProfile(container,runId,profile,runState){
     "h2>Runs</h2>'+ (value.runs.length?'<div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=chec"
     'kbox value="\'+esc(run.id)+\'" \'+(value.selected.includes(run.id)?\'checked\':\'\')+\'> \'+esc(run.id)+\' <span class=muted>(\'+es'
     "c(run.source)+')</span></label>').join('')+'</div>':'<div class=empty>No runs are available.</div>')+'<div class=toolbar"
-    '><button class=primary id=save-comparisons>Update comparison</button></div></section><section class=card><h2>Comparison '
-    "chart</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div><"
+    "><button class=primary id=save-comparisons>Update comparison</button></div></section><section class=card><div id=local-ydb-comparison>'+"
+    "(value.selected.length?'Loading local YDB results…':'Select one or more runs.')+'</div></section><section class=card><h2>Comparison "
+    "charts</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div><"
     "/section>';\n"
     "    app.innerHTML=shell('comparisons',content);\n"
     "    document.querySelector('#save-comparisons').onclick=async()=>{await api('/api/comparisons/selection',jsonOptions([.."
     ".document.querySelectorAll('.compare:checked')].map(input=>input.value)));renderComparisons()};\n"
-    "    if(value.selected.length)try{mountChartBuilder(document.querySelector('#comparison-chart'),await loadChartData(value"
-    ".selected))}catch(error){document.querySelector('#comparison-chart').innerHTML=displayError(error)}\n"
+    "    if(value.selected.length){const [localResult,localChartResult,chartResult]=await Promise.allSettled([\n"
+    "      loadLocalYdbComparison(value.selected),loadChartData(value.selected,'local-ydb'),loadChartData(value.selected)\n"
+    '    ]);\n'
+    "      const localTarget=document.querySelector('#local-ydb-comparison');\n"
+    "      const chartTarget=document.querySelector('#comparison-chart');\n"
+    "      if(localResult.status==='fulfilled')mountLocalYdbComparison(\n"
+    "        localTarget,localResult.value,localChartResult.status==='fulfilled'?localChartResult.value:null\n"
+    '      );\n'
+    '      else localTarget.innerHTML=displayError(localResult.reason);\n'
+    "      if(chartResult.status==='fulfilled')mountChartBuilder(chartTarget,chartResult.value);\n"
+    '      else chartTarget.innerHTML=displayError(chartResult.reason)\n'
+    '    }\n'
     "  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}\n"
     '}\n'
     "async function compose(){const current=route();if(current==='runs')return renderRuns();if(current==='new')return renderN"
@@ -1722,15 +2087,18 @@ def _add_memory_fairness_rows(grouped, dimension_fields):
     return derived_count
 
 
-def chart_data(output, run_ids):
+def chart_data(output, run_ids, benchmark_filter=None):
     """Read bounded profile summaries into UI-facing affinity series."""
     if not isinstance(run_ids, list) or not run_ids or len(run_ids) > 20:
         raise BenchmarkError("charts require between 1 and 20 run ids")
+    if benchmark_filter is not None and benchmark_filter not in BENCHMARKS:
+        raise BenchmarkError("unknown chart benchmark: {}".format(benchmark_filter))
     result = []
     dimensions, metrics, metric_metadata, dimension_metadata = set(), set(), {}, {}
     for run_id in run_ids:
         root = _run_directory(output, run_id)
-        for path in sorted(root.glob("*/*/summary.csv")):
+        pattern = "{}/*/summary.csv".format(benchmark_filter) if benchmark_filter else "*/*/summary.csv"
+        for path in sorted(root.glob(pattern)):
             if path.stat().st_size > 16 * 1024 * 1024:
                 raise BenchmarkError("summary CSV is too large: {}".format(path.relative_to(root)))
             affinity_cpus = {}
@@ -2061,12 +2429,46 @@ class RunService:
 
     def _emit_locked(self, run, event):
         event = dict(event)
-        event["sequence"] = run["store"].manifest.get("events", 0) + 1
+        sequence = run["store"].manifest.get("events", 0) + 1
+        if sequence > _MAX_SAFE_JSON_INTEGER:
+            raise BenchmarkError("event sequence exceeds the JSON safe-integer range")
+        event["sequence"] = sequence
         event["at"] = _utc_now()
+        if event.get("type") in ("stdout", "stderr"):
+            event["data"] = str(event.get("data", ""))[-self.tail_limit :]
+        persisted_event = event
         try:
-            serialized_event = json.dumps(event, sort_keys=True, allow_nan=False)
+            serialized_event = json.dumps(persisted_event, sort_keys=True, allow_nan=False)
         except ValueError as error:
             raise BenchmarkError("event contains a non-finite JSON number") from error
+        serialized_size = len(serialized_event.encode("utf-8")) + 1
+        if serialized_size > _EVENT_LOG_RECORD_BYTES:
+            persisted_event = {
+                "sequence": event["sequence"],
+                "at": event["at"],
+                "payload_truncated": True,
+                "original_size_bytes": serialized_size,
+            }
+            for name in ("type", "step_id", "state"):
+                value = event.get(name)
+                if isinstance(value, str):
+                    persisted_event[name] = value[:2048]
+            fields = event.get("fields")
+            if isinstance(fields, dict):
+                persisted_fields = {}
+                for name in ("reason", "error"):
+                    value = fields.get(name)
+                    if isinstance(value, str):
+                        persisted_fields[name] = value[:2048]
+                if persisted_fields:
+                    persisted_event["fields"] = persisted_fields
+            serialized_event = json.dumps(persisted_event, sort_keys=True, allow_nan=False)
+            if len(serialized_event.encode("utf-8")) + 1 > _EVENT_LOG_RECORD_BYTES:
+                persisted_event.pop("fields", None)
+                for name in ("type", "step_id", "state"):
+                    if name in persisted_event:
+                        persisted_event[name] = persisted_event[name][:128]
+                serialized_event = json.dumps(persisted_event, sort_keys=True, allow_nan=False)
         if event.get("type") in ("stdout", "stderr"):
             key = event["type"]
             run["tail"][key] = (run["tail"][key] + str(event.get("data", "")))[-self.tail_limit :]
@@ -2088,7 +2490,7 @@ class RunService:
                         pass
         if event.get("type") == "step-finished" and step_id:
             run["store"].transition_step(step_id, event.get("state", "passed"), **event.get("fields", {}))
-        run["events"].append(event)
+        run["events"].append(persisted_event)
         run["store"].manifest["events"] = event["sequence"]
         with (run["root"] / "events.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(serialized_event + "\n")
@@ -2306,8 +2708,8 @@ class RunService:
     def archive(self, run_id):
         return export_archive(_run_directory(self.output, run_id))
 
-    def chart_data(self, run_ids):
-        return chart_data(self.output, run_ids)
+    def chart_data(self, run_ids, benchmark_filter=None):
+        return chart_data(self.output, run_ids, benchmark_filter)
 
     def local_ydb_profile(self, run_id, profile):
         root = _run_directory(self.output, run_id)
@@ -2401,13 +2803,431 @@ class RunService:
             "parameters",
             "timeout_seconds",
             "role_affinity",
+            "tool_revision",
+            "binaries",
+            "platform",
+            "cpu_topology",
             "progress",
             "attempts",
             "searches",
+            "verification",
             "result",
             "error",
         )
         return {name: value[name] for name in fields if name in value}
+
+    def local_ydb_activity(self, run_id, profile, after=0):
+        if not isinstance(profile, str) or not profile:
+            raise BenchmarkError("local-ydb profile is required")
+        if isinstance(after, bool) or not isinstance(after, int) or after < 0 or after > _MAX_SAFE_JSON_INTEGER:
+            raise BenchmarkError("activity cursor must be a non-negative integer in the JSON safe range")
+
+        root = _run_directory(self.output, run_id)
+        manifest = load_manifest(root / "run.json")
+        matching_steps = [
+            item
+            for item in manifest.get("steps", [])
+            if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+        ]
+        profile_exists = bool(matching_steps) or any(
+            item.get("benchmark") == "local-ydb" and item.get("profile") == profile for item in manifest.get("runs", [])
+        )
+        if not profile_exists:
+            raise BenchmarkError("local-ydb profile not found: {}".format(profile))
+        step_ids = {item["id"] for item in matching_steps if isinstance(item.get("id"), str) and item["id"]}
+
+        def bounded_scalar(value, limit=2048):
+            if isinstance(value, str):
+                return value[:limit]
+            if value is None or isinstance(value, bool):
+                return value
+            if isinstance(value, int) and abs(value) <= _MAX_SAFE_JSON_INTEGER:
+                return value
+            if isinstance(value, float) and math.isfinite(value) and abs(value) <= _MAX_SAFE_JSON_INTEGER:
+                return value
+            return None
+
+        def project_command(value):
+            if not isinstance(value, dict) or not isinstance(value.get("argv"), (list, tuple)):
+                return None
+            command = {
+                "argv": [
+                    str(part)[:512]
+                    for part in value["argv"][:64]
+                    if part is None or isinstance(part, (str, bool, int, float))
+                ]
+            }
+            cpus = value.get("cpu_affinity")
+            if isinstance(cpus, (list, tuple)):
+                command["cpu_affinity"] = [
+                    cpu
+                    for cpu in cpus[:4096]
+                    if isinstance(cpu, int) and not isinstance(cpu, bool) and 0 <= cpu <= _MAX_SAFE_JSON_INTEGER
+                ]
+            for name in ("phase", "repetition"):
+                projected = bounded_scalar(value.get(name))
+                if projected is not None:
+                    command[name] = projected
+            return command
+
+        def project_progress(value):
+            if not isinstance(value, dict):
+                return {}
+            result = {}
+            fields = (
+                "phase",
+                "phase_started_at",
+                "phase_duration_seconds",
+                "search_stage",
+                "attempt",
+                "static_nodes",
+                "dynamic_nodes",
+                "parameter",
+                "load",
+                "repetition",
+                "repetitions",
+                "passed",
+                "decision",
+                "target_dynamic_nodes",
+                "reason",
+            )
+            for name in fields:
+                projected = bounded_scalar(value.get(name))
+                if projected is not None:
+                    result[name] = projected
+            command = project_command(value.get("current_command"))
+            if command is not None:
+                result["current_command"] = command
+            verification = value.get("verification")
+            if isinstance(verification, bool):
+                result["verification"] = verification
+            elif isinstance(verification, dict):
+                result["verification"] = {
+                    name: projected
+                    for name in (
+                        "status",
+                        "configured_repetitions",
+                        "completed_repetitions",
+                        "accepted",
+                        "evaluation_kind",
+                        "decision",
+                        "throughput_delta_percent",
+                        "saturated_repetitions",
+                    )
+                    if (projected := bounded_scalar(verification.get(name))) is not None
+                }
+            return result
+
+        def project_event(event):
+            event_type = event.get("type")
+            if event_type not in ("step-started", "step-progress", "step-finished"):
+                return None
+            item = {
+                "sequence": event["sequence"],
+                "type": event_type,
+            }
+            at = bounded_scalar(event.get("at"))
+            if at is not None:
+                item["at"] = at
+            if event_type == "step-progress":
+                fields = event.get("fields")
+                progress = fields.get("progress") if isinstance(fields, dict) else None
+                item.update(project_progress(progress))
+            elif event_type == "step-finished":
+                state = bounded_scalar(event.get("state"))
+                if state is not None:
+                    item["state"] = state
+                fields = event.get("fields")
+                if not isinstance(fields, dict):
+                    fields = {}
+                for name in ("reason", "error"):
+                    projected = bounded_scalar(fields.get(name))
+                    if projected is not None:
+                        item[name] = projected
+            return item
+
+        events_path = root / "events.jsonl"
+
+        def event_log_snapshot_size():
+            if events_path.is_symlink():
+                raise BenchmarkError("run event log must be a regular file")
+            try:
+                size = events_path.stat().st_size
+            except FileNotFoundError:
+                return 0
+            if not events_path.is_file():
+                raise BenchmarkError("run event log must be a regular file")
+            return size
+
+        cursor = after
+        matched = 0
+        activity = deque(maxlen=_LOCAL_YDB_ACTIVITY_LIMIT)
+
+        def consume(event):
+            nonlocal cursor, matched
+            sequence = event["sequence"]
+            if sequence <= after:
+                return
+            cursor = sequence
+            step_id = event.get("step_id")
+            if not isinstance(step_id, str) or step_id not in step_ids:
+                return
+            item = project_event(event)
+            if item is not None:
+                activity.append(item)
+                matched += 1
+
+        with self._lock:
+            run = self._runs.get(run_id)
+        live_events = None
+        if run:
+            with run["lock"]:
+                last_sequence = run["store"].manifest.get("events", 0)
+                if after >= last_sequence:
+                    live_events = ()
+                elif run["events"] and after >= run["events"][0]["sequence"] - 1:
+                    live_events = tuple(dict(event) for event in run["events"] if event["sequence"] > after)
+                else:
+                    snapshot_size = event_log_snapshot_size()
+        else:
+            snapshot_size = event_log_snapshot_size()
+
+        if live_events is not None:
+            for event in live_events:
+                consume(event)
+        elif snapshot_size:
+            try:
+                stream = events_path.open("rb")
+            except OSError as error:
+                raise BenchmarkError("cannot read run event log") from error
+            with stream:
+                remaining = snapshot_size
+                previous_sequence = 0
+                while remaining:
+                    line = stream.readline(min(remaining, _EVENT_LOG_RECORD_BYTES + 1))
+                    if not line:
+                        raise BenchmarkError("run event log ended before its snapshot boundary")
+                    remaining -= len(line)
+                    if len(line) > _EVENT_LOG_RECORD_BYTES or not line.endswith(b"\n"):
+                        raise BenchmarkError("run event log contains an oversized or incomplete event")
+                    try:
+                        event = json.loads(line.decode("utf-8"), parse_constant=_non_finite_json_as_null)
+                    except (UnicodeDecodeError, ValueError) as error:
+                        raise BenchmarkError("run event log contains malformed JSON") from error
+                    if not isinstance(event, dict):
+                        raise BenchmarkError("run event log event must be an object")
+                    sequence = event.get("sequence")
+                    if (
+                        not isinstance(sequence, int)
+                        or isinstance(sequence, bool)
+                        or sequence <= previous_sequence
+                        or sequence > _MAX_SAFE_JSON_INTEGER
+                    ):
+                        raise BenchmarkError("run event log sequences must be strictly increasing integers")
+                    previous_sequence = sequence
+                    if not isinstance(event.get("type"), str):
+                        raise BenchmarkError("run event log event type must be a string")
+                    consume(event)
+
+        bounded = deque()
+        response_bytes = 0
+        for item in reversed(activity):
+            encoded_size = len(json.dumps(item, allow_nan=False, separators=(",", ":")).encode("utf-8")) + 1
+            if encoded_size > _LOCAL_YDB_ACTIVITY_RESPONSE_BYTES:
+                continue
+            if response_bytes + encoded_size > _LOCAL_YDB_ACTIVITY_RESPONSE_BYTES:
+                break
+            bounded.appendleft(item)
+            response_bytes += encoded_size
+        return {
+            "events": list(bounded),
+            "after": cursor,
+            "truncated": matched > len(bounded),
+        }
+
+    def local_ydb_comparison(self, run_ids):
+        if not isinstance(run_ids, list) or not run_ids or len(run_ids) > 20:
+            raise BenchmarkError("local YDB comparisons require between 1 and 20 run ids")
+        if any(not isinstance(run_id, str) or not run_id for run_id in run_ids):
+            raise BenchmarkError("local YDB comparison run ids must be non-empty strings")
+        if len(set(run_ids)) != len(run_ids):
+            raise BenchmarkError("local YDB comparison run ids must be unique")
+
+        def project(value, fields):
+            if not isinstance(value, dict):
+                return {}
+            return {name: value[name] for name in fields if name in value}
+
+        def project_parameters(value):
+            if not isinstance(value, dict):
+                return {}
+            workload = project(value.get("workload"), ("type", "operation", "options"))
+            geometry = project(
+                value.get("geometry"),
+                (
+                    "preset",
+                    "static_nodes",
+                    "dynamic_nodes",
+                    "max_dynamic_nodes",
+                    "disk_size_gb",
+                    "storage_groups",
+                ),
+            )
+            client = project(value.get("client"), ("threads",))
+            load = project(value.get("load"), ("parameter", "allow_errors", "values", "search", "objective"))
+            measurement = project(
+                value.get("measurement"),
+                ("warmup", "duration", "repetitions", "verification_repetitions"),
+            )
+            affinity = project(value.get("affinity"), ("ydb_cli", "static_nodes", "dynamic_nodes"))
+            return {
+                name: item
+                for name, item in (
+                    ("workload", workload),
+                    ("geometry", geometry),
+                    ("client", client),
+                    ("load", load),
+                    ("measurement", measurement),
+                    ("affinity", affinity),
+                )
+                if item
+            }
+
+        def project_binaries(value):
+            if not isinstance(value, dict):
+                return {}
+            return {
+                name: item
+                for name in ("ydbd", "ydb_cli")
+                if (item := project(value.get(name), ("name", "sha256", "size")))
+            }
+
+        def project_platform(value):
+            result = project(value, ("architecture", "cpu_count", "cpu_model", "physical_memory_bytes"))
+            uname = project(
+                value.get("uname") if isinstance(value, dict) else None,
+                ("machine", "node", "release", "system", "version"),
+            )
+            if uname:
+                result["uname"] = uname
+            return result
+
+        def project_topology(value):
+            return project(
+                value,
+                (
+                    "version",
+                    "allowed_cpus",
+                    "numa_nodes",
+                    "chiplets",
+                    "physical_cores",
+                    "smt_siblings",
+                    "hierarchy_reasons",
+                ),
+            )
+
+        model = self.model()
+        entries = []
+        response_size = 0
+        for run_id in run_ids:
+            record = model.get(run_id)
+            if record is None:
+                raise BenchmarkError("run not found: {}".format(run_id))
+            profiles = sorted(
+                {
+                    str(item["profile"])
+                    for item in record.get("runs", []) + record.get("steps", [])
+                    if item.get("benchmark") == "local-ydb" and item.get("profile") is not None
+                }
+            )
+            for profile in profiles:
+                value = self.local_ydb_profile(run_id, profile)
+                compact_fields = (
+                    "status",
+                    "state",
+                    "started_at",
+                    "finished_at",
+                    "tool_revision",
+                    "error",
+                )
+                entry = {
+                    "run": run_id,
+                    "profile": profile,
+                    **{name: value[name] for name in compact_fields if name in value},
+                }
+                projections = {
+                    "parameters": project_parameters(value.get("parameters")),
+                    "role_affinity": project(value.get("role_affinity"), ("ydb_cli", "static_nodes", "dynamic_nodes")),
+                    "binaries": project_binaries(value.get("binaries")),
+                    "platform": project_platform(value.get("platform")),
+                    "cpu_topology": project_topology(value.get("cpu_topology")),
+                    "verification": project(
+                        value.get("verification"),
+                        (
+                            "status",
+                            "state",
+                            "started_at",
+                            "finished_at",
+                            "load",
+                            "dynamic_nodes",
+                            "configured_repetitions",
+                            "completed_repetitions",
+                            "accepted",
+                            "evaluation_kind",
+                            "decision",
+                            "outcome",
+                            "reason",
+                            "duration_seconds",
+                            "throughput_delta_percent",
+                            "saturated_repetitions",
+                            "error",
+                        ),
+                    ),
+                }
+                entry.update({name: item for name, item in projections.items() if item})
+                result = value.get("result")
+                if isinstance(result, dict):
+                    result_fields = (
+                        "outcome",
+                        "objective",
+                        "parameter",
+                        "allow_errors",
+                        "search_stage",
+                        "dynamic_nodes",
+                        "selected_load",
+                        "passing_load",
+                        "failing_load",
+                        "stop_reason",
+                        "metrics_source",
+                        "verification_repetitions",
+                        "holdout_accepted",
+                    )
+                    compact_result = {name: result[name] for name in result_fields if name in result}
+                    metrics = result.get("selected_metrics")
+                    if isinstance(metrics, dict):
+                        metric_names = {metric.name for metric in BENCHMARKS["local-ydb"].metrics}
+                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated"))
+                        compact_result["selected_metrics"] = {
+                            name: metrics[name] for name in metric_names if name in metrics
+                        }
+                    verified_metrics = result.get("verified_metrics")
+                    if isinstance(verified_metrics, dict):
+                        metric_names = {metric.name for metric in BENCHMARKS["local-ydb"].metrics}
+                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated"))
+                        compact_result["verified_metrics"] = {
+                            name: verified_metrics[name] for name in metric_names if name in verified_metrics
+                        }
+                    entry["result"] = compact_result
+                try:
+                    response_size += len(json.dumps(entry, allow_nan=False, separators=(",", ":")).encode("utf-8")) + 1
+                except (TypeError, ValueError) as error:
+                    raise BenchmarkError("local YDB comparison contains invalid JSON data") from error
+                if response_size > 4 * 1024 * 1024:
+                    raise BenchmarkError("local YDB comparison response is too large")
+                entries.append(entry)
+                if len(entries) > 100:
+                    raise BenchmarkError("local YDB comparison contains more than 100 profiles")
+        return {"entries": entries}
 
     def comparisons(self, selected=None):
         model = self.model()
@@ -2736,7 +3556,31 @@ def _handler(service):
             if path == "/api/comparisons":
                 return self._json(200, service.comparisons())
             if path == "/api/chart-data":
-                return self._json(200, service.chart_data(parse_qs(parsed.query).get("run", [])))
+                query = parse_qs(parsed.query)
+                try:
+                    value = service.chart_data(query.get("run", []), query.get("benchmark", [None])[-1])
+                except BenchmarkError as error:
+                    return self._json(400, {"error": str(error)})
+                return self._json(200, value)
+            if path == "/api/local-ydb-comparison":
+                try:
+                    value = service.local_ydb_comparison(parse_qs(parsed.query).get("run", []))
+                except BenchmarkError as error:
+                    return self._json(400, {"error": str(error)})
+                return self._json(200, value)
+            if path.startswith("/api/runs/") and path.endswith("/local-ydb-activity"):
+                run_id = unquote(path[len("/api/runs/") : -len("/local-ydb-activity")])
+                query = parse_qs(parsed.query)
+                profile = query.get("profile", [""])[-1]
+                try:
+                    after = int(query.get("after", [0])[-1])
+                except ValueError:
+                    return self._json(400, {"error": "activity cursor must be a non-negative integer"})
+                try:
+                    value = service.local_ydb_activity(run_id, profile, after)
+                except BenchmarkError as error:
+                    return self._json(400, {"error": str(error)})
+                return self._json(200, value)
             if path.startswith("/api/runs/") and path.endswith("/local-ydb-profile"):
                 run_id = unquote(path[len("/api/runs/") : -len("/local-ydb-profile")])
                 profile = parse_qs(parsed.query).get("profile", [""])[-1]

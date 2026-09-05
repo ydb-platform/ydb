@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import inspect
 import io
@@ -15,6 +16,7 @@ import time
 import unittest
 import urllib.request
 import zipfile
+from collections import deque
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import FrozenInstanceError, fields, replace
 from pathlib import Path
@@ -111,6 +113,105 @@ class YdbBenchTest(unittest.TestCase):
             repetitions=repetitions,
             timeout_seconds=timeout,
         )
+
+    def _run_mock_local_ydb(self, configuration, output_name, measurements):
+        def command_result(command, stdout="", exit_code=0, stderr="", interrupted=False, timed_out=False):
+            return runner.CommandResult(
+                command=tuple(str(part) for part in command),
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=exit_code,
+                started_at="2026-08-25T10:00:00+00:00",
+                finished_at="2026-08-25T10:00:01+00:00",
+                duration_seconds=1.0,
+                interrupted=interrupted,
+                timed_out=timed_out,
+            )
+
+        def measurement_stdout(value):
+            if isinstance(value, BaseException):
+                raise value
+            return """
+                Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
+                1 {throughput} {throughput} 0 {errors} 1 2 {p99_ms} 4
+            """.format(
+                throughput=value.get("throughput", 10),
+                errors=value.get("errors", 0),
+                p99_ms=value.get("p99_ms", 3),
+            )
+
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            dynamic_nodes=[{}],
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command: (
+            command_result(command),
+            [command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.start.return_value = monitor
+        monitor.stop.return_value = {
+            "static_cpu_mean": 1,
+            "static_cpu_max": 2,
+            "dynamic_cpu_mean": 3,
+            "dynamic_cpu_max": 4,
+            "cli_cpu_mean": 5,
+            "cli_cpu_max": 6,
+            "host_cpu_mean": 7,
+            "host_cpu_max": 8,
+        }
+        outputs = iter(measurements)
+
+        def next_measurement(command):
+            value = next(outputs)
+            stdout = measurement_stdout(value)
+            return command_result(
+                command,
+                stdout,
+                exit_code=value.get("exit_code", 0),
+                stderr=value.get("stderr", ""),
+                interrupted=value.get("interrupted", False),
+                timed_out=value.get("timed_out", False),
+            )
+
+        output = self.root / output_name
+        binaries = {
+            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            for name in ("ydbd", "ydb_cli", "process_guard")
+        }
+        events = []
+        self.last_local_ydb_cluster = cluster
+        with mock.patch.object(local_ydb, "LocalYdbCluster", return_value=cluster), mock.patch.object(
+            local_ydb, "LinuxCpuMonitor", return_value=monitor
+        ), mock.patch.object(
+            local_ydb,
+            "discover_topology",
+            return_value=CpuTopology(
+                allowed_cpus=(0,),
+                numa_nodes=((0, (0,)),),
+                chiplets=(),
+                physical_cores=((0,),),
+            ),
+        ), mock.patch.object(
+            local_ydb, "collect_system_info", return_value={}
+        ), mock.patch.object(
+            local_ydb,
+            "run_command",
+            side_effect=lambda command, *_args, **_kwargs: next_measurement(command),
+        ):
+            manifest = local_ydb.run_local_ydb(
+                binaries,
+                configuration,
+                output,
+                tool_revision="test",
+                event_sink=events.append,
+            )
+        return manifest, output, events
 
     def _worker_metrics_benchmark(self):
         return replace(
@@ -246,6 +347,43 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(profile["load"]["objective"]["cpu_saturation_percent"], 80)
         self.assertTrue(profile["load"]["allow_errors"])
         self.assertEqual(profile["affinity"]["ydb_cli"]["cpus"], "one-chiplet")
+        self.assertEqual(profile["measurement"]["verification_repetitions"], 0)
+
+    def test_local_ydb_verification_config_is_optional_bounded_and_counted_in_default_timeout(self):
+        loaded = load_config(self._config("""
+            local-ydb:
+              verified:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement:
+                  warmup: 1
+                  duration: 2
+                  repetitions: 1
+                  verification-repetitions: 2
+        """))
+        configuration = loaded.runs[0]
+        self.assertEqual(configuration.parameters["local_ydb"]["measurement"]["verification_repetitions"], 2)
+        self.assertEqual(configuration.timeout_seconds, 300 + 3 * (1 + 2 + 10))
+
+        invalid = self._config("""
+            local-ydb:
+              invalid:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement: {verification-repetitions: -1}
+        """)
+        with self.assertRaisesRegex(BenchmarkError, "verification-repetitions"):
+            load_config(invalid)
+
+        too_many = self._config("""
+            local-ydb:
+              invalid:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement: {verification-repetitions: 21}
+        """)
+        with self.assertRaisesRegex(BenchmarkError, "must be at most 20"):
+            load_config(too_many)
 
     def test_local_ydb_allow_errors_defaults_to_false_and_requires_boolean(self):
         loaded = load_config(self._config("""
@@ -353,6 +491,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(profile["local_ydb"]["geometry"]["max_dynamic_nodes"], 4)
         self.assertEqual(profile["local_ydb"]["load"]["values"], [10, 20])
         self.assertTrue(profile["local_ydb"]["load"]["allow_errors"])
+        self.assertEqual(profile["local_ydb"]["measurement"]["verification_repetitions"], 0)
         self.assertEqual(profile["local_ydb"]["affinity"]["ydb_cli"]["cpus"], "one-chiplet")
         self.assertEqual(profile["parameters"], {})
 
@@ -451,7 +590,7 @@ class YdbBenchTest(unittest.TestCase):
               audit:
                 workload: {type: stock, operation: add-rand-order}
                 load: {parameter: threads, values: [8]}
-                measurement: {warmup: 1, duration: 1, repetitions: 1}
+                measurement: {warmup: 1, duration: 1, repetitions: 1, verification-repetitions: 2}
                 affinity:
                   ydb-cli: {mode: none}
                   static-nodes: {mode: none}
@@ -494,10 +633,14 @@ class YdbBenchTest(unittest.TestCase):
             "host_cpu_mean": 7,
             "host_cpu_max": 8,
         }
-        measurement_stdout = """
-            Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
-            1 10 10 0 0 1 2 3 4
-        """
+
+        def measurement_stdout(throughput):
+            return """
+                Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
+                1 {throughput} {throughput} 0 0 1 2 3 4
+            """.format(throughput=throughput)
+
+        measurement_outputs = iter(measurement_stdout(value) for value in (10, 20, 30))
         events = []
         output = self.root / "command-audit"
         binaries = {
@@ -520,7 +663,7 @@ class YdbBenchTest(unittest.TestCase):
         ), mock.patch.object(
             local_ydb,
             "run_command",
-            side_effect=lambda command, *_args, **_kwargs: command_result(command, measurement_stdout),
+            side_effect=lambda command, *_args, **_kwargs: command_result(command, next(measurement_outputs)),
         ):
             manifest = local_ydb.run_local_ydb(
                 binaries,
@@ -542,6 +685,203 @@ class YdbBenchTest(unittest.TestCase):
         progress = [event["fields"]["progress"] for event in events if event["type"] == "step-progress"]
         running = [item for item in progress if item.get("current_command")]
         self.assertEqual([item["phase"] for item in running[:4]], [command["phase"] for command in commands])
+        self.assertIn("verification-evaluating", [item["phase"] for item in progress])
+        evaluating = next(item for item in progress if item["phase"] == "verification-evaluating")
+        self.assertEqual(
+            set(evaluating["verification"]),
+            {"status", "configured_repetitions", "completed_repetitions"},
+        )
+        verification_completed = next(item for item in progress if item["phase"] == "verification-completed")
+        for item in (evaluating, verification_completed):
+            payload = json.dumps(item)
+            self.assertNotIn('"samples"', payload)
+            self.assertNotIn('"commands"', payload)
+        self.assertEqual(len(manifest["attempts"]), 1)
+        self.assertEqual(manifest["result"]["metrics_source"], "verification")
+        self.assertEqual(manifest["result"]["selected_metrics"]["throughput"], 10)
+        self.assertEqual(manifest["attempts"][0]["throughput"], 10)
+        self.assertEqual(manifest["searches"][0]["selected_metrics"]["throughput"], 10)
+        self.assertEqual(manifest["result"]["verified_metrics"]["throughput"], 25)
+        self.assertTrue(manifest["result"]["holdout_accepted"])
+        self.assertEqual(manifest["verification"]["completed_repetitions"], 2)
+        self.assertTrue(manifest["verification"]["accepted"])
+        self.assertEqual(manifest["verification"]["evaluation_kind"], "validity")
+        self.assertNotIn("samples", manifest["verification"])
+        self.assertTrue((output / "verification-repetitions.csv").is_file())
+        self.assertTrue((output / "verification-summary.csv").is_file())
+        with (output / "repetitions.csv").open(newline="", encoding="utf-8") as stream:
+            search_rows = list(csv.DictReader(stream))
+        with (output / "verification-repetitions.csv").open(newline="", encoding="utf-8") as stream:
+            verification_rows = list(csv.DictReader(stream))
+        with (output / "verification-summary.csv").open(newline="", encoding="utf-8") as stream:
+            verification_summary = list(csv.DictReader(stream))
+        self.assertEqual([float(row["throughput"]) for row in search_rows], [10])
+        self.assertEqual([float(row["throughput"]) for row in verification_rows], [20, 30])
+        self.assertNotIn("passed", verification_rows[0])
+        self.assertEqual(verification_summary[0]["samples"], "2")
+        self.assertEqual(float(verification_summary[0]["median_throughput"]), 25)
+        verification_commands = []
+        for repetition in (1, 2):
+            commands_path = output / "verification" / "repeat-{:03d}".format(repetition) / "commands.json"
+            verification_commands.extend(json.loads(commands_path.read_text(encoding="utf-8")))
+        self.assertEqual(len(verification_commands) + len(commands), 12)
+        self.assertEqual(
+            [item["phase"] for item in verification_commands[:4]],
+            [
+                "verification-initializing",
+                "verification-warmup",
+                "verification-measuring",
+                "verification-cleanup",
+            ],
+        )
+        artifacts = next(event["artifacts"] for event in events if event["type"] == "step-artifacts")
+        self.assertIn("verification-repetitions.csv", artifacts)
+
+    def test_local_ydb_disabled_verification_keeps_search_metrics(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              search-only:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        manifest, output, events = self._run_mock_local_ydb(
+            configuration,
+            "verification-disabled",
+            [{"throughput": 10}],
+        )
+        self.assertEqual(manifest["verification"]["status"], "disabled")
+        self.assertEqual(manifest["result"]["metrics_source"], "search")
+        self.assertNotIn("verified_metrics", manifest["result"])
+        self.assertFalse((output / "verification-repetitions.csv").exists())
+        artifacts = next(event["artifacts"] for event in events if event["type"] == "step-artifacts")
+        self.assertNotIn("verification-repetitions.csv", artifacts)
+
+    def test_local_ydb_verification_is_skipped_without_feasible_load(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              no-feasible:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        manifest, output, _events = self._run_mock_local_ydb(
+            configuration,
+            "verification-skipped",
+            [{"throughput": 10, "errors": 1}],
+        )
+        self.assertIsNone(manifest["result"]["selected_load"])
+        self.assertEqual(manifest["result"]["metrics_source"], "search")
+        self.assertEqual(manifest["verification"]["status"], "skipped")
+        self.assertIn("did not select", manifest["verification"]["reason"])
+        self.assertFalse((output / "verification-repetitions.csv").exists())
+        self.assertTrue((output / "repetitions.csv").is_file())
+
+    def test_local_ydb_latency_verification_reports_failed_holdout_without_changing_search(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              latency:
+                workload: {type: kv, operation: upsert}
+                load:
+                  parameter: threads
+                  search: {start: 10, maximum: 10}
+                  objective: {type: latency-slo, percentile: p99, max-ms: 10}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        manifest, _output, _events = self._run_mock_local_ydb(
+            configuration,
+            "verification-latency-fail",
+            [
+                {"throughput": 10, "p99_ms": 9},
+                {"throughput": 11, "p99_ms": 9},
+                {"throughput": 12, "p99_ms": 13},
+            ],
+        )
+        self.assertEqual(manifest["state"], "passed")
+        self.assertEqual(manifest["result"]["selected_metrics"]["p99_ms"], 9)
+        self.assertEqual(manifest["result"]["verified_metrics"]["p99_ms"], 11)
+        self.assertEqual(manifest["result"]["metrics_source"], "verification")
+        self.assertFalse(manifest["result"]["holdout_accepted"])
+        self.assertFalse(manifest["verification"]["accepted"])
+        self.assertEqual(manifest["verification"]["evaluation_kind"], "objective")
+        self.assertIn("exceeds", manifest["verification"]["decision"])
+        self.assertNotIn("saturated_repetitions", manifest["verification"])
+
+    def test_local_ydb_verification_failure_preserves_search_and_partial_holdout(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              verification-failure:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        output = self.root / "verification-failure"
+        with self.assertRaisesRegex(BenchmarkError, "exited with code 17"):
+            self._run_mock_local_ydb(
+                configuration,
+                output.name,
+                [
+                    {"throughput": 10},
+                    {"throughput": 20},
+                    {"throughput": 0, "exit_code": 17, "stderr": "verification command failed"},
+                ],
+            )
+        manifest = json.loads((output / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["verification"]["status"], "failed")
+        self.assertEqual(manifest["verification"]["completed_repetitions"], 1)
+        self.assertEqual(manifest["result"]["selected_metrics"]["throughput"], 10)
+        self.assertEqual(manifest["result"]["metrics_source"], "search")
+        self.assertTrue((output / "repetitions.csv").is_file())
+        with (output / "verification-repetitions.csv").open(newline="", encoding="utf-8") as stream:
+            self.assertEqual(len(list(csv.DictReader(stream))), 1)
+        self.last_local_ydb_cluster.stop.assert_called_once_with()
+
+    def test_local_ydb_verification_cancellation_is_durable(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              verification-cancel:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        output = self.root / "verification-cancel"
+        with self.assertRaisesRegex(BenchmarkInterrupted, "workload was interrupted"):
+            self._run_mock_local_ydb(
+                configuration,
+                output.name,
+                [{"throughput": 10}, {"throughput": 0, "interrupted": True}],
+            )
+        manifest = json.loads((output / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["state"], "cancelled")
+        self.assertEqual(manifest["verification"]["status"], "cancelled")
+        self.assertEqual(manifest["verification"]["completed_repetitions"], 0)
+        self.assertEqual(manifest["result"]["selected_metrics"]["throughput"], 10)
+        self.assertNotIn("repetitions_file", manifest["verification"])
+        self.assertNotIn("summary_file", manifest["verification"])
+        self.assertTrue((output / "summary.csv").is_file())
+        self.assertTrue((output / "verification" / "repeat-001" / "stdout.txt").is_file())
+        self.last_local_ydb_cluster.stop.assert_called_once_with()
 
     def test_local_ydb_kv_commands_keep_table_path(self):
         cluster = mock.Mock(
@@ -576,7 +916,7 @@ class YdbBenchTest(unittest.TestCase):
             },
             on_attempt=lambda attempt: throughput_attempts.append(attempt["load"]),
         )
-        self.assertEqual(throughput.selected_load, 40)
+        self.assertEqual(throughput.selected_load, 38)
         self.assertEqual(throughput.outcome, "plateau-found")
         self.assertEqual(throughput_attempts[0], 10)
         self.assertEqual(len(throughput_attempts), len(set(throughput_attempts)))
@@ -631,6 +971,45 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(no_feasible_latency.outcome, "no-feasible-point")
         self.assertEqual(no_feasible_latency.failing_load, 10)
         self.assertEqual(below_start_attempts, [10])
+
+    def test_throughput_plateau_uses_absolute_gain_and_stable_lowest_load(self):
+        result = load_control.search_load(
+            {
+                "parameter": "rate",
+                "search": {"start": 10, "maximum": 100, "multiplier": 2, "resolution_percent": 40},
+                "objective": {
+                    "type": "maximize-throughput",
+                    "target_role": "dynamic",
+                    "cpu_saturation_percent": 80,
+                    "plateau_gain_percent": 2,
+                    "plateau_points": 2,
+                },
+            },
+            lambda load: {
+                "throughput": 1000 - load,
+                "errors": 0,
+                "dynamic_cpu_mean": 90,
+                "static_cpu_mean": 10,
+                "host_cpu_mean": 20,
+            },
+        )
+        self.assertEqual(result.outcome, "best-observed")
+        self.assertEqual(result.selected_load, 10)
+        self.assertEqual((result.attempts[0]["search_low"], result.attempts[0]["search_high"]), (10, 100))
+        self.assertTrue(
+            any(item["search_high"] - item["search_low"] < 90 for item in result.attempts if "search_low" in item)
+        )
+
+        selected = load_control._lowest_saturated_plateau_load(
+            [
+                {"load": 30, "throughput": 5600, "passed": True, "target_cpu_saturated": False},
+                {"load": 54, "throughput": 5500, "passed": True, "target_cpu_saturated": True},
+                {"load": 61, "throughput": 5637.45, "passed": True, "target_cpu_saturated": True},
+                {"load": 340, "throughput": 5694.58, "passed": True, "target_cpu_saturated": True},
+            ],
+            2,
+        )
+        self.assertEqual(selected, 61)
 
     def test_throughput_controller_uses_ternary_search_and_error_bounds(self):
         config = {
@@ -781,6 +1160,31 @@ class YdbBenchTest(unittest.TestCase):
         self.assertGreater(latency.failing_load, latency.selected_load)
         self.assertTrue(latency.attempts[0]["passed"])
         self.assertIn("latency", latency.attempts[-1]["decision"])
+
+    def test_evaluate_load_reuses_search_acceptance_for_verification(self):
+        points = {"parameter": "threads", "values": [1]}
+        self.assertEqual(load_control.evaluate_load(points, 1, {"errors": 0}), (True, "configured point"))
+        self.assertFalse(load_control.evaluate_load(points, 1, {"errors": 1})[0])
+        self.assertTrue(load_control.evaluate_load({**points, "allow_errors": True}, 1, {"errors": 1})[0])
+
+        latency = {
+            "parameter": "rate",
+            "objective": {
+                "type": "latency-slo",
+                "percentile": "p99",
+                "max_ms": 10,
+                "max_errors": 0,
+                "min_achieved_rate_ratio": 0.98,
+            },
+        }
+        self.assertTrue(load_control.evaluate_load(latency, 100, {"throughput": 100, "errors": 0, "p99_ms": 9})[0])
+        passed, reason = load_control.evaluate_load(
+            latency,
+            100,
+            {"throughput": 100, "errors": 0, "p99_ms": 11},
+        )
+        self.assertFalse(passed)
+        self.assertIn("exceeds", reason)
 
     def test_linux_cpu_summary_weights_intervals_and_ignores_short_spikes_for_max(self):
         monitor = linux_telemetry.LinuxCpuMonitor({"dynamic": lambda: ()}, {"dynamic": 1}, interval=0.5)
@@ -2720,6 +3124,121 @@ class WebTest(unittest.TestCase):
         (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
         (directory / "artifact.txt").write_text("artifact", encoding="utf-8")
 
+    def _local_ydb_result(self, directory, throughput, operation="put", verified=False):
+        self._manifest(directory)
+        main_path = directory / "run.json"
+        main = json.loads(main_path.read_text(encoding="utf-8"))
+        relative = Path("local-ydb") / "capacity"
+        main["runs"] = [
+            {
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "status": "completed",
+                "directory": str(relative),
+                "manifest": str(relative / "run.json"),
+            }
+        ]
+        main["steps"] = [
+            {
+                "id": "step-1",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "affinity": "roles",
+                "threads": 64,
+                "case": 1,
+                "parameters": {},
+                "repeat": 1,
+                "state": "passed",
+                "artifacts": [str(relative / "run.json")],
+            }
+        ]
+        main_path.write_text(json.dumps(main), encoding="utf-8")
+        profile_root = directory / relative
+        profile_root.mkdir(parents=True)
+        selected_metrics = {
+            "throughput": throughput,
+            "p99_ms": 10,
+            "errors": 0,
+            "static_cpu_mean": 50,
+            "dynamic_cpu_mean": 80,
+            "cli_cpu_mean": 30,
+            "commands": [{"argv": ["must", "not", "leak"]}],
+        }
+        result = {
+            "outcome": "best-observed",
+            "parameter": "rate",
+            "dynamic_nodes": 1,
+            "selected_load": 100,
+            "selected_metrics": selected_metrics,
+        }
+        verification = None
+        if verified:
+            result.update(
+                {
+                    "metrics_source": "verification",
+                    "holdout_accepted": True,
+                    "verified_metrics": {
+                        **selected_metrics,
+                        "throughput": throughput + 50,
+                        "commands": [{"argv": ["must", "also", "not", "leak"]}],
+                    },
+                }
+            )
+            verification = {
+                "status": "completed",
+                "configured_repetitions": 3,
+                "completed_repetitions": 3,
+                "accepted": True,
+                "evaluation_kind": "validity",
+                "decision": "workload completed without errors",
+                "throughput_delta_percent": 5,
+                "saturated_repetitions": 3,
+                "samples": [{"commands": [{"argv": ["not", "in", "comparison"]}]}],
+            }
+        profile = {
+            "schema_version": SCHEMA_VERSION,
+            "benchmark": "local-ydb",
+            "profile": "capacity",
+            "status": "completed",
+            "state": "passed",
+            "started_at": "2025-01-01T00:00:00+00:00",
+            "finished_at": "2025-01-01T00:01:00+00:00",
+            "tool_revision": "test-revision",
+            "binaries": {
+                "ydbd": {"sha256": "server-sha"},
+                "ydb_cli": {"sha256": "cli-sha"},
+                "process_guard": {"sha256": "guard-sha", "private": "not projected"},
+            },
+            "platform": {
+                "cpu_model": "test CPU",
+                "uname": {"node": "test-host", "release": "test-kernel"},
+                "private": "not projected",
+            },
+            "cpu_topology": {"version": 2, "allowed_cpus": [0, 1, 2], "private": "not projected"},
+            "parameters": {
+                "workload": {"type": "kv", "operation": operation, "options": {"partitions": 16}},
+                "geometry": {
+                    "preset": "single",
+                    "static_nodes": 1,
+                    "dynamic_nodes": 1,
+                    "max_dynamic_nodes": 1,
+                    "storage_groups": 1,
+                    "disk_size_gb": 64,
+                },
+                "client": {"threads": 64},
+                "load": {"parameter": "rate", "values": [100]},
+                "measurement": {"warmup": 1, "duration": 10, "repetitions": 3},
+                "private": "not projected",
+            },
+            "role_affinity": {"ydb_cli": [0], "static_nodes": [1], "dynamic_nodes": [2]},
+            "attempts": [],
+            "searches": [],
+            "result": result,
+        }
+        if verification is not None:
+            profile["verification"] = verification
+        (profile_root / "run.json").write_text(json.dumps(profile), encoding="utf-8")
+
     def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False, run_updates=None):
         run = {
             "schema_version": version,
@@ -2984,6 +3503,316 @@ class WebTest(unittest.TestCase):
         finally:
             service.shutdown()
 
+    def test_run_service_compacts_oversized_event_log_records_without_changing_lifecycle(self):
+        def oversized_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit(
+                {
+                    "type": "step-finished",
+                    "step_id": step_id,
+                    "state": "passed",
+                    "fields": {"reason": "x" * 4096},
+                }
+            )
+
+        with mock.patch.object(web, "_EVENT_LOG_RECORD_BYTES", 512):
+            service = RunService(self.root, executor=oversized_executor)
+            try:
+                run_id = service.start(
+                    "ping-bench:\n  oversized: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+                )["id"]
+                run = service._runs[run_id]
+                self.assertTrue(run["finished"].wait(2))
+                manifest = json.loads((run["root"] / "run.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["state"], "passed")
+                self.assertEqual(manifest["steps"][0]["state"], "passed")
+                persisted = [
+                    json.loads(line) for line in (run["root"] / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                compacted = next(event for event in persisted if event.get("payload_truncated"))
+                self.assertEqual(compacted["type"], "step-finished")
+                self.assertEqual(compacted["state"], "passed")
+                self.assertGreater(compacted["original_size_bytes"], web._EVENT_LOG_RECORD_BYTES)
+                self.assertTrue(
+                    all(
+                        len((json.dumps(event, sort_keys=True) + "\n").encode("utf-8")) <= web._EVENT_LOG_RECORD_BYTES
+                        for event in persisted
+                    )
+                )
+            finally:
+                service.shutdown()
+
+    def test_run_service_keeps_original_failure_when_compacting_oversized_event(self):
+        def oversized_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit(
+                {
+                    "type": "step-finished",
+                    "step_id": step_id,
+                    "state": "failed",
+                    "fields": {"error": "x" * 4096},
+                }
+            )
+            raise BenchmarkError("original benchmark failure")
+
+        with mock.patch.object(web, "_EVENT_LOG_RECORD_BYTES", 512):
+            service = RunService(self.root, executor=oversized_executor)
+            try:
+                run_id = service.start(
+                    "ping-bench:\n  oversized: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+                )["id"]
+                run = service._runs[run_id]
+                self.assertTrue(run["finished"].wait(2))
+                manifest = json.loads((run["root"] / "run.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["state"], "failed")
+                self.assertEqual(manifest["steps"][0]["state"], "failed")
+                self.assertEqual(manifest["error"], "original benchmark failure")
+                persisted = [
+                    json.loads(line) for line in (run["root"] / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                compacted = next(event for event in persisted if event.get("payload_truncated"))
+                self.assertEqual(compacted["type"], "step-finished")
+                self.assertEqual(compacted["state"], "failed")
+            finally:
+                service.shutdown()
+
+    def test_local_ydb_activity_is_profile_scoped_bounded_and_strictly_projected(self):
+        run_root = self.root / "local-ydb-activity"
+        self._manifest(run_root)
+        manifest_path = run_root / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["runs"] = [
+            {"benchmark": "local-ydb", "profile": "capacity", "status": "running"},
+            {"benchmark": "local-ydb", "profile": "other", "status": "running"},
+        ]
+        manifest["steps"] = [
+            {
+                "id": "capacity-step",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "state": "running",
+            },
+            {
+                "id": "other-step",
+                "benchmark": "local-ydb",
+                "profile": "other",
+                "state": "running",
+            },
+        ]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        events = [
+            {
+                "sequence": 1,
+                "at": "2025-01-01T00:00:00+00:00",
+                "type": "step-started",
+                "step_id": "capacity-step",
+                "fields": {"role_affinity": {"private": list(range(1000))}},
+            }
+        ]
+        for index in range(205):
+            progress = {
+                "phase": "measuring",
+                "search_stage": 1,
+                "attempt": index + 1,
+                "parameter": "rate",
+                "load": 1000 + index,
+                "latest_attempt": {"commands": [{"private": "not projected"}]},
+            }
+            if index == 204:
+                progress.update(
+                    {
+                        "current_command": {
+                            "phase": "measuring",
+                            "repetition": 2,
+                            "argv": ["/tmp/ydb", "workload", "run"],
+                            "cpu_affinity": [0, 128],
+                            "private": "not projected",
+                        },
+                        "verification": {
+                            "status": "completed",
+                            "configured_repetitions": 3,
+                            "completed_repetitions": 3,
+                            "accepted": True,
+                            "evaluation_kind": "objective",
+                            "decision": "latency-slo-passed",
+                            "samples": [{"commands": ["not projected"]}],
+                        },
+                    }
+                )
+            events.append(
+                {
+                    "sequence": index + 2,
+                    "at": "2025-01-01T00:00:{:02d}+00:00".format(index % 60),
+                    "type": "step-progress",
+                    "step_id": "capacity-step",
+                    "fields": {"progress": progress},
+                }
+            )
+        last_target_sequence = events[-1]["sequence"]
+        events.append(
+            {
+                "sequence": last_target_sequence + 1,
+                "at": "2025-01-01T00:04:00+00:00",
+                "type": "step-progress",
+                "step_id": "other-step",
+                "fields": {"progress": {"phase": "measuring", "attempt": 999}},
+            }
+        )
+        (run_root / "events.jsonl").write_text(
+            "".join(json.dumps(event) + "\n" for event in events),
+            encoding="utf-8",
+        )
+
+        service = RunService(self.root)
+        try:
+            with mock.patch.object(service, "events", side_effect=AssertionError("must stream event log")):
+                activity = service.local_ydb_activity("local-ydb-activity", "capacity")
+            self.assertTrue(activity["truncated"])
+            self.assertEqual(len(activity["events"]), web._LOCAL_YDB_ACTIVITY_LIMIT)
+            self.assertEqual(activity["after"], last_target_sequence + 1)
+            self.assertTrue(all(item["sequence"] <= last_target_sequence for item in activity["events"]))
+            projected = activity["events"][-1]
+            self.assertEqual(projected["current_command"]["argv"], ["/tmp/ydb", "workload", "run"])
+            self.assertEqual(projected["current_command"]["cpu_affinity"], [0, 128])
+            self.assertNotIn("private", projected["current_command"])
+            self.assertNotIn("latest_attempt", projected)
+            self.assertTrue(projected["verification"]["accepted"])
+            self.assertEqual(projected["verification"]["evaluation_kind"], "objective")
+            self.assertNotIn("samples", projected["verification"])
+            replay = service.local_ydb_activity("local-ydb-activity", "capacity", after=last_target_sequence)
+            self.assertEqual(replay, {"events": [], "after": last_target_sequence + 1, "truncated": False})
+            live_event = {
+                "sequence": last_target_sequence + 2,
+                "type": "step-progress",
+                "step_id": "capacity-step",
+                "fields": {"progress": {"phase": "finishing"}},
+            }
+            service._runs["local-ydb-activity"] = {
+                "lock": threading.RLock(),
+                "events": deque([live_event]),
+                "store": mock.Mock(manifest={"events": live_event["sequence"]}),
+            }
+            try:
+                with mock.patch.object(web, "load_manifest", return_value=manifest), mock.patch.object(
+                    Path, "open", side_effect=AssertionError("live poll must not replay the event log")
+                ):
+                    live = service.local_ydb_activity("local-ydb-activity", "capacity", after=last_target_sequence + 1)
+                self.assertEqual(live["after"], live_event["sequence"])
+                self.assertEqual(live["events"][0]["phase"], "finishing")
+            finally:
+                del service._runs["local-ydb-activity"]
+            with self.assertRaisesRegex(BenchmarkError, "non-negative integer"):
+                service.local_ydb_activity("local-ydb-activity", "capacity", after=-1)
+            with self.assertRaisesRegex(BenchmarkError, "JSON safe range"):
+                service.local_ydb_activity("local-ydb-activity", "capacity", after=web._MAX_SAFE_JSON_INTEGER + 1)
+            with self.assertRaisesRegex(BenchmarkError, "profile not found"):
+                service.local_ydb_activity("local-ydb-activity", "missing")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": "one", "type": "step-progress"}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "strictly increasing integers"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": 1, "type": 7}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "type must be a string"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": web._MAX_SAFE_JSON_INTEGER + 1, "type": "step-progress"}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "strictly increasing integers"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+
+            large_events = []
+            for sequence in range(1, 41):
+                large_events.append(
+                    {
+                        "sequence": sequence,
+                        "type": "step-progress",
+                        "step_id": "capacity-step",
+                        "fields": {
+                            "progress": {
+                                "phase": "measuring",
+                                "current_command": {"argv": ["x" * 512] * 64},
+                            }
+                        },
+                    }
+                )
+            (run_root / "events.jsonl").write_text(
+                "".join(json.dumps(event) + "\n" for event in large_events),
+                encoding="utf-8",
+            )
+            bounded = service.local_ydb_activity("local-ydb-activity", "capacity")
+            self.assertTrue(bounded["truncated"])
+            self.assertLess(len(bounded["events"]), len(large_events))
+            self.assertLessEqual(
+                len(json.dumps(bounded["events"], separators=(",", ":")).encode("utf-8")),
+                web._LOCAL_YDB_ACTIVITY_RESPONSE_BYTES + 2,
+            )
+        finally:
+            service.shutdown()
+
+    def test_local_ydb_activity_http_endpoint_validates_profile_and_cursor(self):
+        run_root = self.root / "local-ydb-http-activity"
+        self._manifest(run_root)
+        manifest_path = run_root / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["runs"] = [{"benchmark": "local-ydb", "profile": "capacity", "status": "running"}]
+        manifest["steps"] = [
+            {
+                "id": "capacity-step",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "state": "running",
+            }
+        ]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        (run_root / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "sequence": 1,
+                    "at": "2025-01-01T00:00:00+00:00",
+                    "type": "step-progress",
+                    "step_id": "capacity-step",
+                    "fields": {"progress": {"phase": "warming-up", "load": 1000}},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = "http://127.0.0.1:{}".format(server.server_port)
+        endpoint = base + "/api/runs/local-ydb-http-activity/local-ydb-activity"
+        try:
+            with urllib.request.urlopen(endpoint + "?profile=capacity&after=0") as response:
+                activity = json.loads(response.read())
+            self.assertEqual(activity["after"], 1)
+            self.assertEqual(activity["events"][0]["phase"], "warming-up")
+            for query, message in (
+                ("?after=0", "profile is required"),
+                ("?profile=capacity&after=abc", "non-negative integer"),
+                ("?profile=capacity&after=-1", "non-negative integer"),
+                (
+                    "?profile=capacity&after={}".format(web._MAX_SAFE_JSON_INTEGER + 1),
+                    "JSON safe range",
+                ),
+            ):
+                with self.assertRaises(HTTPError) as context:
+                    urllib.request.urlopen(endpoint + query)
+                self.assertEqual(context.exception.code, 400)
+                self.assertIn(message, json.loads(context.exception.read())["error"])
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
     def test_local_ydb_profile_projection_supports_preparing_and_live_results(self):
         run_root = self.root / "local-ydb-run"
         self._manifest(run_root, "running")
@@ -3071,6 +3900,49 @@ class WebTest(unittest.TestCase):
             recovered = service.local_ydb_profile("local-ydb-run", "capacity")
             self.assertEqual(recovered["status"], "recovery_required")
             self.assertEqual(recovered["state"], "recovery_required")
+        finally:
+            service.shutdown()
+
+    def test_local_ydb_comparison_returns_bounded_profile_results(self):
+        self._local_ydb_result(self.root / "baseline", 1000, verified=True)
+        self._local_ydb_result(self.root / "candidate", 1100, operation="mixed")
+        service = RunService(self.root)
+        try:
+            comparison = service.local_ydb_comparison(["baseline", "candidate"])
+            self.assertEqual(
+                [(item["run"], item["profile"]) for item in comparison["entries"]],
+                [("baseline", "capacity"), ("candidate", "capacity")],
+            )
+            self.assertEqual(comparison["entries"][0]["result"]["selected_metrics"]["throughput"], 1000)
+            self.assertEqual(comparison["entries"][0]["binaries"]["ydbd"]["sha256"], "server-sha")
+            self.assertEqual(comparison["entries"][0]["cpu_topology"]["allowed_cpus"], [0, 1, 2])
+            self.assertNotIn("process_guard", comparison["entries"][0]["binaries"])
+            self.assertNotIn("private", comparison["entries"][0]["platform"])
+            self.assertNotIn("private", comparison["entries"][0]["cpu_topology"])
+            self.assertNotIn("private", comparison["entries"][0]["parameters"])
+            self.assertNotIn("attempts", comparison["entries"][0])
+            self.assertNotIn("commands", comparison["entries"][0]["result"]["selected_metrics"])
+            self.assertEqual(comparison["entries"][0]["result"]["metrics_source"], "verification")
+            self.assertEqual(comparison["entries"][0]["result"]["verified_metrics"]["throughput"], 1050)
+            self.assertNotIn("commands", comparison["entries"][0]["result"]["verified_metrics"])
+            self.assertTrue(comparison["entries"][0]["verification"]["accepted"])
+            self.assertNotIn("samples", comparison["entries"][0]["verification"])
+            self.assertEqual(comparison["entries"][1]["parameters"]["workload"]["operation"], "mixed")
+            with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
+                service.local_ydb_comparison([])
+            with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
+                service.local_ydb_comparison(["baseline"] * 21)
+            with self.assertRaisesRegex(BenchmarkError, "must be unique"):
+                service.local_ydb_comparison(["baseline", "baseline"])
+            with self.assertRaisesRegex(BenchmarkError, "run not found"):
+                service.local_ydb_comparison(["missing"])
+            with mock.patch.object(
+                service,
+                "local_ydb_profile",
+                return_value={"tool_revision": "x" * (4 * 1024 * 1024)},
+            ):
+                with self.assertRaisesRegex(BenchmarkError, "response is too large"):
+                    service.local_ydb_comparison(["baseline"])
         finally:
             service.shutdown()
 
@@ -3251,9 +4123,12 @@ class WebTest(unittest.TestCase):
         self._manifest(self.root / "complete")
         summary = self.root / "complete" / "local-ydb" / "capacity" / "summary.csv"
         summary.parent.mkdir(parents=True)
-        row = {"load": 10, "dynamic_nodes": 2}
-        row.update({metric.name: index + 1 for index, metric in enumerate(LOCAL_YDB_BENCHMARK.metrics)})
-        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics([row], LOCAL_YDB_BENCHMARK)
+        rows = []
+        for load, dynamic_nodes, scale in ((10, 1, 1), (20, 1, 2), (10, 2, 3)):
+            row = {"load": load, "dynamic_nodes": dynamic_nodes}
+            row.update({metric.name: (index + 1) * scale for index, metric in enumerate(LOCAL_YDB_BENCHMARK.metrics)})
+            rows.append(row)
+        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics(rows, LOCAL_YDB_BENCHMARK)
         summary.write_text(
             LOCAL_YDB_BENCHMARK.render_summary(summarized, LOCAL_YDB_BENCHMARK),
             encoding="utf-8",
@@ -3264,6 +4139,24 @@ class WebTest(unittest.TestCase):
         self.assertEqual(value["series"][0]["benchmark"], "local-ydb")
         self.assertEqual(value["series"][0]["affinity"], "roles")
         self.assertEqual(value["series"][0]["rows"][0]["load"], 10)
+        self.assertEqual(
+            {(row["load"], row["dynamic_nodes"]) for row in value["series"][0]["rows"]},
+            {(10, 1), (20, 1), (10, 2)},
+        )
+        self.assertIn("median_throughput", value["metrics"])
+        self.assertIn("median_p99_ms", value["metrics"])
+        self.assertIn("median_dynamic_cpu_mean", value["metrics"])
+        self.assertIn("max_errors", value["metrics"])
+        unrelated = self.root / "complete" / "ping-bench" / "broken" / "summary.csv"
+        unrelated.parent.mkdir(parents=True)
+        with unrelated.open("wb") as stream:
+            stream.truncate(16 * 1024 * 1024 + 1)
+        with self.assertRaisesRegex(BenchmarkError, "summary CSV is too large"):
+            chart_data(self.root, ["complete"])
+        filtered = chart_data(self.root, ["complete"], "local-ydb")
+        self.assertEqual(len(filtered["series"]), 1)
+        with self.assertRaisesRegex(BenchmarkError, "unknown chart benchmark"):
+            chart_data(self.root, ["complete"], "missing")
 
     def test_memory_fairness_is_derived_per_repeat_before_aggregation(self):
         dimensions = ["threads", "random_percent", "scope", "worker_aggregation"]
@@ -3353,11 +4246,33 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"for(const points of segments)", script)
                 self.assertIn(b"function mountChartBuilder", script)
                 self.assertIn(b"function mountLocalYdbProfile", script)
+                self.assertIn(b"function loadLocalYdbActivity", script)
+                self.assertIn(b"/local-ydb-activity?", script)
+                self.assertIn(b"function localActivityLog", script)
+                self.assertIn(b"Recent activity", script)
+                self.assertIn(b"activityScrollTop", script)
+                self.assertIn(b"activityPinned", script)
+                self.assertIn(b"showLiveOutput=activeBenchmark!=='local-ydb'", script)
                 self.assertIn(b"local-load-allow-errors", script)
                 self.assertIn(b"allow-errors: ", script)
                 self.assertIn(b"Failed workload requests are allowed", script)
+                self.assertIn(b"verification-repetitions:", script)
+                self.assertIn(b"local-measurement-verification-repetitions", script)
+                self.assertIn(b"localInteger('local-measurement-verification-repetitions',0,20)", script)
+                self.assertIn(b"function localVerificationSummary", script)
+                self.assertIn(b"metrics_source==='verification'", script)
+                self.assertIn(b"verification-measuring", script)
+                self.assertIn(b"'verification-evaluating':'Evaluating verification'", script)
+                self.assertIn(b"Reported metrics come from the independent holdout", script)
+                self.assertIn(b"Incompatible metric source", script)
                 self.assertIn(b"function localElapsed(started,finished=null)", script)
                 self.assertIn(b"Search process", script)
+                self.assertIn(b"Ternary search progress", script)
+                self.assertIn(b"Plateau candidate", script)
+                self.assertIn(b"Search low", script)
+                self.assertIn(b"Search high", script)
+                self.assertNotIn(b"Candidate and current best", script)
+                self.assertNotIn(b"label:'Passed'", script)
                 self.assertIn(b"function localSearchAxisLabel", script)
                 self.assertIn(b"data-local-chart-x", script)
                 self.assertIn(b"Attempts (search order)", script)
@@ -3382,6 +4297,28 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"local-ydb-profile?profile=", script)
                 self.assertIn(b"function defaultActorCharts", script)
                 self.assertIn(b"function defaultMemoryCharts", script)
+                self.assertIn(b"Local YDB baseline comparison", script)
+                self.assertIn(b"function mountLocalYdbComparison", script)
+                self.assertIn(b"function mountLocalYdbComparisonCurves", script)
+                self.assertIn(b"function localComparisonSemantic", script)
+                self.assertIn(b"sameMetricSource=metricView.source===baselineView.source", script)
+                self.assertIn(b"<th>Metric source</th>", script)
+                self.assertIn(b"function localComparisonKey", script)
+                self.assertIn(b"Incompatible", script)
+                self.assertIn(b"reference===0", script)
+                self.assertIn(b"value===null", script)
+                self.assertIn(b"Load values", script)
+                self.assertIn(b"...Object.keys(config)", script)
+                self.assertIn(b"series.benchmark!=='local-ydb'", script)
+                self.assertIn(b"median_throughput", script)
+                self.assertIn(b"median_dynamic_cpu_mean", script)
+                self.assertIn(b"max_errors", script)
+                self.assertIn(b"dynamicNodes", script)
+                self.assertIn(b"connectMeasuredPoints", script)
+                self.assertIn(b"item.rows.has(String(x))", script)
+                self.assertIn(b"no values are synthesized", script)
+                self.assertIn(b"loadChartData(value.selected,'local-ydb')", script)
+                self.assertIn(b"Promise.allSettled", script)
                 self.assertIn(b"function defaultChartScope", script)
                 self.assertIn(b"['actorPairs','in_flight']", script)
                 self.assertIn(b"['actorPairs','star_multiply']", script)
@@ -3425,9 +4362,16 @@ class WebTest(unittest.TestCase):
                 stylesheet = response.read()
                 self.assertIn(b".local-attempts-scroll{max-width:100%;overflow-x:auto}", stylesheet)
                 self.assertIn(b".local-attempts{width:max-content;min-width:100%}", stylesheet)
+                self.assertIn(b".local-activity-log{max-height:20rem;overflow:auto", stylesheet)
                 self.assertNotIn(b".local-attempts{display:block", stylesheet)
             with urllib.request.urlopen(base + "/api/runs") as response:
                 self.assertEqual(json.loads(response.read())[0]["id"], "complete")
+            with urllib.request.urlopen(base + "/api/local-ydb-comparison?run=complete") as response:
+                self.assertEqual(json.loads(response.read()), {"entries": []})
+            with self.assertRaises(HTTPError) as context:
+                urllib.request.urlopen(base + "/api/local-ydb-comparison?run=missing")
+            self.assertEqual(context.exception.code, 400)
+            self.assertIn("run not found", json.loads(context.exception.read())["error"])
             request = urllib.request.Request(base + "/api/import", data=self._portable_archive(), method="POST")
             with urllib.request.urlopen(request) as response:
                 self.assertEqual(json.loads(response.read())["source"], "imported")

@@ -1014,6 +1014,47 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
 
 } // anonymous namespace
 
+TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    Y_UNUSED(kqpCtx);
+
+    TExprNode::TPtr tableEffectInput = node->ChildPtr(1);
+    if (TKqpWriteConstraint::Match(tableEffectInput.Get())){
+        tableEffectInput = tableEffectInput->ChildPtr(0);
+    }
+
+    Y_ENSURE(TKqpOpRoot::Match(tableEffectInput.Get()), "Only support subqueries as input to table effects operation");
+    TKqpOpRoot root(tableEffectInput);
+
+    TString effectType = TString(node->Content());
+
+    TKqlTableEffect tableEffect(node);
+
+    if (TKqlInsertRows::Match(node.Get()) || TKqlInsertRowsIndex::Match(node.Get())) {
+        TKqlInsertRowsBase insert(node);
+
+        TExprNode::TPtr settings = node->ChildPtr(TKqlInsertRows::idx_Settings);
+
+        return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpTableEffect>()
+                .Input(root.Input())
+                .Table(tableEffect.Table())
+                .EffectType().Value(effectType).Build()
+                .Columns(insert.Columns())
+                .ReturningColumns(insert.ReturningColumns())
+                .IsBatch().Build()
+                .DefaultColumns().Build()
+                .Settings(settings)
+                .OnConflict(insert.OnConflict())
+            .Build()
+            .ColumnOrder(insert.ReturningColumns())
+            .Done().Ptr();
+
+    } else {
+        Y_ENSURE(false, "Unsupported table effects operation");
+    }
+}
+
+
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
                               ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot) {
 
@@ -1094,6 +1135,23 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                 }
                 else {
                     Y_ENSURE(false, TStringBuilder() << "Unsupported callable: " << childExpr->Content());
+                }
+
+                auto into_values = GetSetting(fromItem->Tail(), "into_values");
+                if (into_values) {
+                    auto columnList = fromItem->ChildPtr(2);
+                    TVector<TExprNode::TPtr> columns;
+                    for (const auto & c : columnList->Children()) {
+                        TString columnName(c->Content());
+                        TString fullColumnName = TString(alias->Content()) + "." + columnName;
+                        columns.push_back(ctx.NewAtom(node->Pos(), fullColumnName));
+                    }
+                    fromExpr = Build<TKqpOpReplaceColumns>(ctx, node->Pos())
+                        .Input(fromExpr)
+                        .Columns()
+                            .Add(columns)
+                        .Build()
+                        .Done().Ptr();
                 }
 
                 aliasToInputMap.insert({TString(alias->Content()), fromExpr});
@@ -1377,7 +1435,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
         auto result = GetSetting(setItem->Tail(), "result");
         Y_ENSURE(result || values, "New RBO expects either 'values' or 'result' at a set item");
-        
+
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
                                          distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll, ctx, node->Pos());
@@ -1518,6 +1576,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
             finalProjection.push_back(columnName);
         };
+
+        auto into_values = GetSetting(setItem->Tail(), "into_values");
+
 
         // Process result items
         for (auto resultItem : result->Child(1)->Children()) {

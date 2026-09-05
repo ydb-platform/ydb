@@ -1481,6 +1481,72 @@ TString TOpCBOTree::ToString(TExprContext& ctx) {
 }
 
 /**
+* Table Effect operator methods: these are inserts/updates/deletes
+*/
+TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options)
+    : IUnaryOperator(EOperator::TableEffect, pos, input)
+    , Table(table)
+    , EffectType(type)
+    , Options(options) {
+
+    if (options.ReturningColumns.has_value()) {
+        for (const auto & c : options.ReturningColumns.value()) {
+            OutputIUs.push_back(TInfoUnit(c));
+        }
+    }
+
+    UsedIUs = GetInput()->GetOutputIUs();
+}
+
+TVector<TInfoUnit> TOpTableEffect::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return UsedIUs;
+}
+
+void TOpTableEffect::ComputeOutputIUs() {
+    Props.OutputIUs = OutputIUs;
+}
+
+TString TOpTableEffect::GetExplainName() const {
+    switch (EffectType) {
+        case EEffectType::InsertRows:
+        case EEffectType::InsertRowsIndex:
+            return "InsertRows";
+        case EEffectType::UpdateRows:
+        case EEffectType::UpdateRowsIndex:
+            return "UpdateRows";
+        case EEffectType::DeleteRows:
+        case EEffectType::DeleteRowsIndex:
+            return "DeleteRows";
+        default:
+            Y_ENSURE(false, "Uknown table effect type");
+    }
+}
+
+TString TOpTableEffect::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    return GetExplainName();
+}
+
+TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
+    if (EffectType == EEffectType::InsertRows || EffectType == EEffectType::InsertRowsIndex) {
+        return Build<TKqpTableSinkSettings>(ctx, Pos)
+                .Table(Table)
+                .InconsistentWrite().Build("false")
+                .Mode().Build("insert")
+                .Priority().Build("0")
+                .StreamWrite().Build("false")
+                .IsBatch().Build("false")
+                .IsIndexImplTable().Build("false")
+                .DefaultColumns().Build()
+                .ReturningColumns().Build()
+                .Settings().Build()
+                .Done().Ptr();
+    }
+    Y_ENSURE(false, "Unsupported table effect");
+}
+
+/**
  * OpRoot operator methods
  */
 

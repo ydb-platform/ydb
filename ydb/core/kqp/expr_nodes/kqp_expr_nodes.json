@@ -1019,6 +1019,15 @@
             ]
         },
         {
+            "Name": "TKqpOpReplaceColumns",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpReplaceColumns"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
             "Name": "TKqpOpRoot",
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
@@ -1088,6 +1097,23 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "Types", "Type": "TExprList"}
+            ]
+        },
+        {
+            "Name" : "TKqpOpTableEffect",
+            "Base" : "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpOpTableEffect"},
+            "Children" : [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "EffectType", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Columns", "Type": "TCoAtomList", "Optional": true},
+                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList", "Optional": true},
+                {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom", "Optional": true},
+                {"Index": 6, "Name": "DefaultColumns", "Type": "TCoAtomList", "Optional": true},
+                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true},
+                {"Index": 8, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert", "Optional": true},
+                {"Index": 9, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList", "Optional": true}
             ]
         }
     ]

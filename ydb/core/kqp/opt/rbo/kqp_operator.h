@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -934,6 +934,52 @@ protected:
 
 private:
     void RebuildChildren();
+};
+
+// Table Effects operator inserts/updates/deletes rows based on input tuples
+
+enum class EEffectType : ui32 {
+    InsertRows,
+    InsertRowsIndex,
+    UpdateRows,
+    UpdateRowsIndex,
+    DeleteRows,
+    DeleteRowsIndex
+};
+
+struct TEffectOptions {
+    std::optional<TVector<TString>> Columns;
+    std::optional<TVector<TString>> ReturningColumns;
+    std::optional<TString> OnConflict;
+    std::optional<bool> IsBatch;
+    std::optional<TVector<TExprNode::TPtr>> Settings;
+};
+
+class TOpTableEffect: public IUnaryOperator {
+
+public:
+    TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options);
+    virtual TString GetExplainName() const override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    //virtual void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    //virtual void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    TExprNode::TPtr BuildSettings(TExprContext& ctx);
+
+    //virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    //virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    TExprNode::TPtr Table;
+    EEffectType EffectType;
+    TEffectOptions Options;
+    TVector<TInfoUnit> OutputIUs;
+    TVector<TInfoUnit> UsedIUs;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 // End-of-traversal sentinel for TOpIterator

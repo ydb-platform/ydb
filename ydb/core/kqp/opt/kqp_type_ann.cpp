@@ -2984,6 +2984,24 @@ TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) 
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpReplaceColumns(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto structType = input->ChildPtr(TKqpOpReplaceColumns::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes;
+    auto typeItems = structType->GetItems();
+    auto columns = input->ChildPtr(TKqpOpReplaceColumns::idx_Columns);
+
+    for (size_t i=0; i<typeItems.size(); i++) {
+        auto item = typeItems[i];
+        auto newName = columns->ChildPtr(i)->Content();
+        structItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, item->GetItemType()));
+    }
+
+    auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
+    input->SetTypeAnn(resultAnn);
+    return TStatus::Ok;    
+}
+
 TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpFilter::idx_Input)->GetTypeAnn();
@@ -3233,6 +3251,12 @@ TStatus AnnotateOpRoot(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpTableEffect(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    input->SetTypeAnn(ctx.MakeType<TListExprType>(MakeKqpEffectType(ctx)));
+    return TStatus::Ok;
+}
+
 class TKiTypeAnnotationTransformer final : public TVisitorTransformerBase {
 public:
     TKiTypeAnnotationTransformer(const TString& cluster, TIntrusivePtr<TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config)
@@ -3352,8 +3376,11 @@ public:
         AddHandler({TKqpOpSortElement::CallableName()}, Hndl(&AnnotateOpSortElement));
         AddHandler({TKqpOpSort::CallableName()}, Hndl(&AnnotateOpSort));
         AddHandler({TKqpOpReplaceAlias::CallableName()}, Hndl(&AnnotateOpReplaceAlias));
+        AddHandler({TKqpOpReplaceColumns::CallableName()}, Hndl(&AnnotateOpReplaceColumns));
         AddHandler({TKqpOpAggregate::CallableName()}, Hndl(&AnnotateOpAggregate));
         AddHandler({TKqpOpRoot::CallableName()}, Hndl(&AnnotateOpRoot));
+        AddHandler({TKqpOpTableEffect::CallableName()}, Hndl(&AnnotateOpTableEffect));
+
     }
 
 private:

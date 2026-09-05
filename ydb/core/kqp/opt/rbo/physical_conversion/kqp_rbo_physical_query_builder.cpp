@@ -239,8 +239,14 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
             }
 
             auto stageGUID = Graph.StageGUIDs.at(id);
-            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos.at(id)),
+            if (Graph.IsSinkStage(id)) {
+                stage = BuildDqPhySinkStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos.at(id)),
+                                    Graph.GetSinkSettings(id), ctx, StagePos.at(id));
+            }
+            else {
+                stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos.at(id)),
                                     ctx, StagePos.at(id));
+            }
             phyStages.emplace_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
@@ -524,6 +530,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     }
     const auto columnOrder = Build<TCoAtomList>(ctx, Root.Pos).Add(columnAtomList).Done().Ptr();
 
+    TExprNode::TPtr mainTx;
+
     // clang-format off
     // wrap in DqResult
     auto dqResult = Build<TDqCnResult>(ctx, Root.Pos)
@@ -539,20 +547,38 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
 
     auto phyTxSettings = GetPhysicalTxSettings();
-    // Build PhysicalTx
-    auto mainTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
-        .Stages()
-            .Add(physicalStages)
-        .Build()
-        .Results()
-            .Add({dqResult})
-        .Build()
-        .ParamBindings()
-            .Add(paramBindingsMainTx)
-        .Build()
-        .Settings(phyTxSettings.BuildNode(ctx, Root.Pos))
-    .Done().Ptr();
-    // clang-format on
+    if (Root.PlanProps.WithEffects) {
+        // clang-format off
+        // Build PhysicalTx
+        mainTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
+                .Stages()
+                    .Add(physicalStages)
+                .Build()
+                .Results().Build()
+                .ParamBindings()
+                    .Add(paramBindingsMainTx)
+                .Build()
+                .Settings(phyTxSettings.BuildNode(ctx, Root.Pos))
+            .Done().Ptr();
+        // clang-format on
+    }
+    else {
+        // clang-format off
+        // Build PhysicalTx
+        mainTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
+                .Stages()
+                    .Add(physicalStages)
+                .Build()
+                .Results()
+                    .Add({dqResult})
+                .Build()
+                .ParamBindings()
+                    .Add(paramBindingsMainTx)
+                .Build()
+                .Settings(phyTxSettings.BuildNode(ctx, Root.Pos))
+            .Done().Ptr();
+        // clang-format on
+    }
     phyTxs.emplace_back(mainTx);
 
     // If we have materialize tx, main tx is next.
@@ -567,17 +593,29 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
 
     auto phyQuerySettings = GetPhysicalQuerySettings();
     // Build Physical query
-    // clang-format off
-    return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
-        .Transactions()
-            .Add(phyTxs)
-        .Build()
-        .Results()
-            .Add({mainTxResultBinding})
-        .Build()
-        .Settings(phyQuerySettings.BuildNode(ctx, Root.Pos))
-    .Done().Ptr();
-    // clang-format on
+    if (Root.PlanProps.WithEffects) {
+        // clang-format off
+        return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
+            .Transactions()
+                .Add(phyTxs)
+            .Build()
+            .Results().Build()
+            .Settings(phyQuerySettings.BuildNode(ctx, Root.Pos))
+        .Done().Ptr();
+        // clang-format on
+    } else {
+        // clang-format off
+        return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
+            .Transactions()
+                .Add(phyTxs)
+            .Build()
+            .Results()
+                .Add({mainTxResultBinding})
+            .Build()
+            .Settings(phyQuerySettings.BuildNode(ctx, Root.Pos))
+        .Done().Ptr();
+        // clang-format on
+    }
 }
 
 TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
@@ -607,6 +645,8 @@ TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
 TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings() const {
     auto& kqpCtx = RBOCtx.KqpCtx;
     TKqpPhyTxSettings txSettings;
+    txSettings.WithEffects = Root.PlanProps.WithEffects;
+
     switch (kqpCtx.QueryCtx->Type) {
         case EKikimrQueryType::Dml: {
             txSettings.Type = EPhysicalTxType::Compute;
@@ -640,6 +680,36 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhyStage(const TVector<TExprNode::
             .Body(physicalStageBody)
         .Build()
         .Settings(settings)
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhySinkStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args,
+                                                       TExprNode::TPtr physicalStageBody, NNodes::TCoNameValueTupleList&& settings, 
+                                                       const TExprNode::TPtr& sinkSettings, TExprContext& ctx, TPositionHandle pos) const {
+
+    TVector<TExprNode::TPtr> outputs;
+    auto dataSink = ctx.NewCallable(pos, "DataSink", {ctx.NewAtom(pos, "KqpTableSink"), ctx.NewAtom(pos, "db")});
+    outputs.push_back(Build<TDqSink>(ctx, pos)
+                        .Index().Value("0").Build()
+                        .DataSink(dataSink)
+                        .Settings(sinkSettings)
+                        .Done().Ptr()
+    );
+
+    // clang-format off
+    return Build<TDqPhyStage>(ctx, pos)
+        .Inputs()
+            .Add(inputs)
+        .Build()
+        .Program()
+            .Args(args)
+            .Body(physicalStageBody)
+        .Build()
+        .Settings(settings)
+        .Outputs()
+            .Add(outputs)
+        .Build()
     .Done().Ptr();
     // clang-format on
 }

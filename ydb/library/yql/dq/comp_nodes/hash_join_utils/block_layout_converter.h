@@ -5,6 +5,8 @@
 
 #include <arrow/type.h>
 
+#include <functional>
+
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/tuple.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 
@@ -21,6 +23,9 @@ public:
     // Can be called multiple times to accumulate packed data in one storage
     virtual void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) = 0;
     virtual void BucketPack(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) = 0;
+    virtual bool PackIntoBucketPages(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> pages,
+                                     ui32 nBuckets, ui32 pageSizeBytes,
+                                     const std::function<void(ui32)>& onPageFull) = 0;
     // Can not be called multiple times due to immutability of arrow arrays
     virtual void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) = 0;
     // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);

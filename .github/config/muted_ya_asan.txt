@@ -217,7 +217,6 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
-ydb/core/tx/columnshard/engines/storage/indexes/helper/ut unittest.sole chunk
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKDatetime
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
@@ -282,8 +281,8 @@ ydb/library/actors/interconnect/ut InterconnectDirectSession.UnregisterRestoresA
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
-ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
-ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
+ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithBackpressure
+ydb/library/actors/interconnect/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout
@@ -291,7 +290,6 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRe
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProducer_BasicWrite
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.DirectWriteWithoutDescribeResourcesPermission
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
@@ -369,7 +367,6 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-1-2048-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-1-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-1-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-8388608-COLUMN]
@@ -393,7 +390,6 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_prestable-26-4_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_stable-26-3-1_to_prestable-26-4-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_stable-26-3-1_to_prestable-26-4-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_stable-26-3-1_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_prestable-26-4-2-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_prestable-26-4-2-True-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_stable-26-3-1-1-False-2048-ROW]
@@ -407,7 +403,6 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_prestable-26-4-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-0-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-2048-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-0-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-0-8388608-COLUMN]

@@ -2832,6 +2832,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
         {RootUserName, runtimeInfo->DefaultRequestQueue.Get()});
 
     runtimeInfo->Heavy.store(descriptor.Options.Heavy);
+    runtimeInfo->Pooled.store(descriptor.Pooled);
     runtimeInfo->QueueSizeLimit.store(descriptor.QueueSizeLimit);
     runtimeInfo->QueueByteSizeLimit.store(descriptor.QueueByteSizeLimit);
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);

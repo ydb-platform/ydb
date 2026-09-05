@@ -933,9 +933,6 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
     } else if (config.Database.empty()) {
         throw TMisuseException()
             << "Missing required option 'database'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
-    } else if (!config.Database.StartsWith('/')) {
-        throw TMisuseException() << "Path to a database \"" << config.Database
-            << "\" is incorrect. It must be absolute and thus must begin with '/'.";
     }
 }
 

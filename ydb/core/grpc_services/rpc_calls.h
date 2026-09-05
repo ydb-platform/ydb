@@ -44,6 +44,16 @@ void FillYdbStatus(Draft::Dummy::PingResponse& resp, const NYql::TIssues& issues
 template <>
 void FillYdbStatus(Ydb::Coordination::SessionResponse& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status);
 
+template <>
+struct TYdbGrpcDatabaseNameAccessorTraits<Ydb::Discovery::ListEndpointsRequest> {
+    static const TMaybe<TString> GetDatabaseName(
+        const Ydb::Discovery::ListEndpointsRequest& request,
+        const NYdbGrpc::IRequestContextBase* ctx)
+    {
+        const auto database = ExtractDatabaseName(ctx->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+        return database && !database->empty() ? database : TMaybe<TString>(request.database());
+    }
+};
 
 using TEvListEndpointsRequest = TGRpcRequestWrapper<TRpcServices::EvListEndpoints, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse, true>;
 

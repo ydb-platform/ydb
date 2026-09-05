@@ -45,11 +45,12 @@ private:
 
         try {
             for (const auto& item: req->tables()) {
+                const TString destinationPath = Request_->GetDatabaseRelativePath(item.destination_path());
                 if (item.replace_destination()) {
                     auto* modifyScheme = transaction.AddTransactionalModification();
                     modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
 
-                    auto [workingDir, name] = SplitPath(item.destination_path());
+                    auto [workingDir, name] = SplitPath(destinationPath);
                     modifyScheme->SetWorkingDir(workingDir);
                     modifyScheme->MutableDrop()->SetName(name);
                 }
@@ -57,8 +58,8 @@ private:
                 auto* modifyScheme = transaction.AddTransactionalModification();
                 modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
                 auto* description = modifyScheme->MutableMoveTable();
-                description->SetSrcPath(item.source_path());
-                description->SetDstPath(item.destination_path());
+                description->SetSrcPath(Request_->GetDatabaseRelativePath(item.source_path()));
+                description->SetDstPath(destinationPath);
             }
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));

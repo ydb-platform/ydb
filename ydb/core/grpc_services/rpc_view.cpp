@@ -33,7 +33,8 @@ private:
         auto ev = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev.get(), *Request_);
-        ev->Record.MutableDescribePath()->SetPath(GetProtoRequest()->path());
+        ev->Record.MutableDescribePath()->SetPath(
+            Request_->GetDatabaseRelativePath(GetProtoRequest()->path()));
 
         Send(MakeTxProxyID(), ev.release());
         Become(&TDescribeViewRPC::StateDescribeScheme);

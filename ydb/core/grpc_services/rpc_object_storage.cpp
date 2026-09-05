@@ -143,7 +143,7 @@ private:
         request->DatabaseName = GrpcRequest->GetDatabaseName().GetOrElse("");
 
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = NKikimr::SplitPath(table);
+        entry.Path = NKikimr::SplitPath(GrpcRequest->GetDatabaseRelativePath(table));
         if (entry.Path.empty()) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Invalid table path specified", ctx);
         }

@@ -589,7 +589,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -641,7 +641,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -671,6 +671,14 @@ public:
 template <typename TDerived>
 class TBaseKeyValueRequest {
 protected:
+    static auto& GetRequestCtx(TDerived* self) {
+        if constexpr (requires { self->Request(); }) {
+            return self->Request();
+        } else {
+            return *self->Request;
+        }
+    }
+
     void OnBootstrap() {
         auto self = static_cast<TDerived*>(this);
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
@@ -687,7 +695,7 @@ protected:
         auto &rec = *self->GetProtoRequest();
         auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = req->ResultSet.emplace_back();
-        entry.Path = ::NKikimr::SplitPath(rec.path());
+        entry.Path = ::NKikimr::SplitPath(GetRequestCtx(self).GetDatabaseRelativePath(rec.path()));
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
         entry.ShowPrivatePath = true;
         entry.SyncVersion = false;
@@ -857,7 +865,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);

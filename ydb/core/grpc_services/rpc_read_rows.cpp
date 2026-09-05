@@ -92,6 +92,7 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 public:
     explicit TReadRowsRPC(IRequestNoOpCtx* request)
         : Request(request)
+        , TablePath(Request->GetDatabaseRelativePath(GetProto()->path()))
         , PipeCache(MakePipePerNodeCacheID(true))
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
@@ -272,7 +273,7 @@ public:
     }
 
     const TString& GetTable() {
-        return GetProto()->path();
+        return TablePath;
     }
 
     bool CheckAccess(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult, TString& errorMessage) {
@@ -857,6 +858,7 @@ public:
 
 private:
     std::unique_ptr<IRequestNoOpCtx> Request;
+    const TString TablePath;
     TInstant StartTime;
     TActorId TimeoutTimerActorId;
     TActorId PipeCache;

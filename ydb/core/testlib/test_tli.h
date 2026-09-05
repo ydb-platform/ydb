@@ -6,6 +6,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/utility.h>
 #include <util/stream/output.h>
+#include <util/string/split.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {
@@ -25,15 +26,21 @@ inline void CheckRegexMatch(
     const TString& str,
     const TVector<std::pair<TString, ui64>>& regexToMatchCount)
 {
+    // Split whole log on separate rows. Use rule that each row starts by prefix like "YYYY-MM-DDTHH:MM:SS.XXXXXXZ node 1:"
+    auto logRows = SplitString(str, "Z node 1 :");
+
     for (auto& [regexString, expectedMatchCount]: regexToMatchCount) {
         std::regex expression(regexString.c_str());
+        unsigned matchCount = 0;
 
-        auto matchCount = std::distance(
-            std::sregex_iterator(str.begin(), str.end(), expression),
-            std::sregex_iterator());
+        for(auto& row: logRows) {
+            std::smatch expressionMatch;
+            std::regex_search(row.data(), expressionMatch, expression);
+            matchCount += expressionMatch.size();
+        }
 
         UNIT_ASSERT_VALUES_EQUAL_C(expectedMatchCount, matchCount,
-            TStringBuilder() << "Pattern: " << regexString << "\nLogs:\n" << str);
+            TStringBuilder() << "Pattern: " << regexString << " failed\n");
     }
 }
 
@@ -53,7 +60,7 @@ inline TString ConstructRegexToCheckLogs(
     TStringBuilder builder;
     // [\\w]+\\.[A-Za-z]+:[0-9]+ match filename and line number
     builder << "TLI " << logLevel
-            << ": [\\w]+\\.[A-Za-z]+:[0-9]+: Component: " << component
+            << ": [\\w]+\\.[A-Za-z]+:[0-9]+: .*component=" << component
             << ".*?" << message;
     return builder;
 }

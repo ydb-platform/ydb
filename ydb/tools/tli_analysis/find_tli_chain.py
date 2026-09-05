@@ -80,33 +80,53 @@ def unescape_and_format_query_text(s: Optional[str]) -> str:
     return s2
 
 
-def extract_between(line: str, field: str, end_field: Optional[str]) -> Optional[str]:
-    """Extract value between field marker and optional end marker."""
-    key = f"{field}:"
+def extract_field(line: str, field: str) -> Optional[str]:
+    """Extract a field value from log line.
+
+    Field value can have one of following formats
+        value=text
+        value="escaped text"
+    """
+
+    key = field + "="
     pos = line.find(key)
     if pos < 0:
         return None
-    start = pos + len(key)
-    s = line[start:].lstrip()
-    if end_field:
-        marker = f", {end_field}"
-        end_pos = s.find(marker)
-        if end_pos >= 0:
-            return s[:end_pos]
-    return s
+
+    pos += len(key)
+    if pos >= len(line):
+        return None
+
+    if line[pos] != '"':
+        found = line.find(' ', pos)
+        if found < 0:
+            return line[pos:]
+        else:
+            return line[pos:found]
+
+    result = ""
+    pos = pos + 1
+    while pos < len(line):
+        if line[pos] == '"':
+            return result
+        if line[pos] == '\\':
+            pos = pos + 1
+            if line[pos] == '"':
+                result = result + '"'
+            elif line[pos] == '\\':
+                result = result + '\\'
+            else:
+                return None
+            pos = pos + 1
+        else:
+            result += line[pos]
+            pos = pos + 1
+
+    return None
 
 
 # ==================== Regex Patterns ====================
-
-RE_VICTIM_ID = re.compile(r"\bVictimQuerySpanId:\s*(\d+)\b")
-RE_BREAKER_ID = re.compile(r"\bBreakerQuerySpanId:\s*(\d+)\b")
-RE_VICTIM_IDS_LIST = re.compile(r"\bVictimQuerySpanIds:\s*\[([^\]]*)\]")
 RE_ISO = re.compile(r"\b(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z\b")
-RE_TX_ITEM = re.compile(
-    r"QuerySpanId=(\d+)\s+QueryText=(.*?)(?=\s+\|\s+QuerySpanId=|\s*\Z)",
-    re.DOTALL
-)
-
 
 # ==================== Timestamp Parsing ====================
 
@@ -141,90 +161,48 @@ class FastTimeParser:
 
 # ==================== Line Matching Helpers ====================
 
+def extract_query_id(line: str) -> Optional[str]:
+    """Extract querySpanId from line."""
+
+    return extract_field(line, "querySpanId")
+
+
 def extract_breaker_id(line: str) -> Optional[str]:
     """Extract BreakerQuerySpanId from line."""
-    m = RE_BREAKER_ID.search(line)
-    return m.group(1) if m else None
+
+    return extract_field(line, "breakerQuerySpanId")
 
 
-def victim_id_in_line(line: str, victim_id: str) -> bool:
-    """Check if victim_id appears in VictimQuerySpanId or VictimQuerySpanIds."""
-    if re.search(rf"\bVictimQuerySpanId:\s*{re.escape(victim_id)}\b", line):
+def check_query_id_in_line(line: str, query_id: str) -> bool:
+    """Check if query_id appears in line."""
+
+    query_id = query_id.strip()
+
+    id = extract_field(line, "querySpanId")
+    if id and id.strip() == query_id:
         return True
-    m = RE_VICTIM_IDS_LIST.search(line)
-    if m:
-        return re.search(rf"\b{re.escape(victim_id)}\b", m.group(1)) is not None
+
+    id = extract_field(line, "victimQuerySpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    id = extract_field(line, "victimTxSpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    id = extract_field(line, "breakerQuerySpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    id = extract_field(line, "breakerTxSpanId")
+    if id and id.strip() == query_id:
+        return True
     return False
 
 
 def in_window(t: float, start: float, end: float) -> bool:
     """Check if timestamp is within window."""
     return start <= t <= end
-
-
-# ==================== Query Text Parsing ====================
-
-def _extract_list_payload(line: str, list_field: str) -> Optional[str]:
-    """
-    Extract the payload inside the brackets for a given list field.
-
-    Looks for 'list_field: [' and then finds the matching closing ']' for that '[',
-    correctly handling nested brackets. Returns the substring between the brackets,
-    or None if not found or malformed.
-    """
-    marker = f"{list_field}: ["
-    start = line.find(marker)
-    if start < 0:
-        return None
-
-    # Index of the opening '[' corresponding to this list_field
-    open_idx = start + len(marker) - 1
-    if open_idx >= len(line) or line[open_idx] != "[":
-        return None
-
-    depth = 0
-    end_idx = -1
-    for i in range(open_idx, len(line)):
-        ch = line[i]
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            if depth == 0:
-                # Unbalanced closing bracket before opening; treat as malformed.
-                return None
-            depth -= 1
-            if depth == 0:
-                end_idx = i
-                break
-
-    if end_idx <= open_idx:
-        return None
-
-    return line[open_idx + 1:end_idx]
-
-
-def count_queries_in_list(line: str, list_field: str) -> int:
-    """Count number of queries in a QueryTexts list field."""
-    payload = _extract_list_payload(line, list_field)
-    if payload is None:
-        return 0
-    # Count occurrences of "QuerySpanId=" which marks each query
-    return payload.count("QuerySpanId=")
-
-
-def parse_query_texts_list(line: str, list_field: str) -> List[Tuple[str, str]]:
-    """Parse QueryTexts list field into (QuerySpanId, QueryText) pairs."""
-    payload = _extract_list_payload(line, list_field)
-    if payload is None:
-        return []
-    payload = payload.strip()
-
-    out: List[Tuple[str, str]] = []
-    for m in RE_TX_ITEM.finditer(payload):
-        qid = m.group(1)
-        qtext_raw = m.group(2).strip()
-        out.append((qid, unescape_and_format_query_text(qtext_raw)))
-    return out
 
 
 def print_tx_block(title: str, items: List[Tuple[str, str]], highlight_id: Optional[str], use_color: bool):
@@ -263,11 +241,10 @@ def main():
     tp = FastTimeParser()
 
     # Collected data
+    victim_query_text = ""
     anchor_t: Optional[float] = None
-    victim_log_sa: Optional[str] = None      # SessionActor "was a victim" line
     breaker_log_ds: Optional[str] = None     # DataShard "broke other locks" line
     breaker_id: Optional[str] = None
-    breaker_sa_by_id: Dict[str, str] = {}
     breaker_sa_with_text_by_id: Dict[str, str] = {}
 
     # First pass: find anchor time and collect all relevant lines
@@ -308,61 +285,48 @@ def main():
     w_end = anchor_t + W
 
     # Process all relevant lines within the time window
+
+    victim_tx_items: List[Tuple[str, str]] = []
+    breaker_tx_items: List[Tuple[str, str]] = []
+
     for t, line in relevant_lines:
         if not in_window(t, w_start, w_end):
             continue
 
-        # Victim SessionActor line: "was a victim of broken locks" + Component: SessionActor
-        if victim_log_sa is None:
-            if ("was a victim of broken locks" in line) and \
-               ("Component: SessionActor" in line) and \
-               victim_id_in_line(line, victim_id):
-                victim_log_sa = line.rstrip("\n")
+        line = line.rstrip("\n")
+
+        # Victim SessionActor line: "was a victim of broken locks" + component=SessionActor
+        if ("was a victim of broken locks" in line) and ("component=SessionActor" in line) and check_query_id_in_line(line, victim_id):
+
+            line_query_id = extract_field(line, "querySpanId")
+            line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
+
+            if line_query_id and line_query_text:
+                victim_tx_span_id = extract_field(line, "victimTxSpanId")
+                if victim_tx_span_id == line_query_id:
+                    victim_query_text = line_query_text
+                victim_tx_items.append((line_query_id, line_query_text))
 
         # Breaker DataShard line: "broke other locks" + Component: DataShard
         if breaker_log_ds is None:
             if ("broke other locks" in line) and \
-               ("Component: DataShard" in line or "datashard_integrity_trails" in line) and \
-               victim_id_in_line(line, victim_id):
+               ("component=DataShard" in line or "datashard_integrity_trails" in line) and \
+               check_query_id_in_line(line, victim_id):
                 breaker_log_ds = line.rstrip("\n")
                 breaker_id = extract_breaker_id(line)
 
         # Breaker SessionActor lines: "had broken other locks" + Component: SessionActor
         # Keep the line with the most queries in BreakerQueryTexts (prefer Commit over deferred)
-        if ("had broken other locks" in line) and ("Component: SessionActor" in line):
-            bid = extract_breaker_id(line)
+        if ("had broken other locks" in line) and ("component=SessionActor" in line):
+            bid = extract_query_id(line)
             if bid:
-                sline = line.rstrip("\n")
-                new_count = count_queries_in_list(sline, "BreakerQueryTexts")
-                # Update if this is the first line or has more queries
-                if bid not in breaker_sa_by_id:
-                    breaker_sa_by_id[bid] = sline
-                else:
-                    old_count = count_queries_in_list(breaker_sa_by_id[bid], "BreakerQueryTexts")
-                    if new_count > old_count:
-                        breaker_sa_by_id[bid] = sline
-                # Same logic for lines with BreakerQueryText field
-                if "BreakerQueryText:" in sline:
-                    if bid not in breaker_sa_with_text_by_id:
-                        breaker_sa_with_text_by_id[bid] = sline
-                    else:
-                        old_count = count_queries_in_list(breaker_sa_with_text_by_id[bid], "BreakerQueryTexts")
-                        if new_count > old_count:
-                            breaker_sa_with_text_by_id[bid] = sline
+                breaker_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
+                if breaker_query_text:
+                    breaker_sa_with_text_by_id[bid] = breaker_query_text
+                    breaker_tx_items.append((bid, breaker_query_text))
 
-    # Extract query texts
-    victim_query_text = ""
-    if victim_log_sa:
-        vqt = extract_between(victim_log_sa, "VictimQueryText", "VictimQueryTexts:")
-        victim_query_text = unescape_and_format_query_text(vqt or "")
-
-    breaker_log_sa: Optional[str] = None
-    breaker_query_text = ""
     if breaker_id:
-        breaker_log_sa = breaker_sa_with_text_by_id.get(breaker_id) or breaker_sa_by_id.get(breaker_id)
-        if breaker_log_sa:
-            bqt = extract_between(breaker_log_sa, "BreakerQueryText", "BreakerQueryTexts:")
-            breaker_query_text = unescape_and_format_query_text(bqt or "")
+        breaker_query_text = breaker_sa_with_text_by_id[breaker_id]
 
     # Output results
     print_section_header("TLI Chain", use_color)
@@ -382,16 +346,8 @@ def main():
     print_kv_header("BreakerQueryText", use_color)
     print(breaker_query_text if breaker_query_text else "(not found)")
 
-    # Parse and display transaction blocks
-    victim_tx_items: List[Tuple[str, str]] = []
-    if victim_log_sa:
-        victim_tx_items = parse_query_texts_list(victim_log_sa, "VictimQueryTexts")
-
-    breaker_tx_items: List[Tuple[str, str]] = []
-    if breaker_log_sa:
-        breaker_tx_items = parse_query_texts_list(breaker_log_sa, "BreakerQueryTexts")
-
     print_tx_block("VictimTx", victim_tx_items, victim_id, use_color)
+
     print_tx_block("BreakerTx", breaker_tx_items, breaker_id, use_color)
 
 

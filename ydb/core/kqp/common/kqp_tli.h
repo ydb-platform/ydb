@@ -69,6 +69,25 @@ private:
     std::unordered_map<ui64, TIterator> Index;
 };
 
+// Structured parameters for TLI logging to improve readability
+struct TTliLogParams {
+    TString Component;
+    TString Message;
+    TString QueryText;
+
+    struct TQueryInfo {
+        TMaybe<ui64> Id;
+        TString Text;
+    };
+    TVector<TQueryInfo> OtherQueries;
+
+    TString TraceId;
+    TMaybe<ui64> BreakerQuerySpanId;
+    TMaybe<ui64> VictimQuerySpanId;
+    TString VictimQueryText;
+    bool IsCommitAction = false;
+};
+
 // Collects query texts and QuerySpanIds for TLI logging and victim stats attribution
 class TQueryTextCollector {
 public:
@@ -94,22 +113,16 @@ public:
     }
 
     // Combine all query texts into a single string for logging
-    TString CombineQueryTexts() const {
+    TVector<NDataIntegrity::TTliLogParams::TQueryInfo> CombineQueryTexts() const {
         if (QueryTexts.empty()) {
-            return "";
+            return {};
         }
 
-        TStringBuilder builder;
-        builder << "[";
+        TVector<NDataIntegrity::TTliLogParams::TQueryInfo> result;
         for (size_t i = 0; i < QueryTexts.size(); ++i) {
-            if (i > 0) {
-                builder << " | ";
-            }
-            builder << "QuerySpanId=" << QueryTexts[i].first
-                << " QueryText=" << QueryTexts[i].second;
+            result.push_back(NDataIntegrity::TTliLogParams::TQueryInfo{QueryTexts[i].first, QueryTexts[i].second});
         }
-        builder << "]";
-        return builder;
+        return result;
     }
 
     // Check if there are any query texts
@@ -160,56 +173,46 @@ private:
     std::deque<std::pair<ui64, TString>> QueryTexts;
 };
 
-// Structured parameters for TLI logging to improve readability
-struct TTliLogParams {
-    TString Component;
-    TString Message;
-    TString QueryText;
-    TString QueryTexts;
-    TString TraceId;
-    TMaybe<ui64> BreakerQuerySpanId;
-    TMaybe<ui64> VictimQuerySpanId;
-    TMaybe<ui64> CurrentQuerySpanId;
-    TString VictimQueryText;
-    bool IsCommitAction = false;
-};
-
 inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ctx) {
-    if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TLI, 0)) {
         return;
     }
 
-    TStringStream ss;
-    LogKeyValue("Component", params.Component, ss);
-    LogKeyValue("Message", params.Message, ss);
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", params.Component},
+        {"message", params.Message});
 
     if (!params.TraceId.empty()) {
-        LogKeyValue("TraceId", params.TraceId, ss);
+        YDB_LOG_UPDATE_MESSAGE(message, {"traceId", params.TraceId});
     }
 
     // Determine if this is a breaker or victim log based on which TraceId is set (and non-zero)
     const bool isBreaker = params.BreakerQuerySpanId.Defined() && *params.BreakerQuerySpanId != 0;
-
+    ui64 parentQueryId;
     if (isBreaker) {
-        LogKeyValue("BreakerQuerySpanId", ToString(*params.BreakerQuerySpanId), ss);
+        YDB_LOG_UPDATE_MESSAGE(message, {"breakerTxSpanId", ToString(*params.BreakerQuerySpanId)});
+        parentQueryId = params.BreakerQuerySpanId.GetRef();
     } else if (params.VictimQuerySpanId && *params.VictimQuerySpanId != 0) {
-        LogKeyValue("VictimQuerySpanId", ToString(*params.VictimQuerySpanId), ss);
-    }
-
-    if (params.CurrentQuerySpanId && *params.CurrentQuerySpanId != 0) {
-        LogKeyValue("CurrentQuerySpanId", ToString(*params.CurrentQuerySpanId), ss);
+        YDB_LOG_UPDATE_MESSAGE(message, {"victimTxSpanId", ToString(*params.VictimQuerySpanId)});
+        parentQueryId = params.VictimQuerySpanId.GetRef();
     }
 
     // Use appropriate field names based on breaker vs victim
-    if (isBreaker) {
-        LogKeyValue("BreakerQueryText", EscapeC(params.QueryText), ss);
-        LogKeyValue("BreakerQueryTexts", EscapeC(params.QueryTexts), ss, true);
-    } else {
-        LogKeyValue("VictimQueryText", EscapeC(params.VictimQueryText), ss);
-        LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
+    bool hasParent = false;
+    for(auto& allQueriesItem : params.OtherQueries) {
+        hasParent = hasParent || (allQueriesItem.Id == parentQueryId);
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
+            message,
+            {"querySpanId", allQueriesItem.Id},
+            {"queryText", allQueriesItem.Text});
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+    if (!hasParent && params.IsCommitAction) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
+            message,
+            {"querySpanId", parentQueryId},
+            {"queryText", "COMMIT"});
+    }
 }
 
 }

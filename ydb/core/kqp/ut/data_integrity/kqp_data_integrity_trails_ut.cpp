@@ -14,12 +14,18 @@ namespace {
         const TString& str,
         const TVector<std::pair<TString, ui64>>& regexToMatchCount)
     {
+        // Split whole log on separate rows. Use rule that each row starts by prefix like "YYYY-MM-DDTHH:MM:SS.XXXXXXZ node 1:"
+        auto logRows = SplitString(str, "Z node 1 :");
+
         for (auto& [regexString, expectedMatchCount]: regexToMatchCount) {
             std::regex expression(regexString.c_str());
+            unsigned matchCount = 0;
 
-            auto matchCount = std::distance(
-                std::sregex_iterator(str.begin(), str.end(), expression),
-                std::sregex_iterator());
+            for(auto& row: logRows) {
+                std::smatch expressionMatch;
+                std::regex_search(row.data(), expressionMatch, expression);
+                matchCount += expressionMatch.size();
+            }
 
             UNIT_ASSERT_VALUES_EQUAL(expectedMatchCount, matchCount);
         }
@@ -33,7 +39,7 @@ namespace {
 
         // [\\w]+\\.[A-Za-z]+:[0-9]+ match filename and line number
         builder << "DATA_INTEGRITY " << logLevel
-                << ": [\\w]+\\.[A-Za-z]+:[0-9]+: Component: " << component;
+                << ": [\\w]+\\.[A-Za-z]+:[0-9]+: .*component=" << component;
         return builder;
     }
 
@@ -72,7 +78,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             // check grpc logs
             {ConstructRegexToCheckLogs("TRACE", "Grpc"), LogEnabled ? 2 : 0},
             // check datashard logs
-            {ConstructRegexToCheckLogs("INFO", "DataShard"), LogEnabled ? 2 : 0},
+            {ConstructRegexToCheckLogs("INFO", "DataShard"), LogEnabled ? 4 : 0},
             // check write actor logs
             {ConstructRegexToCheckLogs("INFO", "WriteActor"),
              LogEnabled ? 1 : 0},
@@ -122,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             regexToMatchCount = {
                 {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
                 {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
-                {ConstructRegexToCheckLogs("INFO", "DataShard"), 2},
+                {ConstructRegexToCheckLogs("INFO", "DataShard"), 4},
                 // check write actor logs
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 1},
             };
@@ -131,7 +137,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 3},
                 {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
                 {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
-                {ConstructRegexToCheckLogs("INFO", "Executer"), 1}};
+                {ConstructRegexToCheckLogs("INFO", "Executer"), 3}};
 
             // ColumnShard doesn't have integrity logs.
         }
@@ -253,16 +259,16 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         std::string brokenLock;
         for (const auto& row : logRows) {
             // we need to find row with info about read physical tx and extract lock id
-            if (row.Contains("Component: Executer, Type: InputActorResult")) {
-                std::regex lockIdRegex(R"(LockId:\s*(\d+))");
+            if (row.Contains("component=Executer") && row.Contains("type=InputActorResult")) {
+                std::regex lockIdRegex(R"(lockId=\s*(\d+))");
                 std::smatch lockIdMatch;
-                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
+                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) && lockIdMatch.size() == 2, "failed to extract read lock id");
                 readLock = lockIdMatch[1].str();
             }
 
             // we need to find row with info about broken locks and extract lock id
-            if (row.Contains("Component: DataShard, Type: Locks")) {
-                std::regex lockIdRegex(R"(BrokenLocks:\s*\[(\d+)\s*\])");
+            if (row.Contains("component=DataShard") && row.Contains("type=Locks")) {
+                std::regex lockIdRegex(R"(brokenLock=(\d+) )");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();
@@ -326,12 +332,12 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         bool foundInputActorResult = false;
         for (const auto& row : logRows) {
             // Check for InputActorResult log (tx1's read acquiring a lock)
-            if (row.Contains("Component: Executer, Type: InputActorResult")) {
+            if (row.Contains("component=Executer") && row.Contains("type=InputActorResult")) {
                 foundInputActorResult = true;
             }
 
             // Check for the abort response log
-            if (row.Contains("Status: ABORTED") && row.Contains("Transaction locks invalidated")) {
+            if (row.Contains("status=ABORTED") && row.Contains("Transaction locks invalidated")) {
                 foundAbortLog = true;
             }
         }

@@ -11,174 +11,123 @@ namespace NDataIntegrity {
 
 // ExecuteDataQuery
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::ExecuteDataQueryRequest& request, const TActorContext& ctx) {
-    auto log = [](const auto& traceId, const auto& request) {
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", request.session_id(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogTxControl(request.tx_control(), ss);
-        LogKeyValue("Type", "ExecuteDataQueryRequest", ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", request.session_id()},
+        {"traceId", traceId},
+        {"type", "ExecuteDataQueryRequest"},
+        LogTxControl(request.tx_control()));
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::ExecuteDataQueryRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
-    auto log = [](const auto& traceId, const auto& request, const auto& response) {
-        auto& record = response->Get()->Record;
+    auto& record = response->Get()->Record;
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", "Grpc"},
+        {"sessionId", request.session_id()},
+        {"traceId", traceId},
+        {"type", "ExecuteDataQueryResponse"},
+        {"status", record.GetYdbStatus()},
+        {"issues", record.GetResponse().GetQueryIssues()});
 
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "ExecuteDataQueryResponse", ss);
+    if (request.tx_control().tx_selector_case() == Ydb::Table::TransactionControl::kBeginTx) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"txId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty"});
+    }
 
-        if (request.tx_control().tx_selector_case() == Ydb::Table::TransactionControl::kBeginTx) {
-            LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
-        }
-
-        LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request, response));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 // BeginTransaction
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::BeginTransactionRequest& request, const TActorContext& ctx) {
-    auto log = [](const auto& traceId, const auto& request) {
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", request.session_id(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogTxSettings(request.tx_settings(), ss);
-        LogKeyValue("Type", "BeginTransactionRequest", ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", request.session_id()},
+        {"traceId", traceId},
+        LogTxSettings(request.tx_settings()),
+        {"type", "BeginTransactionRequest"});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::BeginTransactionRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
     Y_UNUSED(request);
 
-    auto log = [](const auto& traceId, const auto& response) {
-        auto& record = response->Get()->Record;
-
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "BeginTransactionResponse", ss);
-        LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
-        LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    auto& record = response->Get()->Record;
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", request.session_id()},
+        {"traceId", traceId},
+        {"type", "BeginTransactionResponse"},
+        {"txId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty"},
+        {"status", record.GetYdbStatus()},
+        {"issues", record.GetResponse().GetQueryIssues()});
 }
 
 // CommitTransaction
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::CommitTransactionRequest& request, const TActorContext& ctx) {
-    auto log = [](const auto& traceId, const auto& request) {
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", request.session_id(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "CommitTransactionRequest", ss);
-        LogKeyValue("TxId", request.tx_id(), ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", request.session_id()},
+        {"traceId", traceId},
+        {"type", "CommitTransactionRequest"},
+        {"txId", request.tx_id()});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::CommitTransactionRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
-    auto log = [](const auto& traceId, const auto& request, const auto& response) {
-        const auto& record = response->Get()->Record;
 
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "CommitTransactionResponse", ss);
-        LogKeyValue("TxId", request.tx_id(), ss);
-        LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
-        return ss.Str();
-    };
+    const auto& record = response->Get()->Record;
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request, response));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", record.GetResponse().GetSessionId()},
+        {"traceId", traceId},
+        {"type", "CommitTransactionResponse"},
+        {"txId", request.tx_id()},
+        {"status", record.GetYdbStatus()},
+        {"issues", record.GetResponse().GetQueryIssues()});
 }
 
 // RollbackTransaction
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::RollbackTransactionRequest& request, const TActorContext& ctx) {
-    auto log = [](const auto& traceId, const auto& request) {
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", request.session_id(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "RollbackTransactionRequest", ss);
-        LogKeyValue("TxId", request.tx_id(), ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", request.session_id()},
+        {"traceId", traceId},
+        {"type", "RollbackTransactionRequest"},
+        {"txId", request.tx_id()});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::RollbackTransactionRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
-    auto log = [](const auto& traceId, const auto& request, const auto& response) {
-        const auto& record = response->Get()->Record;
-
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "RollbackTransactionResponse", ss);
-        LogKeyValue("TxId", request.tx_id(), ss);
-        LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request, response));
+    const auto& record = response->Get()->Record;
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", request.session_id()},
+        {"traceId", traceId},
+        {"type", "RollbackTransactionResponse"},
+        {"txId", request.tx_id()},
+        {"status", record.GetYdbStatus()},
+        {"issues", record.GetResponse().GetQueryIssues()});
 }
 
 // ExecuteYqlScript/StreamExecuteYqlScript
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Scripting::ExecuteYqlRequest& request, const TActorContext& ctx) {
     Y_UNUSED(request);
 
-    auto log = [](const auto& traceId) {
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "[Stream]ExecuteYqlScriptRequest", ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"traceId", traceId},
+        {"type", "[Stream]ExecuteYqlScriptRequest"});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Scripting::ExecuteYqlRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
     Y_UNUSED(request);
 
-    auto log = [](const auto& traceId, const auto& response) {
-        const auto& record = response->Get()->Record;
-
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "[Stream]ExecuteYqlScriptResponse", ss);
-        LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    const auto& record = response->Get()->Record;
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", record.GetResponse().GetSessionId()},
+        {"traceId", traceId},
+        {"type", "[Stream]ExecuteYqlScriptResponse"},
+        {"status", record.GetYdbStatus()},
+        {"issues", record.GetResponse().GetQueryIssues()});
 }
 
 // ExecuteQuery
@@ -187,17 +136,12 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         return;
     }
 
-    auto log = [](const auto& traceId, const auto& request) {
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", request.session_id(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogTxControl(request.tx_control(), ss);
-        LogKeyValue("Type", "ExecuteQueryRequest", ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"sessionId", request.session_id()},
+        {"traceId", traceId},
+        {"type", "ExecuteQueryRequest"},
+        LogTxControl(request.tx_control()));
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query::ExecuteQueryRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
@@ -205,25 +149,20 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         return;
     }
 
-    auto log = [](const auto&  traceId, const auto& request, const auto& response) {
-        const auto& record = response->Get()->Record;
+    const auto& record = response->Get()->Record;
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", "Grpc"},
+        {"sessionId", record.GetResponse().GetSessionId()},
+        {"traceId", traceId},
+        {"type", "ExecuteQueryResponse"},
+        {"status", record.GetYdbStatus()},
+        {"issues", record.GetResponse().GetQueryIssues()});
+    if (request.tx_control().tx_selector_case() == Ydb::Query::TransactionControl::kBeginTx) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"txId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty"});
+    }
 
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "ExecuteQueryResponse", ss);
-
-        if (request.tx_control().tx_selector_case() == Ydb::Query::TransactionControl::kBeginTx) {
-            LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
-        }
-
-        LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request, response));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 // ExecuteSrcipt
@@ -232,15 +171,10 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         return;
     }
 
-    auto log = [](const auto& traceId) {
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "ExecuteSrciptRequest", ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"traceId", traceId},
+        {"type", "ExecuteSrciptRequest"});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query::ExecuteScriptRequest& request, const NKqp::TEvKqp::TEvScriptResponse::TPtr& response, const TActorContext& ctx) {
@@ -248,17 +182,12 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         return;
     }
 
-    auto log = [](const auto& traceId, const auto& response) {
-        TStringStream ss;
-        LogKeyValue("Component", "Grpc", ss);
-        LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "ExecuteSrciptResponse", ss);
-        LogKeyValue("Status", ToString(response->Get()->Status), ss);
-        LogKeyValue("Issues", ToString(response->Get()->Issues), ss, /*last*/ true);
-        return ss.Str();
-    };
-
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Grpc"},
+        {"traceId", traceId},
+        {"type", "ExecuteSrciptResponse"},
+        {"status", response->Get()->Status},
+        {"issues", response->Get()->Issues});
 }
 
 }

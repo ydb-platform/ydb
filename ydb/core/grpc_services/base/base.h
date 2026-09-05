@@ -480,6 +480,8 @@ class IRequestProxyCtx
     friend class TGRpcRequestProxyHandleMethods;
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+    virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
+
 public:
     virtual ~IRequestProxyCtx() = default;
 
@@ -513,6 +515,15 @@ public:
 
     // validation
     virtual bool Validate(TString& error) = 0;
+
+    const TMaybe<TString> GetDatabaseName() const final {
+        return ResolvedDatabaseName ? ResolvedDatabaseName : GetDatabaseNameFromRequest();
+    }
+
+    // Store the resolved database for request processing without updating counters.
+    void SetDatabaseName(const TString& database) {
+        ResolvedDatabaseName = database;
+    }
 
     // counters
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
@@ -552,6 +563,7 @@ public:
 
 private:
     NWilson::TTraceId UserFacingTraceId;
+    TMaybe<TString> ResolvedDatabaseName;
 };
 
 // Request context
@@ -665,7 +677,7 @@ public:
         return false;
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 
@@ -881,6 +893,13 @@ struct TYdbGrpcMethodAccessorTraits {
     }
 };
 
+template <typename TReq>
+struct TYdbGrpcDatabaseNameAccessorTraits {
+    static const TMaybe<TString> GetDatabaseName(const TReq&, const NYdbGrpc::IRequestContextBase* ctx) {
+        return ExtractDatabaseName(ctx->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    }
+};
+
 template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
     : public IRequestProxyCtx
@@ -950,7 +969,7 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1301,8 +1320,8 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
+        return TYdbGrpcDatabaseNameAccessorTraits<TRequest>::GetDatabaseName(*GetProtoRequest(), Ctx_.Get());
     }
 
     TString GetRpcMethodName() const override {
@@ -1955,7 +1974,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
-                    Database,
+                    GetDatabaseName().GetOrElse(Database),
                     YdbToken,
                     UserToken,
                     GetAuditLogParts()
@@ -2054,7 +2073,7 @@ public:
         return Span.GetTraceId();
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
 

@@ -82,6 +82,13 @@ def alter_secret(session, secret_name, value):
     )
 
 
+def test_relative_database(ydb_cluster, ydb_database):
+    tenant_node = next(iter(ydb_cluster.slots.values()))
+    relative_database = ydb_database.rsplit("/", 1)[1]
+
+    execute_ydb_cli_command(tenant_node, relative_database, ["sql", "-s", "SELECT 1;"])
+
+
 class TestSchemeDescribe:
     @pytest.fixture(autouse=True, scope="function")
     def init_test(self, tmp_path):

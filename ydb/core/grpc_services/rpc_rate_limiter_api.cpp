@@ -103,7 +103,7 @@ public:
     bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
         const auto databaseName = this->Request_->GetDatabaseName().GetOrElse("");
 
-        if (!GetCoordinationNodePath().StartsWith(databaseName)) {
+        if (!NKikimr::CanonizePath(GetCoordinationNodePath()).StartsWith(NKikimr::CanonizePath(databaseName))) {
             status = StatusIds::BAD_REQUEST;
             issues.AddIssue(TStringBuilder()
                 << "Coordination node path: " << GetCoordinationNodePath()

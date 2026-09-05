@@ -1084,6 +1084,7 @@ message TEvUploadRowsRequest {
     optional uint64 SchemaVersion = 9;
     optional string UserSID = 10;
     optional bool DisableChangeCollection = 11 [ default = false ];
+    optional uint32 DefaultColumnCount = 12 [ default = 0 ]; // Count of DEFAULT columns appended to value columns
 }
 
 message TEvUploadRowsResponse {

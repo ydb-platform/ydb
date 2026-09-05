@@ -590,6 +590,7 @@ TMaybe<bool> ScanExprForMatchedGroup(
 
             TStringBuf memberName;
             if (IsPlainMemberOverArg(root, memberName)) {
+                // clang-format off
                 replaces[&root] = ctx.Builder(root.Pos())
                     .Callable(isYql ? "YqlGroupRef" : "PgGroupRef")
                         .Add(0, row)
@@ -598,7 +599,9 @@ TMaybe<bool> ScanExprForMatchedGroup(
                         .Atom(3, memberName)
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
+                // clang-format off
                 replaces[&root] = ctx.Builder(root.Pos())
                     .Callable(isYql ? "YqlGroupRef" : "PgGroupRef")
                         .Add(0, row)
@@ -606,6 +609,7 @@ TMaybe<bool> ScanExprForMatchedGroup(
                         .Atom(2, ToString(i))
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             nodeVisited[&root] = false;
@@ -715,19 +719,23 @@ bool ReplaceProjectionRefs(
                     }
 
                     if (!result || alias.empty()) {
+                        // clang-format off
                         return ctx.Builder(node->Pos())
                             .Callable("PgColumnRef")
                                 .Atom(0, column)
                             .Seal()
                             .Build();
+                        // clang-format on
                     }
 
+                    // clang-format off
                     return ctx.Builder(node->Pos())
                         .Callable("PgColumnRef")
                             .Atom(0, alias)
                             .Atom(1, column)
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
 
                 current += projectionOrders[i]->first.Size();
@@ -989,12 +997,14 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             const TInput* matchedAliasInput = nullptr;
             const TInput* matchedAliasInputI = nullptr;
             if (node->ChildrenSize() == 1 && usedInUsing.contains(node->Tail().Content())) {
+                // clang-format off
                 return ctx.Expr.Builder(node->Pos())
                             .Callable("Member")
                                 .Add(0, argNode)
                                 .Atom(1, node->Tail().Content())
                             .Seal()
                             .Build();
+                // clang-format on
             }
             for (ui32 priority : { TInput::Projection, TInput::Current, TInput::External }) {
                 for (const auto& x : inputs) {
@@ -1017,12 +1027,14 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
 
                     auto pos = x.Type->FindItemI(node->Tail().Content(), /*isVirtual=*/nullptr);
                     if (pos) {
+                        // clang-format off
                         return ctx.Expr.Builder(node->Pos())
                             .Callable("Member")
                                 .Add(0, argNode)
                                 .Atom(1, MakeAliasedColumn(x.Alias, x.Type->GetItems()[*pos]->GetName()))
                             .Seal()
                             .Build();
+                        // clang-format on
                     }
                 }
             }
@@ -1032,6 +1044,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             }
 
             if (matchedAliasInput) {
+                // clang-format off
                 return ctx.Expr.Builder(node->Pos())
                     .Callable("PgToRecord")
                         .Callable(0, "DivePrefixMembers")
@@ -1042,24 +1055,29 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                         .Seal()
                         .List(1)
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                                // clang-format on
                                 ui32 pos = 0;
                                 for (ui32 i = 0; i < matchedAliasInput->Type->GetSize(); ++i) {
                                     auto columnName = matchedAliasInput->Order ?
                                         matchedAliasInput->Order.GetRef()[i].PhysicalName :
                                         matchedAliasInput->Type->GetItems()[i]->GetName();
                                     if (!columnName.StartsWith("_yql_")) {
+                                        // clang-format off
                                         parent.List(pos++)
                                             .Atom(0, columnName)
                                             .Atom(1, columnName)
                                         .Seal();
+                                        // clang-format on
                                     }
                                 }
 
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             YQL_ENSURE(false, "Missing input");
@@ -1086,6 +1104,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                                     NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", item->GetName())));
                             }
 
+                            // clang-format off
                             members.push_back(ctx.Expr.Builder(node->Pos())
                                 .List()
                                     .Atom(0, NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", item->GetName()))
@@ -1095,6 +1114,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                                     .Seal()
                                 .Seal()
                                 .Build());
+                            // clang-format on
                         }
                     }
 
@@ -1132,12 +1152,14 @@ IGraphTransformer::TStatus RebuildSubLinks(
 {
     TExprNode::TListType inputTypesItems;
     for (const auto& x : inputs) {
+        // clang-format off
         inputTypesItems.push_back(ctx.Expr.Builder(root->Pos())
             .List()
                 .Atom(0, x.Alias)
                 .Add(1, ExpandType(root->Pos(), *x.Type, ctx.Expr))
             .Seal()
             .Build());
+        // clang-format on
     }
 
     auto inputTypes = ctx.Expr.NewList(root->Pos(), std::move(inputTypesItems));
@@ -1578,6 +1600,7 @@ bool ValidateSort(
                 const auto& projectionLambda = projection->Tail().Child(projectionIndex)->Tail();
                 if (ExprNodesEquals(newLambda->Tail(), projectionLambda.Tail())) {
                     auto columnName = projectionOrders->at(projectionIndex)->first.front().PhysicalName;
+                    // clang-format off
                     newLambda = ctx.Expr.Builder(newLambda->Pos())
                         .Lambda()
                             .Callable("PgColumnRef")
@@ -1585,6 +1608,7 @@ bool ValidateSort(
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
 
                     newChildren[1] = newLambda;
                     changedSort = true;
@@ -1709,6 +1733,7 @@ ui32 RegisterGroupExpression(
 
     auto index = groupExprsItems.size();
     hashes[hash].push_back(index);
+    // clang-format off
     auto newLambda = ctx.Builder(group->Pos())
         .Lambda()
             .Param("row")
@@ -1717,6 +1742,7 @@ ui32 RegisterGroupExpression(
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
     newLambda->Head().Head().SetArgIndex(0);
     auto newExpr = ctx.ChangeChild(*group, 1, std::move(newLambda));
@@ -1787,6 +1813,7 @@ bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprN
             }
         } else {
             auto index = RegisterGroupExpression(lambda.TailPtr(), lambda.HeadPtr(), child, hashes, groupExprsItems, ctx);
+            // clang-format off
             sets = ctx.Builder(data.Pos())
                 .List()
                     .List(0)
@@ -1794,6 +1821,7 @@ bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprN
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
         groupSetsItems.push_back(sets);
@@ -1915,6 +1943,7 @@ bool GatherExtraSortColumns(
 
     extraInputColumns = SaveExtraColumns(data.Pos(), columns, inputsCount, ctx);
     if (!keys.empty()) {
+        // clang-format off
         extraKeys = ctx.Builder(data.Pos())
             .List()
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
@@ -1927,6 +1956,7 @@ bool GatherExtraSortColumns(
                 })
             .Seal()
             .Build();
+        // clang-format on
     }
 
     for (const auto&[index, set] : columns) {
@@ -2302,12 +2332,14 @@ IGraphTransformer::TStatus SqlReplaceUnknownWrapper(const TExprNode::TPtr& input
     if (typeAnn && typeAnn->GetKind() == ETypeAnnotationKind::Pg) {
         if (typeAnn->Cast<TPgExprType>()->GetId() == NPg::UnknownOid) {
             const auto* newType = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("text").TypeId);
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("PgCast")
                     .Add(0, input->HeadPtr())
                     .Add(1, ExpandType(input->Pos(), *newType, ctx.Expr))
                 .Seal()
                 .Build();
+            // clang-format on
         } else {
             output = input->HeadPtr();
         }
@@ -2336,6 +2368,7 @@ IGraphTransformer::TStatus SqlReplaceUnknownWrapper(const TExprNode::TPtr& input
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    // clang-format off
     output = ctx.Expr.Builder(input->Pos())
         .Callable("OrderedMap")
             .Add(0, input->HeadPtr())
@@ -2353,6 +2386,7 @@ IGraphTransformer::TStatus SqlReplaceUnknownWrapper(const TExprNode::TPtr& input
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
     return IGraphTransformer::TStatus::Repeat;
 }
@@ -4733,6 +4767,7 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
 
         YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
 
+        // clang-format off
         auto lambdaBody = ctx.Expr.Builder(input->Pos())
             .Callable(sqlSelect)
                 .List(0)
@@ -4751,9 +4786,11 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         auto lambda = ctx.Expr.NewLambda(input->Pos(), ctx.Expr.NewArguments(input->Pos(), { tableArg }), std::move(lambdaBody));
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable(ToString(sqlIterate) + (setOps->Child(2)->Content() == "union_all" ? "All" : ""))
                 .Callable(0, sqlSelect)
@@ -4775,6 +4812,7 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
                 .Add(1, lambda)
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }

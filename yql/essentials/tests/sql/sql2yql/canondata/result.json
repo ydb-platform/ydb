@@ -3912,6 +3912,27 @@
             "uri": "https://{canondata_backend}/1880306/b9032f639802a04f956ae89f0048f5368bd0d8f7/resource.tar.gz#test_sql2yql.test_expr-decimal_common_type_conversions_with_fix_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-decimal_integral_add]": [
+        {
+            "checksum": "5309f910b6b79c0f56445f280f40ac05",
+            "size": 2907,
+            "uri": "https://{canondata_backend}/1923547/aebf16bbc62232d425a6b5e1bd2b80232c9f699f/resource.tar.gz#test_sql2yql.test_expr-decimal_integral_add_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-decimal_integral_add_fail]": [
+        {
+            "checksum": "d6dc31ec36ea1de0b1cb2e47a2c2d7f1",
+            "size": 1028,
+            "uri": "https://{canondata_backend}/1937001/86b83434af72761f348dca463027745af141887f/resource.tar.gz#test_sql2yql.test_expr-decimal_integral_add_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-decimal_integral_arithmetic_old_langver_fail]": [
+        {
+            "checksum": "db42621f0fb2977a779ea4ca00a402d1",
+            "size": 1227,
+            "uri": "https://{canondata_backend}/1942173/1bbf3c1b5633e14cc68bf5d5d22ec29079929982/resource.tar.gz#test_sql2yql.test_expr-decimal_integral_arithmetic_old_langver_fail_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-decimal_integral_common_type_conversions_with_fix]": [
         {
             "checksum": "da5f4a0aa2491d38168d9631a9bdb066",
@@ -3924,6 +3945,20 @@
             "checksum": "255c0e7d7eb12f6ff5e084a11d2fcfa5",
             "size": 2135,
             "uri": "https://{canondata_backend}/1597364/669968241eee79131d787adbde8295fd2398c36a/resource.tar.gz#test_sql2yql.test_expr-decimal_integral_common_type_conversions_with_fix_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-decimal_integral_sub]": [
+        {
+            "checksum": "b170b32187c77878135395034fa7edf6",
+            "size": 2051,
+            "uri": "https://{canondata_backend}/1871002/9ee2ada36328d913e35dc235c5fcde241773fbac/resource.tar.gz#test_sql2yql.test_expr-decimal_integral_sub_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-decimal_integral_sub_fail]": [
+        {
+            "checksum": "2ba6d6d99901396bab6802b29cbc227f",
+            "size": 1026,
+            "uri": "https://{canondata_backend}/1937001/86b83434af72761f348dca463027745af141887f/resource.tar.gz#test_sql2yql.test_expr-decimal_integral_sub_fail_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-deep_graph]": [
@@ -15877,6 +15912,21 @@
             "uri": "file://test_sql_format.test_expr-decimal_common_type_conversions_with_fix_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-decimal_integral_add]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_integral_add_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-decimal_integral_add_fail]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_integral_add_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-decimal_integral_arithmetic_old_langver_fail]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_integral_arithmetic_old_langver_fail_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-decimal_integral_common_type_conversions_with_fix]": [
         {
             "uri": "file://test_sql_format.test_expr-decimal_integral_common_type_conversions_with_fix_/formatted.sql"
@@ -15885,6 +15935,16 @@
     "test_sql_format.test[expr-decimal_integral_common_type_conversions_with_fix_fail]": [
         {
             "uri": "file://test_sql_format.test_expr-decimal_integral_common_type_conversions_with_fix_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-decimal_integral_sub]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_integral_sub_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-decimal_integral_sub_fail]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_integral_sub_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-deep_graph]": [

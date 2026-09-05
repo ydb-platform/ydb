@@ -9,7 +9,8 @@ namespace {
 class TIsValidValueSupportedVisitor: public TTypeAnnotationVisitor {
 public:
     explicit TIsValidValueSupportedVisitor(const TTypeAnnotationNode* type)
-        : Type_(type) {
+        : Type_(type)
+    {
     }
 
     bool IsSupported() {
@@ -179,7 +180,6 @@ private:
         Result_ = false; // YQL_ENSURE(false, "ScalarExprType is not supported.");
     }
 
-
     const TTypeAnnotationNode* Type_;
     bool Result_ = false;
 };
@@ -189,7 +189,8 @@ public:
     TValidValueNodeVisitor(const TTypeAnnotationNode* type, TExprContext& ctx, TPositionHandle pos)
         : Type_(type)
         , Ctx_(ctx)
-        , Pos_(pos) {
+        , Pos_(pos)
+    {
     }
 
     TExprNode::TPtr CreateDefaultValue() {
@@ -492,7 +493,6 @@ private:
         Y_UNUSED(type);
         YQL_ENSURE(false, "DynamicLinearExprType is not supported.");
     }
-
 
     const TTypeAnnotationNode* Type_;
     TExprContext& Ctx_;

@@ -7,6 +7,7 @@
 #include <yql/essentials/ast/yql_type_string.h>
 
 #include <library/cpp/charset/ci_string.h>
+#include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -1879,8 +1880,8 @@ TAggregationPtr BuildAggregationByType(
 
 } // namespace NSQLTranslationV1
 
-template <>
-void Out<NSQLTranslationV1::EAggregateMode>(IOutputStream& out, NSQLTranslationV1::EAggregateMode value) {
+// TODO(YQL-21521): use GENERATE_ENUM_SERIALIZATION
+Y_DECLARE_OUT_SPEC(, NSQLTranslationV1::EAggregateMode, out, value) {
     switch (value) {
         case NSQLTranslationV1::EAggregateMode::Normal:
             out << "Normal";

@@ -10,6 +10,7 @@ TEST_SRCS(
     test_bloom_index.py
     test_min_max_index.py
     test_rename_table.py
+    test_truncate_table.py
     test_compression.py
     test_encoding.py
 )

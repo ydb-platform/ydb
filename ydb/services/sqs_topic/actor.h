@@ -95,6 +95,9 @@ namespace NKikimr::NSqsTopic::V1 {
             entry.Path = NKikimr::SplitPath(this->Database);
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.SyncVersion = false;
+            // Serverless DBs are KindExtSubdomain; default RedirectRequired=true
+            // yields RedirectLookupError and ExtractRlContext skips charging.
+            entry.RedirectRequired = false;
             request->ResultSet.emplace_back(std::move(entry));
             request->DatabaseName = this->Database;
             request->Cookie = RlPathNavigateCookie;

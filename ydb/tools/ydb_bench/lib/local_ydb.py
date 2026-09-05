@@ -29,11 +29,15 @@ from ydb.tools.ydb_bench.lib.common import (
 from ydb.tools.ydb_bench.lib.linux_telemetry import LinuxCpuMonitor
 from ydb.tools.ydb_bench.lib.load_control import evaluate_load, search_load
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
+    GENERIC_TOTAL_RESULT,
     WorkloadCli,
+    WorkloadRunRequest,
     build_cleanup_plan,
     build_prepare_plan,
     build_run_plan,
+    parse_workload_result,
     workload_definition,
+    workload_result_schema,
 )
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
 from ydb.tools.ydb_bench.lib.runner import run_command, start_managed_process
@@ -712,16 +716,43 @@ def _command_record(phase, repetition, command, cpu_affinity, result=None):
     return record
 
 
-def _aggregate_measurements(rows):
-    keys = rows[0]
-    result = {key: statistics.median(row[key] for row in rows) for key in keys}
-    # One clean repetition must not hide request failures in another one. Error
-    # counts describe the whole attempted point; performance metrics remain
-    # medians so that an outlier repetition does not select the load.
-    result["errors"] = sum(row["errors"] for row in rows)
-    if all("transactions" in row for row in rows):
+def _aggregate_measurements(rows, workload_metrics=None):
+    if not rows:
+        raise BenchmarkError("cannot aggregate an empty workload measurement")
+    keys = tuple(rows[0])
+    expected_keys = set(keys)
+    for row in rows[1:]:
+        if set(row) != expected_keys:
+            raise BenchmarkError("workload repetitions returned inconsistent metric keys")
+    if workload_metrics is None:
+        workload_metrics = GENERIC_TOTAL_RESULT.metrics
+    aggregations = {metric.name: metric.repetition_aggregation for metric in workload_metrics}
+    result = {}
+    for key in keys:
+        values = [row[key] for row in rows]
+        result[key] = sum(values) if aggregations.get(key) == "sum" else statistics.median(values)
+    if "transactions" in expected_keys:
         result["empty_repetitions"] = sum(row["transactions"] == 0 for row in rows)
     return result
+
+
+_EXECUTOR_METRIC_NAMES = (
+    "static_cpu_mean",
+    "static_cpu_max",
+    "dynamic_cpu_mean",
+    "dynamic_cpu_max",
+    "cli_cpu_mean",
+    "cli_cpu_max",
+    "host_cpu_mean",
+    "host_cpu_max",
+)
+
+
+def _workload_metric_columns(benchmark, workload_metrics):
+    del benchmark
+    names = [metric.name for metric in workload_metrics]
+    names.extend(name for name in _EXECUTOR_METRIC_NAMES if name not in names)
+    return names
 
 
 def _search_scaling_evidence(result, saturation_percent):
@@ -770,6 +801,16 @@ def _is_finite_number(value):
         return math.isfinite(value)
     except (TypeError, ValueError, OverflowError):
         return False
+
+
+def _validate_measurement_window(window):
+    if (
+        not isinstance(window, tuple)
+        or len(window) != 2
+        or not all(_is_finite_number(value) for value in window)
+        or window[0] >= window[1]
+    ):
+        raise BenchmarkError("workload command returned an invalid CPU measurement window")
 
 
 def _write_csv(path, rows, columns):
@@ -892,9 +933,12 @@ class WorkloadLifecycle:
             plans = build_prepare_plan(self.workload_cli, state.table_path, self.workload)
             for plan in plans:
                 phase = self._prepare_phase(state, plan.name)
+                progress_fields = dict(state.fields)
+                if plan.progress_duration_seconds is not None:
+                    progress_fields["phase_duration_seconds"] = plan.progress_duration_seconds
                 self.progress(
                     phase,
-                    **state.fields,
+                    **progress_fields,
                     current_command=_command_record(
                         phase,
                         state.repetition,
@@ -951,9 +995,12 @@ class WorkloadLifecycle:
         for plan in plans:
             phase = self._cleanup_phase(state, plan.name)
             try:
+                progress_fields = dict(state.fields)
+                if plan.progress_duration_seconds is not None:
+                    progress_fields["phase_duration_seconds"] = plan.progress_duration_seconds
                 self.progress(
                     phase,
-                    **state.fields,
+                    **progress_fields,
                     current_command=_command_record(
                         phase,
                         state.repetition,
@@ -1087,7 +1134,7 @@ class WorkloadLifecycle:
             self.progress(
                 phases["warmup"],
                 **state.fields,
-                phase_duration_seconds=warmup,
+                phase_duration_seconds=warmup_plan.progress_duration_seconds or warmup,
                 current_command=_command_record(
                     phases["warmup"],
                     repetition,
@@ -1140,8 +1187,8 @@ class WorkloadLifecycle:
             self.cluster.ensure_running("cannot start workload measurement")
             progress_fields = {
                 **state.fields,
-                "phase_duration_seconds": self.measurement["duration"]
-                + (warmup if self.definition.warmup_mode == "inline" else 0),
+                "phase_duration_seconds": plan.progress_duration_seconds
+                or self.measurement["duration"] + (warmup if self.definition.warmup_mode == "inline" else 0),
                 "current_command": _command_record(
                     phases["measure"],
                     repetition,
@@ -1183,17 +1230,39 @@ class WorkloadLifecycle:
                     "timed out" if result.timed_out else "exited with code {}".format(result.exit_code)
                 )
             )
-        if plan.measurement_window_builder is not None:
-            window = plan.measurement_window_builder(result.stdout)
-            if (
-                not isinstance(window, tuple)
-                or len(window) != 2
-                or not all(_is_finite_number(value) for value in window)
-                or window[0] >= window[1]
-            ):
-                raise BenchmarkError("workload command returned an invalid CPU measurement window")
+        legacy_window = (
+            plan.measurement_window_builder(result.stdout) if plan.measurement_window_builder is not None else None
+        )
+        if legacy_window is not None:
+            _validate_measurement_window(legacy_window)
+        request = WorkloadRunRequest(
+            load_parameter=self.load_config["parameter"],
+            load=load,
+            duration_seconds=self.measurement["duration"],
+            warmup_seconds=warmup if self.definition.warmup_mode == "inline" else 0,
+            client_threads=self.client_threads,
+            objective=self.load_config.get("objective"),
+        )
+        workload_result = parse_workload_result(self.workload["type"], result, self.workload, request)
+        if legacy_window is not None and workload_result.measurement_window is not None:
+            raise BenchmarkError("workload result and command plan both returned a CPU measurement window")
+        window = workload_result.measurement_window if workload_result.measurement_window is not None else legacy_window
+        if window is not None:
+            _validate_measurement_window(window)
             cpu = monitor.summary(started_at_unix=window[0], finished_at_unix=window[1])
-        metrics = {**self.benchmark.parse_metrics(result.stdout, self.benchmark)[0], **cpu}
+        elif self.definition.warmup_mode == "inline":
+            raise BenchmarkError("{} inline warmup requires a CPU measurement window".format(self.definition.name))
+        result_artifact = {
+            "schema_id": self.definition.result_adapter.schema_id,
+            "metrics": workload_result.metrics,
+        }
+        if workload_result.details is not None:
+            result_artifact["details"] = workload_result.details
+        atomic_write_json(state.directory / "workload-result.json", result_artifact)
+        collisions = sorted(set(workload_result.metrics).intersection(cpu))
+        if collisions:
+            raise BenchmarkError("workload result metrics collide with CPU metrics: {}".format(", ".join(collisions)))
+        metrics = {**workload_result.metrics, **cpu}
         metrics.update({"load": load, "dynamic_nodes": dynamic_nodes, "repetition": repetition})
         return metrics
 
@@ -1268,6 +1337,9 @@ def run_local_ydb(
     output_directory.mkdir(parents=True, exist_ok=True)
     benchmark = configuration.benchmark
     profile = configuration.parameters["local_ydb"]
+    definition = workload_definition(profile["workload"]["type"])
+    workload_metrics = definition.result_adapter.metrics
+    metric_columns = _workload_metric_columns(benchmark, workload_metrics)
     topology = discover_topology()
     affinities = plan_role_affinity(profile["affinity"], topology)
     _validate_role_affinity(profile["geometry"], affinities)
@@ -1293,6 +1365,7 @@ def run_local_ydb(
         "platform": collect_system_info(),
         "cpu_topology": topology_record(topology),
         "parameters": profile,
+        "workload_result_schema": workload_result_schema(profile["workload"]["type"]),
         "timeout_seconds": configuration.timeout_seconds,
         "role_affinity": {role: None if mask is None else list(mask) for role, mask in affinities.items()},
         "attempts": [],
@@ -1426,7 +1499,7 @@ def run_local_ydb(
                     samples.append(metrics)
                     repetition_rows.append(metrics)
                     commands.extend(repetition_commands)
-                aggregated = _aggregate_measurements(samples)
+                aggregated = _aggregate_measurements(samples, workload_metrics)
                 aggregated.update(
                     {
                         "load": load,
@@ -1521,13 +1594,16 @@ def run_local_ydb(
             )
             cluster.add_dynamic_nodes(new_count - dynamic_nodes)
 
-        summary_rows = benchmark.summarize_metrics(repetition_rows, benchmark)
+        summary_rows = benchmark.summarize_metrics(repetition_rows, benchmark, metric_columns)
         _write_csv(
             output_directory / "repetitions.csv",
             repetition_rows,
-            [item.name for item in benchmark.dimensions] + ["repetition"] + [item.name for item in benchmark.metrics],
+            [item.name for item in benchmark.dimensions] + ["repetition"] + metric_columns,
         )
-        atomic_write_text(output_directory / "summary.csv", benchmark.render_summary(summary_rows, benchmark))
+        atomic_write_text(
+            output_directory / "summary.csv",
+            benchmark.render_summary(summary_rows, benchmark, metric_columns),
+        )
 
         verification_repetitions = profile["measurement"].get("verification_repetitions", 0)
         selected_load = manifest["result"]["selected_load"]
@@ -1587,14 +1663,12 @@ def run_local_ydb(
                     _write_csv(
                         output_directory / "verification-repetitions.csv",
                         verification_rows,
-                        [item.name for item in benchmark.dimensions]
-                        + ["repetition"]
-                        + [item.name for item in benchmark.metrics],
+                        [item.name for item in benchmark.dimensions] + ["repetition"] + metric_columns,
                     )
-                    partial_summary = benchmark.summarize_metrics(verification_rows, benchmark)
+                    partial_summary = benchmark.summarize_metrics(verification_rows, benchmark, metric_columns)
                     atomic_write_text(
                         output_directory / "verification-summary.csv",
-                        benchmark.render_summary(partial_summary, benchmark),
+                        benchmark.render_summary(partial_summary, benchmark, metric_columns),
                     )
                     verification.update(
                         {
@@ -1628,7 +1702,8 @@ def run_local_ydb(
                 [
                     {name: value for name, value in row.items() if name not in ("passed", "decision")}
                     for row in verification_rows
-                ]
+                ],
+                workload_metrics,
             )
             verified_metrics.pop("repetition", None)
             accepted, decision = evaluate_load(profile["load"], selected_load, verified_metrics)

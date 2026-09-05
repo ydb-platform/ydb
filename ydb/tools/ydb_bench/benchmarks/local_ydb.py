@@ -2,7 +2,6 @@
 
 import csv
 import io
-import math
 import statistics
 
 from ydb.tools.ydb_bench.benchmarks.registry import (
@@ -12,6 +11,7 @@ from ydb.tools.ydb_bench.benchmarks.registry import (
     MetricDefinition,
 )
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.local_ydb_workloads import parse_generic_total_metrics
 
 DIMENSIONS = (
     DimensionDefinition("load"),
@@ -41,43 +41,7 @@ METRICS = tuple(
 
 
 def parse_cli_metrics(stdout):
-    """Parse the stable Total table printed by generic ``ydb workload``."""
-    lines = [line.strip() for line in stdout.splitlines()]
-    for index, line in enumerate(lines):
-        columns = line.split()
-        if not columns or columns[0] != "Total":
-            continue
-        for values_line in lines[index + 1 :]:
-            values = values_line.split()
-            if not values:
-                continue
-            # Current CLI prints the total duration in the first column below
-            # the "Total" heading.  Older builds omitted that value.
-            if len(values) == 9:
-                values = values[1:]
-            if len(values) != 8:
-                break
-            try:
-                result = {
-                    "transactions": int(values[0]),
-                    "throughput": float(values[1]),
-                    "retries": int(values[2]),
-                    "errors": int(values[3]),
-                    "p50_ms": float(values[4]),
-                    "p95_ms": float(values[5]),
-                    "p99_ms": float(values[6]),
-                    "pmax_ms": float(values[7]),
-                }
-                if not all(
-                    math.isfinite(result[name]) for name in ("throughput", "p50_ms", "p95_ms", "p99_ms", "pmax_ms")
-                ):
-                    raise ValueError("non-finite workload metric")
-                if any(value < 0 for value in result.values()):
-                    raise ValueError("negative workload metric")
-                return result
-            except ValueError:
-                break
-    raise BenchmarkError("YDB CLI workload output does not contain a valid Total row")
+    return parse_generic_total_metrics(stdout)
 
 
 def parse_metrics(stdout, _benchmark):
@@ -96,11 +60,15 @@ def validate_metrics(rows, configuration, _case):
     if len(rows) != 1:
         raise BenchmarkError("local YDB workload must produce exactly one aggregate row")
     allow_errors = configuration.parameters["local_ydb"]["load"].get("allow_errors", False)
-    if rows[0]["errors"] and not allow_errors:
-        raise BenchmarkError("YDB CLI workload reported {} errors".format(rows[0]["errors"]))
+    errors = rows[0].get("errors", 0)
+    if errors and not allow_errors:
+        raise BenchmarkError("YDB CLI workload reported {} errors".format(errors))
 
 
-def summarize_metrics(repetition_rows, benchmark):
+def summarize_metrics(repetition_rows, benchmark, metric_names=None):
+    metric_names = (
+        tuple(metric_names) if metric_names is not None else tuple(metric.name for metric in benchmark.metrics)
+    )
     grouped = {}
     for row in repetition_rows:
         key = tuple(row[item.name] for item in benchmark.dimensions)
@@ -108,24 +76,32 @@ def summarize_metrics(repetition_rows, benchmark):
     result = []
     for key in sorted(grouped):
         rows = grouped[key]
-        if any(row["transactions"] == 0 for row in rows):
+        expected_keys = set(rows[0])
+        if any(set(row) != expected_keys for row in rows[1:]):
+            raise BenchmarkError("workload repetitions returned inconsistent metric keys")
+        if "transactions" in expected_keys and any(row["transactions"] == 0 for row in rows):
             continue
         record = {"affinity_mode": "roles"}
         record.update({item.name: value for item, value in zip(benchmark.dimensions, key)})
         record["samples"] = len(rows)
-        for metric in benchmark.metrics:
-            values = [row[metric.name] for row in rows]
-            record["median_" + metric.name] = statistics.median(values)
-            record["min_" + metric.name] = min(values)
-            record["max_" + metric.name] = max(values)
+        for name in metric_names:
+            if name not in expected_keys:
+                continue
+            values = [row[name] for row in rows]
+            record["median_" + name] = statistics.median(values)
+            record["min_" + name] = min(values)
+            record["max_" + name] = max(values)
         result.append(record)
     return result
 
 
-def render_summary(rows, benchmark):
+def render_summary(rows, benchmark, metric_names=None):
+    metric_names = (
+        tuple(metric_names) if metric_names is not None else tuple(metric.name for metric in benchmark.metrics)
+    )
     columns = ["affinity_mode"] + [item.name for item in benchmark.dimensions] + ["samples"]
-    for metric in benchmark.metrics:
-        columns += ["median_" + metric.name, "min_" + metric.name, "max_" + metric.name]
+    for name in metric_names:
+        columns += ["median_" + name, "min_" + name, "max_" + name]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=columns, lineterminator="\n")
     writer.writeheader()

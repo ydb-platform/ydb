@@ -1,76 +1,81 @@
-# Connecting the CLI to and authenticating with a database
+# Connecting the CLI to a database and authentication
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Most of the {{ ydb-short-name }} CLI commands relate to operations on a {{ ydb-short-name }} database and require establishing a connection to it to be executed.
+Most {{ ydb-short-name }} CLI commands relate to operations on the {{ ydb-short-name }} database and require a connection to it to execute.
 
-The {{ ydb-short-name }} CLI uses the following sources to determine the database to connect to and the [authentication mode](../../../security/authentication.md) to use with it (listed in descending priority):
+{{ ydb-short-name }} CLI determines which database to connect to and which [authentication mode](../../../security/authentication.md) to use from the following sources (in descending order of priority):
 
-1. The command line.
-2. The profile set in the `--profile` command-line option.
-3. Environment variables.
-4. The activated profile.
+1. Command line
+2. Profile selected by the command-line option `--profile`
+3. Environment variables
+4. Activated profile
 
-For the {{ ydb-short-name }} CLI to try connecting to the database, these steps must result in the [endpoint](../../../concepts/connect.md#endpoint) and [database path](../../../concepts/connect.md#database).
+For {{ ydb-short-name }} CLI to attempt to connect to the database, the execution of these steps must define the [endpoint](../../../concepts/connect.md#endpoint) and the [database path](../../../concepts/connect.md#database).
 
-If all the steps are completed, but the {{ ydb-short-name }} CLI did not determine the authentication mode, requests will be sent to the {{ ydb-short-name }} server without adding authentication data. This may let you successfully work with locally deployed {{ ydb-short-name }} clusters that require no authentication. For all databases available over the network, such requests will be rejected by the server with an authentication error returned.
+If all steps are completed but {{ ydb-short-name }} CLI has not determined an authentication mode, requests will be sent to the {{ ydb-short-name }} server without adding authentication data. This may allow successful work with locally deployed {{ ydb-short-name }} clusters that do not require authentication. For all network-accessible databases, such requests will be rejected by the server with an authentication error.
 
-To learn about potential situations where the {{ ydb-short-name }} CLI won't try to connect to the database, see the [Error messages](#errors) below.
+For possible situations when {{ ydb-short-name }} CLI will not attempt to connect to the database, see the [Error messages](#errors) section below.
 
-## Command line parameters {#command-line-pars}
+## Command-line parameters {#command-line-pars}
 
-DB connection options in the command line are specified before defining the command and its parameters:
+Database connection options in the command line are specified before the command and its parameters:
+
 
 ```bash
-{{ ydb-cli }} <connection_options> <command> <command_options>
+{{ ydb-cli }} <опции_соединения> <команда> <опции_команды>
 ```
 
-- `-e, --endpoint <endpoint>` is the [endpoint](../../../concepts/connect.md#endpoint), that is, the main connection parameter that allows finding a {{ ydb-short-name }} server on the network. If no port is specified, port 2135 is used. If no protocol is specified, gRPCs (with encryption) is used in {{ ydb-short-name }} CLI public builds.
-- `-d, --database <database>` is the [database path](../../../concepts/connect.md#database).
-- `--no-discovery` means do not perform discovery (client balancing) for ydb cluster connection. If this option is set the user provided endpoint (by `-e` option) will be used to setup a connections.
+
+### Database connection parameters {#connection}
+
+- `-e, --endpoint <endpoint>` — [endpoint](../../../concepts/connect.md#endpoint) is the main connection parameter that allows you to find the {{ ydb-short-name }} server on the network. If the port is not specified, 2135 is used. If the protocol is not specified, then in public builds of {{ ydb-short-name }} CLI, gRPCs (with encryption) is used.
+- `-d, --database <database>` — [database path](../../../concepts/connect.md#database).
+- `--no-discovery` — skip the discovery stage, which requests a list of addresses for connecting to the YDB cluster. If this option is set, the connection will be made directly to the endpoint specified by the user (using the `-e` option).
+
+### Authentication parameters {#authentication}
 
 {% include [auth/options.md](auth/options.md) %}
 
-## Parameters from the profile set by the command-line option {#profile}
+### TLS connection parameters {#tls}
 
-If a certain connection parameter is not specified in the command line when calling the {{ ydb-short-name }} CLI, it tries to determine it by the [profile](../profile/index.md) set in the `--profile` command-line option.
+{% include [auth/options_client_cert.md](auth/options_client_cert.md) %}
 
-In the profile, you can define most of the variables that have counterparts in the [Command line parameters](#command-line-pars) section. Their values are processed in the same way as command line parameters.
+## Parameters from the profile selected by the command-line option {#profile}
+
+If any connection parameter is not specified in the command line when invoking {{ ydb-short-name }} CLI, the CLI attempts to determine it from the [profile](../profile/index.md) selected by the `--profile` command-line option.
+
+The profile can define most variables similar to the options from the [command-line parameters](#command-line-pars) section. Their values are processed in the same way as command-line parameters.
 
 ## Parameters from environment variables {#env}
 
-If you did not explicitly specify a profile or authentication parameters at the command line, the {{ ydb-short-name }} CLI attempts to determine the authentication mode and parameters from the {{ ydb-short-name }} CLI environment as follows:
+If no profile was explicitly specified in the command line or it does not contain authentication parameters, {{ ydb-short-name }} CLI attempts to determine the authentication mode and parameters from the {{ ydb-short-name }} CLI environment using the following algorithm:
 
 {% include [env.md](auth/env.md) %}
 
 ## Parameters from the activated profile {#activated-profile}
 
-If some connection parameter could not be determined in the previous steps, and you did not explicitly specify a profile at the command line with the `--profile` option, the {{ ydb-short-name }} CLI attempts to use the connection parameters from the [activated profile](../profile/activate.md).
+If any connection parameter could not be determined in the previous steps and no profile was explicitly specified in the command line with the `--profile` option, the {{ ydb-short-name }} CLI tries to use the connection parameters from the [activated profile](../profile/activate.md).
 
 ## Error messages {#errors}
 
-### Errors before attempting to establish a DB connection
+### Errors before attempting to connect to the database
 
-If the CLI completed all the steps listed at the beginning of this article but failed to determine the [endpoint](../../../concepts/connect.md#endpoint), the command terminates with the error `Missing required option 'endpoint'`.
+If all the steps described at the beginning of this article have been completed, but the [endpoint](../../../concepts/connect.md#endpoint) could not be determined, the command execution will be interrupted with the `Missing required option 'endpoint'` message.
 
-If the CLI completed all the steps listed at the beginning of this article but failed to determine the [database path](../../../concepts/connect.md#database), the command terminates with the error message `Missing required option 'database'`.
+If all the steps described at the beginning of this article have been completed, but the [database path](../../../concepts/connect.md#database) could not be determined, the command execution will be aborted with the message `Missing required option 'database'`.
 
-If the authentication mode is known, but the necessary additional parameters are not, the command is aborted and an error message describing the issue is returned:
+If the authentication mode was determined, but the required additional parameters could not be determined, the command execution will be aborted with a message describing the problem:
+
 
 ```text
 (No such file or directory) util/system/file.cpp:857:
 can't open "<filepath>" with mode RdOnly|Seq (0x00000028)
 ```
 
-— Couldn't open and read the file `<filepath>` specified in a parameter passing the file name and path.
 
+— failed to open for reading the file `<filepath>` specified in one of the parameters that accepts a file name with a path
 
-## Additional parameters {#additional}
+## Checking authentication {#whoami}
 
-When using gRPCs (with encryption), you may need to [select a root certificate](../../../concepts/connect.md#tls-cert).
-
-- `--ca-file <filepath>`: Root certificate PEM file for a TLS connection.
-
-## Authentication {#whoami}
-
-The {{ ydb-short-name }} CLI [`discovery whoami`](../commands/discovery-whoami.md) auxiliary command lets you check the account that you actually used to authenticate with the server.
+The {{ ydb-short-name }} CLI service command [`discovery whoami`](../commands/discovery-whoami.md) allows you to check which account you are actually authenticated as on the server.

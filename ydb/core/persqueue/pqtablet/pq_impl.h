@@ -18,6 +18,9 @@
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -282,6 +285,9 @@ public:
         ui32 ServerActors = 0;
         TString SessionId;
         ui64 PartitionSessionId = 0;
+        // For pipe-cache holders: physical ClientId this logical PipeClient is bound to.
+        // Empty for dedicated pipes (key of PipesInfo is the physical ClientId).
+        TActorId PhysicalPipe;
         TPipeInfo() = default;
         static TPipeInfo ForOwner(const TActorId& partActor, const TString& owner, ui32 serverActors) {
             TPipeInfo res;
@@ -294,6 +300,10 @@ public:
 
 private:
     THashMap<TActorId, TPipeInfo> PipesInfo;
+    // pipe ServerId -> physical ClientId
+    absl::flat_hash_map<TActorId, TActorId, THash<TActorId>> PipeServerToClient;
+    // physical ClientId -> logical PipeClient holders (pipe-cache sessions/owners)
+    absl::flat_hash_map<TActorId, absl::flat_hash_set<TActorId>, THash<TActorId>> PipeCacheHolders;
 
     ui64 NextResponseCookie;
     THashMap<ui64, TAutoPtr<TResponseBuilder>> ResponseProxy;
@@ -493,6 +503,9 @@ private:
 
     ui64 GetGeneration();
     void DestroySession(TPipeInfo& pipeInfo);
+    void EnsurePipeHolder(const TActorId& pipeClient, const TActorId& pipeServerId);
+    void CleanupPipeInfo(const TActorId& pipeClient, const TActorContext& ctx);
+    void CleanupPhysicalPipe(const TActorId& physicalClientId, const TActorContext& ctx);
     bool UseMediatorTimeCast = true;
 
     TVector<TEvPersQueue::TEvStatus::TPtr> StatusRequests;

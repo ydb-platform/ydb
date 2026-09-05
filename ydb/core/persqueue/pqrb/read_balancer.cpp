@@ -882,6 +882,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     Balancer->Handle(ev, ctx);
 }
 
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUnregisterClient::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx)
 {
     Balancer->Handle(ev, ctx);
@@ -1179,6 +1184,7 @@ STFUNC(TPersQueueReadBalancer::StateWork) {
         HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
         HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
         HFunc(TEvPersQueue::TEvRegisterReadSession, Handle);
+        HFunc(TEvPersQueue::TEvUnregisterClient, Handle);
         HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
         HFunc(TEvPersQueue::TEvPartitionReleased, Handle);
         HFunc(TEvTabletPipe::TEvServerConnected, Handle);

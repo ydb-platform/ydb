@@ -1,17 +1,27 @@
 #include "limit.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/limit_sorted.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
+
+namespace {
+ui32 GetSysViewMaxHeldPortions() {
+    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetLimitSyncPointConfig().GetSysViewMaxHeldPortions() : 0;
+}
+}   // namespace
 
 TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
     const std::shared_ptr<TScanWithLimitCollection>& collection)
     : TBase(pointIndex, "SYNC_LIMIT", context, collection)
     , Limit(limit)
     , Collection(collection)
+    , SysViewMaxHeldPortions(GetSysViewMaxHeldPortions())
 {
     AFL_VERIFY(Collection);
 }
@@ -41,8 +51,10 @@ bool TSyncPointLimitControl::DrainToLimit() {
 }
 
 std::shared_ptr<NCommon::IDataSource> TSyncPointLimitControl::OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
-    AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
-    UnfilledIterators.emplace_back(TSourceIterator(source));
+    if (!Passthrough) {
+        AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
+        UnfilledIterators.emplace_back(TSourceIterator(source));
+    }
 
     return TBase::OnAddSource(source);
 }
@@ -56,6 +68,10 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
+    }
+
+    if (Passthrough) {
+        return source->GetStageResult().IsEmpty() ? ESourceAction::Finish : ESourceAction::ProvideNext;
     }
 
     AFL_VERIFY(UnfilledIterators.size());
@@ -77,17 +93,17 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
                 return item.GetSourceIdx() == source->GetSourceIdx();
             }) != UnfilledIterators.end()) {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<IDataSource>()->GetFirstPK().DebugString())(
                     "source_idx", source->GetSourceIdx());
         } else if (FindIf(FilledIterators, [&](const auto& item) {
                        return item.GetSourceIdx() == source->GetSourceIdx();
                    }) != FilledIterators.end()) {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<IDataSource>()->GetFirstPK().DebugString())(
                     "source_idx", source->GetSourceIdx());
         } else {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<IDataSource>()->GetFirstPK().DebugString())(
                     "source_idx", source->GetSourceIdx());
         }
     }
@@ -121,7 +137,16 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         AFL_VERIFY(FilledIterators.back().IsFilled());
         std::push_heap(FilledIterators.begin(), FilledIterators.end());
     }
-    if (DrainToLimit()) {
+    // SysViewMaxHeldPortions is the max portions we reorder here; the next one trips passthrough (transient peak +1
+    // before the clear below). Once we stop reordering, correctness relies on KQP's per-shard TopSort re-sorting/re-limiting.
+    if (SysViewMaxHeldPortions && source->GetType() == IDataSource::EType::SimpleSysInfo && FilledIterators.size() > SysViewMaxHeldPortions) {
+        Passthrough = true;
+        // FetchedCount is intentionally abandoned here: in passthrough it never gates emission again (KQP re-limits)
+        FilledIterators.clear();
+        UnfilledIterators.clear();
+        NYDBTest::TControllers::GetColumnShardController()->OnSysViewLimitSyncPointPassthrough();
+    }
+    if (!Passthrough && DrainToLimit()) {
         Collection->Clear();
     }
     if (source->GetStageResult().IsEmpty()) {
@@ -137,8 +162,8 @@ TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
     sb << "idx=" << Source->GetSourceIdx() << ";";
     sb << "f=" << IsFilled() << ";";
     sb << "record=" << SortableRecord->DebugJson() << ";";
-    sb << "start=" << Source->GetAs<TPortionDataSource>()->GetStart().DebugString() << ";";
-    sb << "finish=" << Source->GetAs<TPortionDataSource>()->GetFinish().DebugString() << ";";
+    sb << "start=" << Source->GetAs<IDataSource>()->GetFirstPK().DebugString() << ";";
+    sb << "finish=" << Source->GetAs<IDataSource>()->GetLastPK().DebugString() << ";";
     return sb;
 }
 

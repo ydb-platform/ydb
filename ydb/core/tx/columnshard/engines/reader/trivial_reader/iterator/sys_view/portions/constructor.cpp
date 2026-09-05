@@ -35,9 +35,8 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             if (portions.size() == 10) {
                 if (unifiedPathId.HasInternalPathId()) {
                     constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(),
-                                                  unifiedPathId.GetSchemeShardLocalPathIdVerified()), TabletId, portions);
-                    if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
-                            constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
+                                                  unifiedPathId.GetSchemeShardLocalPathIdVerified()), TabletId, portions, sorting);
+                    if (!constructors.back().IsUsedBy(*pkFilter)) {
                         constructors.pop_back();
                     }
                     portions.clear();
@@ -45,9 +44,8 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
                 }
                 for (const auto& schemeShardLocalPathId : translator.ResolveSchemeShardLocalPathIdsVerified(granuleMeta->GetPathId())) {
                     constructors.emplace_back(
-                        NColumnShard::TUnifiedPathId::BuildValid(granuleMeta->GetPathId(), schemeShardLocalPathId), TabletId, portions);
-                    if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
-                            constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
+                        NColumnShard::TUnifiedPathId::BuildValid(granuleMeta->GetPathId(), schemeShardLocalPathId), TabletId, portions, sorting);
+                    if (!constructors.back().IsUsedBy(*pkFilter)) {
                         constructors.pop_back();
                     }
                 }
@@ -57,9 +55,8 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
         if (portions.size()) {
             if (unifiedPathId.HasInternalPathId()) {
                 constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(),
-                                              unifiedPathId.GetSchemeShardLocalPathIdVerified()), TabletId, std::move(portions));
-                if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
-                        constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
+                                              unifiedPathId.GetSchemeShardLocalPathIdVerified()), TabletId, std::move(portions), sorting);
+                if (!constructors.back().IsUsedBy(*pkFilter)) {
                     constructors.pop_back();
                 }
                 portions.clear();
@@ -67,9 +64,8 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             }
             for (const auto& schemeShardLocalPathId : translator.ResolveSchemeShardLocalPathIdsVerified(granuleMeta->GetPathId())) {
                 constructors.emplace_back(
-                    NColumnShard::TUnifiedPathId::BuildValid(granuleMeta->GetPathId(), schemeShardLocalPathId), TabletId, portions);
-                if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
-                        constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
+                    NColumnShard::TUnifiedPathId::BuildValid(granuleMeta->GetPathId(), schemeShardLocalPathId), TabletId, portions, sorting);
+                if (!constructors.back().IsUsedBy(*pkFilter)) {
                     constructors.pop_back();
                 }
             }

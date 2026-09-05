@@ -27,6 +27,7 @@ private:
     std::optional<NKikimrSSA::TProgram> ProgramProto;
     std::optional<TString> SerializedProgram;
     YDB_ACCESSOR(bool, Reverse, false);
+    YDB_ACCESSOR_DEF(TString, TablePath);
     YDB_ACCESSOR(ui32, Limit, 0);
     std::vector<TSerializedTableRange> Ranges;
     std::optional<NKikimrKqp::TEvKqpScanCursor> StartCursor;

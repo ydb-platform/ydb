@@ -2,7 +2,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAll
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
-ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NoMultipleColumnsWithoutFeatureFlag
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
@@ -38,7 +37,6 @@ ydb/library/actors/interconnect/ut OutgoingStream.PublicMethodsLatencyBenchmark
 ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemory
 ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemoryPreallocateNoAlloc
 ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
-ydb/services/config/ut ConfigGRPCService.ReplaceConfig
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionWasmDwarfMapsToMainCpp
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc

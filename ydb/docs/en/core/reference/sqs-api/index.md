@@ -45,7 +45,7 @@ For FIFO queues, message deduplication is supported by `MessageDeduplicationId`,
 
 Deduplication is implemented over a 5-minute window: a message with a duplicate `MessageDeduplicationId` can be written again after 5 minutes or more.
 
-There is a limit on the number of messages that can be written to a FIFO topic partition: 1000 messages per second. If you need to write more messages to the topic, increase the number of partitions. The topic limit is calculated as 1000 messages/sec/partition × number of partitions. For example, to write 10 thousand messages per second, create a topic with 10 partitions.
+There is a limit on the number of messages that can be written to a FIFO queue partition: 1000 messages per second. If you need to write more messages to the topic, increase the number of partitions. The topic limit is calculated as 1000 messages/sec/partition × number of partitions. For example, to write 10 thousand messages per second, create a topic with 10 partitions.
 
 ## Documentation sections
 

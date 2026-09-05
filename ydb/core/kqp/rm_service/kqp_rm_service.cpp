@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <yql/essentials/utils/yql_panic.h>
@@ -61,16 +62,30 @@ ui64 Percentage(ui64 limit, double percent) {
     return static_cast<double>(limit) / 100 * percent + MYEPS;
 }
 
+struct TPoolSensors {
+    NMonitoring::TDynamicCounters::TCounterPtr Limit;
+    NMonitoring::TDynamicCounters::TCounterPtr Allocated;
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;
+};
+
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {
 public:
-    explicit TMemoryResource(ui64 baseLimit, double memoryPoolPercent, double overPercent)
+    explicit TMemoryResource(ui64 baseLimit, double memoryPoolPercent, double overPercent,
+                             TPoolSensors* sensors = nullptr)
         : BaseLimit(baseLimit)
         , Used(0)
         , MemoryPoolPercent(memoryPoolPercent)
         , OverPercent(overPercent)
         , SpillingCookie(MakeIntrusive<TMemoryResourceCookie>())
+        , Sensors(sensors)
     {
         SetActualLimits();
+    }
+
+    ~TMemoryResource() {
+        if (Sensors) {
+            Sensors->Allocated->Set(0); // Limit persists at last configured value while pool is idle
+        }
     }
 
     ui64 Available() const {
@@ -85,6 +100,9 @@ public:
         if (Available() >= value) {
             Used += value;
             UpdateCookie();
+            if (Sensors) {
+                Sensors->Allocated->Set(Used);
+            }
             return true;
         }
         return false;
@@ -108,8 +126,10 @@ public:
         } else {
             Used = 0;
         }
-
         UpdateCookie();
+        if (Sensors) {
+            Sensors->Allocated->Set(Used);
+        }
     }
 
     void SetNewLimit(ui64 baseLimit, double memoryPoolPercent, double overPercent) {
@@ -125,10 +145,23 @@ public:
     void SetActualLimits() {
         Limit = Percentage(BaseLimit, MemoryPoolPercent);
         OverLimit = OverPercentage(Limit, OverPercent);
+        if (Sensors) {
+            Sensors->Limit->Set(Limit);
+        }
     }
 
     ui64 GetLimit() const {
         return Limit;
+    }
+
+    void RecordDenied() {
+        if (Sensors) {
+            Sensors->DeniedRequests->Inc();
+        }
+    }
+
+    ui64 GetDeniedRequests() const {
+        return Sensors ? Sensors->DeniedRequests->Val() : 0;
     }
 
     TString ToString() const {
@@ -144,6 +177,7 @@ private:
     double OverPercent;
 
     TIntrusivePtr<TMemoryResourceCookie> SpillingCookie;
+    TPoolSensors* Sensors = nullptr; // non-owning; owned by TKqpResourceManager::PoolSensorRegistry
 };
 
 struct TEvPrivate {
@@ -282,7 +316,18 @@ public:
                 auto [it, success] = MemoryNamedPools.emplace(tx.MakePoolId(), nullptr);
 
                 if (success) {
-                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
+                    auto regKey = std::make_pair(tx.Database, tx.PoolId);
+                    auto [regIt, regNew] = PoolSensorRegistry.emplace(regKey, TPoolSensors{});
+                    if (regNew && Counters && ActorSystem &&
+                            AppData(ActorSystem)->FeatureFlags.GetEnableResourcePoolsCounters()) {
+                        auto sg = Counters->GetWorkloadManagerCounters()
+                            ->GetSubgroup("pool", TStringBuilder() << tx.Database << "/" << tx.PoolId);
+                        regIt->second.Limit = sg->GetCounter("MemoryLimit", false);
+                        regIt->second.Allocated = sg->GetCounter("MemoryAllocated", false);
+                        regIt->second.DeniedRequests = sg->GetCounter("MemoryDeniedRequests", true);
+                    }
+                    TPoolSensors* sensors = regIt->second.Limit ? &regIt->second : nullptr;
+                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load(), sensors);
                 } else {
                     it->second->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
                 }
@@ -291,6 +336,7 @@ public:
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
+                    poolMemory->RecordDenied();
                 }
 
                 if (!tx.PoolMemoryCookie) {
@@ -598,6 +644,8 @@ public:
     TActorId ResourceInfoExchanger = TActorId();
 
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
+    // Persistent sensor registry; entries are created once and never deleted; guarded by Lock
+    std::unordered_map<std::pair<TString, TString>, TPoolSensors, THash<std::pair<TString, TString>>> PoolSensorRegistry;
 };
 
 struct TResourceManagers {
@@ -929,6 +977,34 @@ private:
                     }
                  }
             } // PRE()
+
+            struct TPoolRow { TString Database; TString Pool; ui64 Limit; ui64 Used; ui64 DeniedRequests; };
+            TVector<TPoolRow> poolSnapshot;
+            with_lock (ResourceManager->Lock) {
+                poolSnapshot.reserve(ResourceManager->MemoryNamedPools.size());
+                for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
+                    poolSnapshot.push_back({key.first, key.second, pool->GetLimit(), pool->GetUsed(), pool->GetDeniedRequests()});
+                }
+            }
+            if (!poolSnapshot.empty()) {
+                str << "<h3>Memory Pools</h3>";
+                str << "<table border='1' cellpadding='4'>";
+                str << "<tr>"
+                    << "<th>Database</th><th>Pool</th>"
+                    << "<th>Limit</th><th>Allocated</th>"
+                    << "<th>DeniedRequests</th>"
+                    << "</tr>";
+                for (const auto& row : poolSnapshot) {
+                    str << "<tr>"
+                        << "<td>" << EncodeHtmlPcdata(row.Database) << "</td>"
+                        << "<td>" << EncodeHtmlPcdata(row.Pool) << "</td>"
+                        << "<td>" << row.Limit << "</td>"
+                        << "<td>" << row.Used << "</td>"
+                        << "<td>" << row.DeniedRequests << "</td>"
+                        << "</tr>";
+                }
+                str << "</table>";
+            }
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

@@ -464,7 +464,8 @@ TInternalPathId TTablesManager::GetOrCreateInternalPathId(const TSchemeShardLoca
     }
 }
 
-NKikimrTxColumnShard::TTableVersionInfo TTablesManager::LoadLastTableVersionInfo(const TInternalPathId pathId, NIceDb::TNiceDb& db) const {
+NKikimrTxColumnShard::TTableVersionInfo TTablesManager::LoadLastTableVersionInfo(
+    const TInternalPathId pathId, NIceDb::TNiceDb& db) const {
     const auto* table = Tables.FindPtr(pathId);
     AFL_VERIFY(table)("path_id", pathId);
     AFL_VERIFY(!table->GetVersions().empty())("path_id", pathId);

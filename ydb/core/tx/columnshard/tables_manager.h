@@ -284,7 +284,7 @@ public:
         if (!minReadSnapshot) {
             return true;
         }
-                return *dropVersion <= *minReadSnapshot;
+        return *dropVersion <= *minReadSnapshot;
     }
 
     TTableInfo(const std::set<TUnifiedPathId>& unifiedPathIds) {

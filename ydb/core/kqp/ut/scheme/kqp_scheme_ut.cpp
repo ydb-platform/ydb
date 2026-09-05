@@ -15164,9 +15164,9 @@ END DO)",
         }
 
         {
-            auto result = session.ExecuteSchemeQuery(R"(
+            auto result = session.ExecuteDataQuery(R"(
                 UPSERT INTO `/Root/TableWithFamilies` (Key, Value1, Value2) VALUES (1, "a", 10);
-            )").ExtractValueSync();
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 

@@ -46,7 +46,11 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- alternat
 Modifies properties of an existing column in the specified table. Property changes are applied without recreating the column. Some properties apply only to newly written data or during compaction (see the description of each property for details).
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ALTER COLUMN column_name
+  { SET FAMILY <family_name>
+  | DROP NOT NULL
+  | SET COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
+  };
 ```
 
 ### Request parameters
@@ -59,22 +63,24 @@ The path of the table containing the column to change.
 
 The name of the column to change in the specified table.
 
-#### SET
+#### SET FAMILY
 
-Set a column option.
+Moves a column of a row-oriented table to the specified column family.
 
-#### DROP
+#### DROP NOT NULL
 
-Remove a column option. Currently only `NOT NULL` can be removed.
+Allows a column to contain `NULL` values.
 
-{% include [column_option_list.md](../_includes/column_option_list.md) %}
+#### SET COMPRESSION
+
+Changes the compression settings of a column in a column-oriented table.
 
 ### Examples
 
-The code below will disallow `NULL` values in the `title` column of the `episodes` table.
+The code below will allow `NULL` values in the `title` column of the `episodes` table.
 
 ```yql
-ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
+ALTER TABLE episodes ALTER COLUMN title DROP NOT NULL;
 ```
 
 {% if oss == true and backend_name == "YDB" %}

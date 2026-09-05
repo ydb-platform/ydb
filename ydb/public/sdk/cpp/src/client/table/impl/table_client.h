@@ -134,7 +134,8 @@ public:
         const TReadTableSettings& settings);
     TAsyncReadRowsResult ReadRows(const std::string& path, TValue&& keys, const std::vector<std::string>& columns, const TReadRowsSettings& settings);
 
-    TAsyncStatus Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings);
+    TAsyncStatus Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings,
+                       std::shared_ptr<NYdbGrpc::IQueueClientContext> context = nullptr);
     TAsyncStatus CloseInternal(const TKqpSessionCommon* sessionImpl);
 
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override;
@@ -341,6 +342,7 @@ public:
 private:
     std::shared_ptr<NTrace::ITracer> Tracer_;
     NSdkStats::TStatCollector::TClientOperationStatCollector OperationStatCollector_;
+    std::shared_ptr<NYdbGrpc::IQueueClientContext> SessionCleanupContext_;
     NSessionPool::TSessionPool SessionPool_;
     TRequestMigrator RequestMigrator_;
     static const TKeepAliveSettings KeepAliveSettings;

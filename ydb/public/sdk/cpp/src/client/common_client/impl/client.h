@@ -75,7 +75,8 @@ protected:
     NThreading::TFuture<TStatus> RunSimple(
         TRequest&& request,
         TAsyncRequest<TService, TRequest, TResponse> rpc,
-        const TRpcRequestSettings& requestSettings = {})
+        const TRpcRequestSettings& requestSettings = {},
+        std::shared_ptr<NYdbGrpc::IQueueClientContext> context = nullptr)
     {
         auto promise = NThreading::NewPromise<TStatus>();
 
@@ -86,12 +87,13 @@ protected:
             };
 
         Connections_->RunDeferred<TService, TRequest, TResponse>(
-            std::move(request),
+            std::forward<TRequest>(request),
             extractor,
             rpc,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            requestSettings);
+            requestSettings,
+            std::move(context));
 
         return promise.GetFuture();
     }
@@ -117,7 +119,7 @@ protected:
             };
 
         Connections_->RunDeferred<TService, TRequest, TResponse>(
-            std::move(request),
+            std::forward<TRequest>(request),
             extractor,
             rpc,
             DbDriverState_,

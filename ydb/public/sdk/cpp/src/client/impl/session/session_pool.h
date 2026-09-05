@@ -17,14 +17,13 @@ public:
     virtual void ReplySessionToUser(TKqpSessionCommon* session) = 0;
     virtual void ReplyError(TStatus status) = 0;
     virtual void ReplyNewSession() = 0;
-    virtual void ScheduleOnDeadlineWaiterCleanup() = 0;
     virtual TDeadline GetDeadline() const = 0;
 };
 
-//How often run session pool keep alive check
+// How often run session pool keep alive check
 constexpr TDeadline::Duration PERIODIC_ACTION_INTERVAL = std::chrono::seconds(5);
 constexpr TDeadline::Duration MAX_WAIT_SESSION_TIMEOUT = std::chrono::seconds(5); // Max time to wait session
-constexpr std::uint64_t PERIODIC_ACTION_BATCH_SIZE = 10; // Max number of tasks to perform during one interval
+constexpr std::uint64_t PERIODIC_ACTION_BATCH_SIZE = 10;                          // Max number of tasks to perform during one interval
 
 TStatus GetStatus(const TOperation& operation);
 TStatus GetStatus(const TStatus& status);
@@ -104,7 +103,7 @@ private:
 
         // returns true and gets ownership if queue size less than limit
         // otherwise returns false and doesn't not touch ctx
-        IGetSessionCtx* TryPush(std::unique_ptr<IGetSessionCtx>& p);
+        IGetSessionCtx* TryPush(std::unique_ptr<IGetSessionCtx>& p, TDeadline deadline);
         std::unique_ptr<IGetSessionCtx> TryGet();
         void GetOld(TDeadline deadline, std::vector<std::unique_ptr<IGetSessionCtx>>& oldWaiters);
         std::uint32_t Size() const;
@@ -119,7 +118,8 @@ public:
     TSessionPool(std::uint32_t maxActiveSessions, std::uint32_t minPoolSize = 0);
 
     // Extracts session from pool or creates new one ising given ctx
-    void GetSession(std::unique_ptr<IGetSessionCtx> ctx);
+    void GetSession(std::unique_ptr<IGetSessionCtx> ctx,
+                    std::function<void(TDeadline)> scheduleWaiterCleanup);
 
     // Returns true if session returned to pool successfully
     bool ReturnSession(TKqpSessionCommon* impl, bool active);

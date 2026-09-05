@@ -25,6 +25,7 @@ constexpr TDuration kSlowAttach = TDuration::MilliSeconds(300);
 class TDelayedMockQueryService : public Ydb::Query::V1::QueryService::Service {
 public:
     TDuration AttachDelay = TDuration::Zero();
+    NThreading::TPromise<void> AttachCancelled = NThreading::NewPromise<void>();
 
     grpc::Status CreateSession(
         grpc::ServerContext*,
@@ -51,6 +52,7 @@ public:
         while (!context->IsCancelled()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
+        AttachCancelled.TrySetValue();
         return grpc::Status::OK;
     }
 };
@@ -87,6 +89,7 @@ Y_UNIT_TEST(TimeoutThenPoolWarmup) {
 
     TDelayedMockQueryService service;
     service.AttachDelay = kSlowAttach;
+    auto attachCancelled = service.AttachCancelled.GetFuture();
     auto server = StartGrpcServer(endpoint, service);
 
     TDriver driver(
@@ -109,8 +112,12 @@ Y_UNIT_TEST(TimeoutThenPoolWarmup) {
     UNIT_ASSERT_EQUAL(client->GetCurrentPoolSize(), 1);
     UNIT_ASSERT_EQUAL(client->GetActiveSessionCount(), 0);
 
+    driver.Stop(false);
+    const auto stoppedResult = client->GetSession().ExtractValueSync();
+    UNIT_ASSERT_EQUAL(stoppedResult.GetStatus(), EStatus::CLIENT_CANCELLED);
+    UNIT_ASSERT(attachCancelled.Wait(TDuration::Seconds(10)));
+
     client.reset();
-    driver.Stop(true);
 }
 
 Y_UNIT_TEST(DisabledWaitsForAttach) {
@@ -139,5 +146,4 @@ Y_UNIT_TEST(DisabledWaitsForAttach) {
     client.reset();
     driver.Stop(true);
 }
-
-}
+} // Y_UNIT_TEST_SUITE(DeferredGetSession)

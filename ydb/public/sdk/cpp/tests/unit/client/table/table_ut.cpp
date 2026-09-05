@@ -85,17 +85,27 @@ namespace {
         virtual grpc::Status DeleteSession(
             grpc::ServerContext* /* context */,
             const Ydb::Table::DeleteSessionRequest* request,
-            Ydb::Table::DeleteSessionResponse* response
-        ) override {
+            Ydb::Table::DeleteSessionResponse* response) override {
             std::cerr << "DeleteSession():" << std::endl
-                << request->DebugString()
-                << std::endl;
+                      << request->DebugString()
+                      << std::endl;
 
             ++DeleteSessionRequests;
+
+            if (DeleteSessionStarted) {
+                DeleteSessionStarted->set_value();
+                ContinueDeleteSession.wait();
+            }
 
             auto op = response->mutable_operation();
             op->set_ready(true);
             op->set_status(Ydb::StatusIds::SUCCESS);
+
+            if (DeleteSessionFinished) {
+                DeleteSessionFinished->set_value();
+            }
+
+            ++DeleteSessionCompleted;
 
             return grpc::Status::OK;
         }
@@ -103,11 +113,10 @@ namespace {
         virtual grpc::Status AlterTable(
             grpc::ServerContext* /* context */,
             const Ydb::Table::AlterTableRequest* request,
-            Ydb::Table::AlterTableResponse* response
-        ) override {
+            Ydb::Table::AlterTableResponse* response) override {
             std::cerr << "AlterTable():" << std::endl
-                << request->DebugString()
-                << std::endl;
+                      << request->DebugString()
+                      << std::endl;
 
             //
 
@@ -124,8 +133,12 @@ namespace {
         std::optional<Ydb::Table::CreateTableRequest> LastCreateTableRequest;
         std::optional<Ydb::Table::AlterTableRequest> LastAlterTableRequest;
         std::atomic_uint DeleteSessionRequests = 0;
-        std::promise<void>* CreateTableStarted = nullptr;
+        std::atomic_uint DeleteSessionCompleted = 0;
+        std::shared_ptr<std::promise<void>> CreateTableStarted;
         std::shared_future<void> ContinueCreateTable;
+        std::shared_ptr<std::promise<void>> DeleteSessionStarted;
+        std::shared_ptr<std::promise<void>> DeleteSessionFinished;
+        std::shared_future<void> ContinueDeleteSession;
     };
 
     /**
@@ -242,12 +255,11 @@ TEST(TableTest, SessionHandleDestructionSendsDeleteSession) {
         grpcServer,
         driver,
         tableClient,
-        tableSession
-    );
+        tableSession);
 
     tableSession.reset();
     ASSERT_TRUE(WaitUntil([&] {
-        return tableService.DeleteSessionRequests.load() == 1u;
+        return tableService.DeleteSessionCompleted.load() == 1u;
     }));
 
     tableClient.reset();
@@ -322,7 +334,7 @@ TEST(TableTest, ExplicitStopClosesPooledSessions) {
     ASSERT_EQ(tableService.DeleteSessionRequests.load(), 1u);
 }
 
-TEST(TableTest, CheckedOutPooledSessionClosesRemotelyAfterExplicitStop) {
+TEST(TableTest, DriverStopDoesNotWaitForPooledSessionClose) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;
     std::unique_ptr<TDriver> driver;
@@ -334,8 +346,56 @@ TEST(TableTest, CheckedOutPooledSessionClosesRemotelyAfterExplicitStop) {
         grpcServer,
         driver,
         tableClient,
-        tableSession
-    );
+        tableSession);
+
+    tableSession.reset();
+    ASSERT_TRUE(WaitUntil([&] {
+        return tableService.DeleteSessionCompleted.load() == 1u;
+    }));
+    tableService.DeleteSessionRequests.store(0);
+
+    {
+        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
+        ASSERT_TRUE(pooledSessionResult.IsSuccess());
+        auto pooledSession = pooledSessionResult.GetSession();
+    }
+
+    auto deleteSessionStarted = std::make_shared<std::promise<void>>();
+    auto deleteSessionStartedFuture = deleteSessionStarted->get_future();
+    auto deleteSessionFinished = std::make_shared<std::promise<void>>();
+    auto deleteSessionFinishedFuture = deleteSessionFinished->get_future();
+    std::promise<void> continueDeleteSession;
+    tableService.DeleteSessionStarted = std::move(deleteSessionStarted);
+    tableService.DeleteSessionFinished = std::move(deleteSessionFinished);
+    tableService.ContinueDeleteSession = continueDeleteSession.get_future().share();
+
+    auto stopFuture = std::async(std::launch::async, [&] {
+        driver->Stop(true);
+    });
+    const auto deleteStarted = deleteSessionStartedFuture.wait_for(std::chrono::seconds(10));
+    const auto stopReturned = stopFuture.wait_for(std::chrono::seconds(10));
+    continueDeleteSession.set_value();
+    EXPECT_EQ(deleteStarted, std::future_status::ready);
+    EXPECT_EQ(stopReturned, std::future_status::ready);
+    ASSERT_EQ(stopFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    stopFuture.get();
+    ASSERT_EQ(deleteSessionFinishedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    ASSERT_EQ(tableService.DeleteSessionRequests.load(), 1u);
+}
+
+TEST(TableTest, CheckedOutPooledSessionClosesRemotelyAfterDriverStop) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession);
 
     tableSession.reset();
     ASSERT_TRUE(WaitUntil([&] {
@@ -348,7 +408,7 @@ TEST(TableTest, CheckedOutPooledSessionClosesRemotelyAfterExplicitStop) {
         ASSERT_TRUE(pooledSessionResult.IsSuccess());
         auto pooledSession = pooledSessionResult.GetSession();
 
-        ASSERT_TRUE(tableClient->Stop().Wait(TDuration::Seconds(10)));
+        driver->Stop(false);
         ASSERT_EQ(tableService.DeleteSessionRequests.load(), 0u);
     }
 
@@ -357,7 +417,7 @@ TEST(TableTest, CheckedOutPooledSessionClosesRemotelyAfterExplicitStop) {
     }));
 }
 
-TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
+TEST(TableTest, AsyncDriverStopLetsInFlightRequestFinish) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;
     std::unique_ptr<TDriver> driver;
@@ -369,8 +429,81 @@ TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
         grpcServer,
         driver,
         tableClient,
-        tableSession
-    );
+        tableSession);
+
+    auto createTableStarted = std::make_shared<std::promise<void>>();
+    auto createTableStartedFuture = createTableStarted->get_future();
+    std::promise<void> continueCreateTable;
+    tableService.CreateTableStarted = std::move(createTableStarted);
+    tableService.ContinueCreateTable = continueCreateTable.get_future().share();
+
+    auto requestFuture = tableSession->CreateTable(
+        "/Root/My/DB/in_flight_during_driver_stop",
+        NTable::TTableBuilder().Build());
+    const auto createStarted = createTableStartedFuture.wait_for(std::chrono::seconds(10));
+    if (createStarted != std::future_status::ready) {
+        continueCreateTable.set_value();
+    }
+    ASSERT_EQ(createStarted, std::future_status::ready);
+
+    auto stopFuture = std::async(std::launch::async, [&] {
+        driver->Stop(false);
+    });
+    const auto stopReturned = stopFuture.wait_for(std::chrono::seconds(10));
+    if (stopReturned != std::future_status::ready) {
+        continueCreateTable.set_value();
+    }
+    ASSERT_EQ(stopReturned, std::future_status::ready);
+    stopFuture.get();
+
+    auto stoppedSessionResult = tableClient->GetSession();
+    const bool stoppedSessionReady = stoppedSessionResult.Wait(TDuration::Seconds(10));
+    continueCreateTable.set_value();
+    ASSERT_TRUE(stoppedSessionReady);
+    ASSERT_EQ(stoppedSessionResult.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
+    ASSERT_TRUE(requestFuture.Wait(TDuration::Seconds(10)));
+    ASSERT_TRUE(requestFuture.ExtractValueSync().IsSuccess());
+    driver->Stop(true);
+}
+
+TEST(TableTest, RetryAcceptedBeforeDriverStopCompletes) {
+    TDriver driver(TDriverConfig()
+                       .SetEndpoint("localhost:1")
+                       .SetDiscoveryMode(EDiscoveryMode::Off));
+    NTable::TTableClient tableClient(driver);
+    auto attempts = std::make_shared<std::atomic_size_t>(0);
+    TDriver callbackDriver = driver;
+
+    auto result = tableClient.RetryOperation(
+        [attempts, callbackDriver](NTable::TTableClient&) mutable -> TAsyncStatus {
+            if (++*attempts == 1) {
+                callbackDriver.Stop(false);
+                return NThreading::MakeFuture(
+                    TStatus(EStatus::UNAVAILABLE, NIssue::TIssues{}));
+            }
+            return NThreading::MakeFuture(
+                TStatus(EStatus::CLIENT_CANCELLED, NIssue::TIssues{}));
+        },
+        NRetry::TRetryOperationSettings().MaxRetries(1));
+
+    ASSERT_TRUE(result.Wait(TDuration::Seconds(10)));
+    ASSERT_EQ(result.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
+    ASSERT_EQ(attempts->load(), 2u);
+}
+
+TEST(TableTest, DriverStopFromResponseCallbackIsNonBlocking) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession);
 
     {
         auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
@@ -378,41 +511,43 @@ TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
         auto pooledSession = pooledSessionResult.GetSession();
     }
 
-    std::promise<void> createTableStarted;
-    auto createTableStartedFuture = createTableStarted.get_future();
+    auto createTableStarted = std::make_shared<std::promise<void>>();
+    auto createTableStartedFuture = createTableStarted->get_future();
     std::promise<void> continueCreateTable;
-    tableService.CreateTableStarted = &createTableStarted;
+    tableService.CreateTableStarted = std::move(createTableStarted);
     tableService.ContinueCreateTable = continueCreateTable.get_future().share();
 
-    std::promise<void> callbackDone;
-    auto callbackDoneFuture = callbackDone.get_future();
-    std::atomic_bool success = false;
+    auto callbackDone = std::make_shared<std::promise<void>>();
+    auto callbackDoneFuture = callbackDone->get_future();
+    auto success = std::make_shared<std::atomic_bool>(false);
+    TDriver callbackDriver = *driver;
 
     auto requestFuture = tableSession->CreateTable(
         "/Root/My/DB/driver_stop_from_callback",
-        NTable::TTableBuilder().Build()
-    );
+        NTable::TTableBuilder().Build());
 
-    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    const auto createStarted = createTableStartedFuture.wait_for(std::chrono::seconds(10));
+    if (createStarted != std::future_status::ready) {
+        continueCreateTable.set_value();
+    }
+    ASSERT_EQ(createStarted, std::future_status::ready);
 
-    requestFuture.Subscribe([&](const NThreading::TFuture<TStatus>& future) mutable {
-        success.store(future.GetValue().IsSuccess());
-        driver->Stop(true);
-        callbackDone.set_value();
+    requestFuture.Subscribe([callbackDone, success, callbackDriver](const NThreading::TFuture<TStatus>& future) mutable {
+        success->store(future.GetValue().IsSuccess());
+        callbackDriver.Stop(true);
+        callbackDone->set_value();
     });
 
     continueCreateTable.set_value();
 
     ASSERT_EQ(callbackDoneFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
-    ASSERT_TRUE(success.load());
-
+    ASSERT_TRUE(success->load());
     ASSERT_TRUE(WaitUntil([&] {
         return tableService.DeleteSessionRequests.load() >= 1u;
     }));
-    ASSERT_TRUE(WaitUntil([&] {
-        auto stoppedSessionResult = tableClient->CreateSession().ExtractValueSync();
-        return stoppedSessionResult.GetStatus() == EStatus::CLIENT_CANCELLED;
-    }));
+    auto stoppedSessionResult = tableClient->GetSession();
+    ASSERT_TRUE(stoppedSessionResult.Wait(TDuration::Seconds(10)));
+    ASSERT_EQ(stoppedSessionResult.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
 }
 
 TEST(TableTest, DriverStopDoesNotAffectOtherDriver) {
@@ -427,31 +562,35 @@ TEST(TableTest, DriverStopDoesNotAffectOtherDriver) {
         grpcServer,
         driverB,
         tableClientB,
-        tableSessionB
-    );
+        tableSessionB);
 
     TDriver driverA(driverB->GetConfig());
     NTable::TTableClient tableClientA(driverA);
 
-    std::promise<void> createTableStarted;
-    auto createTableStartedFuture = createTableStarted.get_future();
+    auto createTableStarted = std::make_shared<std::promise<void>>();
+    auto createTableStartedFuture = createTableStarted->get_future();
     std::promise<void> continueCreateTable;
-    tableService.CreateTableStarted = &createTableStarted;
+    tableService.CreateTableStarted = std::move(createTableStarted);
     tableService.ContinueCreateTable = continueCreateTable.get_future().share();
 
     auto requestB = tableSessionB->CreateTable(
         "/Root/My/DB/driver_scope_isolation",
-        NTable::TTableBuilder().Build()
-    );
-    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+        NTable::TTableBuilder().Build());
+    const auto createStarted = createTableStartedFuture.wait_for(std::chrono::seconds(10));
+    if (createStarted != std::future_status::ready) {
+        continueCreateTable.set_value();
+    }
+    ASSERT_EQ(createStarted, std::future_status::ready);
 
     driverA.Stop(true);
 
-    auto stoppedResult = tableClientA.CreateSession().ExtractValueSync();
-    ASSERT_EQ(stoppedResult.GetStatus(), EStatus::CLIENT_CANCELLED);
-    ASSERT_FALSE(requestB.Wait(TDuration::MilliSeconds(100)));
-
+    auto stoppedResult = tableClientA.CreateSession();
+    const bool stoppedResultReady = stoppedResult.Wait(TDuration::Seconds(10));
+    const bool requestCompletedBeforeRelease = requestB.Wait(TDuration::MilliSeconds(100));
     continueCreateTable.set_value();
+    ASSERT_TRUE(stoppedResultReady);
+    ASSERT_EQ(stoppedResult.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
+    ASSERT_FALSE(requestCompletedBeforeRelease);
     ASSERT_TRUE(requestB.Wait(TDuration::Seconds(10)));
     ASSERT_TRUE(requestB.ExtractValueSync().IsSuccess());
 
@@ -459,117 +598,65 @@ TEST(TableTest, DriverStopDoesNotAffectOtherDriver) {
     ASSERT_TRUE(secondResultB.IsSuccess());
 }
 
-TEST(TableTest, DropLastOwnersFromResponseCallbackDoesNotDeadlock) {
+TEST(TableTest, AsyncDriverStopFromResponseCallbackThenDropsOwners) {
+    struct TOwners {
+        std::unique_ptr<TDriver> Driver;
+        std::unique_ptr<NTable::TTableClient> TableClient;
+        std::unique_ptr<NTable::TSession> TableSession;
+    };
+
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;
-    std::unique_ptr<TDriver> driver;
-    std::unique_ptr<NTable::TTableClient> tableClient;
-    std::unique_ptr<NTable::TSession> tableSession;
+    auto owners = std::make_shared<TOwners>();
 
     StartServerWithTableService(
         tableService,
         grpcServer,
-        driver,
-        tableClient,
-        tableSession
-    );
+        owners->Driver,
+        owners->TableClient,
+        owners->TableSession);
 
-    std::weak_ptr<TGRpcConnectionsImpl> connections = CreateInternalInterface(*driver);
+    std::weak_ptr<TGRpcConnectionsImpl> connections = CreateInternalInterface(*owners->Driver);
 
     {
-        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
+        auto pooledSessionResult = owners->TableClient->GetSession().ExtractValueSync();
         ASSERT_TRUE(pooledSessionResult.IsSuccess());
         auto pooledSession = pooledSessionResult.GetSession();
     }
 
-    std::promise<void> createTableStarted;
-    auto createTableStartedFuture = createTableStarted.get_future();
+    auto createTableStarted = std::make_shared<std::promise<void>>();
+    auto createTableStartedFuture = createTableStarted->get_future();
     std::promise<void> continueCreateTable;
-    tableService.CreateTableStarted = &createTableStarted;
+    tableService.CreateTableStarted = std::move(createTableStarted);
     tableService.ContinueCreateTable = continueCreateTable.get_future().share();
 
-    std::promise<void> callbackDone;
-    auto callbackDoneFuture = callbackDone.get_future();
-    std::atomic_bool success = false;
+    auto callbackDone = std::make_shared<std::promise<void>>();
+    auto callbackDoneFuture = callbackDone->get_future();
+    auto success = std::make_shared<std::atomic_bool>(false);
 
-    auto requestFuture = tableSession->CreateTable(
-        "/Root/My/DB/drop_owners",
-        NTable::TTableBuilder().Build()
-    );
-
-    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
-
-    requestFuture.Subscribe([&](const NThreading::TFuture<TStatus>& future) mutable {
-        success.store(future.GetValue().IsSuccess());
-        tableSession.reset();
-        tableClient.reset();
-        driver.reset();
-        callbackDone.set_value();
-    });
-
-    continueCreateTable.set_value();
-
-    ASSERT_EQ(callbackDoneFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
-    ASSERT_TRUE(success.load());
-    ASSERT_TRUE(WaitUntil([&] {
-        return connections.expired();
-    }));
-    ASSERT_EQ(tableService.DeleteSessionRequests.load(), 2u);
-}
-
-TEST(TableTest, DriverStopFromResponseCallbackThenDropOwnersDoesNotDeadlock) {
-    TMockTableService tableService;
-    std::unique_ptr<grpc::Server> grpcServer;
-    std::unique_ptr<TDriver> driver;
-    std::unique_ptr<NTable::TTableClient> tableClient;
-    std::unique_ptr<NTable::TSession> tableSession;
-
-    StartServerWithTableService(
-        tableService,
-        grpcServer,
-        driver,
-        tableClient,
-        tableSession
-    );
-
-    std::weak_ptr<TGRpcConnectionsImpl> connections = CreateInternalInterface(*driver);
-
-    {
-        auto pooledSessionResult = tableClient->GetSession().ExtractValueSync();
-        ASSERT_TRUE(pooledSessionResult.IsSuccess());
-        auto pooledSession = pooledSessionResult.GetSession();
-    }
-
-    std::promise<void> createTableStarted;
-    auto createTableStartedFuture = createTableStarted.get_future();
-    std::promise<void> continueCreateTable;
-    tableService.CreateTableStarted = &createTableStarted;
-    tableService.ContinueCreateTable = continueCreateTable.get_future().share();
-
-    std::promise<void> callbackDone;
-    auto callbackDoneFuture = callbackDone.get_future();
-    std::atomic_bool success = false;
-
-    auto requestFuture = tableSession->CreateTable(
+    auto requestFuture = owners->TableSession->CreateTable(
         "/Root/My/DB/driver_stop_drop_owners",
-        NTable::TTableBuilder().Build()
-    );
+        NTable::TTableBuilder().Build());
 
-    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    const auto createStarted = createTableStartedFuture.wait_for(std::chrono::seconds(10));
+    if (createStarted != std::future_status::ready) {
+        continueCreateTable.set_value();
+    }
+    ASSERT_EQ(createStarted, std::future_status::ready);
 
-    requestFuture.Subscribe([&](const NThreading::TFuture<TStatus>& future) mutable {
-        success.store(future.GetValue().IsSuccess());
-        driver->Stop(true);
-        tableSession.reset();
-        tableClient.reset();
-        driver.reset();
-        callbackDone.set_value();
+    requestFuture.Subscribe([owners, callbackDone, success](const NThreading::TFuture<TStatus>& future) mutable {
+        success->store(future.GetValue().IsSuccess());
+        owners->Driver->Stop(false);
+        owners->TableSession.reset();
+        owners->TableClient.reset();
+        owners->Driver.reset();
+        callbackDone->set_value();
     });
 
     continueCreateTable.set_value();
 
     ASSERT_EQ(callbackDoneFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
-    ASSERT_TRUE(success.load());
+    ASSERT_TRUE(success->load());
     ASSERT_TRUE(WaitUntil([&] {
         return connections.expired();
     }));

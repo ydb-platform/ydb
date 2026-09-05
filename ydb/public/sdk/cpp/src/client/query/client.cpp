@@ -73,6 +73,7 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
         , Settings_(settings)
+        , SessionCleanupContext_(Connections_->CreateContext())
         , SessionPool_(
             Settings_.SessionPoolSettings_.MaxActiveSessions_,
             Settings_.SessionPoolSettings_.MinPoolSize_
@@ -94,6 +95,39 @@ public:
     ~TImpl() {
         auto sessions = SessionPool_.GetCurrentPoolSize();
         while (sessions-- > 0) {
+            SessionPool_.RecordSessionClosed(NSessionPool::NSessionCloseCommands::PoolGracefulShutdown.Reason);
+        }
+    }
+
+    void InitStopper() {
+        std::weak_ptr<TImpl> weak = shared_from_this();
+        DbDriverState_->AddCb([weak] {
+            if (auto strong = weak.lock()) {
+                auto promise = NThreading::NewPromise<void>();
+                auto future = promise.GetFuture();
+                auto context = strong->SessionCleanupContext_;
+                strong->Connections_->ScheduleCallback(
+                    TDuration::Zero(),
+                    [strong, promise](bool) mutable {
+                        NThreading::NImpl::SetValue(promise, [&] {
+                            strong->Drain();
+                        });
+                    },
+                    std::move(context));
+                return future;
+            }
+            return NThreading::TFuture<void>{};
+        }, TDbDriverState::ENotifyType::STOP);
+    }
+
+    void Drain() {
+        std::vector<std::unique_ptr<TKqpSessionCommon>> sessions;
+        sessions.reserve(Settings_.SessionPoolSettings_.MaxActiveSessions_);
+        SessionPool_.Drain([&sessions](std::unique_ptr<TKqpSessionCommon>&& session) {
+            sessions.push_back(std::move(session));
+            return true;
+        }, true);
+        for (auto count = sessions.size(); count > 0; --count) {
             SessionPool_.RecordSessionClosed(NSessionPool::NSessionCloseCommands::PoolGracefulShutdown.Reason);
         }
     }
@@ -603,15 +637,6 @@ public:
                 }
             }
 
-            void ScheduleOnDeadlineWaiterCleanup() override {
-                Client->Connections_->ScheduleDelayedTask(
-                    [client = Client]() {
-                        client->SessionPool_.ClearOldWaiters();
-                    },
-                    GetDeadline()
-                );
-            }
-
             TDeadline GetDeadline() const override {
                 return std::min(RpcSettings.Deadline, TDeadline::AfterDuration(NSessionPool::MAX_WAIT_SESSION_TIMEOUT));
             }
@@ -628,7 +653,17 @@ public:
 
         auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings);
         auto future = ctx->GetFuture();
-        SessionPool_.GetSession(std::move(ctx));
+        if (Connections_->IsStopping()) {
+            ctx->ReplyError(TStatus(TPlainStatus(EStatus::CLIENT_CANCELLED, "Driver is stopped")));
+        } else {
+            SessionPool_.GetSession(std::move(ctx), [this](TDeadline deadline) {
+                Connections_->ScheduleDelayedTask(
+                    [client = shared_from_this()] {
+                        client->SessionPool_.ClearOldWaiters();
+                    },
+                    deadline);
+            });
+        }
 
         return future;
     }
@@ -736,12 +771,14 @@ private:
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram_;
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram_;
 
+    std::shared_ptr<NYdbGrpc::IQueueClientContext> SessionCleanupContext_;
     NSessionPool::TSessionPool SessionPool_;
 };
 
 TQueryClient::TQueryClient(const TDriver& driver, const TClientSettings& settings)
     : Impl_(new TQueryClient::TImpl(CreateInternalInterface(driver), settings))
 {
+    Impl_->InitStopper();
     Impl_->StartPeriodicSessionPoolTask();
 }
 

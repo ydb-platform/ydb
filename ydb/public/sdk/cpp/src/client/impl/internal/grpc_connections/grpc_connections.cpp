@@ -1,14 +1,22 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "grpc_connections.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/runtime/runtime.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/client_pid.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
 
+#include <util/generic/scope.h>
+
 #include <string>
+#include <thread>
 #include <utility>
 
-
 namespace NYdb::inline Dev {
+
+bool IsSdkRuntimeCallback() noexcept;
 
 namespace {
 
@@ -23,10 +31,6 @@ TPlainStatus InitFailedStatus(const std::exception* e = nullptr) {
     return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, message);
 }
 
-TPlainStatus InitCancelledStatus() {
-    return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
-}
-
 TCredentialsWaitResult ReadyResult(const NThreading::TFuture<void>& future) {
     try {
         future.GetValue();
@@ -38,30 +42,55 @@ TCredentialsWaitResult ReadyResult(const NThreading::TFuture<void>& future) {
     }
 }
 
+NThreading::TFuture<void> MakeFreshReadyFuture() {
+    auto promise = NThreading::NewPromise<void>();
+    auto future = promise.GetFuture();
+    promise.SetValue();
+    return future;
+}
+
+TDuration GetTimeout(TDeadline deadline) {
+    const auto remaining = deadline.GetTimePoint() - TDeadline::Clock::now();
+    return remaining <= TDeadline::Duration::zero()
+        ? TDuration::Zero()
+        : TDuration::MicroSeconds(
+            std::chrono::ceil<std::chrono::microseconds>(remaining).count());
+}
+
 } // anonymous namespace
+
+void TGRpcConnectionsImpl::PostCallbackImpl(
+    TCallbackCounter counter,
+    std::function<void()> callback) {
+    GetSdkRuntime().PostImpl(
+        [producer = TCallbackProducer(std::move(counter)), callback = std::move(callback)]() mutable {
+            Y_SCOPE_EXIT(&callback) {
+                callback = nullptr;
+            };
+            callback();
+        });
+}
 
 NThreading::TFuture<void> TGRpcConnectionsImpl::CredentialsReadyToWaitFor(
     const TDbDriverStatePtr& dbState,
     const TRpcRequestSettings& requestSettings,
-    const IQueueClientContextPtr& context) const
-{
+    const IQueueClientContextPtr& context) const {
     if (!requestSettings.UseAuth) {
         return {};
     }
     auto ready = dbState->GetCredentialsReady();
     return ready.HasValue() && !(context && context->IsCancelled())
-        ? NThreading::TFuture<void>{}
-        : ready;
+               ? NThreading::TFuture<void>{}
+               : ready;
 }
 
 void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
     const TRpcRequestSettings& requestSettings,
     IQueueClientContextPtr& context,
     NThreading::TFuture<void> credentialsReady,
-    TCredentialsCallback callback)
-{
+    TCredentialsCallback callback) {
     if (!TryCreateContext(context)) {
-        callback(InitCancelledStatus());
+        callback(MakeClientStoppedStatus());
         return;
     }
 
@@ -74,23 +103,13 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
         cancelled.SetValue();
     }
 
-    auto scheduleContext = context;
-    auto scheduleCallback = [this, scheduleContext, driverScope = DriverScope_]
-        (TDeadline deadline, std::function<void(bool)> callback) {
-        // Future continuations may outlive TGRpcConnectionsImpl. Acquire the guard before
-        // dereferencing this, so destruction either waits for scheduling or prevents it.
-        driverScope->RunGuarded(
-            [&] {
-                const auto now = TDeadline::Clock::now();
-                const auto timeout = deadline.GetTimePoint() <= now
-                    ? TDuration::Zero()
-                    : TDuration::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(
-                        deadline.GetTimePoint() - now).count());
-                // Register the callback directly on the alarm. ScheduleFuture(timeout).Subscribe(...)
-                // may run the callback inline when the future becomes ready before Subscribe().
-                ScheduleCallback(timeout, std::move(callback), scheduleContext);
-            },
-            [&] { callback(false); });
+    auto scheduleCallback = [this, scheduleContext = context, callbackCounter = CallbackCounter_](TDeadline deadline, std::function<void(bool)> callback) {
+        PostCallbackImpl(
+            callbackCounter,
+            [this, deadline, scheduleContext, callback = std::move(callback)]() mutable {
+                // Register directly on the alarm: a ready future may run Subscribe() inline.
+                ScheduleCallback(GetTimeout(deadline), std::move(callback), scheduleContext);
+            });
     };
 
     NThreading::TFuture<TCredentialsWaitResult> wait;
@@ -98,7 +117,7 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
         auto status = ReadyResult(credentialsReady);
         wait = NThreading::MakeFuture(status || !cancelled.HasValue()
             ? std::move(status)
-            : TCredentialsWaitResult(InitCancelledStatus()));
+            : TCredentialsWaitResult(MakeClientStoppedStatus()));
     } else {
         auto result = NThreading::NewPromise<TCredentialsWaitResult>();
         wait = result.GetFuture();
@@ -106,7 +125,7 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
             result.TrySetValue(ReadyResult(future));
         });
         cancelled.GetFuture().Subscribe([result](const NThreading::TFuture<void>&) mutable {
-            result.TrySetValue(InitCancelledStatus());
+            result.TrySetValue(MakeClientStoppedStatus());
         });
         if (requestSettings.Deadline != TDeadline::Max()) {
             scheduleCallback(requestSettings.Deadline,
@@ -114,7 +133,7 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
                     result.TrySetValue(scheduledSuccessfully
                         ? TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
                             "Request deadline exceeded while waiting for credentials")
-                        : InitCancelledStatus());
+                        : MakeClientStoppedStatus());
                 });
         }
     }
@@ -126,7 +145,7 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
             (bool scheduledSuccessfully) mutable {
                 callback(scheduledSuccessfully
                     ? std::move(status)
-                    : TCredentialsWaitResult(InitCancelledStatus()));
+                    : TCredentialsWaitResult(MakeClientStoppedStatus()));
             });
     });
 }
@@ -151,18 +170,11 @@ std::string GetAuthInfo(TDbDriverStatePtr p) {
             throw TAuthenticationError("token is incorrect, illegal characters found");
         }
         return token;
-    } catch (const TAuthenticationError& e) {
-        throw;
-    } catch (const TYdbException& e) {
+    } catch (const TYdbException&) {
         throw;
     } catch (const std::exception& e) {
         throw TAuthenticationError(TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what());
     }
-}
-
-void SetDatabaseHeader(TCallMeta& meta, const std::string& database) {
-    // See TDbDriverStateTracker::GetDriverState to find place where we do quote non ASCII characters
-    meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 }
 
 std::string CreateSDKBuildInfo() {
@@ -187,124 +199,9 @@ std::string BuildFullBuildInfo(const IConnectionsParams& params, bool includeObs
     return result;
 }
 
-template<class TDerived>
-class TScheduledObject : public TThrRefBase {
-    using TSelf = TScheduledObject<TDerived>;
-    using TPtr = TIntrusivePtr<TSelf>;
-
-    Y_FORCE_INLINE TDerived* Derived() {
-        return static_cast<TDerived*>(this);
-    }
-
-    void Complete(bool ok) {
-        bool entered = true;
-        std::unique_ptr<NYdbGrpc::IQueueClientCallbackGuard> guard;
-        if (CallbackGuardFactory) {
-            guard = CallbackGuardFactory();
-            entered = !guard || guard->IsEntered();
-        }
-        Derived()->OnComplete(entered ? ok : false);
-    }
-
-protected:
-    TScheduledObject() { }
-
-    void Start(TDuration timeout, IQueueClientContextProvider* provider) {
-        CallbackGuardFactory = provider->GetCallbackGuardFactory();
-        auto context = provider->CreateContext();
-        if (!context) {
-            Complete(false);
-            return;
-        }
-
-        auto deadline = gpr_time_add(
-            gpr_now(GPR_CLOCK_MONOTONIC),
-            gpr_time_from_micros(timeout.MicroSeconds(), GPR_TIMESPAN));
-
-        {
-            std::lock_guard guard(Mutex);
-            Context = context;
-            Alarm.Set(context->CompletionQueue(), deadline, OnAlarmTag.Prepare());
-        }
-
-        context->SubscribeCancel([self = TPtr(this)] {
-            self->Alarm.Cancel();
-        });
-    }
-
-private:
-    void OnAlarm(bool ok) {
-        {
-            std::lock_guard guard(Mutex);
-            // Break circular dependencies
-            Context.reset();
-        }
-
-        Complete(ok);
-    }
-
-private:
-    std::mutex Mutex;
-    IQueueClientContextPtr Context;
-    grpc::Alarm Alarm;
-    TQueueClientCallbackGuardFactory CallbackGuardFactory;
-
-private:
-    using TFixedEvent = NYdbGrpc::TQueueClientFixedEvent<TSelf>;
-
-    TFixedEvent OnAlarmTag = { this, &TSelf::OnAlarm };
-};
-
-class TScheduledCallback : public TScheduledObject<TScheduledCallback> {
-    using TBase = TScheduledObject<TScheduledCallback>;
-
-public:
-    using TCallback = std::function<void(bool)>;
-
-    TScheduledCallback(TCallback&& callback)
-        : Callback(std::move(callback))
-    { }
-
-    void Start(TDuration timeout, IQueueClientContextProvider* provider) {
-        TBase::Start(timeout, provider);
-    }
-
-    void OnComplete(bool ok) {
-        auto callback = std::move(Callback);
-        callback(ok);
-    }
-
-private:
-    TCallback Callback;
-};
-
-class TScheduledFuture : public TScheduledObject<TScheduledFuture> {
-    using TBase = TScheduledObject<TScheduledFuture>;
-
-public:
-    TScheduledFuture()
-        : Promise(NThreading::NewPromise<bool>())
-    { }
-
-    NThreading::TFuture<bool> Start(TDuration timeout, IQueueClientContextProvider* provider) {
-        auto future = Promise.GetFuture();
-
-        TBase::Start(timeout, provider);
-
-        return future;
-    }
-
-    void OnComplete(bool ok) {
-        Promise.SetValue(ok);
-        Promise = { };
-    }
-
-private:
-    NThreading::TPromise<bool> Promise;
-};
-
 TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params)
-    : MetricRegistryPtr_(nullptr)
+    : CallbackCounter_(std::make_shared<std::atomic_uint64_t>(0))
+    , StopNotification_(MakeFreshReadyFuture())
     , ClientThreadsNum_(params->GetClientThreadsNum())
     , DefaultDiscoveryEndpoint_(params->GetEndpoint())
     , SslCredentials_(params->GetSslCredentials())
@@ -338,14 +235,13 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
     , GRpcClientLow_(NetworkThreadsNum_)
-    , Log(params->GetLog())
-    , DriverScope_(GetSdkRuntime().CreateDriverScope(GRpcClientLow_))
-{
+    , Log(params->GetLog()) {
+}
+
+void TGRpcConnectionsImpl::Start() {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     if (SocketIdleTimeout_ != TDeadline::Duration::max()) {
-        auto channelPoolUpdateWrapper = [this]
-            (NYdb::NIssue::TIssues&&, EStatus status) mutable
-        {
+        auto channelPoolUpdateWrapper = [this](NYdb::NIssue::TIssues&&, EStatus status) mutable {
             if (status != EStatus::SUCCESS) {
                 return false;
             }
@@ -356,14 +252,6 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
         AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ / 10);
     }
 #endif
-    if (params->GetExecutor()) {
-        ResponseQueue_ = params->GetExecutor();
-    } else {
-        // TAdaptiveThreadPool ignores params
-        ResponseQueue_ = CreateThreadPoolExecutor(ClientThreadsNum_, MaxQueuedRequests_);
-    }
-
-    ResponseQueue_->Start();
     if (!DefaultDatabase_.empty()) {
         DefaultState_ = StateTracker_.GetDriverState(
             DefaultDatabase_,
@@ -375,110 +263,110 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     }
 }
 
-TGRpcConnectionsImpl::~TGRpcConnectionsImpl() {
-    Stop(true);
-    DriverScope_->CloseCallbacksAndWait();
-}
-
 bool TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback() noexcept {
-    return TDriverScope::IsCurrentThreadInCallback();
+    return IsSdkRuntimeCallback() || NYdbGrpc::IsGRpcCompletionThread();
 }
 
 void TGRpcConnectionsDeleter::operator()(TGRpcConnectionsImpl* connections) const noexcept {
-    if (!connections) {
-        return;
+    auto states = connections->StateTracker_.GetStates();
+    connections->Stop();
+    try {
+        std::thread([connections, states = std::move(states)]() mutable {
+            connections->StopNotification_.Wait();
+            connections->GRpcClientLow_.Stop(true);
+            connections->WaitCallbacks();
+            for (auto& state : states) {
+                state->ResetCredentials();
+            }
+            connections->WaitCallbacks();
+            connections->DefaultState_.reset();
+            states.clear();
+            connections->StateTracker_.WaitEmpty();
+            connections->WaitCallbacks();
+            delete connections;
+        }).detach();
+    } catch (...) {
+        Y_ABORT("Failed to destroy YDB driver asynchronously");
     }
-
-    connections->DriverScope_->DeferOrRun([connections] {
-        delete connections;
-    });
 }
 
 void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
-    std::shared_ptr<IQueueClientContext> context;
-    if (!TryCreateContext(context)) {
-        NYdb::NIssue::TIssues issues;
-        DriverScope_->RunGuarded(
-            [&] { cb(std::move(issues), EStatus::CLIENT_INTERNAL_ERROR); },
-            [&] { cb(std::move(issues), EStatus::CLIENT_CANCELLED); });
+    auto context = CreateContext();
+    if (!context) {
+        cb(NYdb::NIssue::TIssues{}, EStatus::CLIENT_CANCELLED);
     } else {
-        auto action = MakeIntrusive<TPeriodicAction>(
+        MakeIntrusive<TPeriodicAction>(
             std::move(cb),
             this,
             std::move(context),
-            period);
-        action->Start();
+            period)
+            ->Start();
     }
 }
 
 void TGRpcConnectionsImpl::PostToResponseQueue(std::function<void()>&& f) {
-    auto driverScope = DriverScope_;
-    ResponseQueue_->Post([f = std::move(f), driverScope = std::move(driverScope)]() mutable {
-        driverScope->RunGuarded(
-            [&] { auto callback = std::move(f); callback(); },
-            [] {});
-    });
+    PostCallback(
+        [callback = std::move(f)]() mutable {
+            callback();
+        });
 }
 
 void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline) {
-    auto cbLow = [this, fn = std::move(fn)](bool ok) mutable {
+    std::shared_ptr<IQueueClientContext> context;
+    if (!TryCreateContext(context)) {
+        GetSdkRuntime().AsyncSleep(GetTimeout(deadline)).Subscribe(
+            [fn = std::move(fn)](const NThreading::TFuture<void>&) mutable {
+                fn();
+            });
+        return;
+    }
+
+    auto cbLow = [this, fn = std::move(fn), context](bool ok) mutable {
         if (!ok) {
             return;
         }
 
-        // Enqueue to user pool
-        auto resp = new TSimpleCbResult(std::move(fn));
-        EnqueueResponse(resp);
+        PostCallback([fn = std::move(fn), context = std::move(context)]() mutable {
+            fn();
+        });
     };
-
-    std::shared_ptr<IQueueClientContext> context;
-    if (!TryCreateContext(context)) {
-        cbLow(false);
-        return;
-    }
 
     if (deadline <= TDeadline::Now()) {
         cbLow(true);
         return;
     }
 
-    auto action = MakeIntrusive<TDelayedAction>(
+    MakeIntrusive<TDelayedAction>(
         std::move(cbLow),
         this,
         std::move(context),
-        deadline);
-    action->Start();
+        deadline)->Start();
 }
 
 void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay) {
     ScheduleDelayedTask(std::move(fn), TDeadline::AfterDuration(delay));
 }
 
-NThreading::TFuture<bool> TGRpcConnectionsImpl::ScheduleFuture(
-        TDuration timeout,
-        IQueueClientContextPtr context)
-{
-    IQueueClientContextProvider* provider = context.get();
-    if (!provider) {
-        provider = this;
-    }
-
-    return MakeIntrusive<TScheduledFuture>()
-        ->Start(timeout, provider);
-}
-
 void TGRpcConnectionsImpl::ScheduleCallback(
-        TDuration timeout,
-        std::function<void(bool)> callback,
-        IQueueClientContextPtr context)
-{
-    IQueueClientContextProvider* provider = context.get();
-    if (!provider) {
-        provider = this;
+    TDuration timeout,
+    std::function<void(bool)> callback,
+    IQueueClientContextPtr context) {
+    if (!context) {
+        context = CreateContext();
+    }
+    if (!context) {
+        callback(false);
+        return;
     }
 
-    return MakeIntrusive<TScheduledCallback>(std::move(callback))
-        ->Start(timeout, provider);
+    auto completion = [this, callback = std::move(callback)](bool ok) mutable {
+        PostCallback([callback = std::move(callback), ok]() mutable {
+            callback(ok);
+        });
+    };
+    MakeIntrusive<TDelayedAction>(
+        std::move(completion), this, std::move(context), TDeadline::AfterDuration(timeout))
+        ->Start();
 }
 
 TDbDriverStatePtr TGRpcConnectionsImpl::GetDriverState(
@@ -486,8 +374,7 @@ TDbDriverStatePtr TGRpcConnectionsImpl::GetDriverState(
     const std::optional<std::string>& discoveryEndpoint,
     const std::optional<EDiscoveryMode>& discoveryMode,
     const std::optional<TSslCredentials>& sslCredentials,
-    const std::optional<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
-) {
+    const std::optional<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory) {
     return StateTracker_.GetDriverState(
         database.value_or(DefaultDatabase_),
         discoveryEndpoint.value_or(DefaultDiscoveryEndpoint_),
@@ -497,38 +384,47 @@ TDbDriverStatePtr TGRpcConnectionsImpl::GetDriverState(
 }
 
 IQueueClientContextPtr TGRpcConnectionsImpl::CreateContext() {
-    return DriverScope_->CreateContext();
-}
+    if (IsStopping()) {
+        return {};
+    }
 
-TQueueClientCallbackGuardFactory TGRpcConnectionsImpl::GetCallbackGuardFactory() {
-    return DriverScope_->GetCallbackGuardFactory();
+    auto context = GRpcClientLow_.CreateContext();
+    if (context && IsStopping()) {
+        context->Cancel();
+        context.reset();
+    }
+    return context;
 }
 
 bool TGRpcConnectionsImpl::TryCreateContext(IQueueClientContextPtr& context) {
     if (!context) {
         // Keep CQ running until the request is complete
         context = CreateContext();
-        if (!context) {
-            return false;
-        }
     }
-    return true;
+    return bool(context);
 }
 
-void TGRpcConnectionsImpl::Stop(bool wait) {
-    auto driverScope = DriverScope_;
-    StateTracker_.SendNotification(
-        TDbDriverState::ENotifyType::STOP,
-        [driverScope = std::move(driverScope)](TDbDriverState::TCb& cb) {
-            return driverScope->RunGuarded(
-                [&] { return cb(); },
-                [] { return NThreading::MakeFuture(); });
-        }).Wait();
-    DriverScope_->Cancel();
-    GRpcClientLow_.Stop(wait);
-    if (wait) {
-        StopResponseQueue();
-        DriverScope_->WaitCallbacksDrained();
+bool TGRpcConnectionsImpl::IsStopping() const noexcept {
+    return Stopping_.load(std::memory_order_acquire);
+}
+
+void TGRpcConnectionsImpl::Stop() {
+    if (!Stopping_.exchange(true, std::memory_order_acq_rel)) {
+        try {
+            StopNotification_ = StateTracker_.SendNotification(TDbDriverState::ENotifyType::STOP);
+        } catch (...) {
+            // StopNotification_ is already ready; shutdown must stay non-throwing.
+            (void)0;
+        }
+        GRpcClientLow_.StopGracefully(false);
+    }
+}
+
+void TGRpcConnectionsImpl::WaitCallbacks() const noexcept {
+    auto count = CallbackCounter_->load(std::memory_order_acquire);
+    while (count) {
+        CallbackCounter_->wait(count, std::memory_order_acquire);
+        count = CallbackCounter_->load(std::memory_order_acquire);
     }
 }
 
@@ -559,16 +455,22 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
     request.set_database(TStringType{dbState->Database});
 
     auto promise = NThreading::NewPromise<TListEndpointsResult>();
+    std::weak_ptr<TDbDriverState> weakState = dbState;
 
-    auto extractor = [promise]
-        (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Discovery::ListEndpointsResult result;
-            if (any) {
-                any->UnpackTo(&result);
-            }
-            TListEndpointsResult val{result, status};
-            promise.SetValue(std::move(val));
-        };
+    auto extractor = [this, promise, weakState](google::protobuf::Any* any, TPlainStatus status) mutable {
+        Ydb::Discovery::ListEndpointsResult result;
+        if (any) {
+            any->UnpackTo(&result);
+        }
+        auto strong = weakState.lock();
+        TListEndpointsResult value{result, status};
+        if (strong && value.DiscoveryStatus.IsTransportError()) {
+            strong->StatCollector.IncDiscoveryFailDueTransportError();
+        }
+        NThreading::NImpl::SetValue(promise, [&] {
+            return MutateDiscovery(std::move(value), strong.get());
+        });
+    };
 
     TRpcRequestSettings rpcSettings;
     rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
@@ -582,21 +484,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
         INITIAL_DEFERRED_CALL_DELAY,
         rpcSettings);
 
-    std::weak_ptr<TDbDriverState> weakState = dbState;
-
-    auto driverScope = DriverScope_;
-    return promise.GetFuture().Apply([this, weakState, driverScope = std::move(driverScope)](NThreading::TFuture<TListEndpointsResult> future){
-        auto strong = weakState.lock();
-        auto result = future.ExtractValue();
-        return driverScope->RunGuarded(
-            [&] {
-                if (strong && result.DiscoveryStatus.IsTransportError()) {
-                    strong->StatCollector.IncDiscoveryFailDueTransportError();
-                }
-                return NThreading::MakeFuture<TListEndpointsResult>(MutateDiscovery(std::move(result), strong.get()));
-            },
-            [&] { return NThreading::MakeFuture<TListEndpointsResult>(std::move(result)); });
-    });
+    return promise.GetFuture();
 }
 
 TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TDbDriverState* dbDriverState) {
@@ -676,27 +564,6 @@ void TGRpcConnectionsImpl::SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&
 
 const TLog& TGRpcConnectionsImpl::GetLog() const {
     return Log;
-}
-
-void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
-    auto driverScope = DriverScope_;
-    ResponseQueue_->Post([action, driverScope = std::move(driverScope)]() {
-        driverScope->RunGuarded(
-            [&] { action->Process(nullptr); },
-            [&] {
-                if (auto* response = dynamic_cast<TQueueResponse*>(action)) {
-                    response->Cancel();
-                } else {
-                    delete action;
-                }
-            });
-    });
-}
-
-void TGRpcConnectionsImpl::StopResponseQueue() {
-    std::call_once(ResponseQueueStopOnce_, [this] {
-        ResponseQueue_->Stop();
-    });
 }
 
 TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState) const {

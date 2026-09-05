@@ -1624,9 +1624,9 @@ TSessionInspectorFn TSession::TImpl::GetSessionInspector(
 
 TTableClient::TTableClient(const TDriver& driver, const TClientSettings& settings)
     : Impl_(new TImpl(CreateInternalInterface(driver), settings)) {
+    Impl_->InitStopper();
     Impl_->StartPeriodicSessionPoolTask();
     Impl_->StartPeriodicHostScanTask();
-    Impl_->InitStopper();
 }
 
 TAsyncCreateSessionResult TTableClient::CreateSession(const TCreateSessionSettings& settings) {

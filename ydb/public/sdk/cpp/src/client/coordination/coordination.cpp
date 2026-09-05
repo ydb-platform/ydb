@@ -211,10 +211,10 @@ public:
             LocalContext = context;
             ConnectionState = EConnectionState::CONNECTING;
         }
-        DoConnectRequest(context);
-        context->SubscribeStop([self = TPtr(this)] {
+        context->SubscribeCancel([self = TPtr(this)] {
             self->Stop();
         });
+        DoConnectRequest(context);
     }
 
     void Stop() {
@@ -334,16 +334,13 @@ private:
     struct TDescribeSemaphoreOp : public TSimpleOp {
         const std::string Name;
         TDescribeSemaphoreSettings Settings;
-        NYdbGrpc::TQueueClientCallbackGuardFactory CallbackGuardFactory;
         TPromise<TDescribeSemaphoreResult> Promise = NewPromise<TDescribeSemaphoreResult>();
 
         TDescribeSemaphoreOp(
                 const std::string& name,
-                const TDescribeSemaphoreSettings& settings,
-                NYdbGrpc::TQueueClientCallbackGuardFactory callbackGuardFactory)
+                const TDescribeSemaphoreSettings& settings)
             : Name(name)
             , Settings(settings)
-            , CallbackGuardFactory(std::move(callbackGuardFactory))
         {}
 
         void FillRequest(TRequest& req, uint64_t reqId) const override {
@@ -362,9 +359,7 @@ private:
             } else if (Settings.OnChanged_) {
                 std::function<void(bool)> callback;
                 callback.swap(Settings.OnChanged_);
-                NYdbGrpc::RunQueueClientCallback(CallbackGuardFactory, [&] {
-                    callback(false);
-                });
+                callback(false);
             }
         }
     };
@@ -535,10 +530,7 @@ private:
         if (IsClosed()) {
             return MakeClosedResult<TSemaphoreDescription>();
         }
-        auto op = std::make_unique<TDescribeSemaphoreOp>(
-            name,
-            settings,
-            Connections_->GetCallbackGuardFactory());
+        auto op = std::make_unique<TDescribeSemaphoreOp>(name, settings);
         auto future = op->Promise.GetFuture();
         if (IsWriteAllowed()) {
             DoSendSimpleOp(std::move(op));
@@ -913,13 +905,6 @@ private:
     }
 
 private:
-    template<class TCallback>
-    void RunUserCallback(TCallback&& callback) {
-        NYdbGrpc::RunQueueClientCallback(
-            Connections_->GetCallbackGuardFactory(),
-            std::forward<TCallback>(callback));
-    }
-
     void OnProcessorStatus(TStatus status) {
         std::shared_ptr<IQueueClientContext> context;
         TDbDriverStatePtr dbDriverState;
@@ -1093,14 +1078,10 @@ private:
 
         if (stopped) {
             if (notifyExpired && Settings_.OnStateChanged_) {
-                RunUserCallback([this] {
-                    Settings_.OnStateChanged_(ESessionState::EXPIRED);
-                });
+                Settings_.OnStateChanged_(ESessionState::EXPIRED);
             }
             if (Settings_.OnStopped_) {
-                RunUserCallback([this] {
-                    Settings_.OnStopped_();
-                });
+                Settings_.OnStopped_();
             }
             return;
         }
@@ -1302,9 +1283,7 @@ private:
         }
 
         if (detached && Settings_.OnStateChanged_) {
-            RunUserCallback([this] {
-                Settings_.OnStateChanged_(ESessionState::DETACHED);
-            });
+            Settings_.OnStateChanged_(ESessionState::DETACHED);
         }
 
         if (sessionStartTimeoutContext) {
@@ -1518,13 +1497,9 @@ private:
                     }
                 }
                 if (expired && Settings_.OnStateChanged_) {
-                    RunUserCallback([this] {
-                        Settings_.OnStateChanged_(ESessionState::EXPIRED);
-                    });
+                    Settings_.OnStateChanged_(ESessionState::EXPIRED);
                 } else if (detached && Settings_.OnStateChanged_) {
-                    RunUserCallback([this] {
-                        Settings_.OnStateChanged_(ESessionState::DETACHED);
-                    });
+                    Settings_.OnStateChanged_(ESessionState::DETACHED);
                 }
                 return false;
             }
@@ -1555,9 +1530,7 @@ private:
                     }
                 }
                 if (Settings_.OnStateChanged_) {
-                    RunUserCallback([this] {
-                        Settings_.OnStateChanged_(ESessionState::ATTACHED);
-                    });
+                    Settings_.OnStateChanged_(ESessionState::ATTACHED);
                 }
                 if (replyPromise.Initialized()) {
                     // If there are no listeners session destructor will be immediately called outside of the lock
@@ -1600,9 +1573,7 @@ private:
                     Y_ABORT_UNLESS(SessionState != ESessionState::ATTACHED);
                 }
                 if (expired && Settings_.OnStateChanged_) {
-                    RunUserCallback([this] {
-                        Settings_.OnStateChanged_(ESessionState::EXPIRED);
-                    });
+                    Settings_.OnStateChanged_(ESessionState::EXPIRED);
                 }
                 return false;
             }
@@ -1639,9 +1610,7 @@ private:
                     supersededPromise.SetValue(TResult<bool>(std::move(status), false));
                 }
                 if (acceptedCallback) {
-                    RunUserCallback([callback = std::move(acceptedCallback)] {
-                        callback();
-                    });
+                    acceptedCallback();
                 }
                 return true;
             }
@@ -1722,9 +1691,7 @@ private:
                     }
                 }
                 if (callback) {
-                    RunUserCallback([callback = std::move(callback), triggered] {
-                        callback(triggered);
-                    });
+                    callback(triggered);
                 }
                 return true;
             }

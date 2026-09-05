@@ -18,6 +18,7 @@ DEPENDS(
 PEERDIR(
     contrib/libs/openssl
     library/cpp/testing/common
+    ydb/core/kqp/opt/rbo/verification/benchmark_policy
     ydb/core/kqp/ut/common
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg

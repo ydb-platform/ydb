@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from itertools import combinations, permutations
 from math import factorial
-from typing import Callable, Iterator, Mapping, TypeAlias
+from typing import Callable, Iterator, Literal, Mapping, TypeAlias
 
-from . import decimal, smt, sort_network
+from . import decimal, join as join_kernel, smt, sort_network, sort_strategy
+from .analysis import AnalysisError, AnalyzedPlan, analyze_snapshot
 from .ir import (
     Aggregate,
     AggregateTrait,
@@ -34,7 +35,6 @@ from .ir import (
     WINDOW_ROWS_KINDS,
     expression_columns,
     plan_node_inputs,
-    validate_snapshot,
 )
 from .scalar import (
     DecimalAverageState,
@@ -47,6 +47,11 @@ from .scalar import (
 )
 from .scalar import Value, date_domain, integer_domain, smt_sort
 from .types import BOOL, DATE, DOUBLE, family, is_decimal_type, is_ordered_type
+from .value_transport import (
+    ValueTransportError,
+    select_scalar,
+    validated_decimal_sum_state as _validated_decimal_sum_state,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +131,25 @@ class Relation:
             raise ValueError(
                 "present-prefix relations require a fixed sequence without ordinals"
             )
+
+
+@dataclass(frozen=True, slots=True)
+class _DirectUniqueRhs:
+    """Admission tied to the exact join and provenance-checked RHS rows."""
+
+    node: Join
+    right: Relation
+
+
+@dataclass(frozen=True, slots=True)
+class _DelayedCrossPlan:
+    """A private Cross-spine proposal; the complete Filter stays authoritative."""
+
+    factors: tuple[str, ...]
+    seed: str
+    schedule: tuple[tuple[Join, tuple[JoinKey, ...]], ...]
+    local_conjuncts: Mapping[str, tuple[Expr, ...]]
+    columns: tuple[Column, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,85 +255,6 @@ class _SubplanPartial:
 
 
 NodeObserver: TypeAlias = Callable[[str, str, RelationFamily], None]
-
-
-@dataclass(frozen=True, slots=True)
-class _EvaluatorContext:
-    """Validated immutable plan metadata shared by scalar invocations."""
-
-    snapshot: Snapshot
-    nodes: Mapping[str, PlanNode]
-    schemas: Mapping[str, Mapping[str, Column]]
-    parents: Mapping[str, frozenset[str]]
-    decimal_sum_state_producers: frozenset[tuple[str, str]]
-    decimal_sum_state_consumers: frozenset[tuple[str, str]]
-    subplans_by_consumer: Mapping[str, tuple[Subplan, ...]]
-    scalar_outer_binds: Mapping[str, OuterBind]
-
-
-def _decimal_sum_state_lineages(
-    snapshot: Snapshot,
-    nodes: Mapping[str, PlanNode],
-    parents: Mapping[str, frozenset[str]],
-) -> tuple[
-    frozenset[tuple[str, str]],
-    frozenset[tuple[str, str]],
-]:
-    """Return the exact private intermediate/final SUM certificate pairs."""
-
-    exposed_roots = {
-        snapshot.plan.root,
-        *(subplan.root for subplan in snapshot.plan.subplans),
-    }
-    producers: set[tuple[str, str]] = set()
-    consumers: set[tuple[str, str]] = set()
-    for producer in snapshot.plan.nodes:
-        if (
-            not isinstance(producer, Aggregate)
-            or producer.phase != "intermediate"
-            or producer.distinct_all
-            or producer.id in exposed_roots
-            or len(parents[producer.id]) != 1
-        ):
-            continue
-        consumer = nodes[next(iter(parents[producer.id]))]
-        if (
-            not isinstance(consumer, Aggregate)
-            or consumer.phase != "final"
-            or consumer.input != producer.id
-            or consumer.keys != producer.keys
-            or consumer.distinct_all
-        ):
-            continue
-
-        for producer_trait in producer.aggregates:
-            if (
-                producer_trait.function != "sum"
-                or producer_trait.distinct
-                or producer_trait.unwrap
-                or not decimal.is_type(producer_trait.output_type)
-                or producer_trait.output in consumer.keys
-            ):
-                continue
-            uses = tuple(
-                trait
-                for trait in consumer.aggregates
-                if trait.input == producer_trait.output
-            )
-            if len(uses) != 1:
-                continue
-            consumer_trait = uses[0]
-            if (
-                consumer_trait.function != "sum"
-                or consumer_trait.distinct
-                or consumer_trait.unwrap
-                or consumer_trait.output_type != producer_trait.output_type
-                or not decimal.is_type(consumer_trait.output_type)
-            ):
-                continue
-            producers.add((producer.id, producer_trait.output))
-            consumers.add((consumer.id, consumer_trait.output))
-    return frozenset(producers), frozenset(consumers)
 
 
 @dataclass(slots=True)
@@ -441,25 +386,6 @@ def _require_grouped_distinct_capacity(
             "grouped distinct aggregate requires "
             f"{equality_terms} distinct-equality terms, exceeding "
             f"the {MAX_RELATION_ROW_PAIRS} pair construction audit bound"
-        )
-
-
-def _require_sort_construction_capacity(
-    pair_count: int,
-    network_count: int,
-    payload_cells: int,
-    key_columns: int,
-) -> None:
-    if pair_count > MAX_RELATION_ROW_PAIRS:
-        raise RelationError(
-            f"sort construction requires {pair_count} candidate-row pairs, "
-            f"exceeding the {MAX_RELATION_ROW_PAIRS} pair construction audit "
-            f"bound; its exact sorting network requires {network_count} "
-            f"comparators, {payload_cells} packed payload cells, and "
-            f"{key_columns} order columns, with limits "
-            f"{MAX_SORT_NETWORK_COMPARATORS}, "
-            f"{MAX_SORT_NETWORK_PAYLOAD_CELLS}, and "
-            f"{MAX_SORT_NETWORK_KEY_COLUMNS}"
         )
 
 
@@ -605,7 +531,7 @@ class Evaluator:
         defer_pushed_limits: bool = False,
         node_observer: NodeObserver | None = None,
         outer_bindings: Mapping[str, Value] | None = None,
-        _context: _EvaluatorContext | None = None,
+        _context: AnalyzedPlan | None = None,
         _correlated_pair_budget: _CorrelatedPairBudget | None = None,
         _boolean_subplan_pair_budget: _BooleanSubplanPairBudget | None = None,
     ) -> None:
@@ -613,65 +539,10 @@ class Evaluator:
         self.database = database
         self.scalar = scalar
         if _context is None:
-            schemas = validate_snapshot(snapshot)
-            _reject_correlated_limit_fanout(snapshot)
-            nodes = snapshot.plan.node_map()
-            subplans_by_consumer = {
-                node_id: tuple(
-                    subplan
-                    for subplan in snapshot.plan.subplans
-                    if node_id in subplan.consumers
-                )
-                for node_id in {
-                    consumer
-                    for subplan in snapshot.plan.subplans
-                    for consumer in subplan.consumers
-                }
-            }
-            scalar_outer_binds = {
-                subplan.binding: next(
-                    node
-                    for node in snapshot.plan.nodes
-                    if (
-                        isinstance(node, OuterBind)
-                        and node.id in _descendants(nodes, subplan.root)
-                    )
-                )
-                for subplan in snapshot.plan.subplans
-                if (
-                    isinstance(subplan, ScalarSubplan)
-                    and subplan.dependency is not None
-                )
-            }
-            parents: dict[str, set[str]] = {
-                node_id: set()
-                for node_id in nodes
-            }
-            for parent in snapshot.plan.nodes:
-                for child in plan_node_inputs(parent):
-                    parents[child].add(parent.id)
-            frozen_parents = {
-                node_id: frozenset(consumers)
-                for node_id, consumers in parents.items()
-            }
-            (
-                decimal_sum_state_producers,
-                decimal_sum_state_consumers,
-            ) = _decimal_sum_state_lineages(
-                snapshot,
-                nodes,
-                frozen_parents,
-            )
-            _context = _EvaluatorContext(
-                snapshot,
-                nodes,
-                schemas,
-                frozen_parents,
-                decimal_sum_state_producers,
-                decimal_sum_state_consumers,
-                subplans_by_consumer,
-                scalar_outer_binds,
-            )
+            try:
+                _context = analyze_snapshot(snapshot)
+            except AnalysisError as error:
+                raise RelationError(str(error)) from error
         elif _context.snapshot is not snapshot:
             raise RelationError(
                 "an evaluator context may only be shared by one snapshot"
@@ -1020,38 +891,7 @@ class Evaluator:
             )
 
         if isinstance(node, Filter):
-            source = self._factor_delayed_cross_filter(node)
-            if source is None:
-                source = self._input(node.id, 0, node.input)
-            return self._with_consumer_subplans(
-                node.id,
-                source,
-                lambda relation, bindings: Relation(
-                    relation.columns,
-                    tuple(
-                        Row(
-                            smt.and_(
-                                row.present,
-                                self.scalar.is_true(
-                                    self.scalar.evaluate(
-                                        node.predicate,
-                                        dict(row.values) | bindings(row_index, row),
-                                    )
-                                ),
-                            ),
-                            row.values,
-                            row.occurrence,
-                            row.partition_facts,
-                        )
-                        for row_index, row in enumerate(relation.rows)
-                    ),
-                    sequence=relation.sequence,
-                    order=relation.order,
-                    ordinals=relation.ordinals,
-                    null_safe_unique_key=relation.null_safe_unique_key,
-                    task_partition_key=relation.task_partition_key,
-                ),
-            )
+            return self._filter(node)
 
         if isinstance(node, Limit):
             return limit_family(
@@ -2048,18 +1888,39 @@ class Evaluator:
         key = (parent, ordinal)
         return self.edge_inputs[key] if key in self.edge_inputs else self.node(child)
 
-    def _factor_delayed_cross_filter(
+    def _filter(
         self,
         node: Filter,
-    ) -> RelationFamily | None:
-        """Reduce a private left-deep Cross spine under its retained Filter.
+        *,
+        encoding: Literal["auto", "baseline", "factored"] = "auto",
+    ) -> RelationFamily:
+        """Apply the whole SQL predicate after selecting an exact input encoding."""
 
-        A factor row is discarded only when its guard combined with a
-        factor-local conjunct's SQL truth test is syntactically false.
-        Necessary column equalities may also promote direct unique-RHS scans.
-        The original Filter remains intact, so neither reduction assumes that
-        any unresolved predicate is true.
-        """
+        if encoding not in {"auto", "baseline", "factored"}:
+            raise RelationError(f"unknown Filter encoding {encoding!r}")
+        source = None if encoding == "baseline" else self._factor_delayed_cross_filter(node)
+        if source is None:
+            if encoding == "factored":
+                raise RelationError("factored Filter requires an admitted private Cross spine")
+            source = self._input(node.id, 0, node.input)
+
+        def retain(relation: Relation, bindings: Callable[[int, Row], Mapping[str, Value]]) -> Relation:
+            # Filtering keeps payload, order, provenance, and key certificates.
+            # It can introduce holes, so a compact present prefix is no longer known.
+            return replace(relation, rows=tuple(
+                replace(row, present=smt.and_(row.present, self.scalar.is_true(
+                    self.scalar.evaluate(node.predicate, dict(row.values) | bindings(index, row)),
+                )))
+                for index, row in enumerate(relation.rows)
+            ), present_prefix=False)
+
+        return self._with_consumer_subplans(node.id, source, retain)
+
+    def _plan_delayed_cross_filter(
+        self,
+        node: Filter,
+    ) -> _DelayedCrossPlan | None:
+        """Admit and schedule a private spine without evaluating or pruning rows."""
 
         if (
             self.snapshot.stage_graph is not None
@@ -2152,6 +2013,22 @@ class Evaluator:
         has_keys = any(keys for _join, keys in schedule)
         if not has_keys and not any(local_conjuncts.values()):
             return None
+        return _DelayedCrossPlan(
+            factors, scheduled_seed, schedule, local_conjuncts, self._columns(node.input),
+        )
+
+    def _factor_delayed_cross_filter(self, node: Filter) -> RelationFamily | None:
+        """Execute an admitted proposal; unresolved predicates are never assumed.
+
+        Pruning removes only syntactically rejected rows. A key promotion is
+        used only after checking the evaluated RHS's exact scan provenance.
+        Neither step replaces the complete Filter applied by `_filter`.
+        """
+
+        plan = self._plan_delayed_cross_filter(node)
+        if plan is None:
+            return None
+        factors, local_conjuncts = plan.factors, plan.local_conjuncts
 
         factor_sources = {
             factor: self.node(factor)
@@ -2173,11 +2050,11 @@ class Evaluator:
                 )
                 factor_sources[factor] = filtered
                 pruned |= factor_pruned
-        if not has_keys and not pruned:
+        if not any(keys for _join, keys in plan.schedule) and not pruned:
             return None
 
-        source = factor_sources[scheduled_seed]
-        for original, keys in schedule:
+        source = factor_sources[plan.seed]
+        for original, keys in plan.schedule:
             right = factor_sources[original.right]
 
             def join_relations(
@@ -2196,7 +2073,7 @@ class Evaluator:
                 (source, right),
                 join_relations,
             )
-        columns = self._columns(node.input)
+        columns = plan.columns
         return map_family(
             source,
             lambda relation: replace(
@@ -2357,11 +2234,11 @@ class Evaluator:
             column.name: column
             for column in left.columns
         }
-        if keys and self._can_compact_direct_unique_rhs(
+        if keys and self._admit_direct_unique_rhs(
             normalized,
             right,
             left_schema=left_schema,
-        ):
+        ) is not None:
             return self._join(
                 normalized,
                 left,
@@ -2853,23 +2730,10 @@ class Evaluator:
                 "scalar subplan candidate types disagree: "
                 f"{selected.type!r} and {fallback.type!r}"
             )
-        finite_abs_bound = (
-            max(
-                selected.decimal_finite_abs_bound,
-                fallback.decimal_finite_abs_bound,
-            )
-            if (
-                selected.decimal_finite_abs_bound is not None
-                and fallback.decimal_finite_abs_bound is not None
-            )
-            else None
-        )
-        return Value(
-            selected.type,
-            smt.ite(condition, selected.is_null, fallback.is_null),
-            smt.ite(condition, selected.value, fallback.value),
-            finite_abs_bound,
-        )
+        try:
+            return select_scalar(((condition, selected),), fallback)
+        except ValueTransportError as error:
+            raise RelationError(str(error)) from error
 
     def _join(
         self,
@@ -2879,163 +2743,102 @@ class Evaluator:
         *,
         output_columns: tuple[Column, ...] | None = None,
         compact_left_schema: Mapping[str, Column] | None = None,
+        encoding: Literal["auto", "baseline", "compact"] = "auto",
     ) -> Relation:
+        """Select an exact encoding; baseline and forced compact share inputs.
+
+        IR validation supplies compatible keys, a Boolean residual, unambiguous
+        input names, and the correctly NULL-extended output schema. Family
+        choices/errors are lifted by the caller, outside either row encoding.
+        """
+
+        if encoding not in {"auto", "baseline", "compact"}:
+            raise RelationError(f"unknown join encoding {encoding!r}")
         left = _live_join_input(left)
         right = _live_join_input(right)
         matching_rows = len(left.rows) * len(right.rows)
         _require_relation_row_pairs(matching_rows, "join matching")
-        if self._can_compact_direct_unique_rhs(
-            node,
-            right,
-            left_schema=compact_left_schema,
-        ):
-            _require_relation_rows(len(left.rows), "join output")
-            # Select the unique RHS independently of the task-local left-row
-            # presence guard. Values of an absent output row are unobservable,
-            # and this keeps routed copies of one logical occurrence identical
-            # so StageGraph gather can coalesce them.
-            return self._compact_direct_unique_rhs_join(
-                node,
-                left,
-                right,
-                self._join_matches(
-                    node,
-                    left,
-                    right,
-                    include_left_presence=False,
-                ),
-                output_columns=output_columns,
+        admission = (
+            None
+            if encoding == "baseline"
+            else self._admit_direct_unique_rhs(
+                node, right, left_schema=compact_left_schema,
             )
-
-        emit_matches = node.kind not in {
-            "left_semi",
-            "right_semi",
-            "left_anti",
-            "right_anti",
-            "exclusion",
-        }
-        emit_left = node.kind in {
-            "left",
-            "full",
-            "left_anti",
-            "left_semi",
-            "exclusion",
-        }
-        emit_right = node.kind in {
-            "right",
-            "full",
-            "right_anti",
-            "right_semi",
-            "exclusion",
-        }
-        output_rows = matching_rows if emit_matches else 0
-        output_rows += len(left.rows) if emit_left else 0
-        output_rows += len(right.rows) if emit_right else 0
-        _require_relation_rows(output_rows, "join output")
-
-        matches = self._join_matches(node, left, right)
-
-        rows: list[Row] = []
-        if emit_matches:
-            for left_index, left_row in enumerate(left.rows):
-                for right_index, right_row in enumerate(right.rows):
-                    rows.append(
-                        Row(
-                            matches[left_index][right_index],
-                            dict(left_row.values) | dict(right_row.values),
-                            _derived_occurrence(
-                                "join_match",
-                                node.id,
-                                left_row.occurrence,
-                                right_row.occurrence,
-                            ),
-                            left_row.partition_facts | right_row.partition_facts,
-                        )
-                    )
-
-        if emit_left:
-            right_nulls = {
-                column.name: self.scalar.null(column.type)
-                for column in right.columns
-            }
-            for index, left_row in enumerate(left.rows):
-                matched = smt.or_(*matches[index])
-                if node.kind == "left_semi":
-                    present = smt.and_(left_row.present, matched)
-                    values = left_row.values
-                elif node.kind == "left_anti":
-                    present = smt.and_(left_row.present, smt.not_(matched))
-                    values = left_row.values
-                else:
-                    present = smt.and_(left_row.present, smt.not_(matched))
-                    values = dict(left_row.values) | right_nulls
-                rows.append(
-                    Row(
-                        present,
-                        values,
-                        _derived_occurrence(
-                            f"join_{node.kind}_left",
-                            node.id,
-                            left_row.occurrence,
-                        ),
-                        left_row.partition_facts,
-                    )
-                )
-
-        if emit_right:
-            left_nulls = {
-                column.name: self.scalar.null(column.type)
-                for column in left.columns
-            }
-            for right_index, right_row in enumerate(right.rows):
-                matched = smt.or_(*(matches[left_index][right_index] for left_index in range(len(left.rows))))
-                if node.kind == "right_semi":
-                    present = smt.and_(right_row.present, matched)
-                    values = right_row.values
-                elif node.kind == "right_anti":
-                    present = smt.and_(right_row.present, smt.not_(matched))
-                    values = right_row.values
-                else:
-                    present = smt.and_(right_row.present, smt.not_(matched))
-                    values = left_nulls | dict(right_row.values)
-                rows.append(
-                    Row(
-                        present,
-                        values,
-                        _derived_occurrence(
-                            f"join_{node.kind}_right",
-                            node.id,
-                            right_row.occurrence,
-                        ),
-                        right_row.partition_facts,
-                    )
-                )
-
-        # Inner/cross joins with an empty side simply have no candidate rows.
-        return Relation(
-            (
-                self._columns(node.id)
-                if output_columns is None
-                else output_columns
-            ),
-            tuple(rows),
         )
+        if encoding == "compact" and admission is None:
+            raise RelationError("compact join requires a provenance-checked unique RHS")
+        columns = self._columns(node.id) if output_columns is None else output_columns
+        if admission is not None:
+            _require_relation_rows(len(left.rows), "join output")
+            return self._compact_direct_unique_rhs_join(
+                admission,
+                left,
+                self._join_conditions(node, left, right),
+                columns,
+            )
+        layout = join_kernel.shape(node.kind)
+        _require_relation_rows(
+            layout.candidate_count(len(left.rows), len(right.rows)), "join output",
+        )
+        emissions = join_kernel.reference_rows(
+            layout,
+            tuple(row.present for row in left.rows),
+            tuple(row.present for row in right.rows),
+            self._join_conditions(node, left, right),
+        )
+        return Relation(columns, tuple(
+            self._join_emission(node, left, right, columns, emission)
+            for emission in emissions
+        ))
 
-    def _join_matches(
+    def _join_emission(
         self,
         node: Join,
         left: Relation,
         right: Relation,
-        *,
-        include_left_presence: bool = True,
-    ) -> list[list[smt.Term]]:
-        matches: list[list[smt.Term]] = []
+        columns: tuple[Column, ...],
+        emission: join_kernel.Emission,
+    ) -> Row:
+        """Attach payload and exact routing provenance to one kernel emission.
+
+        A matched guard implies both input presences: union their facts.
+        A one-sided guard implies only the retained input's presence: retain
+        only its facts. Occurrence tags deliberately match those two cases.
+        """
+
+        inputs = tuple(
+            source.rows[index]
+            for source, index in ((left, emission.left), (right, emission.right))
+            if index is not None
+        )
+        values = {name: value for row in inputs for name, value in row.values.items()}
+        for column in columns:
+            if column.name not in values:
+                values[column.name] = self.scalar.null(column.type)
+        role = (
+            "join_match"
+            if len(inputs) == 2
+            else f"join_{node.kind}_{'left' if emission.left is not None else 'right'}"
+        )
+        return Row(
+            emission.present,
+            values,
+            _derived_occurrence(role, node.id, *(row.occurrence for row in inputs)),
+            frozenset().union(*(row.partition_facts for row in inputs)),
+        )
+
+    def _join_conditions(
+        self,
+        node: Join,
+        left: Relation,
+        right: Relation,
+    ) -> tuple[tuple[smt.Term, ...], ...]:
+        """SQL-TRUE keys and residual only; neither input presence is included."""
+
+        conditions: list[tuple[smt.Term, ...]] = []
         for left_row in left.rows:
-            match_row: list[smt.Term] = []
+            pair_conditions: list[smt.Term] = []
             for right_row in right.rows:
-                if right_row.present == smt.FALSE:
-                    match_row.append(smt.FALSE)
-                    continue
                 values = dict(left_row.values) | dict(right_row.values)
                 key_matches = tuple(
                     self.scalar.is_true(
@@ -3046,37 +2849,31 @@ class Evaluator:
                     )
                     for key in node.keys
                 )
-                match_row.append(
+                pair_conditions.append(
                     smt.and_(
-                        *(
-                            (left_row.present,)
-                            if include_left_presence
-                            else ()
-                        ),
-                        right_row.present,
                         *key_matches,
                         self.scalar.is_true(self.scalar.evaluate(node.predicate, values)),
                     )
                 )
-            matches.append(match_row)
-        return matches
+            conditions.append(tuple(pair_conditions))
+        return tuple(conditions)
 
-    def _can_compact_direct_unique_rhs(
+    def _admit_direct_unique_rhs(
         self,
         node: Join,
         right: Relation,
         *,
         left_schema: Mapping[str, Column] | None = None,
-    ) -> bool:
+    ) -> _DirectUniqueRhs | None:
         right_node = self._direct_unique_rhs_scan(
             node,
             left_schema=left_schema,
         )
         if right_node is None:
-            return False
+            return None
         expected_columns = tuple(self.schemas[right_node.id].values())
         if right.columns != expected_columns:
-            return False
+            return None
 
         source = self.database.relations[right_node.table]
         expected_outputs = {column.name for column in expected_columns}
@@ -3085,7 +2882,7 @@ class Evaluator:
             if row.present == smt.FALSE:
                 continue
             if set(row.values) != expected_outputs:
-                return False
+                return None
             occurrence = row.occurrence
             if not (
                 occurrence is not None
@@ -3094,21 +2891,21 @@ class Evaluator:
                 and occurrence.ordinal is not None
                 and not occurrence.inputs
             ):
-                return False
+                return None
             slot = occurrence.ordinal
             if slot in seen_slots or not 0 <= slot < len(source.rows):
-                return False
+                return None
             seen_slots.add(slot)
             source_row = source.rows[slot]
             if not _syntactically_implies(row.present, source_row.present):
-                return False
+                return None
             for mapping in right_node.columns:
                 if (
                     row.values.get(mapping.output)
                     != source_row.values[mapping.source]
                 ):
-                    return False
-        return True
+                    return None
+        return _DirectUniqueRhs(node, right)
 
     def _direct_unique_rhs_scan(
         self,
@@ -3161,13 +2958,22 @@ class Evaluator:
 
     def _compact_direct_unique_rhs_join(
         self,
-        node: Join,
+        admission: _DirectUniqueRhs,
         left: Relation,
-        right: Relation,
-        rhs_selectors: list[list[smt.Term]],
-        *,
-        output_columns: tuple[Column, ...] | None = None,
+        conditions: tuple[tuple[smt.Term, ...], ...],
+        columns: tuple[Column, ...],
     ) -> Relation:
+        """One slot per LHS, valid only after uniqueness/provenance admission.
+
+        RHS selectors intentionally omit LHS presence. An absent output's
+        payload is unobservable; stable selectors let routed copies coalesce.
+        """
+
+        node, right = admission.node, admission.right
+        rhs_selectors = tuple(
+            tuple(smt.and_(row.present, condition) for row, condition in zip(right.rows, pair_conditions))
+            for pair_conditions in conditions
+        )
         rows: list[Row] = []
         for left_index, left_row in enumerate(left.rows):
             matched = smt.and_(
@@ -3198,14 +3004,7 @@ class Evaluator:
                     left_row.partition_facts,
                 )
             )
-        return Relation(
-            (
-                self._columns(node.id)
-                if output_columns is None
-                else output_columns
-            ),
-            tuple(rows),
-        )
+        return Relation(columns, tuple(rows))
 
     def _columns(self, node_id: str) -> tuple[Column, ...]:
         return tuple(self.schemas[node_id].values())
@@ -3321,24 +3120,6 @@ def _finish_decimal_sum_value(
         decimal_sum_state=state if carry_state else None,
     )
 
-
-def _validated_decimal_sum_state(
-    value: Value,
-    nullable: bool,
-) -> DecimalSumState | None:
-    """Return a certificate only when it exactly reconstructs its scalar."""
-
-    state = value.decimal_sum_state
-    if (
-        not isinstance(state, DecimalSumState)
-        or state.sum_type != value.type
-        or state.finite_abs_bound != value.decimal_finite_abs_bound
-        or value.is_null
-        != (smt.not_(state.any_non_null) if nullable else smt.FALSE)
-        or value.value != decimal.finish_sum_state(state)
-    ):
-        return None
-    return state
 
 
 def _finish_decimal_average(
@@ -3650,69 +3431,6 @@ def single(relation: Relation) -> RelationFamily:
     return RelationFamily((Outcome(smt.TRUE, relation, smt.FALSE),))
 
 
-def _descendants(
-    nodes: Mapping[str, PlanNode],
-    root: str,
-) -> frozenset[str]:
-    reached: set[str] = set()
-    pending = [root]
-    while pending:
-        node_id = pending.pop()
-        if node_id in reached:
-            continue
-        reached.add(node_id)
-        pending.extend(plan_node_inputs(nodes[node_id]))
-    return frozenset(reached)
-
-
-def _reject_correlated_limit_fanout(snapshot: Snapshot) -> None:
-    """Fail closed when two Limit branches observe one latent stream order."""
-
-    nodes = snapshot.plan.node_map()
-    parents: dict[str, set[str]] = {node_id: set() for node_id in nodes}
-    for parent in snapshot.plan.nodes:
-        for child in plan_node_inputs(parent):
-            parents[child].add(parent.id)
-
-    cache: dict[str, frozenset[str]] = {}
-    ordered: dict[str, bool] = {}
-
-    def has_sequence(node_id: str) -> bool:
-        if node_id not in ordered:
-            node = nodes[node_id]
-            if isinstance(node, Sort):
-                result = True
-            elif isinstance(node, (Project, Filter, OuterBind, Limit)):
-                result = has_sequence(node.input)
-            else:
-                result = False
-            ordered[node_id] = result
-        return ordered[node_id]
-
-    def reachable_limits(node_id: str) -> frozenset[str]:
-        if node_id not in cache:
-            limits = {node_id} if isinstance(nodes[node_id], Limit) else set()
-            if not isinstance(nodes[node_id], (Sort, Aggregate, Join, UnionAll)):
-                for parent in parents[node_id]:
-                    limits.update(reachable_limits(parent))
-            cache[node_id] = frozenset(limits)
-        return cache[node_id]
-
-    for child, consumers in parents.items():
-        if snapshot.stage_graph is None and has_sequence(child):
-            continue
-        for left, right in combinations(sorted(consumers), 2):
-            left_limits = reachable_limits(left)
-            right_limits = reachable_limits(right)
-            if left_limits - right_limits and right_limits - left_limits:
-                distinct = (left_limits - right_limits) | (right_limits - left_limits)
-                raise RelationError(
-                    f"shared stream {child!r} feeds independently ordered Limit "
-                    f"branches {', '.join(sorted(distinct))}; correlated fan-out "
-                    "is not modeled"
-                )
-
-
 def map_family(
     family: RelationFamily,
     transform: Callable[[Relation], Relation],
@@ -3768,6 +3486,17 @@ def _strip_integral_average_certificates(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _FamilyProduct:
+    """One compatible partial product, before the operator combines its rows."""
+
+    enabled: smt.Term = smt.TRUE
+    relations: tuple[Relation, ...] = ()
+    errors: tuple[smt.Term, ...] = ()
+    decisions: tuple[tuple[str, int], ...] = ()
+    choices: tuple[BoundedChoice, ...] = ()
+
+
 def combine_families(
     families: tuple[RelationFamily, ...],
     combine: Callable[[tuple[Relation, ...]], Relation],
@@ -3778,39 +3507,21 @@ def combine_families(
 ) -> RelationFamily:
     """Take a compatible product, preserving choices and observable errors."""
 
-    partials: list[
-        tuple[
-            smt.Term,
-            tuple[Relation, ...],
-            tuple[smt.Term, ...],
-            tuple[tuple[str, int], ...],
-            tuple[BoundedChoice, ...],
-        ]
-    ] = [
-        (smt.TRUE, (), (), (), ())
-    ]
+    partials = [_FamilyProduct()]
     for relation_family in families:
-        expanded: list[
-            tuple[
-                smt.Term,
-                tuple[Relation, ...],
-                tuple[smt.Term, ...],
-                tuple[tuple[str, int], ...],
-                tuple[BoundedChoice, ...],
-            ]
-        ] = []
-        for enabled, relations, errors, decisions, choices in partials:
+        expanded: list[_FamilyProduct] = []
+        for partial in partials:
             for outcome in relation_family.outcomes:
-                merged = _merge_decisions(decisions, outcome.decisions)
+                merged = _merge_decisions(partial.decisions, outcome.decisions)
                 if merged is None:
                     continue
                 expanded.append(
-                    (
-                        smt.and_(enabled, outcome.enabled),
-                        relations + (outcome.relation,),
-                        errors + (outcome.error,),
+                    _FamilyProduct(
+                        smt.and_(partial.enabled, outcome.enabled),
+                        partial.relations + (outcome.relation,),
+                        partial.errors + (outcome.error,),
                         merged,
-                        _merge_choices(choices, outcome.choices),
+                        _merge_choices(partial.choices, outcome.choices),
                     )
                 )
                 if len(expanded) > MAX_OUTCOME_ALTERNATIVES:
@@ -3824,19 +3535,65 @@ def combine_families(
     return RelationFamily(
         tuple(
             Outcome(
-                enabled,
-                combine(relations),
+                partial.enabled,
+                combine(partial.relations),
                 (
-                    smt.or_(*errors)
+                    smt.or_(*partial.errors)
                     if combine_errors is None
-                    else combine_errors(relations, errors)
+                    else combine_errors(partial.relations, partial.errors)
                 ),
-                decisions,
-                choices,
+                partial.decisions,
+                partial.choices,
             )
-            for enabled, relations, errors, decisions, choices in partials
+            for partial in partials
         )
     )
+
+
+def _choose_sort_encoding(
+    source: RelationFamily,
+    order: tuple[SortOrder, ...],
+    *,
+    compact_prefix: bool,
+    requested: sort_strategy.Encoding,
+) -> sort_strategy.Plan:
+    """Measure the input without allocating symbols; delegate policy decisions."""
+
+    if not order:
+        raise RelationError("sort order must not be empty")
+    _require_order_columns(source.columns, order, "sort")
+    unique_order = all(
+        _order_covers_unique_key(outcome.relation, order)
+        for outcome in source.outcomes
+    )
+    live_counts = tuple(_live_row_count(outcome.relation) for outcome in source.outcomes)
+    trivial = all(count <= 1 for count in live_counts)
+    costs = sort_strategy.Costs(
+        row_pairs=sum(_unordered_row_pairs(count) for count in live_counts),
+        comparators=sum(_sorting_network_cost(count) for count in live_counts),
+        payload_cells=sum(
+            _sorting_network_payload_cells(outcome.relation)
+            for outcome in source.outcomes
+        ),
+        key_columns=len(order),
+        unique_order=unique_order,
+        enumerated=len(source.outcomes) == 1 and _use_enumerated_sequences(source),
+        trivial=trivial,
+        # The modeled StageGraph has two producer tasks. This is a cost hint,
+        # not a Sort semantic assumption: a compact prefix reduces Merge work.
+        merge_pairs=(
+            max((_unordered_row_pairs(2 * count) for count in live_counts), default=0)
+            if compact_prefix else 0
+        ),
+    )
+    limits = sort_strategy.Limits(
+        MAX_RELATION_ROW_PAIRS, MAX_SORT_NETWORK_COMPARATORS,
+        MAX_SORT_NETWORK_PAYLOAD_CELLS, MAX_SORT_NETWORK_KEY_COLUMNS,
+    )
+    try:
+        return sort_strategy.choose(costs, limits, requested)
+    except ValueError as error:
+        raise RelationError(str(error)) from error
 
 
 def sort_family(
@@ -3846,106 +3603,39 @@ def sort_family(
     decision: str,
     *,
     compact_prefix: bool = False,
+    encoding: sort_strategy.Encoding = "auto",
 ) -> RelationFamily:
-    """Represent every tie-respecting Sort sequence exactly.
+    """All tie-respecting sequences, with an independently selected exact encoding.
 
-    A single-outcome family with at most three candidate rows stays
-    quantifier-free for solver performance.  Moderate full sorts use bounded
-    ordinal choices.  A certified complete unique key makes the SQL order
-    total, so predecessor counts provide its sole sequence without choices.
-    Larger sorts, and TopSort inputs whose selected prefix must be compacted
-    before a downstream Merge, use a fixed compare-exchange network with
-    finite tie ranks.  Each representation is selected under explicit
-    construction budgets.
+    Enumerated permutations are the tiny-domain reference. Ordinal choices and
+    compare-exchange networks represent the same sequence language; a complete
+    unique-key certificate permits deterministic predecessor ranks instead.
     """
 
-    if not order:
-        raise RelationError("sort order must not be empty")
-    _require_order_columns(source.columns, order, "sort")
-    unique_order = all(
-        _order_covers_unique_key(outcome.relation, order)
-        for outcome in source.outcomes
-    )
-    if all(_live_row_count(outcome.relation) <= 1 for outcome in source.outcomes):
-        outcomes: list[Outcome] = []
-        for source_outcome in source.outcomes:
-            relation = source_outcome.relation
-            columns = {column.name for column in relation.columns}
-            missing = [item.column for item in order if item.column not in columns]
-            if missing:
-                raise RelationError(
-                    f"sort columns are absent: {', '.join(missing)}"
-                )
-            outcomes.append(
-                Outcome(
-                    source_outcome.enabled,
-                    Relation(
-                        relation.columns,
-                        relation.rows,
-                        sequence=True,
-                        order=order,
-                        null_safe_unique_key=relation.null_safe_unique_key,
-                        task_partition_key=relation.task_partition_key,
-                    ),
-                    source_outcome.error,
-                    source_outcome.decisions,
-                    source_outcome.choices,
-                )
-            )
-        return RelationFamily(tuple(outcomes))
-    pair_count = sum(
-        _unordered_row_pairs(_live_row_count(outcome.relation))
-        for outcome in source.outcomes
-    )
-    network_count = sum(
-        _sorting_network_cost(_live_row_count(outcome.relation))
-        for outcome in source.outcomes
-    )
-    payload_cells = sum(
-        _sorting_network_payload_cells(outcome.relation)
-        for outcome in source.outcomes
-    )
-    network_fits = (
-        network_count <= MAX_SORT_NETWORK_COMPARATORS
-        and payload_cells <= MAX_SORT_NETWORK_PAYLOAD_CELLS
-        and len(order) <= MAX_SORT_NETWORK_KEY_COLUMNS
-    )
-    if (
-        network_fits
-        and (
-            pair_count > MAX_RELATION_ROW_PAIRS
-            or (
-                compact_prefix
-                and any(
-                    # The v1 StageGraph has two symbolic producer tasks.
-                    # Compact only when retaining their shaped local slots
-                    # would make the downstream Merge exceed the pair cap.
-                    _unordered_row_pairs(
-                        2 * _live_row_count(outcome.relation)
-                    )
-                    > MAX_RELATION_ROW_PAIRS
-                    for outcome in source.outcomes
-                )
-            )
-        )
-    ):
-        return _sorting_network_family(
-            source,
-            order,
-            script,
-            decision,
-            deterministic_ties=unique_order,
-        )
-    _require_sort_construction_capacity(
-        pair_count,
-        network_count,
-        payload_cells,
-        len(order),
-    )
-    if unique_order:
+    plan = _choose_sort_encoding(source, order, compact_prefix=compact_prefix, requested=encoding)
+    if plan.encoding == "trivial":
+        return map_family(source, lambda relation: Relation(
+            relation.columns, relation.rows, sequence=True, order=order,
+            null_safe_unique_key=relation.null_safe_unique_key,
+            task_partition_key=relation.task_partition_key,
+        ))
+    if plan.encoding == "unique":
         return _unique_order_family(source, order)
-    if len(source.outcomes) == 1 and _use_enumerated_sequences(source):
+    if plan.encoding == "enumerated":
         return _enumerated_sort_family(source, order, decision)
+    if plan.encoding == "network":
+        return _sorting_network_family(source, order, script, decision, deterministic_ties=plan.unique_order)
+    return _ordinal_sort_family(source, order, script, decision)
+
+
+def _ordinal_sort_family(
+    source: RelationFamily,
+    order: tuple[SortOrder, ...],
+    script: smt.Script,
+    decision: str,
+) -> RelationFamily:
+    """Constrain each live row to one tie-respecting ordinal permutation."""
+
     outcomes: list[Outcome] = []
     for source_outcome in source.outcomes:
         relation = source_outcome.relation
@@ -5485,27 +5175,10 @@ def _select_ordered_singleton_value(
             "ordered singleton cannot select hidden AVG metadata"
         )
 
-    is_null = fallback.is_null
-    value = fallback.value
-    for guard, alternative in reversed(candidates):
-        is_null = smt.ite(guard, alternative.is_null, is_null)
-        value = smt.ite(guard, alternative.value, value)
-
-    finite_bounds = tuple(
-        alternative.decimal_finite_abs_bound
-        for alternative in alternatives + (fallback,)
-    )
-    finite_bound = (
-        None
-        if any(bound is None for bound in finite_bounds)
-        else max(bound for bound in finite_bounds if bound is not None)
-    )
-    return Value(
-        first.type,
-        is_null,
-        value,
-        finite_bound,
-    )
+    try:
+        return select_scalar(candidates, fallback)
+    except ValueTransportError as error:
+        raise RelationError(str(error)) from error
 
 
 def _ordered_singleton_fallback(column: Column) -> Value:
@@ -5853,38 +5526,15 @@ def _select_limit_value(
     if any(value.type != first.type for value in alternatives[1:]):
         raise RelationError("singleton limit value alternatives have different types")
 
-    is_null = first.is_null
-    value = first.value
-    for index, alternative in enumerate(alternatives[1:], start=1):
-        selected = smt.eq(choice, smt.int_value(index))
-        is_null = smt.ite(selected, alternative.is_null, is_null)
-        value = smt.ite(selected, alternative.value, value)
-
-    finite_bounds = tuple(
-        alternative.decimal_finite_abs_bound
-        for alternative in alternatives
+    if any(value.average_metadata is not None for value in alternatives):
+        raise RelationError("singleton limit cannot select hidden AVG metadata")
+    # Match the existing right-biased selector order exactly; slot zero is the
+    # fallback, while larger matching indices take precedence.
+    candidates = tuple(
+        (smt.eq(choice, smt.int_value(index)), value)
+        for index, value in enumerate(alternatives[1:], start=1)
     )
-    finite_bound = (
-        None
-        if any(bound is None for bound in finite_bounds)
-        else max(bound for bound in finite_bounds if bound is not None)
-    )
-
-    metadata = tuple(
-        alternative.average_metadata
-        for alternative in alternatives
-    )
-    if any(item is not None for item in metadata):
-        raise RelationError(
-            "singleton limit cannot select hidden AVG metadata"
-        )
-
-    return Value(
-        first.type,
-        is_null,
-        value,
-        finite_bound,
-    )
+    return select_scalar(tuple(reversed(candidates)), first)
 
 
 def _uint64_literal(expression: Expr, description: str) -> int:

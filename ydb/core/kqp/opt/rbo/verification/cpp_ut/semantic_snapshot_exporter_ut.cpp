@@ -20201,6 +20201,16 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(Q51AdmissionIsDeterministicAcrossEquivalentAllocations) {
+        for (const bool split : {false, true}) {
+            const auto first = ExportQ51WindowPlan(EQ51WindowMutation::None, split);
+            const auto second = ExportQ51WindowPlan(EQ51WindowMutation::None, split);
+            UNIT_ASSERT_C(first.IsSupported(), first.UnsupportedReason);
+            UNIT_ASSERT_C(second.IsSupported(), second.UnsupportedReason);
+            UNIT_ASSERT_VALUES_EQUAL(first.Json, second.Json);
+        }
+    }
+
     Y_UNIT_TEST(ExportsExactQ51RowsWindowsAndAggregateDataflow) {
         for (const bool split : {false, true}) {
             const auto snapshot = ParseSupported(

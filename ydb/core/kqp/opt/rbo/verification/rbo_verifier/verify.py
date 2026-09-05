@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, TypeAlias
 
 from . import smt
+from .analysis import AnalysisError, ValidatedPlan, analyze_validated
 from .ir import (
     Aggregate,
     Filter,
@@ -458,8 +459,10 @@ def _build_problem(
         raise SchemaMismatch("root output arity differs")
     if before.plan.output != after.plan.output:
         raise SchemaMismatch("root output names or order differ")
-    before_output = before.output_schema()
-    after_output = after.output_schema()
+    before_validated = ValidatedPlan(before)
+    after_validated = ValidatedPlan(after)
+    before_output = before_validated.output_schema
+    after_output = after_validated.output_schema
     for index, (left, right) in enumerate(zip(before_output, after_output)):
         if left.type != right.type:
             raise SchemaMismatch(
@@ -471,6 +474,8 @@ def _build_problem(
                 f"{left.nullable!r} and {right.nullable!r}"
             )
     try:
+        before_analysis = analyze_validated(before_validated)
+        after_analysis = analyze_validated(after_validated)
         script = smt.Script(timeout_ms)
         database = Database(before, row_bound, script)
         scalar = ScalarEncoder(script)
@@ -497,6 +502,7 @@ def _build_problem(
                 scalar,
                 choice_scope="before:logical",
                 node_observer=observed_before,
+                _context=before_analysis,
             ).root()
             if before.stage_graph is None
             else StageEvaluator(
@@ -505,6 +511,7 @@ def _build_problem(
                 scalar,
                 router,
                 node_observer=observed_before,
+                _context=before_analysis,
             ).root()
         )
         after_family = (
@@ -514,6 +521,7 @@ def _build_problem(
                 scalar,
                 choice_scope="after:logical",
                 node_observer=observed_after,
+                _context=after_analysis,
             ).root()
             if after.stage_graph is None
             else StageEvaluator(
@@ -523,6 +531,7 @@ def _build_problem(
                 router,
                 node_observer=observed_after,
                 edge_observer=after_edge_observer,
+                _context=after_analysis,
             ).root()
         )
         if boundary_observer is not None:
@@ -534,7 +543,7 @@ def _build_problem(
             mismatch = comparison.mismatch
         else:
             mismatch = family_mismatch(before_family, after_family, scalar)
-    except (RelationError, StageError, smt.SmtError) as error:
+    except (AnalysisError, RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error
     semantic_mismatch = MismatchBranch(
         "semantic_mismatch",

@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, TypeAlias
 
-from . import decimal, smt
+from . import smt
+from .analysis import AnalysisError, AnalyzedPlan, analyze_snapshot
 from .ir import (
     Column,
     INTEGRAL_AVG_RANK_COMPARISON,
@@ -15,7 +16,6 @@ from .ir import (
     StageEdge,
     stage_input_slots,
     stage_task_counts,
-    validate_snapshot,
 )
 from .relation import (
     Database,
@@ -26,21 +26,15 @@ from .relation import (
     Relation,
     RelationFamily,
     Row,
-    _validated_decimal_sum_state,
     combine_families,
     limit_family,
     map_family,
     merge_family,
     single,
 )
-from .scalar import (
-    DecimalAverageState,
-    DecimalSumState,
-    Encoder as ScalarEncoder,
-    IntegralAverageState,
-    Value,
-)
+from .scalar import Encoder as ScalarEncoder, Value
 from .types import DOUBLE, family
+from .value_transport import ValueTransportError, merge_exclusive_values
 
 
 TASKS = 2
@@ -112,6 +106,8 @@ class Evaluator:
         router: Router,
         node_observer: NodeObserver | None = None,
         edge_observer: EdgeObserver | None = None,
+        *,
+        _context: AnalyzedPlan | None = None,
     ) -> None:
         if snapshot.stage_graph is None:
             raise StageError("snapshot has no StageGraph")
@@ -122,10 +118,18 @@ class Evaluator:
         self.router = router
         self.node_observer = node_observer
         self.edge_observer = edge_observer
-        self.schemas = validate_snapshot(snapshot)
+        if _context is None:
+            try:
+                _context = analyze_snapshot(snapshot)
+            except AnalysisError as error:
+                raise StageError(str(error)) from error
+        elif _context.snapshot is not snapshot:
+            raise StageError("an evaluator context may only be shared by one snapshot")
+        self._context = _context
+        self.schemas = _context.schemas
         self.task_counts = stage_task_counts(snapshot)
         self.stages = self.graph.stage_map()
-        self.nodes = snapshot.plan.node_map()
+        self.nodes = _context.nodes
         self.incoming = {
             stage.id: tuple(sorted(
                 (edge for edge in self.graph.edges if edge.consumer == stage.id),
@@ -209,6 +213,7 @@ class Evaluator:
                     },
                     choice_scope=f"stage:{stage.id}:task:{task}",
                     node_observer=self.node_observer,
+                    _context=self._context,
                 )
                 for task in range(task_count)
             ]
@@ -229,6 +234,7 @@ class Evaluator:
             choice_scope=f"stage:{stage.id}:task:0",
             defer_pushed_limits=True,
             node_observer=self.node_observer if stage.source_storage is None else None,
+            _context=self._context,
         )
         if stage.source_storage is None:
             return {
@@ -292,6 +298,7 @@ class Evaluator:
                 choice_scope=f"stage:{stage.id}:task:{task}",
                 defer_pushed_limits=True,
                 node_observer=self.node_observer,
+                _context=self._context,
             )
             for task, partition in enumerate(scan_partitions)
         )
@@ -593,159 +600,17 @@ def _merge_exclusive_rows(rows: list[Row], columns: tuple[Column, ...]) -> Row:
     ):
         raise StageError("exclusive row compaction received overlapping task copies")
 
-    values = {}
-    for column in columns:
-        alternatives = [row.values[column.name] for row in rows]
-        if any(value.type != alternatives[0].type for value in alternatives[1:]):
-            raise StageError("exclusive row compaction received different value types")
-        bounds = [value.decimal_finite_abs_bound for value in alternatives]
-        bound = (
-            None
-            if any(item is None for item in bounds)
-            else max(item for item in bounds if item is not None)
-        )
-        is_null = alternatives[-1].is_null
-        value = alternatives[-1].value
-        for row, alternative in reversed(list(zip(rows[:-1], alternatives[:-1]))):
-            is_null = smt.ite(row.present, alternative.is_null, is_null)
-            value = smt.ite(row.present, alternative.value, value)
-        average_states = [
-            alternative.average_metadata
-            for alternative in alternatives
-        ]
-        average_state = None
-        if any(state is not None for state in average_states):
-            if any(state is None for state in average_states):
-                raise StageError(
-                    "exclusive row compaction mixed AVG state and scalar values"
-                )
-            states = [state for state in average_states if state is not None]
-            if any(type(state) is not type(states[0]) for state in states[1:]):
-                raise StageError(
-                    "exclusive row compaction received different AVG state types"
-                )
-            first_state = states[0]
-            if isinstance(first_state, DecimalAverageState):
-                if any(
-                    not isinstance(state, DecimalAverageState)
-                    or state.sum_type != first_state.sum_type
-                    for state in states[1:]
-                ):
-                    raise StageError(
-                        "exclusive row compaction received different Decimal "
-                        "AVG state layouts"
-                    )
-                decimal_states = [
-                    state
-                    for state in states
-                    if isinstance(state, DecimalAverageState)
-                ]
-                state_sum = decimal_states[-1].sum
-                state_count = decimal_states[-1].count
-                for row, state in reversed(
-                    list(zip(rows[:-1], decimal_states[:-1]))
-                ):
-                    state_sum = smt.ite(row.present, state.sum, state_sum)
-                    state_count = smt.ite(row.present, state.count, state_count)
-                average_state = DecimalAverageState(
-                    sum_type=first_state.sum_type,
-                    sum=state_sum,
-                    count=state_count,
-                    finite_abs_bound=max(
-                        state.finite_abs_bound for state in decimal_states
-                    ),
-                    count_bound=max(state.count_bound for state in decimal_states),
-                )
-            elif isinstance(first_state, IntegralAverageState):
-                integral_states = [
-                    state
-                    for state in states
-                    if isinstance(state, IntegralAverageState)
-                ]
-                state_count = integral_states[-1].count
-                state_minimum = integral_states[-1].minimum
-                state_maximum = integral_states[-1].maximum
-                for row, state in reversed(
-                    list(zip(rows[:-1], integral_states[:-1]))
-                ):
-                    state_count = smt.ite(row.present, state.count, state_count)
-                    state_minimum = smt.ite(
-                        row.present,
-                        state.minimum,
-                        state_minimum,
-                    )
-                    state_maximum = smt.ite(
-                        row.present,
-                        state.maximum,
-                        state_maximum,
-                    )
-                average_state = IntegralAverageState(
-                    count=state_count,
-                    minimum=state_minimum,
-                    maximum=state_maximum,
-                    count_bound=max(state.count_bound for state in integral_states),
-                )
-            else:
-                raise StageError(
-                    "exclusive row compaction received unsupported AVG metadata"
-                )
-        sum_states = [
-            _validated_decimal_sum_state(alternative, column.nullable)
-            for alternative in alternatives
-        ]
-        sum_state = None
-        if (
-            average_state is None
-            and all(isinstance(state, DecimalSumState) for state in sum_states)
-        ):
-            states = [
-                state
-                for state in sum_states
-                if isinstance(state, DecimalSumState)
-            ]
-            first_state = states[0]
-            if all(
-                state.sum_type == first_state.sum_type
-                for state in states[1:]
-            ):
-                def select_state_term(attribute: str) -> smt.Term:
-                    term = getattr(states[-1], attribute)
-                    for row, state in reversed(
-                        list(zip(rows[:-1], states[:-1]))
-                    ):
-                        term = smt.ite(
-                            row.present,
-                            getattr(state, attribute),
-                            term,
-                        )
-                    return term
-
-                sum_state = DecimalSumState(
-                    sum_type=first_state.sum_type,
-                    any_non_null=select_state_term("any_non_null"),
-                    has_nan=select_state_term("has_nan"),
-                    has_pos_inf=select_state_term("has_pos_inf"),
-                    has_neg_inf=select_state_term("has_neg_inf"),
-                    finite_total=select_state_term("finite_total"),
-                    finite_abs_bound=max(
-                        state.finite_abs_bound for state in states
-                    ),
-                )
-                is_null = (
-                    smt.not_(sum_state.any_non_null)
-                    if column.nullable
-                    else smt.FALSE
-                )
-                value = decimal.finish_sum_state(sum_state)
-                bound = sum_state.finite_abs_bound
-        values[column.name] = Value(
-            alternatives[0].type,
-            is_null,
-            value,
-            bound,
-            average_metadata=average_state,
-            decimal_sum_state=sum_state,
-        )
+    try:
+        values = {
+            column.name: merge_exclusive_values(
+                tuple(row.present for row in rows),
+                tuple(row.values[column.name] for row in rows),
+                nullable=column.nullable,
+            )
+            for column in columns
+        }
+    except ValueTransportError as error:
+        raise StageError(str(error)) from error
 
     common_facts = set(rows[0].partition_facts)
     for row in rows[1:]:

@@ -2525,8 +2525,8 @@ class CorrelatedScalarSubplanEvaluationTest(unittest.TestCase):
         database = Database(snapshot, 2, script)
         with mock.patch.object(
             relation,
-            "validate_snapshot",
-            wraps=relation.validate_snapshot,
+            "analyze_snapshot",
+            wraps=relation.analyze_snapshot,
         ) as validate:
             Evaluator(snapshot, database, ScalarEncoder(script)).root()
         self.assertEqual(validate.call_count, 1)

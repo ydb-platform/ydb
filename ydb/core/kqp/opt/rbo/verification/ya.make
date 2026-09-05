@@ -3,22 +3,28 @@ PY3_LIBRARY()
 PY_SRCS(
     rbo_verifier/__init__.py
     rbo_verifier/__main__.py
+    rbo_verifier/analysis.py
     rbo_verifier/cli.py
     rbo_verifier/decimal.py
     rbo_verifier/ir.py
+    rbo_verifier/join.py
     rbo_verifier/relation.py
     rbo_verifier/scalar.py
     rbo_verifier/smt.py
     rbo_verifier/sort_network.py
+    rbo_verifier/sort_strategy.py
     rbo_verifier/stages.py
     rbo_verifier/string_order.py
     rbo_verifier/types.py
+    rbo_verifier/value_transport.py
     rbo_verifier/verify.py
+    rbo_verifier/window_admission.py
 )
 
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark_policy/ut
     benchmark_ut
     bisect_ut
     confirmation_ut

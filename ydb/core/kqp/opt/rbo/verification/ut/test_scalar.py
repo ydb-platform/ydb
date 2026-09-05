@@ -24,6 +24,10 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
     MAX_DATE,
     integer_bounds,
 )
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.value_transport import (
+    ValueTransportError,
+    select_scalar,
+)
 
 
 def _literal(scalar_type, value):
@@ -1879,6 +1883,63 @@ class IntegralAverageCarrierTest(unittest.TestCase):
             script.render().count('"integral_int64_average_at_most_two"'),
             1,
         )
+
+
+class ScalarValueTransportTest(unittest.TestCase):
+    def test_selection_preserves_payload_order_and_discards_sum_proof_hints(self):
+        script = smt.Script()
+        first = script.fresh_constant("first", smt.BOOL)
+        second = script.fresh_constant("second", smt.BOOL)
+        hint = decimal.DecimalSumState(
+            sum_type="Decimal(35,2)",
+            any_non_null=smt.TRUE,
+            has_nan=smt.FALSE,
+            has_pos_inf=smt.FALSE,
+            has_neg_inf=smt.FALSE,
+            finite_total=smt.int_value(3),
+            finite_abs_bound=3,
+        )
+        hinted = Value(
+            hint.sum_type, smt.FALSE, decimal.finish_sum_state(hint), 3,
+            decimal_sum_state=hint,
+        )
+        nullable = Value(hint.sum_type, smt.TRUE, smt.int_value(7), 7)
+        for fallback_bound in (11, None):
+            with self.subTest(fallback_bound=fallback_bound):
+                fallback = Value(hint.sum_type, smt.FALSE, smt.int_value(11), fallback_bound)
+                result = select_scalar(((first, hinted), (second, nullable)), fallback)
+                self.assertEqual(result, Value(
+                    hint.sum_type,
+                    smt.ite(first, smt.FALSE, smt.ite(second, smt.TRUE, fallback.is_null)),
+                    smt.ite(first, hinted.value, smt.ite(second, nullable.value, fallback.value)),
+                    fallback_bound,
+                ))
+        # Even an unchanged fallback is transported as scalar payload, not as
+        # permission to retain the source aggregate's proof-only summary.
+        self.assertEqual(select_scalar((), hinted), Value(hint.sum_type, smt.FALSE, hinted.value, 3))
+
+    def test_all_hidden_avg_variants_are_rejected_in_candidate_or_fallback(self):
+        metadata = (
+            scalar_module.DecimalAverageState("Decimal(7,2)", smt.ONE, smt.ONE, 1, 1),
+            scalar_module.IntegralAverageState(smt.ONE, smt.ONE, smt.ONE, 1),
+            scalar_module.IntegralAverageCertificate(smt.ONE),
+        )
+        for state in metadata:
+            scalar_type = state.sum_type if isinstance(state, scalar_module.DecimalAverageState) else "Double"
+            plain = Value(scalar_type, smt.FALSE, smt.ONE)
+            hidden = Value(scalar_type, smt.FALSE, smt.ONE, average_metadata=state)
+            for selected, fallback in ((hidden, plain), (plain, hidden)):
+                with self.subTest(metadata=type(state).__name__, fallback=fallback is hidden):
+                    with self.assertRaisesRegex(ValueTransportError, "hidden AVG metadata"):
+                        # False guards do not authorize silently dropping state.
+                        select_scalar(((smt.FALSE, selected),), fallback)
+
+    def test_unselected_candidate_must_still_have_the_fallback_type(self):
+        with self.assertRaisesRegex(ValueTransportError, "identical value types"):
+            select_scalar(
+                ((smt.FALSE, Value("Int64", smt.FALSE, smt.ONE)),),
+                Value("Uint64", smt.FALSE, smt.ONE),
+            )
 
 
 if __name__ == "__main__":

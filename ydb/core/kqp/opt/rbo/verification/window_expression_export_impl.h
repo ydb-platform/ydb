@@ -49,17 +49,6 @@ struct TQ51Window {
     ui32 SourceOrdinal = 0;
 };
 
-struct TQ51ProjectionWindow {
-    TString Output;
-    TString Input;
-    TString PartitionColumn;
-    TString OrderColumn;
-    TString WindowName;
-    EQ51WindowFunction Function;
-    ui32 SourceOrdinal = 0;
-    ui32 ExecutionOrder = 0;
-};
-
 TStringBuf WindowLabel(EWholePartitionWindowFunction function) {
     return function == EWholePartitionWindowFunction::Sum
         ? TStringBuf("Window sum")

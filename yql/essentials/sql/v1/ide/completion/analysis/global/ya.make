@@ -16,6 +16,7 @@ PEERDIR(
     yql/essentials/sql/v1/ide/completion/syntax
     yql/essentials/sql/v1/ide/completion/text
     yql/essentials/sql/v1/ide/pure_ast
+    yql/essentials/utils/meta
     yql/essentials/parser/antlr_ast/gen/v1_antlr4
     yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4
     contrib/libs/re2

@@ -102,6 +102,11 @@ protected:
 
     virtual bool CanCacheError(const TError& error) noexcept;
 
+    //! If true, an error entry is periodically refreshed and expires as a successful one.
+    //! NB: Unlike #CanCacheError, this hook may be called under an internal shard lock
+    //! (see #RefreshAllItems), so it must be cheap and must not re-enter the cache.
+    virtual bool CanRefreshError(const TError& error) noexcept;
+
     //! Ping resets refresh timer period and behaves like successful entry update.
     void Ping(const TKey& key);
 

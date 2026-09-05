@@ -79,6 +79,7 @@ void RegisterCoFinalCallables(TCallableOptimizerMap& map) {
             YQL_CLOG(DEBUG, Core) << "Suppress order on " << indexes.size() << ' ' << node->Content() << " inputs";
             auto children = node->ChildrenList();
             for (const auto idx : indexes) {
+                // clang-format off
                 children[idx] = ctx.Builder(children[idx]->Pos())
                     .List()
                         .Callable(0, "Unordered")
@@ -86,6 +87,7 @@ void RegisterCoFinalCallables(TCallableOptimizerMap& map) {
                         .Seal()
                         .Add(1, children[idx]->TailPtr())
                     .Seal().Build();
+                // clang-format on
             }
             return ctx.ChangeChildren(*node, std::move(children));
         }

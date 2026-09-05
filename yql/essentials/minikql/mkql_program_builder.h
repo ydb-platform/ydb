@@ -630,6 +630,8 @@ public:
     TRuntimeNode Min(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode Max(TRuntimeNode data1, TRuntimeNode data2);
 
+    TRuntimeNode DecimalIntegralAdd(TRuntimeNode data1, TRuntimeNode data2);
+    TRuntimeNode DecimalIntegralSub(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode DecimalDiv(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode DecimalMod(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode DecimalMul(TRuntimeNode data1, TRuntimeNode data2);
@@ -864,6 +866,8 @@ private:
     TRuntimeNode BuildWideTopOrSortImpl(const std::string_view& callableName, TRuntimeNode flow, TMaybe<TRuntimeNode> count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys, TType::EKind streamKind);
 
     TRuntimeNode InvokeBinary(const std::string_view& callableName, TType* type, TRuntimeNode data1, TRuntimeNode data2);
+    TRuntimeNode BuildDecimalIntegralAdditive(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
+    TRuntimeNode BuildDecimalBinary(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode AggrCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode ConvertIntegralToDecimal(TRuntimeNode data);
     std::pair<TRuntimeNode, TRuntimeNode> ConvertIntegralToDecimalForComparison(std::pair<TRuntimeNode, TRuntimeNode> comparisonData);

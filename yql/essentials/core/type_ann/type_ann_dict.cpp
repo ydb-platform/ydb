@@ -484,6 +484,7 @@ IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExp
     }
 
     if (isOptional) {
+        // clang-format off
         output = AddChildren(ctx.Expr.Builder(input->Pos())
             .Callable("Map")
                 .Add(0, input->HeadPtr())
@@ -494,6 +495,7 @@ IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExp
                     .Seal()
                 .Seal()
             .Seal().Build();
+        // clang-format on
         return IGraphTransformer::TStatus::Repeat;
     }
 

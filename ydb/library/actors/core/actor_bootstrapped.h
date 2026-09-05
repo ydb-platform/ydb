@@ -7,6 +7,7 @@
 namespace NActors {
     template<typename T> struct dependent_false : std::false_type {};
 
+    // NotifyOnMailboxProcessingStarted must not be set before Bootstrap().
     template<typename TDerived>
     class TActorBootstrapped: public TActor<TDerived> {
     protected:

@@ -2,8 +2,6 @@
 
 {{ ydb-short-name }} поддерживает работу с [топиками](../../concepts/datamodel/topic.md) по протоколу [Amazon SQS](https://en.wikipedia.org/wiki/Amazon_Simple_Queue_Service).
 
-{% include [x](_includes/limitations.md) %}
-
 С одним топиком работа может вестись одновременно по нескольким протоколам. Например, запись может осуществляться с использованием Topic API, а чтение — с использованием Amazon SQS API, и наоборот.
 
 При создании топика командой `CreateQueue` Amazon SQS API топик создаётся с включённым [автопартиционированием](../../concepts/datamodel/topic.md#autopartitioning_modes): с одной партицией и автоматической возможностью увеличения до 10 активных партиций. Параметры автопартиционирования можно изменить через [YQL](../../yql/reference/syntax/alter-topic.md) или [YDB CLI](../ydb-cli/topic-alter.md).

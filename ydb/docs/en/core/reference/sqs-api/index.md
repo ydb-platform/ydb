@@ -2,8 +2,6 @@
 
 {{ ydb-short-name }} supports working with [topics](../../concepts/datamodel/topic.md) via the [SQS](https://en.wikipedia.org/wiki/Amazon_Simple_Queue_Service) protocol.
 
-{% include [x](_includes/limitations.md) %}
-
 A single topic can be used simultaneously via multiple protocols. For example, writes can be performed using the Topic API, and reads using the SQS API, and vice versa.
 
 When creating a topic with the `CreateQueue` SQS API command, the topic is created with [auto-partitioning](../../concepts/datamodel/topic.md#autopartitioning_modes) enabled: with one partition and the automatic ability to increase up to 10 active partitions. Auto-partitioning parameters can be changed via [YQL](../../yql/reference/syntax/alter-topic.md) or [YDB CLI](../ydb-cli/topic-alter.md).

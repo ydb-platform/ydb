@@ -8,7 +8,13 @@ This guide applies only to {{ ydb-short-name }} clusters with **configuration V2
 
 During cluster operation, entire nodes on which {{ ydb-short-name }} is running may fail.
 
+<<<<<<< HEAD
 Self Heal State Storage keeps the [metadata distribution subsystem](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) operational and fault tolerant when failed nodes cannot be restored quickly, and automatically increases the number of replicas of these subsystems when new nodes are added to the cluster.
+=======
+Self Heal State Storage is the SelfHeal mechanism for metadata distribution subsystems. Storage SelfHeal (disks and storage groups) is described in [{#T}](selfheal.md).
+
+Self Heal State Storage ensures the operability of the [metadata distribution subsystem](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) of the cluster if it is impossible to quickly restore failed nodes, and automatically increases the number of replicas of these subsystems when new nodes are added to the cluster.
+>>>>>>> 95c048edc38 (docs: improve SelfHeal documentation (#50561))
 
 Self Heal State Storage:
 

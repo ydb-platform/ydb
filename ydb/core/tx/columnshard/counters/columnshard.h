@@ -104,6 +104,17 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
 
+    // Aggregation clients, not plain gauges: every tablet owns a TCSCounters but
+    // they share one module_id=CS subgroup, so Set() would be last-tablet-wins.
+    std::shared_ptr<TValueAggregationClient> MoveDataActive;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsInFlight;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByGCCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataPortionsRejectedCount;
+
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadCompactionBytes;
@@ -207,6 +218,41 @@ public:
     void OnSplitCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {
         SplitCompactionGranuleBytes->SetValue(bytes);
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
+    }
+
+    void OnMoveDataStarted() const {
+        MoveDataActive->SetValue(1);
+    }
+
+    // Scalars, not TMoveDataQueueSizes: keeps this library off the actualizer headers.
+    void OnMoveDataQueues(const ui64 pending, const ui64 confirmedToMove, const ui64 inFlight) const {
+        MoveDataPortionsPending->SetValue(pending);
+        MoveDataPortionsConfirmedToMove->SetValue(confirmedToMove);
+        MoveDataPortionsInFlight->SetValue(inFlight);
+    }
+
+    void OnMoveDataGateBlockedByVacuum() const {
+        MoveDataGateBlockedByVacuumCount->Add(1);
+    }
+
+    // A portion left the queues because none of its blobs resolved into a target group.
+    void OnMoveDataPortionsRejected(const ui64 count) const {
+        MoveDataPortionsRejectedCount->Add(count);
+    }
+
+    void OnMoveDataGateBlockedByPortions() const {
+        MoveDataGateBlockedByPortionsCount->Add(1);
+    }
+
+    void OnMoveDataGateBlockedByGC() const {
+        MoveDataGateBlockedByGCCount->Add(1);
+    }
+
+    void OnMoveDataFinished() const {
+        MoveDataActive->SetValue(0);
+        MoveDataPortionsPending->SetValue(0);
+        MoveDataPortionsConfirmedToMove->SetValue(0);
+        MoveDataPortionsInFlight->SetValue(0);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {

@@ -344,6 +344,11 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
+    virtual void MoveDataCompleted(const TActorContext& ctx) override;
+    // Evaluates the response gate. Split out of MoveDataCompleted so the periodic wakeup
+    // can drive it without claiming the executor's vacuum has finished.
+    void CheckMoveDataGate(const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -517,6 +522,10 @@ private:
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
+    // The move's accessor requests are scheduled like TTL's but must not be *counted* as
+    // TTL's: one string drives both the broker queue and the ResourceType label, so sharing
+    // it made a stalled move indistinguishable from idle tiering in the sensors.
+    NOlap::NResourceBroker::NSubscribe::TTaskContext MoveDataTaskSubscription;
 
     ui64 InProgressTxId = 0;
     bool ProgressTxScheduled = false;
@@ -534,6 +543,33 @@ private:
 
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
+
+    // Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
+    struct TMoveDataState {
+        TActorId HiveSender;
+        THashSet<ui32> TargetGroups;
+        bool Active = false;
+        // Set to true when the executor calls MoveDataCompleted(); signals that
+        // vacuum is done and only the HasBlobsForGroups gate remains.
+        bool VacuumCompleted = false;
+        // The completion gate scans the GC queues; cap its cadence instead of
+        // paying the scans on every periodic wakeup tick. Default-initialized to the
+        // epoch so the first check fires immediately. The effective interval is
+        // max(MoveDataGateCheckCadence, PeriodicWakeupActivationPeriod) — the cadence
+        // is a lower bound; wakeup granularity is acceptable for an hours-scale
+        // decommission operation.
+        TInstant LastGateCheckAt;
+        // The actualizer's rejection count is cumulative per session; remember what was
+        // already reported so the sensor stays a rate rather than a repeated total.
+        ui64 ReportedRejections = 0;
+    };
+
+    static constexpr TDuration MoveDataGateCheckCadence = TDuration::Seconds(5);
+
+    TMoveDataState MoveDataState;
+
+    // Number of metadata-accessor requests this tablet has in flight; gates SetupMetadata.
+    std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
 
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
     // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
@@ -598,6 +634,10 @@ private:
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();
+    // Re-arms only the move's accessor requests, ungated: they must not queue behind tiering's.
+    void SetupMoveDataMetadata();
+    void StartMetadataRequests(
+        std::vector<NOlap::TCSMetadataRequest>&& requests, const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext);
     bool SetupTtl();
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);

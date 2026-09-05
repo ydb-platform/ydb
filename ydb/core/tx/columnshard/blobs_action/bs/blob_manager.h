@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/util/backoff.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 #include <map>
@@ -177,6 +178,9 @@ private:
 
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
+
+    // Scans the pending keep/delete queues, not live portions.
+    bool HasBlobsForGroups(const THashSet<ui32>& groups) const;
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);

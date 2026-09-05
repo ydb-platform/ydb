@@ -43,7 +43,7 @@ class TTester: public TNonCopyable {
 public:
     static constexpr const ui64 FAKE_SCHEMESHARD_TABLET_ID = 4200;
 
-    static void Setup(TTestActorRuntime& runtime);
+    static void Setup(TTestActorRuntime& runtime, TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies = {});
 };
 
 // Installs, on every node of the runtime, a stand-in snapshot registry whose OldestCollectionTime tracks

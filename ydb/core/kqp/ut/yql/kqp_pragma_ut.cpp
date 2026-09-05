@@ -208,6 +208,26 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
             [[1u];[4u]];
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(PortionIdRequiresPragma) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT _yql_portion_id FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));
+
+        result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.EnableSystemColumns = "true";
+            SELECT _yql_portion_id FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));
+        UNIT_ASSERT_C(result.GetIssues().ToString().contains("_yql_portion_id"), result.GetIssues().ToString());
+    }
 }
 
 } // namspace NKqp

@@ -81,9 +81,10 @@ void ParseReadColumns(const TType* readType, const TRuntimeNode& tagsNode,
 
     for (ui32 i = 0; i < tags->GetValuesCount(); ++i) {
         NTable::TTag columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();
-        if (IsSystemColumn(columnId)) {
+        if (IsRowTableSystemColumn(columnId)) {
             systemColumns.push_back(columnId);
         } else {
+            MKQL_ENSURE_S(!IsSystemColumn(columnId), "System column is not supported for row tables");
             columns.push_back(columnId);
         }
     }
@@ -102,9 +103,10 @@ void ParseWideReadColumns(const TRuntimeNode& tagsNode,
 
         NTable::TTag columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();;
 
-        if (IsSystemColumn(columnId)) {
+        if (IsRowTableSystemColumn(columnId)) {
             systemColumns.push_back(columnId);
         } else if (columnId != TKeyDesc::EColumnIdInvalid) {
+            MKQL_ENSURE_S(!IsSystemColumn(columnId), "System column is not supported for row tables");
             columns.push_back(columnId);
         }
     }

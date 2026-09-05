@@ -15,6 +15,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
     SetPKRangesFilter(read.PKRangesFilter);
+    SetSystemColumnsFilter(read.SystemColumnsFilter);
     InitShardingInfo(read.TableMetadataAccessor);
     TxId = read.TxId;
     LockId = read.LockId;

@@ -250,6 +250,7 @@ message TKqpTransaction {
         optional EReadType ReadType = 14;
         repeated string GroupByColumnNames = 15;
         optional uint32 OptionalSorting = 16;
+        optional NKqpProto.TKqpPhySystemColumnsFilter SystemColumnsFilter = 17;
     }
 
     optional EKqpTransactionType Type = 1;
@@ -2256,6 +2257,7 @@ message TEvKqpScan {
     optional double CpuGroupThreadsLimit = 29;
     optional string CpuGroupName = 30;
     optional bool UseBatchPool = 31 [default = false];
+    optional NKqpProto.TKqpPhySystemColumnsFilter SystemColumnsFilter = 32;
 }
 
 message TEvCompactTable {

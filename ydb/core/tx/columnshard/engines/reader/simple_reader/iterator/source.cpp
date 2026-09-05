@@ -7,12 +7,14 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constant_uint64_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/dictionary_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -380,6 +382,15 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
         {"sourceIdx", GetSourceIdx()});
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
 
+    if (addr.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::PARTITION_ID) {
+        return std::make_shared<NCommon::TConstantUInt64FetchLogic>(
+            addr.GetColumnId(), GetContext()->GetCommonContext()->GetStoragesManager(), GetTabletId());
+    }
+    if (addr.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::PORTION_ID) {
+        return std::make_shared<NCommon::TConstantUInt64FetchLogic>(
+            addr.GetColumnId(), GetContext()->GetCommonContext()->GetStoragesManager(), Portion->GetPortionId());
+    }
+
     const NArrow::TColumnFilter& columnFilter =
         GetStageData().HasTable() ? GetStageData().GetTable().GetFilter() : context.GetResources().GetFilter();
     const auto portionState = GetContext()->GetPortionStateAtScanStart(*Portion);
@@ -431,6 +442,13 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
                      .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
+
+    if (columns->GetColumnIds().contains((ui32)IIndexInfo::ESpecialColumn::PARTITION_ID)) {
+        IIndexInfo::AddPartitionIdColumn(*batch, GetTabletId());
+    }
+    if (columns->GetColumnIds().contains((ui32)IIndexInfo::ESpecialColumn::PORTION_ID)) {
+        IIndexInfo::AddPortionIdColumn(*batch, Portion->GetPortionId());
+    }
 
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }

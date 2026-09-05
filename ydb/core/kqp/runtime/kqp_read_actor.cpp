@@ -892,7 +892,7 @@ public:
         size_t notSystemColumnsIndex = 0;
         for (size_t i = 0; i < columnsSize; ++i) {
             const auto& column = Settings->GetColumns()[i];
-            if (!IsSystemColumn(column.GetId())) {
+            if (!IsRowTableSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
 
                 if (Settings->GetIsBatch() && column.GetIsPrimary()) {
@@ -1335,7 +1335,7 @@ public:
         TStringBuilder builder;
         TVector<NScheme::TTypeInfo> types;
         for (auto& column : Settings->GetColumns()) {
-            if (!IsSystemColumn(column.GetId())) {
+            if (!IsRowTableSystemColumn(column.GetId())) {
                 types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
             }
         }
@@ -1684,7 +1684,7 @@ private:
             TResultColumn column;
             column.Tag = srcColumn.GetId();
             column.TypeInfo = MakeTypeInfo(srcColumn);
-            column.IsSystem = IsSystemColumn(column.Tag);
+            column.IsSystem = IsRowTableSystemColumn(column.Tag);
             column.NotNull = srcColumn.GetNotNull();
             ResultColumns.push_back(column);
         }

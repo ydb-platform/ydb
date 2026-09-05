@@ -157,6 +157,17 @@ public:
         return *dropVersion;
     }
 
+    bool HasSchemeShardLocalPathId(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+        return SchemeShardLocalPathIds.contains(schemeShardLocalPathId);
+    }
+
+    // Path-local drop version. Caller must ensure HasSchemeShardLocalPathId; nullopt means the path is live.
+    std::optional<NOlap::TSnapshot> GetPathDropVersionOptional(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+        const auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
+        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        return it->second.DropVersion;
+    }
+
     void Merge(TTableInfo&& other) {
         AFL_VERIFY(InternalPathId == other.InternalPathId);
         Versions.insert(other.Versions.begin(), other.Versions.end());
@@ -370,14 +381,21 @@ public:
         }
         return memory;
     }
+
+    void RemovePathId(const TInternalPathId pathId) {
+        Ttl.erase(pathId);
+    }
 };
 
 class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
-    THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
+    THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> AllPathIds;
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> LivePathIds;
+
     THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
     THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;   // Paths that are being truncated
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
@@ -397,6 +415,100 @@ private:
     void RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& version);
     void RebuildReadOnlyTablesSnapshots();
 
+    void SetLivePathId(TSchemeShardLocalPathId ss, TInternalPathId id, bool isDropped) {
+        AllPathIds[ss].insert(id);
+        if (isDropped) {
+            // Invariant: a live generation always wins over a dropped one for the same SS path.
+            // During recovery, TableInfoV1 (dropped) and TableInfo (live) rows for the same SS path
+            // can be loaded in either order. Using emplace (no-overwrite) for dropped generations
+            // ensures a dropped generation never clobbers an already-loaded live one.
+            LivePathIds.emplace(ss, id);
+        } else {
+            // Live generation: always overwrite, regardless of what was loaded before.
+            LivePathIds[ss] = id;
+        }
+    }
+
+    // Removes the live mapping for `ss`, verifying it points to `id`.
+    // AFL_VERIFYs that the mapping is present and matches — a mismatch indicates a logic error
+    // (the caller expected the live mapping to be present and pointing to `id`).
+    void ForgetLivePathIdVerified(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        auto it = LivePathIds.find(ss);
+        AFL_VERIFY(it != LivePathIds.end() && it->second == id)("ss", ss)("expected", id)(
+                                              "actual", it != LivePathIds.end() ? it->second : TInternalPathId{});
+        LivePathIds.erase(it);
+    }
+
+    // Removes the live mapping for `ss` if present. No verification — the mapping may
+    // legitimately be absent. Scenarios where LivePathIds does not contain `ss`:
+    //  - TruncateTableProgress (retention mode): the path was already fenced by
+    //    TruncateTablePropose, which called ForgetLivePathId. The second call is a no-op.
+    //  - TruncateTablePropose (idempotent re-propose): the path was already fenced by a
+    //    previous propose. The conditional-insert guard returns early, but if the fence
+    //    was set and then the tablet restarted, DoOnTabletInit re-calls TruncateTablePropose
+    //    and the live mapping is already gone.
+    void ForgetLivePathId(TSchemeShardLocalPathId ss) {
+        LivePathIds.erase(ss);
+    }
+
+    void ForgetGeneration(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        // The path must be present in AllPathIds: it was added via SetLivePathId or AddToHistory
+        // before any drop/finalize operation that calls ForgetGeneration.
+        auto it = AllPathIds.find(ss);
+        AFL_VERIFY(it != AllPathIds.end())("ss", ss)("internal", id);
+        AFL_VERIFY(it->second.erase(id) == 1)("ss", ss)("internal", id);
+        if (it->second.empty()) {
+            AllPathIds.erase(it);
+        }
+    }
+
+    void RenamePathId(TSchemeShardLocalPathId fromSs, TSchemeShardLocalPathId toSs) {
+        // Live mapping may have been already removed by the propose phase (e.g., MoveTablePropose
+        // calls ForgetLivePathIdVerified). Only move it if present.
+        if (const auto itLive = LivePathIds.find(fromSs); itLive != LivePathIds.end()) {
+            LivePathIds[toSs] = itLive->second;
+            LivePathIds.erase(itLive);
+        }
+        // Full history must be present: the source path was added to AllPathIds when the table
+        // was registered and is only removed by ForgetGeneration on drop.
+        auto itAll = AllPathIds.find(fromSs);
+        AFL_VERIFY(itAll != AllPathIds.end())("from", fromSs)("to", toSs);
+        AllPathIds[toSs] = std::move(itAll->second);
+        AllPathIds.erase(itAll);
+    }
+
+    // Adds a generation to the AllPathIds index without touching LivePathIds.
+    // Used for lazy-populating AllPathIds during rolling deploy (tables created before
+    // this change lack entries) and for tracking copies in CopyTableProgress.
+    void AddToHistory(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        AllPathIds[ss].insert(id);
+    }
+
+    // Returns the live InternalPathId for `ss`, or nullopt if no live mapping exists.
+    // The nullopt is a legitimate "not found" result (e.g., the path is fenced during
+    // a TRUNCATE/Move propose, or the table does not exist). Callers that require the
+    // path to be live wrap the result in AFL_VERIFY.
+    std::optional<TInternalPathId> ResolveLivePathId(TSchemeShardLocalPathId ss) const {
+        const auto* it = LivePathIds.FindPtr(ss);
+        return it ? std::optional<TInternalPathId>(*it) : std::nullopt;
+    }
+
+    // Returns a pointer to the set of all generations for `ss`, or nullptr if none are tracked.
+    // nullptr is a legitimate result for tables created before this change deployed
+    // (rolling deploy): their AllPathIds entries are not yet populated. The caller
+    // (ResolveInternalPathIdForSnapshot) falls back to ResolveInternalPathIdOptional.
+    const THashSet<TInternalPathId>* Generations(TSchemeShardLocalPathId ss) const {
+        return AllPathIds.FindPtr(ss);
+    }
+
+    // Resolves the correct InternalPathId for a given SchemeShard path at a specific read snapshot.
+    // Only used internally by BuildTableMetadataAccessor.
+    std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId,
+        const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const;
+
+    TInternalPathId GenerateNextInternalPathId();
+    NKikimrTxColumnShard::TTableVersionInfo LoadLastTableVersionInfo(const TInternalPathId pathId, NIceDb::TNiceDb& db) const;
+
     friend class TTxInit;
 
 public:   //IPathIdTranslator
@@ -413,8 +525,8 @@ public:
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
 
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
-        const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
+    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
+        const TString& tablePath, const TSchemeShardLocalPathId externalPathId, const NOlap::TSnapshot& readSnapshot);
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
         const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId,
         const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
@@ -548,6 +660,9 @@ public:
     void CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
 
+    void TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
+    bool TruncateTableProgress(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
+
     NOlap::TSnapshot ResolveReadSnapshot(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& requestSnapshot) const;
 
     void AddTableInfo(const NKikimr::NColumnShard::TUnifiedPathId unifiedPathId, TTableInfo&& tableInfo);
@@ -622,6 +737,11 @@ public:
 
     ui64 GetMemoryUsage() const;
     TInternalPathId GetOrCreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
+
+    bool IsGenerateInternalPathId() const {
+        return GenerateInternalPathId;
+    }
+
     THashMap<TSchemeShardLocalPathId, TInternalPathId> ResolveInternalPathIds(
         const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const;
     bool HasTable(const TInternalPathId pathId, const bool withDeleted = false,

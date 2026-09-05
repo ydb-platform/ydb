@@ -17,5 +17,6 @@
 * [Roaring](roaring.md)
 * [String](string.md)
 * [Unicode](unicode.md)
+* [Uuid](uuid.md)
 * [Url](url.md)
 * [Yson](yson.md)

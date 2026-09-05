@@ -32,6 +32,8 @@
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace Ydb::Maintenance {
     class Node;
 }
@@ -709,6 +711,8 @@ class TClusterInfo : public TThrRefBase {
 public:
     using TNodes = THashMap<ui32, TNodeInfoPtr>;
     using TTablets = THashMap<ui64, TTabletInfo>;
+    using TTabletInstanceId = std::pair<ui64, ui32>;
+    using TRunningSystemTabletsByNode = THashMap<ui32, THashSet<TTabletInstanceId>>;
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
@@ -857,6 +861,10 @@ public:
     const TTablets &AllTablets() const {
         return Tablets;
     }
+
+    bool NodeHasRunningSystemTablet(ui32 nodeId) const;
+
+    bool HostHasRunningSystemTablet(const TString &hostName) const;
 
     bool HasPDisk(TPDiskID pdId) const {
         return PDisks.contains(pdId);
@@ -1099,6 +1107,7 @@ private:
 
     TNodes Nodes;
     TTablets Tablets;
+    TRunningSystemTabletsByNode RunningSystemTabletsByNode;
     TPDisks PDisks;
     TVDisks VDisks;
     TBSGroups BSGroups;

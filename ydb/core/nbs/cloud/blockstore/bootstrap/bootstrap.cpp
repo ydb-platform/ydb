@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_simple.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/vhost.h>
@@ -66,18 +67,30 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
         CreateDefaultDeviceHandlerFactory(),
         std::move(vhostServerConfig),
         VhostCallbacks);
+
+    if (Config.GetNbsFrontendConfig().GetEnabled()) {
+        Frontend = std::make_unique<TNbsFrontendRuntime>();
+    }
 }
+
+TNbsService::~TNbsService() = default;
 
 void TNbsService::Start()
 {
     STORAGE_INFO("TNbsService start");
     Scheduler->Start();
     VhostServer->Start();
+    if (Frontend) {
+        Frontend->Start();
+    }
 }
 
 void TNbsService::Stop()
 {
     STORAGE_INFO("TNbsService stop");
+    if (Frontend) {
+        Frontend->Stop();
+    }
     VhostServer->Stop();
     Scheduler->Stop();
 }
@@ -109,6 +122,14 @@ void StopNbsService()
     if (NbsService) {
         NbsService->Stop();
     }
+}
+
+NCloud::NBlockStore::IBlockStorePtr GetNbsFrontendBlockStore()
+{
+    if (!NbsService || !NbsService->Frontend) {
+        return {};
+    }
+    return NbsService->Frontend->GetBlockStore();
 }
 
 TNbsServicePtr GetNbsService()

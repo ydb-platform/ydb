@@ -701,6 +701,128 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
     }
 }
 
+Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
+    Y_UNIT_TEST(ShouldAcceptDisabledFrontend) {
+        {
+            NKikimrConfig::TAppConfig config;
+            std::vector<TString> errors;
+
+            UNIT_ASSERT_EQUAL(
+                ValidateConfig(config, errors),
+                EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+
+        {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->MutableNbsFrontendConfig();
+            std::vector<TString> errors;
+
+            UNIT_ASSERT_EQUAL(
+                ValidateConfig(config, errors),
+                EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+
+        {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()
+                ->MutableNbsFrontendConfig()
+                ->SetEnabled(false);
+            std::vector<TString> errors;
+
+            UNIT_ASSERT_EQUAL(
+                ValidateConfig(config, errors),
+                EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldAcceptEnabledFrontend) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableNbsConfig()->SetEnabled(true);
+        config.MutableNbsConfig()
+            ->MutableNbsFrontendConfig()
+            ->SetEnabled(true);
+        config.MutableGRpcConfig()->SetStartGRpcProxy(true);
+        config.MutableGRpcConfig()->SetPort(2135);
+        std::vector<TString> errors;
+
+        UNIT_ASSERT_EQUAL(
+            ValidateConfig(config, errors),
+            EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
+    }
+
+    Y_UNIT_TEST(ShouldRejectInvalidEnabledFrontend) {
+        struct TTestCase
+        {
+            bool NbsEnabled;
+            bool HasGrpcConfig;
+            bool StartGrpcProxy;
+            ui32 Port;
+            TString ExpectedError;
+        };
+
+        const TVector<TTestCase> testCases = {
+            {
+                .NbsEnabled = false,
+                .HasGrpcConfig = true,
+                .StartGrpcProxy = true,
+                .Port = 2135,
+                .ExpectedError =
+                    "NbsConfig.Enabled: expected true when "
+                    "NbsConfig.NbsFrontendConfig.Enabled=true, got false",
+            },
+            {
+                .NbsEnabled = true,
+                .HasGrpcConfig = false,
+                .ExpectedError =
+                    "GRpcConfig: required when "
+                    "NbsConfig.NbsFrontendConfig.Enabled=true, got missing",
+            },
+            {
+                .NbsEnabled = true,
+                .HasGrpcConfig = true,
+                .StartGrpcProxy = false,
+                .Port = 2135,
+                .ExpectedError =
+                    "GRpcConfig.StartGRpcProxy: expected true when "
+                    "NbsConfig.NbsFrontendConfig.Enabled=true, got false",
+            },
+            {
+                .NbsEnabled = true,
+                .HasGrpcConfig = true,
+                .StartGrpcProxy = true,
+                .Port = 65536,
+                .ExpectedError =
+                    "GRpcConfig.Port: expected 1..65535 when "
+                    "NbsConfig.NbsFrontendConfig.Enabled=true, got 65536",
+            },
+        };
+
+        for (const auto& testCase: testCases) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->SetEnabled(testCase.NbsEnabled);
+            config.MutableNbsConfig()
+                ->MutableNbsFrontendConfig()
+                ->SetEnabled(true);
+            if (testCase.HasGrpcConfig) {
+                config.MutableGRpcConfig()->SetStartGRpcProxy(
+                    testCase.StartGrpcProxy);
+                config.MutableGRpcConfig()->SetPort(testCase.Port);
+            }
+            std::vector<TString> errors;
+
+            UNIT_ASSERT_EQUAL(
+                ValidateConfig(config, errors),
+                EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(errors.front(), testCase.ExpectedError);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(MonitoringConfigValidation) {
     Y_UNIT_TEST(RequireCountersAuthentication) {
         { // Without security config

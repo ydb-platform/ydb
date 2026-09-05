@@ -10,9 +10,13 @@
 
 {% note warning %}
 
-{% include [export-supported-object-types.md](export-supported-object-types.md) %}
+{% include [export-supported-object-types-s3.md](export-supported-object-types-s3.md) %}
 
-Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).
+{% endnote %}
+
+{% note info %}
+
+В качестве альтернативы для экспорта одиночных таблиц в S3-совместимое хранилище можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).
 
 {% endnote %}
 

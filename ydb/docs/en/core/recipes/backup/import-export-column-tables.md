@@ -1,8 +1,8 @@
 # Import and export of data to column tables
 
-Column tables in {{ ydb-short-name }} currently do not have a built-in backup and restore mechanism (it is in development). For data migration or recovery after failures, use export and import operations.
+For data migration and recovery after failures, [column tables](../../concepts/datamodel/table.md#column-oriented-tables) can be exported and imported with the server-side [`export s3`](../../reference/ydb-cli/export-import/export-s3.md) and [`import s3`](../../reference/ydb-cli/export-import/import-s3.md) commands. The [`tools dump`](../../reference/ydb-cli/export-import/tools-dump.md), [`tools restore`](../../reference/ydb-cli/export-import/tools-restore.md), [`export nfs`](../../reference/ydb-cli/export-import/export-nfs.md), and [`import nfs`](../../reference/ydb-cli/export-import/import-nfs.md) commands do not process column tables.
 
-Two main approaches are available:
+If you need a different format (for example, Parquet or CSV) or an export to an external system, additional approaches are available:
 
 1. [Export and import via federated queries](#objstorage) to object storage (for example, {{ objstorage-name }} or any other S3-compatible storage).
 **Advantages**: Uses built-in YDB functionality; no third-party services or tools required.

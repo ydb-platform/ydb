@@ -8,6 +8,8 @@
 
 {% include [conn_options_ref.md](../commands/_includes/conn_options_ref.md) %}
 
+{% include [limitation](_includes/limitation-restore-column-tables.md) %}
+
 В отличие от [команды `tools restore`](./tools-restore.md), команда `import nfs` всегда создает объекты целиком, поэтому для её успешного выполнения ни один из загружаемых объектов (ни директорий, ни таблиц) не должен существовать.
 
 При необходимости догрузки данных в существующие таблицы воспользуйтесь [командой `tools restore`](./tools-restore.md) непосредственно на смонтированной NFS-директории.

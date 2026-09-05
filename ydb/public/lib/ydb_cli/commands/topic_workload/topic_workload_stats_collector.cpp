@@ -42,17 +42,20 @@ TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
 }
 
 void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
-    if (Quiet && !total)
+    if (Quiet && !total) {
         return;
+    }
 
     TStringBuilder header;
 
     header << "Window\t";
-    if (WriterCount > 0)
+    if (WriterCount > 0) {
         header << "Write speed\tWrite time\tInflight\t";
+    }
     if (ReaderCount > 0) {
-        if (!TransferMode)
+        if (!TransferMode) {
             header << "Lag\t\tLag time\t";
+        }
         header << "Read speed\t";
         if (TransferMode) {
             header << "Topic time\t";
@@ -65,17 +68,20 @@ void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
         header << "Upsert time\t";
         header << "Commit time\t";
     }
-    if (PrintTimestamp)
+    if (PrintTimestamp) {
         header << "Timestamp";
+    }
 
     header << "\n";
 
     header << "#\t";
-    if (WriterCount > 0)
+    if (WriterCount > 0) {
         header << "msg/s\tMB/s\tpercentile,ms\tpercentile,msg\t";
+    }
     if (ReaderCount > 0) {
-        if (!TransferMode)
+        if (!TransferMode) {
             header << "percentile,msg\tpercentile,ms\t";
+        }
         header << "msg/s\tMB/s\tpercentile,ms\t";
     }
     if (TransferMode) {
@@ -108,27 +114,29 @@ void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
         };
         if (Now() > windowTime(windowIt) && !*ErrorFlag) {
             CollectThreadEvents();
-            PrintWindowStats(windowIt++);
+            PrintWindowStats(windowIt, windowTime(windowIt));
+            ++windowIt;
         }
-        Sleep(std::max(TDuration::Zero(), Now() - windowTime(windowIt)));
+        Sleep(std::max(TDuration::Zero(), windowTime(windowIt) - Now()));
     }
 
     CollectThreadEvents();
 }
 
-void TTopicWorkloadStatsCollector::PrintWindowStats(ui32 windowIt) {
-    PrintStats(windowIt);
+void TTopicWorkloadStatsCollector::PrintWindowStats(ui32 windowIt, TInstant windowTime) {
+    PrintStats(windowIt, windowTime);
 
     WindowStats = MakeHolder<TTopicWorkloadStats>();
 }
 void TTopicWorkloadStatsCollector::PrintTotalStats() const {
     PrintHeader(true);
-    PrintStats({});
+    PrintStats({}, Now());
 }
 
-void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
-    if (Quiet && windowIt.Defined())
+void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt, TInstant windowTime) const {
+    if (Quiet && windowIt.Defined()) {
         return;
+    }
 
     const auto& stats = windowIt.Empty() ? TotalStats : *WindowStats;
     double seconds = windowIt.Empty() ? TotalSec - WarmupSec : WindowSec;
@@ -156,7 +164,7 @@ void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
         Cout << "\t" << stats.CommitTxTimeHist.GetValueAtPercentile(Percentile) << "\t";
     }
     if (PrintTimestamp) {
-        Cout << "\t" << Now().ToStringUpToSeconds();
+        Cout << "\t" << windowTime.ToStringUpToSeconds();
     }
     Cout << Endl;
 }
@@ -174,7 +182,7 @@ void TTopicWorkloadStatsCollector::CollectThreadEvents()
     CollectThreadEvents(WriterCommitTxEventQueues);
 }
 
-template<class T>
+template <class T>
 void TTopicWorkloadStatsCollector::CollectThreadEvents(TEventQueues<T>& queues)
 {
     for (auto& queue : queues) {
@@ -186,7 +194,7 @@ void TTopicWorkloadStatsCollector::CollectThreadEvents(TEventQueues<T>& queues)
     }
 }
 
-template<class T>
+template <class T>
 void TTopicWorkloadStatsCollector::AddQueue(TEventQueues<T>& queues)
 {
     auto queue = MakeHolder<TAutoLockFreeQueue<T>>();
@@ -246,7 +254,7 @@ void TTopicWorkloadStatsCollector::AddWriterCommitTxEvent(size_t writerIdx, cons
     AddEvent(writerIdx, WriterCommitTxEventQueues, event);
 }
 
-template<class T>
+template <class T>
 void TTopicWorkloadStatsCollector::AddEvent(size_t index, TEventQueues<T>& queues, const T& event)
 {
     if ((WarmupTime != TInstant()) && (Now() >= WarmupTime)) {

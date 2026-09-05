@@ -602,11 +602,7 @@ class LocalYdbCluster:
         while time.monotonic() < deadline:
             self._check_cancelled()
             last_result = run_command(command, {}, 10, work_dir_hint=self.directory, cancel_event=self.cancel_event)
-            if (
-                not last_result.exit_code
-                and not last_result.timed_out
-                and _database_status_ready(last_result.stdout)
-            ):
+            if not last_result.exit_code and not last_result.timed_out and _database_status_ready(last_result.stdout):
                 atomic_write_text(self.directory / "database-status.txt", last_result.stdout)
                 return
             if any(process.poll() is not None for process in self.static_processes + self.dynamic_processes):
@@ -772,6 +768,18 @@ def _search_scaling_evidence(result, saturation_percent):
     return None, None
 
 
+def _search_stage_score(load_config, search_record):
+    selected = search_record.get("selected_metrics")
+    if selected is None or search_record.get("selected_load") is None:
+        return None
+    objective_type = load_config.get("objective", {}).get("type", "points")
+    dynamic_nodes = search_record["dynamic_nodes"]
+    selected_load = search_record["selected_load"]
+    if objective_type == "latency-slo":
+        return selected_load, -dynamic_nodes, selected["throughput"]
+    return selected["throughput"], -dynamic_nodes, -selected_load
+
+
 def _role_capacity(mask, topology):
     return len(mask) if mask is not None else len(topology.allowed_cpus)
 
@@ -831,6 +839,7 @@ class WorkloadLifecycle:
         affinities,
         cancel_event,
         progress,
+        command_timeout_seconds=None,
     ):
         self.cluster = cluster
         self.workload_cli = workload_cli
@@ -843,11 +852,21 @@ class WorkloadLifecycle:
         self.affinities = affinities
         self.cancel_event = cancel_event
         self.progress = progress
+        if command_timeout_seconds is not None and (
+            not _is_finite_number(command_timeout_seconds) or command_timeout_seconds <= 0
+        ):
+            raise BenchmarkError("workload command timeout must be a positive finite number")
+        self.command_timeout_seconds = command_timeout_seconds
         self.definition = workload_definition(workload["type"])
         self._profile_opened = False
         self._profile_closed = False
         self._profile_state = None
         self._geometry_state = None
+
+    def _plan_timeout(self, plan):
+        if self.command_timeout_seconds is None:
+            return plan.timeout_seconds
+        return min(plan.timeout_seconds, self.command_timeout_seconds)
 
     @property
     def profile_commands(self):
@@ -928,7 +947,7 @@ class WorkloadLifecycle:
                         self.affinities["ydb_cli"],
                     ),
                 )
-                result, attempts = self.cluster.init_workload(plan.argv, timeout=plan.timeout_seconds)
+                result, attempts = self.cluster.init_workload(plan.argv, timeout=self._plan_timeout(plan))
                 state.commands.extend(
                     _command_record(
                         phase,
@@ -1000,7 +1019,7 @@ class WorkloadLifecycle:
             try:
                 result = self.cluster._run(
                     plan.argv,
-                    timeout=plan.timeout_seconds,
+                    timeout=self._plan_timeout(plan),
                     cpu_affinity=self.affinities["ydb_cli"],
                     ignore_cancellation=True,
                 )
@@ -1041,7 +1060,7 @@ class WorkloadLifecycle:
                 raise errors[0]
             raise BenchmarkError("workload cleanup failed: {}".format("; ".join(map(str, errors))))
 
-    def open_profile(self, directory, table_path):
+    def open_profile(self, directory, table_path, purpose="profile", progress_fields=None):
         if self._profile_opened:
             raise BenchmarkError("workload profile lifecycle is already open")
         self._profile_opened = True
@@ -1052,14 +1071,14 @@ class WorkloadLifecycle:
         state = _DatasetState(
             directory=directory,
             table_path=table_path,
-            purpose="profile",
+            purpose=purpose,
             repetition=None,
-            fields={"profile_dataset": True},
+            fields={**(progress_fields or {}), "profile_dataset": True},
         )
         self._profile_state = state
         self._prepare_dataset(state)
 
-    def open_geometry(self, directory, table_path, dynamic_nodes, progress_fields=None):
+    def open_geometry(self, directory, table_path, dynamic_nodes, progress_fields=None, purpose="geometry"):
         if not self._profile_opened or self._profile_closed:
             raise BenchmarkError("workload profile lifecycle is not open")
         self._check_cancelled()
@@ -1074,7 +1093,7 @@ class WorkloadLifecycle:
         state = _DatasetState(
             directory=directory,
             table_path=table_path,
-            purpose="geometry",
+            purpose=purpose,
             repetition=None,
             fields={**(progress_fields or {}), "geometry_dataset": True, "dynamic_nodes": dynamic_nodes},
         )
@@ -1127,7 +1146,7 @@ class WorkloadLifecycle:
             )
             result = self.cluster._run(
                 warmup_plan.argv,
-                timeout=warmup_plan.timeout_seconds,
+                timeout=self._plan_timeout(warmup_plan),
                 cpu_affinity=self.affinities["ydb_cli"],
             )
             commands.append(
@@ -1165,7 +1184,7 @@ class WorkloadLifecycle:
                 load,
                 self.measurement["duration"],
                 self.client_threads,
-                warmup_seconds=warmup if self.definition.warmup_mode == "inline" else 0,
+                warmup_seconds=configured_warmup if self.definition.warmup_mode == "inline" else 0,
             )
             self.cluster.ensure_running("cannot start workload measurement")
             progress_fields = {
@@ -1181,13 +1200,13 @@ class WorkloadLifecycle:
             }
             if self.definition.warmup_mode == "inline":
                 progress_fields["inline_warmup_seconds"] = warmup
-                if warmup != configured_warmup:
+                if configured_warmup is not None and warmup != configured_warmup:
                     progress_fields["configured_warmup_seconds"] = configured_warmup
             self.progress(phases["measure"], **progress_fields)
             result = run_command(
                 plan.argv,
                 {},
-                plan.timeout_seconds,
+                self._plan_timeout(plan),
                 cpu_affinity=self.affinities["ydb_cli"],
                 cancel_event=self.cancel_event,
                 on_process_started=lambda process: cli_pids.append(process.pid),
@@ -1325,6 +1344,7 @@ def run_local_ydb(
     definition = workload_definition(profile["workload"]["type"])
     workload_metrics = definition.result_adapter.metrics
     metric_columns = _workload_metric_columns(benchmark, workload_metrics)
+    metric_aggregations = {metric.name: metric.repetition_aggregation for metric in workload_metrics}
     topology = discover_topology()
     affinities = plan_role_affinity(profile["affinity"], topology)
     _validate_role_affinity(profile["geometry"], affinities)
@@ -1401,18 +1421,38 @@ def run_local_ydb(
                 compact[name] = {key: value for key, value in metrics.items() if key != "commands"}
         return compact
 
-    cluster = LocalYdbCluster(
-        binaries["ydbd"].path,
-        binaries["ydb_cli"].path,
-        binaries["process_guard"].path,
-        output_directory / "cluster",
-        profile["geometry"],
-        affinities,
-        configuration.timeout_seconds,
-        cancel_event,
-        publish_progress,
-    )
+    def create_cluster(directory, geometry):
+        return LocalYdbCluster(
+            binaries["ydbd"].path,
+            binaries["ydb_cli"].path,
+            binaries["process_guard"].path,
+            directory,
+            geometry,
+            affinities,
+            configuration.timeout_seconds,
+            cancel_event,
+            publish_progress,
+        )
+
+    def create_lifecycle(target_cluster):
+        return WorkloadLifecycle(
+            target_cluster,
+            WorkloadCli(target_cluster.ydb_cli, target_cluster.client_endpoint, target_cluster.database),
+            profile["workload"],
+            profile["load"],
+            profile["measurement"],
+            profile["client"]["threads"],
+            benchmark,
+            topology,
+            affinities,
+            cancel_event,
+            publish_progress,
+            command_timeout_seconds=(configuration.timeout_seconds if configuration.timeout_explicit else None),
+        )
+
+    cluster = create_cluster(output_directory / "cluster", profile["geometry"])
     repetition_rows = []
+    best_search_record = None
     cluster_stopped = False
     lifecycle = None
 
@@ -1427,20 +1467,7 @@ def run_local_ydb(
 
     try:
         cluster.start()
-        workload_cli = WorkloadCli(cluster.ydb_cli, cluster.client_endpoint, cluster.database)
-        lifecycle = WorkloadLifecycle(
-            cluster,
-            workload_cli,
-            profile["workload"],
-            profile["load"],
-            profile["measurement"],
-            profile["client"]["threads"],
-            benchmark,
-            topology,
-            affinities,
-            cancel_event,
-            publish_progress,
-        )
+        lifecycle = create_lifecycle(cluster)
         lifecycle.open_profile(output_directory / "workload", "ydb_bench_profile")
         while True:
             dynamic_nodes = len(cluster.dynamic_nodes)
@@ -1551,22 +1578,27 @@ def run_local_ydb(
             else:
                 new_count = None
                 search_record["next_action"] = "finish"
+            score = _search_stage_score(profile["load"], search_record)
+            best_score = _search_stage_score(profile["load"], best_search_record or {})
+            if score is not None and (best_score is None or score > best_score):
+                best_search_record = search_record
             manifest["searches"].append(search_record)
             write_manifest(manifest_path, manifest)
 
             if new_count is None:
+                selected_search = best_search_record or search_record
                 manifest["result"] = {
-                    "outcome": result.outcome,
+                    "outcome": selected_search["outcome"],
                     "objective": profile["load"].get("objective", {}).get("type", "points"),
                     "parameter": profile["load"]["parameter"],
                     "allow_errors": profile["load"].get("allow_errors", False),
-                    "search_stage": search_stage,
-                    "dynamic_nodes": dynamic_nodes,
-                    "selected_load": result.selected_load,
-                    "selected_metrics": selected,
-                    "passing_load": result.passing_load,
-                    "failing_load": result.failing_load,
-                    "stop_reason": result.stop_reason,
+                    "search_stage": selected_search["stage"],
+                    "dynamic_nodes": selected_search["dynamic_nodes"],
+                    "selected_load": selected_search["selected_load"],
+                    "selected_metrics": selected_search["selected_metrics"],
+                    "passing_load": selected_search["passing_load"],
+                    "failing_load": selected_search["failing_load"],
+                    "stop_reason": selected_search["stop_reason"],
                 }
                 break
             lifecycle.close_geometry()
@@ -1579,7 +1611,12 @@ def run_local_ydb(
             )
             cluster.add_dynamic_nodes(new_count - dynamic_nodes)
 
-        summary_rows = benchmark.summarize_metrics(repetition_rows, benchmark, metric_columns)
+        summary_rows = benchmark.summarize_metrics(
+            repetition_rows,
+            benchmark,
+            metric_columns,
+            metric_aggregations,
+        )
         _write_csv(
             output_directory / "repetitions.csv",
             repetition_rows,
@@ -1587,11 +1624,12 @@ def run_local_ydb(
         )
         atomic_write_text(
             output_directory / "summary.csv",
-            benchmark.render_summary(summary_rows, benchmark, metric_columns),
+            benchmark.render_summary(summary_rows, benchmark, metric_columns, metric_aggregations),
         )
 
         verification_repetitions = profile["measurement"].get("verification_repetitions", 0)
         selected_load = manifest["result"]["selected_load"]
+        selected_dynamic_nodes = manifest["result"]["dynamic_nodes"]
         manifest["result"]["metrics_source"] = "search"
         verification = {
             "status": "disabled" if verification_repetitions == 0 else "pending",
@@ -1612,17 +1650,52 @@ def run_local_ydb(
         elif verification_repetitions:
             verification_started_at = _utc_now()
             verification_started_monotonic = time.monotonic()
+            fresh_verification_cluster = selected_dynamic_nodes != len(cluster.dynamic_nodes)
             verification.update(
                 {
                     "status": "running",
                     "started_at": verification_started_at,
                     "load": selected_load,
-                    "dynamic_nodes": dynamic_nodes,
+                    "dynamic_nodes": selected_dynamic_nodes,
+                    "cluster": "fresh" if fresh_verification_cluster else "search",
                 }
             )
             write_manifest(manifest_path, manifest)
             verification_rows = []
             try:
+                if fresh_verification_cluster:
+                    close_lifecycle()
+                    lifecycle = None
+                    publish_progress(
+                        "restarting-verification-cluster",
+                        search_stage=manifest["result"]["search_stage"],
+                        dynamic_nodes=selected_dynamic_nodes,
+                    )
+                    cluster.stop()
+                    cluster_stopped = True
+                    verification_geometry = {
+                        **profile["geometry"],
+                        "dynamic_nodes": selected_dynamic_nodes,
+                        "max_dynamic_nodes": selected_dynamic_nodes,
+                    }
+                    cluster = create_cluster(output_directory / "verification-cluster", verification_geometry)
+                    cluster_stopped = False
+                    cluster.start()
+                    lifecycle = create_lifecycle(cluster)
+                    lifecycle.open_profile(
+                        output_directory / "verification" / "workload" / "profile",
+                        "ydb_bench_verify_profile",
+                        purpose="verification",
+                        progress_fields={"search_stage": manifest["result"]["search_stage"]},
+                    )
+                    lifecycle.open_geometry(
+                        output_directory / "verification" / "workload" / "geometry",
+                        "ydb_bench_verify_geometry_{:02d}".format(selected_dynamic_nodes),
+                        selected_dynamic_nodes,
+                        progress_fields={"search_stage": manifest["result"]["search_stage"]},
+                        purpose="verification",
+                    )
+                dynamic_nodes = selected_dynamic_nodes
                 for repetition in range(1, verification_repetitions + 1):
                     directory = output_directory / "verification" / "repeat-{:03d}".format(repetition)
                     table_path = "ydb_bench_verify_{}_{}_{}".format(dynamic_nodes, selected_load, repetition)
@@ -1650,10 +1723,20 @@ def run_local_ydb(
                         verification_rows,
                         [item.name for item in benchmark.dimensions] + ["repetition"] + metric_columns,
                     )
-                    partial_summary = benchmark.summarize_metrics(verification_rows, benchmark, metric_columns)
+                    partial_summary = benchmark.summarize_metrics(
+                        verification_rows,
+                        benchmark,
+                        metric_columns,
+                        metric_aggregations,
+                    )
                     atomic_write_text(
                         output_directory / "verification-summary.csv",
-                        benchmark.render_summary(partial_summary, benchmark, metric_columns),
+                        benchmark.render_summary(
+                            partial_summary,
+                            benchmark,
+                            metric_columns,
+                            metric_aggregations,
+                        ),
                     )
                     verification.update(
                         {
@@ -1764,6 +1847,8 @@ def run_local_ydb(
             ]
             if verification["status"] == "completed":
                 artifacts += ["verification-summary.csv", "verification-repetitions.csv"]
+                if verification.get("cluster") == "fresh":
+                    artifacts.append("verification-cluster/cluster.yaml")
             event_sink(
                 {
                     "type": "step-artifacts",

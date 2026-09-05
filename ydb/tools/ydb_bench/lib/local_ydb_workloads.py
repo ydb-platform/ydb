@@ -130,6 +130,7 @@ GENERIC_TOTAL_RESULT = WorkloadResultAdapter(
     ),
 )
 
+_DEFAULT_CLEANUP_TIMEOUT_SECONDS = 120
 _TPCC_TRANSACTION_NAMES = ("NewOrder", "Delivery", "OrderStatus", "Payment", "StockLevel")
 _TPCC_PERCENTILES = (
     ("50", "p50_ms"),
@@ -147,6 +148,7 @@ _TPCC_SLO_METRICS = (
 )
 _TPCC_TERMINALS_PER_WAREHOUSE = 10
 _TPCC_MIN_WARMUP_PER_TERMINAL_MS = 10
+_TPCC_MAX_ADAPTIVE_WARMUP_SECONDS = 60 * 60
 _TPCC_JSON_MAX_BYTES = 1024 * 1024
 
 
@@ -190,10 +192,24 @@ def _tpcc_percentile_values(value, location):
 
 
 def _tpcc_effective_warmup_seconds(workload, requested_seconds):
+    # Keep this in sync with the adaptive heuristic in
+    # ydb/library/workload/tpcc/runner.cpp::TPCCRunner::RunSync.
     warehouses = workload["options"]["warehouses"]
     terminals = warehouses * _TPCC_TERMINALS_PER_WAREHOUSE
     minimum = terminals * _TPCC_MIN_WARMUP_PER_TERMINAL_MS // 1000 + 1
-    return max(requested_seconds, minimum)
+    if requested_seconds is not None:
+        return max(requested_seconds, minimum)
+    if warehouses <= 10:
+        adaptive = 30
+    elif warehouses <= 100:
+        adaptive = 5 * 60
+    elif warehouses <= 1000:
+        adaptive = 10 * 60
+    elif warehouses <= 10000:
+        adaptive = 20 * 60
+    else:
+        adaptive = 30 * 60
+    return min(max(adaptive, minimum), _TPCC_MAX_ADAPTIVE_WARMUP_SECONDS)
 
 
 def _parse_tpcc_json_result(command_result, normalized_workload, request):
@@ -276,16 +292,14 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
     metrics = {
         "transactions": selected["ok_count"] if new_orders > 0 else 0,
         "new_orders": new_orders,
-        "throughput": new_orders / measured_seconds,
+        "throughput": new_orders / request.duration_seconds,
+        "cli_elapsed_seconds": measured_seconds,
         "tpcc_tpmc": tpcc_tpmc,
         "efficiency_pct": efficiency,
         "errors": sum(transaction["failed_count"] for transaction in parsed_transactions.values()),
     }
     metrics.update(
-        {
-            metric_name: value
-            for (_percentile, metric_name), value in zip(_TPCC_PERCENTILES, selected["percentiles_ms"])
-        }
+        {metric_name: value for (_percentile, metric_name), value in zip(_TPCC_PERCENTILES, selected["percentiles_ms"])}
     )
     return WorkloadResult(
         metrics,
@@ -298,7 +312,7 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
 
 
 TPCC_JSON_RESULT = WorkloadResultAdapter(
-    schema_id="tpcc-json-v2",
+    schema_id="tpcc-json-v3",
     parse=_parse_tpcc_json_result,
     metrics=(
         WorkloadMetric(
@@ -314,25 +328,34 @@ TPCC_JSON_RESULT = WorkloadResultAdapter(
             "new_orders",
             "new orders",
             required=True,
-            description="Successful NewOrder transactions in the measurement window",
+            description=(
+                "Successful NewOrder transactions admitted during the requested measurement interval; completion "
+                "may include graceful drain"
+            ),
         ),
         WorkloadMetric(
             "throughput",
             "new orders/s",
             required=True,
-            description="Successful NewOrder transactions divided by measured seconds",
+            description="Successful NewOrder transactions divided by the requested admission interval",
+        ),
+        WorkloadMetric(
+            "cli_elapsed_seconds",
+            "s",
+            required=True,
+            description="CLI-reported elapsed measurement time including graceful drain",
         ),
         WorkloadMetric(
             "tpcc_tpmc",
             "tpmC",
             required=True,
-            description="CLI-reported capped TPC-C tpmC",
+            description="CLI-reported capped TPC-C tpmC using the drain-inclusive elapsed time",
         ),
         WorkloadMetric(
             "efficiency_pct",
             "%",
             required=True,
-            description="CLI-reported TPC-C efficiency",
+            description="CLI-reported TPC-C efficiency using the drain-inclusive elapsed time",
         ),
         WorkloadMetric(
             "errors",
@@ -360,6 +383,7 @@ TPCC_JSON_RESULT = WorkloadResultAdapter(
 _TOPIC_CONSUMER_PREFIX = "ydb-bench-consumer"
 _TOPIC_PERCENTILE = 99
 _TOPIC_OUTPUT_MAX_BYTES = 1024 * 1024
+_TOPIC_MAX_TOTAL_SECONDS = 3600
 _TOPIC_METRIC_MAX = (1 << 64) - 1
 _TOPIC_TIMESTAMP_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 
@@ -396,7 +420,7 @@ def _topic_stats_row(values, location):
     return metric_values, timestamp
 
 
-def _parse_topic_total_result(command_result, normalized_workload, request):
+def _parse_topic_window_result(command_result, normalized_workload, request):
     stdout = command_result.stdout
     if not isinstance(stdout, str):
         _topic_result_error("is not text or exceeds {} bytes".format(_TOPIC_OUTPUT_MAX_BYTES))
@@ -407,11 +431,13 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
     if output_size > _TOPIC_OUTPUT_MAX_BYTES:
         _topic_result_error("is not text or exceeds {} bytes".format(_TOPIC_OUTPUT_MAX_BYTES))
 
-    start_index = request.warmup_seconds + 1
-    finish_index = request.warmup_seconds + request.duration_seconds
-    if start_index >= finish_index:
+    first_index = request.warmup_seconds + 1
+    last_index = request.warmup_seconds + request.duration_seconds
+    if request.duration_seconds < 2:
         _topic_result_error("requires a measurement duration of at least two seconds")
-    boundary_rows = {str(start_index): [], str(finish_index): []}
+    boundary_index = first_index - 1
+    required_indexes = range(max(1, boundary_index), last_index + 1)
+    window_rows = {str(index): [] for index in required_indexes}
     total_rows = []
     for line in stdout.splitlines():
         values = line.split()
@@ -419,24 +445,29 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
             continue
         if values[0] == "Total":
             total_rows.append(values)
-        elif values[0] in boundary_rows:
-            boundary_rows[values[0]].append(values)
+        elif values[0] in window_rows:
+            window_rows[values[0]].append(values)
     if len(total_rows) != 1:
         _topic_result_error("must contain exactly one Total row")
-    for index, rows in boundary_rows.items():
+    _topic_stats_row(total_rows[0], "Total row")
+
+    parsed_windows = {}
+    for index, rows in window_rows.items():
         if len(rows) != 1:
             _topic_result_error("must contain exactly one window row for index {}".format(index))
-    metric_values, _total_timestamp = _topic_stats_row(total_rows[0], "Total row")
-    _start_metrics, measurement_started_at = _topic_stats_row(
-        boundary_rows[str(start_index)][0],
-        "window row {}".format(start_index),
-    )
-    _finish_metrics, measurement_finished_at = _topic_stats_row(
-        boundary_rows[str(finish_index)][0],
-        "window row {}".format(finish_index),
-    )
-    if measurement_started_at >= measurement_finished_at:
-        _topic_result_error("measurement window timestamps must be increasing")
+        parsed_windows[int(index)] = _topic_stats_row(rows[0], "window row {}".format(index))
+    ordered_indexes = sorted(parsed_windows)
+    for previous, current in zip(ordered_indexes, ordered_indexes[1:]):
+        if parsed_windows[current][1] < parsed_windows[previous][1]:
+            _topic_result_error("window row timestamps must not move backwards")
+
+    measurement_rows = [parsed_windows[index][0] for index in range(first_index, last_index + 1)]
+
+    def mean_metric(index):
+        return sum(row[index] for row in measurement_rows) / len(measurement_rows)
+
+    def max_metric(index):
+        return max(row[index] for row in measurement_rows)
 
     (
         write_messages_s,
@@ -448,7 +479,19 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
         read_messages_s,
         read_mib_s,
         full_p99_ms,
-    ) = metric_values
+    ) = (
+        mean_metric(0),
+        mean_metric(1),
+        max_metric(2),
+        max_metric(3),
+        max_metric(4),
+        max_metric(5),
+        mean_metric(6),
+        mean_metric(7),
+        max_metric(8),
+    )
+    measurement_finished_at = parsed_windows[last_index][1]
+    measurement_started_at = measurement_finished_at - request.duration_seconds
     consumers = normalized_workload["options"]["consumers"]
     read_per_consumer_messages_s = read_messages_s / consumers
     throughput = min(write_messages_s, read_per_consumer_messages_s)
@@ -468,7 +511,13 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
     }
     return WorkloadResult(
         metrics,
-        details={"percentile": _TOPIC_PERCENTILE, "total": metrics},
+        details={
+            "percentile": _TOPIC_PERCENTILE,
+            "window_seconds": 1,
+            "measurement_windows": len(measurement_rows),
+            "rate_aggregation": "mean",
+            "percentile_aggregation": "maximum",
+        },
         measurement_window=(
             measurement_started_at,
             measurement_finished_at,
@@ -476,83 +525,84 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
     )
 
 
-TOPIC_TOTAL_RESULT = WorkloadResultAdapter(
-    schema_id="topic-total-v1",
-    parse=_parse_topic_total_result,
+TOPIC_WINDOW_RESULT = WorkloadResultAdapter(
+    schema_id="topic-window-v1",
+    parse=_parse_topic_window_result,
     metrics=(
         WorkloadMetric(
             "transactions",
             "estimated messages",
             required=True,
             description=(
-                "Conservative completed-message estimate derived from truncated CLI rates; used to reject empty samples"
+                "Conservative completed-message estimate derived from mean per-window CLI rates; used to reject "
+                "empty samples"
             ),
         ),
         WorkloadMetric(
             "throughput",
             "messages/s",
             required=True,
-            description="Minimum of write rate and aggregate read rate divided by the number of consumers",
+            description=("Minimum of mean write rate and mean aggregate read rate divided by the number of consumers"),
         ),
         WorkloadMetric(
             "write_messages_s",
             "messages/s",
             required=True,
-            description="CLI-reported successful write rate",
+            description="Mean successful write rate across one-second measurement windows",
         ),
         WorkloadMetric(
             "read_messages_s",
             "deliveries/s",
             required=True,
-            description="CLI-reported aggregate delivery rate across all consumers",
+            description="Mean aggregate delivery rate across all consumers and one-second measurement windows",
         ),
         WorkloadMetric(
             "read_per_consumer_messages_s",
             "messages/s",
             required=True,
-            description="Aggregate delivery rate divided by the configured number of consumers",
+            description="Mean aggregate delivery rate divided by the configured number of consumers",
         ),
         WorkloadMetric(
             "write_mib_s",
             "logical MiB/s",
             required=True,
-            description="CLI-reported uncompressed logical write bandwidth",
+            description="Mean uncompressed logical write bandwidth across one-second measurement windows",
         ),
         WorkloadMetric(
             "read_mib_s",
             "logical MiB/s",
             required=True,
-            description="CLI-reported aggregate uncompressed logical read bandwidth",
+            description="Mean aggregate uncompressed logical read bandwidth across one-second measurement windows",
         ),
         WorkloadMetric(
             "write_p99_ms",
             "ms",
             required=True,
-            description="p99 time from scheduled message creation to write acknowledgement",
+            description="Worst per-window p99 time from scheduled message creation to write acknowledgement",
         ),
         WorkloadMetric(
             "inflight_p99_messages",
             "messages",
             required=True,
-            description="p99 number of messages awaiting write acknowledgement",
+            description="Worst per-window p99 number of messages awaiting write acknowledgement",
         ),
         WorkloadMetric(
             "lag_p99_messages",
             "messages",
             required=True,
-            description="p99 unread-message lag across consumers",
+            description="Worst per-window p99 unread-message lag across consumers",
         ),
         WorkloadMetric(
             "lag_p99_ms",
             "ms",
             required=True,
-            description="p99 consumer lag time",
+            description="Worst per-window p99 consumer lag time",
         ),
         WorkloadMetric(
             "full_p99_ms",
             "ms",
             required=True,
-            description="p99 end-to-end time from scheduled message creation to delivery",
+            description="Worst per-window p99 end-to-end time from scheduled message creation to delivery",
         ),
     ),
     slo_metrics=(("p99", "full_p99_ms"),),
@@ -664,8 +714,10 @@ class WorkloadDefinition:
     profile_validator: object = None
     effective_warmup_builder: object = None
     minimum_duration_seconds: int = 1
+    maximum_total_seconds: int | None = None
     load_limits: tuple = ()
     default_client_threads: int = 64
+    default_warmup_seconds: int | None = 10
 
 
 def _config_error(location, message):
@@ -873,13 +925,17 @@ def _tpcc_init_builder(cli, definition, path, workload):
 
 def _tpcc_run_command(cli, definition, path, workload, load, seconds, client_threads, warmup_seconds):
     options = workload["options"]
-    effective_warmup = _tpcc_effective_warmup_seconds(workload, warmup_seconds)
     command = _workload_base(cli, definition, path) + [
         "run",
         "--warehouses",
         options["warehouses"],
-        "--warmup",
-        "{}s".format(effective_warmup),
+    ]
+    if warmup_seconds is not None:
+        command += [
+            "--warmup",
+            "{}s".format(_tpcc_effective_warmup_seconds(workload, warmup_seconds)),
+        ]
+    command += [
         "--time",
         "{}s".format(seconds),
         "--max-sessions",
@@ -950,7 +1006,7 @@ def _tpcc_run_plan_builder(
                 load,
                 seconds,
                 client_threads,
-                effective_warmup,
+                warmup_seconds,
             )
         ),
         effective_warmup + seconds + 60,
@@ -1127,7 +1183,7 @@ def _validate_tpcc_profile(workload, load, measurement, location):
 
 
 def _validate_topic_profile(workload, load, measurement, location):
-    del workload, measurement
+    del workload
     if load["allow_errors"]:
         _config_error(location + ".load.allow-errors", "must be false because Topic does not report errors")
     objective = load.get("objective")
@@ -1135,6 +1191,12 @@ def _validate_topic_profile(workload, load, measurement, location):
         _config_error(
             location + ".load.objective.max-errors",
             "must be zero because Topic does not report errors",
+        )
+    total_seconds = measurement["warmup"] + measurement["duration"]
+    if total_seconds > _TOPIC_MAX_TOTAL_SECONDS:
+        _config_error(
+            location + ".measurement",
+            "warmup plus duration must not exceed {} seconds for bounded Topic output".format(_TOPIC_MAX_TOTAL_SECONDS),
         )
 
 
@@ -1280,12 +1342,38 @@ def _validate_catalog(definitions):
                 raise ValueError("{} must be callable for {}".format(name, definition.name))
         if definition.warmup_mode == "inline" and definition.run_plan_builder is None:
             raise ValueError("inline warmup requires a run plan builder for {}".format(definition.name))
+        if definition.default_warmup_seconds is not None and (
+            isinstance(definition.default_warmup_seconds, bool)
+            or not isinstance(definition.default_warmup_seconds, int)
+            or definition.default_warmup_seconds < 0
+        ):
+            raise ValueError("default warmup must be a non-negative integer or None for {}".format(definition.name))
+        if definition.default_warmup_seconds is None and definition.effective_warmup_builder is None:
+            raise ValueError("automatic warmup requires an effective warmup builder for {}".format(definition.name))
         if (
             isinstance(definition.minimum_duration_seconds, bool)
             or not isinstance(definition.minimum_duration_seconds, int)
             or definition.minimum_duration_seconds <= 0
         ):
             raise ValueError("minimum duration must be a positive integer for {}".format(definition.name))
+        if definition.maximum_total_seconds is not None and (
+            isinstance(definition.maximum_total_seconds, bool)
+            or not isinstance(definition.maximum_total_seconds, int)
+            or definition.maximum_total_seconds <= 0
+        ):
+            raise ValueError(
+                "maximum total duration must be a positive integer or None for {}".format(definition.name)
+            )
+        minimum_total_seconds = definition.minimum_duration_seconds + (definition.default_warmup_seconds or 0)
+        if (
+            definition.maximum_total_seconds is not None
+            and definition.maximum_total_seconds < minimum_total_seconds
+        ):
+            raise ValueError(
+                "maximum total duration cannot fit the default warmup and minimum duration for {}".format(
+                    definition.name
+                )
+            )
         if (
             isinstance(definition.default_client_threads, bool)
             or not isinstance(definition.default_client_threads, int)
@@ -1485,6 +1573,7 @@ _DEFINITIONS = (
         minimum_duration_seconds=2,
         load_limits=(("max-sessions", "warehouses", _TPCC_TERMINALS_PER_WAREHOUSE),),
         default_client_threads=2,
+        default_warmup_seconds=None,
     ),
     WorkloadDefinition(
         name="topic",
@@ -1507,10 +1596,11 @@ _DEFINITIONS = (
         prepare_plan_builder=_topic_prepare_plan_builder,
         run_plan_builder=_topic_run_plan_builder,
         cleanup_plan_builder=_topic_cleanup_plan_builder,
-        result_adapter=TOPIC_TOTAL_RESULT,
+        result_adapter=TOPIC_WINDOW_RESULT,
         throughput_unit="messages/s",
         profile_validator=_validate_topic_profile,
         minimum_duration_seconds=2,
+        maximum_total_seconds=_TOPIC_MAX_TOTAL_SECONDS,
         default_client_threads=1,
     ),
 )
@@ -1614,7 +1704,9 @@ def web_workload_catalog():
             "reports_errors": any(metric.name == "errors" for metric in definition.result_adapter.metrics),
             "result_schema_id": definition.result_adapter.schema_id,
             "minimum_duration_seconds": definition.minimum_duration_seconds,
+            "maximum_total_seconds": definition.maximum_total_seconds,
             "default_client_threads": definition.default_client_threads,
+            "default_warmup_seconds": definition.default_warmup_seconds,
             "load_limits": {
                 parameter: {"option": option, "multiplier": multiplier}
                 for parameter, option, multiplier in definition.load_limits
@@ -1676,15 +1768,27 @@ def validate_workload_profile(workload, load, measurement, location):
 
 
 def workload_effective_warmup_seconds(workload, requested_seconds):
-    """Return the explicit warmup passed to the CLI for one workload run."""
+    """Return the numeric warmup expected from one workload run."""
 
-    if isinstance(requested_seconds, bool) or not isinstance(requested_seconds, int) or requested_seconds < 0:
-        raise BenchmarkError("workload warmup must be a non-negative integer")
     definition = _definition(workload["type"])
+    if requested_seconds is None:
+        if definition.default_warmup_seconds is not None:
+            raise BenchmarkError("{} does not support automatic warmup".format(definition.name))
+        if definition.effective_warmup_builder is None:
+            raise BenchmarkError("{} does not support automatic warmup".format(definition.name))
+    if requested_seconds is not None and (
+        isinstance(requested_seconds, bool) or not isinstance(requested_seconds, int) or requested_seconds < 0
+    ):
+        raise BenchmarkError("workload warmup must be a non-negative integer")
     if definition.effective_warmup_builder is None:
         return requested_seconds
     effective = definition.effective_warmup_builder(workload, requested_seconds)
-    if isinstance(effective, bool) or not isinstance(effective, int) or effective < requested_seconds:
+    if (
+        isinstance(effective, bool)
+        or not isinstance(effective, int)
+        or effective < 0
+        or (requested_seconds is not None and effective < requested_seconds)
+    ):
         raise BenchmarkError("{} returned an invalid effective warmup".format(definition.name))
     return effective
 
@@ -1708,7 +1812,7 @@ def build_clean_argv(cli, path, workload_type):
     return _workload_base(cli, definition, path) + ["clean"]
 
 
-def _validate_command_plans(plans, description, allow_default_timeout=False):
+def _validate_command_plans(plans, description):
     if not isinstance(plans, tuple) or not plans:
         raise BenchmarkError("{} must produce a non-empty tuple of command plans".format(description))
     for plan in plans:
@@ -1718,9 +1822,7 @@ def _validate_command_plans(plans, description, allow_default_timeout=False):
             raise BenchmarkError("{} produced an invalid command plan name".format(description))
         if not isinstance(plan.argv, tuple) or not plan.argv:
             raise BenchmarkError("{} command {} must have a non-empty argv tuple".format(description, plan.name))
-        if plan.timeout_seconds is None and allow_default_timeout:
-            pass
-        elif not _is_finite_number(plan.timeout_seconds) or plan.timeout_seconds <= 0:
+        if not _is_finite_number(plan.timeout_seconds) or plan.timeout_seconds <= 0:
             raise BenchmarkError("{} command {} must have a positive timeout".format(description, plan.name))
         if plan.measurement_window_builder is not None and not callable(plan.measurement_window_builder):
             raise BenchmarkError(
@@ -1763,6 +1865,7 @@ def build_run_plan(
     """Build one pure workload command plan without executing a process."""
 
     definition = _definition(workload["type"])
+    workload_effective_warmup_seconds(workload, warmup_seconds)
     if load_parameter not in definition.load_parameters:
         raise BenchmarkError(
             "local YDB workload {} does not support load parameter {}".format(definition.name, load_parameter)
@@ -1817,16 +1920,12 @@ def build_cleanup_plan(cli, path, workload):
             WorkloadCommandPlan(
                 "clean",
                 tuple(_workload_base(cli, definition, path) + ["clean"]),
-                None,
+                _DEFAULT_CLEANUP_TIMEOUT_SECONDS,
             ),
         )
     else:
         plans = definition.cleanup_plan_builder(cli, definition, path, workload)
-    return _validate_command_plans(
-        plans,
-        "{} cleanup plan".format(definition.name),
-        allow_default_timeout=True,
-    )
+    return _validate_command_plans(plans, "{} cleanup plan".format(definition.name))
 
 
 def workload_definition(workload_type):

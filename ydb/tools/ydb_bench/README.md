@@ -119,9 +119,19 @@ Config V2 cluster backed by in-memory SectorMap PDisks, and stops it after the
 profile. `single` always uses one dynamic node. `storage` may grow the
 dynamic-node count up to `max-dynamic-nodes` when dynamic CPU is saturated but
 static/storage CPU is not; `custom` keeps the explicitly requested geometry.
+Across scaled stages, latency search selects the highest feasible load, while
+manual points and throughput search select the highest observed throughput;
+ties prefer fewer dynamic nodes.
 Each static node gets its own `NONE`-profile SectorMap with the virtual size
 specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
+
+An explicitly configured profile `timeout` caps every YDB CLI setup, warmup,
+measurement, and cleanup command. Workload-specific safety limits still apply
+when they are shorter. Without an explicit cap, setup and cleanup retain their
+workload-specific budgets. The computed default is used as a conservative
+per-command budget for cluster control; it is not a deadline or an estimate of
+the total profile runtime.
 
 `load.parameter` selects the one monotonic YDB CLI setting controlled by the
 benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. Topic
@@ -138,6 +148,14 @@ saturated measurement. A plateau is confirmed only when the selected role's
 CPU is saturated. `latency-slo` uses the configured `multiplier` to find the
 first failing point, then a binary search to find the highest load whose
 millisecond percentile, error count, and achieved-rate ratio satisfy the SLO.
+Automatic search is limited to 64 measurements per cluster-geometry stage.
+The `storage` preset can run a separate search after each dynamic-node scaling
+step, so a complete profile can contain more than 64 measurements.
+Latency-SLO configuration validation rejects ranges, multipliers, or
+resolutions whose deterministic worst-case search path can exceed that limit.
+Throughput search stops at the limit and reports the best point measured so far
+with a `search-limit-reached` outcome, because its path depends on measured
+throughput, feasibility, and cached probes.
 For example:
 
 ```yaml
@@ -167,13 +185,17 @@ The result is rejected if the CLI reports a different number of execution
 threads than `client.threads`, which prevents CPU-based CLI clamping from
 silently changing the configuration being compared.
 
-TPC-C warmup is inline. The CLI receives the explicit value
-`max(measurement.warmup, floor(warehouses / 10) + 1)` so terminal startup is
-complete before measurement; YAML `warmup: 0` requests that minimum rather
-than the CLI's adaptive warmup. Measurement duration must be at least two
-seconds. Canonical throughput is uncapped successful NewOrder transactions per
-measured second. The CLI-reported, warehouse-capped `tpmC` remains available as
-the separate `tpcc_tpmc` metric. Latency SLOs use the admitted latency of
+TPC-C warmup is inline. When `measurement.warmup` is omitted, `--warmup` is
+also omitted and the CLI selects its adaptive warmup from the warehouse count.
+Timeouts and progress use the same heuristic as the CLI. An explicit value is
+raised to at least `floor(warehouses / 10) + 1` seconds so terminal startup is
+complete before measurement; YAML `warmup: 0` therefore requests that minimum.
+Measurement duration must be at least two seconds. Canonical throughput is
+uncapped successful NewOrder transactions per requested admission second.
+Requests admitted before the deadline may finish during graceful drain;
+`cli_elapsed_seconds` exposes that drain-inclusive CLI interval. The
+CLI-reported, warehouse-capped `tpmC` and efficiency remain drain-inclusive
+diagnostics. Latency SLOs use the admitted latency of
 `latency-transaction`: it excludes the queue created by the configured
 `max-sessions` limit, but includes session acquisition and SDK retries. This
 keeps the latency signal monotonic enough for load search; the full terminal
@@ -190,9 +212,13 @@ the next search or verification sample. `partitions`, `consumers`,
 `--consumer-threads`; with multiple consumers, each consumer receives that many
 reader threads. The CLI receives `--seconds` equal to warmup plus measurement
 duration, one-second reporting windows with UTC timestamps, and a fixed p99
-percentile. CPU aggregation is anchored to the CLI timestamps at windows
-`warmup + 1` and `warmup + duration`; this excludes topic/session startup and
-the first measurement interval from the approximate CPU window.
+percentile. Metrics aggregate every numbered measurement window after warmup:
+rates use the mean while percentiles, lag, and inflight values use the maximum.
+The CLI timestamps each row with its nominal window boundary, so delayed
+printing cannot create gaps or duplicates in the timeline. CPU aggregation
+ends at the last measurement-window timestamp and starts exactly the requested
+measurement duration earlier. Warmup plus measurement duration is limited to
+one hour so the per-second CLI output and parser state remain bounded.
 
 Canonical Topic throughput is the smaller of the write rate and the aggregate
 read rate divided by `consumers`. The raw aggregate read rate and normalized
@@ -224,9 +250,11 @@ compatibility, but newly generated YAML uses `search` and `objective`.
 point. Set `measurement.verification-repetitions` to run additional independent
 samples at the load selected by the search; it defaults to `0` so existing
 configurations keep their previous runtime and is limited to 20. These
-post-search samples contribute to the automatically computed default command
-timeout; `timeout` remains a per-command safety bound rather than an absolute
-profile deadline. Verification never
+post-search samples are included when deriving the conservative default
+cluster-control command budget. An explicitly configured `timeout` also caps
+each workload command; it remains a per-command safety bound rather than an
+absolute profile deadline.
+Verification never
 changes the selected load or dynamic-node scaling decision. Its holdout samples
 are written separately to `verification-repetitions.csv` and
 `verification-summary.csv`; a completed holdout becomes the reported metric
@@ -237,9 +265,11 @@ throughput drift, and CPU saturation do not claim statistical reproducibility.
 
 Workloads with geometry-scoped datasets initialize and import once for each
 dynamic-node count, reuse that dataset across every search attempt at the same
-geometry, and clean it before adding nodes. The final geometry remains open for
-verification and is cleaned only after the holdout finishes. Shared setup and
-cleanup commands are stored under that geometry's `workload/commands.json`.
+geometry, and clean it before adding nodes. When the winning stage is the last
+one, its geometry remains open until verification finishes. If an earlier stage
+wins, verification recreates its geometry on a fresh cluster; that cluster's
+configuration is stored in `verification-cluster/cluster.yaml`. Shared setup
+and cleanup commands are stored under the corresponding `workload/commands.json`.
 
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.

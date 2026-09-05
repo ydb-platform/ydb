@@ -53,8 +53,8 @@ namespace NYdb {
             template<class T>
             void AddEvent(size_t index, TEventQueues<T>& queues, const T& event);
 
-            void PrintWindowStats(ui32 windowIt);
-            void PrintStats(TMaybe<ui32> windowIt) const;
+            void PrintWindowStats(ui32 windowIt, TInstant windowTime);
+            void PrintStats(TMaybe<ui32> windowIt, TInstant windowTime) const;
 
             size_t WriterCount;
             size_t ReaderCount;

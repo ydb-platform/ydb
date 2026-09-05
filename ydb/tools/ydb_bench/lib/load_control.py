@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
+MAX_AUTOMATIC_SEARCH_ATTEMPTS = 64
+MAX_LOAD_VALUE = (1 << 53) - 1
+
 
 @dataclass(frozen=True)
 class LoadSearchResult:
@@ -16,8 +19,61 @@ class LoadSearchResult:
 
 
 def _next_geometric(current, maximum, multiplier):
+    if multiplier >= maximum / current:
+        return maximum
     candidate = max(current + 1, int(round(current * multiplier)))
     return min(maximum, candidate)
+
+
+def _binary_probe_count(low, high, resolution):
+    probes = 0
+    width = high - low
+    while width > resolution:
+        probes += 1
+        width = (width + 1) // 2
+    return probes
+
+
+def _maximum_latency_attempts(search):
+    current = search["start"]
+    maximum = search["maximum"]
+    probes = 1
+    worst = probes
+    while current < maximum:
+        previous = current
+        current = _next_geometric(current, maximum, search["multiplier"])
+        probes += 1
+        resolution = max(1, int(round(max(current, 1) * search["resolution_percent"] / 100.0)))
+        worst = max(worst, probes + _binary_probe_count(previous, current, resolution))
+        if worst > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+            return worst
+    return worst
+
+
+def validate_search_attempt_bound(config):
+    """Reject latency searches whose worst path exceeds the runtime budget."""
+    objective_type = config["objective"]["type"]
+    if objective_type == "maximize-throughput":
+        # Throughput search branches on both feasibility and observed throughput.
+        # It is stopped gracefully by the runtime budget instead of rejecting a
+        # range using a pessimistic estimate which cannot account for cached probes.
+        return
+    elif objective_type == "latency-slo":
+        attempts = _maximum_latency_attempts(config["search"])
+    else:
+        raise BenchmarkError("unsupported load objective: {}".format(objective_type))
+    if attempts > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+        raise BenchmarkError(
+            "automatic load search may require more than {} attempts; "
+            "narrow the range or increase multiplier/resolution-percent".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+        )
+
+
+def _ensure_attempt_capacity(attempts):
+    if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+        raise BenchmarkError(
+            "automatic load search exceeded its {}-attempt safety limit".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+        )
 
 
 def _target_cpu(metrics, target_role):
@@ -154,11 +210,13 @@ def _run_throughput(config, measure, on_attempt):
     failing_load = None
     plateau = 0
     plateau_confirmed = False
+    search_limit_reached = False
 
     def sample(load, reason, baseline=None, search_low=None, search_high=None):
         nonlocal failing_load
         if load in measured:
             return measured[load]
+        _ensure_attempt_capacity(attempts)
         metrics = measure(load)
         saturated = _target_cpu(metrics, objective["target_role"]) >= objective["cpu_saturation_percent"]
         passed, evaluation_reason = evaluate_load(config, load, metrics)
@@ -214,11 +272,17 @@ def _run_throughput(config, measure, on_attempt):
         upper_load = high - third
         if lower_load >= upper_load:
             break
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and lower_load not in measured:
+            search_limit_reached = True
+            break
         lower = sample(lower_load, "lower ternary probe", search_low=low, search_high=high)
         if not lower["passed"]:
             plateau = 0
             high = lower_load - 1
             continue
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and upper_load not in measured:
+            search_limit_reached = True
+            break
         upper = sample(
             upper_load,
             "upper ternary probe",
@@ -246,13 +310,21 @@ def _run_throughput(config, measure, on_attempt):
             low = lower_load + 1
 
     for load in sorted({low, (low + high) // 2, high}):
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and load not in measured:
+            search_limit_reached = True
+            break
         sample(load, "final ternary candidate", search_low=low, search_high=high)
     selected = (
         _lowest_saturated_plateau_load(attempts, objective["plateau_gain_percent"])
         if plateau_confirmed
         else _best_throughput(attempts)
     )
-    if selected is None:
+    if search_limit_reached:
+        outcome = "search-limit-reached"
+        stop_reason = "throughput search reached its {}-attempt safety limit".format(
+            MAX_AUTOMATIC_SEARCH_ATTEMPTS
+        )
+    elif selected is None:
         outcome = "no-feasible-point"
         stop_reason = "ternary search found no feasible load"
     elif plateau_confirmed:
@@ -295,6 +367,7 @@ def _run_latency(config, measure, on_attempt):
     def sample(load):
         if load in measured:
             return measured[load]
+        _ensure_attempt_capacity(attempts)
         metrics = measure(load)
         passed, reason = evaluate_load(config, load, metrics)
         record = _with_decision(metrics, load, passed, reason)
@@ -366,6 +439,7 @@ def search_load(config, measure, on_attempt=None):
     """Run the configured controller using ``measure(load) -> metrics``."""
     if "values" in config:
         return _run_points(config, measure, on_attempt)
+    validate_search_attempt_bound(config)
     objective_type = config["objective"]["type"]
     if objective_type == "maximize-throughput":
         return _run_throughput(config, measure, on_attempt)

@@ -36,7 +36,9 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, 
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
+_CHART_DATA_ROW_LIMIT = 100000
 _LOCAL_YDB_ACTIVITY_LIMIT = 200
+_LOCAL_YDB_ACTIVITY_SCAN_BYTES = 4 * 1024 * 1024
 _EVENT_LOG_RECORD_BYTES = 4 * 1024 * 1024
 _LOCAL_YDB_ACTIVITY_RESPONSE_BYTES = 512 * 1024
 _MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
@@ -256,6 +258,40 @@ function localYdbDefaultClientThreads(definition){
   const value=Number(definition?.default_client_threads);
   return Number.isSafeInteger(value)&&value>0?value:64
 }
+function localYdbDefaultWarmupSeconds(definition){
+  if(definition?.default_warmup_seconds===null)return null;
+  const value=Number(definition?.default_warmup_seconds);
+  return Number.isSafeInteger(value)&&value>=0?value:10
+}
+function localYdbMeasurementMaximumDuration(definition,warmup){
+  const total=Number(definition?.maximum_total_seconds),warmupSeconds=Number(warmup);
+  if(!Number.isSafeInteger(total)||total<=0||warmup===null||
+      !Number.isSafeInteger(warmupSeconds)||warmupSeconds<0)return null;
+  return total-warmupSeconds
+}
+function localYdbMeasurementForWorkload(measurement,definition){
+  const warmup=localYdbDefaultWarmupSeconds(definition),minimum=definition.minimum_duration_seconds||1;
+  let duration=Number(measurement.duration);
+  if(!Number.isSafeInteger(duration)||duration<minimum)duration=minimum;
+  const maximum=localYdbMeasurementMaximumDuration(definition,warmup);
+  if(maximum!==null)duration=Math.min(duration,maximum);
+  return {...measurement,warmup,duration}
+}
+function localYdbValidateMeasurement(measurement,definition){
+  const maximum=localYdbMeasurementMaximumDuration(definition,measurement.warmup);
+  if(maximum!==null&&measurement.duration>maximum){
+    throw Error('Warmup plus duration must not exceed '+definition.maximum_total_seconds+' seconds.')
+  }
+  return measurement
+}
+function localYdbWarmupInput(id,definition){
+  const raw=document.querySelector('#'+id).value.trim();
+  return raw===''?localYdbDefaultWarmupSeconds(definition):localInteger(id,0)
+}
+function localYdbNeedsRerender(id,loadLimitInputs=[]){
+  return ['profile-name','local-geometry-preset','local-load-allow-errors',
+    'local-measurement-warmup'].includes(id)||loadLimitInputs.includes(id)
+}
 function localYdbParameterDefaults(parameter,definition=null,workload=null){
   const source=localYdbLoadDefaults[parameter]||localYdbLoadDefaults.threads;
   const limit=localYdbLoadLimit(definition,workload,parameter);
@@ -293,7 +329,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "ions}}\n"
     "function defaultLocalYdb(){const definition=localYdbWorkloadDefinition('kv');return {workload:defaultLocalYdbWorkload('kv'),"
     "geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},client"
-    ":{threads:localYdbDefaultClientThreads(definition)},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:10,duration:30,rep"
+    ":{threads:localYdbDefaultClientThreads(definition)},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:localYdbDefaultWarmupSeconds(definition),duration:30,rep"
     "etitions:3,verification_repetitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
     ",cpus:null},dynamic_nodes:{mode:'none',cpus:null}}}}\n"
     "function serializeLocalYdb(lines,profile){const config=profile.local_ydb,workload=config.workload;lines.push('    work"
@@ -309,8 +345,9 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "ive.type);if(config.load.objective.type==='maximize-throughput')for(const [key,yamlKey] of Object.entries(localYdbOb"
     "jectiveKeys))lines.push('        '+yamlKey+': '+config.load.objective[key]);else{lines.push('        percentile: '+config.load.o"
     "bjective.percentile);for(const [key,yamlKey] of Object.entries(localYdbSloKeys))lines.push('        '+yamlKey+': '+con"
-    "fig.load.objective[key])}}lines.push('    measurement:','      warmup: '+config.measurement.warmup,' "
-    "     duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,"
+    "fig.load.objective[key])}}lines.push('    measurement:');if("
+    "config.measurement.warmup!==null&&config.measurement.warmup!==undefined)lines.push('      warmup: '+config.measurement.warmup);lines.push("
+    "'      duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,"
     "'      verification-repetitions: '+(config.measurement.verification_repetitions??0),'    affinity:');f"
     "or(const [key,yamlKey] of Object.entries(localYdbAffinityKeys)){const role=config.affinity[key];lines.push('      '+yam"
     "lKey+':','        mode: '+role.mode);if(role.cpus!==null&&role.cpus!==undefined)lines.push('        cpus: '+role.cpus)}"
@@ -426,8 +463,14 @@ function localYdbSloPercentile(definition,requested=null){
 function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
   const definition=localYdbWorkloadDefinition(workload.type);
+  const warmupHelp=definition.default_warmup_seconds===null?
+    'Empty uses adaptive YDB CLI warmup.':
+    'Empty uses the workload default ('+localYdbDefaultWarmupSeconds(definition)+' seconds).';
   const clientThreadsHelp=workload.type==='topic'?
     'Applied to both producer and consumer thread counts; every consumer gets this many reader threads.':'';
+  const durationMaximum=localYdbMeasurementMaximumDuration(definition,measurement.warmup);
+  const durationHelp=definition.maximum_total_seconds?
+    'Warmup plus duration must not exceed '+definition.maximum_total_seconds+' seconds.':'';
   const loadMode=load.values?'points':load.objective.type;
   const sloPercentiles=Object.keys(definition.slo_metrics||{});
   const objectiveChoices=['points','maximize-throughput',...(sloPercentiles.length?['latency-slo']:[])];
@@ -500,10 +543,11 @@ function localYdbProfileEditor(profile){
     '</div><h3>Client and load</h3><div class=form-grid>'+
     localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
     loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
-    localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,'','type=number min=0')+
+    localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,warmupHelp,'type=number min=0')+
     localField(
-      'local-measurement-duration','Duration (seconds)',measurement.duration,'',
-      'type=number min='+(definition.minimum_duration_seconds||1)
+      'local-measurement-duration','Duration (seconds)',measurement.duration,durationHelp,
+      'type=number min='+(definition.minimum_duration_seconds||1)+
+        (durationMaximum===null?'':' max='+durationMaximum)
     )+
     localField('local-measurement-repetitions','Repetitions',measurement.repetitions,'','type=number min=1')+
     localField(
@@ -561,10 +605,8 @@ function bindLocalYdbEditor(profile){
       const nextDefinition=localYdbWorkloadDefinition(event.target.value);
       const parameters=nextDefinition.load_parameters;
       config.client.threads=localYdbDefaultClientThreads(nextDefinition);
+      config.measurement=localYdbMeasurementForWorkload(config.measurement,nextDefinition);
       config.load=localYdbLoadForWorkload(config.load,parameters,nextDefinition,config.workload);
-      config.measurement.duration=Math.max(
-        config.measurement.duration,nextDefinition.minimum_duration_seconds||1
-      );
       if(!nextDefinition.reports_errors){
         config.load.allow_errors=false;
         if(config.load.objective?.type==='latency-slo')config.load.objective.max_errors=0
@@ -676,12 +718,12 @@ function bindLocalYdbEditor(profile){
       })
     }
     config.load=localYdbClampLoad(config.load,workloadDefinition,config.workload);
-    config.measurement={
-      warmup:localInteger('local-measurement-warmup',0),
+    config.measurement=localYdbValidateMeasurement({
+      warmup:localYdbWarmupInput('local-measurement-warmup',workloadDefinition),
       duration:localInteger('local-measurement-duration',workloadDefinition.minimum_duration_seconds||1),
       repetitions:localInteger('local-measurement-repetitions'),
       verification_repetitions:localInteger('local-measurement-verification-repetitions',0,20)
-    };
+    },workloadDefinition);
     for(const key of Object.keys(localYdbAffinityKeys)){
       const mode=document.querySelector('#local-affinity-'+key+'-mode').value;
       config.affinity[key]={mode,cpus:localCpu('local-affinity-'+key+'-cpus',mode)}
@@ -694,8 +736,7 @@ function bindLocalYdbEditor(profile){
     const loadLimitInputs=Object.values(workloadDefinition.load_limits||{}).map(
       constraint=>'local-option-'+constraint.option
     );
-    if(['profile-name','local-geometry-preset','local-load-allow-errors'].includes(event.target.id)||
-      loadLimitInputs.includes(event.target.id))renderNew()
+    if(localYdbNeedsRerender(event.target.id,loadLimitInputs))renderNew()
   }catch(error){message().innerHTML=displayError(error)}};
   for(const input of document.querySelectorAll('#local-editor input,#local-editor select'))input.onchange=update;
   document.querySelector('#delete-profile').onclick=()=>{
@@ -879,10 +920,13 @@ function addProfile(){
     'r){alert(error.message)}}\n'
     "const chartColors=['#1b62b9','#c2410c','#087443','#7c3aed','#be185d','#0e7490','#854d0e','#94a3b8','#ef4444','#818cf8','"
     "#22c55e','#d946ef'];\n"
+    "const chartPointLimit=10000;\n"
     'function metricLabel(value){const number=Number(value);if(!Number.isFinite(number))return String(value);return Math.abs('
     "number)>=1e9?(number/1e9).toFixed(2)+'B':Math.abs(number)>=1e6?(number/1e6).toFixed(2)+'M':Math.abs(number)>=1e3?(number"
     "/1e3).toFixed(2)+'k':Number.isInteger(number)?String(number):number.toFixed(2)}\n"
     "function chartNumber(value){return value===null||value===undefined||typeof value==='string'&&!value.trim()?NaN:Number(value)}\n"
+    'function chartExtent(values){let minimum=Infinity,maximum=-Infinity;for(const value of values){const number=Number(value);'
+    'if(!Number.isFinite(number))continue;minimum=Math.min(minimum,number);maximum=Math.max(maximum,number)}return minimum===Infinity?null:[minimum,maximum]}\n'
     "function chartSeriesLabel(series,compact=false){return compact?series.affinity:series.run+' / '+series.profile+' / '+ser"
     'ies.affinity}\n'
     "function seriesCpuNote(series){if(series.cpu_masks&&Object.keys(series.cpu_masks).length)return 'CPUs by threads: '+Obje"
@@ -892,12 +936,13 @@ function addProfile(){
     'function svgChart(metric,xName,xValues,seriesRows,colors){\n'
     '  const width=900,height=330,left=78,right=24,top=24,bottom=52,plotWidth=width-left-right,plotHeight=height-top-bottom,v'
     'alueFor=(item,row)=>chartNumber(row?.[item.metric||metric]);\n'
-    '  const values=[];for(const item of seriesRows)for(const x of xValues){const value=valueFor(item,item.rows.get(String(x)'
-    '));if(Number.isFinite(value))values.push(value)}\n'
+    '  const xKeys=new Set(xValues.map(String)),values=[];for(const item of seriesRows)for(const [x,row] of item.rows){if(!xKeys.has(String(x)))continue;'
+    'const value=valueFor(item,row);if(Number.isFinite(value))values.push(value);if(values.length>chartPointLimit)return '
+    "'<div class=notice>Chart omitted because it has more than '+chartPointLimit+' numeric points. Select fewer runs or lines.</div>'}\n"
     "  if(!values.length)return '<div class=empty>No numeric values for '+esc(metric)+'.</div>';\n"
-    '  let yMin=Math.min(...values),yMax=Math.max(...values);if(yMin===yMax){const pad=Math.abs(yMin)*.05||1;yMin-=pad;yMax+='
+    '  let [yMin,yMax]=chartExtent(values);if(yMin===yMax){const pad=Math.abs(yMin)*.05||1;yMin-=pad;yMax+='
     'pad}else{const pad=(yMax-yMin)*.08;yMin-=pad;yMax+=pad}\n'
-    '  const numericX=xValues.map(Number),xMin=Math.min(...numericX),xMax=Math.max(...numericX),xPos=value=>left+(xMax===xMin'
+    '  const [xMin,xMax]=chartExtent(xValues),xPos=value=>left+(xMax===xMin'
     '?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth),yPos=value=>top+(yMax-Number(value))/(yMax-yMin)*plotHeight;\n'
     '  let svg=\'<svg viewBox="0 0 \'+width+\' \'+height+\'" role=img aria-label="\'+esc(metric)+\' by \'+esc(xName)+\'">\';\n'
     "  for(let tick=0;tick<=4;tick++){const y=top+plotHeight*tick/4,value=yMax-(yMax-yMin)*tick/4;svg+='<line class=chart-gri"
@@ -924,9 +969,6 @@ function addProfile(){
     '}\n'
     """
 function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,synchronize=false){
-  const width=900,left=78,right=24,plotWidth=width-left-right,numericX=xValues.map(Number);
-  const xMin=Math.min(...numericX),xMax=Math.max(...numericX);
-  const xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);
   const seriesFor=metric=>Array.isArray(seriesRows)?seriesRows:(seriesRows[metric]||[]);
   const panels=[...container.querySelectorAll('.chart-panel')].map(panel=>({
     panel,
@@ -936,6 +978,9 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     tooltip:panel.querySelector('.chart-tooltip'),
     cursor:panel.querySelector('.chart-cursor'),
   })).filter(item=>item.svg&&item.surface&&item.tooltip&&item.cursor&&metrics.includes(item.metric));
+  const xExtent=chartExtent(xValues);if(!panels.length||!xExtent)return;
+  const width=900,left=78,right=24,plotWidth=width-left-right,[xMin,xMax]=xExtent;
+  const xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);
   const hideAll=()=>{for(const item of panels){
     item.tooltip.hidden=true;item.cursor.setAttribute('visibility','hidden');
     item.cursor.removeAttribute('data-selected-x')
@@ -1164,10 +1209,12 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'function localComparisonConfig(item){\n'
     '  const parameters=item.parameters||{},workload=parameters.workload||{},geometry=parameters.geometry||{},client=parameters.client||{};\n'
     '  const measurement=parameters.measurement||{},load=parameters.load||{},objective=load.objective||{};\n'
+    "  const warmup=Object.prototype.hasOwnProperty.call(measurement,'warmup')?"
+    "(measurement.warmup===null?'automatic':measurement.warmup):'—';\n"
     "  const values={\n"
     "    'Workload':workload.type??'—','Operation':workload.operation??'—','Load parameter':load.parameter??'—',\n"
     "    'Load values':JSON.stringify(localComparisonStable(load.values??null)),\n"
-    "    'Objective':objective.type??'points','Warmup seconds':measurement.warmup??'—',\n"
+    "    'Objective':objective.type??'points','Warmup seconds':warmup,\n"
     "    'Duration seconds':measurement.duration??'—','Repetitions':measurement.repetitions??'—',\n"
     "    'Verification repetitions':measurement.verification_repetitions??0,\n"
     "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"
@@ -1185,7 +1232,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'function localComparisonContext(item){return {\n'
     "  'Host':item.platform?.uname?.node??'—','CPU':item.platform?.cpu_model??'—',\n"
     "  'Kernel':item.platform?.uname?.release??'—','CPU topology':JSON.stringify(localComparisonStable(item.cpu_topology??null)),\n"
-    "  'YDB CLI build':item.binaries?.ydb_cli?.sha256??'—'\n"
+    "  'YDB CLI build':item.binaries?.ydb_cli?.sha256??'—',\n"
+    "  'Verification cluster':localResultMetrics(item.result).verified?localVerificationClusterLabel(item.verification):'not applicable'\n"
     '}}\n'
     "function localComparisonBuild(item){return {'ydbd':item.binaries?.ydbd?.sha256??'—','Tool revision':item.tool_revision??'—'}}\n"
     'function localComparisonStable(value){\n'
@@ -1216,6 +1264,11 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'function localVerificationCount(result,parameters={},verification={}){\n'
     '  return result?.verification_repetitions??verification?.configured_repetitions??verification?.completed_repetitions??\n'
     '    parameters?.measurement?.verification_repetitions??0\n'
+    '}\n'
+    'function localVerificationClusterLabel(verification={}){\n'
+    "  if(verification?.cluster==='fresh')return 'fresh cluster';\n"
+    "  if(verification?.cluster==='search')return 'retained search cluster';\n"
+    "  return 'unknown cluster'\n"
     '}\n'
     'function localVerificationBadge(result,parameters={},verification={}){\n'
     '  const view=localResultMetrics(result);if(!view.verified)return \'\';\n'
@@ -1260,9 +1313,7 @@ function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseli
   }
   groups.sort((left,right)=>left.label.localeCompare(right.label,undefined,{numeric:true}));
   groups.forEach((group,index)=>group.colorIndex=index);
-  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]
-    .sort((left,right)=>left-right);
-  if(!xValues.length){
+  if(!groups.some(group=>group.rows.size)){
     container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';
     return
   }
@@ -1275,7 +1326,7 @@ function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseli
     ['cli_cpu','median_cli_cpu_mean','YDB CLI CPU (%)']
   ];
   const customSpecifications=curveMetrics.map(metric=>[
-    'workload_'+metric.name,(metric.name==='errors'?'max_':'median_')+metric.name,
+    'workload_'+metric.name,(metric.repetition_aggregation==='sum'?'sum_':'median_')+metric.name,
     localMetricLabel(schema,metric.name)+' ('+metric.unit+')'
   ]);
   const [percentile,sloMetric]=localPreferredSlo(schema,objective);
@@ -1283,13 +1334,23 @@ function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseli
     ['throughput','median_throughput','Achieved throughput ('+schema.throughput_unit+')'],
     ['latency_ms','median_'+sloMetric,percentile+' latency (ms)'],
     ...cpuSpecifications,
-    ['errors','max_errors','Maximum errors per repetition']
+    ['errors','sum_errors','Errors across repetitions']
   ]:customSpecifications.concat(cpuSpecifications)).filter(([,metric])=>groups.some(group=>[...group.rows.values()]
     .some(row=>Number.isFinite(chartNumber(row[metric])))));
   if(!specifications.length){
     container.innerHTML='<div class=empty>No numeric local YDB search metrics are available.</div>';
     return
   }
+  let pointCount=0;
+  for(const [,metric] of specifications)for(const group of groups)for(const row of group.rows.values()){
+    if(Number.isFinite(chartNumber(row[metric]))&&++pointCount>chartPointLimit){
+      container.innerHTML='<div class=notice>Search curves omitted because they have more than '+chartPointLimit+
+        ' numeric points. Select fewer runs.</div>';
+      return
+    }
+  }
+  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]
+    .sort((left,right)=>left-right);
   const seriesByMetric=Object.fromEntries(specifications.map(([alias,metric])=>[
     alias,groups.map(group=>({...group,metric}))
   ]));
@@ -1390,7 +1451,8 @@ const localPhaseLabels={
   'verification-initializing':'Preparing verification workload','verification-warmup':'Warming up verification',
   'verification-measuring':'Measuring verification','verification-cleanup':'Cleaning verification workload',
   'verification-evaluating':'Evaluating verification','verification-completed':'Verification completed',
-  'scaling-dynamic-nodes':'Scaling dynamic nodes','stopping-cluster':'Stopping cluster','finishing':'Writing results',
+  'scaling-dynamic-nodes':'Scaling dynamic nodes','restarting-verification-cluster':'Restarting verification cluster',
+  'stopping-cluster':'Stopping cluster','finishing':'Writing results',
   completed:'Completed',failed:'Failed',cancelled:'Cancelled'
 };
 function localPhaseLabel(phase){return localPhaseLabels[phase]||String(phase||'Preparing').replaceAll('-',' ')}
@@ -1493,6 +1555,7 @@ function localVerificationSummary(data){
     repetitions+' independent holdout repetition'+(Number(repetitions)===1?'':'s'):
     'Independent holdout measurements';
   const outcomes=[];
+  if(verification.cluster)outcomes.push(localVerificationClusterLabel(verification));
   if(verification.decision){
     outcomes.push((verification.evaluation_kind==='objective'?'Objective':'Validity check')+': '+verification.decision)
   }
@@ -1833,7 +1896,7 @@ function renderLocalYdbProfile(container,data){
       )).join('')+
       localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+
       (errorSeries.length?localChart('Errors and retries','errors',xName,xValues,errorSeries):'')+'</div>';
-    const displayedMetrics=localDisplayedMetrics(resultSchema);
+    const displayedMetrics=localDisplayedMetrics(resultSchema,objective);
     const workloadHeaders=displayedMetrics.map(metric=>'<th title="'+
       esc(metric.description||'')+'">'+esc(localMetricLabel(resultSchema,metric.name))+
       (metric.unit?' ('+esc(metric.unit)+')':'')+'</th>').join('');
@@ -2566,6 +2629,7 @@ def chart_data(output, run_ids, benchmark_filter=None):
     if benchmark_filter is not None and benchmark_filter not in BENCHMARKS:
         raise BenchmarkError("unknown chart benchmark: {}".format(benchmark_filter))
     result = []
+    result_row_count = 0
     dimensions, metrics, metric_metadata, dimension_metadata = set(), set(), {}, {}
     for run_id in run_ids:
         root = _run_directory(output, run_id)
@@ -2603,7 +2667,7 @@ def chart_data(output, run_ids, benchmark_filter=None):
                 benchmark_definition = BENCHMARKS.get(benchmark_name) if benchmark_name in BENCHMARKS else None
                 normalized_repetitions = benchmark_name == "memory-bandwidth-bench"
                 has_memory_fairness = False
-                prefixes = ("median_", "mean_", "min_", "max_")
+                prefixes = ("median_", "mean_", "min_", "max_", "sum_")
                 metric_fields = [name for name in fields if name.startswith(prefixes)]
                 dimension_fields = [
                     name
@@ -2652,6 +2716,9 @@ def chart_data(output, run_ids, benchmark_filter=None):
                     metric_fields = [metric.name for metric in benchmark_definition.metrics]
                     if has_memory_fairness:
                         metric_fields += list(_MEMORY_FAIRNESS_METRICS)
+                result_row_count += sum(len(rows) for rows in grouped.values())
+                if result_row_count > _CHART_DATA_ROW_LIMIT:
+                    raise BenchmarkError("selected chart data has too many rows")
                 dimensions.update(dimension_fields)
                 metrics.update(metric_fields)
                 file_metric_metadata = {}
@@ -2689,7 +2756,10 @@ def chart_data(output, run_ids, benchmark_filter=None):
                             "unit": descriptor["unit"],
                             "description": descriptor.get("description", ""),
                         }
-                        for prefix in ("median_", "min_", "max_"):
+                        prefixes = ["median_", "min_", "max_"]
+                        if descriptor["repetition_aggregation"] == "sum":
+                            prefixes.append("sum_")
+                        for prefix in prefixes:
                             file_metric_metadata[prefix + descriptor["name"]] = metadata
                 for name, metadata in file_metric_metadata.items():
                     _merge_chart_metric_metadata(metric_metadata, name, metadata)
@@ -3457,6 +3527,7 @@ class RunService:
         cursor = after
         matched = 0
         activity = deque(maxlen=_LOCAL_YDB_ACTIVITY_LIMIT)
+        replay_gap = False
 
         def consume(event):
             nonlocal cursor, matched
@@ -3496,8 +3567,21 @@ class RunService:
             except OSError as error:
                 raise BenchmarkError("cannot read run event log") from error
             with stream:
-                remaining = snapshot_size
-                previous_sequence = 0
+                replay_start = max(
+                    0,
+                    snapshot_size - _LOCAL_YDB_ACTIVITY_SCAN_BYTES - _EVENT_LOG_RECORD_BYTES,
+                )
+                if replay_start:
+                    stream.seek(replay_start - 1)
+                    starts_at_record_boundary = stream.read(1) == b"\n"
+                    stream.seek(replay_start)
+                    if not starts_at_record_boundary:
+                        partial = stream.readline(min(snapshot_size - replay_start, _EVENT_LOG_RECORD_BYTES + 1))
+                        if len(partial) > _EVENT_LOG_RECORD_BYTES or not partial.endswith(b"\n"):
+                            raise BenchmarkError("run event log contains an oversized or incomplete event")
+                remaining = snapshot_size - stream.tell()
+                previous_sequence = None
+                first_sequence = None
                 while remaining:
                     line = stream.readline(min(remaining, _EVENT_LOG_RECORD_BYTES + 1))
                     if not line:
@@ -3515,15 +3599,20 @@ class RunService:
                     if (
                         not isinstance(sequence, int)
                         or isinstance(sequence, bool)
-                        or sequence <= previous_sequence
+                        or sequence <= 0
+                        or (previous_sequence is not None and sequence <= previous_sequence)
                         or sequence > _MAX_SAFE_JSON_INTEGER
                     ):
                         raise BenchmarkError("run event log sequences must be strictly increasing integers")
+                    if first_sequence is None:
+                        first_sequence = sequence
                     previous_sequence = sequence
                     if not isinstance(event.get("type"), str):
                         raise BenchmarkError("run event log event type must be a string")
                     consume(event)
-
+                if replay_start and first_sequence is None:
+                    raise BenchmarkError("run event log contains an oversized or incomplete event")
+                replay_gap = bool(replay_start and first_sequence > after + 1)
         bounded = deque()
         response_bytes = 0
         for item in reversed(activity):
@@ -3537,7 +3626,7 @@ class RunService:
         return {
             "events": list(bounded),
             "after": cursor,
-            "truncated": matched > len(bounded),
+            "truncated": replay_gap or matched > len(bounded),
         }
 
     def local_ydb_comparison(self, run_ids):
@@ -3668,6 +3757,7 @@ class RunService:
                             "finished_at",
                             "load",
                             "dynamic_nodes",
+                            "cluster",
                             "configured_repetitions",
                             "completed_repetitions",
                             "accepted",

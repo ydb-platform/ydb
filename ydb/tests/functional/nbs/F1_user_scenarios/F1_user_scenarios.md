@@ -53,13 +53,13 @@ Geometry to keep in mind when picking offsets:
 | F1.10 | Write crossing a vchunk boundary (32 MiB on this harness) | both vchunks hold the correct slice; read is exact | none |
 | F1.11 | Write crossing a 4 GiB region boundary (needs a disk > 4 GiB) | both regions hold the correct slice; read is exact | none |
 | F1.12 | Read of a never-written range | zeroes, not garbage, not an error | none |
-| F1.13 | Block sizes 4 / 8 / 16 / 32 / 64 / 128 KiB (create 512 GiB with `--block-size`) | create succeeds at every size; first / middle / last block read-after-write exact. IO at block size > 4 KiB is a known product bug: VChunk hardcodes 4 KiB | `F1_13_block_sizes.py` (known_bug xfail per size >4 KiB) |
+| F1.13 | Block sizes 4 / 8 / 16 / 32 / 64 / 128 KiB (create 512 GiB with `--block-size`) | create succeeds at every size; first / middle / last block read-after-write exact | `F1_13_block_sizes.py` |
 | F1.14 | Unaligned vhost writes at byte offsets 1024 and 5120, then unaligned read | `VIRTIO_BLK_S_OK`; payload match | `test_nbs_vhost_unaligned_write` |
 | F1.15 | Vhost after partition tablet kill + recovery | same vhost session keeps working across the restart; generation increases; previously written data readable | `F1_15_vhost_after_tablet_restart.py` |
 | F1.16 | Two disks, independent IO | no cross-talk | `test_nbs_multiple_disks_creation` |
 | F1.17 | Noisy neighbour: load-actor on disk A while doing verified IO on disk B | disk B read-after-write holds; disk A `RequestsFailed == 0` | none |
 | F1.18 | 500 GiB disk, first / middle / last block of first / middle / last 32 MiB chunk (in-memory PDisk chunk size) | each 4 KiB read matches | `test_nbs_500gb_disk_read_write` |
-| F1.25 | Max disk size at every supported block size (`2³¹` blocks) | 4 KiB: create, first / middle / last block read-after-write exact, write past the last block rejected. Sizes > 4 KiB are known_bug xfail and are not created (eager vchunk metadata + 4 KiB IO path) | `F1_25_max_disk_size.py` (known_bug xfail, not run, per size >4 KiB) |
+| F1.25 | Max disk size at every supported block size (`2³¹` blocks) | create, first / middle / last block read-after-write exact, write past the last block rejected. Only 4 KiB runs today; larger sizes are `known_bug` xfail with `run=False` (eager vchunk metadata at 2³¹ blocks) | `F1_25_max_disk_size.py` (known_bug xfail, not run, per size >4 KiB) |
 
 Extend F1.18 with a self-describing payload (LBA + sequence) so a misplaced
 block is distinguishable from a torn one. Today's test writes the same

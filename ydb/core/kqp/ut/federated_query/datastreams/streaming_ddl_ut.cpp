@@ -496,7 +496,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 2 }},
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 -- so in test query will be restarted after zero checkpoint completion.
 
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 2 }},
@@ -887,7 +887,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ) AS
             DO BEGIN
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 1 }},
@@ -976,15 +976,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         auto newSeqNo = CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
         UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo); // No checkpoints due to checkpointing interval
 
-        const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> ::NMonitoring::TDynamicCounters::TCounterPtr {
+        const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> std::function<ui64()> {
             const NMonitoring::TDynamicCounterPtr kqpCounters = GetCounters("kqp", nodeIndex);
             const auto sourceTracker = kqpCounters->GetSubgroup("subsystem", "DqSinkTracker");
             const auto sourceCounters = sourceTracker->GetSubgroup("sink", "PqSink");
             const auto inflyData = sourceCounters->GetCounter("InFlyData");
             const auto inFlyCheckpoints = sourceCounters->GetCounter("InFlyCheckpoints");
+            const auto inFlyPendingAckCheckpoints = sourceCounters->GetCounter("InFlyPendingAckCheckpoints");
 
             if (inflyData->Val() != 0) {
-                return inFlyCheckpoints;
+                return [inFlyCheckpoints, inFlyPendingAckCheckpoints]() {
+                    return inFlyCheckpoints->Val() + inFlyPendingAckCheckpoints->Val();
+                };
             }
 
             return nullptr;
@@ -995,7 +998,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             counters = pqCountersExtractor(/* nodeIndex */ 1);
         }
         UNIT_ASSERT_C(counters, "Counters not found for PQ sink");
-        UNIT_ASSERT_VALUES_EQUAL(counters->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters(), 0);
 
         WaitFor(CHECKPOINT_INTERVAL, "checkpoint propagation", [&](TString& error) {
             if (GetLastCheckpointSeqNo(checkpointId) == seqNo) {
@@ -1003,7 +1006,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 return false;
             }
 
-            return counters->Val() == 1;
+            return counters() == 1;
         });
 
         newSeqNo = GetLastCheckpointSeqNo(checkpointId);
@@ -6001,8 +6004,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             featureFlags.SetEnableStreamingQueriesPqSinkDeduplication(true);
         }
 
-        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-
         constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
         constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
         CreateTopic(inputTopicName);
@@ -6025,20 +6026,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "output_topic"_a = outputTopicName
         ), EStatus::GENERIC_ERROR, "Authorization is required for setting `DELIVERY_GUARANTEE` = 'exactly_once'");
 
-        constexpr char queryName[] = "deliveryGuarantyWriteSetting";
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
-                    DELIVERY_GUARANTEE = "exactly_once"
-                ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "query_name"_a = queryName
-        ));
-
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY deliveryGuarantyWriteSettingWithDeduplication AS
             DO BEGIN
@@ -6051,19 +6038,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` = 'exactly_once' is not supported with enabled deduplication");
-
-        Sleep(TDuration::Seconds(1));
-
-        {
-            const auto& result = ExecQuery(fmt::format(R"(
-                SELECT Issues FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")",
-                "query_name"_a = queryName
-            ));
-            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_STRING_CONTAINS(resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or(""), "Deferred publications is not supported");
-            });
-        }
 
         ExecQuery(fmt::format(R"(
             INSERT INTO `{pq_source}`.`{output_topic}` WITH (

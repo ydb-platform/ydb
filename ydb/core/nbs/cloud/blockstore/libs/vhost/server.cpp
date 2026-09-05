@@ -937,6 +937,9 @@ IDeviceHandlerPtr TServer::CreateDeviceHandler(
     const TStorageOptions& options,
     IStoragePtr storage)
 {
+    Y_ABORT_UNLESS(IsSupportedBlockSize(options.BlockSize));
+    Y_ABORT_UNLESS(options.StripeSize % options.BlockSize == 0);
+
     TDeviceHandlerParams params{
         .Storage = CreateWrappers(options, std::move(storage)),
         .DiskId = options.DiskId,

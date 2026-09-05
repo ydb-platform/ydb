@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.91.0)
+VERSION(1.92.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/graph/archive/boost-1.91.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/graph/archive/boost-1.92.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/algorithm
@@ -20,7 +20,6 @@ PEERDIR(
     contrib/restricted/boost/array
     contrib/restricted/boost/assert
     contrib/restricted/boost/bimap
-    contrib/restricted/boost/bind
     contrib/restricted/boost/concept_check
     contrib/restricted/boost/config
     contrib/restricted/boost/container_hash
@@ -35,6 +34,7 @@ PEERDIR(
     contrib/restricted/boost/move
     contrib/restricted/boost/mpl
     contrib/restricted/boost/multi_index
+    contrib/restricted/boost/multiprecision
     contrib/restricted/boost/optional
     contrib/restricted/boost/parameter
     contrib/restricted/boost/preprocessor

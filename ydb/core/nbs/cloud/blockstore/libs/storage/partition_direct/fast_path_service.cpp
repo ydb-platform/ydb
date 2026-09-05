@@ -84,6 +84,13 @@ void DumpToFile(
     }
 }
 
+ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
+{
+    Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
+    Y_ABORT_UNLESS(storageConfig.GetStripeSize() % blockSize == 0);
+    return blockSize;
+}
+
 TVector<TRegionPtr> CreateRegions(
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
@@ -95,6 +102,7 @@ TVector<TRegionPtr> CreateRegions(
     const TDirtyMapStateProtos& dirtyMapStates,
     const TStorageConfig& storageConfig)
 {
+    blockSize = CheckedBlockSize(blockSize, storageConfig);
     const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
@@ -108,6 +116,7 @@ TVector<TRegionPtr> CreateRegions(
             vChunkConfigs,
             dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
+            blockSize,
             storageConfig.GetVChunkSize());
     }
 

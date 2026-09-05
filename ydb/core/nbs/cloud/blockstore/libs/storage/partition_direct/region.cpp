@@ -34,6 +34,7 @@ TRegion::TRegion(
     const TVChunkConfigs& vChunkConfigs,
     const TDirtyMapStateProtos& dirtyMapStates,
     ui32 syncRequestsBatchSize,
+    ui32 blockSize,
     ui64 vChunkSize)
     : ActorSystem(actorSystem)
     , DiskDescription(diskDescription)
@@ -63,6 +64,7 @@ TRegion::TRegion(
             dirtyMapState ? *dirtyMapState : TDirtyMapStateProto(),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
+            blockSize,
             vChunkSize);
         VChunks.push_back(std::move(vChunk));
     }

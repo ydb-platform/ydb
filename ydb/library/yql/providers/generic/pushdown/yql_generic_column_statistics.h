@@ -75,7 +75,7 @@ namespace NYql::NGenericPushDown {
         TString ColumnName;
         Ydb::Type ColumnType;
         TMaybe<TBooleanColumnStatsData> BooleanStats;
-        TMaybe<TBooleanColumnStatsData> DoubleStats;
+        TMaybe<TDoubleColumnStatsData> DoubleStats;
         TMaybe<TLongColumnStatsData> LongStats;
         TMaybe<TStringColumnStatsData> StringStats;
         TMaybe<TBinaryColumnStatsData> BinaryStats;

@@ -4,6 +4,20 @@
 
 namespace NKikimr::NBlobDepot {
 
+    inline ui32 S3ControlLimit(i64 icbValue) {
+        return static_cast<ui32>(Max<i64>(1, icbValue));
+    }
+
+    inline bool ClampToS3ControlLimit(ui32& currentMax, i64 icbValue) {
+        const ui32 limit = S3ControlLimit(icbValue);
+        if (currentMax <= limit) {
+            return false;
+        }
+
+        currentMax = limit;
+        return true;
+    }
+
     static constexpr ui32 BaseDataChannel = 2;
 
     struct TChannelKind {

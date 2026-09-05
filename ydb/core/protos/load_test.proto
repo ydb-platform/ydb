@@ -194,10 +194,8 @@ message TEvLoadTestRequest {
 
         // When true, the load test performs reads instead of writes.
         optional bool IsReadLoad = 15 [default = false];
-        // Enable io_uring SQPOLL mode for DDisk direct I/O.
-        optional bool SQPoll = 16 [default = false];
-        // Enable io_uring IOPOLL mode for DDisk direct I/O.
-        optional bool IOPoll = 17 [default = false];
+        reserved 16, 17;
+        reserved "SQPoll", "IOPoll";
         // Request size for read/write operations in bytes.
         optional uint32 IoSizeBytes = 18 [default = 4096];
         // Unmeasured background writes per measured read during IsReadLoad.

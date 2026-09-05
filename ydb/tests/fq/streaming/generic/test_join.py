@@ -1260,8 +1260,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
             return
 
         assert not (not streamlookup and "MultiGet true" in sql)
-        path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
             self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]), endpoint=endpoint)
@@ -1400,8 +1399,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
             END DO;
         """)
 
-        path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         if partitions_count > 1 or tasks > 1:
             # let idle timeout fire

@@ -10,11 +10,12 @@ namespace NYql {
 
 namespace {
 
-class TNormalizeDependsOnTransformer : public TSyncTransformerBase {
+class TNormalizeDependsOnTransformer: public TSyncTransformerBase {
 public:
     explicit TNormalizeDependsOnTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
-    {}
+    {
+    }
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         if (!Types_.NormalizeDependsOn) {
@@ -48,17 +49,18 @@ public:
             TExprNode::TListType normalizedArgs;
 
             auto hash = HexEncode(MakeCacheKey(dependsOn->Head()));
-            normalizedArgs.push_back(ctx.NewCallable(dependsOn->Head().Pos(), "String", { ctx.NewAtom(dependsOn->Head().Pos(), hash) }));
+            normalizedArgs.push_back(ctx.NewCallable(dependsOn->Head().Pos(), "String", {ctx.NewAtom(dependsOn->Head().Pos(), hash)}));
 
             TNodeSet innerLambdasArgs;
             TNodeSet outerLambdasArgs;
+            // clang-format off
             VisitExpr(dependsOn, [&](const TExprNode::TPtr& node) {
                 if (node->GetDependencyScope() && node->IsComplete()) {
                     return false;
                 }
 
                 if (node->IsLambda()) {
-                    for (const auto& arg: node->Head().Children()) {
+                    for (const auto& arg : node->Head().Children()) {
                         innerLambdasArgs.insert(arg.Get());
                     }
                 } else if (node->IsArgument()) {
@@ -70,13 +72,14 @@ public:
                 return true;
             }, [&](const TExprNode::TPtr& node) {
                 if (node->IsLambda()) {
-                    for (const auto& arg: node->Head().Children()) {
+                    for (const auto& arg : node->Head().Children()) {
                         innerLambdasArgs.erase(arg.Get());
                     }
                 }
 
                 return true;
             });
+            // clang-format on
 
             if (normalizedArgs.size() == 1) {
                 replaces[dependsOn.Get()] = ctx.ChangeChild(*dependsOn, 0, std::move(normalizedArgs[0]));
@@ -98,7 +101,7 @@ private:
     const TTypeAnnotationContext& Types_;
 };
 
-}
+} // namespace
 
 THolder<IGraphTransformer> CreateNormalizeDependsOnTransformer(const TTypeAnnotationContext& types) {
     return THolder<IGraphTransformer>(new TNormalizeDependsOnTransformer(types));

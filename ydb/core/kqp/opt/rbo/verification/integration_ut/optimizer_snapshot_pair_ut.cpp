@@ -16,6 +16,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/tempdir.h>
+#include <util/generic/scope.h>
 #include <util/stream/file.h>
 #include <util/system/shellcommand.h>
 
@@ -421,17 +422,33 @@ NJson::TJsonValue BuildVerificationProblem(
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final,
     ui64 timeoutMs = 10'000,
-    bool diagnosticTransformationPrefix = false)
+    bool diagnosticTransformationPrefix = false,
+    TStringBuf query = {})
 {
-    TTempDir tempDir;
+    auto tempDir = TTempDir::NewTempDir(GetOutputPath().GetPath());
+    TShellCommand command(BinaryPath(
+        "ydb/core/kqp/opt/rbo/verification/bin/kqp_rbo_verify"));
+    bool verified = false;
+    Y_SCOPE_EXIT(&) {
+        if (!verified) {
+            tempDir.DoNotRemove();
+            try {
+                Cerr << "Verifier failure artifacts: " << tempDir.Name() << Endl;
+                TFileOutput((tempDir.Path() / "verifier.stdout").GetPath()).Write(command.GetOutput());
+                TFileOutput((tempDir.Path() / "verifier.stderr").GetPath()).Write(command.GetError());
+            } catch (...) {
+                // Preserve existing files without masking the original failure.
+            }
+        }
+    };
     const auto initialPath = tempDir.Path() / "initial.json";
     const auto finalPath = tempDir.Path() / "final.json";
     const auto formulaPath = tempDir.Path() / "problem.smt2";
     TFileOutput(initialPath.GetPath()).Write(initial.Json);
     TFileOutput(finalPath.GetPath()).Write(final.Json);
-
-    TShellCommand command(BinaryPath(
-        "ydb/core/kqp/opt/rbo/verification/bin/kqp_rbo_verify"));
+    if (!query.empty()) {
+        TFileOutput((tempDir.Path() / "query.sql").GetPath()).Write(query);
+    }
     command
         << initialPath.GetPath()
         << finalPath.GetPath()
@@ -466,6 +483,7 @@ NJson::TJsonValue BuildVerificationProblem(
         expectedExitCode,
         command.GetError() << command.GetOutput());
     UNIT_ASSERT_C(formulaPath.Exists(), command.GetOutput());
+    verified = status == "VERIFIED_BOUNDED";
     return verdict;
 }
 
@@ -477,7 +495,8 @@ struct TSnapshotPair {
 
 TSnapshotPair CaptureRealHostSnapshotPair(
     TKikimrRunner& kikimr,
-    const TString& query)
+    const TString& query,
+    ui64 timeoutMs = 10'000)
 {
     NYql::TExprContext moduleContext;
     NYql::IModuleResolver::TPtr moduleResolver;
@@ -490,7 +509,15 @@ TSnapshotPair CaptureRealHostSnapshotPair(
         sink);
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-    const auto prepared = host->SyncPrepareDataQuery(query, settings);
+    // Constant folding may execute a literal MiniKQL program, which requires
+    // the actor activation context supplied by production query preparation.
+    const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
+        host,
+        query,
+        settings
+    ] {
+        return host->SyncPrepareDataQuery(query, settings);
+    });
     UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
     const auto results = sink->Extract();
@@ -503,7 +530,7 @@ TSnapshotPair CaptureRealHostSnapshotPair(
     UNIT_ASSERT(initial["stage_graph"].IsNull());
     UNIT_ASSERT(final["stage_graph"].IsMap());
 
-    auto verdict = BuildVerificationProblem(results[0], results[1]);
+    auto verdict = BuildVerificationProblem(results[0], results[1], timeoutMs, false, query);
     return {
         .Initial = std::move(initial),
         .Final = std::move(final),
@@ -513,9 +540,10 @@ TSnapshotPair CaptureRealHostSnapshotPair(
 
 TSnapshotPair VerifyRealHostSnapshotPair(
     TKikimrRunner& kikimr,
-    const TString& query)
+    const TString& query,
+    ui64 timeoutMs = 10'000)
 {
-    auto pair = CaptureRealHostSnapshotPair(kikimr, query);
+    auto pair = CaptureRealHostSnapshotPair(kikimr, query, timeoutMs);
     UNIT_ASSERT_VALUES_EQUAL_C(
         pair.Verdict["status"].GetStringSafe(),
         "VERIFIED_BOUNDED",
@@ -1101,6 +1129,8 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         TKikimrRunner kikimr;
         CreateExistsColumnTables(kikimr);
 
+        // Decimal division needs the corpus proof budget even at two rows.
+        // This is a correctness check, not a ten-second performance gate.
         const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
             SELECT
                 outer_row.Id,
@@ -1110,7 +1140,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                     WHERE inner_row.MatchKey == outer_row.MatchKey
                 ) AS MeanAmount
             FROM `/Root/RboExistsOuter` AS outer_row;
-        )");
+        )", 60'000);
 
         const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
@@ -1190,6 +1220,194 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(
             (*joins[0])["kind"].GetStringSafe(),
             "left");
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesEqualityCorrelatedScalarDecimalMulAvgLeftJoin) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        // Correlating the two primary keys keeps this focused proof small while
+        // the two-row symbolic model still covers unmatched outer keys and
+        // nullable Amount values.
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT
+                outer_row.Id,
+                (
+                    SELECT CAST("2.00" AS Decimal(7, 2)) * Avg(inner_row.Amount)
+                    FROM `/Root/RboExistsInner` AS inner_row
+                    WHERE inner_row.Id == outer_row.Id
+                ) AS ScaledMeanAmount
+            FROM `/Root/RboExistsOuter` AS outer_row;
+        )", 60'000);
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        const auto& subplan = subplans[0];
+        UNIT_ASSERT_VALUES_EQUAL(subplan.GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(subplan["kind"].GetStringSafe(), "scalar");
+        UNIT_ASSERT_VALUES_EQUAL(subplan["type"].GetStringSafe(), "Decimal(7,2)");
+        UNIT_ASSERT(subplan["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(subplan["output"].GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["output"]["type"].GetStringSafe(),
+            "Decimal(7,2)");
+        UNIT_ASSERT(subplan["output"]["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["dependencies"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(subplan["consumers"].GetArraySafe().size(), 1);
+        const TString dependency =
+            subplan["dependencies"][0].GetStringSafe();
+
+        const auto outerBindings = PlanNodes(pair.Initial, "outer_bind");
+        UNIT_ASSERT_VALUES_EQUAL(outerBindings.size(), 1);
+        const auto& outerBinding = *outerBindings[0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            outerBinding["dependency"].GetStringSafe(),
+            dependency);
+        UNIT_ASSERT_VALUES_EQUAL(outerBinding["type"].GetStringSafe(), "Int64");
+        UNIT_ASSERT(!outerBinding["nullable"].GetBooleanSafe());
+
+        TString selectedColumn = subplan["output"]["column"].GetStringSafe();
+        const auto* shape = &PlanNode(
+            pair.Initial,
+            subplan["root"].GetStringSafe());
+        const NJson::TJsonValue* multiplication = nullptr;
+        size_t computedProjectCount = 0;
+        while ((*shape)["op"].GetStringSafe() == "project") {
+            const NJson::TJsonValue* producer = nullptr;
+            for (const auto& column : (*shape)["columns"].GetArraySafe()) {
+                if (column["output"].GetStringSafe() == selectedColumn) {
+                    UNIT_ASSERT_C(!producer, NJson::WriteJson(*shape, false));
+                    producer = &column["expression"];
+                }
+            }
+            UNIT_ASSERT_C(producer, NJson::WriteJson(*shape, false));
+
+            const TString kind = (*producer)["kind"].GetStringSafe();
+            if (kind == "column") {
+                selectedColumn = (*producer)["column"].GetStringSafe();
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(kind, "mul");
+                UNIT_ASSERT_C(!multiplication, NJson::WriteJson(subplan, false));
+                multiplication = producer;
+                ++computedProjectCount;
+
+                UNIT_ASSERT_VALUES_EQUAL(multiplication->GetMapSafe().size(), 5);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*multiplication)["type"].GetStringSafe(),
+                    "Decimal(7,2)");
+                UNIT_ASSERT((*multiplication)["nullable"].GetBooleanSafe());
+                const auto& left = (*multiplication)["left"];
+                const auto& right = (*multiplication)["right"];
+                const TString leftKind = left["kind"].GetStringSafe();
+                const TString rightKind = right["kind"].GetStringSafe();
+                UNIT_ASSERT_C(
+                    (leftKind == "literal" && rightKind == "column") ||
+                        (leftKind == "column" && rightKind == "literal"),
+                    NJson::WriteJson(*multiplication, false));
+
+                const auto& literal = leftKind == "literal" ? left : right;
+                const auto& member = leftKind == "column" ? left : right;
+                UNIT_ASSERT_VALUES_EQUAL(literal.GetMapSafe().size(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    literal["type"].GetStringSafe(),
+                    "Decimal(7,2)");
+                UNIT_ASSERT_VALUES_EQUAL(literal["value"].GetMapSafe().size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    literal["value"]["kind"].GetStringSafe(),
+                    "finite");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    literal["value"]["scaled"].GetStringSafe(),
+                    "200");
+                UNIT_ASSERT_VALUES_EQUAL(member.GetMapSafe().size(), 2);
+                selectedColumn = member["column"].GetStringSafe();
+            }
+            shape = &PlanNode(pair.Initial, (*shape)["input"].GetStringSafe());
+        }
+        UNIT_ASSERT_C(multiplication, NJson::WriteJson(subplan, false));
+        UNIT_ASSERT_VALUES_EQUAL(computedProjectCount, 1);
+
+        const auto& aggregate = *shape;
+        UNIT_ASSERT_VALUES_EQUAL(aggregate["op"].GetStringSafe(), "aggregate");
+        UNIT_ASSERT(aggregate["keys"].GetArraySafe().empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate["phase"].GetStringSafe(),
+            "undefined");
+        UNIT_ASSERT(!aggregate["distinct_all"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate["aggregates"].GetArraySafe().size(),
+            1);
+        const auto& trait = aggregate["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(trait["function"].GetStringSafe(), "avg");
+        UNIT_ASSERT_VALUES_EQUAL(
+            trait["output"].GetStringSafe(),
+            selectedColumn);
+        UNIT_ASSERT_VALUES_EQUAL(trait["type"].GetStringSafe(), "Decimal(7,2)");
+        UNIT_ASSERT(trait["nullable"].GetBooleanSafe());
+        UNIT_ASSERT(!trait["distinct"].GetBooleanSafe());
+        UNIT_ASSERT(!trait["unwrap"].GetBooleanSafe());
+
+        const auto* correlationShape = &PlanNode(
+            pair.Initial,
+            aggregate["input"].GetStringSafe());
+        size_t correlationProjectionCount = 0;
+        while ((*correlationShape)["op"].GetStringSafe() == "project") {
+            ++correlationProjectionCount;
+            for (const auto& column :
+                 (*correlationShape)["columns"].GetArraySafe())
+            {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    column["expression"]["kind"].GetStringSafe(),
+                    "column");
+            }
+            correlationShape = &PlanNode(
+                pair.Initial,
+                (*correlationShape)["input"].GetStringSafe());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(correlationProjectionCount, 1);
+        const auto& correlationFilter = *correlationShape;
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationFilter["op"].GetStringSafe(),
+            "filter");
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationFilter["input"].GetStringSafe(),
+            outerBinding["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationFilter["predicate"]["kind"].GetStringSafe(),
+            "eq");
+        const auto& correlationLeft = correlationFilter["predicate"]["left"];
+        const auto& correlationRight = correlationFilter["predicate"]["right"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationLeft["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationRight["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT(
+            correlationLeft["column"].GetStringSafe() == dependency ||
+            correlationRight["column"].GetStringSafe() == dependency);
+
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+        UNIT_ASSERT(PlanNodes(pair.Final, "outer_bind").empty());
+        const auto joins = PlanNodes(pair.Final, "join");
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL((*joins[0])["kind"].GetStringSafe(), "left");
+
+        TVector<const NJson::TJsonValue*> ifExpressions;
+        CollectExpressions(pair.Final["plan"], "if", ifExpressions);
+        for (const auto* expression : ifExpressions) {
+            const bool isCountZeroRepair =
+                expression->Has("type") &&
+                (*expression)["type"].GetStringSafe() == "Uint64" &&
+                expression->Has("nullable") &&
+                (*expression)["nullable"].GetBooleanSafe() &&
+                expression->Has("then") &&
+                (*expression)["then"]["kind"].GetStringSafe() == "if_present";
+            UNIT_ASSERT_C(
+                !isCountZeroRepair,
+                NJson::WriteJson(pair.Final, false));
+        }
     }
 
     Y_UNIT_TEST(RealHostVerifiesCorrelatedScalarCountEmptyInput) {

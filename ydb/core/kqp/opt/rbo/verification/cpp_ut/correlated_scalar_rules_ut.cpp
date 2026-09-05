@@ -56,6 +56,143 @@ const TTypeAnnotationNode* DataType(
     return ctx.ExprCtx.MakeType<TDataExprType>(slot);
 }
 
+const TTypeAnnotationNode* DecimalType(
+    TRuleTestContext& ctx,
+    TStringBuf precision,
+    TStringBuf scale,
+    bool nullable = false)
+{
+    const auto* decimal = ctx.ExprCtx.MakeType<TDataExprParamsType>(
+        NUdf::EDataSlot::Decimal,
+        precision,
+        scale);
+    if (nullable) {
+        return ctx.ExprCtx.MakeType<TOptionalExprType>(decimal);
+    }
+    return decimal;
+}
+
+TExprNode::TPtr TypedColumnAccess(
+    TRuleTestContext& ctx,
+    const TInfoUnit& column,
+    TPositionHandle pos,
+    const TTypeAnnotationNode* type)
+{
+    auto member = MakeColumnAccess(
+        column,
+        pos,
+        &ctx.ExprCtx,
+        &ctx.PlanProps).GetExpressionBody();
+    member->SetTypeAnn(type);
+    return member;
+}
+
+TExprNode::TPtr TypedDecimalLiteral(
+    TRuleTestContext& ctx,
+    TPositionHandle pos,
+    TStringBuf value,
+    TStringBuf precision,
+    TStringBuf scale,
+    const TTypeAnnotationNode* type)
+{
+    auto literal = ctx.ExprCtx.NewCallable(
+        pos,
+        "Decimal",
+        {
+            ctx.ExprCtx.NewAtom(pos, value),
+            ctx.ExprCtx.NewAtom(pos, precision),
+            ctx.ExprCtx.NewAtom(pos, scale),
+        });
+    literal->SetTypeAnn(type);
+    return literal;
+}
+
+TExprNode::TPtr TypedLiteral(
+    TRuleTestContext& ctx,
+    TPositionHandle pos,
+    TStringBuf callable,
+    TStringBuf value,
+    const TTypeAnnotationNode* type)
+{
+    auto literal = ctx.ExprCtx.NewCallable(
+        pos,
+        callable,
+        {ctx.ExprCtx.NewAtom(pos, value)});
+    literal->SetTypeAnn(type);
+    return literal;
+}
+
+TExprNode::TPtr DecimalDataTypeDescriptor(
+    TRuleTestContext& ctx,
+    TPositionHandle pos,
+    TStringBuf precision,
+    TStringBuf scale,
+    const TTypeAnnotationNode* type)
+{
+    auto descriptor = ctx.ExprCtx.NewCallable(
+        pos,
+        "DataType",
+        {
+            ctx.ExprCtx.NewAtom(pos, "Decimal"),
+            ctx.ExprCtx.NewAtom(pos, precision),
+            ctx.ExprCtx.NewAtom(pos, scale),
+        });
+    descriptor->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(type));
+    return descriptor;
+}
+
+TExprNode::TPtr ScalarDataTypeDescriptor(
+    TRuleTestContext& ctx,
+    TPositionHandle pos,
+    TStringBuf typeName,
+    const TTypeAnnotationNode* type)
+{
+    auto descriptor = ctx.ExprCtx.NewCallable(
+        pos,
+        "DataType",
+        {ctx.ExprCtx.NewAtom(pos, typeName)});
+    descriptor->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(type));
+    return descriptor;
+}
+
+TExprNode::TPtr OptionalTypeDescriptor(
+    TRuleTestContext& ctx,
+    TPositionHandle pos,
+    TExprNode::TPtr item,
+    const TTypeAnnotationNode* optionalType)
+{
+    auto descriptor = ctx.ExprCtx.NewCallable(
+        pos,
+        "OptionalType",
+        {std::move(item)});
+    descriptor->SetTypeAnn(
+        ctx.ExprCtx.MakeType<TTypeExprType>(optionalType));
+    return descriptor;
+}
+
+TExpression TypedExpression(
+    TRuleTestContext& ctx,
+    TPositionHandle pos,
+    TStringBuf callable,
+    TExprNode::TListType children,
+    const TTypeAnnotationNode* type,
+    TExprNode::TPtr windowDefinition = nullptr)
+{
+    auto body = ctx.ExprCtx.NewCallable(
+        pos,
+        callable,
+        std::move(children));
+    body->SetTypeAnn(type);
+    TExpression result(
+        body,
+        &ctx.ExprCtx,
+        &ctx.PlanProps,
+        std::move(windowDefinition));
+    result.GetExpressionBody()->SetTypeAnn(type);
+    result.Node->SetTypeAnn(type);
+    return result;
+}
+
 void SetOutputType(
     TRuleTestContext& ctx,
     IOperator& op,
@@ -327,6 +464,477 @@ struct TCorrelatedCountFixture {
     TIntrusivePtr<IOperator> Subplan;
 };
 
+enum class EDecimalAverageComputation {
+    AverageTimesFactor,
+    FactorTimesAverage,
+    WrongCallable,
+    NestedMultiply,
+    AverageTimesAverage,
+    WrongLiteralScale,
+    NullableLiteral,
+    WrongMemberType,
+    NonNullableResult,
+};
+
+enum class EDecimalFactor {
+    DirectDecimal,
+    StringSafeCast,
+    Utf8SafeCast,
+    DynamicStringSafeCast,
+    ComputedStringSafeCast,
+    InvalidStringSafeCast,
+    WrongTargetPrecisionSafeCast,
+    WrongTargetScaleSafeCast,
+    WrongTargetTypeSafeCast,
+    WrongTargetAnnotationSafeCast,
+    NonOptionalTargetSafeCast,
+    NullableSourceSafeCast,
+    NonOptionalResultSafeCast,
+    WrongCastCallable,
+};
+
+struct TCorrelatedDecimalAverageFixture {
+    explicit TCorrelatedDecimalAverageFixture(
+        bool factorFirst = false,
+        EDecimalFactor factor = EDecimalFactor::DirectDecimal)
+        : Int32(DataType(Ctx, NUdf::EDataSlot::Int32))
+        , String(DataType(Ctx, NUdf::EDataSlot::String))
+        , Utf8(DataType(Ctx, NUdf::EDataSlot::Utf8))
+        , OptionalString(Ctx.ExprCtx.MakeType<TOptionalExprType>(String))
+        , Decimal(DecimalType(Ctx, "12", "2"))
+        , OptionalDecimal(DecimalType(Ctx, "12", "2", true))
+        , WrongPrecisionDecimal(DecimalType(Ctx, "13", "2"))
+        , OptionalWrongPrecisionDecimal(
+              DecimalType(Ctx, "13", "2", true))
+        , WrongScaleDecimal(DecimalType(Ctx, "12", "3"))
+        , OptionalWrongScaleDecimal(
+              DecimalType(Ctx, "12", "3", true))
+        , ScalarResultType(OptionalDecimal)
+        , Factor(factor)
+    {
+        OuterRead = MakeRead({OuterKey}, Pos);
+        InnerRead = MakeRead({InnerKey, InnerValue}, Pos);
+        SetOutputType(Ctx, *OuterRead, {{OuterKey, Int32}});
+        SetOutputType(Ctx, *InnerRead, {
+            {InnerKey, Int32},
+            {InnerValue, OptionalDecimal},
+        });
+
+        AddDependencies = MakeIntrusive<TOpAddDependencies>(
+            InnerRead,
+            Pos,
+            TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>{{
+                OuterKey,
+                Int32,
+            }});
+        CorrelationFilter = MakeIntrusive<TOpFilter>(
+            AddDependencies,
+            Pos,
+            MakeBinaryPredicate(
+                "==",
+                MakeColumnAccess(
+                    InnerKey,
+                    Pos,
+                    &Ctx.ExprCtx,
+                    &Ctx.PlanProps),
+                MakeColumnAccess(
+                    OuterKey,
+                    Pos,
+                    &Ctx.ExprCtx,
+                    &Ctx.PlanProps)));
+        Aggregate = MakeIntrusive<TOpAggregate>(
+            CorrelationFilter,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                InnerValue,
+                "avg",
+                AverageResult)},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            Pos);
+
+        const auto shape = factorFirst
+            ? EDecimalAverageComputation::FactorTimesAverage
+            : EDecimalAverageComputation::AverageTimesFactor;
+        ResultMap = MakeIntrusive<TOpMap>(
+            Aggregate,
+            Pos,
+            TVector<TMapElement>{TMapElement(
+                ScalarResult,
+                MakeComputation(shape))});
+        Subplan = ResultMap;
+        RefreshTypes();
+    }
+
+    TExprNode::TPtr MakeFactor(EDecimalAverageComputation shape) {
+        const auto* literalType = shape ==
+                EDecimalAverageComputation::WrongLiteralScale
+            ? WrongScaleDecimal
+            : shape == EDecimalAverageComputation::NullableLiteral
+                ? OptionalDecimal
+                : Decimal;
+        const TStringBuf literalScale = shape ==
+                EDecimalAverageComputation::WrongLiteralScale
+            ? "3"
+            : "2";
+
+        if (Factor == EDecimalFactor::DirectDecimal) {
+            return TypedDecimalLiteral(
+                Ctx,
+                Pos,
+                "20",
+                "12",
+                literalScale,
+                literalType);
+        }
+
+        TStringBuf sourceCallable =
+            Factor == EDecimalFactor::Utf8SafeCast ? "Utf8" : "String";
+        const TTypeAnnotationNode* sourceType =
+            sourceCallable == "Utf8" ? Utf8 : String;
+        TStringBuf sourceText = Factor == EDecimalFactor::InvalidStringSafeCast
+            ? "not-a-decimal"
+            : "0.2";
+
+        TExprNode::TPtr source;
+        if (Factor == EDecimalFactor::DynamicStringSafeCast) {
+            source = TypedColumnAccess(
+                Ctx,
+                AverageResult,
+                Pos,
+                String);
+        } else if (Factor == EDecimalFactor::ComputedStringSafeCast) {
+            source = Ctx.ExprCtx.NewCallable(
+                Pos,
+                "Concat",
+                {
+                    TypedLiteral(Ctx, Pos, "String", "0", String),
+                    TypedLiteral(Ctx, Pos, "String", ".2", String),
+                });
+            source->SetTypeAnn(String);
+        } else {
+            if (Factor == EDecimalFactor::NullableSourceSafeCast) {
+                sourceType = OptionalString;
+            }
+            source = TypedLiteral(
+                Ctx,
+                Pos,
+                sourceCallable,
+                sourceText,
+                sourceType);
+        }
+
+        // Descriptor spelling, item annotation and optional annotation are
+        // separate mutation axes. Build their common syntax only once.
+        struct TDecimalTarget {
+            EDecimalFactor Factor;
+            TStringBuf Precision;
+            TStringBuf Scale;
+            const TTypeAnnotationNode* ItemType;
+            const TTypeAnnotationNode* OptionalType;
+        };
+        const TDecimalTarget targetCases[] = {
+            {EDecimalFactor::WrongTargetPrecisionSafeCast, "13", "2",
+             WrongPrecisionDecimal, OptionalWrongPrecisionDecimal},
+            {EDecimalFactor::WrongTargetScaleSafeCast, "12", "3",
+             WrongScaleDecimal, OptionalWrongScaleDecimal},
+            {EDecimalFactor::WrongTargetAnnotationSafeCast, "12", "2",
+             WrongScaleDecimal, OptionalDecimal},
+            {EDecimalFactor::NonOptionalTargetSafeCast, "12", "2",
+             Decimal, nullptr},
+        };
+        TDecimalTarget targetCase{Factor, "12", "2", Decimal, OptionalDecimal};
+        for (const auto& candidate : targetCases) {
+            if (candidate.Factor == Factor) {
+                targetCase = candidate;
+            }
+        }
+
+        TExprNode::TPtr target;
+        if (Factor == EDecimalFactor::WrongTargetTypeSafeCast) {
+            target = OptionalTypeDescriptor(
+                Ctx,
+                Pos,
+                ScalarDataTypeDescriptor(Ctx, Pos, "String", String),
+                OptionalString);
+        } else {
+            target = DecimalDataTypeDescriptor(
+                Ctx,
+                Pos,
+                targetCase.Precision,
+                targetCase.Scale,
+                targetCase.ItemType);
+            if (targetCase.OptionalType) {
+                target = OptionalTypeDescriptor(
+                    Ctx, Pos, std::move(target), targetCase.OptionalType);
+            }
+        }
+
+        auto factor = Ctx.ExprCtx.NewCallable(
+            Pos,
+            Factor == EDecimalFactor::WrongCastCallable
+                ? TStringBuf("Cast")
+                : TStringBuf("SafeCast"),
+            {std::move(source), std::move(target)});
+        factor->SetTypeAnn(
+            Factor == EDecimalFactor::NonOptionalResultSafeCast
+                ? Decimal
+                : OptionalDecimal);
+        return factor;
+    }
+
+    TExpression MakeComputation(
+        EDecimalAverageComputation shape,
+        bool withWindowMetadata = false)
+    {
+        const auto* memberType = shape ==
+                EDecimalAverageComputation::WrongMemberType
+            ? OptionalWrongScaleDecimal
+            : OptionalDecimal;
+        const auto* resultType = shape ==
+                EDecimalAverageComputation::NonNullableResult
+            ? Decimal
+            : OptionalDecimal;
+
+        auto average = [&] {
+            return TypedColumnAccess(
+                Ctx,
+                AverageResult,
+                Pos,
+                memberType);
+        };
+        auto factor = [&] { return MakeFactor(shape); };
+
+        TStringBuf callable = "DecimalMul";
+        TExprNode::TListType children;
+        switch (shape) {
+            case EDecimalAverageComputation::FactorTimesAverage:
+                children = {factor(), average()};
+                break;
+            case EDecimalAverageComputation::WrongCallable:
+                callable = "DecimalAdd";
+                children = {average(), factor()};
+                break;
+            case EDecimalAverageComputation::NestedMultiply: {
+                auto nested = Ctx.ExprCtx.NewCallable(
+                    Pos,
+                    "DecimalMul",
+                    {average(), factor()});
+                nested->SetTypeAnn(OptionalDecimal);
+                children = {nested, factor()};
+                break;
+            }
+            case EDecimalAverageComputation::AverageTimesAverage:
+                children = {average(), average()};
+                break;
+            default:
+                children = {average(), factor()};
+                break;
+        }
+
+        return TypedExpression(
+            Ctx,
+            Pos,
+            callable,
+            std::move(children),
+            resultType,
+            withWindowMetadata
+                ? Ctx.ExprCtx.NewAtom(Pos, "window_definition")
+                : nullptr);
+    }
+
+    void SetComputation(EDecimalAverageComputation shape) {
+        ScalarResultType = shape ==
+                EDecimalAverageComputation::NonNullableResult
+            ? Decimal
+            : OptionalDecimal;
+        ResultMap->MapElements.front().SetExpression(
+            MakeComputation(shape));
+        RefreshTypes();
+    }
+
+    void SetFactor(EDecimalFactor factor) {
+        Factor = factor;
+        ResultMap->MapElements.front().SetExpression(MakeComputation(
+            EDecimalAverageComputation::AverageTimesFactor));
+        RefreshTypes();
+    }
+
+    void AddComputedSibling() {
+        ResultMap->MapElements.emplace_back(
+            SiblingResult,
+            MakeComputation(
+                EDecimalAverageComputation::FactorTimesAverage));
+        RefreshTypes();
+    }
+
+    void AddSecondAggregateTrait() {
+        Aggregate->AggregationTraitsList.emplace_back(
+            InnerValue,
+            "avg",
+            SecondAverageResult);
+        RefreshTypes();
+    }
+
+    void AddWindowMetadataToComputation() {
+        ResultMap->MapElements.front().SetExpression(MakeComputation(
+            EDecimalAverageComputation::AverageTimesFactor,
+            true));
+        UNIT_ASSERT(ResultMap->MapElements.front()
+            .GetExpression()
+            .HasWindowSemantics());
+    }
+
+    void PullUpCorrelation() {
+        ComputeParents(Subplan, Pos);
+
+        TIntrusivePtr<IOperator> aggregate = Aggregate;
+        TPullUpCorrelatedFilterRule rule;
+        UNIT_ASSERT(rule.MatchAndApply(
+            aggregate,
+            Ctx.RboCtx,
+            Ctx.PlanProps));
+        ResultMap->SetInput(aggregate);
+
+        Subplan = ResultMap;
+        ComputeParents(Subplan, Pos);
+        UNIT_ASSERT(rule.MatchAndApply(
+            Subplan,
+            Ctx.RboCtx,
+            Ctx.PlanProps));
+
+        RefreshTypes();
+        TOpRoot root(Subplan, Pos, {});
+        root.RecomputeOutputIUsSubtree();
+    }
+
+    TIntrusivePtr<TOpMap> MakeProjectionConsumer() {
+        auto binding = MakeColumnAccess(
+            Binding,
+            Pos,
+            &Ctx.ExprCtx,
+            &Ctx.PlanProps);
+        binding.GetExpressionBody()->SetTypeAnn(OptionalDecimal);
+        auto result = MakeIntrusive<TOpMap>(
+            OuterRead,
+            Pos,
+            TVector<TMapElement>{TMapElement(Output, binding)});
+        SetOutputType(Ctx, *result, {
+            {OuterKey, Int32},
+            {Output, OptionalDecimal},
+        });
+        return result;
+    }
+
+    TIntrusivePtr<TOpFilter> MakeFilterConsumer() {
+        auto binding = MakeColumnAccess(
+            Binding,
+            Pos,
+            &Ctx.ExprCtx,
+            &Ctx.PlanProps);
+        binding.GetExpressionBody()->SetTypeAnn(OptionalDecimal);
+        auto zero = TExpression(
+            TypedDecimalLiteral(
+                Ctx,
+                Pos,
+                "0",
+                "12",
+                "2",
+                Decimal),
+            &Ctx.ExprCtx,
+            &Ctx.PlanProps);
+        zero.GetExpressionBody()->SetTypeAnn(Decimal);
+        auto result = MakeIntrusive<TOpFilter>(
+            OuterRead,
+            Pos,
+            MakeBinaryPredicate("==", binding, zero));
+        SetOutputType(Ctx, *result, {{OuterKey, Int32}});
+        return result;
+    }
+
+    void RegisterSubplan() {
+        Ctx.PlanProps.Subplans.Add(
+            Binding,
+            TSubplanEntry{
+                Subplan,
+                {},
+                ESubplanType::EXPR,
+                Binding,
+                SubplanDependencies});
+    }
+
+    void RefreshTypes() {
+        TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>
+            aggregateColumns;
+        for (const auto& key : Aggregate->KeyColumns) {
+            aggregateColumns.emplace_back(key, Int32);
+        }
+        for (const auto& trait : Aggregate->AggregationTraitsList) {
+            aggregateColumns.emplace_back(
+                trait.ResultColName,
+                OptionalDecimal);
+        }
+        SetOutputType(Ctx, *Aggregate, aggregateColumns);
+
+        auto mapColumns = aggregateColumns;
+        for (const auto& element : ResultMap->MapElements) {
+            mapColumns.emplace_back(
+                element.GetElementName(),
+                element.GetElementName() == ScalarResult
+                    ? ScalarResultType
+                    : OptionalDecimal);
+        }
+        SetOutputType(Ctx, *ResultMap, mapColumns);
+
+        TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>
+            dependentColumns;
+        if (AddDependencies->GetInput().Get() == ResultMap.Get()) {
+            dependentColumns = mapColumns;
+        } else {
+            dependentColumns = {
+                {InnerKey, Int32},
+                {InnerValue, OptionalDecimal},
+            };
+        }
+        dependentColumns.emplace_back(OuterKey, Int32);
+        SetOutputType(Ctx, *AddDependencies, dependentColumns);
+        SetOutputType(Ctx, *CorrelationFilter, dependentColumns);
+    }
+
+    TRuleTestContext Ctx;
+    const TPositionHandle Pos;
+    const TInfoUnit OuterKey{"outer.k"};
+    const TInfoUnit InnerKey{"inner.k"};
+    const TInfoUnit InnerValue{"inner.value"};
+    const TInfoUnit AverageResult{"avg.value"};
+    const TInfoUnit SecondAverageResult{"avg.second"};
+    const TInfoUnit ScalarResult{"scalar.value"};
+    const TInfoUnit SiblingResult{"scalar.sibling"};
+    const TInfoUnit Binding{"_rbo_decimal_scalar", true};
+    const TInfoUnit Output{"result"};
+    const TInfoUnit ExtraDependency{"outer.extra"};
+    const TTypeAnnotationNode* const Int32;
+    const TTypeAnnotationNode* const String;
+    const TTypeAnnotationNode* const Utf8;
+    const TTypeAnnotationNode* const OptionalString;
+    const TTypeAnnotationNode* const Decimal;
+    const TTypeAnnotationNode* const OptionalDecimal;
+    const TTypeAnnotationNode* const WrongPrecisionDecimal;
+    const TTypeAnnotationNode* const OptionalWrongPrecisionDecimal;
+    const TTypeAnnotationNode* const WrongScaleDecimal;
+    const TTypeAnnotationNode* const OptionalWrongScaleDecimal;
+    const TTypeAnnotationNode* ScalarResultType;
+    EDecimalFactor Factor;
+    TIntrusivePtr<TOpRead> OuterRead;
+    TIntrusivePtr<TOpRead> InnerRead;
+    TIntrusivePtr<TOpAddDependencies> AddDependencies;
+    TIntrusivePtr<TOpFilter> CorrelationFilter;
+    TIntrusivePtr<TOpAggregate> Aggregate;
+    TIntrusivePtr<TOpMap> ResultMap;
+    TIntrusivePtr<IOperator> Subplan;
+    TVector<TInfoUnit> SubplanDependencies{OuterKey};
+};
+
 TExpression MakeColumnComparison(
     TCorrelatedCountFixture& fixture,
     TStringBuf callable,
@@ -433,6 +1041,165 @@ const TExprNode* AssertOptionalCountRepair(const TMapElement& element) {
     UNIT_ASSERT_VALUES_EQUAL(coalesce->Child(1)->ChildrenSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(coalesce->Child(1)->Child(0)->Content(), "0");
     return coalesce->Child(0);
+}
+
+void AssertDecimalAverageInlineShape(
+    bool factorFirst,
+    bool filterConsumer,
+    EDecimalFactor factor)
+{
+    TCorrelatedDecimalAverageFixture fixture(factorFirst, factor);
+    fixture.PullUpCorrelation();
+    fixture.RegisterSubplan();
+    const auto* originalComputation = fixture.ResultMap->MapElements
+        .front()
+        .GetExpression()
+        .GetExpressionBody()
+        .Get();
+
+    TIntrusivePtr<IUnaryOperator> consumer;
+    if (filterConsumer) {
+        consumer = fixture.MakeFilterConsumer();
+    } else {
+        consumer = fixture.MakeProjectionConsumer();
+    }
+    TIntrusivePtr<IOperator> input = consumer;
+    TInlineScalarSubplanRule rule;
+    UNIT_ASSERT(rule.MatchAndApply(
+        input,
+        fixture.Ctx.RboCtx,
+        fixture.Ctx.PlanProps));
+    UNIT_ASSERT_VALUES_EQUAL(input.Get(), consumer.Get());
+
+    TIntrusivePtr<TOpJoin> join;
+    if (filterConsumer) {
+        UNIT_ASSERT(consumer->GetInput()->Kind == EOperator::Join);
+        join = CastOperator<TOpJoin>(consumer->GetInput());
+        const auto usedIUs = CastOperator<TOpFilter>(consumer)
+            ->FilterExpr.GetInputIUs(true, true);
+        UNIT_ASSERT_VALUES_EQUAL(usedIUs.size(), 1);
+        UNIT_ASSERT(usedIUs.front() == fixture.ScalarResult);
+        UNIT_ASSERT(!(usedIUs.front() == fixture.Binding));
+    } else {
+        UNIT_ASSERT(consumer->GetInput()->Kind == EOperator::Map);
+        auto scalarRename = CastOperator<TOpMap>(consumer->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(scalarRename->MapElements.size(), 1);
+        UNIT_ASSERT(scalarRename->MapElements.front().IsRename());
+        UNIT_ASSERT(
+            scalarRename->MapElements.front().GetRename() ==
+            fixture.ScalarResult);
+        UNIT_ASSERT(scalarRename->GetInput()->Kind == EOperator::Join);
+        join = CastOperator<TOpJoin>(scalarRename->GetInput());
+    }
+
+    UNIT_ASSERT(!fixture.Ctx.PlanProps.Subplans.PlanMap.contains(
+        fixture.Binding));
+    UNIT_ASSERT_VALUES_EQUAL(join->JoinKind, "Left");
+    UNIT_ASSERT(
+        join->JoinKeys ==
+        (TVector<std::pair<TInfoUnit, TInfoUnit>>{{
+            fixture.OuterKey,
+            fixture.InnerKey,
+        }}));
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        join->GetRightInput().Get(),
+        fixture.ResultMap.Get());
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.ResultMap->GetInput().Get(),
+        fixture.Aggregate.Get());
+    UNIT_ASSERT_VALUES_EQUAL(fixture.ResultMap->MapElements.size(), 1);
+    UNIT_ASSERT(!fixture.ResultMap->MapElements.front().IsRename());
+    const auto computation = fixture.ResultMap->MapElements
+        .front()
+        .GetExpression()
+        .GetExpressionBody();
+    UNIT_ASSERT_VALUES_EQUAL(computation.Get(), originalComputation);
+    UNIT_ASSERT(computation->IsCallable("DecimalMul"));
+    UNIT_ASSERT_VALUES_EQUAL(computation->ChildrenSize(), 2);
+    const auto* factorNode = computation->Child(factorFirst ? 0 : 1);
+    const auto* memberNode = computation->Child(factorFirst ? 1 : 0);
+    UNIT_ASSERT(memberNode->IsCallable("Member"));
+    if (factor == EDecimalFactor::DirectDecimal) {
+        UNIT_ASSERT(factorNode->IsCallable("Decimal"));
+    } else {
+        UNIT_ASSERT(factorNode->IsCallable("SafeCast"));
+        UNIT_ASSERT_VALUES_EQUAL(factorNode->ChildrenSize(), 2);
+        const TStringBuf sourceCallable =
+            factor == EDecimalFactor::Utf8SafeCast ? "Utf8" : "String";
+        UNIT_ASSERT(factorNode->Child(0)->IsCallable(sourceCallable));
+        UNIT_ASSERT(factorNode->Child(1)->IsCallable("OptionalType"));
+        UNIT_ASSERT_VALUES_EQUAL(factorNode->Child(1)->ChildrenSize(), 1);
+        const auto* targetItem = factorNode->Child(1)->Child(0);
+        UNIT_ASSERT(targetItem->IsCallable("DataType"));
+        UNIT_ASSERT_VALUES_EQUAL(targetItem->ChildrenSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(targetItem->Child(0)->Content(), "Decimal");
+        UNIT_ASSERT_VALUES_EQUAL(targetItem->Child(1)->Content(), "12");
+        UNIT_ASSERT_VALUES_EQUAL(targetItem->Child(2)->Content(), "2");
+    }
+
+    UNIT_ASSERT(fixture.Aggregate->WasKeylessBeforeCorrelation);
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.Aggregate->AggregationTraitsList.size(),
+        1);
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.Aggregate->AggregationTraitsList.front().AggFunction,
+        "avg");
+}
+
+void AssertDecimalAverageInlineRejectedWithoutMutation(
+    TCorrelatedDecimalAverageFixture& fixture)
+{
+    fixture.RegisterSubplan();
+    auto consumer = fixture.MakeProjectionConsumer();
+    const auto originalChild = consumer->GetInput();
+    const auto originalSubplan = fixture.Ctx.PlanProps.Subplans.PlanMap
+        .at(fixture.Binding)
+        .Plan;
+    const auto originalMapInput = fixture.ResultMap->GetInput();
+    const auto originalAggregateInput = fixture.Aggregate->GetInput();
+    TVector<const TExprNode*> originalExpressions;
+    for (const auto& element : fixture.ResultMap->MapElements) {
+        originalExpressions.push_back(
+            element.GetExpression().GetExpressionBody().Get());
+    }
+    TIntrusivePtr<IOperator> input = consumer;
+
+    TInlineScalarSubplanRule rule;
+    UNIT_ASSERT_EXCEPTION(
+        rule.MatchAndApply(
+            input,
+            fixture.Ctx.RboCtx,
+            fixture.Ctx.PlanProps),
+        yexception);
+
+    UNIT_ASSERT_VALUES_EQUAL(input.Get(), consumer.Get());
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetInput().Get(), originalChild.Get());
+    UNIT_ASSERT(fixture.Ctx.PlanProps.Subplans.PlanMap.contains(
+        fixture.Binding));
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.Ctx.PlanProps.Subplans.PlanMap.at(fixture.Binding).Plan.Get(),
+        originalSubplan.Get());
+    UNIT_ASSERT(
+        fixture.Ctx.PlanProps.Subplans.PlanMap.at(fixture.Binding).DependentIUs ==
+        fixture.SubplanDependencies);
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.ResultMap->GetInput().Get(),
+        originalMapInput.Get());
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.Aggregate->GetInput().Get(),
+        originalAggregateInput.Get());
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.ResultMap->MapElements.size(),
+        originalExpressions.size());
+    for (size_t index = 0; index < originalExpressions.size(); ++index) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            fixture.ResultMap->MapElements[index]
+                .GetExpression()
+                .GetExpressionBody()
+                .Get(),
+            originalExpressions[index]);
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpRboCorrelatedScalarRules) {
@@ -728,13 +1495,143 @@ Y_UNIT_TEST_SUITE(KqpRboCorrelatedScalarRules) {
                 fixture.Ctx.RboCtx,
                 fixture.Ctx.PlanProps),
             yexception,
-            "Computed correlated scalar aggregate results");
+            "must be exactly one nullable DecimalMul");
         UNIT_ASSERT_VALUES_EQUAL(consumer->GetInput().Get(), originalChild.Get());
         UNIT_ASSERT(fixture.Ctx.PlanProps.Subplans.PlanMap.contains(
             fixture.Binding));
         UNIT_ASSERT_VALUES_EQUAL(
             fixture.Ctx.PlanProps.Subplans.PlanMap.at(fixture.Binding).Plan.Get(),
             fixture.Subplan.Get());
+    }
+
+    Y_UNIT_TEST(InlineDecimalAverageKeepsComputedRightProject) {
+        for (const auto factor : {
+                 EDecimalFactor::DirectDecimal,
+                 EDecimalFactor::StringSafeCast,
+                 EDecimalFactor::Utf8SafeCast,
+                 EDecimalFactor::InvalidStringSafeCast,
+             })
+        {
+            for (const bool factorFirst : {false, true}) {
+                for (const bool filterConsumer : {false, true}) {
+                    AssertDecimalAverageInlineShape(
+                        factorFirst,
+                        filterConsumer,
+                        factor);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(InlineDecimalAverageRejectsSafeCastNearMissesWithoutMutation) {
+        for (const auto factor : {
+                 EDecimalFactor::DynamicStringSafeCast,
+                 EDecimalFactor::ComputedStringSafeCast,
+                 EDecimalFactor::WrongTargetPrecisionSafeCast,
+                 EDecimalFactor::WrongTargetScaleSafeCast,
+                 EDecimalFactor::WrongTargetTypeSafeCast,
+                 EDecimalFactor::WrongTargetAnnotationSafeCast,
+                 EDecimalFactor::NonOptionalTargetSafeCast,
+                 EDecimalFactor::NullableSourceSafeCast,
+                 EDecimalFactor::NonOptionalResultSafeCast,
+                 EDecimalFactor::WrongCastCallable,
+             })
+        {
+            TCorrelatedDecimalAverageFixture fixture;
+            fixture.SetFactor(factor);
+            fixture.PullUpCorrelation();
+            AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
+        }
+    }
+
+    Y_UNIT_TEST(InlineDecimalAverageRejectsOtherExpressionsWithoutMutation) {
+        for (const auto shape : {
+                 EDecimalAverageComputation::WrongCallable,
+                 EDecimalAverageComputation::NestedMultiply,
+                 EDecimalAverageComputation::AverageTimesAverage,
+             })
+        {
+            TCorrelatedDecimalAverageFixture fixture;
+            fixture.SetComputation(shape);
+            fixture.PullUpCorrelation();
+            AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
+        }
+    }
+
+    Y_UNIT_TEST(InlineDecimalAverageRejectsTypeNearMissesWithoutMutation) {
+        for (const auto shape : {
+                 EDecimalAverageComputation::WrongLiteralScale,
+                 EDecimalAverageComputation::NullableLiteral,
+                 EDecimalAverageComputation::WrongMemberType,
+                 EDecimalAverageComputation::NonNullableResult,
+             })
+        {
+            TCorrelatedDecimalAverageFixture fixture;
+            fixture.SetComputation(shape);
+            fixture.PullUpCorrelation();
+            AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
+        }
+    }
+
+    Y_UNIT_TEST(InlineDecimalAverageRejectsSiblingComputationWithoutMutation) {
+        TCorrelatedDecimalAverageFixture fixture;
+        fixture.AddComputedSibling();
+        fixture.PullUpCorrelation();
+
+        AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
+    }
+
+    Y_UNIT_TEST(InlineDecimalAverageRejectsPostPullupNearMissesWithoutMutation) {
+        using TFixture = TCorrelatedDecimalAverageFixture;
+        struct TCase {
+            TStringBuf Name;
+            void (*Mutate)(TFixture&);
+        };
+        const TCase cases[] = {
+            {"non-AVG", [](TFixture& f) {
+                f.Aggregate->AggregationTraitsList.front().AggFunction = "sum";
+            }},
+            {"window semantics", [](TFixture& f) {
+                f.AddWindowMetadataToComputation();
+            }},
+            {"multiple dependencies", [](TFixture& f) {
+                f.SubplanDependencies.push_back(f.ExtraDependency);
+            }},
+            {"misaligned dependency", [](TFixture& f) {
+                f.SubplanDependencies = {f.ExtraDependency};
+            }},
+            {"distinct AVG", [](TFixture& f) {
+                f.Aggregate->AggregationTraitsList.front().Distinct = true;
+            }},
+            {"unwrapped AVG", [](TFixture& f) {
+                f.Aggregate->AggregationTraitsList.front().Unwrap = true;
+            }},
+            {"final-phase AVG", [](TFixture& f) {
+                f.Aggregate->AggregationPhase = EOpPhase::Final;
+            }},
+            {"DistinctAll", [](TFixture& f) {
+                f.Aggregate->DistinctAll = true;
+            }},
+        };
+        for (const auto& test : cases) {
+            TCorrelatedDecimalAverageFixture fixture;
+            fixture.PullUpCorrelation();
+            test.Mutate(fixture);
+            const TString function =
+                fixture.Aggregate->AggregationTraitsList.front().AggFunction;
+            AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                fixture.Aggregate->AggregationTraitsList.front().AggFunction,
+                function,
+                test.Name);
+        }
+    }
+
+    Y_UNIT_TEST(InlineDecimalAverageRejectsMultipleAggregateTraitsWithoutMutation) {
+        TCorrelatedDecimalAverageFixture fixture;
+        fixture.AddSecondAggregateTrait();
+        fixture.PullUpCorrelation();
+        AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
     }
 
     Y_UNIT_TEST(OriginallyGroupedCountKeepsOrdinaryLeftJoin) {

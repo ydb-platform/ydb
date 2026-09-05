@@ -2,6 +2,8 @@
 
 #include <ydb/core/kqp/opt/rbo/map_renames.h>
 
+#include <variant>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -40,6 +42,257 @@ std::optional<TInfoUnit> ExactMemberSource(const TMapElement& element) {
     return TInfoUnit(TString(body->Child(1)->Content()));
 }
 
+const TTypeAnnotationNode* ExactOptionalDecimalItem(
+    const TTypeAnnotationNode* type)
+{
+    if (!type || type->GetKind() != ETypeAnnotationKind::Optional) {
+        return nullptr;
+    }
+
+    const auto* item = type->Cast<TOptionalExprType>()->GetItemType();
+    if (!item || item->GetKind() != ETypeAnnotationKind::Data) {
+        return nullptr;
+    }
+
+    const auto* data = dynamic_cast<const TDataExprParamsType*>(item);
+    return data && data->GetSlot() == NUdf::EDataSlot::Decimal
+        ? item
+        : nullptr;
+}
+
+bool IsExactMatchingDecimalLiteral(
+    const TExprNode& node,
+    const TTypeAnnotationNode& decimalType)
+{
+    if (!node.IsCallable("Decimal") || node.ChildrenSize() != 3 ||
+        !node.Child(0)->IsAtom() || !node.Child(1)->IsAtom() ||
+        !node.Child(2)->IsAtom() || !node.GetTypeAnn() ||
+        node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)
+    {
+        return false;
+    }
+
+    const auto* literalType =
+        dynamic_cast<const TDataExprParamsType*>(node.GetTypeAnn().Get());
+    return literalType &&
+        literalType->GetSlot() == NUdf::EDataSlot::Decimal &&
+        literalType->GetParamOne() == node.Child(1)->Content() &&
+        literalType->GetParamTwo() == node.Child(2)->Content() &&
+        IsSameAnnotation(*literalType, decimalType);
+}
+
+bool IsExactTypeDescriptorAnnotation(
+    const TExprNode& descriptor,
+    const TTypeAnnotationNode& describedType)
+{
+    const auto annotation = descriptor.GetTypeAnn();
+    return annotation &&
+        annotation->GetKind() == ETypeAnnotationKind::Type &&
+        IsSameAnnotation(
+            *annotation->Cast<TTypeExprType>()->GetType(),
+            describedType);
+}
+
+bool IsExactMatchingStringDecimalSafeCast(
+    const TExprNode& node,
+    const TTypeAnnotationNode& optionalDecimalType,
+    const TTypeAnnotationNode& decimalType)
+{
+    if (!node.IsCallable("SafeCast") || node.ChildrenSize() != 2 ||
+        !node.GetTypeAnn() ||
+        !IsSameAnnotation(*node.GetTypeAnn(), optionalDecimalType))
+    {
+        return false;
+    }
+
+    const auto& source = *node.Child(0);
+    const bool isString = source.IsCallable("String");
+    const bool isUtf8 = source.IsCallable("Utf8");
+    if ((!isString && !isUtf8) || source.ChildrenSize() != 1 ||
+        !source.Child(0)->IsAtom() || !source.GetTypeAnn() ||
+        source.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)
+    {
+        return false;
+    }
+    const auto* sourceType =
+        source.GetTypeAnn()->Cast<TDataExprType>();
+    if (dynamic_cast<const TDataExprParamsType*>(sourceType) ||
+        sourceType->GetSlot() != (isString
+            ? NUdf::EDataSlot::String
+            : NUdf::EDataSlot::Utf8))
+    {
+        return false;
+    }
+
+    const auto& target = *node.Child(1);
+    if (!target.IsCallable("OptionalType") ||
+        target.ChildrenSize() != 1 ||
+        !IsExactTypeDescriptorAnnotation(target, optionalDecimalType))
+    {
+        return false;
+    }
+    const auto& item = *target.Child(0);
+    const auto* decimal =
+        dynamic_cast<const TDataExprParamsType*>(&decimalType);
+    if (!decimal || !item.IsCallable("DataType") ||
+        item.ChildrenSize() != 3 || !item.Child(0)->IsAtom() ||
+        !item.Child(1)->IsAtom() || !item.Child(2)->IsAtom() ||
+        item.Child(0)->Content() != "Decimal" ||
+        item.Child(1)->Content() != decimal->GetParamOne() ||
+        item.Child(2)->Content() != decimal->GetParamTwo() ||
+        !IsExactTypeDescriptorAnnotation(item, decimalType))
+    {
+        return false;
+    }
+
+    constexpr NUdf::TCastResultOptions ExpectedCast =
+        static_cast<NUdf::TCastResultOptions>(
+            NUdf::ECastOptions::MayFail |
+            NUdf::ECastOptions::MayLoseData);
+    if (CastResult<false>(source.GetTypeAnn(), &decimalType) != ExpectedCast) {
+        return false;
+    }
+    return true;
+}
+
+bool IsExactMatchingDecimalFactor(
+    const TExprNode& node,
+    const TTypeAnnotationNode& optionalDecimalType,
+    const TTypeAnnotationNode& decimalType)
+{
+    return IsExactMatchingDecimalLiteral(node, decimalType) ||
+        IsExactMatchingStringDecimalSafeCast(
+            node,
+            optionalDecimalType,
+            decimalType);
+}
+
+std::optional<TInfoUnit> ExactNullableDecimalMulSource(
+    const TMapElement& element,
+    const TTypeAnnotationNode* outputType)
+{
+    if (element.GetExpression().HasWindowSemantics()) {
+        return std::nullopt;
+    }
+
+    const auto lambda = element.GetExpression().GetLambda();
+    if (!lambda || lambda->ChildrenSize() != 2 ||
+        !lambda->Child(0)->IsArguments() ||
+        lambda->Child(0)->ChildrenSize() != 1 ||
+        !lambda->Child(0)->Child(0)->IsArgument())
+    {
+        return std::nullopt;
+    }
+
+    const auto* argument = lambda->Child(0)->Child(0);
+    const auto* body = lambda->Child(1);
+    const auto* decimalType = ExactOptionalDecimalItem(outputType);
+    if (!decimalType || !body->IsCallable("DecimalMul") ||
+        body->ChildrenSize() != 2 || !body->GetTypeAnn() ||
+        !IsSameAnnotation(*body->GetTypeAnn(), *outputType))
+    {
+        return std::nullopt;
+    }
+
+    const TExprNode* member = nullptr;
+    const TExprNode* factor = nullptr;
+    for (ui32 index = 0; index < body->ChildrenSize(); ++index) {
+        const auto* child = body->Child(index);
+        if (child->IsCallable("Member")) {
+            if (member) {
+                return std::nullopt;
+            }
+            member = child;
+        } else if (child->IsCallable({"Decimal", "SafeCast"})) {
+            if (factor) {
+                return std::nullopt;
+            }
+            factor = child;
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    if (!member || !factor || member->ChildrenSize() != 2 ||
+        member->Child(0) != argument || !member->Child(1)->IsAtom() ||
+        !member->GetTypeAnn() ||
+        !IsSameAnnotation(*member->GetTypeAnn(), *outputType) ||
+        !IsExactMatchingDecimalFactor(
+            *factor,
+            *outputType,
+            *decimalType))
+    {
+        return std::nullopt;
+    }
+
+    return TInfoUnit(TString(member->Child(1)->Content()));
+}
+
+bool IsExactTypePreservingMemberAlias(
+    const TMapElement& element,
+    TOpMap& map,
+    const TIntrusivePtr<IOperator>& input)
+{
+    if (element.GetExpression().HasWindowSemantics()) {
+        return false;
+    }
+
+    const auto source = ExactMemberSource(element);
+    if (!source ||
+        CountInfoUnit(map.GetOutputIUs(), element.GetElementName()) != 1 ||
+        CountInfoUnit(input->GetOutputIUs(), *source) != 1)
+    {
+        return false;
+    }
+
+    const auto* outputType = map.GetIUType(element.GetElementName());
+    const auto* sourceType = input->GetIUType(*source);
+    return outputType && sourceType &&
+        IsSameAnnotation(*outputType, *sourceType);
+}
+
+bool IsExactComputedResultPathMap(
+    TOpMap& map,
+    const TMapElement* computed,
+    const TIntrusivePtr<IOperator>& input)
+{
+    for (const auto& element : map.MapElements) {
+        if (&element != computed &&
+            !IsExactTypePreservingMemberAlias(element, map, input))
+        {
+            return false;
+        }
+    }
+
+    // Map elements describe produced values; every other output is an
+    // implicit pass-through and must retain its unique input type exactly.
+    for (const auto& output : map.GetOutputIUs()) {
+        const bool explicitlyProduced = std::any_of(
+            map.MapElements.begin(),
+            map.MapElements.end(),
+            [&](const TMapElement& element) {
+                return element.GetElementName() == output;
+            });
+        if (explicitlyProduced) {
+            continue;
+        }
+
+        if (CountInfoUnit(map.GetOutputIUs(), output) != 1 ||
+            CountInfoUnit(input->GetOutputIUs(), output) != 1)
+        {
+            return false;
+        }
+        const auto* outputType = map.GetIUType(output);
+        const auto* inputType = input->GetIUType(output);
+        if (!outputType || !inputType ||
+            !IsSameAnnotation(*outputType, *inputType))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 TIntrusivePtr<TOpAggregate> FindOnlyMarkedAggregate(
     const TIntrusivePtr<IOperator>& root)
 {
@@ -69,16 +322,20 @@ TIntrusivePtr<TOpAggregate> FindOnlyMarkedAggregate(
     return marked;
 }
 
-EScalarEmptyInputRepair ClassifyScalarEmptyInputRepair(
-    const TIntrusivePtr<IOperator>& root,
-    TInfoUnit resultIU,
-    const TTypeAnnotationNode* resultType)
-{
-    const auto marked = FindOnlyMarkedAggregate(root);
-    if (!marked) {
-        return EScalarEmptyInputRepair::None;
-    }
+// A traced path says where the selected value comes from, not yet whether
+// replacing the originally-keyless aggregate's empty row is sound.
+struct TScalarMapPath {
+    TInfoUnit AggregateResultIU;
+    TVector<TIntrusivePtr<TOpMap>> Maps;
+    const TMapElement* Computation = nullptr;
+};
 
+TScalarMapPath TraceScalarResultMaps(
+    const TIntrusivePtr<IOperator>& root,
+    const TIntrusivePtr<TOpAggregate>& marked,
+    TInfoUnit resultIU)
+{
+    TScalarMapPath path;
     auto current = root;
     while (current != marked) {
         Y_ENSURE(
@@ -103,11 +360,22 @@ EScalarEmptyInputRepair ClassifyScalarEmptyInputRepair(
 
         const auto input = map->GetInput();
         if (producer) {
-            const auto source = ExactMemberSource(*producer);
-            Y_ENSURE(
-                source,
-                "Computed correlated scalar aggregate results require general "
-                "empty-row reconstruction");
+            auto source = ExactMemberSource(*producer);
+            if (!source) {
+                Y_ENSURE(
+                    !path.Computation,
+                    "Correlated scalar aggregate result permits only one "
+                    "computed DecimalMul");
+                source = ExactNullableDecimalMulSource(
+                    *producer,
+                    map->GetIUType(resultIU));
+                Y_ENSURE(
+                    source,
+                    "Computed correlated scalar aggregate result must be "
+                    "exactly one nullable DecimalMul of a direct member and "
+                    "matching constant Decimal factor");
+                path.Computation = producer;
+            }
             Y_ENSURE(
                 CountInfoUnit(input->GetOutputIUs(), *source) == 1,
                 "Correlated scalar Map alias source is absent or ambiguous");
@@ -123,9 +391,43 @@ EScalarEmptyInputRepair ClassifyScalarEmptyInputRepair(
                 CountInfoUnit(input->GetOutputIUs(), resultIU) == 1,
                 "Correlated scalar pass-through IU is absent or ambiguous");
         }
+        path.Maps.push_back(map);
         current = input;
     }
 
+    path.AggregateResultIU = resultIU;
+    return path;
+}
+
+struct TUnmarkedScalarResult {
+};
+
+struct TDirectScalarAggregateResult {
+    TString AggFunction;
+};
+
+// Constructed only after the exact AVG/strict-factor/Map/dependency premises
+// below have been checked. This is optimizer applicability, not verifier input.
+struct TExactScaledNullableAverageResult {
+};
+
+using TScalarResultPath = std::variant<
+    TUnmarkedScalarResult,
+    TDirectScalarAggregateResult,
+    TExactScaledNullableAverageResult>;
+
+TScalarResultPath AnalyzeScalarResultPath(
+    const TIntrusivePtr<IOperator>& root,
+    TInfoUnit resultIU,
+    bool hasExactAlignedCorrelationDependency)
+{
+    const auto marked = FindOnlyMarkedAggregate(root);
+    if (!marked) {
+        return TUnmarkedScalarResult{};
+    }
+
+    const auto path = TraceScalarResultMaps(root, marked, resultIU);
+    resultIU = path.AggregateResultIU;
     Y_ENSURE(
         marked->GetAggregationPhase() == EOpPhase::Undefined &&
             !marked->IsDistinctAll(),
@@ -149,7 +451,41 @@ EScalarEmptyInputRepair ClassifyScalarEmptyInputRepair(
         !selectedTrait->Distinct && !selectedTrait->Unwrap &&
             CountInfoUnit(marked->GetOutputIUs(), resultIU) == 1,
         "Correlated scalar aggregate result trait is not a unique direct value");
-    if (selectedTrait->AggFunction != "count") {
+    if (path.Computation) {
+        for (const auto& map : path.Maps) {
+            Y_ENSURE(
+                IsExactComputedResultPathMap(
+                    *map, path.Computation, map->GetInput()),
+                "Computed correlated scalar DecimalMul path Maps must contain "
+                "only exact type-preserving member aliases and pass-throughs");
+        }
+        Y_ENSURE(
+            marked->AggregationTraitsList.size() == 1 &&
+                selectedTrait->AggFunction == "avg",
+            "Computed correlated scalar DecimalMul requires one unique direct "
+            "AVG trait");
+        Y_ENSURE(
+            hasExactAlignedCorrelationDependency,
+            "Computed correlated scalar DecimalMul requires one matching "
+            "registered and AddDependencies correlation IU");
+
+        // AVG(empty) is NULL.  This exact DecimalMul is strict and its factor
+        // is a row-independent direct Decimal literal or String/Utf8-literal
+        // SafeCast (including a constant NULL when that cast fails).  The
+        // synthetic NULL introduced by the Left join therefore already has
+        // the scalar expression's empty-input value; unlike COUNT, it needs
+        // no post-join repair.
+        return TExactScaledNullableAverageResult{};
+    }
+    return TDirectScalarAggregateResult{selectedTrait->AggFunction};
+}
+
+EScalarEmptyInputRepair DecideScalarEmptyInputRepair(
+    const TScalarResultPath& path,
+    const TTypeAnnotationNode* resultType)
+{
+    const auto* direct = std::get_if<TDirectScalarAggregateResult>(&path);
+    if (!direct || direct->AggFunction != "count") {
         return EScalarEmptyInputRepair::None;
     }
 
@@ -225,9 +561,17 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         auto subplanFilter = CastOperator<TOpFilter>(subplan);
         auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         auto uncorrSubplan = addDeps->GetInput();
-        const auto emptyInputRepair = ClassifyScalarEmptyInputRepair(
+        const bool hasExactAlignedCorrelationDependency =
+            subplanEntry.DependentIUs.size() == 1 &&
+            addDeps->Dependencies.size() == 1 &&
+            subplanEntry.DependentIUs.front() ==
+                addDeps->Dependencies.front();
+        const auto resultPath = AnalyzeScalarResultPath(
             uncorrSubplan,
             subplanResIU,
+            hasExactAlignedCorrelationDependency);
+        const auto emptyInputRepair = DecideScalarEmptyInputRepair(
+            resultPath,
             subplanResType);
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;

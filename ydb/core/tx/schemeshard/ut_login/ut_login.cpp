@@ -101,6 +101,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         const auto user1Hashes = MakeTestPasswordHashes("password1");
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
+        env.TestWaitNotification(runtime, txId);
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -214,7 +215,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
             AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
             TestModificationResults(runtime, txId, TVector<TExpectedResult>{{
-                missingOk ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusPreconditionFailed,
+                missingOk ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusPreconditionFailed,
                 missingOk ? "" : "User not found"
             }});
         }
@@ -423,7 +424,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
             AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
             TestModificationResults(runtime, txId, TVector<TExpectedResult>{{
-                missingOk ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusPreconditionFailed,
+                missingOk ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusPreconditionFailed,
                 missingOk ? "" : "Group not found"
             }});
         }

@@ -23,6 +23,21 @@ bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfo
 namespace NKikimr {
 namespace NKqp {
 
+bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, TPlanProps& props) const {
+    if (input->Kind != EOperator::Filter || props.Subplans.PlanMap.empty()) {
+        return false;
+    }
+
+    for (const auto& iu : input->GetSubplanIUs(props)) {
+        const auto type = props.Subplans.PlanMap.at(iu).Type;
+        if (type == ESubplanType::IN_SUBPLAN || type == ESubplanType::EXISTS) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Filter;
 }

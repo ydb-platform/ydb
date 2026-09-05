@@ -1522,11 +1522,15 @@ def print_result(format: str, status: str, description: str = None, file=None):
         file = sys.stderr
     if format == 'json':
         print_json_result(status, description)
+        sys.stdout.flush()
+        return
+    if description is not None:
+        print('{0}, {1}'.format(status, description), file=file)
     else:
-        if description is not None:
-            print('{0}, {1}'.format(status, description), file=file)
-        else:
-            print(status, file=file)
+        print(status, file=file)
+    # Flush immediately so that messages do not interleave with unbuffered
+    # stderr output (e.g. 'INFO: using random hosts') when streams are merged.
+    file.flush()
 
 
 def print_request_result(args, request, response):

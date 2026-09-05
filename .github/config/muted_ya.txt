@@ -18,7 +18,6 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeferredTopicCreation_
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
-ydb/core/mind/hive/ut THiveTest.TestResetServerlessComputeResourcesMode
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk

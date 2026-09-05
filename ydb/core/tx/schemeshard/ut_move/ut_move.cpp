@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     static const std::vector<TMoveReplaceTestCase> MoveReplaceTests = {
         { .Tag = "RowTable-over-RowTable", .SrcType = RowTable, .DstType = RowTable },
         { .Tag = "ColumnTable-over-ColumnTable", .SrcType = ColumnTable, .DstType = ColumnTable },
-        // { .Tag = "ColumnTableWithIndexes-over-ColumnTableWithIndexes", .SrcType = ColumnTableWithIndexes, .DstType = ColumnTableWithIndexes },
+        { .Tag = "ColumnTableWithIndexes-over-ColumnTableWithIndexes", .SrcType = ColumnTableWithIndexes, .DstType = ColumnTableWithIndexes },
         { .Tag = "RowTable-over-ColumnTable", .SrcType = RowTable, .DstType = ColumnTable },
         { .Tag = "ColumnTable-over-RowTable", .SrcType = ColumnTable, .DstType = RowTable },
     };

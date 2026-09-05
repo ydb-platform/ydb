@@ -15,6 +15,7 @@ namespace NKikimr {
 static constexpr TDuration UpdateResponsivenessTimeout = TDuration::MilliSeconds(500);
 static constexpr TDuration ResponsivenessTrackerWindow = TDuration::Seconds(5);
 static constexpr ui32 ResponsivenessTrackerMaxQueue = 10000; // number of stat series items per single VDisk
+static constexpr TDuration DeadlineCheckInterval = TDuration::Seconds(1);
 
 class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy> {
     enum {
@@ -34,6 +35,13 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     struct TEvStopBatchingGetRequests : TEventLocal<TEvStopBatchingGetRequests, EvStopBatchingGetRequests> {};
     struct TEvConfigureQueryTimeout : TEventLocal<TEvConfigureQueryTimeout, EvConfigureQueryTimeout> {};
     struct TEvEstablishingSessionTimeout : TEventLocal<TEvEstablishingSessionTimeout, EvEstablishingSessionTimeout> {};
+    struct TEvCheckDeadlines : TEventLocal<TEvCheckDeadlines, EvCheckDeadlines> {
+        ui64 Generation;
+
+        explicit TEvCheckDeadlines(ui64 generation)
+            : Generation(generation)
+        {}
+    };
 
     template <typename TEventPtr>
     struct TBatchedQueue {
@@ -70,12 +78,17 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TDeque<std::unique_ptr<IEventHandle>> InitQueue;
     std::multimap<TInstant, TActorId> DeadlineMap;
     THashMap<TActorId, std::multimap<TInstant, TActorId>::iterator, TActorId::THash> ActiveRequests;
+    TMonotonic LastRequestActivity;
+    bool IsDormant = false;
+    bool DeadlineChecksStarted = false;
+    ui64 DeadlineCheckGeneration = 0;
     ui64 UnconfiguredBufferSize = 0;
     const bool IsEjected;
     bool ForceWaitAllDrives;
     bool UseActorSystemTimeInBSQueue;
     bool IsLimitedKeyless = false;
     bool IsFullMonitoring = false; // current state of monitoring
+    bool IsBlobDepotProxy = false;
     ui32 MinHugeBlobInBytes = 0;
 
     TActorId MonActor;
@@ -288,7 +301,11 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     // todo: in-fly tracking for cancelation and
     void PushRequest(IActor *actor, TInstant deadline);
-    void CheckDeadlines();
+    void Handle(TEvCheckDeadlines::TPtr& ev);
+    void ScheduleDeadlineCheck();
+    void HandleRequestActivity();
+    bool CanEnterDormant() const;
+    void SetDormant(bool isDormant);
     void HandleNormal(TEvBlobStorage::TEvGet::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvGetBlock::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvPut::TPtr &ev);
@@ -372,6 +389,7 @@ public:
     // Group statistics
 
     const TDuration GroupStatUpdateInterval = TDuration::Seconds(10);
+    bool GroupStatUpdatesStarted = false;
     bool GroupStatUpdateScheduled = false;
     TGroupStat Stat;
 
@@ -398,23 +416,31 @@ public:
         IgnoreFunc(TEvConfigureQueryTimeout);
         IgnoreFunc(TEvEstablishingSessionTimeout);
         fFunc(Ev5min, Handle5min);
-        cFunc(EvCheckDeadlines, CheckDeadlines);
+        hFunc(TEvCheckDeadlines, Handle);
         hFunc(TEvGetQueuesInfo, Handle);
         hFunc(TEvExplicitMultiPut, Handle);
     )
 
+#define REQUEST_HFUNC(EVENT, HANDLER) \
+    case EVENT::EventType: { \
+        typename EVENT::TPtr *x = reinterpret_cast<typename EVENT::TPtr*>(&ev); \
+        HandleRequestActivity(); \
+        HANDLER(*x); \
+        break; \
+    }
+
 #define HANDLE_EVENTS(HANDLER) \
-    hFunc(TEvBlobStorage::TEvPut, HANDLER); \
-    hFunc(TEvBlobStorage::TEvGet, HANDLER); \
-    hFunc(TEvBlobStorage::TEvGetBlock, HANDLER); \
-    hFunc(TEvBlobStorage::TEvBlock, HANDLER); \
-    hFunc(TEvBlobStorage::TEvDiscover, HANDLER); \
-    hFunc(TEvBlobStorage::TEvRange, HANDLER); \
-    hFunc(TEvBlobStorage::TEvCollectGarbage, HANDLER); \
-    hFunc(TEvBlobStorage::TEvStatus, HANDLER); \
-    hFunc(TEvBlobStorage::TEvPatch, HANDLER); \
-    hFunc(TEvBlobStorage::TEvAssimilate, HANDLER); \
-    hFunc(TEvBlobStorage::TEvCheckIntegrity, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvPut, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvGet, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvGetBlock, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvBlock, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvDiscover, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvRange, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvCollectGarbage, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvStatus, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvPatch, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvAssimilate, HANDLER); \
+    REQUEST_HFUNC(TEvBlobStorage::TEvCheckIntegrity, HANDLER); \
     /**/
 
     STFUNC(StateUnconfigured) {

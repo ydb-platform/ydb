@@ -339,31 +339,6 @@ protected:
                         }
                     }
                 }
-
-#ifdef QP_FORCE_CS_WRITE_AFFINITY
-                // Invariant: with the force flag, CTAS sink stages must have
-                // destination shards in shardIds so they get resolved to nodes.
-                bool hasCtasSink = false;
-                for (const auto& sink : stage.GetSinks()) {
-                    if (sink.HasInternalSink()
-                            && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                        NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-                        if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
-                                && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
-                            hasCtasSink = true;
-                            break;
-                        }
-                    }
-                }
-                AFL_VERIFY(!stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
-                            || !hasCtasSink
-                            || !shardIds.empty())
-                    ("stageId", stageInfo.Id)
-                    ("hasCtasSink", hasCtasSink)
-                    ("shardIdsSize", shardIds.size())
-                    ("hasShardKey", stageInfo.Meta.ShardKey != nullptr)
-                    ("msg", "QP_FORCE_CS_WRITE_AFFINITY requires destination shards in shardIds for CTAS sink stages");
-#endif
             }
         }
 

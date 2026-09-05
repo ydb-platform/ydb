@@ -17,6 +17,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
@@ -32,6 +33,7 @@
 #include <util/string/builder.h>
 
 #include <algorithm>
+#include <limits>
 #include <queue>
 #include <variant>
 
@@ -380,8 +382,75 @@ private:
         return opts;
     }
 
+<<<<<<< HEAD
     static i64 GetItemSize(const TString& item) {
         return std::max(static_cast<i64>(item.size()), static_cast<i64>(1));
+=======
+    IFederatedTopicClient& GetFederatedTopicClient() {
+        if (!FederatedTopicClient) {
+            FederatedTopicClient = PqGateway->GetFederatedTopicClient(Driver, GetFederatedTopicClientSettings());
+            Y_VALIDATE(FederatedTopicClient, "Failed to create federated topic client");
+        }
+
+        return *FederatedTopicClient;
+    }
+
+    IDeferredPublishClient& GetDeferredPublishClient() {
+        if (!DeferredPublishClient) {
+            DeferredPublishClient = PqGateway->GetDeferredPublishClient(Driver, NYdb::TCommonClientSettings()
+                .Database(SinkParams.GetDatabase())
+                .DiscoveryEndpoint(SinkParams.GetEndpoint())
+                .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
+                .CredentialsProviderFactory(CredentialsProviderFactory)
+            );
+            Y_VALIDATE(DeferredPublishClient, "Failed to create deferred publish client");
+        }
+
+        return *DeferredPublishClient;
+    }
+
+    const TString& GetSourceId() { // Must be called after state loading
+        if (!SourceId) {
+            SourceId = CreateGuidAsString(); // Not loaded from state, so this is the first run.
+            SINK_LOG_D("Created new source id: " << SourceId);
+        }
+
+        return SourceId;
+    }
+
+    NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() { 
+        auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
+            /* minDelay           */ TDuration::MilliSeconds(500),
+            /* minLongRetryDelay  */ TDuration::Seconds(5),
+            /* maxDelay           */ TDuration::Seconds(20),
+            /* maxRetries         */ 100,
+            /* maxTime            */ TDuration::Seconds(60),
+            /* scaleFactor        */ 2.0,
+            /* customRetryClass   */ [](NYdb::EStatus status) {
+                if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+                    return ERetryErrorClass::LongRetry;
+                }
+                return NYdb::NTopic::GetRetryErrorClass(status);
+            });
+
+        auto settings = NYdb::NTopic::TWriteSessionSettings()
+            .Path(SinkParams.GetTopicPath())
+            .TraceId(LogPrefix())
+            .MaxMemoryUsage(FreeSpace)
+            .DeduplicationEnabled(EnableDeduplication)
+            .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
+                ? NYdb::NTopic::ECodec::RAW
+                : NYdb::NTopic::ECodec::GZIP)
+            .RetryPolicy(retryPolicy);
+
+        if (EnableDeduplication) {
+            const auto& sourceId = GetSourceId();
+            settings.ProducerId(sourceId);
+            settings.MessageGroupId(sourceId);
+        }
+
+        return settings;
+>>>>>>> 962a07265a1 (YQ-5434 add topics retry policy (#44982))
     }
 
     void CreateSessionIfNotExists() {

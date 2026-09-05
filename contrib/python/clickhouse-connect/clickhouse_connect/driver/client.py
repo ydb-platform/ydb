@@ -26,7 +26,15 @@ from clickhouse_connect.driver._backend.orchestration import (
     insert_context_sequence,
     run_sync,
 )
-from clickhouse_connect.driver.binding import bind_query, str_query_value
+from clickhouse_connect.driver.binding import (
+    _binding_has_binary_values,
+    _binding_keeps_query_structure,
+    _needs_trailing_semicolon_lexer,
+    _query_is_insert,
+    _strip_trailing_semicolons,
+    bind_query,
+    str_query_value,
+)
 from clickhouse_connect.driver.common import (
     ShowClickHouseErrors,
     StreamContext,
@@ -57,6 +65,8 @@ from clickhouse_connect.driver.query import (
     TzMode,
     TzSource,
     arrow_buffer,
+    leading_select_re,
+    remove_sql_comments,
     to_arrow,
     to_arrow_batches,
 )
@@ -528,10 +538,39 @@ class Client(ABC):
         fmt: str | None,
         use_database: bool,
     ) -> tuple[str | bytes, dict[str, str], QueryRuntime]:
-        """Append the format, bind parameters, and build the runtime for a raw query."""
-        if fmt:
-            query += f"\n FORMAT {fmt}"
-        final_query, bind_params = bind_query(query, parameters, self.server_tz)
+        """Bind parameters, append the format, and build the runtime for a raw query."""
+        suffix = f"\n FORMAT {fmt}" if fmt else ""
+        structure_preserving_bind = _binding_keeps_query_structure(query, parameters)
+        is_insert_template = bool(fmt and structure_preserving_bind and _query_is_insert(query))
+        bind_with_suffix = bool(fmt and (is_insert_template or not structure_preserving_bind))
+        query_to_bind = query
+        if fmt and not structure_preserving_bind and _binding_has_binary_values(parameters):
+            uncommented_template = remove_sql_comments(query)
+            # Only a leading-SELECT template is safe to pre-strip. A WITH template can bind
+            # into an insert whose inline data must stay untouched.
+            if leading_select_re.search(uncommented_template) is not None and _needs_trailing_semicolon_lexer(query):
+                query_to_bind = _strip_trailing_semicolons(query)
+        if fmt and structure_preserving_bind and not is_insert_template and _needs_trailing_semicolon_lexer(query):
+            query_to_bind = _strip_trailing_semicolons(query)
+        if bind_with_suffix:
+            query_to_bind += suffix
+
+        final_query, bind_params = bind_query(query_to_bind, parameters, self.server_tz)
+        if fmt and not structure_preserving_bind and isinstance(final_query, str):
+            # bind_query rstrips trailing semicolons, so a fmt ending in ";" shortens the suffix.
+            appended = suffix if final_query.endswith(suffix) else suffix.rstrip(";")
+            final_query = final_query[: -len(appended)]
+            if not _query_is_insert(final_query):
+                if _needs_trailing_semicolon_lexer(final_query):
+                    final_query = _strip_trailing_semicolons(final_query)
+                else:
+                    final_query = final_query.rstrip(";")
+            final_query += suffix
+        elif fmt and not bind_with_suffix:
+            if isinstance(final_query, bytes):
+                final_query += suffix.encode()
+            else:
+                final_query += suffix
         runtime = QueryRuntime(
             database=self.database if use_database else None,
             settings=self._validate_settings(settings or {}),

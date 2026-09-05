@@ -3,7 +3,7 @@
 Simple package for disabling App Nap on macOS >= 10.9,
 which can be problematic.
 
-To disable App Nap:
+To disable App Nap for the current process:
 
 ```python
 import appnope

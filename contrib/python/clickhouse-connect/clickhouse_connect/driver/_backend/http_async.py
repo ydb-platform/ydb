@@ -163,6 +163,7 @@ class HttpAsyncBackend:
         form_encode_query_params: bool = False,
     ):
         self.url = url
+        self._base_url = url if "/" in url.split("://", 1)[-1] else f"{url}/"
         self.headers = headers
         self.client_settings = client_settings
         self.timeout = timeout
@@ -474,7 +475,7 @@ class HttpAsyncBackend:
             lease_released = False
             try:
                 # Construct full URL (aiohttp doesn't have base_url)
-                url = f"{self.url}/"
+                url = self._base_url
                 request_kwargs = {"method": method, "url": url, "params": final_params, "headers": req_headers}
                 if self.server_host_name and self.ssl_context is not None:
                     request_kwargs["ssl"] = self.ssl_context

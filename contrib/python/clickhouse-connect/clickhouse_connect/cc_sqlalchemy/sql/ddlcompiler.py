@@ -107,8 +107,7 @@ class ClickHouseDDLHelper:
     def render_comment(comment: str | None) -> str:
         if comment is None:
             return "''"
-        escaped = comment.replace("'", "''")
-        return f"'{escaped}'"
+        return format_str(comment)
 
     @staticmethod
     def _render_setting_value(value: Any) -> str:

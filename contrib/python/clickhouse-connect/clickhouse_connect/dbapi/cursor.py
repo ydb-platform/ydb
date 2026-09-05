@@ -108,8 +108,10 @@ class Cursor:
         parameters: Any = None,
         settings: dict[str, Any] | None = None,
         query_formats: dict[str, str] | None = None,
+        *,
+        pyformat_encoded: bool = True,
     ) -> None:
-        if not parameters and isinstance(operation, str):
+        if pyformat_encoded and not parameters and isinstance(operation, str):
             # Per PEP 249 pyformat paramstyle, callers (e.g. SQLAlchemy) escape
             # literal percent signs as %% in operation strings.  When there are
             # parameters, Python's % operator in finalize_query handles the

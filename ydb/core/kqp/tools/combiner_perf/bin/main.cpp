@@ -339,6 +339,22 @@ int main(int argc, const char* argv[])
         })
         .Help("Input data type: string key -> ui64 numeric value or ui64 numeric key -> ui64 numeric value");
 
+    options.AddLongOption("quota-mode")
+        .Choices({"none", "steady", "pressure"})
+        .RequiredArgument()
+        .Handler1([&](const NLastGetopt::TOptsParser* option) {
+            auto val = TStringBuf(option->CurVal());
+            if (val == "none") {
+                runParams.QuotaMode = NKikimr::NMiniKQL::EQuotaMode::None;
+            } else if (val == "steady") {
+                runParams.QuotaMode = NKikimr::NMiniKQL::EQuotaMode::Steady;
+            } else if (val == "pressure") {
+                runParams.QuotaMode = NKikimr::NMiniKQL::EQuotaMode::Pressure;
+            }
+        })
+        .Help("Operator memory quota binding for the DqHashCombine tests: none (allocator heuristics), "
+              "steady (bound, availability positive), pressure (bound, availability negative at the spilling trigger)");
+
     options.AddLongOption("hashmap")
         .Choices({"std", "absl", "robinhood"})
         .RequiredArgument()

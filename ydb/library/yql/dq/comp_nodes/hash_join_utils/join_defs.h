@@ -12,6 +12,13 @@ template <typename T> using TMKQLDeque = std::deque<T, TMKQLAllocator<T>>;
 
 using TFuturePage = NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>;
 
+// A page written by the spiller: its key and the serialized size (used to account the read buffer in advance)
+struct TSpilledPageRef {
+    ISpiller::TKey Key;
+    ui64 Bytes;
+};
+using TSpilledPages = TMKQLVector<TSpilledPageRef>;
+
 enum class ESide { Probe, Build };
 
 const char* AsString(ESide side);
@@ -92,7 +99,7 @@ struct TBucket {
     }
 
     TPackResult BuildingPage;
-    std::optional<TMKQLVector<ISpiller::TKey>> SpilledPages;
+    std::optional<TSpilledPages> SpilledPages;
     const TMKQLVector<TPackResult>& InMemoryPages() const {
         return InMemoryPages_;
     }

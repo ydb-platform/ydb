@@ -394,6 +394,8 @@ protected:
 
         auto guard = BindAllocator();
         auto* alloc = guard.GetMutex();
+        // memory hungry operators reach the task memory quota through this thread-local binding
+        TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
 
         if (State == NDqProto::COMPUTE_STATE_FINISHED) {
             if (!DoHandleChannelsAfterFinishImpl()) {
@@ -2555,6 +2557,8 @@ public:
             dst->SetMkqlMaxMemoryUsage(memProfileStats->MkqlMaxUsedMemory);
             dst->SetMkqlExtraMemoryBytes(memProfileStats->MkqlExtraMemoryBytes);
             dst->SetMkqlExtraMemoryRequests(memProfileStats->MkqlExtraMemoryRequests);
+            dst->SetMkqlOptionalMemoryRequests(memProfileStats->MkqlOptionalMemoryRequests);
+            dst->SetMkqlOptionalMemoryRefusals(memProfileStats->MkqlOptionalMemoryRefusals);
         }
 
         if (Stat) { // for task_runner_actor

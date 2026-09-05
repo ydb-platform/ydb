@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/system/types.h>
+
 #include <functional>
 
 namespace NKikimr::NMiniKQL {
@@ -10,6 +12,14 @@ struct TComputationNodeFactoryContext;
 
 struct TDqHashCombineTestState {
     bool BypassActivated = false;
+    size_t DrainsStarted = 0;
+    size_t SpillsStarted = 0;
+    size_t ShrinksRequested = 0; // give-backs through the bound operator memory quota
+    // what the operator saw, so that a test that expected a spill or a drain can say why it did not happen
+    bool SpillingEnabled = false; // the operator has a spiller and may spill
+    bool QuotaBound = false;      // an operator memory quota was bound when the operator last read the pressure
+    i64 LastAvailability = 0;     // the availability it read from that quota
+    size_t InputRows = 0;
 };
 
 using TTestStateCallback = std::function<void(const TDqHashCombineTestState&)>;

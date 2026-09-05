@@ -25,6 +25,13 @@ enum class EHashMapImpl {
     YqlRobinHood,
 };
 
+// Operator memory quota binding for the DqHashCombine / DqHashAggregate graphs (RFC dq_memory_quota_20)
+enum class EQuotaMode {
+    None = 0,  // unbound: the operators use the allocator heuristics (yellow zone)
+    Steady,    // bound, the availability stays positive (measures the bound-path overhead)
+    Pressure,  // bound, the availability turns negative at the spilling trigger instead of the yellow zone
+};
+
 struct TRunParams {
     ETestMode TestMode = ETestMode::Full;
     ESamplerType SamplerType = ESamplerType::StringKeysUI64Values;
@@ -41,6 +48,7 @@ struct TRunParams {
     bool MeasureReferenceMemory = false;
     bool AlwaysSubprocess = false;
     bool EnableVerification = true;
+    EQuotaMode QuotaMode = EQuotaMode::None;
 
     // Specific test params
     std::string CombineVsTestColumnSet; // key/value column configuration for DqHashCombineVsWideCombine

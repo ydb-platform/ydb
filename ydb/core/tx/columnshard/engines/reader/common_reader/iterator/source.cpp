@@ -160,6 +160,7 @@ ui32 IDataSource::GetRecordsCount() const {
 void IDataSource::OnStartProcessing() {
     AFL_VERIFY(!SourceCreatedTimestamp);
     SourceCreatedTimestamp = TMonotonic::Now();
+    GetContext()->GetCommonContext()->GetCounters().OnSourceStartProcessing(IsConflicting());
     if (!NLWTrace::HasShuttles(DataSourceOrbit) && !NLWTrace::HasShuttles(*GetContext()->GetCommonContext()->GetScanOrbit()) &&
         !LWPROBE_ENABLED(StartSourceProcessing) && !LWPROBE_ENABLED(ScanStartSource)) {
         return;
@@ -218,7 +219,7 @@ TBlobRange IDataSource::RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) 
     return TBlobRange();
 }
 
-IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,
     const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
     const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
     : Type(type)
@@ -230,6 +231,7 @@ IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shar
     , RecordsCountImpl(recordsCount)
     , ShardingVersionOptional(shardingVersion)
     , HasDeletions(hasDeletions)
+    , ConflictingFlag(isConflicting)
 {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));

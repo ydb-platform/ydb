@@ -16,14 +16,17 @@ class TOrbit;
 namespace NKikimr::NOlap::NReader {
 
 enum class ERequestSorting {
-    NONE = 0 /* "not_sorted" */,
-    ASC /* "ascending" */,
-    DESC /* "descending" */,
+    NONE = 0,
+    ASC,
+    DESC,
 };
 
-enum class EDeduplicationPolicy {
-    ALLOW_DUPLICATES = 0,
-    PREVENT_DUPLICATES,
+enum class ESourcesSorting {
+    // by the source's own id: portion id for a table, (tablet, path/schema id) for a sys view
+    SourceIdAsc = 0,
+    FirstPkAsc,
+    LastPkAsc,
+    LastPkDesc,
 };
 
 // Describes read/scan request
@@ -33,8 +36,12 @@ private:
     TProgramContainer Program;
     std::optional<std::shared_ptr<IScanCursor>> ScanCursor;
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
-    YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
-    YDB_ACCESSOR_DEF(bool, FakeSort);
+    YDB_READONLY(ERequestSorting, Sorting, ERequestSorting::NONE);
+    YDB_READONLY(bool, DeduplicationEnabled, false);
+    // False gives deduplicated scans the old first_pk order: strictly worse, it enlarges the duplicates
+    // filter borders window and breaks cursor resume between readers. Kept only so the simple reader can
+    // be compared against the trivial one; delete it together with the simple reader.
+    YDB_READONLY(bool, SortSourcesForDeduplicationByLastPk, true);
     YDB_READONLY(ui64, TabletId, 0);
 
 public:
@@ -46,7 +53,6 @@ public:
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
-    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
     EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<NLWTrace::TOrbit> Orbit;
     bool readNonconflictingPortions;
@@ -54,13 +60,26 @@ public:
     // portions that the current tx has written
     std::optional<THashSet<TInsertWriteId>> ownPortions;
 
-    bool NeedDuplicateFiltering() const {
-        AFL_VERIFY(TableMetadataAccessor);
-        return DeduplicationPolicy == EDeduplicationPolicy::PREVENT_DUPLICATES && TableMetadataAccessor->NeedDuplicateFiltering();
+    ESourcesSorting GetSourcesSorting() const {
+        switch (Sorting) {
+            case ERequestSorting::ASC:
+                return ESourcesSorting::FirstPkAsc;
+            case ERequestSorting::DESC:
+                return ESourcesSorting::LastPkDesc;
+            case ERequestSorting::NONE:
+                if (!NeedDuplicateFiltering()) {
+                    return ESourcesSorting::SourceIdAsc;
+                }
+                // deduplication needs key order
+                return SortSourcesForDeduplicationByLastPk ? ESourcesSorting::LastPkAsc : ESourcesSorting::FirstPkAsc;
+        }
+        AFL_VERIFY(false)("sorting", (ui64)Sorting);
+        return ESourcesSorting::SourceIdAsc;
     }
 
-    bool IsReverseSort() const {
-        return Sorting == ERequestSorting::DESC;
+    bool NeedDuplicateFiltering() const {
+        AFL_VERIFY(TableMetadataAccessor);
+        return DeduplicationEnabled && TableMetadataAccessor->NeedDuplicateFiltering();
     }
 
     TString GetLockName() const {
@@ -117,12 +136,19 @@ public:
         }
     }
 
-    TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting)
+    TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting, const bool deduplicationEnabled,
+        const bool sortSourcesForDeduplicationByLastPk)
         : Snapshot(snapshot)
         , Sorting(sorting)
+        , DeduplicationEnabled(deduplicationEnabled)
+        , SortSourcesForDeduplicationByLastPk(sortSourcesForDeduplicationByLastPk)
         , TabletId(tabletId)
         , PKRangesFilter(std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty()))
     {
+    }
+
+    void OverrideSorting(const ERequestSorting sorting) {
+        Sorting = sorting;
     }
 
     void SetProgram(TProgramContainer&& value) {

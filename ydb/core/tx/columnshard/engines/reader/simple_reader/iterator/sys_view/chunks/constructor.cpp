@@ -25,8 +25,8 @@ std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std:
 
 TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
     const IColumnEngine& engine, const ui64 tabletId, const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-    const ERequestSorting sorting)
-    : TBase(sorting)
+    const ESourcesSorting sourcesSorting)
+    : TBase(sourcesSorting)
 {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     const TVersionedIndex& originalSchemaInfo = engineImpl->GetVersionedIndex();

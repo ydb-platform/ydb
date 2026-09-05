@@ -12,8 +12,8 @@ TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeConte
     , ReadMetadata(readMetadata)
 {
     for (const auto& portion : portions) {
-        Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, *ReadMetadata)].Start.push_back(portion->GetPortionId());
-        Borders[NCommon::TReplaceKeyAdapter::BuildFinish(*portion, *ReadMetadata)].Finish.push_back(portion->GetPortionId());
+        Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, ReadMetadata->GetSorting())].Start.push_back(portion->GetPortionId());
+        Borders[NCommon::TReplaceKeyAdapter::BuildFinish(*portion, ReadMetadata->GetSorting())].Finish.push_back(portion->GetPortionId());
     }
     BuildExclusivePortions();
     Counters->OnLeftBorders(Borders.size());
@@ -65,7 +65,7 @@ bool TBordersFlowController::ExtractExclusiveInterval(const ui64 portionId) {
 }
 
 TBordersIterator TBordersFlowController::Next(const std::shared_ptr<const TPortionInfo>& portion) {
-    auto border = NCommon::TReplaceKeyAdapter::BuildFinish(*portion, *ReadMetadata);
+    auto border = NCommon::TReplaceKeyAdapter::BuildFinish(*portion, ReadMetadata->GetSorting());
     TBordersIteratorBuilder builder;
     ui32 oldWaitingBordersSize = WaitingBorders.size();
     for (auto it = Borders.begin(); it != Borders.end() && it->first <= border; it = Borders.erase(it)) {

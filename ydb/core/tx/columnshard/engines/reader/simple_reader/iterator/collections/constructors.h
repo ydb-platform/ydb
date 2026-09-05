@@ -36,12 +36,9 @@ public:
         return IsStartedByCursorFlag;
     }
 
-    TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isVisible, const NReader::ERequestSorting sorting)
-        : NCommon::TDataSourceConstructor(
-              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-                  sorting == NReader::ERequestSorting::DESC),
-              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
-                  sorting == NReader::ERequestSorting::DESC), !isVisible)
+    TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isConflicting, const NReader::ERequestSorting sorting)
+        : NCommon::TDataSourceConstructor(NCommon::TReplaceKeyAdapter::BuildStart(*portion, sorting),
+              NCommon::TReplaceKeyAdapter::BuildFinish(*portion, sorting), isConflicting)
         , Portion(std::move(portion))
         , RecordsCount(portion->GetRecordsCount())
     {
@@ -96,8 +93,8 @@ private:
     }
 
 public:
-    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, const bool needDuplicateFiltering = false)
-        : TBase(sorting)
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ESourcesSorting sourcesSorting, const bool needDuplicateFiltering = false)
+        : TBase(sourcesSorting)
     {
         if (needDuplicateFiltering) {
             // Cursor drops already processed portions.
@@ -118,7 +115,7 @@ public:
 
     static std::unique_ptr<TPortionsSources> BuildEmpty() {
         std::deque<TSourceConstructor> sources;
-        return std::make_unique<TPortionsSources>(std::move(sources), ERequestSorting::NONE);
+        return std::make_unique<TPortionsSources>(std::move(sources), ESourcesSorting::SourceIdAsc);
     }
 };
 

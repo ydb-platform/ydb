@@ -24,7 +24,6 @@ public:
 
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
-    YDB_ACCESSOR_DEF(bool, FakeSort);
     std::optional<ui64> FilteredCountLimit;
     std::optional<ui64> RequestedLimit;
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
@@ -56,6 +55,12 @@ public:
 
     ui64 GetTabletId() const {
         return TabletId;
+    }
+
+    // The transaction has written something and its lock is broken, so it can no longer commit,
+    // and it does not make sense to execute scans for it too.
+    virtual bool HasWritesAndBroken() const {
+        return false;
     }
 
     bool NeedToDetectConflicts() const {
@@ -211,6 +216,10 @@ public:
         AFL_VERIFY(ResultIndexSchema);
         std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
+    }
+
+    ESorting GetSorting() const {
+        return Sorting;
     }
 
     bool IsAscSorted() const {

@@ -243,21 +243,6 @@ public:
     }
 };
 
-class TSnapshotFilter: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
-
-public:
-    virtual TConclusion<bool> DoExecuteInplace(
-        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
-
-    TSnapshotFilter()
-        : TBase("SNAPSHOT")
-    {
-    }
-};
-
 class TInitializeSourceStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

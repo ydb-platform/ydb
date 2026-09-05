@@ -130,7 +130,7 @@ private:
                 {"pathId", PathId},
                 {"portion", portion->DebugString()});
             if (takePortion) {
-                Result.emplace_back(portion, nonconflicting);
+                Result.emplace_back(portion, conflicting);
             } else {
                 ++TotalFilteredPortionsCount;
             }
@@ -166,7 +166,7 @@ private:
                 {"pathId", PathId},
                 {"portion", portion->DebugString()});
             if (takePortion) {
-                Result.emplace_back(portion, nonconflicting);
+                Result.emplace_back(portion, conflicting);
             } else {
                 ++TotalFilteredPortionsCount;
             }
@@ -201,7 +201,7 @@ private:
                 return true;
             }
 
-            selectedPortionsMap.emplace(portion->GetPortionId(), TColumnEngineForLogs::TSelectedPortionInfo(portion, nonconflicting));
+            selectedPortionsMap.emplace(portion->GetPortionId(), TColumnEngineForLogs::TSelectedPortionInfo(portion, conflicting));
 
             return true;
         };

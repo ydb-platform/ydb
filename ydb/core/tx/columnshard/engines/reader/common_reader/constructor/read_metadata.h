@@ -90,7 +90,6 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    mutable TAtomicCounter BreakLockOnReadFinished = TAtomicCounter();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
     std::shared_ptr<NOlap::NDataLocks::TManager::TGuard> DataLockGuard;
 
@@ -139,13 +138,11 @@ public:
         return std::move(SourcesConstructor);
     }
 
-    bool GetBreakLockOnReadFinished() const {
-        return BreakLockOnReadFinished.Val();
-    }
+    // Breaking it right away, not at read finish, so that this scan stops at its next step
+    // (HasWritesAndBroken) and its own reply already reports the lock as broken (DoOnReplyConstruction).
+    void BreakLock() const;
 
-    void SetBreakLockOnReadFinished() const {
-        BreakLockOnReadFinished.Inc();
-    }
+    virtual bool HasWritesAndBroken() const override;
 
     THashSet<ui64> GetConflictingLockIds() const {
         THashSet<ui64> result;
@@ -206,7 +203,7 @@ public:
     TReadMetadata& operator=(const TReadMetadata&) = delete;
 
     bool OrderByLimitAllowed() const {
-        return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+        return TableMetadataAccessor->OrderByLimitAllowed();
     }
 
     EScanGroupedMemoryLimiterOperator GetGroupedMemoryLimiterOperator() const {

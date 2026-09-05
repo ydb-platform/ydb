@@ -44,6 +44,6 @@ private:
 
 public:
     TConstructor(const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-        const ERequestSorting sorting);
+        const ESourcesSorting sourcesSorting);
 };
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas

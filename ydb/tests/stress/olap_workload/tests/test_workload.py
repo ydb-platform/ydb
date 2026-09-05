@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
+import json
+import time
+import urllib.request
 import os
 import pytest
 import yatest
 from ydb.tests.library.common.types import Erasure
 
 from ydb.tests.library.stress.fixtures import StressFixture
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class TestYdbWorkload(StressFixture):
@@ -16,16 +20,133 @@ class TestYdbWorkload(StressFixture):
                 "enable_move_column_table": True,
                 "enable_columnshard_bool": True,
                 "enable_cs_dictionary_encoding": True,
+                "enable_cut_history": True,
+                "enable_columnshard_group_decommission": True,
                 "enable_columnshard_interval": True,
                 "enable_columnshard_uuid": True,
                 "enable_columnshard_dy_number": True,
             },
             column_shard_config={
                 "allow_nullable_columns_in_pk": True,
-                "generate_internal_path_id": True
-
-            }
+                "generate_internal_path_id": True,
+            },
+            # Hive's gate needs the type off the deny list AND on the allow list;
+            # either half missing and Hive refuses the cut this test waits for.
+            hive_config={
+                "cut_history_deny_list": "KeyValue,PersQueue,BlobDepot",
+                "cut_history_allow_list": "DataShard,ColumnShard",
+            },
         )
+
+    def _cut_history_sensors(self):
+        totals = {}
+        for node in self.cluster.nodes.values():
+            url = f"http://localhost:{node.mon_port}/counters/counters=tablets/json"
+            try:
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    payload = json.loads(response.read().decode("utf-8", "replace"))
+            except Exception:
+                continue
+            for item in payload.get("sensors", []):
+                labels = item.get("labels", {})
+                if labels.get("component") != "CutHistory":
+                    continue
+                name = labels.get("sensor", "")
+                for prefix in ("Deriviative/", "Value/"):
+                    if name.startswith(prefix):
+                        name = name[len(prefix):]
+                        break
+                try:
+                    totals[name] = totals.get(name, 0) + int(item.get("value") or 0)
+                except (TypeError, ValueError):
+                    continue
+        return totals
+
+    def _mon_json(self, path):
+        for node in self.cluster.nodes.values():
+            url = f"http://localhost:{node.mon_port}{path}"
+            try:
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    return json.loads(response.read().decode("utf-8", "replace"))
+            except Exception:
+                continue
+        return {}
+
+    def _mon_post(self, path):
+        """POST with params in the BODY: the tablet mon proxy ignores the query string
+        for form-urlencoded POSTs, and mutating Hive pages reject GET."""
+        base, _, query = path.partition("?")
+        errors = []
+        for node in self.cluster.nodes.values():
+            url = f"http://localhost:{node.mon_port}{base}"
+            try:
+                with urllib.request.urlopen(url, data=query.encode(), timeout=60) as response:
+                    return None, response.read().decode("utf-8", "replace")
+            except Exception as e:
+                errors.append(f"{url}: {e}")
+        return "; ".join(errors) or "no cluster nodes", ""
+
+    def _prepare_cut_history_candidate(self, pool):
+        """Make one deterministically cuttable history entry and return the probe path.
+
+        History grows only on a Hive channel reassignment, never on restarts, and an
+        entry is nominated only when its range holds no blobs — hence: empty table,
+        reassign, and only then writes (they feed the GC ticks TryNominate runs on).
+        """
+        path = f"{self.database}/cut_history_probe"
+        # Compile timeouts under host load are environment, not subject — retry.
+        deadline = time.time() + 120
+        while True:
+            try:
+                pool.execute_with_retries(
+                    f"CREATE TABLE `{path}` (k Uint64 NOT NULL, v Uint64, PRIMARY KEY(k)) "
+                    "WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1)"
+                )
+                break
+            except ydb.issues.Error:
+                if time.time() >= deadline:
+                    raise
+                time.sleep(5)
+        described = self._mon_json(f"/viewer/json/describe?path={path}")
+        shards = ((((described.get("PathDescription") or {}).get("ColumnTableDescription") or {})
+                   .get("Sharding") or {}).get("ColumnShards") or [])
+        assert shards, f"no ColumnShards behind {path}: {described}"
+        # Tenant databases expose their Hive via describe (ProcessingParams.Hive);
+        # the root domain used here does not, so resolve the Hive tablet directly
+        # and keep the well-known root Hive id as the fallback.
+        tablets = self._mon_json("/viewer/json/tabletinfo?filter=(Type=Hive)")
+        hives = [t.get("TabletId") for t in tablets.get("TabletStateInfo", []) if t.get("TabletId")]
+        hive_id = hives[0] if hives else 72057594037968897
+
+        def channel2_history():
+            info = self._mon_json(
+                f"/tablets/app?TabletID={hive_id}&page=TabletInfo&tablet={shards[0]}")
+            channels = ((info.get("TabletStorageInfo") or {}).get("Channels") or [])
+            for ch in channels:
+                if ch.get("Channel") == 2:
+                    return ch.get("History") or []
+            return []
+
+        history = channel2_history()
+        assert history, f"no channel 2 history in Hive TabletInfo for tablet {shards[0]}"
+        force_group = history[-1]["GroupID"]
+        history_before = len(history)
+        # Manual reassign excludes the current group from selection, so only a forced
+        # same-group reassign appends a history entry here.
+        err, body = self._mon_post(
+            f"/tablets/app?TabletID={hive_id}&page=ReassignTablet"
+            f"&tablet={shards[0]}&channel=2&forcedGroup={force_group}&wait=0"
+        )
+        assert err is None, f"Hive ReassignTablet monitoring call failed: {err}"
+        # The reassignment restarts the tablet; the entry to cut exists once history grew.
+        deadline = time.time() + 60
+        while time.time() < deadline and len(channel2_history()) <= history_before:
+            time.sleep(3)
+        assert len(channel2_history()) > history_before, (
+            f"forced reassign did not grow channel 2 history; "
+            f"POST response: {body[:2000]}; history now: {channel2_history()}"
+        )
+        return path
 
     def test(self):
         yatest.common.execute([
@@ -34,3 +155,34 @@ class TestYdbWorkload(StressFixture):
             "--database", self.database,
             "--duration", self.base_duration,
         ])
+        # Manufacture a guaranteed-cuttable entry and require the full pipeline:
+        # Entries/Cut must grow, not merely "no errors". Window: one nomination
+        # cadence plus barrier round-trip; SIZE(MEDIUM) budget holds under asan.
+        pool = ydb.QuerySessionPool(self.driver)
+        try:
+            probe = self._prepare_cut_history_candidate(pool)
+            deadline = time.time() + 150
+            sensors = {}
+            row = 0
+            while time.time() < deadline:
+                # Writes feed GC completions (the only TryNominate trigger); their
+                # own failures are not the subject — tolerate and keep polling.
+                try:
+                    pool.execute_with_retries(f"UPSERT INTO `{probe}` (k, v) VALUES ({row}, {row})")
+                    row += 1
+                except ydb.issues.Error:
+                    pass
+                sensors = self._cut_history_sensors()
+                if sensors.get("Entries/Cut/Count", 0) > 0:
+                    break
+                time.sleep(5)
+        finally:
+            pool.stop()
+        assert sensors.get("Nominations/Count", 0) > 0, (
+            f"CutHistory never nominated the probe entry: {sensors}"
+        )
+        assert sensors.get("Entries/Cut/Count", 0) > 0, (
+            f"CutHistory nominated but never cut the probe entry: {sensors}"
+        )
+        assert sensors.get("Channels/Poisoned", 0) == 0, f"cutter poisoned a channel: {sensors}"
+        assert sensors.get("Barriers/Failed/Count", 0) == 0, f"barrier send failed: {sensors}"

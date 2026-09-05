@@ -12,6 +12,10 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+namespace NFlatExecutorSetup {
+    struct ITablet;
+}
+
 struct TGCTime {
     ui32 Generation;
     ui32 Step;
@@ -39,7 +43,13 @@ struct TGCLogEntry {
 
 class TExecutorGCLogic {
 public:
+    // False for channels the tablet writes past the executor (ITablet::
+    // HasExternallyWrittenBlobs): cutting those strands their blobs below the surviving
+    // history, where GroupFor() resolves them to the Max<ui32> sentinel forever.
+    bool IsHistoryCuttingSound(ui32 channel) const;
+
     TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>);
+    void SetOwner(NFlatExecutorSetup::ITablet* owner) { Owner = owner; }
     void WriteToLog(TLogCommit &logEntry);
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
@@ -92,6 +102,9 @@ public:
     TIntrospection IntrospectStateSize() const;
 protected:
     const TIntrusiveConstPtr<TTabletStorageInfo> TabletStorageInfo;
+    // Not owned; set by the executor once it adopts this logic. Null during boot and
+    // in unit tests, where no channel is externally written.
+    NFlatExecutorSetup::ITablet* Owner = nullptr;
     const TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
     const ui32 Generation;
     NPageCollection::TSlicer Slicer;

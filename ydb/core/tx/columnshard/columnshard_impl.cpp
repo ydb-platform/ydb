@@ -4,6 +4,7 @@
 #include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
+#include "blobs_action/common/const.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
@@ -496,6 +497,12 @@ void TColumnShard::RunAlterStore(
     ApplyColumnShardConfig();
 }
 
+// Portions go through TBlobManager, past the executor; channels 0 and 1 (log, local DB)
+// stay with the executor's cutter.
+bool TColumnShard::HasExternallyWrittenBlobs(ui32 channel) const {
+    return channel >= NOlap::NBlobOperations::TGlobal::FirstDataChannel;
+}
+
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
     YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, periodic",
@@ -521,6 +528,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupMetadata();
     SetupTtl();
     SetupGC();
+    SetupCutHistory();
 
     RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
 }
@@ -1628,7 +1636,13 @@ public:
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
         for (auto&& i : PortionsByPath) {
-            const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
+            // The cut-history sweep iterates a portion snapshot without a read snapshot, so
+            // the path may have been dropped since the request: skip rather than abort.
+            const auto granulePtr = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(i.first);
+            if (!granulePtr) {
+                continue;
+            }
+            const auto& granule = *granulePtr;
             for (auto&& c : i.second.GetConsumers()) {
                 NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
                 YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
@@ -1647,9 +1661,14 @@ public:
                         auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
-                        } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
+                        } else if (rowset.EndOfSet()) {
+                            // Rows erased by cleanup while the in-memory object lingers.
+                            // Only remove-marked portions may legitimately lack rows.
+                            AFL_VERIFY(itPortionConstructor->second.GetPortionInfo()->HasRemoveSnapshot())("path_id", i.first)("portion_id", p)(
                                 "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            Constructors.erase(itPortionConstructor);
+                            continue;
+                        } else {
                             NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
@@ -1935,6 +1954,9 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvWriteDraft, Handle);
         HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
         HFunc(TEvPrivate::TEvTieringModified, Handle);
+        HFunc(TEvPrivate::TEvStartCutHistorySweep, Handle);
+        HFunc(TEvPrivate::TEvCutHistoryBarrierDone, Handle);
+        HFunc(TEvPrivate::TEvCutHistorySweepBatchDone, Handle);
 
         HFunc(NActors::TEvents::TEvUndelivered, Handle);
 

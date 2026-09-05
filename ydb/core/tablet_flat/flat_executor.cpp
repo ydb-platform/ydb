@@ -502,6 +502,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     Database = loadedState->Database;
     LogicSnap = loadedState->Snap;
     GcLogic = loadedState->GcLogic;
+    GcLogic->SetOwner(Owner);
     LogicRedo = loadedState->Redo;
     LogicAlter = loadedState->Alter;
     BorrowLogic = loadedState->Loans;

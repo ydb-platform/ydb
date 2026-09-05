@@ -1,4 +1,7 @@
+#include "flat_boot_cookie.h"
+#include "flat_boot_oven.h"
 #include "flat_executor_gclogic.h"
+#include "tablet_flat_executor.h"
 #include "flat_sausage_grind.h"
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -418,6 +421,37 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         // (the gen-5 keep and the gen-6 delete) as dropped.
         UNIT_ASSERT_VALUES_EQUAL(gcLogic.TakeSentinelDroppedMarks(), 2u);
     }
+
+    Y_UNIT_TEST(HistoryCuttingUnsoundForExternalBlobWriters) {
+        // Observed live: entries cut under externally-written blobs left GroupFor()
+        // resolving to Max<ui32> and GC retrying an invalid group forever.
+        struct TExternalWriter: public NFlatExecutorSetup::ITablet {
+            explicit TExternalWriter(TTabletStorageInfo* info)
+                : ITablet(info, TActorId())
+            {
+            }
+            void ActivateExecutor(const TActorContext&) override {}
+            void Detach(const TActorContext&) override {}
+            bool HasExternallyWrittenBlobs(ui32 channel) const override {
+                return channel >= 2;
+            }
+        };
+        auto info = MakeIntrusive<TTabletStorageInfo>();
+        info->TabletID = 1;
+        // Deliberately not ColumnShard: the split follows the declared channels, not the type.
+        info->TabletType = TTabletTypes::Dummy;
+        NBoot::TSteppedCookieAllocatorFactory cookies(*info, 1);
+        TExecutorGCLogic gcLogic(info, cookies.Sys(NBoot::TCookie::EIdx::GCExt));
+        UNIT_ASSERT_C(gcLogic.IsHistoryCuttingSound(2), "without an owner every channel is the executor's");
+
+        TExternalWriter external(info.Get());
+        gcLogic.SetOwner(&external);
+        UNIT_ASSERT(gcLogic.IsHistoryCuttingSound(0));
+        UNIT_ASSERT(gcLogic.IsHistoryCuttingSound(1));
+        UNIT_ASSERT(!gcLogic.IsHistoryCuttingSound(2));
+        UNIT_ASSERT(!gcLogic.IsHistoryCuttingSound(65));
+    }
+
 }
 
 }

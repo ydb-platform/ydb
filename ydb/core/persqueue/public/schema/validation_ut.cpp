@@ -1,6 +1,5 @@
 #include "common.h"
 #include "check_dlq_topics.h"
-#include "schema_ut_helpers.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -782,7 +781,7 @@ Y_UNIT_TEST(AddConsumerServiceTypeAndCodecs) {
         runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
         auto r = AddConsumer(&config, consumer, types, true, nullptr);
         UNIT_ASSERT(!r);
-        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "important flag is forbiden");
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "important flag is forbidden");
     }
     {
         Ydb::Topic::Consumer consumer;

@@ -1037,6 +1037,14 @@ Y_UNIT_TEST(AlterEnableAutopartitioningAndServiceConsumerGuards) {
     {
         Ydb::Topic::AlterTopicRequest request;
         request.set_path(path);
+        request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(
+            static_cast<i64>(Max<ui32>()));
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, "less than");
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
         auto* alterAuto = request.mutable_alter_partitioning_settings()
             ->mutable_alter_auto_partitioning_settings();
         alterAuto->set_set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(999));

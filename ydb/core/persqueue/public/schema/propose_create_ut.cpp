@@ -77,6 +77,29 @@ Y_UNIT_TEST(RejectsNegativeAndHugePartitionCount) {
             UNIT_ASSERT(!r);
             UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
         }
+        {
+            auto request = BaseRequest();
+            request.mutable_partitioning_settings()->set_max_active_partitions(-1);
+            auto r = Propose(std::move(request));
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "non-negative");
+        }
+        {
+            auto request = BaseRequest();
+            request.mutable_partitioning_settings()->set_max_active_partitions(
+                static_cast<i64>(Max<ui32>()));
+            auto r = Propose(std::move(request));
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
+        }
+        {
+            auto request = BaseRequest();
+            request.mutable_partitioning_settings()->set_max_active_partitions(
+                static_cast<i64>(Max<ui32>()) + 1);
+            auto r = Propose(std::move(request));
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
+        }
     });
 }
 

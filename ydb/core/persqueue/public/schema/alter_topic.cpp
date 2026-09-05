@@ -172,6 +172,11 @@ TResult ApplyChangesInt(
                         << "Max active partitions must be non-negative, provided "
                         << settings.set_max_active_partitions()};
                 }
+                if (settings.set_max_active_partitions() >= Max<ui32>()) {
+                    return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                        << "Max active partitions must be less than " << Max<ui32>()
+                        << ", provided " << settings.set_max_active_partitions()};
+                }
                 pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());
             }
             if (settings.has_alter_auto_partitioning_settings()) {

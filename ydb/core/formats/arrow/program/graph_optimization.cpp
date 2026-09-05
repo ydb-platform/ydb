@@ -252,7 +252,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     }
     if (nodeFetch) {
         std::shared_ptr<IMemoryCalculationPolicy> policy;
-        if (baseNode->Is(EProcessorType::Filter)) {
+        if (baseNode->Is(EProcessorType::Filter) || baseNode->Is(EProcessorType::DistinctMarker)) {
             policy = std::make_shared<TFilterCalculationPolicy>();
         } else if (baseNode->Is(EProcessorType::Projection)) {
             policy = std::make_shared<TFetchingCalculationPolicy>();
@@ -311,8 +311,8 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
 
     const ui32 columnId = *requiredDataColumnIds.begin();
 
-    if (node->Is(EProcessorType::Filter)) {
-        const auto distinctMarker = std::dynamic_pointer_cast<TDistinctMarkerProcessor>(node->GetProcessor());
+    if (node->Is(EProcessorType::DistinctMarker)) {
+        const auto distinctMarker = node->GetProcessorAs<TDistinctMarkerProcessor>();
         if (!distinctMarker || distinctMarker->GetKeyColumnId() != columnId) {
             return false;
         }
@@ -765,7 +765,7 @@ TConclusionStatus TGraph::Collapse() {
     {
         std::vector<TGraphNode*> nodesToOptimize;
         for (auto&& [_, n] : Nodes) {
-            if (n->Is(EProcessorType::Filter)) {
+            if (n->Is(EProcessorType::Filter) || n->Is(EProcessorType::DistinctMarker)) {
                 nodesToOptimize.emplace_back(n.get());
             }
         }

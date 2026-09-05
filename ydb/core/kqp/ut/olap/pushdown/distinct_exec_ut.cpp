@@ -147,6 +147,18 @@ std::vector<TString> MakeUniqueJsonPayloads(const TString& prefix, const ui32 co
     return payloads;
 }
 
+// {"a.b.c": "<prefix>_<i % distinctCount>", "other": "grp_<i % otherGroups>"}
+std::vector<TString> MakeJsonPayloadsWithOtherKey(const TString& prefix, const ui32 count, const ui32 distinctCount, const ui32 otherGroups) {
+    Y_ABORT_UNLESS(distinctCount > 0 && otherGroups > 0);
+    std::vector<TString> payloads;
+    payloads.reserve(count);
+    for (ui32 i = 0; i < count; ++i) {
+        payloads.emplace_back(TStringBuilder() << R"({"a.b.c":")" << prefix << "_" << (i % distinctCount) << R"(","other":"grp_)"
+                                               << (i % otherGroups) << R"("})");
+    }
+    return payloads;
+}
+
 std::shared_ptr<arrow::RecordBatch> BuildBatchForRowsWithJsonPayload(
     const std::vector<i64>& timestamps,
     const std::vector<TString>& resourceIds,
@@ -962,6 +974,116 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
         CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
             "JSON_VALUE DISTINCT + WHERE partial portion + low distinct limit: pushdown must match plain");
+    }
+
+    // Non-PK filter is pushed as an SSA Filter next to the DISTINCT marker. The marker must not be AND-merged
+    // with the real filter by TGraph::Collapse (regression: "not appropriate scalar type for bool interpretation").
+    Y_UNIT_TEST(OneShard_NonPkFilter_SimpleDistinct_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        const auto ts = PickTimestampsForShard(0, 1, 50, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 10, 50);
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        // level = i % 5, resource_id = rid_(i % 10) => level = 2 keeps rid_2 and rid_7 only.
+        constexpr TStringBuf kWhere = "WHERE level = 2";
+        constexpr ui64 kLimit = 100;
+
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", TString(kWhere), {}, kLimit);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", TString(kWhere), {}, kLimit);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 2u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "non-PK filter + DISTINCT: pushdown must match plain");
+    }
+
+    // JSON_VALUE alias DISTINCT + pushed non-PK filter + PK range.
+    Y_UNIT_TEST(OneShard_NonPkFilter_JsonValueDistinct_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding helper(kikimr);
+        helper.SetWithJsonDocument(true);
+        helper.SetShardingMethod("HASH_FUNCTION_MODULO_N");
+        helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        const auto ts = PickTimestampsForShard(0, 1, 50, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 50, 50);
+        // jsonDoc = jv_(i % 10), level = i % 5 => level = 3 keeps jv_3 and jv_8.
+        const auto jsonPayloads = MakeJsonPayloadsWithOtherKey("jv", 50, 10, 2);
+        helper.SendDataViaActorSystem(
+            "/Root/olapStore/olapTable", BuildBatchForRowsWithJsonPayload(ts, rids, jsonPayloads, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = TStringBuilder() << "WHERE level = 3 AND `timestamp` >= DateTime::FromMicroseconds(" << ts[0]
+            << ") AND `timestamp` <= DateTime::FromMicroseconds(" << ts[49] << ")";
+        constexpr ui64 kLimit = 100;
+
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, where, kLimit);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, where, kLimit);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 2u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "JSON_VALUE DISTINCT + non-PK filter: pushdown must match plain");
+    }
+
+    // JSON_VALUE alias DISTINCT + JSON_VALUE filter on another path of the same JSON column.
+    // The projection must be named by the SELECT alias so the DISTINCT key resolves although two JSON_VALUE nodes exist.
+    Y_UNIT_TEST(OneShard_JsonValueDistinct_JsonFilterSameColumn_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding helper(kikimr);
+        helper.SetWithJsonDocument(true);
+        helper.SetShardingMethod("HASH_FUNCTION_MODULO_N");
+        helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        const auto ts = PickTimestampsForShard(0, 1, 60, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 60, 60);
+        // jsonDoc = jv_(i % 10), other = grp_(i % 4) => other = grp_1 keeps i in {1,5,9,...}: jv_1, jv_5, jv_9, jv_3, jv_7.
+        const auto jsonPayloads = MakeJsonPayloadsWithOtherKey("jv", 60, 10, 4);
+        helper.SendDataViaActorSystem(
+            "/Root/olapStore/olapTable", BuildBatchForRowsWithJsonPayload(ts, rids, jsonPayloads, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = R"(WHERE JSON_VALUE(json_payload, "$.other") = "grp_1")";
+        constexpr ui64 kLimit = 100;
+
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, where, kLimit);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, where, kLimit);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 5u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "JSON_VALUE DISTINCT + JSON_VALUE filter on the same column: pushdown must match plain");
     }
 
     // No matching rows: SYNC_DISTINCT_LIMIT must forward empty stages without breaking the scan pipeline.

@@ -48,6 +48,29 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
     return newQuery;
 }
 
+TFullPoolId TQuery::GetFullPoolId() const {
+    auto* pool = GetParent();
+    Y_ENSURE(pool, "Query " << std::get<TQueryId>(GetId()) << " is not attached to a pool");
+
+    auto* database = pool;
+    while (auto* parent = database->GetParent()) {
+        if (parent->IsRoot()) {
+            break;
+        }
+        database = parent;
+    }
+
+    Y_ENSURE(database->GetParent(), "Pool " << std::get<TPoolId>(pool->GetId()) << " is not attached to a database");
+    Y_ENSURE(database != pool, "Query "
+        << std::get<TQueryId>(GetId()) << " is attached to database "
+        << std::get<TDatabaseId>(database->GetId()) << " instead of a pool");
+
+    return {
+        .DatabaseId = std::get<TDatabaseId>(database->GetId()),
+        .PoolId = std::get<TPoolId>(pool->GetId()),
+    };
+}
+
 TSchedulableTaskList::iterator TQuery::AddTask(const TSchedulableTaskPtr& task) {
     TGuard lock(TasksMutex);
     return SchedulableTasks.emplace(SchedulableTasks.end(), task, false);

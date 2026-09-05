@@ -71,12 +71,12 @@ namespace NYql::NDq {
                 NDB::registerFormats();
                 factory.RegisterSource<NS3::TSource>("S3Source",
                     [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
-                        YQL_LOG(DEBUG) << "S3Source factory: cfg.EnableScheduling=" << cfg.EnableScheduling << " args.SchedulerContext=" << (args.SchedulerContext ? "set" : "null");
-                        auto schedulerContext = cfg.EnableScheduling ? std::move(args.SchedulerContext) : nullptr;
+                        YQL_LOG(DEBUG) << "S3Source factory: cfg.EnableScheduling=" << cfg.EnableScheduling << " args.SchedulableWorkFactory=" << (args.SchedulableWorkFactory ? "set" : "null");
+                        auto workFactory = cfg.EnableScheduling ? std::move(args.SchedulableWorkFactory) : nullptr;
                         return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, std::move(args.Alloc), gateway,
                             std::move(settings), args.InputIndex, args.StatsLevel, args.TxId, args.SecureParams,
                             args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
-                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(schedulerContext));
+                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(workFactory));
                     });
             #else
                 Y_UNUSED(factory);

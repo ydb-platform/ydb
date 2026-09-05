@@ -177,10 +177,10 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
-    // It's very important to keep here std::string instead of TString 
+    // It's very important to keep here std::string instead of TString
     // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
     // This behaviour can be found in the getInputFormat call
-    std::string Format;  
+    std::string Format;
     TString Compression;
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
@@ -433,7 +433,10 @@ public:
             if (!delay) {
                 break;
             }
-            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessUnexpectedEvent, now + *delay);
+
+            // A delivered event means the scheduler woke us up.
+            const auto resumeEv = WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessUnexpectedEvent, now + *delay);
+            Work->NotifyResumed(/* byScheduler = */ static_cast<bool>(resumeEv));
         }
         Working = true;
     }
@@ -503,6 +506,11 @@ public:
         );
 
         while (true) {
+            // TODO: unlike RunCoroBlockArrowParserOverHttp below, this region is not
+            //       guarded by Y_DEFER { StopUnit(); }. stream->read() runs the
+            //       ClickHouse parser, which throws on malformed data, and yields
+            //       through TCoroReadBuffer, which throws TDtorException when the
+            //       coroutine is destroyed - both leave the quota slot held.
             StartUnit();
 
             NDB::Block batch = stream->read();
@@ -907,7 +915,7 @@ public:
                 if (isCancelled) {
                     LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
                                SourceContext->GetDownloadedBytes() << " bytes");
-                    break;        
+                    break;
                 }
             }
         }
@@ -1207,7 +1215,7 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize,
         bool asyncDecompressing,
-        IDqSchedulerContextPtr schedulerContext)
+        IDqSchedulableWorkFactoryPtr workFactory)
         : TActorCoroImpl(256_KB)
         , TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
@@ -1225,8 +1233,8 @@ public:
         , HttpDataRps(httpDataRps)
         , RawInflightSize(rawInflightSize)
         , AsyncDecompressing(asyncDecompressing)
-        , SchedulerContext(std::move(schedulerContext))
-        , Work(SchedulerContext ? SchedulerContext->CreateSchedulableWork() : nullptr)
+        , WorkFactory(std::move(workFactory))
+        , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
     {}
 
     ~TS3ReadCoroImpl() override {
@@ -1281,12 +1289,12 @@ private:
     }
 
     void Run() final {
-        LOG_CORO_D("Run start: SchedulerContext=" << (SchedulerContext ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
+        LOG_CORO_D("Run start: WorkFactory=" << (WorkFactory ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
         if (Work) {
             Work->RegisterForResume(SelfActorId);
         }
         if (AsyncDecompressing) {
-            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, SchedulerContext));
+            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, WorkFactory));
         }
 
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
@@ -1441,7 +1449,7 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     const ::NMonitoring::TDynamicCounters::TCounterPtr RawInflightSize;
     const bool AsyncDecompressing;
-    const IDqSchedulerContextPtr SchedulerContext;
+    const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
     bool Working = false;            // holds HDRF slot — allowed to consume CPU
 };
@@ -1491,7 +1499,7 @@ public:
         bool asyncDecoding,
         bool asyncDecompressing,
         bool allowLocalFiles,
-        IDqSchedulerContextPtr schedulerContext)
+        IDqSchedulableWorkFactoryPtr workFactory)
         : TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
@@ -1521,7 +1529,7 @@ public:
         , AsyncDecoding(asyncDecoding)
         , AsyncDecompressing(asyncDecompressing)
         , AllowLocalFiles(allowLocalFiles)
-        , SchedulerContext(std::move(schedulerContext)) {
+        , WorkFactory(std::move(workFactory)) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -1555,7 +1563,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3StreamReadActor", "Bootstrap SchedulerContext=" << (SchedulerContext ? "set" : "null"));
+        LOG_D("TS3StreamReadActor", "Bootstrap WorkFactory=" << (WorkFactory ? "set" : "null"));
 
         // Arrow blocks are currently not limited by mem quoter, so we use rough buffer quotation
         // After exact mem control implementation, this allocation should be deleted
@@ -1602,7 +1610,7 @@ public:
                 PatternVariant,
                 ES3PatternType::Wildcard,
                 AllowLocalFiles,
-                SchedulerContext));
+                WorkFactory));
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
@@ -1639,7 +1647,7 @@ public:
         if (ReadSpec->ParallelDownloadCount && splitCount >= ReadSpec->ParallelDownloadCount) {
             // explicit limit
             return false;
-        } 
+        }
         if (splitCount && DownloadSize * SourceContext->Ratio() > ReadActorFactoryCfg.DataInflight * 2) {
             // dynamic limit
             return false;
@@ -1686,7 +1694,7 @@ public:
             HttpDataRps,
             RawInflightSize,
             AsyncDecompressing,
-            SchedulerContext
+            WorkFactory
         );
         if (AsyncDecoding) {
             actorId = Register(new TS3ReadCoroActor(std::move(impl)));
@@ -2008,7 +2016,7 @@ private:
             }
         }
     }
-    
+
     void Handle(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
@@ -2131,7 +2139,7 @@ private:
     const bool AsyncDecoding;
     const bool AsyncDecompressing;
     const bool AllowLocalFiles;
-    const IDqSchedulerContextPtr SchedulerContext;
+    const IDqSchedulableWorkFactoryPtr WorkFactory;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -2296,7 +2304,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ::NMonitoring::TDynamicCounterPtr taskCounters,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
     bool allowLocalFiles,
-    IDqSchedulerContextPtr schedulerContext)
+    IDqSchedulableWorkFactoryPtr workFactory)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
@@ -2514,7 +2522,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles, std::move(schedulerContext));
+                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles, std::move(workFactory));
 
         return {actor, actor};
     }

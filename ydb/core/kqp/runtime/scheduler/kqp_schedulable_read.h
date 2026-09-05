@@ -49,7 +49,7 @@ public:
 
 private:
     TComputeSchedulerPtr Scheduler;
-    mutable THashMap<std::pair<NHdrf::TDatabaseId, NHdrf::TPoolId>, TSchedulableReadPtr::weak_type> ReadsCache;
+    mutable THashMap<NHdrf::TFullPoolId, TSchedulableReadPtr::weak_type> ReadsCache;
 };
 
 } // namespace NKikimr::NKqp::NScheduler

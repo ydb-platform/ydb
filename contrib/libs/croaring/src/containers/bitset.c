@@ -59,8 +59,7 @@ void bitset_container_set_all(bitset_container_t *bitset) {
     bitset->cardinality = (1 << 16);
 }
 
-/* Create a new bitset. Return NULL in case of failure. */
-bitset_container_t *bitset_container_create(void) {
+static bitset_container_t *bitset_container_allocate(void) {
     bitset_container_t *bitset =
         (bitset_container_t *)roaring_malloc(sizeof(bitset_container_t));
 
@@ -85,7 +84,23 @@ bitset_container_t *bitset_container_create(void) {
         roaring_free(bitset);
         return NULL;
     }
-    bitset_container_clear(bitset);
+    return bitset;
+}
+
+/* Create a new bitset. Return NULL in case of failure. */
+bitset_container_t *bitset_container_create(void) {
+    bitset_container_t *bitset = bitset_container_allocate();
+    if (bitset) {
+        bitset_container_clear(bitset);
+    }
+    return bitset;
+}
+
+bitset_container_t *bitset_container_create_uninitialized(void) {
+    bitset_container_t *bitset = bitset_container_allocate();
+    if (bitset) {
+        bitset->cardinality = 0;
+    }
     return bitset;
 }
 

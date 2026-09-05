@@ -1324,7 +1324,7 @@ A compiler or static-analyzer warning is not a bug. Do not report such cases as 
 # Stars
 
 
-[![Star History Chart](https://api.star-history.com/svg?repos=RoaringBitmap/CRoaring&type=Date)](https://www.star-history.com/#RoaringBitmap/CRoaring&Date)
+[![Star History Chart](https://api.star-history.dera.page/svg?repos=RoaringBitmap/CRoaring&type=Date)](https://star-history.dera.page/#RoaringBitmap/CRoaring&Date)
 
 # References about Roaring
 

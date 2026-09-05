@@ -26,6 +26,10 @@ namespace {
                 ReturnSuccessOnCommit = success;
             }
 
+            void SetCreateSessionResponse(bool success) {
+                ReturnSuccessOnCreateSession = success;
+            }
+
         private:
             STFUNC(StateFunc) {
                 switch (ev->GetTypeRewrite()) {
@@ -36,8 +40,10 @@ namespace {
 
             void Handle(NKqp::TEvKqp::TEvCreateSessionRequest::TPtr& ev, const TActorContext& ctx) {
                 auto response = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
-                response->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
-                response->Record.MutableResponse()->SetSessionId("123");
+                response->Record.SetYdbStatus(ReturnSuccessOnCreateSession ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE);
+                if (ReturnSuccessOnCreateSession) {
+                    response->Record.MutableResponse()->SetSessionId("123");
+                }
                 Send(new IEventHandle(ev->Sender, ctx.SelfID, response.Release(), 0, ev->Cookie));
             }
 
@@ -46,10 +52,10 @@ namespace {
                 THolder<NKqp::TEvKqp::TEvQueryResponse> response;
                 if (ev->Get()->Record.GetRequest().GetTxControl().commit_tx()) {
                     Cout << "Sending response on commit from dummy kqp" << Endl;
-                    response = MakeSimpleSuccessResponse();
+                    response = MakeStatusResponse(ReturnSuccessOnCommit ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED);
                 } else if (ev->Get()->Record.GetRequest().HasKafkaApiOperations()) {
                     Cout << "Sending response on add kafka operations from dummy kqp" << Endl;
-                    response = MakeSimpleSuccessResponse();
+                    response = MakeStatusResponse(Ydb::StatusIds::SUCCESS);
                 } else {
                     Cout << "Sending response on select from dummy kqp" << Endl;
                     response = MakeResponseOnSelectFromKqp();
@@ -63,14 +69,9 @@ namespace {
                 ));
             }
 
-            THolder<NKqp::TEvKqp::TEvQueryResponse> MakeSimpleSuccessResponse() {
+            THolder<NKqp::TEvKqp::TEvQueryResponse> MakeStatusResponse(Ydb::StatusIds::StatusCode status) {
                 auto response = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
-                NKikimrKqp::TEvQueryResponse record;
-                if (ReturnSuccessOnCommit) {
-                    record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
-                } else {
-                    record.SetYdbStatus(Ydb::StatusIds::ABORTED);
-                }
+                response->Record.SetYdbStatus(status);
                 return response;
             }
 
@@ -163,6 +164,7 @@ namespace {
             i32 ProducerEpochToReturn = 0;
             TMaybe<std::unordered_map<TString, i32>> ConsumerGenerationsToReturn = Nothing();
             bool ReturnSuccessOnCommit = true;
+            bool ReturnSuccessOnCreateSession = true;
         };
 
     class TTransactionActorFixture : public NUnitTest::TBaseFixture {
@@ -204,7 +206,6 @@ namespace {
             const TString TransactionalId = "123"; // transactional id from kafka SDK
             const i64 ProducerId = 1;
             const i32 ProducerEpoch = 1;
-            ui32 QueryRequestsCounter = 0;
 
             void SetUp(NUnitTest::TTestContext&) override {
                 Ctx.ConstructInPlace();
@@ -228,7 +229,6 @@ namespace {
             }
 
             void TearDown(NUnitTest::TTestContext&) override  {
-                QueryRequestsCounter = 0;
                 Ctx->Finalize();
             }
 
@@ -300,14 +300,9 @@ namespace {
             void AddObserverForAddOperationsRequest(std::function<void(const TEvKqp::TEvQueryRequest*)> callback, TMaybe<std::unordered_map<TString, i32>> consumerGenerationsToReturnInValidationRequest = Nothing()) {
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch, consumerGenerationsToReturnInValidationRequest);
 
-                auto observer = [callback = std::move(callback), this](TAutoPtr<IEventHandle>& input) {
-                    // handle query request
+                auto observer = [callback = std::move(callback)](TAutoPtr<IEventHandle>& input) {
                     if (auto* event = input->CastAsLocal<TEvKqp::TEvQueryRequest>()) {
-                        // first request is a validation request with select statements
-                        // second request should be a commit request
-                        if (QueryRequestsCounter == 0) {
-                            QueryRequestsCounter++;
-                        } else {
+                        if (event->Record.GetRequest().HasKafkaApiOperations()) {
                             callback(event);
                         }
                     }
@@ -618,18 +613,47 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->ProducerState.Epoch, ProducerEpoch);
         }
 
-        Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnBROKER_NOT_AVAILABLE) {
+        Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnCOORDINATOR_NOT_AVAILABLE) {
             ui64 correlationId = 987;
+            DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch);
             DummyKqpActor->SetCommitResponse(false);
 
             auto response = SendEndTxnRequest(true, correlationId);
 
             UNIT_ASSERT(response != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::BROKER_NOT_AVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
             UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
             const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
             UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
-            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::BROKER_NOT_AVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+
+            DummyKqpActor->SetCommitResponse(true);
+            auto retry = SendEndTxnRequest(true, correlationId + 1);
+            UNIT_ASSERT(retry != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            const auto& retryResult = static_cast<const NKafka::TEndTxnResponseData&>(*retry->Response);
+            UNIT_ASSERT_VALUES_EQUAL(retryResult.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(OnEndTxnWithCommitAndCreateSessionFailure_shouldReturnCOORDINATOR_NOT_AVAILABLE) {
+            ui64 correlationId = 654;
+            DummyKqpActor->SetCreateSessionResponse(false);
+
+            auto response = SendEndTxnRequest(true, correlationId);
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+            const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+
+            DummyKqpActor->SetCreateSessionResponse(true);
+            auto retry = SendEndTxnRequest(true, correlationId + 1);
+            UNIT_ASSERT(retry != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            const auto& retryResult = static_cast<const NKafka::TEndTxnResponseData&>(*retry->Response);
+            UNIT_ASSERT_VALUES_EQUAL(retryResult.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
         Y_UNIT_TEST(OnEndTxnWithCommitAndNoConsumerStateFound_shouldReturnINVALID_TXN_STATE) {

@@ -704,9 +704,9 @@ void TPlan::PrintMemoryStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px
 }
 
 // CPU: usage as a bar, the derivative as a curve, and the wait times that
-// explain the gaps in it. offsetY places the wait-output badge, which hangs off
-// the bottom of the whole stage rather than off this strip.
-void TPlan::PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw, ui32 offsetY) {
+// explain the gaps in it. The wait-output badge hangs off the bottom of the
+// whole stage rather than off this strip.
+void TPlan::PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw) {
     if (s->CpuTime) {
         TString tooltip;
         auto textSum = FormatTooltip(tooltip, "CPU Usage", s->CpuTime.get(), FormatUsage);
@@ -769,8 +769,9 @@ void TPlan::PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, u
                     }
                 }
                 if (waitOutputPeers) {
-                    PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2,
-                        s->OffsetY + offsetY + s->Height,
+                    // The stage draws into its own nested svg, so the badge is placed
+                    // relative to that stage box, not to its offset in the whole plan.
+                    PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2, s->Height,
                         TStringBuilder() << "Wait input with peer stage(s) " << waitOutputPeers << " wait output", "W");
                 }
             }
@@ -1003,7 +1004,7 @@ void TPlan::PrintIngressStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 p
 
 // One stage: the boxes it occupies in every column, then a strip for each of
 // its data flows, memory and CPU, then its incoming connections.
-void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32 timelineDelta, ui32 offsetY) {
+void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32 timelineDelta) {
     s->Svg
         << "<g data-group='g" << s->GroupId << "' class='selectable'><title>Stage " << (s->External ? "E" : ToString(s->PhysicalStageId)) << "</title>" << Endl;
     auto stageClass = s->External ? "clone" : "stage";
@@ -1038,7 +1039,7 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     PrintEgressStrip(s, y0, px, pw);
     PrintOutputStrip(s, y0, px, pw);
     PrintMemoryStrip(s, y0, px, pw);
-    PrintCpuStrip(s, y0, px, pw, offsetY);
+    PrintCpuStrip(s, y0, px, pw);
 
     if (s->Tasks) {
         s->Svg << "<g><title>";
@@ -1081,7 +1082,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     PrintPlanSummary(maxTime, timelineDelta, offsetY);
 
     for (auto& s : Stages) {
-        PrepareStageSvg(s, maxTime, timelineDelta, offsetY);
+        PrepareStageSvg(s, maxTime, timelineDelta);
     }
 
     offsetY += Height;

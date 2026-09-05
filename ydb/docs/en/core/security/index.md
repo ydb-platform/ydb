@@ -40,3 +40,5 @@ The {{ ydb-short-name }} security system operates with the following concepts:
 
   - [encryption in transit](./encryption/data-in-transit.md) to secure data transmitted between a client and {{ ydb-short-name }}, and between nodes of the {{ ydb-short-name }} cluster.
   - [data encryption at rest](./encryption/data-at-rest.md).
+
+Security requirements for developing Developer UI pages in C++ are described in [{#T}](../contributor/developer-ui-security-guidelines.md).

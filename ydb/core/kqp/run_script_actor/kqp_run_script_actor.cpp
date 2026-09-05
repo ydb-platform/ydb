@@ -147,7 +147,8 @@ private:
     void HandleCreatingFinished() {
         if (FinishInfo.IsFinished()) {
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved after failure, continue finishing",
-                {"logPrefix", LogPrefix()});
+                {"logPrefix", LogPrefix()},
+                {"finishStatus", FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)});
             Finish(); // Continue finishing
             return;
         }

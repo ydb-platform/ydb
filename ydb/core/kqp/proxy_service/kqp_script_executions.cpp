@@ -837,6 +837,9 @@ public:
             Ydb::Query::EXEC_STATUS_STARTING,
             GetExecModeFromAction(Event->Get()->Record.GetRequest().GetAction())
         ));
+        YDB_LOG_INFO("[ScriptExecutions] Sending TEvWakeup to TRunScriptActor to start script execution",
+            {"logPrefix", LogPrefix()},
+            {"runScriptActorId", RunScriptActorId});
         Send(RunScriptActorId, new TEvents::TEvWakeup());
         PassAway();
     }
@@ -976,7 +979,10 @@ private:
 
         if (ValidateLease(ResultSets[0], ELeaseState::ScriptRunning)) {
             LeaseExists = true;
+            YDB_LOG_DEBUG("[ScriptExecutions] Lease is valid, proceeding with update",
+                {"logPrefix", LogPrefix()});
             UpdateLease();
+        } else {
         }
     }
 
@@ -1320,8 +1326,17 @@ private:
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (RunScriptActorId) {
             if (status == Ydb::StatusIds::SUCCESS) {
+                YDB_LOG_INFO("[ScriptExecutions] Restart script execution succeeded, sending TEvWakeup to TRunScriptActor",
+                    {"logPrefix", LogPrefix()},
+                    {"runScriptActorId", RunScriptActorId},
+                    {"nextLeaseGeneration", LeaseGeneration + 1});
                 Send(RunScriptActorId, new TEvents::TEvWakeup());
             } else {
+                YDB_LOG_ERROR("[ScriptExecutions] Restart script execution failed, sending TEvPoison to TRunScriptActor",
+                    {"logPrefix", LogPrefix()},
+                    {"runScriptActorId", RunScriptActorId},
+                    {"status", status},
+                    {"issues", issues.ToOneLineString()});
                 Send(RunScriptActorId, new TEvents::TEvPoison());
             }
         }
@@ -4736,7 +4751,8 @@ private:
         YDB_LOG_DEBUG("[ScriptExecutions] Found expired script execution leases",
             {"logPrefix", LogPrefix()},
             {"leasesCount", Leases.size()},
-            {"fetchedRowCount", rowsCount});
+            {"fetchedRowCount", rowsCount},
+            {"maxLeaseDeadline", LeaseDeadline});
         Finish();
     }
 

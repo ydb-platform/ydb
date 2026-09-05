@@ -65,8 +65,14 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvScriptLeaseUpdateResponse, Handle);
         sFunc(TEvents::TEvWakeup, StartLeaseUpdate);
-        sFunc(TEvents::TEvPoison, Finish);
+        sFunc(TEvents::TEvPoison, HandlePoison);
     )
+
+    void HandlePoison() {
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got TEvPoison, stopping lease watcher",
+            {"logPrefix", LogPrefix()});
+        Finish();
+    }
 
     void Handle(const TEvScriptLeaseUpdateResponse::TPtr& ev) {
         if (const auto& counters = Ctx->Counters) {

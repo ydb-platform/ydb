@@ -50,6 +50,111 @@ TVector<TCoArgument> PrepareArgumentsReplacement(const TExprBase& node, const TV
 }
 
 namespace {
+TExprBase PreserveStageOutputType(TDqConnection output, const TTypeAnnotationNode& itemType, TExprContext& ctx)
+{
+    if (itemType.GetKind() != ETypeAnnotationKind::Variant) {
+        return output;
+    }
+
+    const auto* underlyingType = itemType.Cast<TVariantExprType>()->GetUnderlyingType();
+    YQL_ENSURE(underlyingType->GetKind() == ETypeAnnotationKind::Tuple);
+    const auto* tupleType = underlyingType->Cast<TTupleExprType>();
+
+    TVector<TExprBase> muxParts;
+    muxParts.reserve(tupleType->GetSize());
+    for (ui32 i = 0; i < tupleType->GetSize(); ++i) {
+        muxParts.push_back(Build<TDqCnUnionAll>(ctx, output.Pos())
+            .Output()
+                .Stage(output.Output().Stage())
+                .Index().Build(i)
+            .Build()
+            .Done());
+    }
+
+    return Build<TCoMux>(ctx, output.Pos())
+        .Input<TExprList>()
+            .Add(muxParts)
+        .Build()
+        .Done();
+}
+
+struct TMuxStageInput {
+    TVector<TCoArgument> Args;
+    TVector<TExprBase> Connections;
+    TCoMux Mux;
+};
+
+TMaybe<TMuxStageInput> PrepareFlatMapMuxStageInput(TCoMux mux, const TParentsMap& parentsMap,
+    bool allowStageMultiUsage, TExprContext& ctx)
+{
+    TVector<TCoArgument> inputArgs;
+    TVector<TExprBase> inputConns;
+    TVector<TExprBase> muxArgs;
+    TVector<std::pair<const TExprNode*, ui32>> seenOutputs;
+
+    auto maybeInputList = mux.Input().Maybe<TExprList>();
+    if (!maybeInputList) {
+        return {};
+    }
+
+    for (auto child : maybeInputList.Cast()) {
+        auto maybeUnionAll = child.Maybe<TDqCnUnionAll>();
+        if (!maybeUnionAll) {
+            return {};
+        }
+
+        auto connection = maybeUnionAll.Cast();
+        if (!IsSingleConsumerConnection(connection, parentsMap, allowStageMultiUsage)) {
+            return {};
+        }
+
+        const auto* stage = connection.Output().Stage().Raw();
+        const auto outputIndex = FromString<ui32>(connection.Output().Index().Value());
+        for (const auto& [seenStage, seenIndex] : seenOutputs) {
+            if (seenStage == stage && seenIndex == outputIndex) {
+                return {};
+            }
+        }
+        seenOutputs.emplace_back(stage, outputIndex);
+
+        auto programArg = Build<TCoArgument>(ctx, connection.Pos())
+            .Name("arg")
+            .Done();
+
+        inputConns.push_back(connection);
+        inputArgs.push_back(programArg);
+        muxArgs.push_back(programArg);
+    }
+
+    auto newMux = Build<TCoMux>(ctx, mux.Pos())
+        .Input<TExprList>()
+            .Add(muxArgs)
+        .Build()
+        .Done();
+    return TMuxStageInput{std::move(inputArgs), std::move(inputConns), newMux};
+}
+
+TDqCnUnionAll BuildMuxStageOutput(TExprBase node, TExprBase body, TMuxStageInput&& input, TExprContext& ctx)
+{
+    auto stage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Add(input.Connections)
+            .Build()
+        .Program()
+            .Args(input.Args)
+            .Body(body)
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
 TMaybeNode<TCoMux> ConvertMuxArgumentsToFlows(TCoMux node, TExprContext& ctx) {
     auto mux = node.Cast<TCoMux>();
     bool hasConnAsArg = false;
@@ -959,13 +1064,48 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
 TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    Y_UNUSED(optCtx);
-
-    if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
+    auto maybeFlatmap = node.Maybe<TCoFlatMapBase>();
+    if (!maybeFlatmap) {
         return node;
     }
 
     auto flatmap = node.Cast<TCoFlatMapBase>();
+    if (auto maybeMux = flatmap.Input().Maybe<TCoMux>()) {
+        // Deliberately narrow: this lowers the known `PROCESS ... TableRow()` shape only.
+        // Every Mux child must be a plain TDqCnUnionAll; anything else (other connection
+        // kinds, pure expressions) declines the optimization rather than trying to
+        // normalize arbitrary combinations, which the generic DQ task builder does not
+        // support (see CommonBuildTasks()/BuildUnionAllChannels() assumptions).
+        if (!IsDqCompletePureExpr(flatmap.Lambda())) {
+            return node;
+        }
+
+        const auto* resultItemType = GetSeqItemType(node.Ref().GetTypeAnn());
+        if (!resultItemType) {
+            return node;
+        }
+        if (resultItemType->GetKind() == ETypeAnnotationKind::Variant &&
+            resultItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() != ETypeAnnotationKind::Tuple)
+        {
+            return node;
+        }
+
+        auto stageInput = PrepareFlatMapMuxStageInput(maybeMux.Cast(), parentsMap, allowStageMultiUsage, ctx);
+        if (!stageInput) {
+            return node;
+        }
+        auto stageBody = ctx.ChangeChild(
+            flatmap.Ref(),
+            TCoFlatMapBase::idx_Input,
+            stageInput->Mux.Ptr());
+        auto output = BuildMuxStageOutput(node, TExprBase(std::move(stageBody)), std::move(*stageInput), ctx);
+        return PreserveStageOutputType(output, *resultItemType, ctx);
+    }
+
+    if (!flatmap.Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
     if (!IsDqSelfContainedExpr(flatmap.Lambda())) {
         return node;
     }
@@ -1136,28 +1276,7 @@ TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimization
     }
 
     const auto& lmapItemTy = GetSeqItemType(*lmap.Ref().GetTypeAnn());
-    if (lmapItemTy.GetKind() == ETypeAnnotationKind::Variant) {
-        // preserve typing by Mux'ing several stage outputs into one
-        const auto variantItemTy = lmapItemTy.template Cast<TVariantExprType>();
-        const auto stageOutputNum = variantItemTy->GetUnderlyingType()->template Cast<TTupleExprType>()->GetSize();
-        TVector<TExprBase> muxParts;
-        muxParts.reserve(stageOutputNum);
-        for (auto i = 0U; i < stageOutputNum; i++) {
-            const auto muxPart = Build<TDqCnUnionAll>(ctx, lmap.Lambda().Pos())
-                .Output()
-                    .Stage(result.Output().Stage().Cast())
-                    .Index().Build(i)
-                .Build()
-                .Done();
-            muxParts.emplace_back(muxPart);
-        }
-        return Build<TCoMux>(ctx, result.Cast().Pos())
-            .template Input<TExprList>()
-                .Add(muxParts)
-            .Build()
-            .Done();
-    }
-    return result.Cast();
+    return PreserveStageOutputType(result.Cast(), lmapItemTy, ctx);
 }
 
 TExprBase DqPushOrderedLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,

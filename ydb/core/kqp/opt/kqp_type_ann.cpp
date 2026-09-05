@@ -1827,8 +1827,12 @@ TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx,
     // We need to infer the type of physical query for RBO at this time
     if (enableRBO) {
         TKqpPhysicalQuery query(node);
-        auto type = query.Results().Item(0).Ptr()->GetTypeAnn();
-        node->SetTypeAnn(type);
+        if (query.Results().Size()){
+            auto type = query.Results().Item(0).Ptr()->GetTypeAnn();
+            node->SetTypeAnn(type);
+        } else {
+            node->SetTypeAnn(ctx.MakeType<TListExprType>(MakeKqpEffectType(ctx)));
+        }
     }
     else {
         node->SetTypeAnn(ctx.MakeType<TVoidExprType>());

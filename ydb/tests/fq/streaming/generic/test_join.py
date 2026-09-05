@@ -1201,7 +1201,7 @@ TESTCASES = [
 
 class TestJoinYdbStreaming(StreamingTestBase):
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
-    @pytest.mark.parametrize("streamlookup", [True, False], ids=["slj", "map"])
+    @pytest.mark.parametrize("streamlookup", [True, False] if DEBUG else [True], ids=["slj", "map"] if DEBUG else ["slj"])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     @pytest.mark.parametrize("local", [True, False], ids=["local", "generic"])
     @pytest.mark.parametrize("column_tables", [True, False], ids=["cs", "row"])
@@ -1215,10 +1215,6 @@ class TestJoinYdbStreaming(StreamingTestBase):
         local: bool,
         column_tables: bool,
     ):
-        if not (DEBUG or streamlookup):
-            pytest.skip("map join verified only in DEBUG test")
-        if local and streamlookup:
-            pytest.skip("YQ-5431")
         title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}"
         query_name = f"q_{title}"
         endpoint = self.get_endpoint(kikimr, local_topics=True)
@@ -1312,8 +1308,6 @@ class TestJoinYdbStreaming(StreamingTestBase):
         local: bool,
         column_tables: bool,
     ):
-        if local and streamlookup:
-            pytest.skip("YQ-5431")
         pytest.skip("YQ-5580: works unstable, requires investigation")
         title = f"slj_wm_{partitions_count}{streamlookup!s:.1}{tasks}{local!s:.1}"
         query_name = f"q_{title}"

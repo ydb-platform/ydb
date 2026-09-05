@@ -1,0 +1,11 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NKqpProto;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TDqSourceKikimrLookupSource {
+    string Path = 1;
+    string Token = 2;
+    string Database = 3;
+}

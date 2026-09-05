@@ -31,7 +31,7 @@ std::shared_ptr<IBlobsWritingAction> TOperator::DoStartWritingAction() {
 }
 
 std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
-    return std::make_shared<TReadingAction>(GetStorageId(), GetCurrentOperator());
+    return std::make_shared<TReadingAction>(GetStorageId(), ExternalStorageOperator);
 }
 
 std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {

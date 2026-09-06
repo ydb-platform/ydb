@@ -18,17 +18,18 @@ namespace {
 
 TTestEnv CreateTestEnv() {
     return TTestEnv(1, 1, false, [](Tests::TServerSettings& settings) {
-        settings.AppConfig->MutableStatisticsConfig()
-            ->SetEnableBackgroundColumnStatsCollection(true);
+        auto* stats = settings.AppConfig->MutableStatisticsConfig();
+        stats->SetEnableBackgroundColumnStatsCollection(true);
+        stats->SetBaseStatsSendInitialDelaySeconds(3);
     });
 }
 
 TTestEnv CreateTestEnv(ui32 changeRatioThresholdPercent) {
     return TTestEnv(1, 1, false, [changeRatioThresholdPercent](Tests::TServerSettings& settings) {
-        settings.AppConfig->MutableStatisticsConfig()
-            ->SetEnableBackgroundColumnStatsCollection(true);
-        settings.AppConfig->MutableStatisticsConfig()
-            ->SetBackgroundAnalyzeChangeRatioThresholdPercent(changeRatioThresholdPercent);
+        auto* stats = settings.AppConfig->MutableStatisticsConfig();
+        stats->SetEnableBackgroundColumnStatsCollection(true);
+        stats->SetBackgroundAnalyzeChangeRatioThresholdPercent(changeRatioThresholdPercent);
+        stats->SetBaseStatsSendInitialDelaySeconds(3);
     });
 }
 
@@ -306,6 +307,48 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(observer.GetSaveCount(), 0);
     }
 
+    // The aggregator must not schedule background ANALYZE for .metadata/statistics_v2
+    // to avoid a self-retriggering loop. SchemeShard still sends basic stats for it.
+    Y_UNIT_TEST_TWIN(SkipMetadataFromBackgroundAnalyze, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            auto* stats = settings.AppConfig->MutableStatisticsConfig();
+            stats->SetEnableBackgroundColumnStatsCollection(true);
+            stats->SetBaseStatsSendIntervalSecondsDedicated(1);
+            stats->SetBaseStatsSendInitialDelaySeconds(3);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+
+        TPathId metadataPathId;
+        for (ui32 attempt = 0; attempt < 300 && !metadataPathId; ++attempt) {
+            metadataPathId = ResolvePathId(runtime, "/Root/Database/.metadata/statistics_v2");
+            if (!metadataPathId) {
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+        }
+        UNIT_ASSERT(metadataPathId);
+
+        TSaveStatisticsObserver metadataObserver(runtime, metadataPathId);
+        const auto tableInfo = PrepareTableWithIndexes(env, "Database", "Table", ColumnShard);
+        UNIT_ASSERT_VALUES_UNEQUAL(metadataPathId, tableInfo.PathId);
+
+        WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
+        UNIT_ASSERT_VALUES_EQUAL(metadataObserver.GetSaveCount(), 0);
+
+        RebootTablet(runtime, tableInfo.SaTabletId, runtime.AllocateEdgeActor());
+        WaitForBackgroundAnalyzeToStabilize(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(metadataObserver.GetSaveCount(), 0);
+
+        DropTable(env, "Database", "Table");
+        auto result = Analyze(
+            runtime, tableInfo.SaTabletId, {tableInfo.PathId},
+            "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(result.GetIssues(), issues);
+        UNIT_ASSERT_C(issues.ToString().Contains("Could not find table"), issues.ToString());
+    }
+
     Y_UNIT_TEST_TWIN(Counters, ColumnShard) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
@@ -424,14 +467,10 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
     // re-trigger ANALYZE. A later above-threshold change still must.
     Y_UNIT_TEST_TWIN(SchemeShardRestartWithoutPersistentStats, ColumnShard) {
         TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
-            settings.AppConfig->MutableStatisticsConfig()
-                ->SetEnableBackgroundColumnStatsCollection(true);
-            settings.AppConfig->MutableStatisticsConfig()
-                ->SetBackgroundAnalyzeChangeRatioThresholdPercent(20);
-            // After reboot SS waits 30s before the first SendBaseStatsToSA; keep
-            // the subsequent interval short so recovery is observable quickly.
-            settings.AppConfig->MutableStatisticsConfig()
-                ->SetBaseStatsSendIntervalSecondsDedicated(3);
+            auto* stats = settings.AppConfig->MutableStatisticsConfig();
+            stats->SetEnableBackgroundColumnStatsCollection(true);
+            stats->SetBackgroundAnalyzeChangeRatioThresholdPercent(20);
+            stats->SetBaseStatsSendInitialDelaySeconds(3);
             settings.FeatureFlags.SetEnablePersistentPartitionStats(false);
         });
         auto& runtime = *env.GetServer().GetRuntime();

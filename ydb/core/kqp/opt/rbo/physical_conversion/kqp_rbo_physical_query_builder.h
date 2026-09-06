@@ -21,8 +21,9 @@ public:
 
 private:
     TVector<NYql::TExprNode::TPtr> BuildPhysicalStageGraph();
+    TVector<NYql::TExprNode::TPtr> LowerPhysicalStageCompatibility(TVector<NYql::TExprNode::TPtr>&& physicalStages);
     TVector<NYql::TExprNode::TPtr> PeepHoleOptimizePhysicalStages(TVector<NYql::TExprNode::TPtr>&& physicalStages);
-    TVector<NYql::TExprNode::TPtr> EnableWideChannelsPhysicalStages(TVector<NYql::TExprNode::TPtr>&& physicalStages);
+    TVector<NYql::TExprNode::TPtr> PreparePhysicalStages(TVector<NYql::TExprNode::TPtr>&& physicalStages, bool enableWideChannels);
     NYql::TExprNode::TPtr BuildPhysicalQuery(TVector<NYql::TExprNode::TPtr>&& physicalStages);
     NYql::TExprNode::TPtr PeepHoleOptimize(NYql::TExprNode::TPtr input, const TVector<const NYql::TTypeAnnotationNode*>& argsType) const;
     bool CanApplyPeepHole(NYql::TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) const;

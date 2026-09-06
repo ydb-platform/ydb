@@ -1,4 +1,5 @@
 #include "kqp_rbo_physical_query_builder.h"
+#include "kqp_rbo_compatibility.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
@@ -124,13 +125,57 @@ TPhysicalQueryBuilder::TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph,
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     auto phyStages = BuildPhysicalStageGraph();
     SubmitPhysicalStagesTrace(RBOCtx, "After physical stage graph build", phyStages);
-    phyStages = EnableWideChannelsPhysicalStages(std::move(phyStages));
-    SubmitPhysicalStagesTrace(RBOCtx, "After wide channel rewrite", phyStages);
-    phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
-    SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    const bool fullPeephole = RBOCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
+    phyStages = PreparePhysicalStages(std::move(phyStages), fullPeephole);
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical stage preparation", phyStages);
+    if (!fullPeephole) {
+        phyStages = LowerPhysicalStageCompatibility(std::move(phyStages));
+        SubmitPhysicalStagesTrace(RBOCtx, "After compatibility lowering", phyStages);
+    } else {
+        phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
+        SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    }
     auto physicalQuery = BuildPhysicalQuery(std::move(phyStages));
     SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
     return physicalQuery;
+}
+
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::LowerPhysicalStageCompatibility(TVector<TExprNode::TPtr>&& physicalStages) {
+    Y_ENSURE(!physicalStages.empty());
+    auto root = physicalStages.back();
+    if (!NeedsRboCompatibilityLowering(root)) {
+        return std::move(physicalStages);
+    }
+
+    TOptimizeExprSettings settings(&RBOCtx.TypeCtx);
+    settings.CustomInstantTypeTransformer = RBOCtx.TypeCtx.CustomInstantTypeTransformer.Get();
+    constexpr size_t MaxPasses = 64;
+    for (size_t pass = 0; pass < MaxPasses && NeedsRboCompatibilityLowering(root); ++pass) {
+        TExprNode::TPtr output;
+        const auto status = OptimizeExpr(
+            root,
+            output,
+            [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+                return RewriteRboCompatibilityNode(node, ctx, RBOCtx.TypeCtx);
+            },
+            RBOCtx.ExprCtx,
+            settings);
+        YQL_ENSURE(status != IGraphTransformer::TStatus::Error,
+            "Failed to lower execution-incompatible callables in new RBO physical stages");
+        if (status == IGraphTransformer::TStatus::Ok) {
+            break;
+        }
+
+        YQL_ENSURE(status == IGraphTransformer::TStatus::Repeat);
+        YQL_ENSURE(output != root, "RBO compatibility lowering made no progress");
+        root = std::move(output);
+        TypeAnnotate(root);
+    }
+
+    EnsureRboCompatibilityLowered(root);
+    TVector<TExprNode::TPtr> stagesTopSorted;
+    TopologicalSort(TDqPhyStage(root), stagesTopSorted);
+    return stagesTopSorted;
 }
 
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
@@ -638,7 +683,7 @@ void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhy
     }
 }
 
-TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages(TVector<TExprNode::TPtr>&& physicalStages) {
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages, bool enableWideChannels) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
     if (!root->GetTypeAnn()) {
@@ -660,12 +705,14 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages
         // clang-format on
 
         TypeAnnotate(newStage);
-        rootStage = NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr();
+        rootStage = enableWideChannels
+            ? NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr()
+            : newStage;
         replaces[dqPhyStage.Raw()] = rootStage;
     }
 
     TypeAnnotate(rootStage);
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Wide channels] " << KqpExprToPrettyString(TExprBase(rootStage), ctx);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical stages] " << KqpExprToPrettyString(TExprBase(rootStage), ctx);
 
     TVector<TExprNode::TPtr> stagesTopSorted;
     TopologicalSort(TDqPhyStage(rootStage), stagesTopSorted);

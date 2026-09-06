@@ -429,7 +429,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Filter: c.c_acctbal > a.a</title><text x='47' y='13' class='texts clipped'>Filter: c.c_acctbal > a.a</text>
+<g><title>Filter: c.c_acctbal &gt; a.a</title><text x='47' y='13' class='texts clipped'>Filter: c.c_acctbal &gt; a.a</text>
 </g>
 <g><title>CrossJoin: </title><text x='47' y='29' class='texts clipped'>CrossJoin: </text>
 </g>
@@ -581,7 +581,7 @@
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
 <g><title>Aggregate: </title><text x='36' y='13' class='texts clipped'>Aggregate: </text>
 </g>
-<g><title>Filter: Substring == "31" Or Substring == "29" Or Substring == "30" Or Substring == "26" Or Substring == "28" Or Substring == "25" Or Substring == "15" And c_acctbal > "0.00"</title><text x='36' y='29' class='texts clipped'>Filter: Substring == "31" Or Substring == "29" Or Substring == "30" Or Substring == "26" Or Substring == "28" Or Substring == "25" Or Substring == "15" And c_acctbal > "0.00"</text>
+<g><title>Filter: Substring == "31" Or Substring == "29" Or Substring == "30" Or Substring == "26" Or Substring == "28" Or Substring == "25" Or Substring == "15" And c_acctbal &gt; "0.00"</title><text x='36' y='29' class='texts clipped'>Filter: Substring == "31" Or Substring == "29" Or Substring == "30" Or Substring == "26" Or Substring == "28" Or Substring == "25" Or Substring == "15" And c_acctbal &gt; "0.00"</text>
 </g>
 <g><title>Source s3: customer(c_acctbal, c_custkey, c_phone)</title><text x='36' y='45' class='texts clipped'>Source s3: customer(c_acctbal, c_custkey, c_phone)</text>
 </g>
@@ -601,5 +601,4 @@
 </svg>
 
 <line x1='600' y1='0' x2='600' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-
 </svg>

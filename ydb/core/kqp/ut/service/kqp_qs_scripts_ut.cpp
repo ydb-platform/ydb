@@ -318,6 +318,15 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         UNIT_ASSERT_EQUAL(ops, listedOps);
     }
 
+    Y_UNIT_TEST(ListScriptExecutionsInvalidPageToken) {
+        auto kikimr = DefaultKikimrRunner();
+
+        NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
+        auto list = client.List<NYdb::NQuery::TScriptExecutionOperation>(42, "invalid-page-token").ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(list.GetStatus(), EStatus::BAD_REQUEST, list.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ForgetScriptExecution) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

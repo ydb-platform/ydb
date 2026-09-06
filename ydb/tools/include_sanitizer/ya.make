@@ -14,6 +14,7 @@ PY_SRCS(
     analysis/__init__.py
     analysis/cost.py
     analysis/unity.py
+    analysis/fanout.py
 
     bench/__init__.py
     bench/run.py

@@ -6,6 +6,12 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 package NKikimrDataEvents;
 option java_package = "ru.yandex.kikimr.proto";
 
+// One writer's position in a lock's uncommitted write chain
+message TWriteSeqNum {
+    optional uint64 WriterIndex = 1;
+    optional uint64 WriteSeqNum = 2;
+}
+
 message TLock {
     optional fixed64 LockId = 1;
     optional fixed64 DataShard = 2;
@@ -14,6 +20,7 @@ message TLock {
     optional fixed64 SchemeShard = 5;
     optional uint64 PathId = 6;
     optional bool HasWrites = 7;
+    repeated TWriteSeqNum WriteSeqNums = 8;
 }
 
 message TKqpLocks {
@@ -112,6 +119,7 @@ message TEvWrite {
         optional uint32 DefaultFilledColumnCount = 7;
         optional bool IsBulk = 8;
         optional uint64 QuerySpanId = 9;
+        optional TWriteSeqNum WriteSeqNum = 10;
     }
 
     // Transaction operations
@@ -135,6 +143,7 @@ message TEvWrite {
     optional ELockMode LockMode = 10;
     optional uint64 TimeoutSeconds = 11;
     optional string UserSID = 12;
+    optional bool CollectAffectedRows = 13;
 }
 
 message TEvWriteResult {
@@ -178,6 +187,9 @@ message TEvWriteResult {
 
     // Commit version when available
     optional NKikimrProto.TRowVersion CommitVersion = 14;
+
+    // Duplicate of a previously applied write; Status carries the original status.
+    optional bool IsDuplicate = 15;
 }
 
 message TEvLockRows {

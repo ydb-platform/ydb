@@ -1482,7 +1482,7 @@ subsequent restarts don't re-allocate. The transaction is
   `TDirectBlockGroupConnections` / `TConnection { DDiskId, PersistentBufferDDiskId }`
   (`partition_direct/proto/partition_direct.proto`)
 - tx body: `partition_direct/part_storepartitionids.cpp:13-41`
-- tx db: `partition_direct/part_database.{h,cpp}` (and round-trip test
+- tx db: `partition_direct_tablet/part_database.{h,cpp}` (and round-trip test
   `part_database_ut.cpp`).
 
 On `Complete`, the tx calls `TPartitionActor::Start`

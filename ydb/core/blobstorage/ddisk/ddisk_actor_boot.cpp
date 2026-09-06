@@ -258,8 +258,6 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         NPDisk::TUringRouterConfig config;
         config.QueueDepth = MaxInFlight;
-        config.UseSQPoll = Config.UseSQPoll;
-        config.UseIOPoll = Config.UseIOPoll;
         if (!UringRouter) {
             if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(
@@ -267,12 +265,7 @@ namespace NKikimr::NDDisk {
                     TActivationContext::ActorSystem(),
                     config,
                     &Counters.UringCounters);
-                if (const auto result = UringRouter->RegisterFile(); !result) {
-                    YDB_LOG_WARN("TDDiskActor::InitUring failed to register fixed file for io_uring",
-                        {"marker", "BSDD18"},
-                        {"DDiskId", DDiskId},
-                        {"errno", result.error()});
-                }
+                UringRouter->RegisterFile();
 
                 // Device overestimation tracking: reuse PDisk's measured seek/speed
                 // constants for the first iteration.
@@ -287,6 +280,13 @@ namespace NKikimr::NDDisk {
 
                 UringRouter->Start();
 
+                if (!UringRouter->IsFileRegistered()) {
+                    YDB_LOG_WARN("TDDiskActor::InitUring failed to register fixed file for io_uring",
+                        {"marker", "BSDD18"},
+                        {"DDiskId", DDiskId},
+                        {"errno", UringRouter->GetRegisterFileErrno()});
+                }
+
                 // Periodically flush buffered samples to the owning PDisk actor so it
                 // can merge them with samples from other sources sharing this device.
                 Schedule(DeviceOverestimationFlushPeriod,
@@ -295,16 +295,15 @@ namespace NKikimr::NDDisk {
         }
 
         if (UringRouter) {
-            const NPDisk::EUringFavor requestedFavor = config.GetUringFavor();
             const NPDisk::EUringFavor actualFavor = UringRouter->GetUringFavor();
-            *Counters.DirectIO.RegularUringCount = (actualFavor == requestedFavor) ? 1 : 0;
-            *Counters.DirectIO.FallbackUringCount = (actualFavor == requestedFavor) ? 0 : 1;
+            const bool usedModernFlags = actualFavor == NPDisk::EUringFavor::SingleIssuer;
+            *Counters.DirectIO.RegularUringCount = usedModernFlags ? 1 : 0;
+            *Counters.DirectIO.FallbackUringCount = usedModernFlags ? 0 : 1;
             *Counters.DirectIO.FallbackPDiskCount = 0;
-            if (actualFavor != requestedFavor) {
+            if (!usedModernFlags) {
                 YDB_LOG_WARN("TDDiskActor::InitUring io_uring mode fallback",
                     {"marker", "BSDD19"},
                     {"DDiskId", DDiskId},
-                    {"requestedFavor", requestedFavor},
                     {"actualFavor", actualFavor});
             }
             YDB_LOG_INFO("TDDiskActor::InitUring started io_uring with config",
@@ -320,7 +319,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::OnDeviceIoSample(const NPDisk::TDeviceIoSample& sample) {
-        // Called from the io_uring completion poller thread (via UringRouter's
+        // Called from the io_uring I/O thread (via UringRouter's
         // sample sink). Keep this cheap: just fill BaseCostNs using the flat
         // model and append under a mutex.
         NPDisk::TDeviceIoSample sampleWithCost = sample;

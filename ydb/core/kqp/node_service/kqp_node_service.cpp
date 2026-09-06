@@ -351,6 +351,7 @@ private:
         auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
+        ptr->ColumnShardMaxOperationBytes = settings.GetColumnShardMaxOperationBytes();
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());

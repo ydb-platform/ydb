@@ -751,6 +751,7 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
     auto& task = TasksGraph.GetTask(taskId);
     if (!task.ComputeActorId) {
         task.ComputeActorId = computeActor;
+        AllComputeActors.emplace(computeActor);
         PendingComputeTasks.erase(taskId);
         auto [it, success] = PendingComputeActors.try_emplace(computeActor);
         YQL_ENSURE(success);
@@ -846,11 +847,15 @@ void TKqpPlanner::ShiftConsumption() {
     }
 }
 
-const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() {
+const THashSet<TActorId>& TKqpPlanner::GetAllComputeActors() const {
+    return AllComputeActors;
+}
+
+const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() const {
     return PendingComputeActors;
 }
 
-const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() {
+const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() const {
     return PendingComputeTasks;
 }
 

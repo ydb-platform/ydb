@@ -426,7 +426,7 @@ def JAVAC_FLAGS(unit: ymake.Unit, *args: str):
 
 
 @ymake.macro
-def ENABLE_KOTLIN_ABI_JAR(unit: ymake.Unit, *args: str):
+def ENABLE_KOTLIN_ABI_JAR(unit: ymake.Unit):
     if not unit.enabled('WITH_KOTLIN_VALUE'):
         ymake.report_configure_error('ENABLE_KOTLIN_ABI_JAR requires WITH_KOTLIN')
         return

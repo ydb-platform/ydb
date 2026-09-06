@@ -21,6 +21,7 @@ SRCS(
     memusage_ut.cpp
     vdisk_config_ut.cpp
     vdisk_events_ut.cpp
+    vdisk_histogram_latency_ut.cpp
     vdisk_lsnmngr_ut.cpp
     vdisk_outofspace_ut.cpp
     vdisk_pdisk_error_ut.cpp

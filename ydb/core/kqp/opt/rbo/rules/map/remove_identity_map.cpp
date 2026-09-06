@@ -45,23 +45,23 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
     }
 
     auto map = CastOperator<TOpMap>(input);
-    if (map->MapElements.empty()) {
+    if (map->GetMapElements().empty()) {
         return map->GetInput();
     }
 
     const auto inputIUs = GetInputIUs(map);
     TInfoUnitSet identitySources;
-    for (const auto& mapElement : map->MapElements) {
+    for (const auto& mapElement : map->GetMapElements()) {
         if (IsIdentityElement(mapElement) && inputIUs.contains(mapElement.GetElementName())) {
             identitySources.insert(mapElement.GetElementName());
         }
     }
 
     TVector<TMapElement> newElements;
-    newElements.reserve(map->MapElements.size());
+    newElements.reserve(map->GetMapElements().size());
     TInfoUnitSet remainingRenameSources;
     bool changed = false;
-    for (auto mapElement : map->MapElements) {
+    for (auto mapElement : map->GetMapElements()) {
         if (mapElement.IsRename() &&
             !IsIdentityRename(mapElement) &&
             identitySources.contains(mapElement.GetRename())) {
@@ -97,7 +97,7 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
         return map->GetInput();
     }
 
-    return MakeIntrusive<TOpMap>(map->GetInput(), map->Pos, map->Props, finalElements, map->IsOrdered());
+    return MakeIntrusive<TOpMap>(map->GetInput(), map->Pos, map->Props, finalElements);
 }
 
 }

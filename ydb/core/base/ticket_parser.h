@@ -2,7 +2,6 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/login/login.h>
 #include <util/string/builder.h>

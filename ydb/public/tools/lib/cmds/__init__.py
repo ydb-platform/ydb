@@ -44,6 +44,8 @@ class EmptyArguments(object):
         self.dont_use_log_files = False
         self.enabled_feature_flags = []
         self.enabled_grpc_services = []
+        self.enable_http_proxy = False
+        self.enable_sqs_topic_api = False
 
 
 def _get_build_path(path):
@@ -224,6 +226,9 @@ class Recipe(object):
     def write_kafka_api_port(self, kafka_api_port):
         self.setenv('YDB_KAFKA_PROXY_PORT', str(kafka_api_port))
 
+    def write_http_proxy_endpoint(self, http_proxy_port):
+        self.setenv('YDB_HTTP_PROXY_ENDPOINT', 'http://localhost:%d' % http_proxy_port)
+
     def read_metafile(self):
         return json.loads(self.read(self.metafile_path()))
 
@@ -362,6 +367,32 @@ def resolve_deploy_config_action(config_path, target_config):
     return 'generate'
 
 
+def resolve_http_proxy_config(arguments):
+    enable_sqs_topic_api = (
+        getattr(arguments, 'enable_sqs_topic_api', False)
+        or os.getenv('YDB_ENABLE_SQS_TOPIC_API') == 'true'
+    )
+    enable_http_proxy = (
+        enable_sqs_topic_api
+        or getattr(arguments, 'enable_http_proxy', False)
+        or os.getenv('YDB_ENABLE_HTTP_PROXY') == 'true'
+    )
+
+    if not enable_http_proxy:
+        return None
+
+    config = {
+        'enabled': True,
+        'yandex_cloud_service_region': ['ru-central1', 'ru-central-1'],
+    }
+    if enable_sqs_topic_api:
+        config.update({
+            'sqs_topic_enabled': True,
+            'ymq_enabled': False,
+        })
+    return config
+
+
 def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
@@ -411,6 +442,10 @@ def deploy(arguments):
         kafka_api_port = int(kafka_api_port)
     if kafka_api_port != 0:
         optionals['kafka_api_port'] = kafka_api_port
+
+    http_proxy_config = resolve_http_proxy_config(arguments)
+    if http_proxy_config is not None:
+        optionals['http_proxy_config'] = http_proxy_config
 
     enabled_grpc_services = arguments.enabled_grpc_services.copy()  # type: typing.List[str]
     if 'YDB_GRPC_SERVICES' in os.environ:
@@ -477,6 +512,7 @@ def deploy(arguments):
     endpoints = []
     mon_port = None
     kafka_api_port = None
+    http_proxy_port = None
     for node_id, node in cluster.nodes.items():
         info['nodes'][node_id] = {
             'pid': node.pid,
@@ -485,6 +521,7 @@ def deploy(arguments):
             'grpc_port': node.port,
             'mon_port': node.mon_port,
             'kafka_api_port': node.kafka_api_port,
+            'http_proxy_port': node.http_proxy_port,
             'command': node.command,
             'cwd': node.cwd,
             'stderr_file': node.stderr_file_name,
@@ -501,6 +538,9 @@ def deploy(arguments):
         if kafka_api_port is None:
             kafka_api_port = node.kafka_api_port
 
+        if http_proxy_port is None:
+            http_proxy_port = node.http_proxy_port
+
         endpoints.append("localhost:%d" % node.grpc_port)
 
     endpoint = endpoints[0]
@@ -515,6 +555,8 @@ def deploy(arguments):
         recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
     if kafka_api_port is not None:
         recipe.write_kafka_api_port(kafka_api_port)
+    if http_proxy_port is not None:
+        recipe.write_http_proxy_endpoint(http_proxy_port)
     return endpoint, database
 
 
@@ -623,6 +665,8 @@ def produce_arguments(args):
     parser.add_argument("--base-port-offset", action="store", type=int, default=0)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
+    parser.add_argument("--enable-http-proxy", action='store_true', default=False)
+    parser.add_argument("--enable-sqs-topic-api", action='store_true', default=False)
     parser.add_argument("--config-path", action="store")
     parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
@@ -637,6 +681,8 @@ def produce_arguments(args):
     arguments.enable_pq = parsed.enable_pq
     arguments.pq_client_service_types = parsed.pq_client_service_type
     arguments.enable_pqcd = parsed.enable_pqcd
+    arguments.enable_http_proxy = parsed.enable_http_proxy
+    arguments.enable_sqs_topic_api = parsed.enable_sqs_topic_api
     arguments.config_path = parsed.config_path
     return arguments
 

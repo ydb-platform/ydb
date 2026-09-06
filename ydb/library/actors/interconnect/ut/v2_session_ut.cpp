@@ -12,6 +12,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/system/env.h>
 #include <util/system/mutex.h>
 
@@ -89,6 +90,11 @@ namespace {
             return LastPayload;
         }
 
+        TString GetLastRopePayload() const {
+            TGuard<TMutex> guard(Lock);
+            return LastRopePayload;
+        }
+
     private:
         STRICT_STFUNC(StateFunc,
             hFunc(TEvTest, Handle)
@@ -98,12 +104,18 @@ namespace {
             {
                 TGuard<TMutex> guard(Lock);
                 LastPayload = ev->Get()->Record.GetPayload();
+                if (ev->Get()->GetPayloadCount()) {
+                    LastRopePayload = ev->Get()->GetPayload(0).ConvertToString();
+                } else {
+                    LastRopePayload.clear();
+                }
             }
             Count.fetch_add(1, std::memory_order_release);
         }
 
         mutable TMutex Lock;
         TString LastPayload;
+        TString LastRopePayload;
         std::atomic<size_t> Count = 0;
     };
 
@@ -994,5 +1006,81 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
 
         runLoad(500, "load after dead peer stalled -- reconnect broken");
         AssertV2InUse(*cluster, 1, 2);
+    }
+
+    ui64 SessionHtmlCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name) {
+        const TString start = TStringBuilder() << "<tr><td>" << name << "</td><td>";
+        return FromString<ui64>(ExtractPattern(cluster, me, peer, TString(start), "<"));
+    }
+
+    Y_UNIT_TEST(XdcPayloadRoundTrip) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+        auto cluster = MakeV2Cluster();
+        auto* collector = new TPayloadCollectorActor;
+        const TActorId collectorId = cluster->RegisterActor(collector, 2);
+
+        TString payload = MakeLoadPayload(1, 200000);
+        auto ev = MakeHolder<TEvTest>(1);
+        ev->AddPayload(TRope(payload));
+        const TActorId sender(1, 0, 0xBEEF, 0);
+        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(collectorId, sender, ev.Release()));
+
+        WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= 1; },
+            "XDC payload event received over v2");
+
+        UNIT_ASSERT_VALUES_EQUAL(collector->GetLastRopePayload(), payload);
+
+        WaitFor(TDuration::Seconds(10), [&] {
+            try {
+                return SessionHtmlCounter(*cluster, 1, 2, "BytesSentXdc") > 0
+                    && SessionHtmlCounter(*cluster, 2, 1, "BytesReceivedXdc") > 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, "XDC bytes observed on both sides");
+        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseExternalDataChannel"), 1);
+    }
+
+    Y_UNIT_TEST(XdcDisabledStaysOnMain) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+        auto customizer = [](ui32, TInterconnectSettings& settings) {
+            settings.V2.Enable = true;
+            settings.V2.ChecksumEvents = true;
+            settings.EnableExternalDataChannel = false;
+        };
+        auto cluster = std::make_unique<TTestICCluster>(
+            /*numNodes=*/2, TChannelsConfig(), nullptr, /*loggerSettings=*/nullptr,
+            TTestICCluster::EMPTY, /*checkerFactory=*/TTestICCluster::TCheckerFactory{},
+            TDuration::Seconds(2), /*inflight=*/TNode::DefaultInflight(), customizer);
+
+        auto* collector = new TPayloadCollectorActor;
+        const TActorId collectorId = cluster->RegisterActor(collector, 2);
+
+        TString payload = MakeLoadPayload(1, 200000);
+        auto ev = MakeHolder<TEvTest>(1);
+        ev->AddPayload(TRope(payload));
+        const TActorId sender(1, 0, 0xBEEF, 0);
+        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(collectorId, sender, ev.Release()));
+
+        WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= 1; },
+            "payload event received over v2 without XDC");
+        UNIT_ASSERT_VALUES_EQUAL(collector->GetLastRopePayload(), payload);
+
+        WaitFor(TDuration::Seconds(10), [&] {
+            try {
+                return SessionHtmlCounter(*cluster, 1, 2, "BytesSent") > 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, "main-channel bytes observed");
+        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseExternalDataChannel"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "BytesSentXdc"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 2, 1, "BytesReceivedXdc"), 0);
     }
 }

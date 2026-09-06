@@ -162,9 +162,45 @@ never flagged for removal.
 ## Out of scope for v1
 
 - Auto-applying patches.
-- Adding forward-declaration suggestions.
 - Touching anything outside `ydb/`.
 - Modifying `ya.make` `PEERDIR`s.
 
-These are planned for follow-up phases once we have confidence in v1's
-verdicts.
+Forward-declaration *suggestions* for protobuf includes (and rebuild-fanout
+ranking of any header) live in the `fanout` subcommand. It is a textual
+scan and does not need clang-include-cleaner:
+
+```bash
+# Rank .pb.h files. `rebuild_tus` includes the proto-import overlay
+# (changing blobstorage.proto also regenerates config.pb.h). `include_tus`
+# is the IWYU lever. `via_appdata` marks headers pulled in by appdata.h.
+ydb/tools/include_sanitizer/bin/sanitize_includes fanout --protobuf --top 20
+
+# Classify include sites of specific expensive headers as unused / fwd / keep.
+ydb/tools/include_sanitizer/bin/sanitize_includes fanout --protobuf \
+    --header ydb/core/protos/config.pb.h \
+    --header ydb/core/protos/blobstorage.pb.h \
+    --header ydb/core/protos/feature_flags.pb.h
+
+# Also classify the N most-included protobufs that appear in headers.
+ydb/tools/include_sanitizer/bin/sanitize_includes fanout --protobuf \
+    --classify-top 15
+```
+
+Reports land in `ydb/tools/include_sanitizer/reports/fanout/`
+(`rank.csv`, `rank.md`, `sites-*.csv`).
+
+When applying a verdict, `unused` means the protobuf type *name* does not
+appear in that file. Two common follow-ups:
+
+- The file used the include as an umbrella for downstream `.cpp` files
+  (`AppData()->SomeConfig.GetX()`, or a type from a *different* `.proto`
+  that happened to be pulled in). Add the real `#include` to those `.cpp`
+  files; put `config.pb.h` *before* `appdata.h` because of the `#error` in
+  `appdata.h`.
+- A `keep` in `domain.h` / `channel_profiles.h` / `tablet_types.h` /
+  `resource_profile.h` / `localdb.h` is why `appdata.h` still infects the
+  tree. Those need a type-erasure / pimpl / C++ enum extract, not a
+  one-line include drop.
+
+The `selfcontain` / `analyze` pipeline remains the place for clang-backed
+IWYU patches once a compile_commands.json is available.

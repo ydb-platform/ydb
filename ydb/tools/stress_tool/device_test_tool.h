@@ -633,6 +633,9 @@ struct TPerfTestConfig {
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // SectorMaps[0] alias
     bool DisablePDiskDataEncryption;
     bool DisableDDiskChecksums;
+    bool ForcePDiskFallback;
+    // Used as both the maximum and initial PB chunk count by DDisk-based tests.
+    ui32 PersistentBufferChunks = 512;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
@@ -674,10 +677,11 @@ struct TPerfTestConfig {
             const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
             bool disablePDiskDataEncryption = false,
             bool disableDDiskChecksums = false,
+            bool forcePDiskFallback = false,
             NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN)
         : TPerfTestConfig(TVector<TString>{path}, name, type, outputFormatName,
                 monPort, doLockFile, runCountStr, inFlightFromStr, inFlightToStr,
-                disablePDiskDataEncryption, disableDDiskChecksums, logLevel)
+                disablePDiskDataEncryption, disableDDiskChecksums, forcePDiskFallback, logLevel)
     {}
 
     TPerfTestConfig(const TVector<TString>& paths, const TString name, const TString type, const TString outputFormatName,
@@ -685,6 +689,7 @@ struct TPerfTestConfig {
             const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
             bool disablePDiskDataEncryption = false,
             bool disableDDiskChecksums = false,
+            bool forcePDiskFallback = false,
             NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN)
         : Paths(paths)
         , Path(paths.at(0))
@@ -696,6 +701,7 @@ struct TPerfTestConfig {
         , InFlightTo(std::strtol(inFlightToStr.c_str(), nullptr, 10))
         , DisablePDiskDataEncryption(disablePDiskDataEncryption)
         , DisableDDiskChecksums(disableDDiskChecksums)
+        , ForcePDiskFallback(forcePDiskFallback)
         , LogLevel(logLevel)
     {
         auto it_type = DeviceStrToType.find(type);

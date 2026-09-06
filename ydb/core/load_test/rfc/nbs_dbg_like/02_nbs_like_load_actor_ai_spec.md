@@ -505,7 +505,7 @@ co-location: `nbs_architecture.md §13.1-§13.3`,
 lines 244-253 (pool name lookup), 444-451 (PB co-located with DDisk[k]).
 - Reply consumption pattern in the partition (32-query form, our N-query
 form is identical):
-[ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp](ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp)
+[ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp](ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp)
 lines 278-321.
 - Test-side example (1 query):
 [ydb/core/blobstorage/ut_blobstorage/ddisk.cpp](ydb/core/blobstorage/ut_blobstorage/ddisk.cpp)
@@ -2080,7 +2080,7 @@ typical workflow is "open form, accept default, hit Create".
 Three tables, mirroring
 [ydb/core/test_tablet/scheme.h](ydb/core/test_tablet/scheme.h)'s `State`
 table and the partition's
-[partition_direct/part_database.{h,cpp}](ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_database.h)
+[partition_direct_tablet/part_database.{h,cpp}](ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_database.h)
 with `TStorePartitionIds`. Table ids 100/101/102 are deliberately picked
 out of the way of the KV-flat base (`NKeyValue::TKeyValueFlat`, §23.3.1),
 which uses table 0 internally for its key-value index — same idiom as
@@ -2812,7 +2812,7 @@ the run.
 | Public events / API for PB + DDisk                      | [ydb/core/blobstorage/ddisk/ddisk.h](ydb/core/blobstorage/ddisk/ddisk.h)                                                                      |
 | Event proto                                             | [ydb/core/protos/blobstorage_ddisk.proto](ydb/core/protos/blobstorage_ddisk.proto)                                                            |
 | BSC alloc / dealloc tx                                  | [ydb/core/mind/bscontroller/ddisk.cpp](ydb/core/mind/bscontroller/ddisk.cpp)                                                                  |
-| Partition allocate request shape                        | [partition_direct/partition_direct_actor.cpp:197-321](ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp) |
+| Partition allocate request shape                        | [partition_direct_tablet/partition_direct_actor.cpp:197-321](ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp) |
 | Existing test that allocates a DBG manually             | [blobstorage/ut_blobstorage/ddisk.cpp:67-84](ydb/core/blobstorage/ut_blobstorage/ddisk.cpp)                                                   |
 | Existing PB load actor (read for shape)                 | [load_test/persistent_buffer_write.cpp](ydb/core/load_test/persistent_buffer_write.cpp)                                                       |
 | Existing DDisk load actor (read for shape)              | [load_test/ddisk_load.cpp](ydb/core/load_test/ddisk_load.cpp)                                                                                 |
@@ -2824,5 +2824,4 @@ the run.
 | Load test build                                         | [ydb/core/load_test/ya.make](ydb/core/load_test/ya.make)                                                                                      |
 | Pool definitions on this cluster                        | [my_cluster_setup.md](./my_cluster_setup.md)                                                                                                  |
 | Architecture context                                    | [nbs_architecture.md](./01_nbs_architecture.md)                                                                                               |
-
 

@@ -8,7 +8,6 @@ SRCS(
 PEERDIR(
     ydb/library/grpc/server
     library/cpp/json
-    library/cpp/digest/md5
     ydb/core/grpc_services
     ydb/core/grpc_services/base
     ydb/core/metering
@@ -16,11 +15,9 @@ PEERDIR(
     ydb/core/protos
     ydb/core/persqueue/public/schema
     ydb/core/util
-    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/src/library/jwt
     ydb/public/sdk/cpp/src/library/operation_id
 )
 

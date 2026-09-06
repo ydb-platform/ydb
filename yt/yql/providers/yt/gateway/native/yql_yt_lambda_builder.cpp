@@ -100,14 +100,16 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
 
 
 TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const IFunctionRegistry* functionRegistry, const TSession& session,
-    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider, TLangVersion langver, TRuntimeSettings::TConstPtr runtimeSettings)
+    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider, TLangVersion langver, TRuntimeSettings::TConstPtr runtimeSettings,
+    NKikimr::NUdf::EBridgeMode bridgeMode, TString bridgeBinaryPath)
     : TGatewayLambdaBuilder(functionRegistry, alloc, nullptr,
-        session.RandomProvider_, session.TimeProvider_, nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings)
+        session.RandomProvider_, session.TimeProvider_, nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings, bridgeMode, std::move(bridgeBinaryPath))
 {
 }
 
-TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session, TLangVersion langver, TRuntimeSettings::TConstPtr runtimeSettings)
-    : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session, nullptr, langver, runtimeSettings)
+TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session, TLangVersion langver, TRuntimeSettings::TConstPtr runtimeSettings,
+    NKikimr::NUdf::EBridgeMode bridgeMode, TString bridgeBinaryPath)
+    : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session, nullptr, langver, runtimeSettings, bridgeMode, std::move(bridgeBinaryPath))
 {
 }
 

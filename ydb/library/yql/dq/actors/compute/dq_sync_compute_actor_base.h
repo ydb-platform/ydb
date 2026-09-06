@@ -41,8 +41,12 @@ protected:
              static_cast<TDerived*>(this)->PollSources(std::move(sourcesState));
         }
 
-        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && this->Checkpoints && this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
-            this->Checkpoints->DoCheckpoint();
+        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && this->Checkpoints) {
+            DrainCheckpointsFromInputChannelsAfterFinish(); // Drain checkpoints from finished channels
+
+            if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
+                this->Checkpoints->DoCheckpoint();
+            }
         }
 
         TBase::ProcessOutputsImpl(status);
@@ -80,6 +84,9 @@ protected:
 
     bool DoHandleChannelsAfterFinishImpl() override final {
         Y_ABORT_UNLESS(this->Checkpoints);
+
+        // Read checkpoint from input channels
+        DrainCheckpointsFromInputChannelsAfterFinish();
 
         if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
             this->Checkpoints->DoCheckpoint();
@@ -180,8 +187,12 @@ protected: //TDqComputeActorChannels::ICalbacks
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
     bool ReadyToCheckpoint() const override final {
+        // When task become finished, there will be no read attempts from inputs,
+        // so stale data may stay in channels/sources
+        const auto allowNonEmptyInputs = this->State == NDqProto::COMPUTE_STATE_FINISHED;
+
         for (const auto& [_, sourceInfo] : this->SourcesMap) {
-            if (!sourceInfo.Buffer->Empty()) {
+            if (!sourceInfo.Buffer->Empty() && !allowNonEmptyInputs) {
                 return false;
             }
         }
@@ -191,19 +202,19 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 continue;
             }
 
-            // A finished channel may no longer become paused, but its buffer still needs to be drained.
-            if (!channelInfo.IsPaused() && !channelInfo.Channel->IsFinished()) {
+            // Checkpoints should be distributed also over finished channels, so here we wait pause unconditionally
+            if (!channelInfo.IsPaused()) {
                 return false;
             }
 
-            if (!channelInfo.Channel->Empty()) {
+            if (!channelInfo.Channel->Empty() && !allowNonEmptyInputs) {
                 return false;
             }
         }
 
         for (const auto& [_, transformInfo] : this->InputTransformsMap) {
             const auto buffer = transformInfo.Buffer;
-            if (!buffer->Empty()) {
+            if (!buffer->Empty() && !allowNonEmptyInputs) {
                 return false;
             }
 
@@ -267,7 +278,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
         ui64 checkpointedInputChannels = 0;
         ui64 emptyInputChannels = 0;
-        ui64 finishedOrPausedInputChannels = 0;
+        ui64 pausedInputChannels = 0;
+        ui64 finishedInputChannels = 0;
         ui64 bytesInInputChannels = 0;
         i64 inputChannelsFreeSpace = 0;
         for (const auto& [_, channelInfo] : this->InputChannelsMap) {
@@ -276,7 +288,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
                 if (channelInfo.Channel) {
                     emptyInputChannels += channelInfo.Channel->Empty();
-                    finishedOrPausedInputChannels += channelInfo.IsPaused() || channelInfo.Channel->IsFinished();
+                    pausedInputChannels += channelInfo.IsPaused();
+                    finishedInputChannels += channelInfo.Channel->IsFinished();
                     bytesInInputChannels += channelInfo.Channel->GetStoredBytes();
                     inputChannelsFreeSpace += channelInfo.Channel->GetFreeSpace();
                 }
@@ -297,7 +310,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         }
 
         diagnostics << "Inputs state. ["
-            << "Channels paused or finished: " << finishedOrPausedInputChannels << " / " << checkpointedInputChannels
+            << "Channels paused: " << pausedInputChannels << " / " << checkpointedInputChannels
+            << ". Channels finished: " << finishedInputChannels << " / " << checkpointedInputChannels
             << ". Channels empty: " << emptyInputChannels << " / " << checkpointedInputChannels << " (stored bytes: " << bytesInInputChannels << ", fs: " << inputChannelsFreeSpace << ")"
             << ". Sources empty: " << emptySources << " / " << this->SourcesMap.size() << " (stored bytes: " << bytesInSources << ", fs: " << sourcesFreeSpace << ")"
             << ". Transforms empty: " << emptyInputTransforms << " / " << this->InputTransformsMap.size() << " (stored bytes: " << bytesInInputTransforms << ", fs: " << inputTransformsFreeSpace << ")"
@@ -324,7 +338,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 }
             }
 
-            return TStringBuilder() << " no + soft + hard limit: {" << noLimit << " + " << softLimit << " + " << hardLimit << "} / " << objects.size();
+            return TStringBuilder() << "no + soft + hard limit: {" << noLimit << " + " << softLimit << " + " << hardLimit << "} / " << objects.size();
         };
 
         diagnostics
@@ -429,6 +443,35 @@ protected:
         );
     }
 
+    // Must be called under bound MKQL allocator
+    void DrainCheckpointsFromInputChannelsAfterFinish() {
+        Y_ABORT_UNLESS(this->Checkpoints);
+
+        if (this->Channels) {
+            // There is no need to drain v1 channels, because checkpoints will be registered automatically in TakeInputChannelData() method
+            return;
+        }
+
+        CA_LOG_D("Drain #" << this->InputChannelsMap.size() << " inputs after finish");
+
+        // In v2 channels case, checkpoint must be drained manually, because after finish input producer cannot be used.
+        // All stale data, that was in channel after early finish should be drained.
+        for (const auto& [_, info] : this->InputChannelsMap) {
+            const IDqInputChannel::TPtr& channel = info.Channel;
+            Y_ENSURE(channel);
+
+            if (info.CheckpointingMode == NDqProto::ECheckpointingMode::CHECKPOINTING_MODE_DISABLED || !channel->IsFinished()) {
+                continue;
+            }
+
+            TUnboxedValueBatch batch(channel->GetInputType());
+            TMaybe<TInstant> watermark;
+            while (channel->Pop(batch, watermark)) {
+                CA_LOG_T("Skipped data batch after early finish with rows #" << batch.RowCount() << ", watermark: " << (watermark ? ToString(*watermark) : "<null>"));
+            }
+        }
+    }
+
     const NYql::NDq::TDqTaskRunnerStats* GetTaskRunnerStats() override {
         return TaskRunner ? TaskRunner->GetStats() : nullptr;
     }
@@ -508,7 +551,7 @@ protected:
 
     void DrainAsyncOutput(ui64 outputIndex, typename TBase::TAsyncOutputInfoBase& outputInfo) override final {
         this->ProcessOutputsState.AllOutputsFinished &= outputInfo.Finished;
-        if (outputInfo.Finished && !this->Checkpoints) {
+        if ((outputInfo.Finished && !this->Checkpoints) || outputInfo.Failed) {
             return;
         }
 

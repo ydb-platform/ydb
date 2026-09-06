@@ -1,6 +1,7 @@
 #pragma once
 
-#include "kqp_schedulable_actor.h"
+#include "kqp_dq_scheduler_context.h"
+#include "kqp_schedulable_base.h"
 #include "kqp_schedulable_task.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
@@ -8,18 +9,23 @@
 namespace NKikimr::NKqp::NScheduler {
 
     template <class TDerived>
-    class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived>, TSchedulableActorBase {
+    class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived>, TSchedulableBase {
         using TBase = NYql::NDq::TDqSyncComputeActorBase<TDerived>;
 
     public:
         template<typename ... TArgs>
-        TSchedulableComputeActorBase(const TSchedulableActorOptions& options, TArgs&& ... args)
+        TSchedulableComputeActorBase(const TSchedulableOptions& options, TArgs&& ... args)
             : TBase(std::forward<TArgs>(args) ...)
-            , TSchedulableActorBase(options)
+            , TSchedulableBase(options)
+            , SchedulerContext(std::make_shared<TDqSchedulerContext>(options.Query, options.IsSchedulable))
         {
         }
 
     protected:
+        NYql::NDq::IDqSchedulerContextPtr GetSchedulerContext() const override {
+            return SchedulerContext;
+        }
+
         void DoBootstrap() {
             if (IsAccountable()) {
                 RegisterForResume(this->SelfId());
@@ -80,6 +86,7 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
     private:
+        const NYql::NDq::IDqSchedulerContextPtr SchedulerContext;
         bool PassedAway = false;
         bool ForcedResume = false;
     };

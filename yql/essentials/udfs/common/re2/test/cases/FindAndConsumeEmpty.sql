@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $regexp1 = Re2::FindAndConsume("(a*)");
 $regexp2 = Re2::FindAndConsume("a(b*)");
 

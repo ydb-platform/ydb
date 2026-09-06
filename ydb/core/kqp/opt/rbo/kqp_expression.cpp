@@ -25,6 +25,37 @@ void AddUniqueInfoUnit(TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
     }
 }
 
+void AddResolvedInfoUnit(
+    const TInfoUnit& iu,
+    TVector<TInfoUnit>& result,
+    const TPlanProps& props,
+    bool withSubplanContext,
+    bool withDependencies)
+{
+    const auto* subplan = props.Subplans.Find(iu);
+    if (!subplan) {
+        result.push_back(iu);
+        return;
+    }
+
+    if (withSubplanContext) {
+        auto subplanIU = iu;
+        subplanIU.SetSubplanContext(true);
+        subplanIU.AddDependencies(subplan->Tuple);
+        subplanIU.AddDependencies(subplan->DependentIUs);
+        result.push_back(std::move(subplanIU));
+    }
+
+    if (withDependencies) {
+        for (const auto& dependency : subplan->Tuple) {
+            AddUniqueInfoUnit(result, dependency);
+        }
+        for (const auto& dependency : subplan->DependentIUs) {
+            AddUniqueInfoUnit(result, dependency);
+        }
+    }
+}
+
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx) {
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
@@ -630,21 +661,46 @@ TExprNode::TPtr TExpression::GetExpressionBody() const {
 
 const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
-    ui32 index = ui32(includeSubplanVars)*2 + ui32(includeCorrelatedDeps);
-
-    if (InputIUs[index].has_value()) {
-        return InputIUs[index].value();
+    const auto& rawInputIUs = GetRawInputIUs();
+    if (rawInputIUs.empty()) {
+        return rawInputIUs;
     }
 
-    TVector<TInfoUnit> IUs;
-    GetAllMembers(Node, IUs);
-    if (!IUs.empty()) {
-        IUs.clear();
-        Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
-        GetAllMembers(Node, IUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
+    Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
+    if (PlanProps->Subplans.Empty()) {
+        return rawInputIUs;
     }
-    InputIUs[index] = std::move(IUs);
-    return InputIUs[index].value();
+
+    bool hasSubplanReference = false;
+    for (const auto& iu : rawInputIUs) {
+        if (PlanProps->Subplans.Contains(iu)) {
+            hasSubplanReference = true;
+            break;
+        }
+    }
+    if (!hasSubplanReference) {
+        return rawInputIUs;
+    }
+
+    ResolvedInputIUs.clear();
+
+    for (const auto& iu : rawInputIUs) {
+        AddResolvedInfoUnit(iu, ResolvedInputIUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
+    }
+    return ResolvedInputIUs;
+}
+
+const TVector<TInfoUnit>& TExpression::GetRawInputIUs() const {
+    if (!RawInputIUs || RawInputIUsCacheKey != Node) {
+        if (!RawInputIUs) {
+            RawInputIUs.emplace();
+        } else {
+            RawInputIUs->clear();
+        }
+        GetAllMembers(Node, *RawInputIUs);
+        RawInputIUsCacheKey = Node;
+    }
+    return *RawInputIUs;
 }
 
 TExpression TExpression::ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const {
@@ -923,6 +979,36 @@ TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left
     return TExpression(lambda, ctx, props);
 }
 
+TExpression MakeUnaryCallable(const TString& callable, const TExpression& arg) {
+    Y_ENSURE(arg.Ctx);
+
+    auto node = arg.Ctx->NewCallable(arg.Node->Pos(), callable, {arg.GetExpressionBody()});
+    return TExpression(node, arg.Ctx, arg.PlanProps);
+}
+
+TExpression MakeEnsure(const TExpression& value, const TExpression& predicate, const TString& message) {
+    // Fetch context and plan properties from one of the arguments
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
+
+    for (const auto* expr : {&value, &predicate}) {
+        if (expr->Ctx) {
+            ctx = expr->Ctx;
+        }
+        if (expr->PlanProps) {
+            props = expr->PlanProps;
+        }
+    }
+
+    Y_ENSURE(ctx);
+    Y_ENSURE(props);
+
+    auto pos = value.Node->Pos();
+    auto messageNode = ctx->NewCallable(pos, "String", {ctx->NewAtom(pos, message)});
+    auto ensure = ctx->NewCallable(pos, "Ensure", {value.GetExpressionBody(), predicate.GetExpressionBody(), messageNode});
+    return TExpression(ensure, ctx, props);
+}
+
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
@@ -938,27 +1024,7 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies) {
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
-        auto iu = TInfoUnit(member.Name().StringValue());
-        if (props.Subplans.PlanMap.contains(iu)){
-            const auto& subplan = props.Subplans.PlanMap.at(iu);
-            if (withSubplanContext) {
-                iu.SetSubplanContext(true);
-                iu.AddDependencies(subplan.Tuple);
-                iu.AddDependencies(subplan.DependentIUs);
-                IUs.push_back(iu);
-            }
-            if (withDependencies) {
-                for (const auto& dep : subplan.Tuple) {
-                    AddUniqueInfoUnit(IUs, dep);
-                }
-                for (const auto& dep : subplan.DependentIUs) {
-                    AddUniqueInfoUnit(IUs, dep);
-                }
-            }
-        }
-        else {
-            IUs.push_back(iu);
-        }
+        AddResolvedInfoUnit(TInfoUnit(member.Name().StringValue()), IUs, props, withSubplanContext, withDependencies);
         return;
     }
 

@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -83,6 +84,13 @@ void DumpToFile(
     }
 }
 
+ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
+{
+    Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
+    Y_ABORT_UNLESS(storageConfig.GetStripeSize() % blockSize == 0);
+    return blockSize;
+}
+
 TVector<TRegionPtr> CreateRegions(
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
@@ -94,6 +102,7 @@ TVector<TRegionPtr> CreateRegions(
     const TDirtyMapStateProtos& dirtyMapStates,
     const TStorageConfig& storageConfig)
 {
+    blockSize = CheckedBlockSize(blockSize, storageConfig);
     const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
@@ -107,6 +116,7 @@ TVector<TRegionPtr> CreateRegions(
             vChunkConfigs,
             dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
+            blockSize,
             storageConfig.GetVChunkSize());
     }
 
@@ -124,6 +134,7 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
+    TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
     const TVChunkConfigs& vChunkConfigs,
     const TDirtyMapStateProtos& dirtyMapStates,
     TStorageConfigPtr storageConfig,
@@ -137,6 +148,7 @@ TFastPathService::TFastPathService(
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
+    , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
           this,
           this,
@@ -170,6 +182,8 @@ TFastPathService::TFastPathService(
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
+    Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
+
     const ui64 copyRangeBandwidth =
         StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
     if (copyRangeBandwidth) {
@@ -216,6 +230,12 @@ NThreading::TFuture<void> TFastPathService::Run()
     ScheduleVChunkCountersUpdate();
 
     return NThreading::WaitAll(initialReadyFutures);
+}
+
+IDirectBlockGroupPtr TFastPathService::GetDirectBlockGroup(ui32 dbgIndex) const
+{
+    return dbgIndex >= DirectBlockGroups.size() ? nullptr
+                                                : DirectBlockGroups[dbgIndex];
 }
 
 NThreading::TFuture<void> TFastPathService::Stop()
@@ -488,6 +508,62 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
             Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
     };
+}
+
+void TFastPathService::SetNodeChaosMode(
+    ui32 nodeId,
+    std::optional<ui32> dbgIndex,
+    TChaosConfig::TChaosNodeConfig::EChaosMode mode)
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s SetChaosNodeMode %s %s %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintNodeId(nodeId).c_str(),
+        dbgIndex ? PrintDbgId(*dbgIndex).c_str() : "all",
+        ToString(mode).c_str());
+
+    auto apply = [&](TChaosConfig::TDbgAndNodeId id)
+    {
+        if (id.DbgIndex >= DirectBlockGroups.size()) {
+            return;
+        }
+        ChaosConfig.NodeConfigs[id].Mode = mode;
+
+        auto controller = id.DbgIndex < ChaosInjectorControls.size()
+                              ? ChaosInjectorControls[id.DbgIndex]
+                              : nullptr;
+        if (!controller) {
+            return;
+        }
+        switch (mode) {
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Disabled: {
+                controller->DisableNode(nodeId);
+                break;
+            }
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Enabled: {
+                controller->EnableNode(nodeId);
+                break;
+            }
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Partial: {
+                break;
+            }
+        }
+    };
+
+    if (!dbgIndex) {
+        for (ui32 i = 0; i < DirectBlockGroups.size(); ++i) {
+            const auto id =
+                TChaosConfig::TDbgAndNodeId{.NodeId = nodeId, .DbgIndex = i};
+            apply(id);
+        }
+    } else {
+        const auto id = TChaosConfig::TDbgAndNodeId{
+            .NodeId = nodeId,
+            .DbgIndex = *dbgIndex};
+        apply(id);
+    }
 }
 
 NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(

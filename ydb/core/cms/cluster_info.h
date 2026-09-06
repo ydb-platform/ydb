@@ -19,7 +19,6 @@
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 
 #include <ydb/library/actors/core/actor.h>

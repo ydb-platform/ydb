@@ -199,6 +199,7 @@ message TQueryRequest {
     optional Ydb.ResultSet.Format ResultSetFormat = 39;
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
     optional bool IsWarmupCompilation = 41;
+    optional bool CollectAffectedRows = 43;
 }
 
 message TVectorIndexKmeansTreeDescription {
@@ -929,6 +930,7 @@ message TKqpTableSinkSettings {
     optional bool NeedLookup = 27;
     optional bool SkipMissingRows = 28;
     optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
+    optional bool CollectAffectedRows = 30;
 }
 
 message TReadVectorTopK {

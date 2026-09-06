@@ -437,7 +437,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := __intermediate___kqp_agg_result_agg_col_0, __intermediate___kqp_agg_result_agg_col_2 := <expr>, __intermediate___kqp_agg_result_agg_col_3 := <expr>, __intermediate___kqp_agg_result_agg_col_4 := <expr>, __intermediate___kqp_agg_result_agg_col_0_0 <- __intermediate___kqp_agg_result_agg_col_0]: </title><text x='69' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := __intermediate___kqp_agg_result_agg_col_0, __intermediate___kqp_agg_result_agg_col_2 := <expr>, __intermediate___kqp_agg_result_agg_col_3 := <expr>, __intermediate___kqp_agg_result_agg_col_4 := <expr>, __intermediate___kqp_agg_result_agg_col_0_0 <- __intermediate___kqp_agg_result_agg_col_0]: </text>
+<g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := __intermediate___kqp_agg_result_agg_col_0, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_0_0 &lt;- __intermediate___kqp_agg_result_agg_col_0]: </title><text x='69' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := __intermediate___kqp_agg_result_agg_col_0, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_0_0 &lt;- __intermediate___kqp_agg_result_agg_col_0]: </text>
 </g>
 <circle cx='59' cy='9' r='7' class='stage' />
 <text x='59' y='13' class='textm'>0</text>
@@ -477,7 +477,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Map [__kqp_agg_input_agg_expr_1 := <expr>]: </title><text x='69' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := <expr>]: </text>
+<g><title>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </title><text x='69' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </text>
 </g>
 <circle cx='59' cy='9' r='7' class='stage' />
 <text x='59' y='13' class='textm'>0</text>
@@ -556,7 +556,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := <expr>, __intermediate___kqp_agg_result_agg_col_2 := __intermediate___kqp_agg_result_agg_col_2, __intermediate___kqp_agg_result_agg_col_3 := <expr>, __intermediate___kqp_agg_result_agg_col_4 := <expr>, __intermediate___kqp_agg_result_agg_col_2_0 <- __intermediate___kqp_agg_result_agg_col_2]: </title><text x='69' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := <expr>, __intermediate___kqp_agg_result_agg_col_2 := __intermediate___kqp_agg_result_agg_col_2, __intermediate___kqp_agg_result_agg_col_3 := <expr>, __intermediate___kqp_agg_result_agg_col_4 := <expr>, __intermediate___kqp_agg_result_agg_col_2_0 <- __intermediate___kqp_agg_result_agg_col_2]: </text>
+<g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := __intermediate___kqp_agg_result_agg_col_2, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2_0 &lt;- __intermediate___kqp_agg_result_agg_col_2]: </title><text x='69' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := __intermediate___kqp_agg_result_agg_col_2, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2_0 &lt;- __intermediate___kqp_agg_result_agg_col_2]: </text>
 </g>
 <circle cx='59' cy='9' r='7' class='stage' />
 <text x='59' y='13' class='textm'>0</text>
@@ -596,7 +596,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Map [__kqp_agg_input_agg_expr_1 := <expr>]: </title><text x='69' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := <expr>]: </text>
+<g><title>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </title><text x='69' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </text>
 </g>
 <circle cx='59' cy='9' r='7' class='stage' />
 <text x='59' y='13' class='textm'>0</text>
@@ -680,7 +680,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := <expr>, __intermediate___kqp_agg_result_agg_col_2 := <expr>, __intermediate___kqp_agg_result_agg_col_3 := __intermediate___kqp_agg_result_agg_col_3, __intermediate___kqp_agg_result_agg_col_4 := <expr>, __intermediate___kqp_agg_result_agg_col_3_0 <- __intermediate___kqp_agg_result_agg_col_3]: </title><text x='58' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := <expr>, __intermediate___kqp_agg_result_agg_col_2 := <expr>, __intermediate___kqp_agg_result_agg_col_3 := __intermediate___kqp_agg_result_agg_col_3, __intermediate___kqp_agg_result_agg_col_4 := <expr>, __intermediate___kqp_agg_result_agg_col_3_0 <- __intermediate___kqp_agg_result_agg_col_3]: </text>
+<g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := __intermediate___kqp_agg_result_agg_col_3, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3_0 &lt;- __intermediate___kqp_agg_result_agg_col_3]: </title><text x='58' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := __intermediate___kqp_agg_result_agg_col_3, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3_0 &lt;- __intermediate___kqp_agg_result_agg_col_3]: </text>
 </g>
 <circle cx='48' cy='9' r='7' class='stage' />
 <text x='48' y='13' class='textm'>0</text>
@@ -720,7 +720,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Map [__kqp_agg_input_agg_expr_1 := <expr>]: </title><text x='58' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := <expr>]: </text>
+<g><title>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </title><text x='58' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </text>
 </g>
 <circle cx='48' cy='9' r='7' class='stage' />
 <text x='48' y='13' class='textm'>0</text>
@@ -804,7 +804,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := <expr>, __intermediate___kqp_agg_result_agg_col_2 := <expr>, __intermediate___kqp_agg_result_agg_col_3 := <expr>, __intermediate___kqp_agg_result_agg_col_4 := __intermediate___kqp_agg_result_agg_col_4, __intermediate___kqp_agg_result_agg_col_4_0 <- __intermediate___kqp_agg_result_agg_col_4]: </title><text x='47' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := <expr>, __intermediate___kqp_agg_result_agg_col_2 := <expr>, __intermediate___kqp_agg_result_agg_col_3 := <expr>, __intermediate___kqp_agg_result_agg_col_4 := __intermediate___kqp_agg_result_agg_col_4, __intermediate___kqp_agg_result_agg_col_4_0 <- __intermediate___kqp_agg_result_agg_col_4]: </text>
+<g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := __intermediate___kqp_agg_result_agg_col_4, __intermediate___kqp_agg_result_agg_col_4_0 &lt;- __intermediate___kqp_agg_result_agg_col_4]: </title><text x='47' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := __intermediate___kqp_agg_result_agg_col_4, __intermediate___kqp_agg_result_agg_col_4_0 &lt;- __intermediate___kqp_agg_result_agg_col_4]: </text>
 </g>
 <circle cx='37' cy='9' r='7' class='stage' />
 <text x='37' y='13' class='textm'>0</text>
@@ -865,7 +865,7 @@
 <rect x='395' y='0' width='200' height='100%' class='stage'/>
 <rect x='368' y='0' width='24' height='100%' class='stage'/>
 <rect x='598' y='0' width='682' height='100%' class='stage'/>
-<g><title>Map [__kqp_agg_input_agg_expr_1 := <expr>]: </title><text x='47' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := <expr>]: </text>
+<g><title>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </title><text x='47' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </text>
 </g>
 <circle cx='37' cy='9' r='7' class='stage' />
 <text x='37' y='13' class='textm'>0</text>
@@ -956,5 +956,4 @@
 </svg>
 
 <line x1='600' y1='0' x2='600' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-
 </svg>

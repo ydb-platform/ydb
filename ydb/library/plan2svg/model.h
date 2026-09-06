@@ -160,12 +160,9 @@ public:
     ui32 FinishedTasks = 0;
     ui32 OffsetY = 0;
     ui32 Height = 0;
-    std::shared_ptr<TSingleMetric> OutputBytes;
     std::shared_ptr<TSingleMetric> MemoryUsage;
     std::shared_ptr<TSingleMetric> MaxMemoryUsage;
     std::shared_ptr<TSingleMetric> CpuTime;
-    std::shared_ptr<TSingleMetric> InputBytes;
-    std::shared_ptr<TSingleMetric> IngressBytes;
 
     TMutableMetric MemPhysicalUsage;
     TMutableMetric MemSysAllocated;

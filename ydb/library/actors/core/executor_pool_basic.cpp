@@ -876,8 +876,12 @@ namespace NActors {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "need to wake up");
             WakeUpLoop(semaphore.CurrentThreadCount);
         } else if (SharedPool) {
-            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up global threads");
-            SharedPool->WakeUpGlobalThreads(PoolId);
+            if (SharedPool->WakeUpAdjacentOwner(PoolId)) {
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up adjacent owner");
+            } else {
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up global threads");
+                SharedPool->WakeUpGlobalThreads(PoolId);
+            }
         }
     }
 

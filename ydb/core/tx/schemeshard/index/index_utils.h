@@ -180,6 +180,9 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
+bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableInfo, const TString& columnName);
+bool IsVirtualGeneratedIndexColumn(const NKikimrSchemeOp::TTableDescription& tableDesc, const TString& columnName);
+
 void FillIndexTableColumns(
     const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
     std::span<const TString> keys,
@@ -277,6 +280,24 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         status = NKikimrScheme::EStatus::StatusPreconditionFailed;
         error = "It is not allowed to create index with data column";
         return false;
+    }
+
+    for (const auto& columnName : indexKeys.KeyColumns) {
+        if (IsVirtualGeneratedIndexColumn(tableDesc, columnName)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "VIRTUAL generated column '" << columnName
+                                     << "' cannot be used as an index key";
+            return false;
+        }
+    }
+
+    for (const auto& columnName : indexKeys.DataColumns) {
+        if (IsVirtualGeneratedIndexColumn(tableDesc, columnName)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "VIRTUAL generated column '" << columnName
+                                     << "' cannot be used as an index data column";
+            return false;
+        }
     }
 
     if (!IsCompatibleIndex(GetIndexType(indexDesc), baseTableColumns, indexKeys, error)) {
@@ -383,6 +404,13 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+            if (NKikimr::NFulltext::HasSuperLemmer(indexDesc.GetFulltextIndexDescription().GetSettings())
+                && !AppData()->FeatureFlags.GetEnableSuperLemmer()) {
+                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+                error = "SuperLemmer support is disabled";
+                return false;
+            }
+
             if (!checkInvertedIndex("Fulltext")) {
                 return false;
             }

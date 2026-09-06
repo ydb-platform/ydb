@@ -476,6 +476,9 @@ struct TMultiColumnStatisticsDescription {
                 case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                     Types.push_back("COUNT_MIN_SKETCH");
                     break;
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                    Types.push_back("EQ_HEIGHT_HISTOGRAM");
+                    break;
                 default:
                     break;
             }

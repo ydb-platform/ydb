@@ -102,14 +102,12 @@ namespace NKikimr::NDDisk {
         class TIntegrityIoOp;
         class TChunkFormatIoOp;
 
-        std::queue<std::unique_ptr<TDirectIoOpBase>> DirectIoQueue;
-
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // I/O operation pools
         //
         // SPSC contract: the queues have a single producer and a single consumer.
         //   Consumer (TryPop)  — always the actor thread (AllocateOp).
-        //   Producer (TryPush) — the io_uring completion thread (OnComplete/OnDrop → SelfRecycle → ReturnOp)
+        //   Producer (TryPush) — the io_uring I/O thread (OnComplete/OnDrop → SelfRecycle → ReturnOp)
         //                        when UringRouter is active, or the actor thread itself on the PDisk fallback
         //                        path. These two paths are mutually exclusive: either UringRouter is set for
         //                        the whole lifetime (uring path) or it is not (PDisk fallback), so only one
@@ -212,9 +210,7 @@ namespace NKikimr::NDDisk {
                 NMonitoring::TDynamicCounters::TCounterPtr FallbackUringCount;
                 NMonitoring::TDynamicCounters::TCounterPtr FallbackPDiskCount;
 
-                NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
                 NMonitoring::TDynamicCounters::TCounterPtr RunningCount;
-                NMonitoring::THistogramPtr QueueTime;
             } DirectIO;
 
 #if defined(__linux__)
@@ -254,7 +250,7 @@ namespace NKikimr::NDDisk {
 #endif
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // The io_uring completion poller thread (via UringRouter's sample sink)
+        // The io_uring I/O thread (via UringRouter's sample sink)
         // pushes raw TDeviceIoSample-s into DeviceOverestimationSamples under
         // DeviceOverestimationSamplesMutex. Periodically (WakeupFlushDeviceOverestimationSamples)
         // the actor thread drains the buffer and forwards a batch to the owning
@@ -414,8 +410,8 @@ namespace NKikimr::NDDisk {
                 ~TEvShortIO();
             };
 
-            // Completion-thread callback for a client DDisk read/write. The completion thread
-            // only packages status/data and routing metadata; the actor serializes it with
+            // I/O callback for a client DDisk read/write. The callback only
+            // packages status/data and routing metadata; the actor serializes it with
             // integrity failures, decides the final reply status, and sends the client response.
             struct TEvDDiskIoResult : TEventLocal<TEvDDiskIoResult, EvDDiskIoResult> {
                 NPDisk::TUringOperationBase::EOperationType OperationType;
@@ -519,7 +515,6 @@ namespace NKikimr::NDDisk {
 
     private:
         enum EWakeupTag {
-            WakeupIoSubmitQueue = 1,
             WakeupUpdateFreeSpaceInfo = 2,
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
@@ -543,7 +538,7 @@ namespace NKikimr::NDDisk {
 
         const bool IsPersistentBufferActor = false;
 
-        // Actor-thread-only health state. Completion threads communicate status/data exclusively
+        // Actor-thread-only health state. I/O callbacks communicate status/data exclusively
         // through TEvPrivate callbacks, so Broken ordering is defined by the actor mailbox.
         bool Broken = false;
         TString BrokenReason;
@@ -555,7 +550,7 @@ namespace NKikimr::NDDisk {
         TString GetBrokenReason() const;
         void EnterBroken(TString reason);
         void FailPendingDDiskQuery(std::unique_ptr<IEventHandle> ev);
-        void FailDirectIoOp(std::unique_ptr<TDirectIoOpBase> op, bool wasRunning);
+        void FailDirectIoOp(std::unique_ptr<TDirectIoOpBase> op);
 
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
@@ -999,11 +994,11 @@ namespace NKikimr::NDDisk {
         void Handle(TEvPrivate::TEvDDiskIoResult::TPtr ev);
 
         // Regular direct I/O.
-        // Note: releases the op on success (returns true).
-        void DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true, bool isShort = false);
+        // Note: releases the op when it is submitted to io_uring or moved to the PDisk fallback.
+        void DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool isShort = false);
 
         // Do not call manually!
-        bool DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
+        void DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op);
 
         void HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev);
 
@@ -1123,7 +1118,8 @@ namespace NKikimr::NDDisk {
                 // behavior. Declared last so it never conflicts with designated-initializer ordering
                 // at existing call sites that only name fields up to PayloadChecksums.
                 ui8 DirectBlockGroupIndex = 0;
-
+                bool ChecksumsDisabled = false;
+                ui64 HeaderUniqueId = 0;
                 TRope JoinData(ui32 sectorSize);
             };
 
@@ -1147,6 +1143,7 @@ namespace NKikimr::NDDisk {
         };
 
         ui64 PersistentBufferBatchWriteCookie = 0;
+        ui64 NextPersistentBufferHeaderUniqueId = 0;
         absl::flat_hash_map<TPersistentBufferLocation, absl::flat_hash_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
         absl::flat_hash_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
@@ -1165,7 +1162,13 @@ namespace NKikimr::NDDisk {
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
         bool PersistentBufferReady = false;
 
-        absl::flat_hash_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
+        struct TPersistentBufferDataSectorInfo {
+            ui64 Checksum;
+            ui64 HeaderUniqueId;
+        };
+        // During restoration every data sector is inspected once for both
+        // on-disk formats; the record header flag selects the value to validate.
+        absl::flat_hash_map<ui64, std::vector<TPersistentBufferDataSectorInfo>> PersistentBufferDataSectorsInfo;
         absl::flat_hash_set<ui32> PersistentBufferAllocatedChunks;
         absl::flat_hash_set<ui32> PersistentBufferRestoringChunks;
 
@@ -1183,7 +1186,7 @@ namespace NKikimr::NDDisk {
         void IssuePersistentBufferChunkAllocation();
         void ProcessDeallocatePersistentBufferChunk(bool forceToNextChunk = false);
         void ProcessPersistentBufferQueue();
-        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors, const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex = 0);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors, const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex = 0, ui64 headerUniqueId = 0);
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBufferData(TRope& data, std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
@@ -1235,8 +1238,6 @@ namespace NKikimr::NDDisk {
         void Handle(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
         void Handle(TEvPrivate::TEvWritePersistentBufferPart::TPtr ev);
 
-        void ProcessIoSubmitQueue();
-        void ScheduleIoSubmitWakeup();
         void HandleWakeup(TEvents::TEvWakeup::TPtr &ev);
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr ev);
         void UpdateFreeSpaceInfo();

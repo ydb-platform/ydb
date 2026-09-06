@@ -65,6 +65,18 @@ BELONGS ya.make
         include/boost/pending/relaxed_heap.hpp [3:5]
         src/graphml.cpp [4:6]
 
+KEEP     BSL-1.0              12410d089bc50989b0bcfe1f5879b167
+BELONGS ya.make
+    License text:
+        [![License: BSL-1.0](https://img.shields.io/badge/License-BSL_1.0-blue.svg)](https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [6:6]
+
 KEEP     BSL-1.0              2cc71fe4bd12718a9884bf7ff37269f3
 BELONGS ya.make
     License text:
@@ -120,6 +132,18 @@ BELONGS ya.make
     Files with this license:
         include/boost/graph/boykov_kolmogorov_max_flow.hpp [28:30]
         include/boost/graph/write_dimacs.hpp [28:30]
+
+KEEP     BSL-1.0              425377faeed2cd1ad735c3ec8326adcc
+BELONGS ya.make
+    License text:
+        Boost Software License 1.0](
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        CONTRIBUTING.md [182:182]
 
 KEEP     BSL-1.0              47a0454637d4fa45d78eb2557ccd70c4
 BELONGS ya.make
@@ -197,6 +221,8 @@ BELONGS ya.make
         include/boost/graph/kruskal_min_spanning_tree.hpp [6:8]
         include/boost/graph/leda_graph.hpp [8:10]
         include/boost/graph/lookup_edge.hpp [5:7]
+        include/boost/graph/louvain_clustering.hpp [4:6]
+        include/boost/graph/louvain_quality_functions.hpp [5:7]
         include/boost/graph/make_biconnected_planar.hpp [4:6]
         include/boost/graph/make_connected.hpp [4:6]
         include/boost/graph/make_maximal_planar.hpp [4:6]
@@ -297,6 +323,18 @@ BELONGS ya.make
         include/boost/pending/queue.hpp [2:4]
         include/boost/pending/stringtok.hpp [2:4]
 
+KEEP     BSL-1.0              8d1a316e985f5001c2db542ac9f487a3
+BELONGS ya.make
+    License text:
+        https://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        CONTRIBUTING.md [182:182]
+
 KEEP     Mit-Old-Style        99b210ed9efe704d061e43a6c4c4beb3
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -307,6 +345,18 @@ BELONGS ya.make
         Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
     Files with this license:
         include/boost/detail/algorithm.hpp [22:28]
+
+KEEP     BSL-1.0              a393d3efafa78d2fdf235936ddd68417
+BELONGS ya.make
+    License text:
+        [![License: BSL-1.0](https://img.shields.io/badge/License-BSL_1.0-blue.svg)](https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [6:6]
 
 KEEP     BSL-1.0              a4b06853a77321815bca2cbd7654b649
 BELONGS ya.make
@@ -394,6 +444,18 @@ BELONGS ya.make
         include/boost/graph/buffer_concepts.hpp [2:4]
         include/boost/graph/stoer_wagner_min_cut.hpp [2:4]
 
+KEEP     BSL-1.0              e0ebbe8d1888f759d08bfccd2ebbd8bc
+BELONGS ya.make
+    License text:
+        [![License: BSL-1.0](https://img.shields.io/badge/License-BSL_1.0-blue.svg)](https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [6:6]
+
 KEEP     MIT                  e8fa61ad26065c016c4c968298a683bd
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -419,3 +481,16 @@ BELONGS ya.make
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
         include/boost/graph/bipartite.hpp [7:9]
+
+SKIP     LicenseRef-scancode-unknown-license-reference f77f8db09333af3ee8419c1622af91e0
+BELONGS ya.make
+    # Not a license, but a contributor agreement
+    License text:
+        licensed under the [
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [182:182]

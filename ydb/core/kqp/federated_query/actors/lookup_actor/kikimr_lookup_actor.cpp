@@ -584,6 +584,10 @@ namespace {
                     session->SessionId.clear();
                     [[fallthrough]];
                 default:
+                    if (session->SessionId) {
+                        SendDeleteSession(std::move(session->SessionId));
+                        session->SessionId.clear();
+                    }
                     CleanupStreamProcessor(session);
                     if (auto& lookup = session->PendingLookup) {
                         SendRetryOrError(std::exchange(lookup, {}), status, IssuesFromProtoMessage(response));

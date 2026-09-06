@@ -64,8 +64,7 @@ private:
             // (e.g., after a TRUNCATE generation swap), remove the stale mapping first.
             if (const auto itOld = SchemeShardLocalToInternal.find(pathId.SchemeShardLocalPathId);
                 itOld != SchemeShardLocalToInternal.end() && itOld->second != pathId.InternalPathId) {
-                if (const auto itInternal = InternalToSchemeShardLocal.find(itOld->second);
-                    itInternal != InternalToSchemeShardLocal.end()) {
+                if (const auto itInternal = InternalToSchemeShardLocal.find(itOld->second); itInternal != InternalToSchemeShardLocal.end()) {
                     itInternal->second.erase(pathId.SchemeShardLocalPathId);
                     if (itInternal->second.empty()) {
                         InternalToSchemeShardLocal.erase(itInternal);

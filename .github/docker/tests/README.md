@@ -1,79 +1,60 @@
-# local-ydb healthcheck tests
+# local-ydb healthcheck
 
-Run the probe regression tests with Python 3 and Docker:
+Docker runs `/health_check`; the entrypoint runs `/health_check --readiness`
+before executing `/init.d`. Both check `/local` at `grpc://localhost:${GRPC_PORT}`,
+the same target used by SQL and compressed SQL init files.
 
-```sh
-python3 .github/docker/tests/test_healthcheck.py
-```
+## Behaviour
 
-The tests use disposable Ubuntu 22.04 containers, the packaged Bash scripts,
-GNU timeout, flock, procfs and real container restarts. Only the `/ydb` executable
-is replaced, to inject failures and unresponsive RPCs without starting a database.
-They run automatically for Docker changes in the `Docker healthcheck` workflow.
-The entire probe suite runs with both writable and read-only root filesystems;
-the latter also covers an explicitly configured state path and a read-only cache.
+The image configures a 10-second Docker health interval, a 60-second startup
+grace period, a 12-second timeout and three failures before marking it unhealthy.
 
-Run the image acceptance tests, including SQL/DDL and init scripts with Docker
-healthchecks enabled, after building the image:
+Every invocation first acquires the same nonblocking `flock`. The lock stays
+held through the cache decision, all RPCs and any cache update or invalidation.
+A concurrent invocation fails without issuing RPCs or changing the cache.
+Do not remove `readiness.lock` while the container is running.
 
-```sh
-IMAGE=your-local-ydb-image EXPECTED_REVISION=your-ydbd-git-sha \
-  bash .github/docker/tests/run_acceptance_tests.sh
-```
+- `--readiness`, missing cache or expired cache: run SELECT, scheme listing and
+  optional CREATE/DROP under `/local/.sys_health`. Each operation must succeed.
+- Fresh cache: run one `discovery whoami` RPC. This checks that gRPC responds;
+  database/DDL availability is checked again on the next full readiness.
+- Failed liveness: invalidate the cache so recovery requires full readiness.
 
-## Probe contract
+A full readiness does one attempt under a single deadline covering its RPCs and
+cache update. Docker and the entrypoint handle retries. Each probe deadline
+kills its process group, including children that ignore TERM, to release the
+lock. An interrupted CREATE/DROP is recovered by the next successful readiness.
 
-Docker invokes `/health_check` every 10 seconds, with a 60-second startup grace
-period and a 12-second timeout. Three consecutive failed checks mark it unhealthy.
-Before the first readiness success and whenever its cache expires, the checker
-runs SELECT, scheme listing and (by default) CREATE/DROP under `.sys_health`.
-Between readiness checks, one `discovery whoami` RPC verifies that gRPC responds;
-it does not assert that the database or every cluster component is healthy.
-Database readiness is checked at least on the first Docker invocation after the
-60-second cache expires. A failed liveness probe invalidates that cache.
+Successful readiness is cached atomically. The record includes boot ID, PID 1
+start time, gRPC port and DDL setting. These prevent reuse after restart or a
+change of configuration, including when a custom state directory is persistent.
+Cache age uses `/proc/uptime`; corrupt and future timestamps require readiness.
 
-The entrypoint calls `/health_readiness` directly before running init scripts.
-Both callers use the same `flock` lock for DDL; a busy lock returns failure, never
-a cached success. Successful readiness is cached atomically. Cache entries include
-the boot ID, PID 1 start time, endpoint, database and DDL setting, so they cannot
-survive a container restart or a change of target. Cache age uses `/proc/uptime`,
-independently of changes to wall-clock time. Do not remove `readiness.lock` while
-the container is running: all callers must lock the same inode.
+## Settings
 
-Settings (environment):
-
-| Setting | Default | Meaning |
+| Environment variable | Default | Meaning |
 | --- | --- | --- |
-| `GRPC_PORT` | `2136` | Default local gRPC port |
-| `YDB_ENDPOINT` | `grpc://localhost:${GRPC_PORT}` | Target endpoint |
-| `YDB_DATABASE` | `/local` | Target database |
-| `YDB_LIVENESS_TIMEOUT` | `2s` | Deadline for the one liveness RPC |
-| `YDB_READINESS_TIMEOUT` | `8s` | Deadline for the entire readiness, including retries and sleeps |
-| `YDB_READINESS_RETRIES` | `2` | Maximum attempts within the same total deadline |
-| `YDB_READINESS_SLEEP` | `1` | Seconds between readiness attempts |
-| `YDB_READINESS_ENABLE_DDL` | `true` | Whether readiness also creates/drops its test table |
+| `GRPC_PORT` | `2136` | Local gRPC port, also used by startup and init scripts |
+| `YDB_LIVENESS_TIMEOUT` | `2s` | Deadline for the liveness RPC |
+| `YDB_READINESS_TIMEOUT` | `8s` | Deadline for all readiness RPCs and cache update |
+| `YDB_READINESS_ENABLE_DDL` | `true` | Include CREATE/DROP in readiness |
 | `YDB_READINESS_INTERVAL_SECONDS` | `60` | Maximum age of cached readiness |
-| `YDB_HEALTH_STATE_DIR` | `/dev/shm/ydb_health` | Writable, container-private directory for the readiness cache and lock |
+| `YDB_HEALTH_STATE_DIR` | `/dev/shm/ydb_health` | Writable directory private to this container |
 
-Probes kill their process group at the deadline so a stuck child cannot retain
-the lock. An interrupted CREATE/DROP may leave the test table, which the next
-successful readiness removes. If increasing probe deadlines, also increase
-Docker's `--health-timeout` beyond the longest probe plus scheduling overhead.
-Zero/unbounded probe deadlines are rejected. Increasing `--health-interval`
-also increases failure-detection latency.
+Deadlines must be positive. If increasing them, also increase Docker's
+`--health-timeout` beyond the longest probe plus scheduling overhead. Increasing
+the health interval or readiness cache lifetime delays detection of failures.
 
 ## Read-only root filesystem
 
-The probes keep their cache and lock in Docker's private `/dev/shm` tmpfs, which
-is writable with `--read-only`. They do not modify the packaged scripts or require
-a writable `/tmp`. If `/dev/shm` is unavailable, read-only or shared with another
-container, set `YDB_HEALTH_STATE_DIR` to a writable directory private to this
-container. All probe invocations, including the entrypoint, must use the same
-directory. An unwritable state directory fails readiness; an unwritable cache is
-never trusted, because a subsequent liveness failure could not invalidate it.
+The probes use Docker's private `/dev/shm` tmpfs, which is writable with
+`--read-only`. If it is unavailable or shared, set `YDB_HEALTH_STATE_DIR` to
+another writable directory private to the container. An unwritable directory
+fails the check; an unwritable cache is never trusted because a failed liveness
+could not invalidate it. The probes do not require a writable `/tmp`.
 
-The YDB server and its launcher also need writable data and temporary files. For
-the default configuration, run the image with dedicated volumes and a tmpfs:
+The YDB launcher needs temporary files, and the server needs writable storage.
+This command also gives startup a volume for generating certificates:
 
 ```sh
 docker run --read-only \
@@ -83,9 +64,16 @@ docker run --read-only \
   your-local-ydb-image
 ```
 
-The certificates volume is writable here because the default startup generates
-certificates. A read-only certificate/configuration bind mount is a separate
-case: the supplied files must be complete and supported by the image's launcher.
-Disabling readiness DDL does not remove the server's need for writable storage.
-The image acceptance suite checks startup, init scripts, Docker health and a
-restart with a read-only root filesystem.
+## Tests
+
+```sh
+python3 .github/docker/tests/test_healthcheck.py
+IMAGE=your-local-ydb-image EXPECTED_REVISION=your-ydbd-git-sha \
+  bash .github/docker/tests/run_acceptance_tests.sh
+```
+
+The probe suite runs with writable and read-only root filesystems in disposable
+Ubuntu containers. Only `/ydb` is replaced to inject failures; `timeout`, `flock`,
+procfs and container restarts are real. Barriers cover both orders of overlapping
+cached and full probes. The `Docker healthcheck` workflow runs this suite.
+Image acceptance covers real YDB, init scripts and read-only-rootfs restarts.

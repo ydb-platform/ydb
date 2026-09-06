@@ -47,7 +47,7 @@ RUN mkdir -p /ydb_data/cluster/kikimr_configs \
     && touch /ydb_data/cluster/kikimr_configs/config.yaml
 
 COPY main/.github/docker/files/ /
-RUN chmod +x /health_check /initialize_local_ydb /health_liveness /health_readiness
+RUN chmod +x /health_check /initialize_local_ydb
 COPY --from=builder \
     /ydbwork/out/ydb/apps/ydbd/ydbd \
     /ydbwork/out/ydb/apps/ydb/ydb \

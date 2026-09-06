@@ -26,7 +26,7 @@ jobs:
           sparse-checkout: .github/docker
       - name: Check Bash syntax
         run: |
-          for script in health_common health_check health_readiness health_liveness initialize_local_ydb; do
+          for script in health_common health_check initialize_local_ydb; do
             bash -n ".github/docker/files/$script"
           done
       - name: Exercise readiness, failures, deadlines and restarts

@@ -29,13 +29,16 @@ SH
 
     create_volume "$data_volume"
     create_volume "$certificates_volume"
-    # Keep Docker healthchecks enabled: they share readiness/DDL with the
-    # entrypoint and must not race init scripts or produce stale successes.
+    # Readiness and both SQL file formats must use the local target even if
+    # the surrounding environment contains settings for an external CLI target.
     start_detached "$container" \
+        --env YDB_ENDPOINT=grpc://unreachable:1 \
+        --env YDB_DATABASE=/other \
         --volume "${data_volume}:/ydb_data" \
         --volume "${certificates_volume}:/ydb_certs" \
         --volume "${init_dir}:/init.d:ro"
     wait_for_file "$container" /ydb_data/.user_scripts_initialized
+    wait_for_healthy "$container"
     assert_sql_contains "$container" \
         'SELECT value FROM acceptance_init WHERE id = 1;' \
         'sql-ok'

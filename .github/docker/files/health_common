@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Shared settings and readiness cache for the Linux local-ydb image.
 : "${GRPC_PORT:=2136}"
-: "${YDB_ENDPOINT:=grpc://localhost:${GRPC_PORT}}"
-: "${YDB_DATABASE:=/local}"
+HEALTH_CLI=(/ydb --endpoint "grpc://localhost:${GRPC_PORT}" --database /local --no-discovery)
 : "${YDB_READINESS_ENABLE_DDL:=true}"
 : "${YDB_READINESS_INTERVAL_SECONDS:=60}"
+: "${YDB_READINESS_TIMEOUT:=8s}"
+: "${YDB_LIVENESS_TIMEOUT:=2s}"
 
 # Docker provides a writable /dev/shm tmpfs even with --read-only. Keep runtime
 # state off the image filesystem; callers can select another writable mount.
@@ -12,11 +13,14 @@
 HEALTH_STATE_DIR=$YDB_HEALTH_STATE_DIR
 HEALTH_STATE_FILE=${HEALTH_STATE_DIR}/last_readiness_ok
 
-if [[ ! "$YDB_READINESS_INTERVAL_SECONDS" =~ ^[1-9][0-9]{0,8}$ ]] ||
-   [[ "$YDB_READINESS_ENABLE_DDL" != true && "$YDB_READINESS_ENABLE_DDL" != false ]]; then
-    echo 'healthcheck: invalid readiness interval or DDL setting' >&2
-    exit 1
-fi
+health_validate_settings() {
+    if [[ ! "$YDB_READINESS_INTERVAL_SECONDS" =~ ^[1-9][0-9]{0,8}$ ]] ||
+       [[ "$YDB_READINESS_ENABLE_DDL" != true && "$YDB_READINESS_ENABLE_DDL" != false ]]; then
+        echo 'healthcheck: invalid readiness interval or DDL setting' >&2
+        return 1
+    fi
+    health_validate_timeout "$YDB_READINESS_TIMEOUT" && health_validate_timeout "$YDB_LIVENESS_TIMEOUT"
+}
 
 health_validate_timeout() {
     # GNU timeout accepts zero as "no deadline"; health probes must stay bounded.
@@ -39,7 +43,7 @@ health_context() {
     IFS= read -r pid_stat </proc/1/stat || return 1
     # comm (field 2) can contain spaces and parentheses. Fields below start at 3.
     read -r -a fields <<<"${pid_stat##*) }"
-    printf '%s\n' "$boot_id ${fields[19]}" "$YDB_ENDPOINT" "$YDB_DATABASE" "$YDB_READINESS_ENABLE_DDL"
+    printf '%s\n' "$boot_id ${fields[19]}" "$GRPC_PORT" "$YDB_READINESS_ENABLE_DDL"
 }
 
 health_cache_is_fresh() {
@@ -62,4 +66,20 @@ health_record_readiness() {
     # no record; a killed writer's .new file is never treated as a success.
     { health_uptime && health_context; } >"${HEALTH_STATE_FILE}.new" || return 1
     mv -f "${HEALTH_STATE_FILE}.new" "$HEALTH_STATE_FILE"
+}
+
+health_readiness() {
+    # The caller holds fd 9 and runs this whole sequence under one timeout.
+    if [[ "${DEBUG:-false}" == true ]]; then
+        set -x
+    fi
+    rm -f "$HEALTH_STATE_FILE" || return 1
+    "${HEALTH_CLI[@]}" sql -s 'select 1' >/dev/null || return 1
+    "${HEALTH_CLI[@]}" scheme ls /local >/dev/null || return 1
+    if [[ "$YDB_READINESS_ENABLE_DDL" == true ]]; then
+        # IF NOT EXISTS recovers the table after an interrupted probe.
+        "${HEALTH_CLI[@]}" sql -s 'create table if not exists `/local/.sys_health/test` (key int32, value utf8, primary key(key))' >/dev/null || return 1
+        "${HEALTH_CLI[@]}" sql -s 'drop table `/local/.sys_health/test`' >/dev/null || return 1
+    fi
+    health_record_readiness
 }

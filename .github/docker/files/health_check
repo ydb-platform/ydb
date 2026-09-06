@@ -1,18 +1,36 @@
 #!/usr/bin/env bash
-# Docker calls this every 10s. Require full readiness initially and every 60s;
-# between those checks verify only that the gRPC service responds.
+# Docker uses cached readiness; --readiness always runs the full check for init.
 set -euo pipefail
 source /health_common
 
-if health_cache_is_fresh; then
-    if /health_liveness; then
+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --readiness ) ]]; then
+    echo 'Usage: /health_check [--readiness]' >&2
+    exit 1
+fi
+health_validate_settings
+if [[ "${DEBUG:-false}" == true ]]; then
+    set -x
+fi
+
+mkdir -p "$HEALTH_STATE_DIR"
+# Every probe holds the same lock, including while reading/invalidating the cache
+# and during liveness. Never unlink this file: flock locks its inode.
+exec 9>"${HEALTH_STATE_DIR}/readiness.lock"
+if ! flock --exclusive --nonblock 9; then
+    echo 'healthcheck: another probe is running' >&2
+    exit 1
+fi
+
+if [[ $# -eq 0 ]] && health_cache_is_fresh; then
+    if timeout --signal=KILL "$YDB_LIVENESS_TIMEOUT" "${HEALTH_CLI[@]}" discovery whoami >/dev/null; then
         exit 0
     fi
-    # A recovered gRPC endpoint must pass readiness again before becoming healthy.
+    # Recovery after a failed liveness RPC requires full readiness again.
     rm -f "$HEALTH_STATE_FILE"
     exit 1
 fi
 
-# Do not report success while another (possibly failing) readiness probe runs.
-# health_readiness shares its lock and cache with the entrypoint's direct calls.
-exec /health_readiness
+# exec preserves fd 9 in timeout and its children. KILL at the deadline prevents
+# a TERM-ignoring CLI from surviving with the lock after its parent exits.
+exec timeout --signal=KILL "$YDB_READINESS_TIMEOUT" \
+    /bin/bash -c 'set -euo pipefail; source /health_common; health_readiness'

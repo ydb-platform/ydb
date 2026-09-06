@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 import argparse
 from ydb.public.tools.lib import cmds
-from ydb.public.tools.lib.cmds.cpu_count import available_cpu_count
 
 
 def deploy_local(arguments):
     cmds.deploy(arguments, actor_system_config={
         "use_auto_config": True,
-        "cpu_count": available_cpu_count(),
+        "cpu_count": cmds.available_cpu_count(),
     })
 
 

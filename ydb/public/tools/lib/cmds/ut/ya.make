@@ -7,7 +7,6 @@ PEERDIR(
 
 TEST_SRCS(
     test.py
-    test_cpu_count.py
 )
 
 END()

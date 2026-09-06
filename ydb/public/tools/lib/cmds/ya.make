@@ -1,7 +1,6 @@
 PY23_LIBRARY()
 PY_SRCS(
     __init__.py
-    cpu_count.py
 )
 
 PEERDIR(

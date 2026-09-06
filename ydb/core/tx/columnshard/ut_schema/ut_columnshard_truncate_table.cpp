@@ -1715,8 +1715,13 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
     //
     // This test reproduces that path: write data, truncate, then drive cleanup until the old
     // generation is finalized. Without the fix the test crashes with AFL_VERIFY. With the fix
-    // the old generation is erased from Tables/AllPathIds, the live table remains, and a
-    // time-travel read in the staleness window still sees the old data.
+    // the old generation is erased from Tables/AllPathIds and the live table remains.
+    //
+    // Time-travel semantics:
+    //   - BEFORE GC (staleness window): a pre-truncate time-travel read still sees the old data
+    //     (the old generation is dropped but not yet finalized).
+    //   - AFTER GC: the old generation is finalized and removed; a pre-truncate time-travel
+    //     read returns empty (the data is gone).
     Y_UNIT_TEST(TruncateThenCleanupFinalizesOldGeneration) {
         TTestBasicRuntime runtime;
         SetupTruncateTestRuntime(runtime);
@@ -1769,6 +1774,17 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
         AssertPathsToDropState(*shard, oldInternalPathId, true);
 
+        // BEFORE GC (staleness window): a pre-truncate time-travel read still sees the old data.
+        // The old generation is dropped but not yet finalized, so it is still queryable.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
         // Drive GC: advance the plan step so the read-staleness floor passes the drop version,
         // then run cleanup until the old generation is finalized.
         auto advancePlanStep = [&] {
@@ -1789,6 +1805,16 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         // The live table is still readable (empty at the truncate snapshot).
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, truncateSnapshot);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // AFTER GC: the old generation is finalized and removed. A pre-truncate time-travel
+        // read returns empty (the data is gone).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);

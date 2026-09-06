@@ -23,7 +23,7 @@ Database connection options on the command line are specified before the command
 
 
 ```bash
-{{ ydb-cli }} <опции_соединения> <команда> <опции_команды>
+{{ ydb-cli }} <connection_options> <command> <command_options>
 ```
 
 

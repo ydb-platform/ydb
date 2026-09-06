@@ -23,7 +23,10 @@ class InspectionError(ValueError):
 
 
 def snapshot_digest(snapshot: ir.Snapshot) -> str:
-    """Digest the complete normalized semantic rendering used for inspection."""
+    """Digest this renderer revision's normalized text, not the source JSON.
+
+    Historical digests must be checked with their producer's renderer revision.
+    """
 
     return hashlib.sha256(render_snapshot(snapshot).encode("utf-8")).hexdigest()
 
@@ -68,6 +71,10 @@ def render_expression(expression: ir.Expr) -> str:
         value = _required(expression.value, "value")
         if isinstance(value, decimal.Literal):
             value = decimal.literal_json(value)
+        elif scalar_type == ir.DOUBLE:
+            if type(value) is not int or not 0 <= value < 2**64:
+                raise InspectionError("Double literal must contain 64-bit IEEE bits")
+            value = {"bits": f"{value:016x}"}
         return f"literal(type={_quote(scalar_type)}, value={json.dumps(value, ensure_ascii=True)})"
     if kind == "null":
         scalar_type = str(_required(expression.result_type, "type"))
@@ -97,11 +104,11 @@ def render_expression(expression: ir.Expr) -> str:
         partition_by = _required(expression.partition_by, "partition_by")
         if (
             not isinstance(partition_by, tuple)
-            or not 1 <= len(partition_by) <= 4
+            or not 1 <= len(partition_by) <= 5
             or any(not isinstance(column, str) or not column for column in partition_by)
             or len(set(partition_by)) != len(partition_by)
         ):
-            raise InspectionError("window_avg must have between one and four partition columns")
+            raise InspectionError("window_avg must have between one and five partition columns")
         scalar_type = str(_required(expression.result_type, "type"))
         nullable = _required(expression.nullable, "nullable")
         if not isinstance(nullable, bool):
@@ -138,8 +145,14 @@ def render_expression(expression: ir.Expr) -> str:
             or not partition_by[0]
         ):
             raise InspectionError(f"{kind} must have exactly one partition key")
-        if not isinstance(order_by, tuple) or len(order_by) != 1:
-            raise InspectionError(f"{kind} must have exactly one order key")
+        if (
+            not isinstance(order_by, tuple)
+            or len(order_by) != 1
+            or not order_by[0].ascending
+            or not order_by[0].nulls_first
+            or order_by[0].comparison is not None
+        ):
+            raise InspectionError(f"{kind} requires one ascending nulls-first direct order key")
         if frame != ir.WINDOW_RANK_FRAME:
             raise InspectionError(f"{kind} frame is unsupported")
         if scalar_type != ir.WHOLE_PARTITION_DECIMAL_SUM_TYPE or nullable is not True:
@@ -170,17 +183,26 @@ def render_expression(expression: ir.Expr) -> str:
             raise InspectionError(
                 "window_rank execution_order must be a non-negative integer"
             )
-        if partition_by != ():
-            raise InspectionError("window_rank partition must be empty")
-        if not isinstance(order_by, tuple) or len(order_by) != 1:
-            raise InspectionError("window_rank must have exactly one order key")
+        if (
+            not isinstance(partition_by, tuple)
+            or len(partition_by) > 4
+            or any(not isinstance(column, str) or not column for column in partition_by)
+            or len(set(partition_by)) != len(partition_by)
+        ):
+            raise InspectionError("window_rank admits at most four distinct partition columns")
+        if (
+            not isinstance(order_by, tuple)
+            or not 1 <= len(order_by) <= 2
+            or any(item.comparison is not None for item in order_by)
+        ):
+            raise InspectionError("window_rank requires one or two untagged direct order keys")
         if frame != ir.WINDOW_RANK_FRAME:
             raise InspectionError("window_rank frame is unsupported")
-        if not isinstance(nullable, bool):
-            raise InspectionError("expression field 'nullable' is not Boolean")
+        if scalar_type != ir.WINDOW_RANK_RESULT_TYPE or nullable is not False:
+            raise InspectionError("window_rank result must be non-null Uint64")
         return (
             f"window_rank(name={_quote(window_name)}, "
-            f"execution_order={execution_order}, partition_by=[], "
+            f"execution_order={execution_order}, partition_by={_list(partition_by, _quote)}, "
             f"order_by={_list(order_by, _order)}, frame={_quote(frame)}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
@@ -225,7 +247,10 @@ def render_expression(expression: ir.Expr) -> str:
             f"right={render_expression(expression.args[1])}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
-    if kind in {"cast_decimal", "cast_integral", "decimal_abs"}:
+    if kind in {
+        "cast_decimal", "cast_integral", "decimal_abs",
+        "cast_double", "sqrt_double", "is_nan_double",
+    }:
         if len(expression.args) != 1:
             raise InspectionError(f"{kind} expression does not have exactly one argument")
         scalar_type = str(_required(expression.result_type, "type"))
@@ -233,7 +258,7 @@ def render_expression(expression: ir.Expr) -> str:
         if not isinstance(nullable, bool):
             raise InspectionError("expression field 'nullable' is not Boolean")
         argument = f"arg={render_expression(expression.args[0])}"
-        if kind == "cast_decimal":
+        if kind in {"cast_decimal", "cast_double"}:
             source_type = str(_required(expression.source_type, "source_type"))
             argument += f", source_type={_quote(source_type)}"
         return (
@@ -266,7 +291,7 @@ def render_expression(expression: ir.Expr) -> str:
             f"missing={render_expression(expression.args[2])}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
-    if kind in {"opaque", "opaque_double"}:
+    if kind in {"opaque", "opaque_double", "checked_concat"}:
         fingerprint = str(_required(expression.fingerprint, "fingerprint"))
         scalar_type = str(_required(expression.result_type, "type"))
         nullable = _required(expression.nullable, "nullable")
@@ -293,8 +318,18 @@ def _order(item: ir.SortOrder) -> str:
     )
 
 
-def _average_state(state: ir.AverageStateType | None) -> str:
-    def render(item: ir.AverageStateType) -> str:
+def _aggregate_state(state: ir.AverageStateType | ir.VarianceStateType | None) -> str:
+    def render(item: ir.AverageStateType | ir.VarianceStateType) -> str:
+        if isinstance(item, ir.VarianceStateType):
+            if item.kind != "binary64_variance_v1":
+                raise InspectionError(f"unknown variance state kind {item.kind!r}")
+            return (
+                f"{{kind={_quote(item.kind)}, source_type={_quote(item.source_type)}, "
+                f"nullable={_boolean(item.nullable)}, mean_type={_quote(item.mean_type)}, "
+                f"count_type={_quote(item.count_type)}, m2_type={_quote(item.m2_type)}}}"
+            )
+        if not isinstance(item, ir.AverageStateType):
+            raise InspectionError(f"unknown aggregate state class {type(item).__name__!r}")
         if item.kind == "decimal":
             return (
                 f"{{sum_type={_quote(item.sum_type)}, "
@@ -352,7 +387,8 @@ def render_node(node: ir.PlanNode) -> str:
             lambda item: (
                 f"{{output={_quote(item.output)}, "
                 f"expression={render_expression(item.expression)}, "
-                f"error_on_null={_boolean(item.error_on_null)}}}"
+                f"error_on_null={_boolean(item.error_on_null)}, "
+                f"require_total={_boolean(item.require_total)}}}"
             ),
         )
         return (
@@ -389,7 +425,7 @@ def render_node(node: ir.PlanNode) -> str:
                 f"{{input={_quote(item.input)}, function={_quote(item.function)}, "
                 f"output={_quote(item.output)}, type={_quote(item.output_type)}, "
                 f"nullable={_boolean(item.output_nullable)}, distinct={_boolean(item.distinct)}, "
-                f"unwrap={_boolean(item.unwrap)}, state={_average_state(item.state)}}}"
+                f"unwrap={_boolean(item.unwrap)}, state={_aggregate_state(item.state)}}}"
             ),
         )
         return (
@@ -446,7 +482,8 @@ def render_edge(edge: ir.StageEdge) -> str:
 
 def _column(column: ir.Column) -> str:
     nullability = "nullable" if column.nullable else "not_null"
-    return f"{{name={_quote(column.name)}, type={_quote(column.type)}, {nullability}}}"
+    rank = ", integral_avg_rank=true" if column.integral_avg_rank else ""
+    return f"{{name={_quote(column.name)}, type={_quote(column.type)}, {nullability}{rank}}}"
 
 
 def _subplan(subplan: ir.Subplan) -> str:
@@ -495,7 +532,8 @@ def render_snapshot(snapshot: ir.Snapshot) -> str:
     schemas = ir.validate_snapshot(snapshot)
     output = tuple(schemas[snapshot.plan.root][name] for name in snapshot.plan.output)
     lines = [
-        f"semantic_snapshot format={_quote(ir.FORMAT)} version={ir.VERSION}",
+        f"semantic_snapshot format={_quote(ir.FORMAT)} version={ir.VERSION} "
+        f"semantic_mode={_optional(snapshot.semantic_mode, _quote)}",
         f"schema tables={len(snapshot.tables)}",
     ]
     for table in snapshot.tables:

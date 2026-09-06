@@ -49,20 +49,39 @@ fi
 
 
 class HealthcheckTest(unittest.TestCase):
+    read_only = False
+
+    @classmethod
+    def cleanup_container(cls):
+        subprocess.run(['docker', 'rm', '-f', cls.name], check=False, capture_output=True)
+        if cls.read_only:
+            subprocess.run(['docker', 'image', 'rm', cls.name], check=False, capture_output=True)
+            subprocess.run(['docker', 'volume', 'rm', cls.name, cls.name + '-frozen'],
+                           check=False, capture_output=True)
+
     @classmethod
     def setUpClass(cls):
         cls.name = 'healthcheck-test-' + uuid.uuid4().hex[:12]
         subprocess.run(['docker', 'run', '-d', '--platform', 'linux/amd64', '--name', cls.name, '--network', 'none',
                         os.environ.get('HEALTHCHECK_TEST_IMAGE', 'ubuntu:22.04'),
                         'sleep', 'infinity'], check=True, stdout=subprocess.DEVNULL)
-        cls.addClassCleanup(lambda: subprocess.run(['docker', 'rm', '-f', cls.name],
-                            check=False, stdout=subprocess.DEVNULL))
+        cls.addClassCleanup(cls.cleanup_container)
         for name in ('health_check', 'health_readiness', 'health_liveness', 'health_common'):
             path = ROOT / 'files' / name
             if path.exists():
                 subprocess.run(['docker', 'cp', str(path), cls.name + ':/' + name], check=True)
         cls.shell('chmod +x /health_check /health_readiness /health_liveness')
         cls.shell('cat >/ydb; chmod +x /ydb', input=MOCK_CLI)
+        if cls.read_only:
+            # Bake the probes into the image: docker cp cannot install them into
+            # an already running read-only container. Keep only test fixtures on
+            # a writable volume so injected failures survive docker restart.
+            subprocess.run(['docker', 'commit', cls.name, cls.name], check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(['docker', 'rm', '-f', cls.name], check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(['docker', 'run', '-d', '--platform', 'linux/amd64', '--name', cls.name,
+                            '--network', 'none', '--read-only', '--volume', cls.name + ':/tmp/fixture',
+                            '--volume', cls.name + '-frozen:/frozen:ro',
+                            cls.name, 'sleep', 'infinity'], check=True, stdout=subprocess.DEVNULL)
 
     @classmethod
     def shell(cls, command, **kwargs):
@@ -70,7 +89,7 @@ class HealthcheckTest(unittest.TestCase):
                               text=True, capture_output=True, check=True, **kwargs)
 
     def setUp(self):
-        self.shell('rm -rf /tmp/ydb_health /tmp/fixture; mkdir /tmp/fixture')
+        self.shell('rm -rf /dev/shm/ydb_health; mkdir -p /tmp/fixture; rm -rf /tmp/fixture/*')
 
     def probe(self, name='health_readiness', **env):
         command = ['docker', 'exec']
@@ -147,15 +166,15 @@ class HealthcheckTest(unittest.TestCase):
         for timestamp in ('garbage', '9999999999'):
             with self.subTest(timestamp=timestamp):
                 self.assert_ok(self.probe())
-                self.shell("sed -i '1c\\" + timestamp + "' /tmp/ydb_health/last_readiness_ok; "
+                self.shell("sed -i '1c\\" + timestamp + "' /dev/shm/ydb_health/last_readiness_ok; "
                            'echo select >/tmp/fixture/fail')
                 self.assertNotEqual(self.probe('health_check').returncode, 0)
                 self.shell('rm /tmp/fixture/fail')
 
     def test_failure_to_store_success_does_not_report_healthy(self):
-        self.shell('mkdir -p /tmp/ydb_health/last_readiness_ok.new')
+        self.shell('mkdir -p /dev/shm/ydb_health/last_readiness_ok.new')
         self.assertNotEqual(self.probe().returncode, 0)
-        self.shell('rmdir /tmp/ydb_health/last_readiness_ok.new; echo select >/tmp/fixture/fail')
+        self.shell('rmdir /dev/shm/ydb_health/last_readiness_ok.new; echo select >/tmp/fixture/fail')
         self.assertNotEqual(self.probe('health_check').returncode, 0)
 
     def test_zero_deadline_is_rejected(self):
@@ -205,6 +224,47 @@ class HealthcheckTest(unittest.TestCase):
             self.assertNotEqual(pending.wait(timeout=6), 0)
         self.shell('rm /tmp/fixture/hang')
         self.assert_ok(self.probe())
+
+
+class ReadOnlyHealthcheckTest(HealthcheckTest):
+    read_only = True
+
+    def test_custom_state_directory_keeps_cache_and_failure_invalidation(self):
+        settings = {'YDB_HEALTH_STATE_DIR': '/tmp/fixture/custom-health'}
+        self.assert_ok(self.probe('health_check', **settings))
+        self.shell('test -s /tmp/fixture/custom-health/last_readiness_ok; : >/tmp/fixture/calls')
+        self.assert_ok(self.probe('health_check', **settings))
+        self.assertEqual(self.calls(), ['liveness'])
+        self.shell('echo liveness >/tmp/fixture/fail')
+        self.assertNotEqual(self.probe('health_check', **settings).returncode, 0)
+        self.shell('echo select >/tmp/fixture/fail')
+        self.assertNotEqual(self.probe('health_check', **settings).returncode, 0)
+
+    def test_read_only_state_directory_fails_instead_of_skipping_readiness(self):
+        for path in ('/tmp/ydb_health', '/etc'):
+            with self.subTest(path=path):
+                self.assertNotEqual(self.probe('health_check', YDB_HEALTH_STATE_DIR=path).returncode, 0)
+        self.assertEqual(self.calls(), [])
+
+    def test_persistent_custom_cache_requires_readiness_after_restart(self):
+        settings = {'YDB_HEALTH_STATE_DIR': '/tmp/fixture/custom-health'}
+        self.assert_ok(self.probe('health_check', **settings))
+        self.shell('echo select >/tmp/fixture/fail')
+        subprocess.run(['docker', 'restart', '--timeout', '1', self.name], check=True,
+                       stdout=subprocess.DEVNULL)
+        self.assertNotEqual(self.probe('health_check', **settings).returncode, 0)
+
+    def test_read_only_cache_cannot_be_trusted_even_when_fresh(self):
+        # Seed a valid record via another container, then expose it read-only.
+        # A liveness failure could not invalidate this record, so it must never
+        # allow the target container to bypass readiness.
+        cached = self.shell('source /health_common; health_uptime; health_context').stdout
+        subprocess.run(['docker', 'run', '--rm', '-i', '--platform', 'linux/amd64', '--network', 'none',
+                        '--volume', self.name + '-frozen:/state', self.name,
+                        'bash', '-c', 'cat >/state/last_readiness_ok'],
+                       input=cached, text=True, check=True)
+        self.assertNotEqual(self.probe('health_check', YDB_HEALTH_STATE_DIR='/frozen').returncode, 0)
+        self.assertEqual(self.calls(), [])
 
 
 if __name__ == '__main__':

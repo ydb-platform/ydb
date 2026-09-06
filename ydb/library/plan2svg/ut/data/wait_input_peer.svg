@@ -315,34 +315,34 @@
 <use href='#icon_arrowdn' transform='translate(2 0) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g class='aruu button'><rect x='2' y='14' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowup' transform='translate(2 14) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
-<text x='390' y='23' class='texte'>1405</text>
+<text x='396' y='23' class='texte'>1405</text>
 <g><title>Ingress 1.64TB, Rows 39.93G, Width 45B, Avg 21.94GB/s</title>
-  <rect x='395' y='15' width='65' height='10' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
-  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='397' y='23'>1.64TB</text>
+  <rect x='401' y='15' width='65' height='10' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
+  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='403' y='23'>1.64TB</text>
 </g>
 <g><title>CPU Usage 4h 24m, Avg 206.95 CPU/s</title>
-  <rect class='cpupath' data-groups='g2,g3,g4,g5,g6,g11,g12,g13,g14,g15,g16' x='462' y='15' width='66' height='10' stroke-width='0' fill='var(--cpu-medium, #A36D7B)'/>
-  <text class='cpupath' data-groups='g2,g3,g4,g5,g6,g11,g12,g13,g14,g15,g16' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='464' y='23'>4h 24m</text>
+  <rect class='cpupath' data-groups='g2,g3,g4,g5,g6,g11,g12,g13,g14,g15,g16' x='468' y='15' width='66' height='10' stroke-width='0' fill='var(--cpu-medium, #A36D7B)'/>
+  <text class='cpupath' data-groups='g2,g3,g4,g5,g6,g11,g12,g13,g14,g15,g16' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='470' y='23'>4h 24m</text>
 </g>
 <g><title>Memory 72.93GB</title>
-  <rect x='530' y='15' width='65' height='10' stroke-width='0' fill='var(--mem-medium, #7E4E5B)'/>
-  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='532' y='23'>72.93GB</text>
+  <rect x='536' y='15' width='65' height='10' stroke-width='0' fill='var(--mem-medium, #7E4E5B)'/>
+  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='538' y='23'>72.93GB</text>
 </g>
 <g><title>Duration: 1:16, Total 1:16</title>
   <rect class='timepath' data-groups='g2,g3,g4,g5,g6,g11,g12,g13,g14,g15,g16' x='1215' y='5' width='65' height='10' stroke-width='0' fill='var(--stage-grid, #B2B2B2)'/>
   <text class='timepath' data-groups='g2,g3,g4,g5,g6,g11,g12,g13,g14,g15,g16' text-anchor='end' font-family='Verdana' font-size='8px' fill='var(--text-inv, #FFFFFF)' x='1278' y='13'>1:16</text>
 </g>
 <g><title>Max CPU 689.56</title>
-<path d='M600,24c7,0,14,0,21,0c7,0,14,-4,22,-4c7,0,14,3,21,3c7,0,14,-5,21,-5c7,0,14,1,21,1c7,0,14,0,22,0c7,0,14,1,21,1c7,0,14,-3,21,-3c7,0,14,3,21,3c7,0,14,1,22,1c7,0,14,-6,21,-6c7,0,14,5,21,5c7,0,14,1,21,1c7,0,14,1,21,1c7,0,14,1,22,1c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-3,22,-3c7,0,14,3,21,3c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M606,24c7,0,14,0,21,0c7,0,14,-4,21,-4c7,0,14,3,21,3c7,0,14,-5,21,-5c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,1,22,1c7,0,14,-3,21,-3c7,0,14,3,21,3c7,0,14,1,21,1c7,0,14,-6,21,-6c7,0,14,5,21,5c7,0,14,1,21,1c7,0,14,1,21,1c7,0,14,1,21,1c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-3,21,-3c7,0,14,3,21,3c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <svg data-stage='outer 6' data-height='674' width='1280' height='674' x='0' y='27'>
 <svg class='slimable' data-stage='inner 6' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g2' class='selectable'><title>Stage 6</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Limit: 10</title><text x='36' y='13' class='texts clipped'>Limit: 10</text>
 <g><title>Output Rows 0%, 10</title>
   <rect x='303' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 303,2 304,2 304,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
@@ -357,44 +357,44 @@
 <circle cx='26' cy='9' r='7' class='stage' />
 <text x='26' y='13' class='textm'>6</text>
 <g data-group='g3' class='selectable'><title>Input</title>
-<rect x='598' y='50' width='682' height='14' class='background'/>
+<rect x='604' y='50' width='676' height='14' class='background'/>
 </g>
 <g data-group='g1' class='selectable'><title>Output</title>
 <g><title>Output 0%, 152B, Local 100%, ∑152B, Rows 0%, 10, Width 15B, Chunks ∑1 ~ 152B</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_output' transform='translate(395 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
-  <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,2 413,2 414,2 414,16 413,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
-  <line x1='413' y1='13' x2='593' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
-<rect x='413' y='5' width='22' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>152B</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_output' transform='translate(401 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
+  <rect x='419' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='419,2 419,2 420,2 420,16 419,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <line x1='419' y1='13' x2='599' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
+<rect x='419' y='5' width='22' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>152B</text>
 </g>
 <g><title>Output, Duration: 0:00.00 (1:16 | 1:16 | 1:16 - 1:16 | 1:16 | 1:16)</title><rect x='1280' y='2' width='1' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
 </g>
 <g><title>Memory 0%, 6.00MB</title>
-<use href='#icon_memory' transform='translate(395 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
-  <rect x='413' y='18' width='1' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='413,18 413,18 414,18 414,32 413,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
-<rect x='413' y='21' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='29'>6.00MB</text>
+<use href='#icon_memory' transform='translate(401 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
+  <rect x='419' y='18' width='1' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='419,18 419,18 420,18 420,32 419,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
+<rect x='419' y='21' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='29'>6.00MB</text>
 </g>
 <g><title>Max MEM 6.00MB</title>
 <path d='M1279,31c0,0,0,-1,0,-1c0,0,0,-12,0,-12c0,0,0,0,1,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 0%, 14ms</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='1' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 413,34 414,34 414,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='22' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>14ms</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='1' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 419,34 420,34 420,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='22' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>14ms</text>
 </g>
 <g><title>Input Throughput 785.07K/s</title>
-  <rect x='368' y='0%' width='24' height='100%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='1.904011384e-05'/>
+  <rect x='368' y='0%' width='30' height='100%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='1.904011384e-05'/>
 </g>
 <g><title>Max CPU 1.31</title>
 <path d='M1279,47c0,0,0,-13,0,-13c0,0,0,13,0,13c0,0,0,-4,0,-4c0,0,0,4,0,4c0,0,0,-2,0,-2c0,0,0,2,0,2c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 6, tasks: 1, finished: 1</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>1</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
 <use href='#icon_minus' class='icon_minus' transform='translate(2 20) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/>
@@ -403,14 +403,14 @@
 <use href='#icon_arrowup' transform='translate(2 50) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g data-group='g3' class='selectable'><title>Input</title>
 <g><title>Input 0%, 74.36KB, Local 1%, ∑1002B, Rows 0%, 2.28K, Width 33B, Chunks ∑456 ~ 167B</title>
-<rect x='395' y='50' width='200' height='14' class='background'/>
-<use href='#icon_input' transform='translate(395 50) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
-<text x='403' y='61' class='textm'>5</text>
-  <rect x='413' y='50' width='1' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='413,50 413,50 414,50 414,64 413,64' stroke='none' fill='var(--input-medium, #5A8183)'/>
-  <line x1='414' y1='50' x2='414' y2='64' stroke-width='2' stroke='var(--input-light, #7CA3A5)'/>
-  <line x1='413' y1='61' x2='593' y2='61' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
-<rect x='413' y='53' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>74.36KB</text>
+<rect x='401' y='50' width='200' height='14' class='background'/>
+<use href='#icon_input' transform='translate(401 50) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
+<text x='409' y='61' class='textm'>5</text>
+  <rect x='419' y='50' width='1' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='419,50 419,50 420,50 420,64 419,64' stroke='none' fill='var(--input-medium, #5A8183)'/>
+  <line x1='420' y1='50' x2='420' y2='64' stroke-width='2' stroke='var(--input-light, #7CA3A5)'/>
+  <line x1='419' y1='61' x2='599' y2='61' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
+<rect x='419' y='53' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='61'>74.36KB</text>
 </g>
 <g><title>Input 782.81KB/s, Rows 24.00K/s, Duration: 0:00.09 (1:16 | 1:16 | 1:16 - 1:16 | 1:16 | 1:16)</title><rect x='1279' y='50' width='1' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
 </g>
@@ -423,9 +423,9 @@
 <g data-group='g4' class='selectable'><title>Stage 5</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>TopSort: Limit: 10, TopSortBy: [Arg.Sum0,Arg.o_orderdate,Arg.l_orderkey] Blocks: True</title><rect x='0' y='5' width='32' height='20' class='blocks'/>
 <text x='36' y='13' class='texts clipped'>TopSort: Limit: 10, TopSortBy: [Arg.Sum0,Arg.o_orderdate,Arg.l_orderkey]</text>
 <g><title>Output Rows 0%, ∑2.28K, 10 | 10 | 10</title>
@@ -448,22 +448,22 @@
 <circle cx='26' cy='9' r='7' class='stage' />
 <text x='26' y='13' class='textm'>5</text>
 <g data-group='g3' class='selectable'><title>Output</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g5' class='selectable'><title>Input</title>
-<rect x='598' y='50' width='682' height='14' class='background'/>
+<rect x='604' y='50' width='676' height='14' class='background'/>
 </g>
 <rect x='1278' y='0' width='1' height='100%' class='hot'/>
 <g data-group='g3' class='selectable'><title>Output</title>
 <g><title>Output 0%, ∑74.36KB, 334B | 334B | 334B, Local 1%, ∑1002B, Rows 0%, ∑2.28K, 10 | 10 | 10, Width 33B, Chunks ∑681 ~ 111B</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_output' transform='translate(395 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
-<text x='403' y='13' class='textm'>6</text>
-  <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,2 413,2 414,2 414,16 413,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
-  <line x1='414' y1='2' x2='414' y2='16' stroke-width='2' stroke='var(--output-light, #6F93C3)'/>
-  <line x1='413' y1='13' x2='593' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
-<rect x='413' y='5' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>74.36KB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_output' transform='translate(401 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
+<text x='409' y='13' class='textm'>6</text>
+  <rect x='419' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='419,2 419,2 420,2 420,16 419,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <line x1='420' y1='2' x2='420' y2='16' stroke-width='2' stroke='var(--output-light, #6F93C3)'/>
+  <line x1='419' y1='13' x2='599' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
+<rect x='419' y='5' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>74.36KB</text>
 </g>
 <g><title>Output 682.26KB/s, Rows 20.91K/s, Duration: 0:00.10 (1:16 | 1:16 | 1:16 - 1:16 | 1:16 | 1:16)</title><rect x='1279' y='2' width='2' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
@@ -474,36 +474,36 @@
 <path d='M1279,15c0,0,0,-4,0,-4c0,0,0,-4,0,-4c0,0,0,-5,0,-5c0,0,0,10,0,10c0,0,0,3,0,3c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
 </g>
 <g><title>Memory 20%, ∑14.69GB, 66.00MB | 66.00MB | 66.00MB</title>
-<use href='#icon_memory' transform='translate(395 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
-  <rect x='413' y='18' width='55' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='413,18 440,18 468,18 468,32 413,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
-<rect x='413' y='21' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='29'>14.69GB</text>
+<use href='#icon_memory' transform='translate(401 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
+  <rect x='419' y='18' width='55' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='419,18 446,18 474,18 474,32 419,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
+<rect x='419' y='21' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='29'>14.69GB</text>
 </g>
 <g><title>Max MEM 14.47GB</title>
-<path d='M1010,31c0,0,0,-1,0,-1c17,0,34,0,51,0c5,0,11,-3,17,-3c19,0,38,0,58,0c1,0,2,0,4,0c20,0,40,-8,60,-8c1,0,2,0,3,0c3,0,7,-1,11,-1c21,0,42,0,64,0c0,0,0,1,1,1c0,0,0,12,1,12c0,0,0,0,0,0z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M1013,31c0,0,0,-1,0,-1c16,0,33,0,50,0c5,0,11,-3,17,-3c19,0,38,0,57,0c1,0,2,0,4,0c20,0,40,-8,60,-8c1,0,2,0,3,0c3,0,6,-1,10,-1c21,0,42,0,64,0c0,0,0,1,1,1c0,0,0,12,1,12c0,0,0,0,0,0z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 2%, ∑6m 31s, 1.35s | 1.71s | 2.02s</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='10' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 418,37 423,39 423,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>6m 31s</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='10' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 424,37 429,39 429,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>6m 31s</text>
 </g>
 <g><title>Wait Input Time 72%, ∑19m 18s, 4.15s | 5.08s | 7.21s</title>
-  <rect x='368' y='28%' width='24' height='72%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='368' y='28%' width='30' height='72%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<path d='M1010,47c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,-1,8,-1c3,0,6,0,9,0c2,0,5,1,8,1c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,-2,8,-2c3,0,6,1,9,1c2,0,5,1,8,1c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,-1,9,-1c2,0,5,1,8,1c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,-2,8,-2c3,0,6,1,9,1c2,0,5,1,8,1c2,0,5,0,8,0c3,0,6,-1,9,-1c2,0,5,-1,8,-1c3,0,6,-1,9,-1c2,0,5,1,8,1c3,0,6,-11,9,-11c0,0,0,13,0,13z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
+<path d='M1013,47c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,-1,8,-1c2,0,5,0,8,0c3,0,6,1,9,1c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,-2,9,-2c2,0,5,1,8,1c2,0,5,1,8,1c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,-1,8,-1c3,0,6,1,9,1c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,-2,9,-2c2,0,5,1,8,1c2,0,5,1,8,1c3,0,6,0,9,0c2,0,5,-1,8,-1c2,0,5,-1,8,-1c3,0,6,-1,9,-1c2,0,5,1,8,1c3,0,6,-11,9,-11c0,0,0,13,0,13z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait Output Time 3%, ∑52.71s, 2ms | 0.23s | 0.36s</title>
-  <rect x='368' y='0%' width='24' height='3%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='368' y='0%' width='30' height='3%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
 <g><title>Input Throughput 120.67M/s</title>
-  <rect x='368' y='3%' width='24' height='25%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.002926726567'/>
+  <rect x='368' y='3%' width='30' height='25%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.002926726567'/>
 </g>
 <g><title>Max CPU 152.63</title>
-<path d='M1010,47c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,-2,9,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,-13,9,-13c2,0,5,13,8,13c2,0,5,0,8,0c3,0,6,-2,9,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,-2,8,-2c3,0,6,2,9,2c2,0,5,0,8,0c2,0,5,-2,8,-2c3,0,6,2,9,2c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,0,9,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M1013,47c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,-2,8,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,-13,8,-13c2,0,5,13,8,13c3,0,6,0,9,0c2,0,5,-2,8,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,-2,8,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,-2,8,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,0,9,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 5, tasks: 228, finished: 228</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>228</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>228</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
 <use href='#icon_minus' class='icon_minus' transform='translate(2 20) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/>
@@ -512,22 +512,22 @@
 <use href='#icon_arrowup' transform='translate(2 50) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g data-group='g5' class='selectable'><title>Input</title>
 <g><title>Input 0%, ∑3.40GB, 15.21MB | 15.27MB | 15.32MB, Local 1%, ∑45.84MB, Rows 0%, ∑113.25M, 494.76K | 496.72K | 498.32K, Width 32B, Chunks ∑1.86M ~ 1.90KB</title>
-<rect x='395' y='50' width='200' height='14' class='background'/>
-<use href='#icon_input' transform='translate(395 50) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
-<text x='403' y='61' class='textm'>4</text>
-  <rect x='413' y='50' width='1' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='413,50 413,51 414,51 414,64 413,64' stroke='none' fill='var(--input-medium, #5A8183)'/>
-  <line x1='414' y1='50' x2='414' y2='64' stroke-width='2' stroke='var(--input-light, #7CA3A5)'/>
-  <line x1='413' y1='61' x2='593' y2='61' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
-<rect x='413' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>3.40GB</text>
+<rect x='401' y='50' width='200' height='14' class='background'/>
+<use href='#icon_input' transform='translate(401 50) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
+<text x='409' y='61' class='textm'>4</text>
+  <rect x='419' y='50' width='1' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='419,50 419,51 420,51 420,64 419,64' stroke='none' fill='var(--input-medium, #5A8183)'/>
+  <line x1='420' y1='50' x2='420' y2='64' stroke-width='2' stroke='var(--input-light, #7CA3A5)'/>
+  <line x1='419' y1='61' x2='599' y2='61' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
+<rect x='419' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='61'>3.40GB</text>
 </g>
-<g><title>Input 115.69MB/s, Rows 3.76M/s, Duration: 0:30 (0:46 | 0:47 | 0:49 - 1:09 | 1:12 | 1:16)</title><rect x='1010' y='50' width='269' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
+<g><title>Input 115.69MB/s, Rows 3.76M/s, Duration: 0:30 (0:46 | 0:47 | 0:49 - 1:09 | 1:12 | 1:16)</title><rect x='1013' y='50' width='266' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
 </g>
-  <line x1='1010' y1='52' x2='1036' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='1018' y1='50' x2='1018' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='1213' y1='62' x2='1278' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='1244' y1='57' x2='1244' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M1010,63c3,0,6,-2,9,-2c2,0,5,0,8,0c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,-13,9,-13c2,0,5,9,8,9c3,0,6,3,9,3c2,0,5,1,8,1c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,-2,8,-2c3,0,6,1,9,1c2,0,5,1,8,1c3,0,6,-3,9,-3c2,0,5,1,8,1c2,0,5,0,8,0c3,0,6,1,9,1c2,0,5,-1,8,-1c2,0,5,0,8,0c3,0,6,1,9,1c2,0,5,1,8,1c2,0,5,-1,8,-1c3,0,6,0,9,0c2,0,5,-1,8,-1c3,0,6,1,9,1c2,0,5,1,8,1c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
+  <line x1='1013' y1='52' x2='1038' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='1020' y1='50' x2='1020' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='1214' y1='62' x2='1278' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='1245' y1='57' x2='1245' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M1013,63c2,0,5,-2,8,-2c2,0,5,0,8,0c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,-13,9,-13c2,0,5,9,8,9c2,0,5,3,8,3c3,0,6,1,9,1c2,0,5,0,8,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,-2,9,-2c2,0,5,1,8,1c2,0,5,1,8,1c3,0,6,-3,9,-3c2,0,5,1,8,1c2,0,5,0,8,0c3,0,6,1,9,1c2,0,5,-1,8,-1c2,0,5,0,8,0c2,0,5,1,8,1c3,0,6,1,9,1c2,0,5,-1,8,-1c2,0,5,0,8,0c3,0,6,-1,9,-1c2,0,5,1,8,1c2,0,5,1,8,1c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
 </g>
 </g>
 </svg>
@@ -539,9 +539,9 @@
 <g data-group='g6' class='selectable'><title>Stage 4</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: SUM(DecimalMul), Group By: [l_orderkey,o_orderdate,o_shippriority] Blocks: True</title><rect x='0' y='5' width='32' height='20' class='blocks'/>
 <text x='36' y='13' class='texts clipped'>Aggregate: SUM(DecimalMul), Group By: [l_orderkey,o_orderdate,o_shippriority]</text>
 <g><title>Output Rows 0%, ∑113.25M, 440.72K | 442.39K | 443.98K</title>
@@ -563,70 +563,70 @@
 <circle cx='26' cy='9' r='7' class='stage' />
 <text x='26' y='13' class='textm'>4</text>
 <g data-group='g5' class='selectable'><title>Output</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g7' class='selectable'><title>Input</title>
-<rect x='598' y='50' width='682' height='14' class='background'/>
+<rect x='604' y='50' width='676' height='14' class='background'/>
 </g>
 <g data-group='g11' class='selectable'><title>Input</title>
-<rect x='598' y='66' width='682' height='14' class='background'/>
+<rect x='604' y='66' width='676' height='14' class='background'/>
 </g>
-<rect x='961' y='0' width='316' height='100%' class='hot'/>
+<rect x='964' y='0' width='314' height='100%' class='hot'/>
 <g data-group='g5' class='selectable'><title>Output</title>
 <g><title>Output 0%, ∑3.40GB, 13.56MB | 13.62MB | 13.67MB, Local 1%, ∑45.84MB, Rows 0%, ∑113.25M, 440.72K | 442.39K | 443.98K, Width 32B, Chunks ∑5.73M ~ 637B</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_output' transform='translate(395 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
-<text x='403' y='13' class='textm'>5</text>
-  <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,2 413,3 414,3 414,16 413,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
-  <line x1='414' y1='2' x2='414' y2='16' stroke-width='2' stroke='var(--output-light, #6F93C3)'/>
-  <line x1='413' y1='13' x2='593' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
-<rect x='413' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>3.40GB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_output' transform='translate(401 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
+<text x='409' y='13' class='textm'>5</text>
+  <rect x='419' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='419,2 419,3 420,3 420,16 419,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <line x1='420' y1='2' x2='420' y2='16' stroke-width='2' stroke='var(--output-light, #6F93C3)'/>
+  <line x1='419' y1='13' x2='599' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
+<rect x='419' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>3.40GB</text>
 </g>
-<g><title>Output 115.80MB/s, Rows 3.76M/s, Duration: 0:30 (0:46 | 0:51 | 0:55 - 0:59 | 1:08 | 1:16)</title><rect x='1010' y='2' width='269' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
+<g><title>Output 115.80MB/s, Rows 3.76M/s, Duration: 0:30 (0:46 | 0:51 | 0:55 - 0:59 | 1:08 | 1:16)</title><rect x='1013' y='2' width='266' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
-<polygon points='1010,15 1010,15 1019,4 1027,15 1035,15 1044,2 1052,14 1060,15 1069,15 1077,15 1086,15 1094,15 1102,15 1111,15 1119,12 1127,15 1136,15 1144,15 1153,15 1161,15 1169,15 1178,15 1186,15 1194,15 1203,15 1211,15 1219,15 1228,15 1236,15 1245,15 1253,15 1261,15 1270,15 1278,15 1278,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
-  <line x1='1010' y1='4' x2='1091' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='1054' y1='2' x2='1054' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='1124' y1='14' x2='1278' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='1209' y1='9' x2='1209' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M1010,15c3,0,6,0,9,0c2,0,5,-9,8,-9c2,0,5,9,8,9c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,-5,8,-5c3,0,6,-5,9,-5c2,0,5,-3,8,-3c3,0,6,10,9,10c2,0,5,2,8,2c2,0,5,1,8,1c3,0,6,0,9,0c2,0,5,-5,8,-5c2,0,5,3,8,3c3,0,6,0,9,0c2,0,5,-1,8,-1c3,0,6,3,9,3c2,0,5,-6,8,-6c2,0,5,2,8,2c3,0,6,1,9,1c2,0,5,1,8,1c2,0,5,2,8,2c3,0,6,-9,9,-9c2,0,5,7,8,7c2,0,5,0,8,0c3,0,6,1,9,1c2,0,5,-4,8,-4c3,0,6,2,9,2c2,0,5,1,8,1c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,0,8,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
+<polygon points='1013,15 1013,15 1021,4 1029,15 1037,15 1046,2 1054,14 1062,15 1071,15 1079,15 1087,15 1096,15 1104,15 1112,15 1120,12 1129,15 1137,15 1145,15 1154,15 1162,15 1170,15 1179,15 1187,15 1195,15 1203,15 1212,15 1220,15 1228,15 1237,15 1245,15 1253,15 1262,15 1270,15 1278,15 1278,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
+  <line x1='1013' y1='4' x2='1092' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='1056' y1='2' x2='1056' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='1126' y1='14' x2='1278' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='1210' y1='9' x2='1210' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M1013,15c2,0,5,0,8,0c2,0,5,-9,8,-9c2,0,5,9,8,9c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,-5,8,-5c3,0,6,-5,9,-5c2,0,5,-3,8,-3c2,0,5,10,8,10c3,0,6,2,9,2c2,0,5,1,8,1c2,0,5,0,8,0c2,0,5,-5,8,-5c3,0,6,3,9,3c2,0,5,0,8,0c2,0,5,-1,8,-1c3,0,6,3,9,3c2,0,5,-6,8,-6c2,0,5,2,8,2c3,0,6,1,9,1c2,0,5,1,8,1c2,0,5,2,8,2c2,0,5,-9,8,-9c3,0,6,7,9,7c2,0,5,0,8,0c2,0,5,1,8,1c3,0,6,-4,9,-4c2,0,5,2,8,2c2,0,5,1,8,1c3,0,6,2,9,2c2,0,5,0,8,0c2,0,5,0,8,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
 </g>
 <g><title>Memory 65%, ∑47.51GB, 190.00MB | 190.04MB | 191.00MB</title>
-<use href='#icon_memory' transform='translate(395 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
-  <rect x='413' y='18' width='180' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='413,18 421,19 593,19 593,32 413,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
-<rect x='413' y='21' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='29'>47.51GB</text>
+<use href='#icon_memory' transform='translate(401 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
+  <rect x='419' y='18' width='180' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='419,18 427,19 599,19 599,32 419,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
+<rect x='419' y='21' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='29'>47.51GB</text>
 </g>
 <g><title>Max MEM 47.51GB</title>
-<path d='M613,31c7,0,14,0,22,0c6,0,13,-1,20,-1c5,0,10,0,16,0c22,0,44,-2,66,-2c3,0,6,0,9,0c1,0,3,-1,5,-1c6,0,13,0,20,0c12,0,24,-1,36,-1c3,0,6,0,10,0c13,0,26,-2,40,-2c2,0,4,0,6,0c6,0,13,0,20,0c4,0,9,0,14,0c9,0,19,-1,29,-1c3,0,6,0,10,0c13,0,26,-4,40,-4c4,0,8,0,12,0c2,0,4,0,6,0c14,0,29,0,44,0c8,0,16,0,24,0c2,0,4,0,6,0c2,0,5,0,8,0c17,0,34,0,51,0c11,0,22,0,34,0c7,0,14,0,21,0c4,0,8,0,12,0c6,0,12,0,18,0c9,0,19,0,29,0c0,0,0,-1,0,-1c12,0,24,0,37,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M619,31c7,0,14,0,22,0c6,0,12,-1,19,-1c5,0,11,0,17,0c21,0,43,-2,65,-2c3,0,6,0,9,0c1,0,3,-1,5,-1c6,0,12,0,19,0c12,0,24,-1,36,-1c3,0,6,0,10,0c13,0,26,-2,40,-2c2,0,4,0,6,0c6,0,12,0,19,0c5,0,10,0,15,0c9,0,18,-1,28,-1c3,0,6,0,10,0c13,0,26,-4,40,-4c3,0,7,0,11,0c2,0,4,0,6,0c14,0,29,0,44,0c8,0,16,0,24,0c2,0,4,0,6,0c2,0,5,0,8,0c16,0,33,0,50,0c11,0,22,0,34,0c7,0,14,0,21,0c3,0,7,0,11,0c6,0,12,0,18,0c9,0,19,0,29,0c0,0,0,-1,0,-1c12,0,24,0,37,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 43%, ∑1h 54m, 20.81s | 26.81s | 31.36s</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='180' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 515,37 593,39 593,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>1h 54m</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='180' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 521,37 599,39 599,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1h 54m</text>
 </g>
 <g><title>Wait Input Time 23%, ∑36m 16s, 4.80s | 8.50s | 25.99s</title>
-  <rect x='368' y='77%' width='24' height='23%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='368' y='77%' width='30' height='23%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<path d='M613,47c6,0,13,-2,20,-2c7,0,14,-1,21,-1c7,0,14,-1,21,-1c7,0,14,4,21,4c7,0,14,-8,21,-8c6,0,13,5,20,5c7,0,14,-2,21,-2c7,0,14,4,21,4c7,0,14,1,21,1c7,0,14,-13,21,-13c6,0,13,11,20,11c7,0,14,-2,21,-2c7,0,14,3,21,3c7,0,14,1,21,1c7,0,14,0,21,0c6,0,13,-5,20,-5c7,0,14,-1,21,-1c7,0,14,5,21,5c7,0,14,1,21,1c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,-1,21,-1c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,-1,21,-1c6,0,13,1,20,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
+<path d='M619,47c6,0,13,-2,20,-2c7,0,14,-1,21,-1c6,0,13,-1,20,-1c7,0,14,4,21,4c7,0,14,-8,21,-8c6,0,13,5,20,5c7,0,14,-2,21,-2c6,0,13,4,20,4c7,0,14,1,21,1c7,0,14,-13,21,-13c6,0,13,11,20,11c7,0,14,-2,21,-2c6,0,13,3,20,3c7,0,14,1,21,1c7,0,14,0,21,0c6,0,13,-5,20,-5c7,0,14,-1,21,-1c7,0,14,5,21,5c6,0,13,1,20,1c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,-1,21,-1c7,0,14,1,21,1c6,0,13,0,20,0c7,0,14,-1,21,-1c6,0,13,1,20,1c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait input with peer stage(s) 0 wait output</title>
-  <circle cx='380' cy='74' r='7' stroke='none' fill='var(--stage-texthl, #FC2824)' />
-  <text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='380' y='78'>W</text>
+  <circle cx='383' cy='74' r='7' stroke='none' fill='var(--stage-texthl, #FC2824)' />
+  <text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='383' y='78'>W</text>
 </g>
 <g><title>Wait Output Time 0%, ∑1m 30s, 0.31s | 0.35s | 0.55s</title>
-  <rect x='368' y='0%' width='24' height='0%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='368' y='0%' width='30' height='0%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
 <g><title>Input Throughput 17.61G/s</title>
-  <rect x='368' y='0%' width='24' height='77%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.4271471963'/>
+  <rect x='368' y='0%' width='30' height='77%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.4271471963'/>
 </g>
 <g><title>Max CPU 323.27</title>
-<path d='M613,47c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-9,21,-9c7,0,14,8,21,8c6,0,13,-4,20,-4c7,0,14,2,21,2c7,0,14,3,21,3c7,0,14,0,21,0c7,0,14,-13,21,-13c6,0,13,10,20,10c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,1,21,1c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-7,21,-7c7,0,14,4,21,4c6,0,13,-4,20,-4c7,0,14,2,21,2c7,0,14,1,21,1c7,0,14,4,21,4c7,0,14,-11,21,-11c6,0,13,7,20,7c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,1,21,1c6,0,13,1,20,1c7,0,14,2,21,2c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M619,47c6,0,13,0,20,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,-9,21,-9c7,0,14,8,21,8c6,0,13,-4,20,-4c7,0,14,2,21,2c6,0,13,3,20,3c7,0,14,0,21,0c7,0,14,-13,21,-13c6,0,13,10,20,10c7,0,14,2,21,2c6,0,13,0,20,0c7,0,14,1,21,1c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,-7,20,-7c7,0,14,4,21,4c6,0,13,-4,20,-4c7,0,14,2,21,2c7,0,14,1,21,1c6,0,13,4,20,4c7,0,14,-11,21,-11c6,0,13,7,20,7c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,1,20,1c7,0,14,1,21,1c6,0,13,2,20,2c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 4, tasks: 256, finished: 256</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>256</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>256</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
 <use href='#icon_minus' class='icon_minus' transform='translate(2 20) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/>
@@ -635,40 +635,40 @@
 <use href='#icon_arrowup' transform='translate(2 66) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g data-group='g7' class='selectable'><title>Input</title>
 <g><title>Input 86%, ∑1.17TB, 4.70GB | 4.70GB | 4.70GB, Local 100%, ∑1.17TB, Rows 77%, ∑32.34G, 126.27M | 126.34M | 126.41M, Width 40B, Chunks ∑1.06M ~ 1.15MB</title>
-<rect x='395' y='50' width='200' height='14' class='background'/>
-<use href='#icon_input' transform='translate(395 50) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
-<text x='403' y='61' class='textm'>0</text>
-  <rect x='413' y='50' width='180' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='413,50 506,51 593,51 593,64 413,64' stroke='none' fill='var(--input-medium, #5A8183)'/>
-  <line x1='413' y1='61' x2='413' y2='61' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
-<rect x='413' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>1.17TB</text>
+<rect x='401' y='50' width='200' height='14' class='background'/>
+<use href='#icon_input' transform='translate(401 50) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
+<text x='409' y='61' class='textm'>0</text>
+  <rect x='419' y='50' width='180' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='419,50 512,51 599,51 599,64 419,64' stroke='none' fill='var(--input-medium, #5A8183)'/>
+  <line x1='419' y1='61' x2='419' y2='61' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
+<rect x='419' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='61'>1.17TB</text>
 </g>
-<g><title>Input 33.96GB/s, Rows 911.66M/s, Duration: 0:35 (0:40 | 0:41 | 0:41 - 0:58 | 1:07 | 1:16)</title><rect x='962' y='50' width='317' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
+<g><title>Input 33.96GB/s, Rows 911.66M/s, Duration: 0:35 (0:40 | 0:41 | 0:41 - 0:58 | 1:07 | 1:16)</title><rect x='965' y='50' width='314' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
 </g>
-  <line x1='962' y1='52' x2='963' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='962' y1='50' x2='962' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='1114' y1='62' x2='1278' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='965' y1='52' x2='966' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='965' y1='50' x2='965' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='1115' y1='62' x2='1278' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='1201' y1='57' x2='1201' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M962,63c3,0,6,0,10,0c3,0,6,-4,10,-4c3,0,6,1,10,1c3,0,6,-4,10,-4c3,0,6,3,9,3c3,0,6,-1,10,-1c3,0,6,0,10,0c3,0,6,0,10,0c3,0,6,3,10,3c3,0,6,-5,10,-5c3,0,6,4,10,4c3,0,6,-3,9,-3c3,0,6,1,10,1c3,0,6,0,10,0c3,0,6,5,10,5c3,0,6,-9,10,-9c3,0,6,5,10,5c3,0,6,0,10,0c3,0,6,0,10,0c3,0,6,0,9,0c3,0,6,0,10,0c3,0,6,2,10,2c3,0,6,-4,10,-4c3,0,6,6,10,6c3,0,6,0,10,0c3,0,6,-13,10,-13c3,0,6,10,9,10c3,0,6,1,10,1c3,0,6,0,10,0c3,0,6,2,10,2c3,0,6,0,10,0c3,0,6,0,10,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
+<path d='M965,63c3,0,6,0,10,0c3,0,6,-4,9,-4c3,0,6,1,10,1c3,0,6,-4,10,-4c3,0,6,3,10,3c3,0,6,-1,10,-1c3,0,6,0,9,0c3,0,6,0,10,0c3,0,6,3,10,3c3,0,6,-5,10,-5c3,0,6,4,9,4c3,0,6,-3,10,-3c3,0,6,1,10,1c3,0,6,0,10,0c3,0,6,5,10,5c3,0,6,-9,9,-9c3,0,6,5,10,5c3,0,6,0,10,0c3,0,6,0,10,0c3,0,6,0,9,0c3,0,6,0,10,0c3,0,6,2,10,2c3,0,6,-4,10,-4c3,0,6,6,10,6c3,0,6,0,9,0c3,0,6,-13,10,-13c3,0,6,10,10,10c3,0,6,1,10,1c3,0,6,0,9,0c3,0,6,2,10,2c3,0,6,0,10,0c3,0,6,0,10,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
 </g>
 <g data-group='g11' class='selectable'><title>Input</title>
 <g><title>Input 1%, ∑22.04GB, 87.11MB | 88.18MB | 88.45MB, Local 1%, ∑300.66MB, Rows 3%, ∑1.45G, 5.68M | 5.69M | 5.70M, Width 16B, Chunks ∑27.91M ~ 848B</title>
-<rect x='395' y='66' width='200' height='14' class='background'/>
-<use href='#icon_input' transform='translate(395 66) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
-<text x='403' y='77' class='textm'>3</text>
-  <rect x='413' y='66' width='3' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='413,66 415,67 416,67 416,80 413,80' stroke='none' fill='var(--input-medium, #5A8183)'/>
-  <line x1='416' y1='66' x2='416' y2='80' stroke-width='2' stroke='var(--input-light, #7CA3A5)'/>
-  <line x1='413' y1='77' x2='593' y2='77' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
-<rect x='413' y='69' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='77'>22.04GB</text>
+<rect x='401' y='66' width='200' height='14' class='background'/>
+<use href='#icon_input' transform='translate(401 66) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
+<text x='409' y='77' class='textm'>3</text>
+  <rect x='419' y='66' width='3' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='419,66 421,67 422,67 422,80 419,80' stroke='none' fill='var(--input-medium, #5A8183)'/>
+  <line x1='422' y1='66' x2='422' y2='80' stroke-width='2' stroke='var(--input-light, #7CA3A5)'/>
+  <line x1='419' y1='77' x2='599' y2='77' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
+<rect x='419' y='69' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='77'>22.04GB</text>
 </g>
-<g><title>Input 576.33MB/s, Rows 37.21M/s, Duration: 0:39 (0:01.70 | 0:04.31 | 0:30 - 0:40 | 0:40 | 0:40)</title><rect x='613' y='66' width='349' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
+<g><title>Input 576.33MB/s, Rows 37.21M/s, Duration: 0:39 (0:01.70 | 0:04.31 | 0:30 - 0:40 | 0:40 | 0:40)</title><rect x='619' y='66' width='346' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
 </g>
-  <line x1='613' y1='68' x2='866' y2='68' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='636' y1='66' x2='636' y2='73' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='961' y1='78' x2='961' y2='78' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='961' y1='73' x2='961' y2='80' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M613,79c3,0,7,-4,11,-4c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,-1,11,-1c3,0,7,3,11,3c3,0,7,2,11,2c3,0,7,-13,11,-13c3,0,7,9,11,9c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,3,11,3c3,0,7,-6,11,-6c3,0,7,6,11,6c3,0,7,-6,11,-6c3,0,7,3,11,3c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,2,11,2c3,0,7,-8,11,-8c3,0,7,7,11,7c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,1,10,1c3,0,7,-1,11,-1c3,0,7,1,11,1c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
+  <line x1='619' y1='68' x2='869' y2='68' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='642' y1='66' x2='642' y2='73' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='964' y1='78' x2='964' y2='78' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='964' y1='73' x2='964' y2='80' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M619,79c3,0,6,-4,10,-4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-1,11,-1c3,0,6,3,10,3c3,0,7,2,11,2c3,0,7,-13,11,-13c3,0,7,9,11,9c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,3,10,3c3,0,7,-6,11,-6c3,0,7,6,11,6c3,0,7,-6,11,-6c3,0,7,3,11,3c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,2,11,2c3,0,6,-8,10,-8c3,0,7,7,11,7c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,6,-1,10,-1c3,0,7,1,11,1c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
 </g>
 </g>
 </svg>
@@ -677,9 +677,9 @@
 <g data-group='g8' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter-TableFullScan:  Blocks: True</title><rect x='11' y='5' width='32' height='61' class='blocks'/>
 <text x='47' y='13' class='texts clipped'>Filter-TableFullScan: </text>
 <g><title>Output Rows 39%, ∑32.34G, 126.27M | 126.34M | 126.41M</title>
@@ -691,62 +691,62 @@
 <circle cx='37' cy='9' r='7' class='stage' />
 <text x='37' y='13' class='textm'>0</text>
 <g data-group='g7' class='selectable'><title>Output</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g9' class='selectable'><title>Ingress</title>
-<rect x='598' y='50' width='682' height='14' class='background'/>
+<rect x='604' y='50' width='676' height='14' class='background'/>
 </g>
 <g data-group='g7' class='selectable'><title>Output</title>
 <g><title>Output 86%, ∑1.17TB, 4.70GB | 4.70GB | 4.70GB, Local 100%, ∑1.17TB, Rows 77%, ∑32.34G, 126.27M | 126.34M | 126.41M, Width 40B, Chunks ∑1.06M ~ 1.15MB</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_output' transform='translate(395 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
-<text x='403' y='13' class='textm'>4</text>
-  <rect x='413' y='2' width='180' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,2 506,3 593,3 593,16 413,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
-  <line x1='413' y1='13' x2='413' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
-<rect x='413' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>1.17TB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_output' transform='translate(401 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
+<text x='409' y='13' class='textm'>4</text>
+  <rect x='419' y='2' width='180' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='419,2 512,3 599,3 599,16 419,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <line x1='419' y1='13' x2='419' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
+<rect x='419' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>1.17TB</text>
 </g>
-<g><title>Output 15.87GB/s, Rows 426.17M/s, Duration: 1:15 (0:00.56 | 0:01.37 | 0:01.79 - 0:58 | 1:07 | 1:16)</title><rect x='602' y='2' width='677' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
+<g><title>Output 15.87GB/s, Rows 426.17M/s, Duration: 1:15 (0:00.56 | 0:01.37 | 0:01.79 - 0:58 | 1:07 | 1:16)</title><rect x='608' y='2' width='671' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
-<polygon points='602,15 602,15 624,15 645,15 666,15 687,15 708,15 729,15 750,15 771,15 792,15 813,15 835,15 856,15 877,15 898,15 919,15 940,15 961,15 982,2 1003,7 1024,7 1046,7 1067,7 1088,7 1109,7 1130,7 1151,10 1172,11 1193,11 1214,13 1235,15 1257,15 1278,15 1278,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
-  <line x1='602' y1='4' x2='613' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='610' y1='2' x2='610' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='1114' y1='14' x2='1278' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+<polygon points='608,15 608,15 629,15 650,15 671,15 692,15 713,15 734,15 755,15 776,15 797,15 818,15 838,15 859,15 880,15 901,15 922,15 943,15 964,15 985,2 1006,7 1027,7 1048,7 1069,7 1089,7 1110,7 1131,7 1152,10 1173,11 1194,11 1215,13 1236,15 1257,15 1278,15 1278,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
+  <line x1='608' y1='4' x2='619' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='616' y1='2' x2='616' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='1115' y1='14' x2='1278' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='1201' y1='9' x2='1201' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M602,15c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-4,21,-4c7,0,14,-2,21,-2c7,0,14,3,21,3c7,0,14,-8,22,-8c7,0,14,4,21,4c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,0,21,0c7,0,14,2,21,2c7,0,14,2,22,2c7,0,14,2,21,2c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
+<path d='M608,15c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-4,21,-4c7,0,14,-2,21,-2c7,0,14,3,21,3c7,0,14,-8,21,-8c7,0,14,4,21,4c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,0,21,0c7,0,14,2,21,2c7,0,14,2,21,2c7,0,14,2,21,2c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
 </g>
 <g><title>Memory 0%, ∑256.00MB, 1.00MB | 1.00MB | 1.00MB</title>
-<use href='#icon_memory' transform='translate(395 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
-  <rect x='413' y='18' width='1' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='413,18 413,18 414,18 414,32 413,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
-<rect x='413' y='21' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='29'>256.00MB</text>
+<use href='#icon_memory' transform='translate(401 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
+  <rect x='419' y='18' width='1' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='419,18 419,18 420,18 420,32 419,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
+<rect x='419' y='21' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='29'>256.00MB</text>
 </g>
 <g><title>Max MEM 256.00MB</title>
-<path d='M602,31c0,0,0,-13,0,-13c225,0,450,0,676,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M608,31c0,0,0,-13,0,-13c223,0,446,0,670,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 0%, ∑1m 03s, 0.16s | 0.24s | 0.31s</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='1' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 413,37 414,41 414,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>1m 03s</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='1' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 419,37 420,41 420,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1m 03s</text>
 </g>
 <g><title>Wait Input Time 17%, ∑43m 41s, 2.10s | 10.24s | 17.41s</title>
-  <rect x='368' y='83%' width='24' height='17%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='368' y='83%' width='30' height='17%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<path d='M602,47c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-13,21,-13c7,0,14,5,21,5c7,0,14,-1,21,-1c7,0,14,1,22,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-1,21,-1c7,0,14,1,21,1c7,0,14,2,21,2c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,2,21,2c7,0,14,2,21,2c7,0,14,0,22,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
+<path d='M608,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-13,21,-13c7,0,14,5,21,5c7,0,14,-1,21,-1c7,0,14,1,21,1c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,-1,21,-1c7,0,14,1,21,1c7,0,14,2,21,2c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,2,21,2c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait Output Time 81%, ∑3h 18m, 40.43s | 46.60s | 55.21s</title>
-  <rect x='368' y='0%' width='24' height='81%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='368' y='0%' width='30' height='81%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
-<path d='M602,47c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,6,21,6c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
+<path d='M608,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,6,21,6c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
 <g><title>Input Throughput 20.61G/s</title>
-  <rect x='368' y='81%' width='24' height='2%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.5'/>
+  <rect x='368' y='81%' width='30' height='2%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.5'/>
 </g>
 <g><title>Max CPU 6.86</title>
-<path d='M602,47c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-1,21,-1c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,-13,22,-13c7,0,14,9,21,9c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,1,21,1c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,-5,21,-5c7,0,14,5,22,5c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M608,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-1,21,-1c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,-13,21,-13c7,0,14,9,21,9c6,0,13,1,20,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,1,21,1c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,-5,21,-5c7,0,14,5,21,5c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 0, tasks: 256, finished: 256</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>256</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>256</text>
 </g>
 <g class='plus button'><rect x='13' y='20' width='14' height='14' class='transparent'/>
 <use href='#icon_minus' class='icon_minus' transform='translate(13 20) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/>
@@ -755,19 +755,19 @@
 <use href='#icon_arrowup' transform='translate(13 50) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g data-group='g9' class='selectable'><title>Ingress</title>
 <g><title>Ingress 86%, ∑1.42TB, 5.68GB | 5.69GB | 5.69GB, Rows 80%, ∑32.34G, 126.27M | 126.34M | 126.41M, Width 48B</title>
-<rect x='395' y='50' width='200' height='14' class='background'/>
-<use href='#icon_ingress' transform='translate(395 50) scale(0.9 0.9)' fill='var(--ingress-medium, #466364)'/>
-  <rect x='413' y='50' width='180' height='14' stroke-width='0' fill='var(--ingress-light, #5A8183)'/>  <polygon points='413,50 506,51 593,51 593,64 413,64' stroke='none' fill='var(--ingress-medium, #466364)'/>
-<rect x='413' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>1.42TB</text>
+<rect x='401' y='50' width='200' height='14' class='background'/>
+<use href='#icon_ingress' transform='translate(401 50) scale(0.9 0.9)' fill='var(--ingress-medium, #466364)'/>
+  <rect x='419' y='50' width='180' height='14' stroke-width='0' fill='var(--ingress-light, #5A8183)'/>  <polygon points='419,50 512,51 599,51 599,64 419,64' stroke='none' fill='var(--ingress-medium, #466364)'/>
+<rect x='419' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='61'>1.42TB</text>
 </g>
-<g><title>Ingress 19.20GB/s, Rows 426.17M/s, Duration: 1:15 (0:00.56 | 0:01.36 | 0:01.79 - 0:58 | 1:07 | 1:16)</title><rect x='602' y='50' width='677' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
+<g><title>Ingress 19.20GB/s, Rows 426.17M/s, Duration: 1:15 (0:00.56 | 0:01.36 | 0:01.79 - 0:58 | 1:07 | 1:16)</title><rect x='608' y='50' width='671' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
 </g>
-  <line x1='602' y1='52' x2='613' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='610' y1='50' x2='610' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='1114' y1='62' x2='1278' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='608' y1='52' x2='619' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='616' y1='50' x2='616' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='1115' y1='62' x2='1278' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='1201' y1='57' x2='1201' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M602,63c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-5,21,-5c7,0,14,-1,21,-1c7,0,14,3,21,3c7,0,14,-8,22,-8c7,0,14,4,21,4c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,2,21,2c7,0,14,-1,21,-1c7,0,14,3,22,3c7,0,14,2,21,2c0,0,0,0,0,0z' stroke-width='1' stroke='var(--ingress-dark, #384F50)' fill='none' />
+<path d='M608,63c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-5,21,-5c7,0,14,-1,21,-1c7,0,14,3,21,3c7,0,14,-8,21,-8c7,0,14,4,21,4c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,2,21,2c7,0,14,-1,21,-1c7,0,14,3,21,3c7,0,14,2,21,2c0,0,0,0,0,0z' stroke-width='1' stroke='var(--ingress-dark, #384F50)' fill='none' />
 </g>
 </g>
 </svg>
@@ -776,9 +776,9 @@
 <g data-group='g10' class='selectable'><title>Stage E</title>
 <rect x='11' y='0' width='287' height='100%' class='clone'/>
 <rect x='301' y='0' width='64' height='100%' class='clone'/>
-<rect x='395' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='24' height='100%' class='clone'/>
-<rect x='598' y='0' width='682' height='100%' class='clone'/>
+<rect x='401' y='0' width='200' height='100%' class='clone'/>
+<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>Filter: l_shipdate &gt; 9204 Blocks: True</title><rect x='11' y='5' width='32' height='20' class='blocks'/>
 <text x='47' y='13' class='texts clipped'>Filter: l_shipdate &gt; 9204</text>
 <g><title>Output Rows 39%, ∑32.34G, 126.27M | 126.34M | 126.41M, Est: 0 Rows: 23.99G Size: 403.22GB</title>
@@ -793,36 +793,36 @@
 <circle cx='37' cy='9' r='7' class='stage' />
 <text x='37' y='13' class='textm'>E</text>
 <g data-group='g9' class='selectable'><title>Egress</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g9' class='selectable'><title>Egress</title>
 <g><title>Egress 86%, ∑1.42TB, 5.68GB | 5.69GB | 5.69GB, Rows 80%, ∑32.34G, 126.27M | 126.34M | 126.41M, Width 48B</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
-  <rect x='413' y='2' width='180' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 506,3 593,3 593,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
-<rect x='413' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>1.42TB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_egress' transform='translate(401 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
+  <rect x='419' y='2' width='180' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='419,2 512,3 599,3 599,16 419,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
+<rect x='419' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>1.42TB</text>
 </g>
-<g><title>Egress 19.20GB/s, Rows 426.17M/s, Duration: 1:15 (0:00.56 | 0:01.36 | 0:01.79 - 0:58 | 1:07 | 1:16)</title><rect x='602' y='2' width='677' height='14' stroke-width='0' fill='var(--egress-medium, #3C6090)'/>
+<g><title>Egress 19.20GB/s, Rows 426.17M/s, Duration: 1:15 (0:00.56 | 0:01.36 | 0:01.79 - 0:58 | 1:07 | 1:16)</title><rect x='608' y='2' width='671' height='14' stroke-width='0' fill='var(--egress-medium, #3C6090)'/>
 </g>
-  <line x1='602' y1='4' x2='613' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='610' y1='2' x2='610' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='1114' y1='14' x2='1278' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='608' y1='4' x2='619' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='616' y1='2' x2='616' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='1115' y1='14' x2='1278' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='1201' y1='9' x2='1201' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M602,15c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-5,21,-5c7,0,14,-1,21,-1c7,0,14,3,21,3c7,0,14,-8,22,-8c7,0,14,4,21,4c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,2,21,2c7,0,14,-1,21,-1c7,0,14,3,22,3c7,0,14,2,21,2c0,0,0,0,0,0z' stroke-width='1' stroke='var(--egress-dark, #2D486C)' fill='none' />
+<path d='M608,15c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-5,21,-5c7,0,14,-1,21,-1c7,0,14,3,21,3c7,0,14,-8,21,-8c7,0,14,4,21,4c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,2,21,2c7,0,14,-1,21,-1c7,0,14,3,21,3c7,0,14,2,21,2c0,0,0,0,0,0z' stroke-width='1' stroke='var(--egress-dark, #2D486C)' fill='none' />
 </g>
 <g><title>CPU Usage 74%, ∑2h 00m, 24.90s | 28.32s | 33.44s</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='180' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 485,37 593,38 593,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>2h 00m</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='180' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 491,37 599,38 599,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>2h 00m</text>
 </g>
 <g><title>Max CPU 409.15</title>
-<path d='M603,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,22,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-6,21,-6c7,0,14,-1,21,-1c7,0,14,4,21,4c7,0,14,-9,21,-9c7,0,14,5,22,5c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,3,21,3c7,0,14,1,22,1c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M608,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-6,21,-6c7,0,14,-1,21,-1c7,0,14,4,21,4c7,0,14,-9,21,-9c6,0,13,5,20,5c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,3,21,3c7,0,14,1,21,1c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>External Source, partitions: 256, finished: 256</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>256</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>256</text>
 </g>
 <g class='arup button'><rect x='13' y='34' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowup' transform='translate(13 34) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
@@ -846,9 +846,9 @@
 <g data-group='g12' class='selectable'><title>Stage 3</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>LeftSemiJoin (BlockHash): o_1.o_custkey = c.c_custkey Blocks: True</title><rect x='11' y='5' width='32' height='77' class='blocks'/>
 <text x='47' y='13' class='texts clipped'>LeftSemiJoin (BlockHash): o_1.o_custkey = c.c_custkey</text>
 <g><title>Output Rows 1%, ∑1.45G, 5.67M | 5.69M | 5.71M, Est: 160.73G Rows: 2.40G Size: 16.04GB</title>
@@ -868,71 +868,71 @@
 <circle cx='37' cy='9' r='7' class='stage' />
 <text x='37' y='13' class='textm'>3</text>
 <g data-group='g11' class='selectable'><title>Output</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g13' class='selectable'><title>Input</title>
-<rect x='598' y='50' width='682' height='14' class='background'/>
+<rect x='604' y='50' width='676' height='14' class='background'/>
 </g>
 <g data-group='g17' class='selectable'><title>Input</title>
-<rect x='598' y='66' width='682' height='14' class='background'/>
+<rect x='604' y='66' width='676' height='14' class='background'/>
 </g>
-<rect x='601' y='0' width='1' height='100%' class='hot'/>
-<rect x='619' y='0' width='1' height='100%' class='hot'/>
-<rect x='624' y='0' width='44' height='100%' class='hot'/>
-<rect x='672' y='0' width='66' height='100%' class='hot'/>
-<rect x='760' y='0' width='200' height='100%' class='hot'/>
+<rect x='607' y='0' width='0' height='100%' class='hot'/>
+<rect x='625' y='0' width='1' height='100%' class='hot'/>
+<rect x='630' y='0' width='44' height='100%' class='hot'/>
+<rect x='678' y='0' width='65' height='100%' class='hot'/>
+<rect x='765' y='0' width='198' height='100%' class='hot'/>
 <g data-group='g11' class='selectable'><title>Output</title>
 <g><title>Output 1%, ∑22.04GB, 87.84MB | 88.19MB | 88.48MB, Local 1%, ∑300.66MB, Rows 3%, ∑1.45G, 5.67M | 5.69M | 5.71M, Width 16B, Chunks ∑31.46M ~ 752B</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_output' transform='translate(395 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
-<text x='403' y='13' class='textm'>4</text>
-  <rect x='413' y='2' width='3' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,2 414,3 416,3 416,16 413,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
-  <line x1='416' y1='2' x2='416' y2='16' stroke-width='2' stroke='var(--output-light, #6F93C3)'/>
-  <line x1='413' y1='13' x2='593' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
-<rect x='413' y='5' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>22.04GB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_output' transform='translate(401 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
+<text x='409' y='13' class='textm'>4</text>
+  <rect x='419' y='2' width='3' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='419,2 420,3 422,3 422,16 419,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <line x1='422' y1='2' x2='422' y2='16' stroke-width='2' stroke='var(--output-light, #6F93C3)'/>
+  <line x1='419' y1='13' x2='599' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
+<rect x='419' y='5' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>22.04GB</text>
 </g>
-<g><title>Output 576.38MB/s, Rows 37.21M/s, Duration: 0:39 (0:01.70 | 0:02.01 | 0:02.61 - 0:40 | 0:40 | 0:40)</title><rect x='613' y='2' width='349' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
+<g><title>Output 576.38MB/s, Rows 37.21M/s, Duration: 0:39 (0:01.70 | 0:02.01 | 0:02.61 - 0:40 | 0:40 | 0:40)</title><rect x='618' y='2' width='347' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
-<polygon points='613,15 613,15 624,14 634,15 645,15 656,15 667,12 678,14 689,14 700,15 711,14 722,15 732,15 743,15 754,15 765,14 776,15 787,15 798,14 809,15 820,15 830,15 841,13 852,15 863,15 874,15 885,15 896,15 907,15 918,15 928,15 939,15 950,15 961,2 961,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
-  <line x1='613' y1='4' x2='621' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='615' y1='2' x2='615' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='961' y1='14' x2='961' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='961' y1='9' x2='961' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M613,15c3,0,7,0,11,0c3,0,6,-6,10,-6c3,0,7,4,11,4c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-13,11,-13c3,0,7,11,11,11c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,-2,11,-2c3,0,7,3,11,3c3,0,7,0,11,0c3,0,7,-8,11,-8c3,0,7,6,11,6c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
+<polygon points='618,15 618,15 629,14 640,15 651,15 662,15 672,12 683,14 694,14 705,15 716,14 726,15 737,15 748,15 759,15 770,14 780,15 791,15 802,14 813,15 824,15 834,15 845,13 856,15 867,15 878,15 888,15 899,15 910,15 921,15 932,15 942,15 953,15 964,2 964,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
+  <line x1='618' y1='4' x2='627' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='621' y1='2' x2='621' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='964' y1='14' x2='964' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='964' y1='9' x2='964' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M618,15c3,0,7,0,11,0c3,0,7,-6,11,-6c3,0,7,4,11,4c3,0,7,2,11,2c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,-13,11,-13c3,0,7,11,11,11c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,6,-2,10,-2c3,0,7,3,11,3c3,0,7,0,11,0c3,0,7,-8,11,-8c3,0,7,6,11,6c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,1,10,1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
 </g>
 <g><title>Memory 13%, ∑9.92GB, 39.00MB | 39.71MB | 40.00MB</title>
-<use href='#icon_memory' transform='translate(395 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
-  <rect x='413' y='18' width='37' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='413,18 439,19 450,19 450,32 413,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
-<rect x='413' y='21' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='29'>9.92GB</text>
+<use href='#icon_memory' transform='translate(401 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
+  <rect x='419' y='18' width='37' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='419,18 445,19 456,19 456,32 419,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
+<rect x='419' y='21' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='29'>9.92GB</text>
 </g>
 <g><title>Max MEM 9.92GB</title>
-<path d='M601,31c1,0,2,0,3,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c1,0,2,-3,3,-3c0,0,0,-2,1,-2c1,0,2,-6,3,-6c0,0,0,-1,1,-1c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,1,0,2,0c1,0,2,-1,3,-1c107,0,215,0,323,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M607,31c1,0,2,0,3,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c1,0,2,-3,3,-3c0,0,0,-2,1,-2c0,0,1,-6,2,-6c0,0,0,-1,1,-1c0,0,1,0,2,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,1,0,2,0c0,0,1,0,2,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,1,-1,2,-1c107,0,214,0,321,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 35%, ∑1h 34m, 20.30s | 22.12s | 23.59s</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='148' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 495,35 561,36 561,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>1h 34m</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='148' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 501,35 567,36 567,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1h 34m</text>
 </g>
 <g><title>Wait Input Time 27%, ∑35m 59s, 7.67s | 8.43s | 9.13s</title>
-  <rect x='368' y='73%' width='24' height='27%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='368' y='73%' width='30' height='27%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<path d='M601,47c3,0,7,-5,11,-5c3,0,7,1,11,1c3,0,7,0,11,0c4,0,8,3,12,3c3,0,7,-3,11,-3c3,0,7,2,11,2c4,0,8,-1,12,-1c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,-13,12,-13c3,0,7,13,11,13c3,0,7,-6,11,-6c3,0,7,4,11,4c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-1,11,-1c4,0,8,2,12,2c3,0,7,-8,11,-8c3,0,7,3,11,3c4,0,8,-3,12,-3c3,0,7,2,11,2c3,0,7,3,11,3c3,0,7,2,11,2c4,0,8,0,12,0c3,0,7,1,11,1c3,0,7,1,11,1c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
+<path d='M607,47c3,0,7,-5,11,-5c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,3,11,3c3,0,7,-3,11,-3c4,0,8,2,12,2c3,0,7,-1,11,-1c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,2,12,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-13,11,-13c3,0,7,13,11,13c3,0,7,-6,11,-6c4,0,8,4,12,4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-1,11,-1c3,0,7,2,11,2c4,0,8,-8,12,-8c3,0,7,3,11,3c3,0,7,-3,11,-3c3,0,7,2,11,2c3,0,7,3,11,3c3,0,7,2,11,2c4,0,8,0,12,0c3,0,7,1,11,1c3,0,7,1,11,1c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait Output Time 1%, ∑1m 30s, 0.31s | 0.35s | 0.56s</title>
-  <rect x='368' y='0%' width='24' height='1%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='368' y='0%' width='30' height='1%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
-<path d='M601,47c3,0,7,-13,11,-13c3,0,7,13,11,13c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
+<path d='M607,47c3,0,7,-13,11,-13c3,0,7,13,11,13c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
 <g><title>Input Throughput 4.40G/s</title>
-  <rect x='368' y='1%' width='24' height='72%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.1067265668'/>
+  <rect x='368' y='1%' width='30' height='72%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.1067265668'/>
 </g>
 <g><title>Max CPU 606.71</title>
-<path d='M601,47c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-3,11,-3c4,0,8,0,12,0c3,0,7,3,11,3c3,0,7,-5,11,-5c4,0,8,2,12,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,2,12,2c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,-13,11,-13c4,0,8,10,12,10c3,0,7,1,11,1c3,0,7,-2,11,-2c3,0,7,1,11,1c4,0,8,0,12,0c3,0,7,1,11,1c3,0,7,-2,11,-2c3,0,7,1,11,1c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,2,11,2c4,0,8,0,12,0c3,0,7,-5,11,-5c3,0,7,5,11,5c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M607,47c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-3,11,-3c3,0,7,0,11,0c3,0,7,3,11,3c4,0,8,-5,12,-5c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,-13,11,-13c3,0,7,10,11,10c3,0,7,1,11,1c3,0,7,-2,11,-2c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,1,11,1c4,0,8,0,12,0c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,-5,11,-5c3,0,7,5,11,5c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 3, tasks: 256, finished: 256</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>256</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>256</text>
 </g>
 <g class='plus button'><rect x='13' y='20' width='14' height='14' class='transparent'/>
 <use href='#icon_minus' class='icon_minus' transform='translate(13 20) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/>
@@ -941,40 +941,40 @@
 <use href='#icon_arrowup' transform='translate(13 66) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g data-group='g13' class='selectable'><title>Input</title>
 <g><title>Input 11%, ∑163.80GB, 654.12MB | 655.24MB | 656.18MB, Local 1%, ∑2.17GB, Rows 17%, ∑7.28G, 28.42M | 28.46M | 28.51M, Width 24B, Chunks ∑59.92M ~ 2.86KB</title>
-<rect x='395' y='50' width='200' height='14' class='background'/>
-<use href='#icon_input' transform='translate(395 50) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
-<text x='403' y='61' class='textm'>1</text>
-  <rect x='413' y='50' width='24' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='413,50 425,51 437,51 437,64 413,64' stroke='none' fill='var(--input-medium, #5A8183)'/>
-  <line x1='437' y1='50' x2='437' y2='64' stroke-width='2' stroke='var(--input-light, #7CA3A5)'/>
-  <line x1='413' y1='61' x2='593' y2='61' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
-<rect x='413' y='53' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>163.80GB</text>
+<rect x='401' y='50' width='200' height='14' class='background'/>
+<use href='#icon_input' transform='translate(401 50) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
+<text x='409' y='61' class='textm'>1</text>
+  <rect x='419' y='50' width='24' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='419,50 431,51 443,51 443,64 419,64' stroke='none' fill='var(--input-medium, #5A8183)'/>
+  <line x1='443' y1='50' x2='443' y2='64' stroke-width='2' stroke='var(--input-light, #7CA3A5)'/>
+  <line x1='419' y1='61' x2='599' y2='61' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
+<rect x='419' y='53' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='61'>163.80GB</text>
 </g>
-<g><title>Input 4.18GB/s, Rows 186.16M/s, Duration: 0:39 (0:01.68 | 0:02.00 | 0:02.60 - 0:27 | 0:33 | 0:40)</title><rect x='612' y='50' width='350' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
+<g><title>Input 4.18GB/s, Rows 186.16M/s, Duration: 0:39 (0:01.68 | 0:02.00 | 0:02.60 - 0:27 | 0:33 | 0:40)</title><rect x='618' y='50' width='347' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
 </g>
-  <line x1='612' y1='52' x2='621' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='615' y1='50' x2='615' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='840' y1='62' x2='961' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='894' y1='57' x2='894' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M612,63c3,0,7,-4,11,-4c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,2,11,2c3,0,7,-13,11,-13c3,0,7,9,11,9c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,1,10,1c3,0,7,3,11,3c3,0,7,-11,11,-11c3,0,7,7,11,7c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,2,11,2c3,0,7,-11,11,-11c3,0,6,7,10,7c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,-1,11,-1c3,0,7,1,11,1c3,0,7,1,11,1c3,0,6,1,10,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
+  <line x1='618' y1='52' x2='626' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='621' y1='50' x2='621' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='844' y1='62' x2='964' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='898' y1='57' x2='898' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M618,63c3,0,7,-4,11,-4c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,2,11,2c3,0,6,-13,10,-13c3,0,7,9,11,9c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,1,10,1c3,0,7,3,11,3c3,0,7,-11,11,-11c3,0,7,7,11,7c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,2,11,2c3,0,7,2,11,2c3,0,7,-11,11,-11c3,0,7,7,11,7c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,6,-1,10,-1c3,0,7,1,11,1c3,0,7,1,11,1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
 </g>
 <g data-group='g17' class='selectable'><title>Input</title>
 <g><title>Input 0%, ∑2.23GB, 8.91MB | 8.94MB | 8.96MB, Local 100%, ∑2.23GB, Rows 0%, ∑300.00M, 1.16M | 1.17M | 1.17M, Width 8B, Chunks ∑37.87K ~ 61.89KB</title>
-<rect x='395' y='66' width='200' height='14' class='background'/>
-<use href='#icon_input' transform='translate(395 66) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
-<text x='403' y='77' class='textm'>2</text>
-  <rect x='413' y='66' width='1' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='413,66 413,67 414,67 414,80 413,80' stroke='none' fill='var(--input-medium, #5A8183)'/>
-  <line x1='413' y1='77' x2='584' y2='77' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
-<rect x='413' y='69' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='77'>2.23GB</text>
+<rect x='401' y='66' width='200' height='14' class='background'/>
+<use href='#icon_input' transform='translate(401 66) scale(0.0325 0.0325)' fill='var(--input-light, #7CA3A5)'/>
+<text x='409' y='77' class='textm'>2</text>
+  <rect x='419' y='66' width='1' height='14' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>  <polygon points='419,66 419,67 420,67 420,80 419,80' stroke='none' fill='var(--input-medium, #5A8183)'/>
+  <line x1='419' y1='77' x2='590' y2='77' stroke-width='3' stroke='var(--input-light, #7CA3A5)' stroke-dasharray='1,1'/>
+<rect x='419' y='69' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='77'>2.23GB</text>
 </g>
-<g><title>Input 1.00GB/s, Rows 135.07M/s, Duration: 0:02.22 (0:00.35 | 0:00.81 | 0:01.84 - 0:01.66 | 0:01.97 | 0:02.57)</title><rect x='601' y='66' width='20' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
+<g><title>Input 1.00GB/s, Rows 135.07M/s, Duration: 0:02.22 (0:00.35 | 0:00.81 | 0:01.84 - 0:01.66 | 0:01.97 | 0:02.57)</title><rect x='607' y='66' width='20' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
 </g>
-  <line x1='601' y1='68' x2='614' y2='68' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='605' y1='66' x2='605' y2='73' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='612' y1='78' x2='620' y2='78' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='615' y1='73' x2='615' y2='80' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M601,79c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-2,1,-2c0,0,0,-1,0,-1c0,0,0,-2,1,-2c0,0,0,0,1,0c0,0,0,-3,0,-3c0,0,0,3,1,3c0,0,0,-8,0,-8c0,0,0,5,1,5c0,0,0,3,1,3c0,0,0,3,0,3c0,0,0,1,1,1c0,0,0,1,1,1c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
+  <line x1='607' y1='68' x2='620' y2='68' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='611' y1='66' x2='611' y2='73' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='618' y1='78' x2='626' y2='78' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='621' y1='73' x2='621' y2='80' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M607,79c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-2,1,-2c0,0,0,-1,0,-1c0,0,0,-2,1,-2c0,0,0,-3,1,-3c0,0,0,3,1,3c0,0,0,-8,0,-8c0,0,0,5,1,5c0,0,0,3,1,3c0,0,0,3,0,3c0,0,0,1,1,1c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
 </g>
 </g>
 </svg>
@@ -983,9 +983,9 @@
 <g data-group='g14' class='selectable'><title>Stage 1</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter-TableFullScan:  Blocks: True</title><rect x='22' y='5' width='32' height='61' class='blocks'/>
 <text x='58' y='13' class='texts clipped'>Filter-TableFullScan: </text>
 <g><title>Output Rows 8%, ∑7.28G, 42.15M | 47.94M | 57.78M</title>
@@ -997,66 +997,66 @@
 <circle cx='48' cy='9' r='7' class='stage' />
 <text x='48' y='13' class='textm'>1</text>
 <g data-group='g13' class='selectable'><title>Output</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g15' class='selectable'><title>Ingress</title>
-<rect x='598' y='50' width='682' height='14' class='background'/>
+<rect x='604' y='50' width='676' height='14' class='background'/>
 </g>
-<rect x='621' y='0' width='2' height='100%' class='hot'/>
-<rect x='669' y='0' width='3' height='100%' class='hot'/>
-<rect x='739' y='0' width='21' height='100%' class='hot'/>
+<rect x='627' y='0' width='2' height='100%' class='hot'/>
+<rect x='675' y='0' width='3' height='100%' class='hot'/>
+<rect x='744' y='0' width='21' height='100%' class='hot'/>
 <g data-group='g13' class='selectable'><title>Output</title>
 <g><title>Output 11%, ∑163.81GB, 970.32MB | 1.07GB | 1.29GB, Local 1%, ∑2.17GB, Rows 17%, ∑7.28G, 42.15M | 47.94M | 57.78M, Width 24B, Chunks ∑61.03M ~ 2.81KB</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_output' transform='translate(395 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
-<text x='403' y='13' class='textm'>3</text>
-  <rect x='413' y='2' width='24' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,2 421,5 437,6 437,16 413,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
-  <line x1='437' y1='2' x2='437' y2='16' stroke-width='2' stroke='var(--output-light, #6F93C3)'/>
-  <line x1='413' y1='13' x2='593' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
-<rect x='413' y='5' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>163.81GB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_output' transform='translate(401 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
+<text x='409' y='13' class='textm'>3</text>
+  <rect x='419' y='2' width='24' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='419,2 427,5 443,6 443,16 419,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <line x1='443' y1='2' x2='443' y2='16' stroke-width='2' stroke='var(--output-light, #6F93C3)'/>
+  <line x1='419' y1='13' x2='599' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
+<rect x='419' y='5' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>163.81GB</text>
 </g>
-<g><title>Output 4.06GB/s, Rows 181.02M/s, Duration: 0:40 (0:00.57 | 0:01.52 | 0:02.11 - 0:27 | 0:33 | 0:40)</title><rect x='603' y='2' width='359' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
+<g><title>Output 4.06GB/s, Rows 181.02M/s, Duration: 0:40 (0:00.57 | 0:01.52 | 0:02.11 - 0:27 | 0:33 | 0:40)</title><rect x='609' y='2' width='356' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
-<polygon points='603,15 603,15 614,15 625,11 636,15 647,7 659,11 670,15 681,7 692,14 703,7 715,11 726,11 737,11 748,14 759,8 770,13 782,15 793,2 804,11 815,13 826,8 838,11 849,11 860,13 871,11 882,13 894,14 905,14 916,15 927,14 938,15 950,15 961,15 961,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
-  <line x1='603' y1='4' x2='616' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='611' y1='2' x2='611' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='840' y1='14' x2='961' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='892' y1='9' x2='892' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M603,15c3,0,7,0,11,0c3,0,7,-2,11,-2c3,0,7,-1,11,-1c3,0,7,2,11,2c4,0,8,-3,12,-3c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,2,11,2c3,0,7,-6,11,-6c3,0,7,6,11,6c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,-13,12,-13c3,0,7,12,11,12c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,0,11,0c4,0,8,1,12,1c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,1,11,1c3,0,7,0,11,0c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
+<polygon points='609,15 609,15 620,15 631,11 642,15 653,7 664,11 675,15 686,7 697,14 708,7 720,11 731,11 742,11 753,14 764,8 775,13 786,15 797,2 808,11 819,13 830,8 842,11 853,11 864,13 875,11 886,13 897,14 908,14 919,15 930,14 941,15 952,15 964,15 964,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
+  <line x1='609' y1='4' x2='622' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='617' y1='2' x2='617' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='844' y1='14' x2='964' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='896' y1='9' x2='896' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M609,15c3,0,7,0,11,0c3,0,7,-2,11,-2c3,0,7,-1,11,-1c3,0,7,2,11,2c3,0,7,-3,11,-3c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,2,11,2c3,0,7,-6,11,-6c3,0,7,6,11,6c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-13,11,-13c3,0,7,12,11,12c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,0,11,0c4,0,8,1,12,1c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
 </g>
 <g><title>Memory 0%, ∑304.00MB, 2.00MB | 2.00MB | 2.00MB</title>
-<use href='#icon_memory' transform='translate(395 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
-  <rect x='413' y='18' width='1' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='413,18 413,18 414,18 414,32 413,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
-<rect x='413' y='21' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='29'>304.00MB</text>
+<use href='#icon_memory' transform='translate(401 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
+  <rect x='419' y='18' width='1' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='419,18 419,18 420,18 420,32 419,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
+<rect x='419' y='21' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='29'>304.00MB</text>
 </g>
 <g><title>Max MEM 304.00MB</title>
-<path d='M603,31c0,0,0,-6,0,-6c0,0,1,0,2,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,0,1,0c0,0,0,-2,1,-2c0,0,0,-2,1,-2c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,0,-1c115,0,230,0,345,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M608,31c0,0,0,-6,0,-6c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,0,1,0c0,0,0,-2,1,-2c0,0,0,-2,1,-2c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,0,1,0c0,0,0,-1,1,-1c114,0,228,0,342,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 18%, ∑48m 01s, 15.28s | 18.95s | 23.60s</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='75' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 446,37 488,39 488,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>48m 01s</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='75' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 452,37 494,39 494,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>48m 01s</text>
 </g>
 <g><title>Wait Input Time 37%, ∑29m 31s, 9.34s | 11.65s | 14.89s</title>
-  <rect x='368' y='63%' width='24' height='37%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='368' y='63%' width='30' height='37%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<path d='M603,47c3,0,7,0,11,0c3,0,7,-7,11,-7c3,0,7,7,11,7c3,0,7,-12,11,-12c4,0,8,12,12,12c3,0,7,-13,11,-13c3,0,7,13,11,13c3,0,7,-12,11,-12c3,0,7,6,11,6c3,0,7,5,11,5c4,0,8,-10,12,-10c3,0,7,5,11,5c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,-2,11,-2c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,2,11,2c4,0,8,2,12,2c3,0,7,0,11,0c3,0,7,-5,11,-5c3,0,7,4,11,4c3,0,7,1,11,1c4,0,8,0,12,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
+<path d='M608,47c4,0,8,0,12,0c3,0,7,-7,11,-7c3,0,7,7,11,7c3,0,7,-12,11,-12c3,0,7,12,11,12c3,0,7,-13,11,-13c3,0,7,13,11,13c3,0,7,-12,11,-12c3,0,7,6,11,6c3,0,7,5,11,5c4,0,8,-10,12,-10c3,0,7,5,11,5c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,2,11,2c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,-5,11,-5c3,0,7,4,11,4c3,0,7,1,11,1c3,0,7,0,11,0c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait Output Time 0%, ∑41.97s, 59ms | 0.27s | 0.35s</title>
-  <rect x='368' y='0%' width='24' height='0%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='368' y='0%' width='30' height='0%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
-<path d='M603,47c3,0,7,-13,11,-13c3,0,7,13,11,13c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
+<path d='M608,47c4,0,8,-13,12,-13c3,0,7,13,11,13c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
 <g><title>Input Throughput 5.88G/s</title>
-  <rect x='368' y='0%' width='24' height='63%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.1426574714'/>
+  <rect x='368' y='0%' width='30' height='63%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.1426574714'/>
 </g>
 <g><title>Max CPU 270.89</title>
-<path d='M603,47c3,0,7,-1,11,-1c3,0,7,1,11,1c3,0,7,-5,11,-5c3,0,7,5,11,5c4,0,8,-7,12,-7c3,0,7,4,11,4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,3,11,3c4,0,8,0,12,0c3,0,7,-13,11,-13c3,0,7,11,11,11c3,0,7,-3,11,-3c3,0,7,2,11,2c4,0,8,0,12,0c3,0,7,2,11,2c3,0,7,-5,11,-5c3,0,7,3,11,3c3,0,7,1,11,1c4,0,8,-3,12,-3c3,0,7,2,11,2c3,0,7,2,11,2c3,0,7,-2,11,-2c3,0,7,2,11,2c4,0,8,1,12,1c3,0,7,-2,11,-2c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M608,47c4,0,8,-1,12,-1c3,0,7,1,11,1c3,0,7,-5,11,-5c3,0,7,5,11,5c3,0,7,-7,11,-7c3,0,7,4,11,4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,3,11,3c4,0,8,0,12,0c3,0,7,-13,11,-13c3,0,7,11,11,11c3,0,7,-3,11,-3c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,-5,11,-5c3,0,7,3,11,3c3,0,7,1,11,1c4,0,8,-3,12,-3c3,0,7,2,11,2c3,0,7,2,11,2c3,0,7,-2,11,-2c3,0,7,2,11,2c3,0,7,1,11,1c3,0,7,-2,11,-2c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 1, tasks: 152, finished: 152</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>152</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>152</text>
 </g>
 <g class='plus button'><rect x='24' y='20' width='14' height='14' class='transparent'/>
 <use href='#icon_minus' class='icon_minus' transform='translate(24 20) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/>
@@ -1065,19 +1065,19 @@
 <use href='#icon_arrowup' transform='translate(24 50) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g data-group='g15' class='selectable'><title>Ingress</title>
 <g><title>Ingress 13%, ∑220.59GB, 1.27GB | 1.45GB | 1.74GB, Rows 18%, ∑7.28G, 42.15M | 47.94M | 57.78M, Width 32B</title>
-<rect x='395' y='50' width='200' height='14' class='background'/>
-<use href='#icon_ingress' transform='translate(395 50) scale(0.9 0.9)' fill='var(--ingress-medium, #466364)'/>
-  <rect x='413' y='50' width='27' height='14' stroke-width='0' fill='var(--ingress-light, #5A8183)'/>  <polygon points='413,50 423,53 440,54 440,64 413,64' stroke='none' fill='var(--ingress-medium, #466364)'/>
-<rect x='413' y='53' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>220.59GB</text>
+<rect x='401' y='50' width='200' height='14' class='background'/>
+<use href='#icon_ingress' transform='translate(401 50) scale(0.9 0.9)' fill='var(--ingress-medium, #466364)'/>
+  <rect x='419' y='50' width='27' height='14' stroke-width='0' fill='var(--ingress-light, #5A8183)'/>  <polygon points='419,50 429,53 446,54 446,64 419,64' stroke='none' fill='var(--ingress-medium, #466364)'/>
+<rect x='419' y='53' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='61'>220.59GB</text>
 </g>
-<g><title>Ingress 5.47GB/s, Rows 181.00M/s, Duration: 0:40 (0:00.56 | 0:01.51 | 0:02.11 - 0:27 | 0:33 | 0:40)</title><rect x='603' y='50' width='359' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
+<g><title>Ingress 5.47GB/s, Rows 181.00M/s, Duration: 0:40 (0:00.56 | 0:01.51 | 0:02.11 - 0:27 | 0:33 | 0:40)</title><rect x='608' y='50' width='357' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
 </g>
-  <line x1='603' y1='52' x2='616' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='611' y1='50' x2='611' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='840' y1='62' x2='961' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='892' y1='57' x2='892' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M603,63c3,0,7,0,11,0c3,0,7,-4,11,-4c3,0,7,-1,11,-1c3,0,7,1,11,1c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c4,0,8,-3,12,-3c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,3,11,3c3,0,7,1,11,1c4,0,8,-13,12,-13c3,0,7,9,11,9c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,3,11,3c4,0,8,-3,12,-3c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,-1,11,-1c4,0,8,1,12,1c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--ingress-dark, #384F50)' fill='none' />
+  <line x1='608' y1='52' x2='622' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='617' y1='50' x2='617' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='843' y1='62' x2='964' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='896' y1='57' x2='896' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M608,63c4,0,8,0,12,0c3,0,7,-4,11,-4c3,0,7,-1,11,-1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,-3,11,-3c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,3,11,3c3,0,7,1,11,1c3,0,7,-13,11,-13c4,0,8,9,12,9c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,3,11,3c3,0,7,-3,11,-3c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,-1,11,-1c3,0,7,1,11,1c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--ingress-dark, #384F50)' fill='none' />
 </g>
 </g>
 </svg>
@@ -1086,9 +1086,9 @@
 <g data-group='g16' class='selectable'><title>Stage E</title>
 <rect x='22' y='0' width='276' height='100%' class='clone'/>
 <rect x='301' y='0' width='64' height='100%' class='clone'/>
-<rect x='395' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='24' height='100%' class='clone'/>
-<rect x='598' y='0' width='682' height='100%' class='clone'/>
+<rect x='401' y='0' width='200' height='100%' class='clone'/>
+<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>Filter: o_orderdate &lt; 9204 Blocks: True</title><rect x='22' y='5' width='32' height='20' class='blocks'/>
 <text x='58' y='13' class='texts clipped'>Filter: o_orderdate &lt; 9204</text>
 <g><title>Output Rows 8%, ∑7.28G, 28.45M | 28.46M | 28.48M, Est: 0 Rows: 6.00G Size: 160.50GB</title>
@@ -1103,36 +1103,36 @@
 <circle cx='48' cy='9' r='7' class='stage' />
 <text x='48' y='13' class='textm'>E</text>
 <g data-group='g15' class='selectable'><title>Egress</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g15' class='selectable'><title>Egress</title>
 <g><title>Egress 13%, ∑220.59GB, 881.91MB | 882.37MB | 882.81MB, Rows 18%, ∑7.28G, 28.45M | 28.46M | 28.48M, Width 32B</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
-  <rect x='413' y='2' width='27' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 426,3 440,3 440,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
-<rect x='413' y='5' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>220.59GB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_egress' transform='translate(401 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
+  <rect x='419' y='2' width='27' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='419,2 432,3 446,3 446,16 419,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
+<rect x='419' y='5' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>220.59GB</text>
 </g>
-<g><title>Egress 5.47GB/s, Rows 181.00M/s, Duration: 0:40 (0:00.56 | 0:04.11 | 0:30 - 0:17 | 0:30 | 0:40)</title><rect x='603' y='2' width='359' height='14' stroke-width='0' fill='var(--egress-medium, #3C6090)'/>
+<g><title>Egress 5.47GB/s, Rows 181.00M/s, Duration: 0:40 (0:00.56 | 0:04.11 | 0:30 - 0:17 | 0:30 | 0:40)</title><rect x='608' y='2' width='357' height='14' stroke-width='0' fill='var(--egress-medium, #3C6090)'/>
 </g>
-  <line x1='603' y1='4' x2='865' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='634' y1='2' x2='634' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='755' y1='14' x2='961' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='873' y1='9' x2='873' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M603,15c3,0,7,0,11,0c3,0,7,-2,11,-2c3,0,7,-1,11,-1c3,0,7,0,11,0c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,2,12,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-13,11,-13c3,0,7,12,11,12c4,0,8,1,12,1c3,0,7,-7,11,-7c3,0,7,5,11,5c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--egress-dark, #2D486C)' fill='none' />
+  <line x1='608' y1='4' x2='869' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='640' y1='2' x2='640' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='760' y1='14' x2='964' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='877' y1='9' x2='877' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M608,15c4,0,8,0,12,0c3,0,7,-2,11,-2c3,0,7,-1,11,-1c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,2,12,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-13,11,-13c3,0,7,12,11,12c3,0,7,1,11,1c3,0,7,-7,11,-7c3,0,7,5,11,5c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--egress-dark, #2D486C)' fill='none' />
 </g>
 <g><title>CPU Usage 24%, ∑39m 52s, 8.35s | 9.34s | 10.33s</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='59' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 442,36 472,37 472,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>39m 52s</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='59' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 448,36 478,37 478,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>39m 52s</text>
 </g>
 <g><title>Max CPU 191.81</title>
-<path d='M603,47c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,-6,11,-6c3,0,7,3,11,3c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,4,11,4c3,0,7,-13,11,-13c4,0,8,8,12,8c3,0,7,1,11,1c3,0,7,3,11,3c3,0,7,-5,11,-5c3,0,7,3,11,3c4,0,8,-2,12,-2c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,-4,11,-4c3,0,7,6,11,6c4,0,8,-7,12,-7c3,0,7,4,11,4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c4,0,8,1,12,1c3,0,7,-1,11,-1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M609,47c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,-6,11,-6c3,0,7,3,11,3c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,4,11,4c3,0,7,-13,11,-13c4,0,8,8,12,8c3,0,7,1,11,1c3,0,7,3,11,3c3,0,7,-5,11,-5c3,0,7,3,11,3c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,-4,11,-4c3,0,7,6,11,6c4,0,8,-7,12,-7c3,0,7,4,11,4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,1,11,1c3,0,7,-1,11,-1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>External Source, partitions: 256, finished: 256</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>256</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>256</text>
 </g>
 <g class='arup button'><rect x='24' y='34' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowup' transform='translate(24 34) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
@@ -1153,9 +1153,9 @@
 <g data-group='g18' class='selectable'><title>Stage 2</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter-TableFullScan:  Blocks: True</title><rect x='22' y='5' width='32' height='61' class='blocks'/>
 <text x='58' y='13' class='texts clipped'>Filter-TableFullScan: </text>
 <g><title>Output Rows 0%, ∑300.00M, 1.16M | 1.17M | 1.17M</title>
@@ -1167,64 +1167,64 @@
 <circle cx='48' cy='9' r='7' class='stage' />
 <text x='48' y='13' class='textm'>2</text>
 <g data-group='g17' class='selectable'><title>Output</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g19' class='selectable'><title>Ingress</title>
-<rect x='598' y='50' width='682' height='14' class='background'/>
+<rect x='604' y='50' width='676' height='14' class='background'/>
 </g>
-<rect x='599' y='0' width='1' height='100%' class='hot'/>
-<rect x='602' y='0' width='17' height='100%' class='hot'/>
+<rect x='605' y='0' width='1' height='100%' class='hot'/>
+<rect x='608' y='0' width='17' height='100%' class='hot'/>
 <g data-group='g17' class='selectable'><title>Output</title>
 <g><title>Output 0%, ∑2.23GB, 8.91MB | 8.94MB | 8.96MB, Local 100%, ∑2.23GB, Rows 0%, ∑300.00M, 1.16M | 1.17M | 1.17M, Width 8B, Chunks ∑37.87K ~ 61.89KB</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_output' transform='translate(395 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
-<text x='403' y='13' class='textm'>3</text>
-  <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,2 413,3 414,3 414,16 413,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
-  <line x1='413' y1='13' x2='584' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
-<rect x='413' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>2.23GB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_output' transform='translate(401 2) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
+<text x='409' y='13' class='textm'>3</text>
+  <rect x='419' y='2' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='419,2 419,3 420,3 420,16 419,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <line x1='419' y1='13' x2='590' y2='13' stroke-width='3' stroke='var(--output-light, #6F93C3)' stroke-dasharray='1,1'/>
+<rect x='419' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>2.23GB</text>
 </g>
-<g><title>Output 963.86MB/s, Rows 126.31M/s, Duration: 0:02.37 (0:00.19 | 0:00.80 | 0:01.84 - 0:01.62 | 0:01.96 | 0:02.57)</title><rect x='599' y='2' width='22' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
+<g><title>Output 963.86MB/s, Rows 126.31M/s, Duration: 0:02.37 (0:00.19 | 0:00.80 | 0:01.84 - 0:01.62 | 0:01.96 | 0:02.57)</title><rect x='605' y='2' width='22' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
-<polygon points='599,15 599,15 600,15 601,15 601,15 602,15 603,15 603,15 604,15 605,7 605,12 606,12 607,12 607,12 608,13 609,12 609,10 610,11 610,10 611,9 612,13 612,4 613,10 614,15 614,15 615,2 616,14 616,15 617,15 618,15 618,15 619,15 620,15 620,15 620,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
-  <line x1='599' y1='4' x2='614' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='605' y1='2' x2='605' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='612' y1='14' x2='620' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='615' y1='9' x2='615' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M599,15c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-3,1,-3c0,0,0,1,0,1c0,0,0,-4,1,-4c0,0,0,-2,1,-2c0,0,0,-3,0,-3c0,0,0,7,1,7c0,0,0,-9,1,-9c0,0,0,13,0,13c0,0,0,-4,1,-4c0,0,0,3,1,3c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
+<polygon points='605,15 605,15 606,15 607,15 607,15 608,15 609,15 609,15 610,15 610,7 611,12 612,12 612,12 613,12 614,13 614,12 615,10 616,11 616,10 617,9 618,13 618,4 619,10 620,15 620,15 621,2 622,14 622,15 623,15 624,15 624,15 625,15 626,15 626,15 626,15 ' stroke='none' fill='var(--output-light, #6F93C3)' />
+  <line x1='605' y1='4' x2='620' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='611' y1='2' x2='611' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='618' y1='14' x2='626' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='621' y1='9' x2='621' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M605,15c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-3,1,-3c0,0,0,1,0,1c0,0,0,-4,1,-4c0,0,0,-2,1,-2c0,0,0,-3,0,-3c0,0,0,7,1,7c0,0,0,-9,1,-9c0,0,0,13,0,13c0,0,0,-4,1,-4c0,0,0,3,1,3c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-dark, #41689C)' fill='none' />
 </g>
 <g><title>Memory 0%, ∑256.00MB, 1.00MB | 1.00MB | 1.00MB</title>
-<use href='#icon_memory' transform='translate(395 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
-  <rect x='413' y='18' width='1' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='413,18 413,18 414,18 414,32 413,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
-<rect x='413' y='21' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='29'>256.00MB</text>
+<use href='#icon_memory' transform='translate(401 18) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
+  <rect x='419' y='18' width='1' height='14' stroke-width='0' fill='var(--mem-light, #AA7785)'/>  <polygon points='419,18 419,18 420,18 420,32 419,32' stroke='none' fill='var(--mem-medium, #7E4E5B)'/>
+<rect x='419' y='21' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='29'>256.00MB</text>
 </g>
 <g><title>Max MEM 256.00MB</title>
-<path d='M599,31c0,0,1,0,2,0c0,0,0,-7,0,-7c0,0,0,-1,0,-1c0,0,0,-1,0,-1c0,0,0,-1,0,-1c0,0,0,-1,0,-1c0,0,0,-1,0,-1c0,0,0,-1,0,-1c6,0,12,0,19,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M605,31c0,0,1,0,2,0c0,0,0,-7,0,-7c0,0,0,-1,0,-1c0,0,0,-1,0,-1c0,0,0,-1,0,-1c0,0,0,-1,0,-1c0,0,0,-1,0,-1c0,0,0,-1,0,-1c6,0,12,0,19,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 0%, ∑1.07s, 3ms | 4ms | 5ms</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='1' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 413,38 414,41 414,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='28' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>1.07s</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='1' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 419,38 420,41 420,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='28' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1.07s</text>
 </g>
 <g><title>Wait Input Time 95%, ∑4m 27s, 0.18s | 1.04s | 1.62s</title>
-  <rect x='368' y='5%' width='24' height='95%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='368' y='5%' width='30' height='95%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<path d='M599,47c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,0,1,0c0,0,0,1,1,1c0,0,0,-6,1,-6c0,0,0,2,1,2c0,0,0,-1,0,-1c0,0,0,-3,1,-3c0,0,0,2,0,2c0,0,0,0,1,0c0,0,0,-6,1,-6c0,0,0,-1,0,-1c0,0,0,4,1,4c0,0,0,0,1,0c0,0,0,6,0,6c0,0,0,-5,1,-5c0,0,0,6,1,6c0,0,0,2,0,2c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
+<path d='M605,47c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,0,-1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,-6,1,-6c0,0,0,2,0,2c0,0,0,-1,1,-1c0,0,0,-3,1,-3c0,0,0,2,0,2c0,0,0,0,1,0c0,0,0,-6,1,-6c0,0,0,-1,0,-1c0,0,0,4,1,4c0,0,0,0,1,0c0,0,0,6,0,6c0,0,0,-5,1,-5c0,0,0,6,1,6c0,0,0,2,0,2c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait Output Time 3%, ∑10.56s, 11us | 41ms | 0.11s</title>
-  <rect x='368' y='0%' width='24' height='3%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='368' y='0%' width='30' height='3%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
-<path d='M599,47c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-13,0,-13c0,0,0,7,1,7c0,0,0,6,1,6c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
+<path d='M605,47c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-13,0,-13c0,0,0,7,1,7c0,0,0,6,1,6c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
 <g><title>Input Throughput 2.03G/s</title>
-  <rect x='368' y='3%' width='24' height='2%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.04940013088'/>
+  <rect x='368' y='3%' width='30' height='2%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.04940013088'/>
 </g>
 <g><title>Max CPU 3.06</title>
-<path d='M599,47c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-13,1,-13c0,0,0,10,1,10c0,0,0,-7,0,-7c0,0,0,2,1,2c0,0,0,3,1,3c0,0,0,4,0,4c0,0,0,-1,1,-1c0,0,0,1,1,1c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M605,47c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-13,1,-13c0,0,0,10,1,10c0,0,0,-7,0,-7c0,0,0,2,1,2c0,0,0,3,1,3c0,0,0,4,0,4c0,0,0,-1,1,-1c0,0,0,1,1,1c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 2, tasks: 256, finished: 256</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>256</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>256</text>
 </g>
 <g class='plus button'><rect x='24' y='20' width='14' height='14' class='transparent'/>
 <use href='#icon_minus' class='icon_minus' transform='translate(24 20) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/>
@@ -1233,19 +1233,19 @@
 <use href='#icon_arrowup' transform='translate(24 50) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g data-group='g19' class='selectable'><title>Ingress</title>
 <g><title>Ingress 0%, ∑4.50GB, 17.97MB | 18.02MB | 18.06MB, Rows 0%, ∑300.00M, 1.16M | 1.17M | 1.17M, Width 16B</title>
-<rect x='395' y='50' width='200' height='14' class='background'/>
-<use href='#icon_ingress' transform='translate(395 50) scale(0.9 0.9)' fill='var(--ingress-medium, #466364)'/>
-  <rect x='413' y='50' width='1' height='14' stroke-width='0' fill='var(--ingress-light, #5A8183)'/>  <polygon points='413,50 413,51 414,51 414,64 413,64' stroke='none' fill='var(--ingress-medium, #466364)'/>
-<rect x='413' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>4.50GB</text>
+<rect x='401' y='50' width='200' height='14' class='background'/>
+<use href='#icon_ingress' transform='translate(401 50) scale(0.9 0.9)' fill='var(--ingress-medium, #466364)'/>
+  <rect x='419' y='50' width='1' height='14' stroke-width='0' fill='var(--ingress-light, #5A8183)'/>  <polygon points='419,50 419,51 420,51 420,64 419,64' stroke='none' fill='var(--ingress-medium, #466364)'/>
+<rect x='419' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='61'>4.50GB</text>
 </g>
-<g><title>Ingress 1.89GB/s, Rows 126.31M/s, Duration: 0:02.37 (0:00.19 | 0:00.80 | 0:01.84 - 0:01.62 | 0:01.96 | 0:02.57)</title><rect x='599' y='50' width='22' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
+<g><title>Ingress 1.89GB/s, Rows 126.31M/s, Duration: 0:02.37 (0:00.19 | 0:00.80 | 0:01.84 - 0:01.62 | 0:01.96 | 0:02.57)</title><rect x='605' y='50' width='22' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
 </g>
-  <line x1='599' y1='52' x2='614' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='605' y1='50' x2='605' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='612' y1='62' x2='620' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='615' y1='57' x2='615' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M599,63c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,0,-1c0,0,0,1,1,1c0,0,0,-1,1,-1c0,0,0,-2,0,-2c0,0,0,-3,1,-3c0,0,0,-2,1,-2c0,0,0,-3,0,-3c0,0,0,7,1,7c0,0,0,-9,1,-9c0,0,0,9,0,9c0,0,0,3,1,3c0,0,0,1,1,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--ingress-dark, #384F50)' fill='none' />
+  <line x1='605' y1='52' x2='620' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='611' y1='50' x2='611' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='618' y1='62' x2='626' y2='62' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='621' y1='57' x2='621' y2='64' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M605,63c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,0,-1c0,0,0,1,1,1c0,0,0,-1,1,-1c0,0,0,-2,0,-2c0,0,0,-3,1,-3c0,0,0,-2,1,-2c0,0,0,-3,0,-3c0,0,0,7,1,7c0,0,0,-9,1,-9c0,0,0,9,0,9c0,0,0,3,1,3c0,0,0,1,1,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--ingress-dark, #384F50)' fill='none' />
 </g>
 </g>
 </svg>
@@ -1254,9 +1254,9 @@
 <g data-group='g20' class='selectable'><title>Stage E</title>
 <rect x='22' y='0' width='276' height='100%' class='clone'/>
 <rect x='301' y='0' width='64' height='100%' class='clone'/>
-<rect x='395' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='24' height='100%' class='clone'/>
-<rect x='598' y='0' width='682' height='100%' class='clone'/>
+<rect x='401' y='0' width='200' height='100%' class='clone'/>
+<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>Filter: c_mktsegment == "BUILDING" Blocks: True</title><rect x='22' y='5' width='32' height='20' class='blocks'/>
 <text x='58' y='13' class='texts clipped'>Filter: c_mktsegment == "BUILDING"</text>
 <g><title>Output Rows 0%, ∑300.00M, 1.16M | 1.17M | 1.17M, Est: 0 Rows: 150.00M Size: 3.63GB</title>
@@ -1271,36 +1271,36 @@
 <circle cx='48' cy='9' r='7' class='stage' />
 <text x='48' y='13' class='textm'>E</text>
 <g data-group='g19' class='selectable'><title>Egress</title>
-<rect x='598' y='2' width='682' height='14' class='background'/>
+<rect x='604' y='2' width='676' height='14' class='background'/>
 </g>
 <g data-group='g19' class='selectable'><title>Egress</title>
 <g><title>Egress 0%, ∑4.50GB, 17.97MB | 18.02MB | 18.06MB, Rows 0%, ∑300.00M, 1.16M | 1.17M | 1.17M, Width 16B</title>
-<rect x='395' y='2' width='200' height='14' class='background'/>
-<use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
-  <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 413,3 414,3 414,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
-<rect x='413' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='13'>4.50GB</text>
+<rect x='401' y='2' width='200' height='14' class='background'/>
+<use href='#icon_egress' transform='translate(401 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
+  <rect x='419' y='2' width='1' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='419,2 419,3 420,3 420,16 419,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
+<rect x='419' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='13'>4.50GB</text>
 </g>
-<g><title>Egress 1.89GB/s, Rows 126.31M/s, Duration: 0:02.37 (0:00.19 | 0:00.80 | 0:01.84 - 0:01.62 | 0:01.96 | 0:02.57)</title><rect x='599' y='2' width='22' height='14' stroke-width='0' fill='var(--egress-medium, #3C6090)'/>
+<g><title>Egress 1.89GB/s, Rows 126.31M/s, Duration: 0:02.37 (0:00.19 | 0:00.80 | 0:01.84 - 0:01.62 | 0:01.96 | 0:02.57)</title><rect x='605' y='2' width='22' height='14' stroke-width='0' fill='var(--egress-medium, #3C6090)'/>
 </g>
-  <line x1='599' y1='4' x2='614' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='605' y1='2' x2='605' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-  <line x1='612' y1='14' x2='620' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
-  <line x1='615' y1='9' x2='615' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
-<path d='M599,15c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,-2,0,-2c0,0,0,-3,1,-3c0,0,0,-2,1,-2c0,0,0,-3,0,-3c0,0,0,7,1,7c0,0,0,-9,1,-9c0,0,0,9,0,9c0,0,0,3,1,3c0,0,0,1,1,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--egress-dark, #2D486C)' fill='none' />
+  <line x1='605' y1='4' x2='620' y2='4' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='611' y1='2' x2='611' y2='9' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+  <line x1='618' y1='14' x2='626' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
+  <line x1='621' y1='9' x2='621' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
+<path d='M605,15c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,-2,0,-2c0,0,0,-3,1,-3c0,0,0,-2,1,-2c0,0,0,-3,0,-3c0,0,0,7,1,7c0,0,0,-9,1,-9c0,0,0,9,0,9c0,0,0,3,1,3c0,0,0,1,1,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--egress-dark, #2D486C)' fill='none' />
 </g>
 <g><title>CPU Usage 1%, ∑2m 32s, 0.53s | 0.59s | 0.63s</title>
-<use href='#icon_cpu' transform='translate(395 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
-  <rect x='413' y='34' width='3' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='413,34 414,35 416,37 416,48 413,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
-<rect x='413' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='45'>2m 32s</text>
+<use href='#icon_cpu' transform='translate(401 34) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
+  <rect x='419' y='34' width='3' height='14' stroke-width='0' fill='var(--cpu-light, #B78C98)'/>  <polygon points='419,34 420,35 422,37 422,48 419,48' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<rect x='419' y='37' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>2m 32s</text>
 </g>
 <g><title>Max CPU 189.01</title>
-<path d='M601,47c0,0,0,-7,1,-7c0,0,0,1,1,1c0,0,0,-1,0,-1c0,0,0,0,1,0c0,0,0,-6,1,-6c0,0,0,4,1,4c0,0,0,2,0,2c0,0,0,4,1,4c0,0,0,0,1,0c0,0,0,3,1,3c0,0,0,-6,1,-6c0,0,0,5,0,5c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,-1,1,-1c0,0,0,-1,0,-1c0,0,0,-3,1,-3c0,0,0,0,1,0c0,0,0,4,1,4c0,0,0,2,1,2c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M607,47c0,0,0,-7,1,-7c0,0,0,1,0,1c0,0,0,-1,1,-1c0,0,0,0,1,0c0,0,0,-6,1,-6c0,0,0,4,1,4c0,0,0,2,0,2c0,0,0,4,1,4c0,0,0,0,1,0c0,0,0,3,1,3c0,0,0,-6,0,-6c0,0,0,5,1,5c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,-1,1,-1c0,0,0,-1,0,-1c0,0,0,-3,1,-3c0,0,0,0,1,0c0,0,0,4,1,4c0,0,0,2,0,2c0,0,0,1,1,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>External Source, partitions: 256, finished: 256</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
-  <text x='390' y='50%' class='textc'>256</text>
+<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+  <text x='396' y='50%' class='textc'>256</text>
 </g>
 <g class='arup button'><rect x='24' y='34' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowup' transform='translate(24 34) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
@@ -1335,45 +1335,45 @@
 </svg>
 </svg>
 
-<line x1='600' y1='0' x2='600' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-<line x1='688' y1='0' x2='688' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-<line x1='776' y1='0' x2='776' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-<line x1='865' y1='0' x2='865' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-<line x1='953' y1='0' x2='953' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-<line x1='1042' y1='0' x2='1042' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-<line x1='1130' y1='0' x2='1130' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<line x1='606' y1='0' x2='606' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<line x1='693' y1='0' x2='693' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<line x1='781' y1='0' x2='781' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<line x1='868' y1='0' x2='868' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<line x1='956' y1='0' x2='956' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<line x1='1044' y1='0' x2='1044' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<line x1='1131' y1='0' x2='1131' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
 <line x1='1219' y1='0' x2='1219' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
 <g id='columnHeaders'>
 <svg width='1280' height='18' x='0' y='0'>
 <rect x='0' y='0' width='298' height='18' class='columns'/>
 <rect x='301' y='0' width='64' height='18' class='columns'/>
-<rect x='368' y='0' width='24' height='18' class='columns'/>
-<rect x='395' y='0' width='200' height='18' class='columns'/>
-<rect x='598' y='0' width='682' height='18' class='columns'/>
+<rect x='368' y='0' width='30' height='18' class='columns'/>
+<rect x='401' y='0' width='200' height='18' class='columns'/>
+<rect x='604' y='0' width='676' height='18' class='columns'/>
 <text x='2' y='13' class='texts'>Stages and Operators</text>
 <text x='303' y='13' class='texts'>Rows</text>
-<text x='390' y='13' class='texte'>Tasks</text>
-<text x='397' y='13' class='texts'>Statistics</text>
+<text x='396' y='13' class='texte'>Tasks</text>
+<text x='403' y='13' class='texts'>Statistics</text>
 <g><title>2026-09-04T14:27:09.759000Z</title>
-<text x='602' y='13' class='texts'>0:00</text>
+<text x='608' y='13' class='texts'>0:00</text>
 </g>
 <g><title>2026-09-04T14:27:19.759000Z</title>
-<text x='690' y='13' class='texts'>0:10</text>
+<text x='695' y='13' class='texts'>0:10</text>
 </g>
 <g><title>2026-09-04T14:27:29.759000Z</title>
-<text x='778' y='13' class='texts'>0:20</text>
+<text x='783' y='13' class='texts'>0:20</text>
 </g>
 <g><title>2026-09-04T14:27:39.759000Z</title>
-<text x='867' y='13' class='texts'>0:30</text>
+<text x='870' y='13' class='texts'>0:30</text>
 </g>
 <g><title>2026-09-04T14:27:49.759000Z</title>
-<text x='955' y='13' class='texts'>0:40</text>
+<text x='958' y='13' class='texts'>0:40</text>
 </g>
 <g><title>2026-09-04T14:27:59.759000Z</title>
-<text x='1044' y='13' class='texts'>0:50</text>
+<text x='1046' y='13' class='texts'>0:50</text>
 </g>
 <g><title>2026-09-04T14:28:09.759000Z</title>
-<text x='1132' y='13' class='texts'>1:00</text>
+<text x='1133' y='13' class='texts'>1:00</text>
 </g>
 <g><title>2026-09-04T14:28:19.759000Z</title>
 <text x='1221' y='13' class='texts'>1:10</text>

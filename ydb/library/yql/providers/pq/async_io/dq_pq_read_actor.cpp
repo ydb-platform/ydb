@@ -1220,12 +1220,8 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " EndPartitionSessionEvent received");
-            if (!Self.SourceParams.GetStopAtCurrentEndOffsets()) {  // streaming mode
-                TStringBuilder message;
-                message << "Topic (" << Self.SourceParams.GetTopicPath() << ") with auto partitioning is not supported.";
-                SRC_LOG_E(message);
-                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
-            }
+            // Do not confirm the end of a partition session. Its child partitions
+            // will be picked up after the streaming query restarts on a partition-count change.
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent& event) {

@@ -216,10 +216,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetQueryReplayBackendFactory(settings.QueryReplayBackendFactory);
     }
 
-    if (settings.LogSinkProvider) {
-        ServerSettings->SetLogSinkProvider(settings.LogSinkProvider);
-    }
-
     Server.Reset(MakeIntrusive<Tests::TServer>(*ServerSettings));
 
     if (settings.GrpcServerOptions) {

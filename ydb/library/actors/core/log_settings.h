@@ -178,8 +178,7 @@ namespace NActors {
             void SetEnableStructuredLogInJson(bool value);
 
             using TLogSinkVector = std::vector<NStructuredLog::ILogSinkSPtr>;
-            using TLogSinkVectorProvider = std::function<TLogSinkVector()>;
-            TLogSinkVectorProvider LogSinkProvider;
+            TLogSinkVector Sinks;
 
         private:
             int SetLevelImpl(

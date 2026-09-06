@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/ut/olap/operations/write_log_to_olap.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -735,13 +736,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         std::shared_ptr<TKikimrRunner> kikimr;
         std::shared_ptr<TExampleLogWriter> writer;
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            /*.SetLogSinkProvider([&]() {
-                if (!writer) {
-                    writer = std::make_shared<TExampleLogWriter>(kikimr);
-                }
-                return NActors::NLog::TSettings::TLogSinkVector{writer};
-            })*/;
+            .SetWithSampleTables(false);
         kikimr = std::make_shared<TKikimrRunner>(settings);
         writer = std::make_shared<TExampleLogWriter>(kikimr);
 
@@ -750,10 +745,27 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         writer->CreateStore();
         writer->CreateTable();
         writer->TableExists = true;
-        // YDB_LOG_ERROR_COMP(writer->Component, "Test message via logger actor");
+
+        auto* runtime = kikimr->GetTestServer().GetRuntime();
+        for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+            runtime->GetLogSettings(i)->Sinks.push_back(writer);
+        }
+        runtime->SetLogPriority(writer->Component, NActors::NLog::PRI_TRACE);
+
+        class TEmitTestLog : public NActors::TActorBootstrapped<TEmitTestLog> {
+        public:
+            void Bootstrap() {
+                YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test message via logger actor");
+                Sleep(TDuration::MilliSeconds(1));
+                YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test message 2 via logger actor");
+
+                PassAway();
+            }
+        };
+        runtime->Register(new TEmitTestLog());
 
         // Write data
-        NActors::NStructuredLog::TLogMessage message;
+        /* NActors::NStructuredLog::TLogMessage message;
         message.Component = NActorsServices::TEST;
 
         message.Time = TInstant::MicroSeconds(0);
@@ -761,13 +773,13 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         message.TextMessage = "Alert message";
         message.FileName = "filename1";
         message.LineNumber = 1001;
-        writer->Write(message);
+        writer->Write(message); */
 
         // Fetch and check data
-        /* for(unsigned i=0; writer->Written != 1 && i < 30; i++) {
+        for(unsigned i=0; writer->Written != 2 && i < 30; i++) {
             Cerr << "DEBUG: Wait write "<< i << "..." << Endl;
             Sleep(TDuration::Seconds(1));
-        } */
+        }
 
         CheckQueryResult(*kikimr, *writer, "");
     }

@@ -111,10 +111,6 @@ namespace NActors {
         , LogBuffer(*Metrics, *Settings)
         , StructuredJsonWriter(ReservedJsonKeyNames)
     {
-        if (settings->LogSinkProvider) {
-            auto sinks = settings->LogSinkProvider();
-            std::copy( begin(sinks), end(sinks), std::back_inserter(Sinks) );
-        }
     }
 
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
@@ -544,11 +540,7 @@ namespace NActors {
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
         // @todo Более умное создание синков
-        if (Sinks.empty() && Settings->LogSinkProvider) {
-            Sinks = Settings->LogSinkProvider();
-        }
-
-        if (!Sinks.empty()) {
+        if (!Settings->Sinks.empty()) {
             NStructuredLog::TLogMessage message {
                 .Time = evLog->Stamp,
                 .Priority = evLog->Level.ToPrio(),
@@ -557,7 +549,7 @@ namespace NActors {
                 .LineNumber = evLog->LineNumber,
                 .TextMessage = evLog->Line,
                 .StructuredMessage = evLog->StructuredMessage.GetOrElse({})};
-            for(auto& sink: Sinks) {
+            for(auto& sink: Settings->Sinks) {
                 sink->Write(message);
             }
         }

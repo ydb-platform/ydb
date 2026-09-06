@@ -98,7 +98,6 @@ public:
     bool UseLocalCheckpointsInStreamingQueries = false;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     std::optional<TTestLogSettings> LogSettings;
-    NActors::NLog::TSettings::TLogSinkVectorProvider LogSinkProvider;
     bool Verbose = false;
 
     TKikimrSettings() {
@@ -146,10 +145,6 @@ public:
     TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
     TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
-    TKikimrSettings& SetLogSinkProvider(NActors::NLog::TSettings::TLogSinkVectorProvider value) {
-        LogSinkProvider = std::move(value);
-        return *this;
-    }
     TKikimrSettings& SetEnableStrictSerializableIsolation(bool value) {
         AppConfig.MutableTableServiceConfig()->SetEnableStrictSerializableIsolation(value);
         return *this;

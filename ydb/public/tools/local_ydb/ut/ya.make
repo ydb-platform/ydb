@@ -18,5 +18,10 @@ ENV(YDB_TINY_MODE=true)
 SIZE(MEDIUM)
 TIMEOUT(600)
 
+IF (SANITIZER_TYPE == "address")
+    # The ASAN lifecycle suite peaks at 12.6 GiB, above the default 8 GiB budget.
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 # Do not enable FORK_SUBTESTS: every scenario starts a real ydbd and must run sequentially.
 END()

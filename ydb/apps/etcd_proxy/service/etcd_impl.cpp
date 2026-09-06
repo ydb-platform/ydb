@@ -5,12 +5,11 @@
 #include <ydb/apps/etcd_proxy/proto/rpc.grpc.pb.h>
 
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
+#include <ydb/core/util/tuples.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 #include <ydb/library/actors/core/executor_thread.h>
-
-#include <util/generic/hash.h>
 
 namespace NEtcd {
 
@@ -673,7 +672,7 @@ struct TTxn : public TOperation {
             sql << "select true;" << std::endl;
             make(Success, paramsCounter, resultsCounter, "");
         } else {
-            THashMap<std::pair<std::string, std::string>, std::vector<TCompare>> map(Compares.size());
+            std::unordered_map<std::pair<std::string, std::string>, std::vector<TCompare>> map(Compares.size());
             for (const auto& compare : Compares)
                 map[std::make_pair(compare.Key, compare.RangeEnd)].emplace_back(compare);
             const bool manyRanges = map.size() > 1U;

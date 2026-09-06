@@ -10,6 +10,8 @@
 
 #include <ydb/library/actors/core/executor_thread.h>
 
+#include <util/generic/hash.h>
+
 namespace NEtcd {
 
 using namespace NYdb::NQuery;
@@ -671,7 +673,7 @@ struct TTxn : public TOperation {
             sql << "select true;" << std::endl;
             make(Success, paramsCounter, resultsCounter, "");
         } else {
-            std::unordered_map<std::pair<std::string, std::string>, std::vector<TCompare>> map(Compares.size());
+            THashMap<std::pair<std::string, std::string>, std::vector<TCompare>> map(Compares.size());
             for (const auto& compare : Compares)
                 map[std::make_pair(compare.Key, compare.RangeEnd)].emplace_back(compare);
             const bool manyRanges = map.size() > 1U;

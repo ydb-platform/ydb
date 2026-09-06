@@ -897,11 +897,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
     }
 
     Y_UNIT_TEST(RejectedAlterKeepsTTLTableConsistent) {
-        // Regression (issue #33764): a rejected AlterTable grabs the table via
-        // Tables.Update() during propose, so the abort (memory-changes UnDo) must
-        // restore the pre-mutation contents into the SAME TTableInfo object.
-        // Swapping in a fresh clone desyncs the TTLEnabledTables alias, and the
-        // next TTxRunConditionalErase asserts *checkedTable == tableInfo.
+        // Regression (issue #33764): a rejected AlterTable must preserve the
+        // live TTableInfo object shared with TTLEnabledTables. Update() does not
+        // snapshot or replace it; staged mutations have explicit undo. Replacing
+        // it on abort would desync the alias checked by TTxRunConditionalErase.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -916,7 +915,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
 
         // Reaches Tables.Update() in propose, then ParseParams rejects the
-        // key-column drop -> the operation aborts and rolls back the table.
+        // key-column drop -> the abort must leave the live table unchanged.
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
             DropColumns { Name: "key" }

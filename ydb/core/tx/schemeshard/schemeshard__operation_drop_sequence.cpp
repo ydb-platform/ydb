@@ -324,7 +324,7 @@ public:
 
         if (parent->IsTable() && !parent.IsUnderDeleting()) {
             // TODO: we probably want some kind of usage refcount
-            auto& tableInfo = context.SS->Tables.Update(parent->PathId, context.MemChanges);
+            auto tableInfo = context.SS->Tables.at(parent->PathId);
             if (tableInfo->IsUsingSequence(path->Name)) {
                 TString explain = TStringBuilder() << "cannot delete sequence " << path->Name
                     << " used by table " << parent.PathString();

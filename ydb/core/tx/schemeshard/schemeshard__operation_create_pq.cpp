@@ -483,8 +483,8 @@ public:
         TTopicInfo::TPtr emptyGroup = new TTopicInfo;
         emptyGroup->Shards.swap(pqGroup->Shards);
 
+        emptyGroup->AlterData = pqGroup;
         context.SS->Topics.Set({.Path = pathId, .Value = emptyGroup, .Changes = context.MemChanges});
-        context.SS->Topics.Update(pathId, context.MemChanges)->AlterData = pqGroup;
 
         context.DbChanges.PersistPersQueueGroup(pathId, emptyGroup);
         context.DbChanges.PersistAddPersQueueGroupAlter(pathId, pqGroup);

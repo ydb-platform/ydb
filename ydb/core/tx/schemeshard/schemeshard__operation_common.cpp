@@ -1044,7 +1044,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     txState.TxShardsListFinalized = true;
 }
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TCPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
     // Build a mutable copy of src partitions for the dst table.
     TVector<TTableShardInfo> dstPartitions;
     {

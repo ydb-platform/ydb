@@ -407,7 +407,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Replications.contains(path.Base()->PathId));
-        auto& replication = context.SS->Replications.Update(path.Base()->PathId, context.MemChanges);
+        auto replication = context.SS->Replications.Update(path.Base()->PathId);
 
         if (replication->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Replication is not created yet");
@@ -442,6 +442,9 @@ public:
             return result;
         }
 
+        context.MemChanges.RecordUndo([replication, previous = replication->AlterData]() {
+            replication->AlterData = previous;
+        });
         auto alterData = replication->CreateNextVersion();
 
         if (op.HasState()) {

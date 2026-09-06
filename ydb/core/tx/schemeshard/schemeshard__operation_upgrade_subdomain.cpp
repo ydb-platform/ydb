@@ -1164,7 +1164,7 @@ public:
         auto pathId = path.Base()->PathId;
 
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
-        auto subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+        auto subDomain = context.SS->SubDomains.Update(pathId);
         if (!subDomain->IsSupportTransactions()) {
             result->SetError(NKikimrScheme::StatusSchemeError, "There are no sense to upgrade subdomain with out transactions support (NBS?).");
             return result;
@@ -1232,6 +1232,7 @@ public:
         const TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
         txState.Shards.emplace_back(shardIdx, TTabletTypes::SchemeShard, TTxState::CreateParts);
         alterData->AddPrivateShard(shardIdx);
+        context.MemChanges.GrabDomain(context.SS, pathId);
         subDomain->SetAlter(alterData);
 
 

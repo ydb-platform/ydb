@@ -491,7 +491,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(dstPath->PathId));
-        auto& sequenceInfo = context.SS->Sequences.Update(dstPath->PathId, context.MemChanges);
+        auto sequenceInfo = context.SS->Sequences.Update(dstPath->PathId);
         Y_ABORT_UNLESS(!sequenceInfo->AlterData);
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
@@ -503,6 +503,9 @@ public:
             return result;
         }
 
+        context.MemChanges.RecordUndo([sequenceInfo, previous = sequenceInfo->AlterData]() {
+            sequenceInfo->AlterData = previous;
+        });
         TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
         Y_ABORT_UNLESS(alterData);
         alterData->Description = *description;

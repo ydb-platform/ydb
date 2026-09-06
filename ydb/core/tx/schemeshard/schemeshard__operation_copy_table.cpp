@@ -14,7 +14,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& name, const TTableInfo::TPtr srcTableInfo, TOperationContext &context) {
+void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& name, const TTableInfo::TCPtr srcTableInfo, TOperationContext &context) {
     const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
 
     NKikimrSchemeOp::TTableDescription completedSchema;
@@ -141,7 +141,6 @@ public:
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
 
                 // Get coordinated version from source table's AlterData (shared across both drop and create)
-                // GrabTable is needed for proper rollback if operation fails
                 auto& srcTable = context.SS->Tables.UpdateUntracked(txState->SourcePathId);
                 srcTable->InitAlterData(OperationId);
                 ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
@@ -672,8 +671,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
-        // Copy, not a reference: Tables.Set() below can rehash and invalidate a slot ref.
-        auto srcTableInfo = context.SS->Tables.Update(srcPath.Base()->PathId, context.MemChanges);
+        auto srcTableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
 
         {
             const NKikimrSchemeOp::TPartitionConfig &srcPartitionConfig = srcTableInfo->PartitionConfig();

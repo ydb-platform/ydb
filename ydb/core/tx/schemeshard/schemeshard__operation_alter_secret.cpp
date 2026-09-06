@@ -152,7 +152,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Secrets.contains(secretPath.Base()->PathId));
-        auto& secretInfo = context.SS->Secrets.Update(secretPath.Base()->PathId, context.MemChanges);
+        auto secretInfo = context.SS->Secrets.Update(secretPath.Base()->PathId);
 
         if (secretInfo->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Secret is not created yet");
@@ -195,6 +195,9 @@ public:
             }
         }
 
+        context.MemChanges.RecordUndo([secretInfo, previous = secretInfo->AlterData]() {
+            secretInfo->AlterData = previous;
+        });
         auto alterData = secretInfo->CreateNextVersion();
         alterData->Description.SetValue(alterSecretProto.GetValue());
         alterData->Description.SetVersion(secretInfo->AlterVersion);

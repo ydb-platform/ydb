@@ -24,36 +24,6 @@ namespace NDbRefDetail {
     template <class T> struct TConstView<std::shared_ptr<T>> { using type = std::shared_ptr<const T>; };
 }
 
-// Clone a value for an undo snapshot; TTableInfo uses DeepCopy (COW-shares its
-// partitioning), other types copy-construct.
-template <class T>
-TIntrusivePtr<T> DbRefUndoClone(const TIntrusivePtr<T>& p) {
-    return p ? TIntrusivePtr<T>(new T(*p)) : TIntrusivePtr<T>();
-}
-template <class T>
-std::shared_ptr<T> DbRefUndoClone(const std::shared_ptr<T>& p) {
-    return p ? std::make_shared<T>(*p) : std::shared_ptr<T>();
-}
-inline TIntrusivePtr<TTableInfo> DbRefUndoClone(const TIntrusivePtr<TTableInfo>& p) {
-    return p ? TTableInfo::DeepCopy(*p) : TIntrusivePtr<TTableInfo>();
-}
-
-// Restore an Update() snapshot on abort. Default: swap the pointer back.
-// TTableInfo restores contents into the still-live object instead, because
-// TTLEnabledTables aliases that object by raw pointer and must stay in sync;
-// operator= on the TSimpleRefCount base is a no-op, so the live refcount is kept.
-template <class V>
-void DbRefUndoRestoreSlot(V& slot, const V& snap) {
-    slot = snap;
-}
-inline void DbRefUndoRestoreSlot(TIntrusivePtr<TTableInfo>& slot, const TIntrusivePtr<TTableInfo>& snap) {
-    if (slot && snap) {
-        *slot = *snap;
-    } else {
-        slot = snap;
-    }
-}
-
 // Teardown interface: maps self-register so Clear() iterates one registry.
 class IDbRefMap {
 public:
@@ -69,8 +39,9 @@ public:
 
 // THashMap<TPathId, V> holding a DbRefCount self-ref per entry: insert acquires,
 // erase releases. No operator[], so a missing-key read can't silently acquire.
-// Set/Update record undo and belong to the armed propose phase; SetUntracked/
-// UpdateUntracked/erase are for other phases (init, plan-step, progress, stats).
+// Set records membership undo; Update leaves mutation undo to its caller where
+// proposal rollback is supported. Both belong to the armed propose phase.
+// SetUntracked/UpdateUntracked/erase are for other phases (init, plan-step, progress, stats).
 template <class V>
 class TDbRefMap : public IDbRefMap {
     using TInner = THashMap<TPathId, V>;
@@ -119,11 +90,11 @@ public:
             Y_VERIFY_DEBUG_S(args.Changes.IsPathTracked(args.Path),
                 "Set(" << Reason.c_str() << ") acquires a ref on " << args.Path
                 << " but the path was not grabbed in this tx; GrabNewPath/GrabPath it first");
-            args.Changes.RecordDbRefUndo([this, id = args.Path]() { UndoErase(id); });
+            args.Changes.RecordUndo([this, id = args.Path]() { UndoErase(id); });
             it = Map.emplace(args.Path, std::move(args.Value)).first;
             AcquirePathDbRef(SS, args.Path, Reason);
         } else {
-            args.Changes.RecordDbRefUndo([this, id = args.Path, old = it->second]() { UndoRestore(id, old); });
+            args.Changes.RecordUndo([this, id = args.Path, old = it->second]() { UndoRestore(id, old); });
             it->second = std::move(args.Value);
         }
         return it->second;
@@ -151,23 +122,19 @@ public:
         return it->second;
     }
 
-    // Mutable access that records a deduped undo snapshot. The only tracked way to mutate.
-    // Returns const V&: the pointee stays mutable (->Field), but the slot can't be
-    // reseated (Update(id,mc) = newPtr won't compile), which would desync the undo.
-    const V& Update(const TPathId& id, TMemoryChanges& changes) {
-        Y_VERIFY_DEBUG_S(changes.IsArmed(),
-            "tracked Update on " << Reason.c_str() << " outside an armed propose; use UpdateUntracked");
-        V& slot = Map.at(id);
-        if (changes.NeedsUpdateSnapshot(this, id)) {
-            changes.RecordDbRefUndo([this, id, snap = DbRefUndoClone(slot)]() {
-                UndoRestoreInPlace(id, snap);
-            });
-        }
-        return slot;
+    // Mutable access during propose. This does NOT snapshot the object: callers
+    // supporting proposal rollback must record undo for the fields they change.
+    // Existing operations that prohibit proposal rollback keep that contract.
+    // Returns const V& so the pointee stays mutable (->Field), but replacing the
+    // slot still requires Set().
+    const V& Update(const TPathId& id) {
+        Y_VERIFY_DEBUG_S(IsProposeArmed(SS),
+            "Update on " << Reason.c_str() << " outside an armed propose; use UpdateUntracked");
+        return Map.at(id);
     }
 
     // Pointee-mutable access without undo, for non-transactional callers (init, stats).
-    // Const V& (no slot reseat); operations use Update() so their mutation is undoable.
+    // Const V& (no slot reseat); propose operations use Update().
     const V& UpdateUntracked(const TPathId& id) {
         return Map.at(id);
     }
@@ -227,16 +194,6 @@ private:
         auto& slot = Map[id];
         slot = std::move(value);
         return slot;
-    }
-
-    // Update-undo: restore pre-mutation contents into the SAME live object rather than
-    // swapping the pointer, so secondary aliases of it (e.g. TTLEnabledTables) don't
-    // desync. Falls back to a pointer restore if either side is null.
-    void UndoRestoreInPlace(const TPathId& id, const V& snap) {
-        auto it = Map.find(id);
-        if (it != Map.end()) {
-            DbRefUndoRestoreSlot(it->second, snap);
-        }
     }
 
     // Drop a tx-created entry without releasing (Paths owns the counter).

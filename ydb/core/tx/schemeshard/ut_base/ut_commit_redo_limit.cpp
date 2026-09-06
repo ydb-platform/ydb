@@ -147,9 +147,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardCheckProposeSize) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/pqgroup"), {NLs::PathExist});
     }
 
-    // A redo-overflow abort of a copy restores the source table's undo snapshot,
-    // then an alter walks its partitions. Regression: a shallow snapshot dangled
-    // the source's partition ptrs (crash at ShardInfos.contains).
+    // A redo-overflow abort of a copy must preserve the source table's partitions,
+    // then an alter walks them. Targeted undo must keep the live source intact;
+    // replacing it with a shallow snapshot used to dangle its partition pointers.
     Y_UNIT_TEST(CopyTableAbortRollbackPreservesSourcePartitions) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardCheckProposeSize) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Abort the copy's propose after it has snapshotted the source table.
+        // Abort the copy's propose after it has changed source-table bookkeeping.
         MaxCommitRedoMB = 1;
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "table-copy", "/MyRoot/table");
         TestModificationResults(runtime, txId,

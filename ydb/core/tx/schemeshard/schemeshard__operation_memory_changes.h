@@ -7,12 +7,10 @@
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/stack.h>
 
 #include <functional>
-
 #include <optional>
 
 namespace NKikimr::NSchemeShard {
@@ -35,18 +33,14 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     };
     TPathStack Paths;
 
-
-
     using TTableSnapshotState = std::pair<TPathId, TTxId>;
     TStack<TTableSnapshotState> TablesWithSnapshots;
 
     using TLockState = std::pair<TPathId, TTxId>;
     TStack<TLockState> LockedPaths;
 
-
     using TColumnTableState = std::pair<TPathId, TColumnTableInfo::TPtr>;
     TStack<TColumnTableState> ColumnTables;
-
 
     using TShardState = std::pair<TShardIdx, THolder<TShardInfo>>;
     TStack<TShardState> Shards;
@@ -60,12 +54,6 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 
     using TTxState = std::pair<TOperationId, THolder<TTxState>>;
     TStack<TTxState> TxStates;
-
-
-
-
-
-
 
     using TLongIncrementalRestoreOpState = std::pair<TOperationId, std::optional<NKikimrSchemeOp::TLongIncrementalRestoreOp>>;
     TStack<TLongIncrementalRestoreOpState> LongIncrementalRestoreOps;
@@ -81,17 +69,11 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TBCPathToFullBackupState = std::pair<TPathId, std::optional<ui64>>;
     TStack<TBCPathToFullBackupState> BCPathToFullBackup;
 
-
-
     using TSharedShardEntry = std::tuple<TShardIdx, TPathId, std::optional<TTxId>>;
     TStack<TSharedShardEntry> SharedShardEntries;
 
-
-    TStack<std::function<void()>> DbRefUndos;
-
-    // Dedup: at most one value snapshot per (self-ref map, path) per tx, so
-    // repeated Update() on the same object doesn't re-copy it.
-    THashMap<const void*, THashSet<TPathId>> UpdateSnapshotted;
+    // Common LIFO stack for map membership changes and explicit field undo.
+    TStack<std::function<void()>> UndoActions;
 
     // Only the propose tx can roll back (UnDo runs only from AbortOperationPropose),
     // so only it records undos; other txs would just accumulate dead weight.
@@ -120,16 +102,10 @@ public:
     // that acquires a ref on an ungrabbed path can't fully roll back.
     bool IsPathTracked(const TPathId& id) const { return Paths.Contains(id); }
 
-    // True the first time this (map, path) needs a snapshot; false when disarmed.
-    bool NeedsUpdateSnapshot(const void* map, const TPathId& id) {
-        return Armed && UpdateSnapshotted[map].insert(id).second;
-    }
-
     void GrabNewTxState(TSchemeShard* ss, const TOperationId& op);
 
     void GrabNewPath(TSchemeShard* ss, const TPathId& pathId);
     void GrabPath(TSchemeShard* ss, const TPathId& pathId);
-
 
     void GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId);
     void GrabColumnTable(TSchemeShard* ss, const TPathId& pathId);
@@ -139,19 +115,10 @@ public:
 
     void GrabDomain(TSchemeShard* ss, const TPathId& pathId);
 
-
-
-
     void GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId);
 
     void GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId);
     void GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId);
-
-
-
-
-
-
 
     void GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
     void GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
@@ -161,17 +128,14 @@ public:
     void GrabNewFullBackupOp(TSchemeShard* ss, ui64 id);
     void GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& bcPathId);
 
-
-
     void GrabNewSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
     void GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
 
-
-    // TDbRefMap::Set records its own rollback closure here (undone LIFO),
-    // replacing the per-map GrabNew*/Grab* + UnDo branches.
-    void RecordDbRefUndo(std::function<void()> undo) {
+    // Record map membership changes and explicit field undo on one LIFO stack,
+    // so mutations are undone before an earlier insertion/replacement is undone.
+    void RecordUndo(std::function<void()> undo) {
         if (Armed) {
-            DbRefUndos.push(std::move(undo));
+            UndoActions.push(std::move(undo));
         }
     }
 

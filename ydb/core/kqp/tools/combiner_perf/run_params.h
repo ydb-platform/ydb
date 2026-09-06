@@ -3,6 +3,7 @@
 #include <util/system/defaults.h>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -44,6 +45,12 @@ struct TRunParams {
 
     // Specific test params
     std::string CombineVsTestColumnSet; // key/value column configuration for DqHashCombineVsWideCombine
+
+    std::string ParquetFile;
+    size_t ParquetRowLimit = 0;
+    std::vector<std::string> ParquetColumns;
+    std::vector<std::string> ParquetKeyColumns;
+    std::vector<std::string> ParquetAggregations;
 
     size_t JoinOverlap = 0; // Table generation params for joins
     size_t JoinRightRows = 0;

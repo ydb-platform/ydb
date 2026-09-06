@@ -1,6 +1,8 @@
+#include <array>
 #include <filesystem>
 #include <ydb/core/kqp/tools/combiner_perf/dq_combine_vs.h>
 #include <ydb/core/kqp/tools/combiner_perf/fs_utils.h>
+#include <ydb/core/kqp/tools/combiner_perf/parquet.h>
 #include <ydb/core/kqp/tools/combiner_perf/printout.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
@@ -16,6 +18,7 @@
 #include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/system/compiler.h>
 
@@ -48,17 +51,29 @@ class TPrintingResultCollector : public TTestResultCollector {
             Cout << ", " << (spilling.value() ? "+" : "-") << "spilling";
         }
         Cout << Endl;
+        const bool parquet = TStringBuf(testName).Contains("Parquet");
         Cout << "Data rows total: " << runParams.RowsPerRun << " x " << runParams.NumRuns << Endl;
-        Cout << runParams.NumKeys << " distinct numeric keys" << Endl;
-        Cout << "Block size: " << runParams.BlockSize << Endl;
-        Cout << "Long strings: " << (runParams.LongStringKeys ? "yes" : "no") << Endl;
-        Cout << "Combiner mem limit: " << runParams.WideCombinerMemLimit << Endl;
-        Cout << "Hash map type: " << HashMapTypeName(runParams.ReferenceHashType) << Endl;
-        Cout << "Join overlap: " << runParams.JoinOverlap << Endl;
+        if (parquet) {
+            Cout << "Parquet file: " << runParams.ParquetFile << Endl;
+            Cout << "Columns: " << JoinSeq(",", runParams.ParquetColumns) << Endl;
+            Cout << "Keys: " << JoinSeq(",", runParams.ParquetKeyColumns) << Endl;
+            Cout << "Aggregations: " << JoinSeq(",", runParams.ParquetAggregations) << Endl;
+            Cout << "Block size: " << runParams.BlockSize << Endl;
+        } else {
+            Cout << runParams.NumKeys << " distinct numeric keys" << Endl;
+            Cout << "Block size: " << runParams.BlockSize << Endl;
+            Cout << "Long strings: " << (runParams.LongStringKeys ? "yes" : "no") << Endl;
+            Cout << "Combiner mem limit: " << runParams.WideCombinerMemLimit << Endl;
+            Cout << "Hash map type: " << HashMapTypeName(runParams.ReferenceHashType) << Endl;
+            Cout << "Join overlap: " << runParams.JoinOverlap << Endl;
+        }
         Cout << Endl;
 
-        Cout << "Graph runtime is: " << result.ResultTime
-             << " vs. reference C++ implementation: " << result.ReferenceTime << Endl;
+        Cout << "Graph runtime is: " << result.ResultTime;
+        if (!parquet) {
+            Cout << " vs. reference C++ implementation: " << result.ReferenceTime;
+        }
+        Cout << Endl;
 
         if (result.GeneratorTime) {
             Cout << "Input stream own iteration time: " << result.GeneratorTime << Endl;
@@ -94,23 +109,31 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
     }
     out["rowsPerRun"] = runParams.RowsPerRun;
     out["numRuns"] = runParams.NumRuns;
-    if (TStringBuf(testName).Contains("Block")) {
+    const bool parquet = TStringBuf(testName).Contains("Parquet");
+    if (TStringBuf(testName).Contains("Block") || parquet) {
         out["blockSize"] = runParams.BlockSize;
     }
-    out["longStringKeys"] = runParams.LongStringKeys;
-    out["numKeys"] = runParams.NumKeys;
-    out["joinOverlap"] = runParams.JoinOverlap;
-    out["joinRightRows"] = runParams.JoinRightRows;
-    out["combinerMemLimit"] = runParams.WideCombinerMemLimit;
-    out["hashType"] = HashMapTypeName(runParams.ReferenceHashType);
+    if (parquet) {
+        out["parquetFile"] = runParams.ParquetFile;
+        out["parquetRowLimit"] = runParams.ParquetRowLimit;
+        out["parquetColumns"] = JoinSeq(",", runParams.ParquetColumns);
+        out["parquetKeys"] = JoinSeq(",", runParams.ParquetKeyColumns);
+        out["parquetAggregations"] = JoinSeq(",", runParams.ParquetAggregations);
+    } else {
+        out["longStringKeys"] = runParams.LongStringKeys;
+        out["numKeys"] = runParams.NumKeys;
+        out["joinOverlap"] = runParams.JoinOverlap;
+        out["joinRightRows"] = runParams.JoinRightRows;
+        out["combinerMemLimit"] = runParams.WideCombinerMemLimit;
+        out["hashType"] = HashMapTypeName(runParams.ReferenceHashType);
+        out["dqTestColumns"] = runParams.CombineVsTestColumnSet;
+    }
 
     out["generatorTime"] = result.GeneratorTime.MilliSeconds();
     out["resultTime"] = result.ResultTime.MilliSeconds();
     out["refTime"] = result.ReferenceTime.MilliSeconds();
     out["maxRssDelta"] = result.MaxRSSDelta;
     out["referenceMaxRssDelta"] = result.ReferenceMaxRSSDelta;
-    out["dqTestColumns"] = runParams.CombineVsTestColumnSet;
-
     return out;
 }
 
@@ -201,6 +224,7 @@ enum class ETestType {
     SimpleLastCombiner,
     BlockCombiner,
     DqHashCombinerVs,
+    Parquet,
     SimpleGraceJoin,
 };
 
@@ -247,6 +271,18 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
             } else {
                 NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false, false>(params, printout);
             }
+        }
+    } else if (testType == ETestType::Parquet) {
+        if (spilling) {
+            if (llvm) {
+                NKikimr::NMiniKQL::RunTestParquet<true, true>(params, printout);
+            } else {
+                NKikimr::NMiniKQL::RunTestParquet<false, true>(params, printout);
+            }
+        } else if (llvm) {
+            NKikimr::NMiniKQL::RunTestParquet<true, false>(params, printout);
+        } else {
+            NKikimr::NMiniKQL::RunTestParquet<false, false>(params, printout);
         }
     } else if (testType == ETestType::SimpleGraceJoin) {
         if (params.NumRuns != 1) {
@@ -357,7 +393,7 @@ int main(int argc, const char* argv[])
         .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
 
     options.AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join"})
+        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "parquet", "grace-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -369,6 +405,8 @@ int main(int argc, const char* argv[])
                 testType = ETestType::BlockCombiner;
             } else if (val == "dq-hash-combiner") {
                 testType = ETestType::DqHashCombinerVs;
+            } else if (val == "parquet") {
+                testType = ETestType::Parquet;
             } else if (val == "grace-join") {
                 testType = ETestType::SimpleGraceJoin;
             } else {
@@ -425,10 +463,51 @@ int main(int argc, const char* argv[])
         .StoreResult(&runParams.CombineVsTestColumnSet)
         .Help("Select the set of columns for the dq-hash-combiner test from a list of named configurations");
 
+    options.AddLongOption("parquet-file")
+        .RequiredArgument("PATH")
+        .StoreResult(&runParams.ParquetFile)
+        .Help("Parquet input file for the parquet test");
+    options.AddLongOption("parquet-row-limit")
+        .RequiredArgument("ROWS")
+        .StoreResult(&runParams.ParquetRowLimit)
+        .Help("Maximum number of rows to preload, or 0 for the whole file");
+    options.AddLongOption("parquet-columns")
+        .RequiredArgument("NAME,...")
+        .SplitHandler(&runParams.ParquetColumns, ',')
+        .Help("Parquet columns to preload, in input order");
+    options.AddLongOption("parquet-keys")
+        .RequiredArgument("NAME,...")
+        .SplitHandler(&runParams.ParquetKeyColumns, ',')
+        .Help("Key columns for the parquet aggregation");
+    options.AddLongOption("parquet-aggregations")
+        .RequiredArgument("AGG,...")
+        .SplitHandler(&runParams.ParquetAggregations, ',')
+        .Help("Aggregations: sum:column_name or count");
+
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
-    Y_ENSURE(runParams.NumKeys >= 1);
-    Y_ENSURE(runParams.NumKeys <= runParams.RowsPerRun);
+    const std::array<TString, 5> parquetOptions = {
+        "parquet-file", "parquet-row-limit", "parquet-columns", "parquet-keys", "parquet-aggregations"};
+    if (testType != ETestType::Parquet) {
+        for (const auto& option : parquetOptions) {
+            if (parsedOptions.Has(option)) {
+                ythrow yexception() << "--" << option << " is only valid with -t parquet";
+            }
+        }
+    } else {
+        Y_ENSURE(parsedOptions.Has("parquet-file"), "--parquet-file is required with -t parquet");
+        Y_ENSURE(parsedOptions.Has("parquet-columns"), "--parquet-columns is required with -t parquet");
+        Y_ENSURE(parsedOptions.Has("parquet-keys"), "--parquet-keys is required with -t parquet");
+        Y_ENSURE(parsedOptions.Has("parquet-aggregations"), "--parquet-aggregations is required with -t parquet");
+        Y_ENSURE(runParams.TestMode == NKikimr::NMiniKQL::ETestMode::Full ||
+                runParams.TestMode == NKikimr::NMiniKQL::ETestMode::GraphOnly,
+            "The parquet test only supports mode=all and mode=graph");
+    }
+
+    if (testType != ETestType::Parquet) {
+        Y_ENSURE(runParams.NumKeys >= 1);
+        Y_ENSURE(runParams.NumKeys <= runParams.RowsPerRun);
+    }
     Y_ENSURE(runParams.NumRuns >= 1);
     Y_ENSURE(runParams.NumAttempts >= 1);
     Y_ENSURE(runParams.BlockSize >= 1);

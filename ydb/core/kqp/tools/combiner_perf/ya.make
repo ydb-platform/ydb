@@ -26,6 +26,8 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/comp_nodes/ut/utils
 
+    contrib/libs/apache/arrow
+
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT
     contrib/libs/llvm16/lib/Linker
@@ -49,6 +51,7 @@ SRCS(
     converters.cpp
     dq_combine_vs.cpp
     factories.cpp
+    parquet.cpp
     printout.cpp
     simple.cpp
     simple_block.cpp

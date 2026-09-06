@@ -19,6 +19,10 @@ PY3TEST()
         test_select.py
         test_update.py
         test_upsert.py
+        test_truncate_basic.py
+        test_truncate_negative.py
+        test_truncate_load.py
+        test_truncate_stress.py
     )
     FORK_SUBTESTS()
     SPLIT_FACTOR(150)

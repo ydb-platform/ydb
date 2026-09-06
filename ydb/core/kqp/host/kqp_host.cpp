@@ -1244,6 +1244,12 @@ public:
         if (FederatedQuerySetup) {
             const auto& hostnamePatterns = QueryServiceConfig.GetHostnamePatterns();
             const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
+            std::set<NYql::EDatabaseType> availableTypes;
+            for (const auto& type : availableExternalDataSources) {
+                if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
+                    availableTypes.insert(*databaseType);
+                }
+            }
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
@@ -1251,7 +1257,7 @@ public:
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
                                                                                  QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
-                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
+                                                                                 availableTypes);
         }
     }
 

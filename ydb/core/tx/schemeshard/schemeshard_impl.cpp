@@ -9055,6 +9055,12 @@ void TSchemeShard::ConfigureExternalSources(
     const TActorContext& ctx) {
     const auto& hostnamePatterns = config.GetHostnamePatterns();
     const auto& availableExternalDataSources = config.GetAvailableExternalDataSources();
+    std::set<NYql::EDatabaseType> availableTypes;
+    for (const auto& type : availableExternalDataSources) {
+        if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
+            availableTypes.insert(*databaseType);
+        }
+    }
     ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
         std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
         nullptr,
@@ -9063,7 +9069,7 @@ void TSchemeShard::ConfigureExternalSources(
         EnableExternalSourceSchemaInference,
         config.GetS3().GetAllowLocalFiles(),
         config.GetAllExternalDataSourcesAreAvailable(),
-        std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
+        availableTypes
     );
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

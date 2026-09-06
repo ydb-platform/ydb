@@ -426,7 +426,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
     }
 
     tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalTable;
-    tableMeta->ExternalSource.Type = description.GetSourceType();
+    tableMeta->ExternalSource.DatabaseType = NYql::DatabaseTypeFromString(description.GetSourceType());
     tableMeta->ExternalSource.TableLocation = description.GetLocation();
     tableMeta->ExternalSource.TableContent = description.GetContent();
     tableMeta->ExternalSource.DataSourcePath = description.GetDataSourcePath();
@@ -453,7 +453,7 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     tableMeta->Attributes = entry.Attributes;
 
     tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalDataSource;
-    tableMeta->ExternalSource.Type = description.GetSourceType();
+    tableMeta->ExternalSource.DatabaseType = NYql::DatabaseTypeFromString(description.GetSourceType());
     tableMeta->ExternalSource.DataSourceLocation = description.GetLocation();
     tableMeta->ExternalSource.DataSourceInstallation = description.GetInstallation();
     tableMeta->ExternalSource.DataSourceAuth = description.GetAuth();
@@ -557,7 +557,7 @@ TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavi
 
     auto& source = metadata->ExternalSource;
     source.SourceType = NYql::ESourceType::ExternalDataSource;
-    source.Type = ToString(NYql::EDatabaseType::YdbTopics);
+    source.DatabaseType = NYql::EDatabaseType::YdbTopics;
     source.TableLocation = topicName;
     source.DataSourcePath = cluster;
     source.DataSourceAuth.MutableNone();
@@ -655,10 +655,12 @@ TTableMetadataResult EnrichExternalTable(const TTableMetadataResult& externalTab
         return result;
     }
 
-    if (externalTable.Metadata->ExternalSource.Type != externalDataSource.Metadata->ExternalSource.Type) {
+    if (externalTable.Metadata->ExternalSource.DatabaseType != externalDataSource.Metadata->ExternalSource.DatabaseType) {
         result.AddIssue(YqlIssue({}, TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder()
-            << "Internal error. External table type mismatch, expected: " << externalTable.Metadata->ExternalSource.Type
-            << ", but underlying external data source has type: " << externalDataSource.Metadata->ExternalSource.Type
+            << "Internal error. External table type mismatch, expected: "
+            << ToStringDatabaseType(externalTable.Metadata->ExternalSource.DatabaseType, "<unknown>")
+            << ", but underlying external data source has type: "
+            << ToStringDatabaseType(externalDataSource.Metadata->ExternalSource.DatabaseType, "<unknown>")
         ));
         return result;
     }
@@ -851,7 +853,7 @@ std::shared_ptr<NExternalSource::TMetadata> ConvertToExternalSourceMetadata(cons
     metadata->TableLocation = tableMetadata.ExternalSource.TableLocation;
     metadata->DataSourceLocation = tableMetadata.ExternalSource.DataSourceLocation;
     metadata->DataSourcePath = tableMetadata.ExternalSource.DataSourcePath;
-    metadata->Type = tableMetadata.ExternalSource.Type;
+    metadata->Type = ToStringDatabaseType(tableMetadata.ExternalSource.DatabaseType);
     metadata->Attributes = tableMetadata.Attributes;
     metadata->Auth = MakeAuth(tableMetadata.ExternalSource);
     return metadata;
@@ -885,7 +887,7 @@ bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSo
     tableMetadata.ExternalSource.TableLocation = dynamicMetadata.TableLocation;
     tableMetadata.ExternalSource.DataSourceLocation = dynamicMetadata.DataSourceLocation;
     tableMetadata.ExternalSource.DataSourcePath = dynamicMetadata.DataSourcePath;
-    tableMetadata.ExternalSource.Type = dynamicMetadata.Type;
+    tableMetadata.ExternalSource.DatabaseType = NYql::DatabaseTypeFromString(dynamicMetadata.Type);
     return true;
 }
 
@@ -1296,11 +1298,21 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             auto loadDynamicMetadata = [promise, settings, table, database, externalPath] (const TTableMetadataResult& externalDataSourceMetadata) mutable {
                                 NExternalSource::IExternalSource::TPtr externalSource;
                                 if (settings.ExternalSourceFactory) {
+                                    if (!externalDataSourceMetadata.Metadata->ExternalSource.DatabaseType) {
+                                        TTableMetadataResult wrapper;
+                                        wrapper.SetException(yexception() << "couldn't get external source with type "
+                                            << ToStringDatabaseType(externalDataSourceMetadata.Metadata->ExternalSource.DatabaseType, "<unknown>")
+                                            << ", unknown source type");
+                                        promise.SetValue(wrapper);
+                                        return;
+                                    }
                                     try {
-                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(*externalDataSourceMetadata.Metadata->ExternalSource.DatabaseType);
                                     } catch (const std::exception& exception) {
                                         TTableMetadataResult wrapper;
-                                        wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
+                                        wrapper.SetException(yexception() << "couldn't get external source with type "
+                                            << ToStringDatabaseType(externalDataSourceMetadata.Metadata->ExternalSource.DatabaseType, "<unknown>")
+                                            << ", " <<  exception.what());
                                         promise.SetValue(wrapper);
                                         return;
                                     }
@@ -1335,7 +1347,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     wrapper.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
                                     wrapper.AddIssue(NYql::TIssue(TStringBuilder()
                                         << "Schema inference (with_infer) is not enabled for external source '"
-                                        << externalDataSourceMetadata.Metadata->ExternalSource.Type
+                                        << ToStringDatabaseType(externalDataSourceMetadata.Metadata->ExternalSource.DatabaseType, "<unknown>")
                                         << "'. Please contact your system administrator to enable the "
                                         << "EnableExternalSourceSchemaInference feature flag."));
                                     promise.SetValue(wrapper);
@@ -1343,7 +1355,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     promise.SetValue(externalDataSourceMetadata);
                                 }
                             };
-                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath &&
+                            if (externalDataSourceMetadata.Metadata->ExternalSource.DatabaseType == NYql::EDatabaseType::Ydb && externalPath &&
                                 settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
                                 auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
                                 THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
@@ -1383,7 +1395,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
 
                                         if (*value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                                            externalDataSourceMetadata.Metadata->ExternalSource.DatabaseType = NYql::EDatabaseType::YdbTopics;
                                         }
                                         f(externalDataSourceMetadata);
                                     });

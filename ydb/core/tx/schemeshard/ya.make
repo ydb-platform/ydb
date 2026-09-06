@@ -245,6 +245,7 @@ SRCS(
     schemeshard__upgrade_schema.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
+    schemeshard_path_footprint.cpp
     schemeshard_backup.cpp
     schemeshard_full_backup.cpp
     schemeshard_full_backup__progress.cpp

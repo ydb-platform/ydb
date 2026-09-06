@@ -1,5 +1,7 @@
 #include "validators.h"
 
+#include <ydb/core/tx/conveyor_composite/common/category.h>
+
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
 
@@ -10,13 +12,10 @@ namespace NKikimr::NConfig {
 
 namespace {
 
-const THashSet<TString> Categories = {
-    "scan",
-    "compaction",
-    "insert",
-    "deduplication",
-    "normalizer",
-};
+bool IsKnownCategory(const TString& value) {
+    NConveyorComposite::ESpecialTaskCategory category;
+    return TryFromString<NConveyorComposite::ESpecialTaskCategory>(value, category);
+}
 
 EValidationResult Fail(std::vector<TString>& errors, TString error) {
     errors.emplace_back(std::move(error));
@@ -30,7 +29,7 @@ EValidationResult ValidateCompositeConveyorConfig(
     std::vector<TString>& errors) {
     THashSet<TString> configuredCategories;
     for (const auto& category : config.GetCategories()) {
-        if (!Categories.contains(category.GetName())) {
+        if (!IsKnownCategory(category.GetName())) {
             return Fail(errors, "unknown composite conveyor category: " + category.GetName());
         }
         if (!configuredCategories.emplace(category.GetName()).second) {
@@ -56,7 +55,7 @@ EValidationResult ValidateCompositeConveyorConfig(
 
         std::set<TString> linkedCategories;
         for (const auto& link : pool.GetLinks()) {
-            if (!Categories.contains(link.GetCategory())) {
+            if (!IsKnownCategory(link.GetCategory())) {
                 return Fail(errors, "unknown composite conveyor link category: " + link.GetCategory());
             }
             if (!linkedCategories.emplace(link.GetCategory()).second) {

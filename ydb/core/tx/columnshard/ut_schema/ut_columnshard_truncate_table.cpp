@@ -1810,5 +1810,131 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(!reader.IsError());
         }
     }
+
+    // Regression for review issue 1 (second round): v0 TableInfo overwrites path-local drop version
+    // during recovery in retention mode.
+    //
+    // Retention TRUNCATE writes the source path's drop version only to V1 (SaveTableDropVersionV1).
+    // The v0 row for the old generation still contains the source SS path WITHOUT a drop version
+    // (that's how the table was originally registered). On restart, InitFromDB loads V1 first
+    // (source path WITH drop), then v0 (source path WITHOUT drop). TTableInfo::Merge unconditionally
+    // overwrote the path info, erasing the drop version. After the fix, Merge preserves the
+    // existing DropVersion when the incoming entry lacks one.
+    //
+    // Without the fix, after restart:
+    //   - source path on old gen has no DropVersion → IsDropped() = false
+    //   - old gen never enters PathsToDrop → portions and metadata leak forever
+    //   - after dropping the copy, the old gen is still not GC'd
+    //
+    // This test: copy → truncate source (retention) → restart → verify live source empty,
+    // copy reads old data, path-local drop preserved → drop copy → old gen in PathsToDrop → GC.
+    Y_UNIT_TEST(TruncateRetentionRecoveryDropVersionPreserved) {
+        TTestBasicRuntime runtime;
+        SetupTruncateTestRuntime(runtime);
+        auto csControllerGuard = RegisterTruncateTestController<TTruncateDropTestController>();
+        auto& csController = *csControllerGuard.operator->();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit 100 rows to the source.
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        const auto snapshotBeforeTruncate = NOlap::TSnapshot(planStep, txId);
+
+        // Copy the source → dstPathId is a read-only alias sharing the source's InternalPathId.
+        const ui64 dstPathId = 2;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // TRUNCATE the source (retention mode: copy is alive).
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(srcPathId, 2), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+        const auto truncateSnapshot = NOlap::TSnapshot(planStep, txId);
+
+        const auto* shard = WaitForShard(csController, runtime);
+        UNIT_ASSERT(shard);
+
+        // The old generation's InternalPathId (shared by the copy).
+        const auto oldInternalPathId =
+            shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(dstPathId), false);
+        UNIT_ASSERT(oldInternalPathId);
+
+        // Restart the tablet.
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+
+        const auto* restartedShard = csController.GetShard();
+        UNIT_ASSERT(restartedShard);
+
+        // (a) After restart, the live source must be empty (new generation).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, truncateSnapshot);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // (b) After restart, the copy must still read the old 100 rows.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, truncateSnapshot);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // (c) After restart, the path-local drop version on the old generation for the source
+        //     path must be preserved. Before the fix, v0 overwrote it during Merge, so
+        //     GetPathDropVersionOptional returned nullopt and IsDropped() was false.
+        {
+            const auto& tablesManager = restartedShard->GetTablesManager();
+            const auto& table = tablesManager.GetTable(*oldInternalPathId);
+            const auto pathDropVersion = table.GetPathDropVersionOptional(TSchemeShardLocalPathId::FromRawValue(srcPathId));
+            UNIT_ASSERT(pathDropVersion.has_value())
+                << "Path-local drop version lost after restart (v0 overwrote V1 during Merge)";
+            UNIT_ASSERT_VALUES_EQUAL(*pathDropVersion, truncateSnapshot);
+        }
+
+        // (d) After restart, the old generation must be in PathsToDrop (table-level IsDropped
+        //     is true because both source and copy paths have drop versions... wait, the copy
+        //     path does NOT have a drop version yet — only the source does. So IsDropped() is
+        //     false until the copy is dropped. The old gen enters PathsToDrop only after
+        //     dropping the copy.)
+        //
+        // Drop the copy.
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(dstPathId, 3), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // (e) After dropping the copy, the old generation must be in PathsToDrop.
+        {
+            const auto& tablesManager = restartedShard->GetTablesManager();
+            const auto& table = tablesManager.GetTable(*oldInternalPathId);
+            UNIT_ASSERT(table.IsDropped())
+                << "Old generation not fully dropped after copy drop (path-local drop was lost)";
+        }
+
+        // (f) Drive GC: the old generation must be finalized and removed.
+        UNIT_ASSERT(WaitForPathsToDropEmpty(csController, runtime, sender));
+
+        // (g) After GC, the old generation is gone from Tables.
+        {
+            const auto& tablesManager = restartedShard->GetTablesManager();
+            UNIT_ASSERT(!tablesManager.HasTable(*oldInternalPathId))
+                << "Old generation not finalized by GC after drop copy";
+        }
+    }
 }
 }   // namespace NKikimr

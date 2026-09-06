@@ -217,10 +217,14 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
     } else {
         it->second.Merge(std::move(tableInfo));
     }
+    // Use path-local drop version, not table-level IsDropped(). In retention mode the table
+    // is not fully dropped (copies survive), but the specific SS path on this generation is
+    // dropped. Using table-level IsDropped() would incorrectly treat a dropped path as live.
+    const bool isPathDropped = it->second.GetPathDropVersionOptional(unifiedPathId.SchemeShardLocalPathId).has_value();
     // SetLivePathId handles the dropped case internally: uses emplace (no overwrite) for dropped
     // generations, and direct assignment for live ones. This protects against loading a dropped
     // generation over a live one during recovery.
-    SetLivePathId(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId, it->second.IsDropped());
+    SetLivePathId(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId, isPathDropped);
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {

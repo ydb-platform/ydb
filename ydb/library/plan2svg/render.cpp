@@ -415,10 +415,9 @@ void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << SvgRect(INTERNAL_GAP_X, CONN_SIZE, CONN_SIZE, CONN_SIZE, "transparent")
         << "<use href='#icon_arrowup' transform='translate(" << INTERNAL_GAP_X << ' ' << CONN_SIZE << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
 
+    // The columns are named once by the document header strip, so only the value
+    // belongs here.
     SummaryBuilder
-        << SvgTextS(Config.OperatorLeft + 2, titleHeight, "Rows")
-        << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Statistics")
-        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")
         << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, ToString(p->Tasks));
 
     SummaryBuilder
@@ -1301,6 +1300,35 @@ static TString ErrorSvg(TStringBuf message) {
         << "</svg>" << Endl;
 }
 
+// The column titles shared by every plan in the document. Only the strip itself
+// is placed here; keeping it pinned to the top of the viewport while the
+// document scrolls is left to the script, because CSS positioning does not
+// apply to elements laid out by SVG. The group wrapper is what the script
+// translates, and it also keeps the strip out of the sibling walk that the fold
+// and slim handlers do over adjacent <svg> elements.
+void TVisualizer::PrintColumnHeaders(TStringBuilder& svg, ui64 maxSec, ui64 deltaSec, ui32 x, ui32 w) {
+    auto titleHeight = INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2;
+    svg << "<g id='columnHeaders'>" << Endl
+        << "<svg width='" << Config.Width << "' height='" << COLUMN_HEADER_HEIGHT << "' x='0' y='0'>" << Endl
+        << SvgRect(0, 0, Config.Width, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X, titleHeight, "Stages and Operators")
+        << SvgTextS(Config.OperatorLeft + 2, titleHeight, "Rows")
+        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")
+        << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Statistics");
+    // The timeline column is titled by its own scale: the ticks the grid lines
+    // running down the document are drawn at.
+    for (ui64 t = 0; t <= maxSec; t += deltaSec) {
+        ui64 x1 = t * w * 1000 / MaxTime;
+        svg << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
+            << SvgTextS(x + x1 + 2, titleHeight, Sprintf("%lu:%.2lu", t / 60, t % 60))
+            << "</g>" << Endl;
+    }
+    svg << "</svg>" << Endl
+        // Outside the strip's own viewport, which would clip half of it away.
+        << SvgLine(0, COLUMN_HEADER_HEIGHT, Config.Width, COLUMN_HEADER_HEIGHT, "columns")
+        << "</g>" << Endl;
+}
+
 TString TVisualizer::PrintSvgSafe() {
     if (LoadError) {
         return ErrorSvg(LoadError);
@@ -1322,7 +1350,9 @@ TString TVisualizer::PrintSvg() {
     TStringBuilder background;
     TStringBuilder svg;
 
-    ui32 offsetY = 0;
+    // The plans start below the column header strip, which is drawn once for all
+    // of them at the top of the document.
+    ui32 offsetY = COLUMN_HEADER_HEIGHT;
     ui32 timelineDelta = (UpdateTime > MaxTime) ? std::min<ui32>(Config.TimelineWidth * (UpdateTime - MaxTime) / UpdateTime, Config.TimelineWidth / 10) : 0;
 
     ui64 maxSec = MaxTime / 1000;
@@ -1350,16 +1380,6 @@ TString TVisualizer::PrintSvg() {
     auto x = Config.TimelineLeft + INTERNAL_GAP_X;
     auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
 
-    for (ui64 t = 0; t <= maxSec; t += deltaSec) {
-        ui64 x1 = t * w * 1000 / MaxTime;
-        TString timeLabel = TStringBuilder()
-            << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
-            << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, Sprintf("%lu:%.2lu", t / 60, t % 60)) << Endl
-            << "</g>" << Endl;
-        for (auto& plan : Plans) {
-            plan->SummaryBuilder << timeLabel;
-        }
-    }
     for (auto& plan : Plans) {
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
     }
@@ -1384,6 +1404,8 @@ TString TVisualizer::PrintSvg() {
         << "  .textc { text-anchor:end; dominant-baseline:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  circle.stage { stroke:" << Config.Palette.StageMain << "; stroke-width:1; fill:" << Config.Palette.StageClone << "; }" << Endl
         << "  line.opdiv { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; stroke-dasharray:1,2; }" << Endl
+        << "  rect.columns { stroke-width:0; fill:" << Config.Palette.ColumnHeader << "; }" << Endl
+        << "  line.columns { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; }" << Endl
         << "  text.clipped { clip-path:url(#clipTextPath); }" << Endl
         << "  polygon.conn { stroke-width:0; fill:" << Config.Palette.ConnectionFill << "; }" << Endl
         << "  path.conn { stroke-width:1; stroke:" << Config.Palette.ConnectionLine << "; fill:" << Config.Palette.ConnectionFill << "; }" << Endl
@@ -1414,11 +1436,11 @@ TString TVisualizer::PrintSvg() {
         ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
         svg
         << "<g><title>" << "Last Update: " << FormatTimeMs(UpdateTime) << "</title>" << Endl
-        << "  <rect x='" << Config.TimelineLeft + Config.TimelineWidth - summary3 << "' y='" << GAP_Y
+        << "  <rect x='" << Config.TimelineLeft + Config.TimelineWidth - summary3 << "' y='" << COLUMN_HEADER_HEIGHT + GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl
         << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << Config.TimelineLeft + Config.TimelineWidth - 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(UpdateTime) << "</text>" << Endl
+        << "' y='" << COLUMN_HEADER_HEIGHT + GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(UpdateTime) << "</text>" << Endl
         << "</g>" << Endl;
     }
 
@@ -1438,6 +1460,8 @@ TString TVisualizer::PrintSvg() {
         << "' width='" << timelineDelta << "' height='" << offsetY
         << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
     }
+
+    PrintColumnHeaders(svg, maxSec, deltaSec, x, w);
 
     svg << "</svg>" << Endl;
 

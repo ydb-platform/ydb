@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>RBO Observatory — proof explorer</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23163838'/%3E%3Cpath d='M11 27V13h8a5 5 0 0 1 0 10h-8m10-1 8 5' fill='none' stroke='%238be0bc' stroke-width='3'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="app.mjs"></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="./" aria-label="RBO Observatory home"
+        ><span class="brand-mark">r.</span><span>RBO<span class="brand-sub">OBSERVATORY</span></span></a
+      >
+      <div class="workspace-label">
+        <span class="live-dot"></span> LOCAL WORKSPACE <span class="readonly">read only</span>
+      </div>
+      <label class="search"
+        ><span aria-hidden="true">⌕</span
+        ><input id="search" placeholder="Find a query or case…" aria-label="Find a query or case" /><kbd
+          >/</kbd
+        ></label
+      >
+      <div class="section-label">EXPLORATIONS <span id="case-count">0</span></div>
+      <nav id="case-list" aria-label="Saved explorations"></nav>
+      <button class="import-button" id="import-button">
+        <span aria-hidden="true">＋</span> Open artifacts <span class="button-arrow">↗</span>
+      </button>
+      <input id="file-input" type="file" multiple accept=".json,.yql,.sql,.smt2,.txt" hidden />
+      <button class="text-button" id="demo-button">Restore example collection</button>
+      <div class="sidebar-footer">
+        <span class="lock-mark" aria-hidden="true">◇</span>
+        <div>Evidence stays on your machine.<br /><span>No uploads. No query execution.</span></div>
+      </div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div>Verification <span>/</span> Explorer</div>
+        <div class="topbar-right">
+          <span class="live-dot"></span> Artifact viewer
+          <button id="help-button" class="icon-button" aria-label="About this explorer">?</button>
+        </div>
+      </header>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <section id="case-header" class="case-header"></section>
+      <div class="workspace-tabs">
+        <nav id="tabs" aria-label="Explorer views"></nav>
+        <span class="trust-label">OBSERVATION ≠ PROOF</span>
+      </div>
+      <section id="view" aria-live="polite"></section>
+      <footer class="main-footer">
+        <span>Inspect the model. Keep the evidence.</span
+        ><span>Initial logical plan ↔ Final pre-physical plan</span>
+      </footer>
+    </main>
+    <dialog id="help-dialog">
+      <button id="close-help" class="icon-button dialog-close" aria-label="Close help">×</button
+      ><span class="eyebrow">A SMALLER WINDOW INTO THE PROOF</span>
+      <h2>Follow one piece at a time.</h2>
+      <p>
+        Compare saved plan graphs, inspect exact operator fields, and follow a modeled counterexample through
+        its recorded outcomes.
+      </p>
+      <p>
+        This app never proves equivalence, runs SQL, or confirms a runtime bug. Missing traces stay missing. A
+        green bounded verdict is only about its recorded model and bounds.
+      </p>
+      <h3>Open your own evidence</h3>
+      <p>
+        Select an initial snapshot, final snapshot, saved verdict and optional concrete trace together. An
+        explorer manifest explicitly binds files and their SHA-256 hashes. No imported path is fetched.
+      </p>
+      <p>
+        Use <kbd>/</kbd> to search cases and <kbd>Esc</kbd> to close this panel. Select any graph node to open
+        its audit desk. The stage view shows recorded topology, not a runtime execution timeline.
+      </p>
+    </dialog>
+    <noscript
+      >This local artifact explorer requires JavaScript. It does not send artifacts to a server.</noscript
+    >
+  </body>
+</html>

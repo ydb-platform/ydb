@@ -1,7 +1,7 @@
 """Plan facts are immutable and shared; symbolic evaluation state is not."""
 
 import unittest
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from unittest.mock import patch
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import analysis, relation, smt, stages, verify
@@ -121,9 +121,33 @@ class AnalyzedPlanTest(unittest.TestCase):
         self.assertEqual(validated.output_schema, (Column("a.k", "Int64", False),))
         self.assertEqual(facts.parents["scan"], frozenset(("filter",)))
         for mapping in (facts.nodes, facts.schemas, facts.schemas["scan"], facts.parents,
-                        facts.subplans_by_consumer, facts.scalar_outer_binds):
+                        facts.subplans_by_consumer, facts.scalar_outer_binds, facts.project_effects):
             with self.subTest(mapping=mapping), self.assertRaises(TypeError):
                 mapping["injected"] = None
+
+    def test_project_effects_are_immutable_and_shared_without_discharging_totality(self):
+        base = _snapshot()
+        project = Project("project", "filter", (
+            Projection("a.k", Expr("column", column="a.k"), error_on_null=True, require_total=True),
+        ), False)
+        snapshot = replace(
+            base,
+            tables=(Table("A", (Column("k", "String", True),), ()),),
+            plan=replace(base.plan, nodes=base.plan.nodes + (project,), root=project.id),
+        )
+        with patch.object(analysis, "_project_effects", wraps=analysis._project_effects) as classify:
+            facts = analysis.analyze_snapshot(snapshot)
+            effects = facts.project_effects[project.id]
+            self.assertEqual(effects, analysis.ProjectEffects(None, (), (), True, ("a.k",), ()))
+            with self.assertRaises(FrozenInstanceError):
+                effects.require_totality = False
+            for _ in range(2):
+                script = smt.Script()
+                evaluator = relation.Evaluator(snapshot, relation.Database(snapshot, 1, script),
+                                               Encoder(script), _context=facts)
+                with self.assertRaisesRegex(relation.RelationError, "mandatory totality observer"):
+                    evaluator.root()
+            self.assertEqual(classify.call_count, 1)
 
     def test_reuse_does_not_share_evaluation_caches(self):
         snapshot = _snapshot()

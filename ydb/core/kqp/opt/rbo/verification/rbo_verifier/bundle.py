@@ -19,6 +19,7 @@ from .relation import Database, RelationError, bundle_mismatch
 from .scalar import Encoder as ScalarEncoder
 from .stages import Router, StageError
 from .verify import (
+    BoundaryObserver,
     Problem,
     VerificationError,
     _check_boundary_roles,
@@ -102,6 +103,8 @@ def build_bundle_problem(
     pairs: tuple[SnapshotPair, ...],
     row_bound: int,
     timeout_ms: int | None = None,
+    *,
+    boundary_observer: BoundaryObserver | None = None,
 ) -> Problem:
     if not pairs:
         raise VerificationError("a result bundle must contain at least one result")
@@ -128,6 +131,10 @@ def build_bundle_problem(
                 for snapshot, plan, side in zip(pair, plans, ("before", "after"))
             ))
         mismatch = bundle_mismatch(tuple(families), scalar)
+        if boundary_observer is not None:
+            for pair in families:
+                for side, family in zip(("before", "after"), pair):
+                    boundary_observer(side, family)
         return _finish_problem(
             script, database, mismatch, exclusions, scalar.semantic_mode,
             abstract_integral_average=scalar.uses_abstract_integral_average,

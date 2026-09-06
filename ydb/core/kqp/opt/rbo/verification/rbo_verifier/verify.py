@@ -7,7 +7,7 @@ import subprocess
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, TypeAlias
+from typing import Any, Callable, Iterable, Iterator, Mapping, TypeAlias
 
 from . import smt
 from .analysis import AnalysisError, ValidatedPlan, analyze_validated
@@ -284,6 +284,8 @@ def build_transformation_prefix_problem(
     after: Snapshot,
     row_bound: int,
     timeout_ms: int | None = None,
+    *,
+    boundary_observer: BoundaryObserver | None = None,
 ) -> Problem:
     """Build the explicitly diagnostic initial-to-transformation-prefix obligation."""
 
@@ -299,7 +301,7 @@ def build_transformation_prefix_problem(
         None,
         None,
         None,
-        None,
+        boundary_observer,
         None,
     )
 
@@ -831,6 +833,24 @@ def query_solver(
             f"first: {first_unknown}",
         )
     return SolverQuery("unsat", {})
+
+
+def query_diagnostic_obligations(
+    problem: Problem,
+    branches: Iterable[MismatchBranch],
+    solver: str | Path,
+    timeout_ms: int,
+) -> Iterator[SolverQuery]:
+    """Raw predicate checks under a separate deadline, without proof classification.
+
+    Iteration can stop after an inconclusive prerequisite. Replacing the marked
+    obligation preserves the database/model constraints, not the mismatch.
+    Neither the original problem nor its equivalence verdict is modified.
+    """
+    budget = _SolverBudget.start(timeout_ms)
+    for branch in branches:
+        diagnostic = replace(problem, semantic_mismatch=branch)
+        yield _query_obligation(diagnostic, solver, (), budget, branch)
 
 
 def _query_obligation(

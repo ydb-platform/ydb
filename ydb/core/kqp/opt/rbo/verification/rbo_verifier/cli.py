@@ -10,6 +10,7 @@ from typing import Sequence
 
 from .ir import SnapshotError, load_snapshot
 from .bundle import build_bundle_problem, load_bundle
+from .diagnostics import NonemptyOutputObserver, diagnose_nonempty_outputs
 from .stages import TASKS
 from .verify import (
     SchemaMismatch,
@@ -29,6 +30,14 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--rows", type=int, default=2, help="symbolic row slots per table")
     result.add_argument("--timeout-ms", type=int, default=10_000)
     result.add_argument("--solver", type=Path, help="explicit Z3 executable")
+    result.add_argument(
+        "--diagnose-nonempty-output", action="store_true",
+        help="separately check modeled successful nonempty output reachability; never changes the verdict",
+    )
+    result.add_argument(
+        "--diagnostic-timeout-ms", type=int, default=10_000,
+        help="separate total solver budget for optional reachability checks (default: 10000)",
+    )
     result.add_argument(
         "--emit-smt",
         type=Path,
@@ -68,15 +77,24 @@ def main(arguments: Sequence[str] | None = None) -> int:
             "provide --solver, --emit-smt, or both",
             comparison_scope,
         )
+    if options.diagnose_nonempty_output and (options.solver is None or options.diagnostic_timeout_ms <= 0):
+        return _error(
+            "INVALID_ARGUMENT", "--diagnose-nonempty-output requires --solver and a positive diagnostic timeout",
+            comparison_scope,
+        )
 
+    observer = NonemptyOutputObserver() if options.diagnose_nonempty_output else None
+    observation_options = {} if observer is None else {"boundary_observer": observer}
     try:
         if options.bundle is not None:
-            problem = build_bundle_problem(load_bundle(options.bundle), options.rows, options.timeout_ms)
+            problem = build_bundle_problem(
+                load_bundle(options.bundle), options.rows, options.timeout_ms, **observation_options,
+            )
         else:
             before = load_snapshot(options.before)
             after = load_snapshot(options.after)
             builder = build_transformation_prefix_problem if options.diagnostic_transformation_prefix else build_problem
-            problem = builder(before, after, options.rows, options.timeout_ms)
+            problem = builder(before, after, options.rows, options.timeout_ms, **observation_options)
         if options.emit_smt is not None:
             options.emit_smt.write_text(problem.formula(), encoding="utf-8")
         if options.solver is None:
@@ -110,6 +128,15 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return _error("SOLVER_ERROR", str(error), comparison_scope)
 
     verdict = _scoped(result.to_json(), comparison_scope)
+    if observer is not None:
+        try:
+            verdict["nonempty_output_diagnostic"] = diagnose_nonempty_outputs(
+                problem, observer, options.solver, options.rows, options.diagnostic_timeout_ms,
+            )
+        except Exception as error:
+            # Diagnostics are optional: even an unexpected diagnostic failure
+            # must leave the completed equivalence verdict and exit code intact.
+            verdict["nonempty_output_diagnostic"] = {"status": "ERROR", "reason": str(error)}
     print(json.dumps(verdict, sort_keys=True))
     return {
         "VERIFIED_BOUNDED": 0,

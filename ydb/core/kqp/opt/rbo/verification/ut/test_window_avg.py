@@ -1,6 +1,7 @@
 import os
 import unittest
 from collections import Counter
+from copy import deepcopy
 from unittest import mock
 
 try:
@@ -314,11 +315,22 @@ def _decimal_abs_snapshot():
 
 
 def _ground(term, values):
+    cache = {}
+
+    def visit(node):
+        if id(node) not in cache:
+            cache[id(node)] = _ground_step(node, values, visit)
+        return cache[id(node)]
+
+    return visit(term)
+
+
+def _ground_step(term, values, visit):
     if term.operation == "symbol":
         return values[term.atom]
     if term.operation in {"bool", "int"}:
         return term.atom
-    arguments = tuple(_ground(argument, values) for argument in term.arguments)
+    arguments = tuple(visit(argument) for argument in term.arguments)
     if term.operation == "not":
         return not arguments[0]
     if term.operation == "and":
@@ -351,7 +363,7 @@ def _evaluate(snapshot, slots):
     parsed = parse_snapshot(snapshot)
     script = smt.Script()
     database = Database(parsed, len(slots), script)
-    relation = Evaluator(parsed, database, Encoder(script)).root().certain()
+    family = Evaluator(parsed, database, Encoder(script)).root()
     values = {}
     table_columns = tuple(column.name for column in parsed.tables[0].columns)
     for witness, slot in zip(database.witness["Sales"], slots):
@@ -362,6 +374,9 @@ def _evaluate(snapshot, slots):
                 values[cell.is_null.atom] = concrete is None
             values[cell.value.atom] = 0 if concrete is None else concrete
 
+    active = [outcome for outcome in family.outcomes if _ground(outcome.enabled, values)]
+    assert len(active) == 1 and not _ground(active[0].error, values)
+    relation = active[0].relation
     bag = Counter()
     for row in relation.rows:
         if not _ground(row.present, values):
@@ -430,6 +445,60 @@ def _concrete_window_average(rows):
 
 
 class WindowAverageTest(unittest.TestCase):
+    def test_rank_and_average_share_one_source_outcome(self):
+        raw = _snapshot()
+        raw["plan"]["nodes"][2]["columns"].append({"output": "rank", "expression": {
+            "kind": "window_rank", "window_name": "peer_rank", "execution_order": 0,
+            "partition_by": ["part_i", "part_s"],
+            "order_by": [
+                {"column": name, "ascending": True, "nulls_first": True}
+                for name in ("group_total", "item")
+            ],
+            "frame": "rows_unbounded_preceding_current_row", "type": "Uint64", "nullable": False,
+        }})
+        raw["plan"]["output"].append("rank")
+        self.assertEqual(
+            _evaluate(raw, ((None, None, 1, 100), (None, None, 2, 101))),
+            Counter({(None, None, 1, 100, 100, 1): 1, (None, None, 2, 101, 100, 2): 1}),
+        )
+        # The second order key breaks equal first-key peers, without tie choices.
+        self.assertEqual(
+            _evaluate(raw, ((None, None, 1, 100), (None, None, 2, 100))),
+            Counter({(None, None, 1, 100, 100, 1): 1, (None, None, 2, 100, 100, 2): 1}),
+        )
+
+    def test_five_keys_and_three_private_average_corridors(self):
+        raw = _snapshot()
+        for name in ("extra1", "extra2", "extra3"):
+            raw["schema"]["tables"][0]["columns"].append({"name": name, "type": "Int64", "nullable": True})
+            raw["plan"]["nodes"][0]["columns"].append({"source": name, "output": name})
+            raw["plan"]["nodes"][1]["keys"].append(name)
+            raw["plan"]["nodes"][2]["columns"][-1]["expression"]["partition_by"].append(name)
+        parse_snapshot(raw)
+        original = deepcopy(raw["plan"]["nodes"])
+        for index in (1, 2, 3):
+            branch = deepcopy(original)
+            for node in branch:
+                node["id"] += str(index)
+                if "input" in node:
+                    node["input"] += str(index)
+            previous = raw["plan"]["root"]
+            raw["plan"]["nodes"].extend(branch)
+            raw["plan"]["nodes"].append({
+                "id": f"union{index}", "op": "union_all", "ordered": False,
+                "inputs": [
+                    {"node": node, "columns": raw["plan"]["output"]}
+                    for node in (previous, "project" + str(index))
+                ],
+                "output": raw["plan"]["output"],
+            })
+            raw["plan"]["root"] = f"union{index}"
+            if index < 3:
+                self.assertEqual(sum(_evaluate(raw, ((None, None, 1, 100, None, 2, 3),)).values()), index + 1)
+            else:
+                with self.assertRaisesRegex(SnapshotError, "snapshot audit bound"):
+                    parse_snapshot(raw)
+
     def test_multikey_null_partitions_all_null_inputs_and_even_ties(self):
         tied = _concrete_window_average(
             ((None, None, 100), (None, None, 101), (None, 7, 999))
@@ -514,8 +583,8 @@ class WindowAverageTest(unittest.TestCase):
 
         mutations = (
             ("partition_by", "part_i", "expected an array"),
-            ("partition_by", [], "between 1 and 4"),
-            ("partition_by", ["part_i"] * 5, "between 1 and 4"),
+            ("partition_by", [], "between 1 and 5"),
+            ("partition_by", ["part_i"] * 6, "between 1 and 5"),
             ("partition_by", ["part_i", "part_i"], "duplicate name"),
             ("partition_by", ["missing"], "not available"),
             ("partition_by", ["item"], "Optional<Int64> or Optional<String>"),
@@ -692,8 +761,25 @@ class WindowAverageTest(unittest.TestCase):
                 "output": {"column": "scalar", "type": "Int64", "nullable": False},
             }
         ]
-        with self.assertRaisesRegex(SnapshotError, "does not admit subplans"):
+        with self.assertRaisesRegex(SnapshotError, "separate from subplan evaluation"):
             parse_snapshot(subplan)
+
+        # A binding below the window is already part of its source outcome.
+        below = deepcopy(subplan)
+        bound_column = below["plan"]["nodes"][2]["columns"].pop()
+        below["plan"]["nodes"].append({
+            "id": "bound", "op": "project", "input": "scan", "ordered": False,
+            "columns": [
+                {"output": name, "expression": _column(name)}
+                for name in ("part_i", "part_s", "item", "amount")
+            ] + [bound_column],
+        })
+        below["plan"]["nodes"][1]["input"] = "bound"
+        below["plan"]["subplans"][0]["consumers"] = ["bound"]
+        self.assertEqual(
+            _evaluate(below, ((None, None, 1, 101),)),
+            _evaluate(_snapshot(), ((None, None, 1, 101),)),
+        )
 
         multiple = _snapshot()
         multiple["plan"]["nodes"][2]["columns"].append(

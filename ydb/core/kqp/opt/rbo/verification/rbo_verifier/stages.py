@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, TypeAlias
 
 from . import smt
 from .analysis import AnalysisError, AnalyzedPlan, analyze_snapshot
 from .ir import (
+    BINARY64_ORDER_COMPARISON,
     Column,
     INTEGRAL_AVG_RANK_COMPARISON,
     Scan,
@@ -107,7 +108,9 @@ class Evaluator:
         node_observer: NodeObserver | None = None,
         edge_observer: EdgeObserver | None = None,
         *,
+        choice_scope: str = "",
         _context: AnalyzedPlan | None = None,
+        project_input_observer: NodeObserver | None = None,
     ) -> None:
         if snapshot.stage_graph is None:
             raise StageError("snapshot has no StageGraph")
@@ -116,7 +119,9 @@ class Evaluator:
         self.database = database
         self.scalar = scalar
         self.router = router
+        self.choice_scope = f"{choice_scope}:" if choice_scope else ""
         self.node_observer = node_observer
+        self.project_input_observer = project_input_observer
         self.edge_observer = edge_observer
         if _context is None:
             try:
@@ -211,8 +216,9 @@ class Evaluator:
                         (parent, child): inputs[ordinal].relations[task]
                         for ordinal, (parent, child, _) in enumerate(slots)
                     },
-                    choice_scope=f"stage:{stage.id}:task:{task}",
+                    choice_scope=f"{self.choice_scope}stage:{stage.id}:task:{task}",
                     node_observer=self.node_observer,
+                    project_input_observer=self.project_input_observer,
                     _context=self._context,
                 )
                 for task in range(task_count)
@@ -231,9 +237,10 @@ class Evaluator:
             self.snapshot,
             self.database,
             self.scalar,
-            choice_scope=f"stage:{stage.id}:task:0",
+            choice_scope=f"{self.choice_scope}stage:{stage.id}:task:0",
             defer_pushed_limits=True,
             node_observer=self.node_observer if stage.source_storage is None else None,
+            project_input_observer=self.project_input_observer,
             _context=self._context,
         )
         if stage.source_storage is None:
@@ -285,7 +292,7 @@ class Evaluator:
                     scan.pushed_limit,
                     None,
                     self.scalar.script,
-                    f"stage:{stage.id}:task:{task}:scan:{scan.id}:pushed_limit",
+                    f"{self.choice_scope}stage:{stage.id}:task:{task}:scan:{scan.id}:pushed_limit",
                 )
                 for task, partition in enumerate(scan_partitions)
             )
@@ -295,9 +302,10 @@ class Evaluator:
                 self.database,
                 self.scalar,
                 node_overrides={scan.id: partition},
-                choice_scope=f"stage:{stage.id}:task:{task}",
+                choice_scope=f"{self.choice_scope}stage:{stage.id}:task:{task}",
                 defer_pushed_limits=True,
                 node_observer=self.node_observer,
+                project_input_observer=self.project_input_observer,
                 _context=self._context,
             )
             for task, partition in enumerate(scan_partitions)
@@ -395,7 +403,8 @@ class Evaluator:
         if edge.kind == "merge":
             if tasks != 1:
                 raise StageError("merge connection requires one consumer task")
-            columns = source.relations[0].columns
+            families = tuple(_pad_merge_alternatives(family, self.scalar) for family in source.relations)
+            columns = families[0].columns
 
             def merge_inputs(relations: tuple[Relation, ...]) -> Relation:
                 for relation in relations:
@@ -413,11 +422,11 @@ class Evaluator:
 
             groups = []
             next_index = 0
-            for family in source.relations:
+            for family in families:
                 size = len(family.outcomes[0].relation.rows)
                 groups.append(tuple(range(next_index, next_index + size)))
                 next_index += size
-            gathered = combine_families(source.relations, merge_inputs)
+            gathered = combine_families(families, merge_inputs)
             return Partitions((
                 merge_family(
                     gathered,
@@ -428,6 +437,30 @@ class Evaluator:
                 ),
             ))
         raise AssertionError(f"unknown connection kind {edge.kind!r}")
+
+
+def _pad_merge_alternatives(family: RelationFamily, scalar: ScalarEncoder) -> RelationFamily:
+    """Give each producer a fixed slot interval without inventing a row.
+
+    Alternatives can have different physical tuple lengths after exact local
+    compaction. Absent tail slots make producer ownership independent of that
+    choice; every present row keeps its original ordinal, payload and errors.
+    Fixed-shape families are returned unchanged.
+    """
+    size = max(len(outcome.relation.rows) for outcome in family.outcomes)
+    if all(len(outcome.relation.rows) == size for outcome in family.outcomes):
+        return family
+    absent = Row(smt.FALSE, {column.name: scalar.null(column.type) for column in family.columns})
+
+    def pad(relation: Relation) -> Relation:
+        count = size - len(relation.rows)
+        return replace(
+            relation,
+            rows=relation.rows + (absent,) * count,
+            ordinals=None if relation.ordinals is None else relation.ordinals + (smt.ZERO,) * count,
+        )
+
+    return map_family(family, pad)
 
 
 def _canonical(value: Value) -> smt.Term:
@@ -583,6 +616,8 @@ def _same_values(
         == right.values[column.name].average_metadata
         and left.values[column.name].decimal_sum_state
         == right.values[column.name].decimal_sum_state
+        and left.values[column.name].binary64_state
+        == right.values[column.name].binary64_state
         for column in columns
     )
 
@@ -643,12 +678,15 @@ def _require_merge_order(relation: Relation, edge: StageEdge) -> None:
             raise StageError(f"merge edge {edge.id!r} input order columns differ")
         if column.type == DOUBLE:
             if (
-                item.comparison != INTEGRAL_AVG_RANK_COMPARISON
-                or not column.integral_avg_rank
+                item.comparison != BINARY64_ORDER_COMPARISON
+                and (
+                    item.comparison != INTEGRAL_AVG_RANK_COMPARISON
+                    or not column.integral_avg_rank
+                )
             ):
                 raise StageError(
                     f"merge edge {edge.id!r} Double order requires a "
-                    "certified completed integral AVG comparison"
+                    "binary64 comparison or certified integral AVG comparison"
                 )
         elif item.comparison is not None:
             raise StageError(

@@ -1,12 +1,15 @@
 import copy
 import io
+import json
 import os
 import subprocess
+import tempfile
 import unittest
 from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from itertools import product
+from pathlib import Path
 from unittest import mock
 
 try:
@@ -34,7 +37,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     parse_snapshot,
     stage_task_counts,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import aggregate, cli, decimal
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import aggregate, bundle, cli, decimal, floating
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import analysis as plan_analysis
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
@@ -502,10 +505,10 @@ def aggregate_stage_snapshot(
     )
     if function == "count":
         output_type = "Uint64"
-    elif function in {"avg", "max", "min"}:
+    elif function in {"avg", "max", "min", "stddev_samp"}:
         if function == "avg" and decimal_sum_type is None and not integral_average:
             raise ValueError("the aggregate test fixture only models Decimal avg")
-        output_type = "Double" if integral_average else input_type
+        output_type = "Double" if integral_average or function == "stddev_samp" else input_type
     elif input_type.startswith("Uint"):
         output_type = "Uint64"
     else:
@@ -514,7 +517,7 @@ def aggregate_stage_snapshot(
         "sum" if staged and function == "count" else function
     )
     keys = ["a.k"] if grouped else []
-    nullable_aggregate = function in {"avg", "max", "min", "sum"}
+    nullable_aggregate = function in {"avg", "max", "min", "sum", "stddev_samp"}
     logical_nullable = nullable_aggregate and (nullable_input or not grouped)
     trait = {
         "input": aggregate_input,
@@ -542,6 +545,11 @@ def aggregate_stage_snapshot(
                 "nullable": nullable_input,
             }
         )
+    if function == "stddev_samp":
+        trait["state"] = {
+            "kind": "binary64_variance_v1", "source_type": input_type, "nullable": nullable_input,
+            "mean_type": "Double", "count_type": "Double", "m2_type": "Double",
+        }
     aggregate = {
         "id": "aggregate",
         "op": "aggregate",
@@ -705,16 +713,10 @@ def aggregate_stage_snapshot(
         schema_value["tables"][0]["columns"][0]["nullable"] = True
     if nullable_input:
         schema_value["tables"][0]["columns"][1]["nullable"] = True
-    return parse_snapshot(
-        _snapshot_with_stage_graph(
-            schema_value,
-            nodes,
-            root,
-            output,
-            stages,
-            edges,
-        )
-    )
+    raw = _snapshot_with_stage_graph(schema_value, nodes, root, output, stages, edges)
+    if function == "stddev_samp":
+        raw["semantic_mode"] = floating.SEMANTIC_MODE
+    return parse_snapshot(raw)
 
 
 def q28_decimal_avg_carrier_stage_graph():
@@ -3402,6 +3404,36 @@ def scalar_subplan_inline_snapshot(staged, aggregate_input="a.x"):
 
 
 class SolverProtocolTest(unittest.TestCase):
+    def test_binary64_requires_all_pairs_not_equal_enlarged_languages(self):
+        columns = (Column("x", "Int64", False),)
+        family = relation_model.RelationFamily(tuple(relation_model.Outcome(
+            smt.TRUE,
+            relation_model.Relation(columns, (relation_model.Row(
+                smt.TRUE, {"x": Value("Int64", smt.FALSE, smt.int_value(value))},
+            ),)),
+            smt.FALSE,
+        ) for value in (0, 1)))
+        exact = relation_model.family_mismatch(family, family, ScalarEncoder(smt.Script()))
+        sufficient = relation_model.family_mismatch(
+            family, family, ScalarEncoder(smt.Script(), semantic_mode=floating.SEMANTIC_MODE),
+        )
+        self.assertEqual(exact.counterexample, smt.FALSE)
+        self.assertEqual(sufficient.counterexample, smt.TRUE)
+
+    def test_binary64_candidate_is_unknown_without_requesting_a_model(self):
+        script = smt.Script()
+        script.assert_obligation(smt.TRUE)
+        problem = Problem(script, {}, semantic_mode=floating.SEMANTIC_MODE)
+        for status, expected in (("sat", "UNKNOWN"), ("unsat", "VERIFIED_BOUNDED")):
+            with mock.patch.object(verifier, "_run_solver", return_value=subprocess.CompletedProcess(
+                ["solver"], 0, status + "\n", "",
+            )) as run:
+                result = solve(problem, "solver", 2)
+            self.assertEqual(result.status, expected)
+            self.assertEqual(result.to_json()["semantic_mode"], floating.SEMANTIC_MODE)
+            self.assertEqual(run.call_count, 1)
+            self.assertNotIn("get-value", run.call_args.args[1])
+
     @staticmethod
     def _branch_problem(count=2):
         script = smt.Script()
@@ -3458,6 +3490,7 @@ class SolverProtocolTest(unittest.TestCase):
                 inexact,
             ),
             soundness_exclusions=(inexact_branch,),
+            abstract_integral_average=True,
         )
         return problem, exact, inexact
 
@@ -3470,7 +3503,7 @@ class SolverProtocolTest(unittest.TestCase):
 
         self.assertEqual(query.status, "unknown")
         self.assertEqual(query.phase, "soundness")
-        self.assertIn("greater than two is reachable", query.reason)
+        self.assertIn("model-domain exclusion is reachable", query.reason)
         run.assert_called_once()
 
     def test_unresolved_integral_average_inexact_region_is_inconclusive(self):
@@ -4047,6 +4080,128 @@ class SolverProtocolTest(unittest.TestCase):
                 constant_snapshot(1, scalar_type="Int64"),
                 0,
             )
+
+
+class BundleContractTest(unittest.TestCase):
+    @staticmethod
+    def _family(values, *, ordered=False, error=False):
+        return relation_model.RelationFamily((relation_model.Outcome(
+            smt.TRUE,
+            relation_model.Relation((Column("x", "Int64", False),), tuple(
+                relation_model.Row(smt.TRUE, {"x": Value("Int64", smt.FALSE, smt.int_value(value))})
+                for value in values
+            ), sequence=ordered),
+            smt.bool_value(error),
+        ),))
+
+    def test_tuple_order_bag_multiplicity_and_whole_query_error(self):
+        def seq(values, **kw):
+            return self._family(values, ordered=True, **kw)
+
+        bag = self._family
+        before = (seq([1, 2]), bag([3, 3]))
+        sparse = seq([1, 99, 2])
+        outcome = sparse.outcomes[0]
+        sparse = relation_model.RelationFamily((replace(outcome, relation=replace(
+            outcome.relation,
+            rows=tuple(replace(row, present=smt.FALSE) if index == 1 else row
+                       for index, row in enumerate(outcome.relation.rows)),
+        )),))
+        cases = (
+            (before, (seq([1, 2]), bag([3, 3])), False),
+            (before, (sparse, bag([3, 3])), False),
+            (before, (seq([2, 1]), bag([3, 3])), True),
+            (before, (seq([1, 2]), bag([3])), True),
+            ((bag([1]), bag([2])), (bag([2]), bag([1])), True),
+            ((bag([1], error=True), bag([2])), (bag([9]), bag([], error=True)), False),
+            ((bag([1], error=True), bag([2])), (bag([1]), bag([2])), True),
+        )
+        for left, right, expected in cases:
+            with self.subTest(expected=expected, left=left, right=right):
+                scalar = ScalarEncoder(smt.Script())
+                mismatch = relation_model.bundle_mismatch(tuple(zip(left, right)), scalar)
+                self.assertEqual(_evaluate_ground_term(mismatch.counterexample, {}), expected)
+
+    def test_shared_local_choices_or_decisions_are_not_independent_roots(self):
+        scalar = ScalarEncoder(smt.Script())
+        ordinary = self._family([1])
+        choice = relation_model.BoundedChoice(scalar.script.fresh_constant("choice", smt.INT), 2)
+        for fields in ({"choices": (choice,)}, {"decisions": (("shared", 0),)}):
+            shared = relation_model.RelationFamily((replace(ordinary.outcomes[0], **fields),))
+            with self.subTest(fields=fields), self.assertRaisesRegex(RelationError, "share local choices"):
+                relation_model.bundle_mismatch(((shared, ordinary), (shared, ordinary)), scalar)
+        shared = relation_model.RelationFamily((replace(ordinary.outcomes[0], choices=(choice,)),))
+        with self.assertRaisesRegex(RelationError, "comparison sides share bounded choice"):
+            relation_model.bundle_mismatch(((shared, ordinary), (ordinary, shared)), scalar)
+        for owner_side in (0, 1):
+            scalar = ScalarEncoder(smt.Script())
+            choice = relation_model.BoundedChoice(scalar.script.fresh_constant("late", smt.INT), 2)
+            owner = replace(ordinary.outcomes[0], choices=(choice,))
+            missing = replace(ordinary.outcomes[0], relation=replace(ordinary.outcomes[0].relation, rows=(
+                relation_model.Row(smt.TRUE, {"x": Value("Int64", smt.FALSE, choice.term)}),
+            )))
+            later = [ordinary, ordinary]
+            later[owner_side] = relation_model.RelationFamily((owner,))
+            with self.subTest(owner_side=owner_side), self.assertRaisesRegex(RelationError, "without carrying"):
+                relation_model.bundle_mismatch(((relation_model.RelationFamily((missing,)), ordinary), tuple(later)), scalar)
+
+    def test_joint_prefix_sequences_do_not_build_quadratic_position_tags(self):
+        source = self._family(range(256), ordered=True)
+        outcome = source.outcomes[0]
+        prefix = relation_model.RelationFamily((replace(
+            outcome, relation=replace(outcome.relation, present_prefix=True),
+        ),))
+        scalar = ScalarEncoder(smt.Script())
+        with mock.patch.object(relation_model, "_compressed_rank", side_effect=AssertionError("already a prefix")):
+            mismatch = relation_model.bundle_mismatch(((prefix, prefix), (prefix, prefix)), scalar)
+        self.assertEqual(mismatch.counterexample, smt.FALSE)
+
+    def test_catalog_union_is_shared_and_conflicts_fail_closed(self):
+        before = passthrough_stage_snapshot()
+        after = passthrough_stage_snapshot({"kind": "map"})
+        table = before.tables[0]
+        extended = replace(table, columns=table.columns + (Column("extra", "Int64", True),))
+        pair = (replace(before, tables=(extended,)), replace(after, tables=(extended,)))
+        problem = bundle.build_bundle_problem(((before, after), pair), 2)
+        self.assertEqual(set(problem.witness), {"A"})
+        self.assertEqual(len(problem.witness["A"]), 2)
+        self.assertEqual(set(problem.witness["A"][0].cells), {"k", "x", "extra"})
+        with self.assertRaisesRegex(VerificationError, "final snapshot.*stage_graph"):
+            bundle.build_bundle_problem(((before, before),), 2)
+        conflict = replace(table, columns=(replace(table.columns[0], nullable=True), table.columns[1]))
+        with self.assertRaisesRegex(VerificationError, "conflicting metadata"):
+            bundle.build_bundle_problem(((before, after), (
+                replace(before, tables=(conflict,)), replace(after, tables=(conflict,)),
+            )), 2)
+
+    def test_versioned_manifest_and_cli_exclude_partial_or_mixed_modes(self):
+        pair = (passthrough_stage_snapshot(), passthrough_stage_snapshot({"kind": "map"}))
+        value = {"format": "ydb-rbo-result-bundle", "version": 1,
+                 "observation": "buffered_tuple_or_error", "results": [
+                     {"before": "a.initial.json", "after": "a.final.json"},
+                     {"before": "b.initial.json", "after": "b.final.json"},
+                 ]}
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "bundle.json"
+            manifest.write_text(json.dumps(value), encoding="utf-8")
+            with mock.patch.object(bundle, "load_snapshot", side_effect=pair * 2):
+                self.assertEqual(bundle.load_bundle(manifest), (pair, pair))
+            for invalid in (
+                {**value, "version": True}, {**value, "unexpected": 0}, {**value, "results": []},
+                {**value, "results": [value["results"][0], value["results"][0]]},
+            ):
+                manifest.write_text(json.dumps(invalid), encoding="utf-8")
+                with mock.patch.object(bundle, "load_snapshot", side_effect=pair * 2), self.assertRaises(VerificationError):
+                    bundle.load_bundle(manifest)
+            manifest.write_text('{"version":1,"version":1}', encoding="utf-8")
+            with self.assertRaisesRegex(VerificationError, "repeats field"):
+                bundle.load_bundle(manifest)
+            output = io.StringIO()
+            with mock.patch.object(cli, "load_bundle", return_value=(pair, pair)), redirect_stdout(output):
+                self.assertEqual(cli.main(["--bundle", str(manifest), "--emit-smt", str(Path(directory) / "proof.smt2")]), 0)
+            self.assertEqual(json.loads(output.getvalue())["comparison_scope"], "BUFFERED_RESULT_BUNDLE")
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(cli.main(["before", "after", "--bundle", str(manifest)]), 2)
 
 
 class BoundaryContractTest(unittest.TestCase):
@@ -5735,6 +5890,20 @@ class ConstructionAuditBoundTest(unittest.TestCase):
 
 
 class AggregateConcreteDifferentialTest(unittest.TestCase):
+    def test_binary64_variance_builds_shared_visitation_and_flush_obligation(self):
+        for grouped, nullable in product((False, True), repeat=2):
+            before = aggregate_stage_snapshot("stddev_samp", grouped, False, nullable_input=nullable)
+            after = aggregate_stage_snapshot("stddev_samp", grouped, True, nullable_input=nullable)
+            problem = build_problem(before, after, 2)
+            formula = problem.formula()
+            self.assertEqual(problem.semantic_mode, floating.SEMANTIC_MODE)
+            self.assertIn("flush", formula)
+            self.assertTrue(any(branch.name.startswith("schedule_pair_") for branch in problem.mismatch_branches))
+            self.assertIsNone(problem.preferred_branches)
+            self.assertIsNone(problem.soundness_exclusion)
+            empty = build_problem(before, after, 0)
+            self.assertEqual(empty.semantic_mismatch.predicate, smt.FALSE)
+
     @staticmethod
     def _sum_state(
         finite_total,
@@ -6983,6 +7152,42 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                 )
                 expected = Counter({(sum(row is not None for row in rows),): 1})
                 self.assertEqual(actual, expected)
+
+    def test_literal_case_sum_elides_only_proven_in_range_wrapping(self):
+        condition = smt.symbol("sum_case", smt.BOOL)
+        cases = (
+            ("Int64", -(1 << 63), (1 << 63) - 1, 0, True),
+            ("Uint64", 0, (1 << 64) - 1, 0, True),
+            ("Int64", 0, (1 << 63) - 1, 1, False),
+            ("Int64", -(1 << 63), 0, -1, False),
+            ("Uint64", 0, (1 << 64) - 1, 1, False),
+            ("Uint64", 0, 1, -1, False),
+        )
+        for scalar_type, low, high, offset, elided in cases:
+            with self.subTest(scalar_type=scalar_type, low=low, high=high, offset=offset):
+                raw = smt.add(
+                    smt.ite(condition, smt.int_value(low), smt.int_value(high)),
+                    smt.int_value(offset),
+                )
+                actual = aggregate.wrap_sum(raw, scalar_type)
+                self.assertEqual(actual is raw, elided)
+                with mock.patch.object(aggregate, "_literal_sum_interval", return_value=None):
+                    modular = aggregate.wrap_sum(raw, scalar_type)
+                for selected in (False, True):
+                    constants = {condition.atom: selected}
+                    self.assertEqual(
+                        _evaluate_ground_term(actual, constants),
+                        _evaluate_ground_term(modular, constants),
+                    )
+
+        unknown = smt.ite(condition, smt.symbol("unbounded_sum", smt.INT), smt.ZERO)
+        for scalar_type in ("Int64", "Uint64"):
+            self.assertIsNot(aggregate.wrap_sum(unknown, scalar_type), unknown)
+        shared = smt.ite(condition, smt.ZERO, smt.ONE)
+        deep = shared
+        for _ in range(1500):
+            deep = smt.add(deep, shared)
+        self.assertIs(aggregate.wrap_sum(deep, "Int64"), deep)
 
     def test_partial_sum_canonicalization_preserves_64_bit_wrapping(self):
         cases = (
@@ -9186,7 +9391,7 @@ class VerificationTest(unittest.TestCase):
             30_000,
         )
         self.assertEqual(result.status, "UNKNOWN")
-        self.assertIn("greater than two is reachable", result.reason)
+        self.assertIn("model-domain exclusion is reachable", result.reason)
 
     def test_projected_integral_average_still_checks_exactness_region(self):
         logical = aggregate_stage_snapshot(
@@ -9212,7 +9417,7 @@ class VerificationTest(unittest.TestCase):
             30_000,
         )
         self.assertEqual(result.status, "UNKNOWN")
-        self.assertIn("greater than two is reachable", result.reason)
+        self.assertIn("model-domain exclusion is reachable", result.reason)
 
     def test_integral_average_input_mutation_requires_exact_replay(self):
         logical = aggregate_stage_snapshot(

@@ -82,6 +82,25 @@ must remain separate from runtime attribution:
   candidate nor a confirmed false positive. No fresh q77 replay is claimed.
 - The q56/q60 witnesses led to defect 9 and were invalidated after its repair;
   subsequent archived `UNKNOWN` solver runs do not reopen that bug.
+- Rank's former model treated duplicate Decimal NaNs as different peers.
+  The independent `KqpRboRankContract::ForcedYqlSelectDecimalPeers` runtime
+  witness establishes ANSI `AggrEquals` behavior: NaNs are peers, as are NULLs.
+  The generalized Rank kernel now counts only strictly preceding rows in the
+  same partition. This is a model correction, not a newly found optimizer bug;
+  the earlier q49 task-routing evidence remains separately scoped above.
+- **TPC-DS q40, unresolved (2026-09-05).** The new census and same-input replays
+  return `COUNTEREXAMPLE` on both `77c6028e3f8` and the literal-SUM optimization;
+  their canonical SMT is byte-identical. Initial `Just(SafeCast(Int32(0),
+  Decimal(7,2)))` and Decimal `Coalesce` wrappers are opaque, while the final
+  snapshot represents their zero/default behavior exactly. This suggests a
+  model-abstraction candidate, not a new optimizer regression. Exact wrapper
+  modeling and replay are the next check; no runtime confirmation is claimed.
+  Paired inputs and raw receipts are local
+  `/tmp/rbo-frontier-promotions-QXQWHA/q40-{baseline,current}/`.
+  A fresh 2026-09-06 replay still returns the candidate in 2.131 seconds, with
+  canonical SMT SHA-256 `d70f09a1d5d708bbb95647c80f29bec5fbf2def04eee4d85bbe36f89b3c849ef`.
+  Its raw evidence is `/tmp/rbo-totality-final-census-47MpAn/q40/`; the
+  runtime attribution remains unresolved.
 
 ## Run only the evidence you need
 

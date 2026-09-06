@@ -120,73 +120,37 @@ Y_UNIT_TEST_SUITE(TRBOCoveragePolicy) {
     }
 
     Y_UNIT_TEST(PolicyAllowsMonotonicCoverageImprovements) {
-        const auto policy = LoadCoveragePolicy();
-        const auto selected = AllQueryIds(Tpcds);
-        auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
-        ui32 improvementQuery = 0;
-        for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
-            if (!policy.Suites.at(Tpcds.Name)
-                     .RequiredFormulaQueries.contains(queryId))
-            {
-                improvementQuery = queryId;
-                break;
-            }
-        }
-        UNIT_ASSERT(improvementQuery);
-        statuses[improvementQuery] = "FORMULA_EMITTED";
-        auto snapshotPairs =
-            SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name));
-        snapshotPairs.insert(improvementQuery);
-        auto verifierEntries =
-            FormulaDashboardFloorVerifierEntries(
-                policy.Suites.at(Tpcds.Name));
-        verifierEntries.insert(improvementQuery);
+        // Keep this independent of the real corpus, whose formula floor is full.
+        const TSuite suite{"tiny", "tiny", "", "", 2};
+        const std::set<ui32> required{1};
+        const std::set<ui32> complete{1, 2};
+        TCoveragePolicy policy;
+        auto& floors = policy.Suites[suite.Name];
+        floors.QueryCount = 2;
+        floors.RequiredVerifierEntryQueries = required;
+        floors.RequiredFormulaQueries = required;
         const auto evaluation = EvaluateCoveragePolicy(
-            policy,
-            Tpcds,
-            selected,
-            statuses,
-            snapshotPairs,
-            verifierEntries,
-            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
-            ECoverageMode::FormulaDashboard);
+            policy, suite, complete,
+            {{1, "FORMULA_EMITTED"}, {2, "FORMULA_EMITTED"}},
+            complete, complete, {}, ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(evaluation.VerifierEntryFloorEnforced);
         UNIT_ASSERT(evaluation.FormulaFloorEnforced);
         UNIT_ASSERT(!evaluation.ProofFloorEnforced);
         UNIT_ASSERT(evaluation.Violations.empty());
-        for (const ui32 queryId :
-             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
-        {
-            UNIT_ASSERT(evaluation.VerifierEntryQueries.contains(queryId));
-        }
-        UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(5));
-        UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(65));
-        UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(80));
-        auto expectedFormulaQueries =
-            policy.Suites.at(Tpcds.Name).RequiredFormulaQueries;
-        expectedFormulaQueries.insert(improvementQuery);
-        UNIT_ASSERT(
-            evaluation.FormulaEmittedQueries == expectedFormulaQueries);
-        UNIT_ASSERT(
-            evaluation.FormulaEmittedQueries.contains(improvementQuery));
+        UNIT_ASSERT(evaluation.RequiredFormulaQueries == required);
+        UNIT_ASSERT(evaluation.FormulaEmittedQueries == complete);
+        UNIT_ASSERT(evaluation.RequiredVerifierEntryQueries == required);
+        UNIT_ASSERT(evaluation.VerifierEntryQueries == complete);
 
         const auto report = PolicyEvaluationJson(evaluation);
         UNIT_ASSERT(report["verifier_entry_floor_enforced"].GetBooleanSafe());
-        UNIT_ASSERT_VALUES_EQUAL(
-            report["required_verifier_entry_queries"].GetArraySafe().size(),
-            policy.Suites.at(Tpcds.Name)
-                .RequiredVerifierEntryQueries.size());
-        size_t index = 0;
-        for (const ui32 queryId :
-             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
-        {
-            UNIT_ASSERT_VALUES_EQUAL(
-                report["required_verifier_entry_queries"][index++].GetUIntegerSafe(),
-                queryId);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(
-            report["verifier_entry_queries"].GetArraySafe().size(),
-            verifierEntries.size());
+        const auto& requiredEntries = report["required_verifier_entry_queries"].GetArraySafe();
+        const auto& actualEntries = report["verifier_entry_queries"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(requiredEntries.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(requiredEntries[0].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(actualEntries.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(actualEntries[0].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(actualEntries[1].GetUIntegerSafe(), 2);
     }
 
     Y_UNIT_TEST(PolicyTracksPreparationIndependently) {
@@ -449,6 +413,8 @@ Y_UNIT_TEST_SUITE(TRBOCoveragePolicy) {
         auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
         auto snapshotPairs =
             SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name));
+        const auto pairCount = snapshotPairs.size();
+        const auto formulaCount = policy.Suites.at(Tpcds.Name).RequiredFormulaQueries.size();
         const auto verifierEntries =
             FormulaDashboardFloorVerifierEntries(
                 policy.Suites.at(Tpcds.Name));
@@ -466,8 +432,8 @@ Y_UNIT_TEST_SUITE(TRBOCoveragePolicy) {
         UNIT_ASSERT(baseline.Violations.empty());
         UNIT_ASSERT(baseline.RequiredSnapshotPairQueries.empty());
         UNIT_ASSERT(baseline.RequiredFormulaQueries.contains(51));
-        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairFloorQueries.size(), 82);
-        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairQueries.size(), 82);
+        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairFloorQueries.size(), pairCount);
+        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairQueries.size(), pairCount);
 
         statuses[51] = "OPTIMIZER_FAILURE";
         snapshotPairs.erase(51);
@@ -496,13 +462,13 @@ Y_UNIT_TEST_SUITE(TRBOCoveragePolicy) {
         UNIT_ASSERT(
             report["required_snapshot_pair_queries"].GetArraySafe().empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            report["snapshot_pair_floor_queries"].GetArraySafe().size(), 82);
+            report["snapshot_pair_floor_queries"].GetArraySafe().size(), pairCount);
         UNIT_ASSERT_VALUES_EQUAL(
-            report["snapshot_pair_queries"].GetArraySafe().size(), 81);
+            report["snapshot_pair_queries"].GetArraySafe().size(), pairCount - 1);
         UNIT_ASSERT_VALUES_EQUAL(
-            report["required_formula_queries"].GetArraySafe().size(), 82);
+            report["required_formula_queries"].GetArraySafe().size(), formulaCount);
         UNIT_ASSERT_VALUES_EQUAL(
-            report["formula_emitted_queries"].GetArraySafe().size(), 81);
+            report["formula_emitted_queries"].GetArraySafe().size(), formulaCount - 1);
     }
 
     Y_UNIT_TEST(PolicyReportsEveryFloorRegression) {
@@ -550,39 +516,11 @@ Y_UNIT_TEST_SUITE(TRBOCoveragePolicy) {
 
     Y_UNIT_TEST(PolicyEnforcesCuratedProofFloor) {
         const auto policy = LoadCoveragePolicy();
-        const std::set<ui32> selected = {
-            3, 8, 9, 15, 16, 19, 21, 28, 34, 38, 41, 42, 43, 48, 52, 55, 62,
-            69, 73, 87, 88, 90, 93, 94, 95, 96, 97, 99};
-        const TMap<ui32, TString> statuses = {
-            {3, "VERIFIED_BOUNDED"},
-            {8, "VERIFIED_BOUNDED"},
-            {9, "VERIFIED_BOUNDED"},
-            {15, "VERIFIED_BOUNDED"},
-            {16, "VERIFIED_BOUNDED"},
-            {19, "VERIFIED_BOUNDED"},
-            {21, "VERIFIED_BOUNDED"},
-            {28, "VERIFIED_BOUNDED"},
-            {34, "VERIFIED_BOUNDED"},
-            {38, "VERIFIED_BOUNDED"},
-            {41, "VERIFIED_BOUNDED"},
-            {42, "VERIFIED_BOUNDED"},
-            {43, "VERIFIED_BOUNDED"},
-            {48, "VERIFIED_BOUNDED"},
-            {52, "VERIFIED_BOUNDED"},
-            {55, "VERIFIED_BOUNDED"},
-            {62, "VERIFIED_BOUNDED"},
-            {69, "VERIFIED_BOUNDED"},
-            {73, "VERIFIED_BOUNDED"},
-            {87, "VERIFIED_BOUNDED"},
-            {88, "VERIFIED_BOUNDED"},
-            {90, "VERIFIED_BOUNDED"},
-            {93, "VERIFIED_BOUNDED"},
-            {94, "VERIFIED_BOUNDED"},
-            {95, "VERIFIED_BOUNDED"},
-            {96, "VERIFIED_BOUNDED"},
-            {97, "VERIFIED_BOUNDED"},
-            {99, "VERIFIED_BOUNDED"},
-        };
+        const auto& selected = policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries;
+        TMap<ui32, TString> statuses;
+        for (const ui32 queryId : selected) {
+            statuses[queryId] = "VERIFIED_BOUNDED";
+        }
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
             Tpcds,
@@ -624,39 +562,19 @@ Y_UNIT_TEST_SUITE(TRBOCoveragePolicy) {
 
     Y_UNIT_TEST(PolicyReportsEveryProofFloorRegression) {
         const auto policy = LoadCoveragePolicy();
-        const TMap<ui32, TString> statuses = {
-            {3, "VERIFIED_BOUNDED"},
-            {8, "VERIFIED_BOUNDED"},
-            {9, "VERIFIED_BOUNDED"},
-            {15, "VERIFIED_BOUNDED"},
-            {16, "VERIFIED_BOUNDED"},
-            {19, "VERIFIED_BOUNDED"},
-            {21, "VERIFIED_BOUNDED"},
-            {28, "VERIFIED_BOUNDED"},
-            {34, "VERIFIED_BOUNDED"},
-            {38, "VERIFIED_BOUNDED"},
-            {41, "VERIFIED_BOUNDED"},
-            {42, "VERIFIED_BOUNDED"},
-            {43, "VERIFIED_BOUNDED"},
-            {48, "VERIFIED_BOUNDED"},
-            {52, "UNKNOWN"},
-            {55, "FORMULA_EMITTED"},
-            {62, "VERIFIED_BOUNDED"},
-            {69, "VERIFIED_BOUNDED"},
-            {73, "VERIFIED_BOUNDED"},
-            {87, "VERIFIED_BOUNDED"},
-            {88, "VERIFIED_BOUNDED"},
-            {90, "VERIFIED_BOUNDED"},
-            {93, "UNSUPPORTED"},
-            {94, "VERIFIED_BOUNDED"},
-            {95, "VERIFIED_BOUNDED"},
-            {97, "VERIFIED_BOUNDED"},
-            {99, "VERIFIED_BOUNDED"},
-        };
+        const auto& selected = policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries;
+        TMap<ui32, TString> statuses;
+        for (const ui32 queryId : selected) {
+            statuses[queryId] = "VERIFIED_BOUNDED";
+        }
+        statuses[52] = "UNKNOWN";
+        statuses[55] = "FORMULA_EMITTED";
+        statuses[93] = "UNSUPPORTED";
+        statuses.erase(96);
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 8, 9, 15, 16, 19, 21, 28, 34, 38, 41, 42, 43, 48, 52, 55, 62, 69, 73, 87, 88, 90, 93, 94, 95, 96, 97, 99},
+            selected,
             statuses,
             {},
             {},
@@ -678,7 +596,7 @@ Y_UNIT_TEST_SUITE(TRBOCoveragePolicy) {
         const auto optimizerFailure = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 8, 9, 15, 16, 19, 21, 28, 34, 38, 41, 42, 43, 48, 52, 55, 62, 69, 73, 87, 88, 90, 93, 94, 95, 96, 97, 99},
+            selected,
             optimizerFailureStatuses,
             {},
             {},

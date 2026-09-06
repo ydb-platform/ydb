@@ -1,7 +1,7 @@
 """Admission for the three deliberately restricted window capabilities.
 
 Expression typing lives in ir.py. These checks establish whole-plan premises
-(private lineage, supported topology and no mixed window families). They are
+(private lineage, supported topology and isolated ordered-ROWS families). They are
 mandatory before evaluation and do not imply support for arbitrary SQL windows.
 """
 
@@ -10,11 +10,12 @@ from __future__ import annotations
 from typing import Mapping
 
 from .ir import (
-    Aggregate, Column, ExistsSubplan, Expr, PlanNode, Project, Snapshot, ValueType,
+    Aggregate, Column, ExistsSubplan, InSubplan, Expr, PlanNode, Project, Snapshot, ValueType,
     MAX_WINDOW_RANKS_PER_PROJECT, MAX_WINDOW_RANKS_PER_SNAPSHOT,
+    MAX_WHOLE_PARTITION_WINDOWS_PER_SNAPSHOT,
     MAX_WINDOW_ROWS_PER_PROJECT, MAX_WINDOW_ROWS_PER_SNAPSHOT,
     MAX_WINDOW_ROWS_PROJECTS_PER_SNAPSHOT, Q51_PRICE_TYPE, Q51_WINDOW_NAMES,
-    WHOLE_PARTITION_DECIMAL_SUM_TYPE, WINDOW_RANK_ORDER_TYPE, WINDOW_ROWS_KINDS,
+    WHOLE_PARTITION_DECIMAL_SUM_TYPE, WINDOW_ROWS_KINDS,
     _expression_kind_count, _fail, _node_expressions, _plan_descendants, _unique,
     plan_node_inputs,
 )
@@ -28,11 +29,44 @@ def validate_window_dataflow(snapshot: Snapshot, schemas: Mapping[str, Mapping[s
     _validate_window_rank_dataflow(snapshot, schemas)
 
 
+def _validate_window_subplan_separation(
+    snapshot: Snapshot, project: Project, *, allow_closed_in_rank: bool = False,
+) -> None:
+    # Subplans already evaluated below this input remain part of its shared
+    # source outcome. A window itself cannot bind/invoke a subplan: its
+    # per-task evaluation intentionally has no binding callback. Deterministic
+    # Rank also composes inside one closed leaf IN relation evaluated by node().
+    nodes = snapshot.plan.node_map()
+    main = _plan_descendants(nodes, snapshot.plan.root)
+    owners = []
+    for subplan in snapshot.plan.subplans:
+        if project.id in subplan.consumers:
+            _fail(f"node {project.id!r}", "window Project must be separate from subplan evaluation")
+        region = _plan_descendants(nodes, subplan.root)
+        if project.id in region:
+            owners.append((subplan, region))
+    if not owners and project.id in main:
+        return
+    if allow_closed_in_rank and len(owners) == 1 and project.id not in main:
+        owner, region = owners[0]
+        if (
+            isinstance(owner, InSubplan)
+            and all(consumer in main for consumer in owner.consumers)
+            and not any(
+                consumer in region
+                for subplan in snapshot.plan.subplans
+                for consumer in subplan.consumers
+            )
+        ):
+            return
+    _fail(f"node {project.id!r}", "window Project must be separate from subplan evaluation")
+
+
 def _validate_whole_partition_decimal_window_dataflow(
     snapshot: Snapshot,
     schemas: Mapping[str, Mapping[str, Column]],
 ) -> None:
-    """Admit one SUM/AVG window leaf on one private grouped-SUM corridor."""
+    """Admit bounded, independently private grouped-SUM window corridors."""
 
     window_kinds = ("window_sum", "window_avg")
     owners: list[tuple[str, PlanNode]] = []
@@ -43,37 +77,37 @@ def _validate_whole_partition_decimal_window_dataflow(
                     (kind, node)
                     for _ in range(_expression_kind_count(expression, kind))
                 )
-    predicate_kinds = tuple(
-        kind
+    predicate_windows = any(
+        _expression_kind_count(subplan.predicate, kind)
         for subplan in snapshot.plan.subplans
         if isinstance(subplan, ExistsSubplan) and subplan.predicate is not None
         for kind in window_kinds
-        for _ in range(_expression_kind_count(subplan.predicate, kind))
     )
-    if not owners and not predicate_kinds:
+    if not owners and not predicate_windows:
         return
-    observed_kinds = tuple(kind for kind, _node in owners) + predicate_kinds
-    if len(observed_kinds) != 1:
-        label = (
-            observed_kinds[0]
-            if observed_kinds and len(set(observed_kinds)) == 1
-            else "relation-dependent window"
-        )
-        _fail(
-            "snapshot.plan",
-            f"exactly one {label} expression is modeled",
-        )
-    kind = observed_kinds[0]
-    if snapshot.plan.subplans:
-        _fail("snapshot.plan.subplans", f"{kind} does not admit subplans")
-    if predicate_kinds or not isinstance(owners[0][1], Project):
-        _fail(
-            "snapshot.plan",
-            f"{kind} may appear only inside one main-plan Project",
-        )
+    if predicate_windows or any(not isinstance(node, Project) for _kind, node in owners):
+        _fail("snapshot.plan", "whole-partition windows require main-plan Projects")
+    if len(owners) > MAX_WHOLE_PARTITION_WINDOWS_PER_SNAPSHOT:
+        _fail("snapshot.plan", "whole-partition window count exceeds the snapshot audit bound")
+    if sum(kind == "window_sum" for kind, _project in owners) > 1:
+        _fail("snapshot.plan", "exactly one window_sum expression is modeled")
+    project_ids: set[str] = set()
+    for kind, project in owners:
+        if project.id in project_ids:
+            _fail("snapshot.plan", f"exactly one {kind} expression is modeled per Project")
+        project_ids.add(project.id)
+    for kind, project in owners:
+        _validate_whole_partition_decimal_window_corridor(snapshot, schemas, kind, project)
 
-    project = owners[0][1]
+
+def _validate_whole_partition_decimal_window_corridor(
+    snapshot: Snapshot,
+    schemas: Mapping[str, Mapping[str, Column]],
+    kind: str,
+    project: PlanNode,
+) -> None:
     assert isinstance(project, Project)
+    _validate_window_subplan_separation(snapshot, project)
     nodes = snapshot.plan.node_map()
     aggregate = nodes.get(project.input)
     if not (
@@ -217,17 +251,15 @@ def _validate_window_rank_dataflow(
     snapshot: Snapshot,
     schemas: Mapping[str, Mapping[str, Column]],
 ) -> None:
-    """Admit only q49's direct, independently sorted global Rank leaves."""
+    """Admit bounded, private ANSI Rank Projects with fully typed direct keys.
+
+    Rank reads the complete task-local partition, regardless of frame. Scalar
+    key semantics are ordinary preceding Projects, not query-specific lineage.
+    """
 
     ranks_by_project: dict[str, list[Expr]] = {}
     rank_count = 0
-    whole_window_count = 0
     for node in snapshot.plan.nodes:
-        for expression in _node_expressions(node):
-            whole_window_count += sum(
-                _expression_kind_count(expression, kind)
-                for kind in ("window_sum", "window_avg")
-            )
         if isinstance(node, Project):
             for index, projection in enumerate(node.columns):
                 count = _expression_kind_count(
@@ -262,10 +294,6 @@ def _validate_window_rank_dataflow(
                 "window_rank",
             )
             rank_count += predicate_ranks
-            whole_window_count += sum(
-                _expression_kind_count(subplan.predicate, kind)
-                for kind in ("window_sum", "window_avg")
-            )
             if predicate_ranks:
                 _fail(
                     f"snapshot.plan.subplans[{index}].predicate",
@@ -274,13 +302,6 @@ def _validate_window_rank_dataflow(
 
     if not rank_count:
         return
-    if snapshot.plan.subplans:
-        _fail("snapshot.plan.subplans", "window_rank does not admit subplans")
-    if whole_window_count:
-        _fail(
-            "snapshot.plan",
-            "window_rank may not be mixed with aggregate-window leaves",
-        )
     if rank_count > MAX_WINDOW_RANKS_PER_SNAPSHOT:
         _fail(
             "snapshot.plan",
@@ -289,20 +310,16 @@ def _validate_window_rank_dataflow(
         )
 
     nodes = snapshot.plan.node_map()
-    main_nodes = _plan_descendants(nodes, snapshot.plan.root)
     consumers: dict[str, list[PlanNode]] = {
         node.id: [] for node in snapshot.plan.nodes
     }
     for consumer in snapshot.plan.nodes:
         for producer in plan_node_inputs(consumer):
             consumers[producer].append(consumer)
-    names: list[str] = []
     for project_id, ranks in ranks_by_project.items():
-        if project_id not in main_nodes:
-            _fail(
-                f"node {project_id!r}",
-                "window_rank must belong to the main result plan",
-            )
+        project = nodes[project_id]
+        assert isinstance(project, Project)
+        _validate_window_subplan_separation(snapshot, project, allow_closed_in_rank=True)
         if len(consumers[project_id]) > 1:
             _fail(
                 f"node {project_id!r}",
@@ -321,14 +338,14 @@ def _validate_window_rank_dataflow(
                 "window_rank execution_order must be the complete distinct "
                 f"range 0..{len(ranks) - 1}",
             )
-        input_schema = schemas[nodes[project_id].input]
+        definitions: dict[str, tuple[object, ...]] = {}
         for rank in ranks:
             assert rank.window_name is not None
-            assert rank.order_by is not None and len(rank.order_by) == 1
-            names.append(rank.window_name)
-            key = input_schema.get(rank.order_by[0].column)
-            assert key is not None
-            assert key.value_type == ValueType(WINDOW_RANK_ORDER_TYPE, False)
+            assert rank.order_by is not None and 1 <= len(rank.order_by) <= 2
+            definition = (rank.partition_by, rank.order_by, rank.window_frame)
+            previous = definitions.setdefault(rank.window_name, definition)
+            if previous != definition:
+                _fail(f"node {project_id!r}", "one window_rank name must describe one definition")
 
         if snapshot.stage_graph is not None:
             stage_outputs = tuple(
@@ -351,7 +368,6 @@ def _validate_window_rank_dataflow(
                     f"node {project_id!r}",
                     "a staged window_rank Project output must not fan out",
                 )
-    _unique(names, "snapshot.plan window_rank names")
 
 
 

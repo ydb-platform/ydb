@@ -7,15 +7,16 @@ plan belongs to one snapshot; consumers receive only the facts they need.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cache
 from itertools import combinations
 from types import MappingProxyType
 from typing import Mapping
 
 from . import decimal
 from .ir import (
-    Aggregate, Column, Filter, Join, Limit, OuterBind, PlanNode, Project,
+    Aggregate, Column, EmptySource, Filter, Join, Limit, OuterBind, PlanNode, Project,
     ScalarSubplan, Snapshot, Sort, Subplan, UnionAll, _plan_descendants,
-    plan_node_inputs, validate_snapshot,
+    plan_node_inputs, stage_input_slots, stage_task_counts, validate_snapshot,
 )
 
 
@@ -51,7 +52,7 @@ class AnalyzedPlan:
     decimal_sum_state_producers: frozenset[tuple[str, str]]
     decimal_sum_state_consumers: frozenset[tuple[str, str]]
     subplans_by_consumer: Mapping[str, tuple[Subplan, ...]]
-    scalar_outer_binds: Mapping[str, OuterBind]
+    scalar_outer_binds: Mapping[str, tuple[OuterBind, ...]]
 
 
 def analyze_snapshot(snapshot: Snapshot) -> AnalyzedPlan:
@@ -74,16 +75,22 @@ def analyze_validated(validated: ValidatedPlan) -> AnalyzedPlan:
     producers, consumers = _decimal_sum_state_lineages(snapshot, nodes, frozen_parents)
 
     by_consumer: dict[str, list[Subplan]] = {}
-    outer_binds: dict[str, OuterBind] = {}
+    outer_binds: dict[str, tuple[OuterBind, ...]] = {}
     for subplan in snapshot.plan.subplans:
         for consumer in subplan.consumers:
             by_consumer.setdefault(consumer, []).append(subplan)
-        if isinstance(subplan, ScalarSubplan) and subplan.dependency is not None:
-            descendants = _plan_descendants(nodes, subplan.root)
-            outer_binds[subplan.binding] = next(
-                node for node in snapshot.plan.nodes
-                if isinstance(node, OuterBind) and node.id in descendants
-            )
+        if isinstance(subplan, ScalarSubplan) and subplan.dependencies:
+            shape = nodes[subplan.root]
+            while isinstance(shape, (Project, Aggregate)):
+                shape = nodes[shape.input]
+            assert isinstance(shape, Filter)
+            shape = nodes[shape.input]
+            chain: list[OuterBind] = []
+            while isinstance(shape, OuterBind):
+                chain.append(shape)
+                shape = nodes[shape.input]
+            # Bottom-up: the first binding's input is the shared closed root.
+            outer_binds[subplan.binding] = tuple(reversed(chain))
     return AnalyzedPlan(
         snapshot,
         MappingProxyType(nodes),
@@ -170,6 +177,7 @@ def _reject_correlated_limit_fanout(
 
     cache: dict[str, frozenset[str]] = {}
     ordered: dict[str, bool] = {}
+    inert_limits = _order_insensitive_limits(snapshot, nodes)
 
     def has_sequence(node_id: str) -> bool:
         if node_id not in ordered:
@@ -185,7 +193,11 @@ def _reject_correlated_limit_fanout(
 
     def reachable_limits(node_id: str) -> frozenset[str]:
         if node_id not in cache:
-            limits = {node_id} if isinstance(nodes[node_id], Limit) else set()
+            limits = (
+                {node_id}
+                if isinstance(nodes[node_id], Limit) and node_id not in inert_limits
+                else set()
+            )
             if not isinstance(nodes[node_id], (Sort, Aggregate, Join, UnionAll)):
                 for parent in parents[node_id]:
                     limits.update(reachable_limits(parent))
@@ -205,3 +217,57 @@ def _reject_correlated_limit_fanout(
                     f"branches {', '.join(sorted(distinct))}; correlated fan-out "
                     "is not modeled"
                 )
+
+
+def _order_insensitive_limits(
+    snapshot: Snapshot, nodes: Mapping[str, PlanNode],
+) -> frozenset[str]:
+    """Certify Take that cannot select rows, even across stage transfers.
+
+    Bounds count successful rows across *all* tasks. Broadcast is the only
+    connection that duplicates that total; every other connection only moves
+    rows. Unknown cardinalities stay unknown. This is deliberately stronger
+    than a per-task bound, so it never assumes a correct shuffle or gather.
+    """
+
+    tasks = dict.fromkeys(nodes, 1)
+    copies: dict[tuple[str, int], int] = {}
+    if snapshot.stage_graph is not None:
+        graph = snapshot.stage_graph
+        counts = stage_task_counts(snapshot)
+        incoming = {(edge.consumer, edge.consumer_input): edge for edge in graph.edges}
+        for stage in graph.stages:
+            tasks.update(dict.fromkeys(stage.nodes, counts[stage.id]))
+            for slot, (parent, ordinal, _child) in enumerate(stage_input_slots(snapshot.plan, stage)):
+                edge = incoming[stage.id, slot]
+                copies[parent, ordinal] = counts[stage.id] if edge.kind == "broadcast" else 1
+
+    def input_bound(node: PlanNode) -> int | None:
+        source = bound(plan_node_inputs(node)[0])
+        return None if source is None else source * copies.get((node.id, 0), 1)
+
+    @cache
+    def bound(node_id: str) -> int | None:
+        node = nodes[node_id]
+        if isinstance(node, EmptySource) or (
+            isinstance(node, Aggregate) and not node.keys and not node.distinct_all
+        ):
+            return tasks[node_id]
+        if isinstance(node, (Project, Filter, OuterBind, Sort, Limit)):
+            source = input_bound(node)
+            if isinstance(node, Limit):
+                maximum = node.count.value * tasks[node_id]
+                return maximum if source is None else min(source, maximum)
+            return source
+        return None
+
+    return frozenset(
+        node.id for node in nodes.values()
+        if isinstance(node, Limit) and (
+            node.count.value == 0 or (
+                (node.offset is None or node.offset.value == 0)
+                and (maximum := input_bound(node)) is not None
+                and maximum <= node.count.value
+            )
+        )
+    )

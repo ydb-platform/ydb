@@ -120,7 +120,7 @@ TIntrusivePtr<TOpRead> MakeRead(
         outputs.emplace_back(alias, column);
     }
 
-    return MakeIntrusive<TOpRead>(
+    auto read = MakeIntrusive<TOpRead>(
         alias,
         columns,
         outputs,
@@ -133,6 +133,17 @@ TIntrusivePtr<TOpRead> MakeRead(
         ESortDir::None,
         TPhysicalOpProps{},
         pos);
+    // Physical input annotations come from the declared table, independently
+    // of the scalar expression (which a negative test may deliberately mutate).
+    const auto types = table.GetColumnTypesMap();
+    TVector<const TItemExprType*> items;
+    for (const auto& column : columns) {
+        items.push_back(ctx.ExprCtx.MakeType<TItemExprType>(
+            TInfoUnit(alias, column).GetFullName(), types.at(column)));
+    }
+    read->Type = ctx.ExprCtx.MakeType<TListExprType>(
+        ctx.ExprCtx.MakeType<TStructExprType>(std::move(items)));
+    return read;
 }
 
 struct TOutputTypeSpec {
@@ -3329,15 +3340,16 @@ TSemanticSnapshotExportResult ExportMapExpressionResult(
 TSemanticSnapshotExportResult ExportTypedMapExpressionResult(
     TExportTestContext& ctx,
     const TString& alias,
-    TStringBuf sourceType,
-    bool sourceNullable,
+    const TVector<TColumnSpec>& columns,
     TExprNode::TPtr expression,
     std::function<void(TExprNode&)> mutate = {})
 {
-    const auto& table = AddTable(ctx, "/Root/TypedExpression", {
-        {"x", TString(sourceType), !sourceNullable},
-    });
-    auto read = MakeRead(ctx, table, alias, {"x"});
+    const auto& table = AddTable(ctx, "/Root/TypedExpression", columns);
+    TVector<TString> names;
+    for (const auto& column : columns) {
+        names.push_back(column.Name);
+    }
+    auto read = MakeRead(ctx, table, alias, names);
     TExpression wrapped(
         std::move(expression),
         &ctx.ExprCtx,
@@ -3356,6 +3368,36 @@ TSemanticSnapshotExportResult ExportTypedMapExpressionResult(
     return ExportSemanticSnapshotV1(root, ctx.RboCtx);
 }
 
+TSemanticSnapshotExportResult ExportTypedMapExpressionResult(
+    TExportTestContext& ctx,
+    const TString& alias,
+    TStringBuf sourceType,
+    bool sourceNullable,
+    TExprNode::TPtr expression,
+    std::function<void(TExprNode&)> mutate = {})
+{
+    return ExportTypedMapExpressionResult(ctx, alias,
+        {{"x", TString(sourceType), !sourceNullable}},
+        std::move(expression), std::move(mutate));
+}
+
+NJson::TJsonValue ExportTypedMapExpression(
+    TExportTestContext& ctx,
+    const TString& alias,
+    const TVector<TColumnSpec>& columns,
+    TExprNode::TPtr expression)
+{
+    const auto snapshot = ParseSupported(ExportTypedMapExpressionResult(
+        ctx,
+        alias,
+        columns,
+        std::move(expression)));
+
+    const auto& outputs = FindNode(snapshot, "project")["columns"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(outputs.back()["output"].GetStringSafe(), "result");
+    return outputs.back()["expression"];
+}
+
 NJson::TJsonValue ExportTypedMapExpression(
     TExportTestContext& ctx,
     const TString& alias,
@@ -3363,16 +3405,8 @@ NJson::TJsonValue ExportTypedMapExpression(
     bool sourceNullable,
     TExprNode::TPtr expression)
 {
-    const auto snapshot = ParseSupported(ExportTypedMapExpressionResult(
-        ctx,
-        alias,
-        sourceType,
-        sourceNullable,
-        std::move(expression)));
-
-    const auto& columns = FindNode(snapshot, "project")["columns"].GetArraySafe();
-    UNIT_ASSERT_VALUES_EQUAL(columns.back()["output"].GetStringSafe(), "result");
-    return columns.back()["expression"];
+    return ExportTypedMapExpression(ctx, alias,
+        {{"x", TString(sourceType), !sourceNullable}}, std::move(expression));
 }
 
 TSemanticSnapshotExportResult ExportCompiledLike(
@@ -3830,7 +3864,7 @@ TSemanticSnapshotExportResult ExportDateUnwrapExpression(
     EDateUnwrapShape shape)
 {
     const auto& table = AddTable(ctx, "/Root/DateUnwrap", {
-        {"x", "Date", false},
+        {"x", "Date", shape == EDateUnwrapShape::WrongMemberType},
         {"s", "String", false},
     });
     auto read = MakeRead(ctx, table, "a", {"x", "s"});
@@ -3990,14 +4024,16 @@ TSemanticSnapshotExportResult ExportStringUnwrapExpression(
     EStringUnwrapShape shape)
 {
     const bool nonNullableSource =
-        shape == EStringUnwrapShape::NonNullablePhysicalSource;
+        shape == EStringUnwrapShape::NonNullablePhysicalSource ||
+        shape == EStringUnwrapShape::NonOptionalMember;
+    const bool utf8Source = shape == EStringUnwrapShape::Utf8;
     const auto& table = AddTable(ctx, "/Root/StringUnwrap", {
-        {"s", "String", nonNullableSource},
+        {"s", utf8Source ? "Utf8" : "String", nonNullableSource},
     });
     auto read = MakeRead(ctx, table, "a", {"s"});
     const auto* sourceType = ScalarType(
         ctx,
-        NUdf::EDataSlot::String,
+        utf8Source ? NUdf::EDataSlot::Utf8 : NUdf::EDataSlot::String,
         !nonNullableSource);
     SetExactOutputType(ctx, *read, {{"a.s", sourceType}});
     auto map = MakeIntrusive<TOpMap>(
@@ -4170,7 +4206,7 @@ TString ExportDeterministicStageGraph() {
 }
 
 struct TCorrelatedScalarExportFixture {
-    TCorrelatedScalarExportFixture()
+    explicit TCorrelatedScalarExportFixture(bool composite = false)
         : Int32(ScalarType(Ctx, NUdf::EDataSlot::Int32))
         , OptionalInt32(ScalarType(
               Ctx,
@@ -4188,10 +4224,19 @@ struct TCorrelatedScalarExportFixture {
               true))
         , String(ScalarType(Ctx, NUdf::EDataSlot::String))
     {
+        TVector<TColumnSpec> outerColumns{{"k", "Int32", false}};
+        TVector<TString> outerNames{"k"};
+        TVector<std::pair<TString, const TTypeAnnotationNode*>> outerSchema{
+            {"outer.k", OptionalInt32}};
+        if (composite) {
+            outerColumns.push_back({"second", "Int64", false});
+            outerNames.push_back("second");
+            outerSchema.push_back({"outer.second", OptionalInt64});
+        }
         const auto& outerTable = AddTable(
             Ctx,
             "/Root/CorrelatedScalarOuter",
-            {{"k", "Int32", false}});
+            outerColumns);
         const auto& innerTable = AddTable(
             Ctx,
             "/Root/CorrelatedScalarInner",
@@ -4205,15 +4250,13 @@ struct TCorrelatedScalarExportFixture {
             Ctx,
             outerTable,
             "outer",
-            {"k"});
+            outerNames);
         InnerRead = MakeRead(
             Ctx,
             innerTable,
             "inner",
             {"k", "value", "text", "flag"});
-        SetExactOutputType(Ctx, *OuterRead, {
-            {"outer.k", OptionalInt32},
-        });
+        SetExactOutputType(Ctx, *OuterRead, outerSchema);
         SetExactOutputType(Ctx, *InnerRead, {
             {"inner.k", OptionalInt32},
             {"inner.value", Int64},
@@ -4225,22 +4268,23 @@ struct TCorrelatedScalarExportFixture {
             OuterRead,
             Pos,
             TVector<TString>{"outer.k"});
-        OuterBind = MakeIntrusive<TOpAddDependencies>(
-            InnerRead,
-            Pos,
-            TVector<std::pair<
-                TInfoUnit,
-                const TTypeAnnotationNode*>>{{
-                Dependency,
-                OptionalInt32,
-            }});
-        SetExactOutputType(Ctx, *OuterBind, {
+        TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> dependencies{
+            {Dependency, OptionalInt32}};
+        if (composite) {
+            dependencies.push_back({TInfoUnit("outer.second"), OptionalInt64});
+        }
+        OuterBind = MakeIntrusive<TOpAddDependencies>(InnerRead, Pos, dependencies);
+        TVector<std::pair<TString, const TTypeAnnotationNode*>> boundSchema{
             {"inner.k", OptionalInt32},
             {"inner.value", Int64},
             {"inner.text", String},
             {"inner.flag", Bool},
             {"outer.k", OptionalInt32},
-        });
+        };
+        if (composite) {
+            boundSchema.push_back({"outer.second", OptionalInt64});
+        }
+        SetExactOutputType(Ctx, *OuterBind, boundSchema);
 
         Equality = MakeBinaryPredicate(
             "==",
@@ -4267,18 +4311,22 @@ struct TCorrelatedScalarExportFixture {
         AnnotateExpression(Residual, Bool);
         CorrelationPredicate =
             MakeConjunction({Residual, Equality});
+        if (composite) {
+            auto secondEquality = MakeBinaryPredicate(
+                "==",
+                MakeColumnAccess(TInfoUnit("outer.second"), Pos,
+                    &Ctx.ExprCtx, &Root->PlanProps),
+                MakeColumnAccess(TInfoUnit("inner.value"), Pos,
+                    &Ctx.ExprCtx, &Root->PlanProps));
+            AnnotateBinaryExpression(secondEquality, OptionalInt64, Int64, OptionalBool);
+            CorrelationPredicate = MakeConjunction({Residual, secondEquality, Equality});
+        }
         AnnotateExpression(CorrelationPredicate, OptionalBool);
         CorrelationFilter = MakeIntrusive<TOpFilter>(
             OuterBind,
             Pos,
             CorrelationPredicate);
-        SetExactOutputType(Ctx, *CorrelationFilter, {
-            {"inner.k", OptionalInt32},
-            {"inner.value", Int64},
-            {"inner.text", String},
-            {"inner.flag", Bool},
-            {"outer.k", OptionalInt32},
-        });
+        SetExactOutputType(Ctx, *CorrelationFilter, boundSchema);
 
         auto mappedValue = MakeColumnAccess(
             TInfoUnit("inner.value"),
@@ -4303,15 +4351,10 @@ struct TCorrelatedScalarExportFixture {
                         &Ctx.ExprCtx,
                         &Root->PlanProps)),
             });
-        SetExactOutputType(Ctx, *CorrelationMap, {
-            {"inner.k", OptionalInt32},
-            {"inner.value", Int64},
-            {"inner.text", String},
-            {"inner.flag", Bool},
-            {"outer.k", OptionalInt32},
-            {"mapped.value", Int64},
-            {"mapped.text", String},
-        });
+        auto mappedSchema = boundSchema;
+        mappedSchema.push_back({"mapped.value", Int64});
+        mappedSchema.push_back({"mapped.text", String});
+        SetExactOutputType(Ctx, *CorrelationMap, mappedSchema);
 
         ScalarAggregate = MakeIntrusive<TOpAggregate>(
             CorrelationMap,
@@ -4334,6 +4377,11 @@ struct TCorrelatedScalarExportFixture {
                 ESubplanType::EXPR,
                 Binding,
                 {Dependency}});
+        if (composite) {
+            // Registry order is deliberately different from typed binding order.
+            Entry().DependentIUs.insert(
+                Entry().DependentIUs.begin(), TInfoUnit("outer.second"));
+        }
 
         auto bindingValue = MakeColumnAccess(
             Binding,
@@ -4358,9 +4406,7 @@ struct TCorrelatedScalarExportFixture {
             OuterRead,
             Pos,
             ConsumerPredicate);
-        SetExactOutputType(Ctx, *Consumer, {
-            {"outer.k", OptionalInt32},
-        });
+        SetExactOutputType(Ctx, *Consumer, outerSchema);
         Root->SetInput(Consumer);
     }
 
@@ -6239,6 +6285,8 @@ enum class EWholePartitionWindowAvgMutation {
     Order,
     NoPartitions,
     TooManyPartitions,
+    FivePartitions,
+    MixedRank,
     WrongIndex,
     NoncanonicalIndex,
     DuplicateIndex,
@@ -6281,7 +6329,8 @@ TExprNode::TPtr WholePartitionWindowAvgDefinition(
     if (mutation == EWholePartitionWindowAvgMutation::NoPartitions) {
         keys.clear();
     } else if (
-        mutation == EWholePartitionWindowAvgMutation::TooManyPartitions)
+        mutation == EWholePartitionWindowAvgMutation::TooManyPartitions ||
+        mutation == EWholePartitionWindowAvgMutation::FivePartitions)
     {
         keys = {
             {"a.category", NUdf::EDataSlot::String, 0},
@@ -6290,6 +6339,9 @@ TExprNode::TPtr WholePartitionWindowAvgDefinition(
             {"a.store", NUdf::EDataSlot::String, 3},
             {"a.company", NUdf::EDataSlot::String, 4},
         };
+        if (mutation == EWholePartitionWindowAvgMutation::TooManyPartitions) {
+            keys.push_back({"a.month", NUdf::EDataSlot::Int64, 5});
+        }
     } else if (
         mutation == EWholePartitionWindowAvgMutation::DuplicateIndex &&
         keys.size() > 1)
@@ -6703,6 +6755,29 @@ TSemanticSnapshotExportResult ExportWholePartitionWindowAvg(
                 "window_input"))});
     auto projectOutput = aggregateOutput;
     projectOutput.emplace_back("window_avg", valueType);
+    if (mutation == EWholePartitionWindowAvgMutation::MixedRank) {
+        const auto definition = WholePartitionWindowAvgDefinition(ctx, shape, EWholePartitionWindowAvgMutation::None);
+        const auto* key = definition->Child(2)->Child(0);
+        auto row = ctx.ExprCtx.NewArgument(pos, "rank_key_row");
+        row->SetTypeAnn(key->Child(1)->Child(0)->Child(0)->GetTypeAnn());
+        auto member = TypedCallable(ctx, "Member", {
+            row, key->Child(0)->Child(0)->ChildPtr(0)}, key->Child(1)->Child(1)->GetTypeAnn());
+        auto sort = TypedCallable(ctx, "YqlSort", {
+            key->ChildPtr(0), ctx.ExprCtx.NewLambda(pos, ctx.ExprCtx.NewArguments(pos, {row}), {member}),
+            ctx.ExprCtx.NewAtom(pos, "asc"), ctx.ExprCtx.NewAtom(pos, "first")}, nullptr);
+        auto rankDefinition = TypedCallable(ctx, "YqlWindow", {
+            ctx.ExprCtx.NewAtom(pos, "rank_peer"), ctx.ExprCtx.NewAtom(pos, ""),
+            ctx.ExprCtx.NewList(pos, {}), ctx.ExprCtx.NewList(pos, {sort}),
+            ctx.ExprCtx.NewList(pos, {})}, nullptr);
+        const auto* rankType = ScalarType(ctx, NUdf::EDataSlot::Uint64);
+        auto call = TypedCallable(ctx, "YqlWin", {
+            ctx.ExprCtx.NewAtom(pos, "rank"), ctx.ExprCtx.NewAtom(pos, "rank_peer"),
+            ctx.ExprCtx.NewList(pos, {}), DataTypeDescriptor(ctx, "Uint64", rankType)}, rankType);
+        project->MapElements.emplace_back(TInfoUnit("rank"), TExpression(
+            ctx.ExprCtx.NewLambda(pos, ctx.ExprCtx.NewArguments(pos, {ctx.ExprCtx.NewArgument(pos, "row")}), {call}),
+            &ctx.ExprCtx, &ctx.ExpressionProps, rankDefinition));
+        projectOutput.emplace_back("rank", rankType);
+    }
     SetExactOutputType(ctx, *project, projectOutput);
 
     TOpRoot root(project, pos, {"window_avg"});
@@ -6771,17 +6846,21 @@ TSemanticSnapshotExportResult ExportDecimalAbs(
             row,
             ctx.ExprCtx.NewAtom(pos, "a.y"),
         },
-        absType);
+        optionalDecimalType);
     auto relativeDifference = TypedCallable(
         ctx,
         "DecimalDiv",
-        {std::move(abs), std::move(denominator)},
+        {abs, std::move(denominator)},
         absType);
+    // Keep malformed Abs signatures independent of the outer division: its
+    // operand typing must not mask the specific Abs rejection being tested.
+    auto output = mutation == EDecimalAbsMutation::None
+        ? std::move(relativeDifference) : std::move(abs);
     TExpression expression(
         ctx.ExprCtx.NewLambda(
             pos,
             ctx.ExprCtx.NewArguments(pos, {row}),
-            std::move(relativeDifference)),
+            std::move(output)),
         &ctx.ExprCtx,
         &ctx.ExpressionProps);
     auto project = MakeIntrusive<TOpMap>(
@@ -6811,6 +6890,8 @@ enum class EGlobalRankMutation {
     ResultType,
     DefinitionName,
     Partition,
+    ValidPartition,
+    TwoOrderKeys,
     OrderType,
     Direction,
     NullOrder,
@@ -6820,6 +6901,7 @@ enum class EGlobalRankMutation {
     SingleRank,
     DuplicateGlobalName,
     WrongRatioFamily,
+    TypedMixedRatio,
     WrongAggregateFunction,
     FusedRatioAndRank,
 };
@@ -6910,6 +6992,13 @@ TExprNode::TPtr GlobalRankDefinition(
     TExprNode::TListType partitions;
     if (mutation == EGlobalRankMutation::Partition) {
         partitions.push_back(ctx.ExprCtx.NewAtom(pos, "unexpected"));
+    } else if (mutation == EGlobalRankMutation::ValidPartition) {
+        partitions.push_back(TypedCallable(ctx, "YqlGroup",
+            {sort->ChildPtr(0), sort->ChildPtr(1)}, nullptr));
+    }
+    TExprNode::TListType order{std::move(sort)};
+    if (mutation == EGlobalRankMutation::TwoOrderKeys) {
+        order.push_back(GlobalRankDefinition(ctx, name, "currency_ratio", EGlobalRankMutation::None)->Child(3)->ChildPtr(0));
     }
     return TypedCallable(
         ctx,
@@ -6922,7 +7011,7 @@ TExprNode::TPtr GlobalRankDefinition(
                     : name),
             ctx.ExprCtx.NewAtom(pos, ""),
             ctx.ExprCtx.NewList(pos, std::move(partitions)),
-            ctx.ExprCtx.NewList(pos, {std::move(sort)}),
+            ctx.ExprCtx.NewList(pos, std::move(order)),
             ctx.ExprCtx.NewList(
                 pos,
                 {
@@ -7001,12 +7090,13 @@ TExpression Q49RatioExpression(
     TExportTestContext& ctx,
     TStringBuf left,
     TStringBuf right,
-    const TTypeAnnotationNode* sourceType)
+    const TTypeAnnotationNode* sourceType,
+    const TTypeAnnotationNode* rightType = nullptr)
 {
     const auto pos = TPositionHandle();
     const auto* targetType = DecimalType(ctx, "15", "4");
     auto row = ctx.ExprCtx.NewArgument(pos, "ratio_row");
-    const auto cast = [&](TStringBuf column) {
+    const auto cast = [&](TStringBuf column, const TTypeAnnotationNode* type) {
         return TypedCallable(
             ctx,
             "SafeCast",
@@ -7015,7 +7105,7 @@ TExpression Q49RatioExpression(
                     ctx,
                     "Member",
                     {row, ctx.ExprCtx.NewAtom(pos, column)},
-                    sourceType),
+                    type),
                 DecimalDataTypeDescriptor(
                     ctx,
                     "15",
@@ -7031,7 +7121,7 @@ TExpression Q49RatioExpression(
             TypedCallable(
                 ctx,
                 "DecimalDiv",
-                {cast(left), cast(right)},
+                {cast(left, sourceType), cast(right, rightType ? rightType : sourceType)},
                 targetType)),
         &ctx.ExprCtx,
         &ctx.ExpressionProps);
@@ -7156,7 +7246,8 @@ TIntrusivePtr<TOpMap> MakeGlobalRankBranch(
 
     const bool mutateBranch = branch == 0;
     const TString currencyRight =
-        mutateBranch && mutation == EGlobalRankMutation::WrongRatioFamily
+        mutateBranch && (mutation == EGlobalRankMutation::WrongRatioFamily ||
+            mutation == EGlobalRankMutation::TypedMixedRatio)
         ? sumColumns[1]
         : sumColumns[3];
     auto ratio = MakeIntrusive<TOpMap>(
@@ -7176,7 +7267,9 @@ TIntrusivePtr<TOpMap> MakeGlobalRankBranch(
                     ctx,
                     sumColumns[2],
                     currencyRight,
-                    decimal35Type)),
+                    decimal35Type,
+                    mutateBranch && mutation == EGlobalRankMutation::TypedMixedRatio
+                        ? int64Type : nullptr)),
         });
     SetExactOutputType(ctx, *ratio, {
         {alias + ".item", int64Type},
@@ -8514,6 +8607,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 read,
                 "computed",
                 StringLiteral(ctx, "small"));
+            SetOutputType(ctx, *computed, {
+                {"a.stored", NUdf::EDataSlot::String},
+                {"computed", NUdf::EDataSlot::String},
+            });
             auto concat = MakeComputedMap(
                 ctx,
                 computed,
@@ -9952,7 +10049,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "\"kind\":\"column\"},\"output\":\"result\"}");
     }
 
-    Y_UNIT_TEST(ErrorOnNullStringProjectionRequiresDemandingTopology) {
+    Y_UNIT_TEST(ErrorOnNullStringProjectionRequiresDemandOrTotalityProof) {
         enum class EShape {
             KeyedLeftSemiRight,
             InnerRight,
@@ -10124,45 +10221,19 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto& marked =
             FindNode(accepted, "project")["columns"].GetArraySafe().back();
         UNIT_ASSERT(marked["error_on_null"].GetBooleanSafe());
+        UNIT_ASSERT(!marked.Has("require_total"));
         UNIT_ASSERT_VALUES_EQUAL(
             marked["output"].GetStringSafe(),
             "right.key");
 
-        struct TCase {
-            EShape Shape;
-            TStringBuf Reason;
-        };
-        for (const auto& test : {
-            TCase{
-                EShape::InnerRight,
-                "direct RHS of a left_semi Join",
-            },
-            TCase{
-                EShape::UnkeyedLeftSemiRight,
-                "exact RHS key",
-            },
-            TCase{
-                EShape::LeftSemiLeft,
-                "direct RHS of a left_semi Join",
-            },
-            TCase{
-                EShape::Fanout,
-                "exactly one plan parent",
-            },
-            TCase{
-                EShape::LimitParent,
-                "direct RHS of a left_semi Join",
-            },
-            TCase{
-                EShape::UnobservedMainRoot,
-                "main root result output",
-            },
+        for (const auto shape : {
+            EShape::InnerRight, EShape::UnkeyedLeftSemiRight, EShape::LeftSemiLeft,
+            EShape::Fanout, EShape::LimitParent, EShape::UnobservedMainRoot,
         }) {
-            const auto result = exportShape(test.Shape);
-            UNIT_ASSERT(!result.IsSupported());
-            UNIT_ASSERT_STRING_CONTAINS(
-                result.UnsupportedReason,
-                test.Reason);
+            const auto snapshot = ParseSupported(exportShape(shape));
+            const auto& checked = FindNode(snapshot, "project")["columns"].GetArraySafe().back();
+            UNIT_ASSERT(checked["error_on_null"].GetBooleanSafe());
+            UNIT_ASSERT(checked["require_total"].GetBooleanSafe());
         }
     }
 
@@ -10312,7 +10383,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             {
                 EStringUnwrapShape::NonNullablePhysicalSource,
                 "non-null physical source",
-                "exact physical Optional<String>",
+                "Input Member a.s type annotation disagrees with the actual input column",
             },
             {
                 EStringUnwrapShape::WrongMapOutput,
@@ -14537,11 +14608,12 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto exportExpression = [](
             TExportTestContext& ctx,
             TExprNode::TPtr expression,
-            std::function<void(TExprNode&)> mutate = {})
+            std::function<void(TExprNode&)> mutate = {},
+            TStringBuf sourceType = "String")
         {
             const auto& table = AddTable(ctx, "/Root/StringMembership", {
-                {"x", "String", false},
-                {"y", "String", false},
+                {"x", TString(sourceType), false},
+                {"y", TString(sourceType), false},
             });
             auto read = MakeRead(ctx, table, "a", {"x", "y"});
             TExpression typedExpression(
@@ -14682,7 +14754,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     "==",
                     "x",
                     NUdf::EDataSlot::Utf8),
-                markComparisonsUnordered);
+                markComparisonsUnordered,
+                "Utf8");
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -14959,9 +15032,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             ctx,
             NUdf::EDataSlot::Int32,
             true);
-        const auto expression = ExportMapExpression(
+        const auto expression = ExportTypedMapExpression(
             ctx,
             "a",
+            "Bool",
+            true,
             TypedCallable(
                 ctx,
                 "If",
@@ -14970,13 +15045,14 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     TypedLiteral(ctx, "Int32", "1", intType),
                     TypedLiteral(ctx, "Int32", "2", intType),
                 },
-                optionalInt),
-            true);
+                optionalInt));
         UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
 
-        const auto badIf = ExportMapExpressionResult(
+        const auto badIf = ExportTypedMapExpressionResult(
             ctx,
             "a",
+            "Bool",
+            true,
             TypedCallable(
                 ctx,
                 "If",
@@ -14985,22 +15061,22 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     TypedLiteral(ctx, "Int32", "1", intType),
                     TypedLiteral(ctx, "Int32", "2", intType),
                 },
-                intType),
-            true);
+                intType));
         UNIT_ASSERT(!badIf.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             badIf.UnsupportedReason,
             "result nullability");
 
-        const auto badExists = ExportMapExpressionResult(
+        const auto badExists = ExportTypedMapExpressionResult(
             ctx,
             "a",
+            "Bool",
+            true,
             TypedCallable(
                 ctx,
                 "Exists",
                 {TypedMember(ctx, "a.x", optionalBool)},
-                optionalBool),
-            true);
+                optionalBool));
         UNIT_ASSERT(!badExists.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             badExists.UnsupportedReason,
@@ -15111,11 +15187,12 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
     Y_UNIT_TEST(NormalizesExactStaticSetContainsInsideIfPresent) {
         TExportTestContext ctx;
-        const auto expression = ExportMapExpression(
+        const auto expression = ExportTypedMapExpression(
             ctx,
             "a",
-            TypedStaticSetIfPresent(ctx, EStaticSetIfPresentShape::Exact),
-            true);
+            "String",
+            true,
+            TypedStaticSetIfPresent(ctx, EStaticSetIfPresentShape::Exact));
 
         UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if_present");
         const auto& present = expression["present"];
@@ -15149,11 +15226,12 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
         for (const auto& [shape, expectedReason] : cases) {
             TExportTestContext ctx;
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
-                TypedStaticSetIfPresent(ctx, shape),
-                true);
+                shape == EStaticSetIfPresentShape::DecimalItems ? "Decimal(5,2)" : "String",
+                true,
+                TypedStaticSetIfPresent(ctx, shape));
             UNIT_ASSERT_C(!result.IsSupported(), static_cast<size_t>(shape));
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -15342,9 +15420,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto* targetType = ScalarType(ctx, test.Target);
             const auto* optionalTarget = ScalarType(ctx, test.Target, true);
             const TString targetName(NUdf::GetDataTypeInfo(test.Target).Name);
-            const auto expression = ExportMapExpression(
+            const auto expression = ExportTypedMapExpression(
                 ctx,
                 "a",
+                TString(NUdf::GetDataTypeInfo(test.Source).Name),
+                test.SourceNullable,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -15356,8 +15436,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                             targetType,
                             optionalTarget),
                     },
-                    optionalTarget),
-                test.SourceNullable);
+                    optionalTarget));
 
             UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(
@@ -15385,9 +15464,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto* targetType = ScalarType(ctx, targetSlot);
             const auto* optionalTarget = ScalarType(ctx, targetSlot, true);
             const TString targetName(NUdf::GetDataTypeInfo(targetSlot).Name);
-            const auto expression = ExportMapExpression(
+            const auto expression = ExportTypedMapExpression(
                 ctx,
                 "a",
+                TString(NUdf::GetDataTypeInfo(sourceSlot).Name),
+                true,
                 TypedCallable(
                     ctx,
                     callable,
@@ -15399,8 +15480,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                             targetType,
                             optionalTarget),
                     },
-                    optionalTarget),
-                true);
+                    optionalTarget));
             UNIT_ASSERT_VALUES_EQUAL(
                 expression["kind"].GetStringSafe(),
                 "opaque");
@@ -15414,9 +15494,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
             const auto* targetType = ScalarType(ctx, NUdf::EDataSlot::Int32);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                true,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -15424,8 +15506,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                         TypedMember(ctx, "a.x", sourceType),
                         DataTypeDescriptor(ctx, "Int32", targetType),
                     },
-                    targetType),
-                true);
+                    targetType));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -15436,9 +15517,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
             const auto* targetType = ScalarType(ctx, NUdf::EDataSlot::Int32);
             const auto* optionalTarget = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                true,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -15446,8 +15529,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                         TypedMember(ctx, "a.x", sourceType),
                         DataTypeDescriptor(ctx, "Int32", targetType),
                     },
-                    optionalTarget),
-                true);
+                    optionalTarget));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -15464,9 +15546,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 "OptionalType",
                 {DataTypeDescriptor(ctx, "Int32", targetType)},
                 ctx.ExprCtx.MakeType<TTypeExprType>(wrongAnnotation));
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                true,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -15474,8 +15558,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                         TypedMember(ctx, "a.x", sourceType),
                         std::move(descriptor),
                     },
-                    optionalTarget),
-                true);
+                    optionalTarget));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -15491,9 +15574,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 "OptionalType",
                 {DataTypeDescriptor(ctx, "Int32", wrongItemAnnotation)},
                 ctx.ExprCtx.MakeType<TTypeExprType>(optionalTarget));
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                true,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -15501,8 +15586,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                         TypedMember(ctx, "a.x", sourceType),
                         std::move(descriptor),
                     },
-                    optionalTarget),
-                true);
+                    optionalTarget));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -15540,9 +15624,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "5",
             "2");
         const auto* optionalCastDecimal = castContext.ExprCtx.MakeType<TOptionalExprType>(castDecimal);
-        const auto castResult = ExportMapExpressionResult(
+        const auto castResult = ExportTypedMapExpressionResult(
             castContext,
             "a",
+            "Int32",
+            false,
             TypedCallable(
                 castContext,
                 "SafeCast",
@@ -16174,38 +16260,90 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
     }
 
-    Y_UNIT_TEST(ExportsExactQ49DecimalRescaleSafeCast) {
-        TExportTestContext ctx;
-        const auto* sourceType = DecimalType(ctx, "35", "2");
-        const auto* targetType = DecimalType(ctx, "15", "4");
-        const auto expression = ExportTypedMapExpression(
-            ctx,
-            "a",
-            "Decimal(35,2)",
-            false,
-            TypedCallable(
-                ctx,
-                "SafeCast",
-                {
-                    TypedMember(ctx, "a.x", sourceType),
-                    DecimalDataTypeDescriptor(
-                        ctx,
-                        "15",
-                        "4",
-                        targetType),
-                },
-                targetType));
+    Y_UNIT_TEST(ExportsExactDecimalRescaleSafeCasts) {
+        struct TShape {
+            TString SourcePrecision;
+            TString SourceScale;
+            TString TargetPrecision;
+            TString TargetScale;
+        };
+        const TVector<TShape> shapes = {
+            {"35", "2", "15", "4"}, // Q49: pre-narrow at precision 13.
+            {"35", "2", "35", "9"}, // Q36: pre-narrow at precision 28.
+            {"7", "2", "12", "3"},  // Complete scale-up.
+            {"13", "2", "12", "2"}, // Same-scale narrowing.
+            {"35", "2", "16", "4"},
+            {"34", "2", "15", "4"},
+            {"35", "3", "15", "4"},
+            {"5", "2", "3", "1"},   // Round-to-even, then target bounds.
+            {"2", "2", "3", "1"},   // Nonempty fractional overlap.
+        };
+        for (const auto& shape : shapes) {
+            for (const bool nullable : {false, true}) {
+                TExportTestContext ctx;
+                const auto* source = DecimalType(ctx, shape.SourcePrecision, shape.SourceScale, nullable);
+                const auto* target = DecimalType(ctx, shape.TargetPrecision, shape.TargetScale);
+                const auto* result = DecimalType(ctx, shape.TargetPrecision, shape.TargetScale, nullable);
+                auto descriptor = nullable
+                    ? OptionalDecimalDataTypeDescriptor(ctx, shape.TargetPrecision, shape.TargetScale, target, result)
+                    : DecimalDataTypeDescriptor(ctx, shape.TargetPrecision, shape.TargetScale, target);
+                const TString sourceName = TStringBuilder()
+                    << "Decimal(" << shape.SourcePrecision << "," << shape.SourceScale << ")";
+                const auto expression = ExportTypedMapExpression(
+                    ctx, "a", sourceName, nullable,
+                    TypedCallable(ctx, "SafeCast",
+                        {TypedMember(ctx, "a.x", source), std::move(descriptor)}, result));
+                UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "cast_decimal");
+                UNIT_ASSERT_VALUES_EQUAL(expression["source_type"].GetStringSafe(), sourceName);
+                UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), TStringBuilder()
+                    << "Decimal(" << shape.TargetPrecision << "," << shape.TargetScale << ")");
+                UNIT_ASSERT_VALUES_EQUAL(expression["nullable"].GetBooleanSafe(), nullable);
+            }
+        }
+    }
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            expression["kind"].GetStringSafe(),
-            "cast_decimal");
-        UNIT_ASSERT_VALUES_EQUAL(
-            expression["source_type"].GetStringSafe(),
-            "Decimal(35,2)");
-        UNIT_ASSERT_VALUES_EQUAL(
-            expression["type"].GetStringSafe(),
-            "Decimal(15,4)");
-        UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+    Y_UNIT_TEST(DecimalOptionalIdentityLiftIsExactAndFailClosed) {
+        for (const TStringBuf precision : {TStringBuf("7"), TStringBuf("35")}) {
+            TExportTestContext ctx;
+            const auto* source = DecimalType(ctx, precision, "2");
+            const auto* result = DecimalType(ctx, precision, "2", true);
+            const TString type = TStringBuilder() << "Decimal(" << precision << ",2)";
+            const auto expression = ExportTypedMapExpression(ctx, "a", type, false,
+                TypedCallable(ctx, "SafeCast", {
+                    TypedMember(ctx, "a.x", source),
+                    OptionalDecimalDataTypeDescriptor(ctx, precision, "2", source, result),
+                }, result));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if");
+            UNIT_ASSERT_VALUES_EQUAL(expression["condition"]["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(expression["condition"]["type"].GetStringSafe(), "Bool");
+            UNIT_ASSERT(expression["condition"]["value"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(expression["then"]["kind"].GetStringSafe(), "column");
+            UNIT_ASSERT_VALUES_EQUAL(expression["then"]["column"].GetStringSafe(), "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(expression["else"]["kind"].GetStringSafe(), "null");
+            UNIT_ASSERT_VALUES_EQUAL(expression["else"]["type"].GetStringSafe(), type);
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), type);
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+        }
+
+        // Complete widening still changes the numeric type; it is not this
+        // identity lift. Nor may an optional source lose its NULL channel.
+        for (const bool removeOptional : {false, true}) {
+            TExportTestContext ctx;
+            const auto* source = DecimalType(ctx, "7", "2", removeOptional);
+            const auto* target = DecimalType(ctx, removeOptional ? "7" : "12", "2");
+            const auto* result = removeOptional
+                ? target : DecimalType(ctx, "12", "2", true);
+            auto descriptor = removeOptional
+                ? DecimalDataTypeDescriptor(ctx, "7", "2", target)
+                : OptionalDecimalDataTypeDescriptor(ctx, "12", "2", target, result);
+            const auto exported = ExportTypedMapExpressionResult(
+                ctx, "a", "Decimal(7,2)", removeOptional,
+                TypedCallable(ctx, "SafeCast", {
+                    TypedMember(ctx, "a.x", source), std::move(descriptor),
+                }, result));
+            UNIT_ASSERT(!exported.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(exported.UnsupportedReason, "nullability must match");
+        }
     }
 
     Y_UNIT_TEST(IncompleteIntegralSafeCastLiteralsRemainExplicit) {
@@ -16273,9 +16411,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int32);
             const auto* decimalType = DecimalType(ctx, "12", "2");
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int32",
+                false,
                 TypedCallable(
                     ctx,
                     "Convert",
@@ -16294,9 +16434,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
             const auto* decimalType = DecimalType(ctx, "12", "2");
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int32",
+                true,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16321,9 +16463,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 "OptionalType",
                 {DecimalDataTypeDescriptor(ctx, "11", "2", decimalType)},
                 ctx.ExprCtx.MakeType<TTypeExprType>(optionalDecimalType));
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int32",
+                false,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16345,11 +16489,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TStringBuf TargetScale;
         };
         const TVector<TDecimalShape> decimalNearMisses = {
-            {"13", "2", "12", "2"},
-            {"7", "2", "12", "3"},
-            {"35", "2", "16", "4"},
-            {"34", "2", "15", "4"},
-            {"35", "3", "15", "4"},
+            {"2", "2", "3", "0"},
+            {"35", "35", "35", "0"},
         };
         for (const auto& test : decimalNearMisses) {
             TExportTestContext ctx;
@@ -16367,9 +16508,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 test.TargetPrecision,
                 test.TargetScale,
                 true);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                TStringBuilder() << "Decimal(" << test.SourcePrecision << "," << test.SourceScale << ")",
+                true,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16382,12 +16525,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                             targetType,
                             optionalTargetType),
                     },
-                    optionalTargetType),
-                true);
+                    optionalTargetType));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "same-scale widening");
+                "unexpected weak-cast semantics");
         }
 
         for (const bool corruptItemAnnotation : {false, true}) {
@@ -16411,9 +16553,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 target->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(
                     DecimalType(ctx, "13", "2", true)));
             }
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                true,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16421,8 +16565,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                         TypedMember(ctx, "a.x", sourceType),
                         std::move(target),
                     },
-                    optionalTargetType),
-                true);
+                    optionalTargetType));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -16436,9 +16579,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Bool, true);
             const auto* targetType = DecimalType(ctx, "12", "2");
             const auto* optionalTargetType = DecimalType(ctx, "12", "2", true);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Bool",
+                true,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16451,8 +16596,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                             targetType,
                             optionalTargetType),
                     },
-                    optionalTargetType),
-                true);
+                    optionalTargetType));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -16463,9 +16607,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64);
             const auto* targetType = DecimalType(ctx, "4", "4");
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                false,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16485,9 +16631,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64);
             const auto* resultType = DecimalType(ctx, "15", "4");
             const auto* targetType = DecimalType(ctx, "14", "4");
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                false,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16512,9 +16660,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 "4",
                 resultType);
             targetDescriptor->SetTypeAnn(nullptr);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                false,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16534,9 +16684,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64);
             const auto* resultType = DecimalType(ctx, "15", "4");
             const auto* annotationType = DecimalType(ctx, "14", "4");
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                false,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16561,9 +16713,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 "OptionalType",
                 {DecimalDataTypeDescriptor(ctx, "15", "4", targetType)},
                 ctx.ExprCtx.MakeType<TTypeExprType>(optionalTargetType));
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                false,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -16582,9 +16736,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64);
             const auto* targetType = DecimalType(ctx, "15", "4");
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int64",
+                false,
                 TypedCallable(
                     ctx,
                     "StrictCast",
@@ -16744,9 +16900,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         {
             TExportTestContext ctx;
             const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
-            const auto expression = ExportMapExpression(
+            const auto expression = ExportTypedMapExpression(
                 ctx,
                 "a",
+                {{"x", "Decimal(5,2)", false}, {"y", "Decimal(5,2)", false}},
                 TypedCallable(
                     ctx,
                     "IsNotDistinctFrom",
@@ -16754,8 +16911,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                         TypedMember(ctx, "a.x", optionalDecimal),
                         TypedMember(ctx, "a.y", optionalDecimal),
                     },
-                    ScalarType(ctx, NUdf::EDataSlot::Bool)),
-                true);
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
             UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "eq");
             UNIT_ASSERT(expression["null_safe"].GetBooleanSafe());
         }
@@ -16846,9 +17002,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         {
             TExportTestContext ctx;
             const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                {{"x", "Decimal(5,2)", false}, {"y", "Decimal(6,2)", false}},
                 TypedCallable(
                     ctx,
                     "IsNotDistinctFrom",
@@ -16856,8 +17013,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                         TypedMember(ctx, "a.x", optionalDecimal),
                         TypedMember(ctx, "a.y", DecimalType(ctx, "6", "2", true)),
                     },
-                    ScalarType(ctx, NUdf::EDataSlot::Bool)),
-                true);
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "exactly the same type");
         }
@@ -17168,16 +17324,17 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 ? TypedStaticAsList(ctx, std::move(items), int32Type)
                 : TypedStaticTuple(ctx, std::move(items), int32Type);
 
-            const auto expression = ExportMapExpression(
+            const auto expression = ExportTypedMapExpression(
                 ctx,
                 "a",
+                "Int64",
+                true,
                 TypedSqlIn(
                     ctx,
                     std::move(collection),
                     TypedMember(ctx, "a.x", optionalInt64),
                     SqlInOptions(ctx, {}),
-                    optionalBool),
-                true);
+                    optionalBool));
 
             UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "in");
             UNIT_ASSERT_VALUES_EQUAL(
@@ -17195,16 +17352,16 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             {TypedDecimalLiteral(ctx, "1.25", "7", "2", decimalType)},
             decimalType);
 
-        const auto result = ExportMapExpressionResult(
+        const auto result = ExportTypedMapExpressionResult(
             ctx,
             "a",
+            {{"d", "Decimal(7,2)", false}},
             TypedSqlIn(
                 ctx,
                 std::move(collection),
                 TypedMember(ctx, "a.d", optionalDecimalType),
                 SqlInOptions(ctx, {}),
-                ScalarType(ctx, NUdf::EDataSlot::Bool, true)),
-            true);
+                ScalarType(ctx, NUdf::EDataSlot::Bool, true)));
 
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
@@ -17235,16 +17392,17 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         auto collection = ctx.ExprCtx.NewList(TPositionHandle(), std::move(items));
         collection->SetTypeAnn(tupleType);
 
-        const auto result = ExportMapExpressionResult(
+        const auto result = ExportTypedMapExpressionResult(
             ctx,
             "a",
+            "Int64",
+            true,
             TypedSqlIn(
                 ctx,
                 std::move(collection),
                 TypedMember(ctx, "a.x", optionalInt64),
                 SqlInOptions(ctx, {}),
-                optionalBool),
-            true);
+                optionalBool));
 
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "must have one item type");
@@ -17380,16 +17538,17 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     break;
             }
 
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                testCase == 1 ? "Int64" : "Int32",
+                testCase == 3,
                 TypedSqlIn(
                     ctx,
                     TypedStaticTuple(ctx, {std::move(item)}, annotatedItemType),
                     TypedMember(ctx, "a.x", lookupType),
                     SqlInOptions(ctx, {}),
-                    resultType),
-                testCase == 3);
+                    resultType));
             UNIT_ASSERT_C(!result.IsSupported(), testCase);
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
@@ -18288,9 +18447,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
         {
             TExportTestContext ctx;
-            const auto result = ExportOptionalInt64MapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Int32",
+                true,
                 TypedRestrictedFloatingPredicate(
                     ctx,
                     "<",
@@ -18669,15 +18830,15 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             auto right = rightNullable
                 ? TypedMember(ctx, "a.y", optionalDecimal)
                 : TypedMember(ctx, "a.y", decimal);
-            const auto expression = ExportMapExpression(
+            const auto expression = ExportTypedMapExpression(
                 ctx,
                 "a",
+                {{"x", "Decimal(5,2)", !leftNullable}, {"y", "Decimal(5,2)", !rightNullable}},
                 TypedCallable(
                     ctx,
                     "DecimalDiv",
                     {std::move(left), std::move(right)},
-                    optionalDecimal),
-                true);
+                    optionalDecimal));
 
             UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "div");
             UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Decimal(5,2)");
@@ -18788,15 +18949,16 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     break;
             }
 
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                {{"x", test.Case == ECase::LeftTypeMismatch ? "Decimal(6,2)" : "Decimal(5,2)",
+                  test.Case != ECase::MissingResultNullability}},
                 TypedCallable(
                     ctx,
                     callable,
                     std::move(children),
-                    resultType),
-                true);
+                    resultType));
             UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(test.Case));
             UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, test.Reason);
         }
@@ -18805,9 +18967,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(DecimalDivIsAllowedInsideExactIf) {
         TExportTestContext ctx;
         const auto* decimal = DecimalType(ctx, "5", "2");
-        const auto expression = ExportMapExpression(
+        const auto expression = ExportTypedMapExpression(
             ctx,
             "a",
+            {{"x", "Decimal(5,2)", true}},
             TypedCallable(
                 ctx,
                 "If",
@@ -18879,9 +19042,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* decimal = DecimalType(ctx, "5", "2");
             const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Decimal(5,2)",
+                false,
                 TypedCallable(
                     ctx,
                     "+",
@@ -18897,9 +19062,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* decimal = DecimalType(ctx, "5", "2");
             const auto* otherDecimal = DecimalType(ctx, "6", "2");
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Decimal(5,2)",
+                false,
                 TypedCallable(
                     ctx,
                     "DecimalMul",
@@ -18915,9 +19082,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* decimal = DecimalType(ctx, "5", "2");
             const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Decimal(5,2)",
+                false,
                 TypedCallable(
                     ctx,
                     "DecimalMul",
@@ -18933,9 +19102,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* decimal = DecimalType(ctx, "5", "2");
             const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Decimal(5,2)",
+                false,
                 TypedCallable(
                     ctx,
                     "DecimalMul",
@@ -18951,9 +19122,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto* decimal = DecimalType(ctx, "5", "2");
             const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Decimal(5,2)",
+                false,
                 TypedCallable(
                     ctx,
                     "DecimalMul",
@@ -18968,9 +19141,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         {
             TExportTestContext ctx;
             const auto* decimal = DecimalType(ctx, "5", "2");
-            const auto result = ExportMapExpressionResult(
+            const auto result = ExportTypedMapExpressionResult(
                 ctx,
                 "a",
+                "Decimal(5,2)",
+                false,
                 TypedCallable(
                     ctx,
                     "DecimalMul",
@@ -19188,7 +19363,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 ctx,
                 "/Root/GenericStringPredicateFailure",
                 {
-                    {"s", "String", false},
+                    {"s", shape == EGenericShape::Utf8Left ? "Utf8" : "String",
+                     shape == EGenericShape::NonNullableLeft},
                     {"rhs", "String", true},
                 });
             auto read = MakeRead(ctx, table, "a", {"s", "rhs"});
@@ -19210,13 +19386,6 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 ctx,
                 NUdf::EDataSlot::Bool,
                 true);
-            SetExactOutputType(
-                ctx,
-                *read,
-                {
-                    {"a.s", optionalString},
-                    {"a.rhs", stringType},
-                });
 
             const auto* leftType =
                 shape == EGenericShape::Utf8Left
@@ -19521,17 +19690,27 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "Convert");
         UNIT_ASSERT_VALUES_EQUAL(converted["args"].GetArraySafe().size(), 1);
 
+        auto nonOptional = TSubstringCase{};
+        nonOptional.InputNullable = false;
+        nonOptional.ResultNullable = false;
+        const auto requiredSnapshot = ParseSupported(exportSubstring(nonOptional));
+        const auto& required = FindNode(requiredSnapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+        UNIT_ASSERT(!required["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            exact["fingerprint"].GetStringSafe(),
+            required["fingerprint"].GetStringSafe());
+
         TVector<TSubstringCase> rejected;
         auto wrongArity = TSubstringCase{};
         wrongArity.OmitCount = true;
         rejected.push_back(wrongArity);
-        auto nonOptional = TSubstringCase{};
-        nonOptional.InputNullable = false;
-        nonOptional.ResultNullable = false;
-        rejected.push_back(nonOptional);
         auto mismatchedResult = TSubstringCase{};
         mismatchedResult.ResultNullable = false;
         rejected.push_back(mismatchedResult);
+        auto mismatchedInput = TSubstringCase{};
+        mismatchedInput.InputNullable = false;
+        rejected.push_back(mismatchedInput);
         auto utf8 = TSubstringCase{};
         utf8.Utf8 = true;
         rejected.push_back(utf8);
@@ -20221,7 +20400,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(Q49GlobalRankGrammarAndDataflowFailClosed) {
+    Y_UNIT_TEST(RankGrammarAndTypedKeyDataflowFailClosed) {
         const EGlobalRankMutation mutations[] = {
             EGlobalRankMutation::MissingMetadata,
             EGlobalRankMutation::Function,
@@ -20231,15 +20410,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             EGlobalRankMutation::DefinitionName,
             EGlobalRankMutation::Partition,
             EGlobalRankMutation::OrderType,
-            EGlobalRankMutation::Direction,
-            EGlobalRankMutation::NullOrder,
             EGlobalRankMutation::Frame,
-            EGlobalRankMutation::CurrentRow,
-            EGlobalRankMutation::NoncanonicalName,
             EGlobalRankMutation::SingleRank,
-            EGlobalRankMutation::DuplicateGlobalName,
             EGlobalRankMutation::WrongRatioFamily,
-            EGlobalRankMutation::WrongAggregateFunction,
             EGlobalRankMutation::FusedRatioAndRank,
         };
         for (const auto mutation : mutations) {
@@ -20250,6 +20423,55 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     << "mutation unexpectedly exported: "
                     << static_cast<ui32>(mutation));
             UNIT_ASSERT(!result.UnsupportedReason.empty());
+            if (mutation == EGlobalRankMutation::WrongRatioFamily) {
+                UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason,
+                    "Input Member sum_q_den type annotation disagrees");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RankAdmissionUsesTypedKeysInsteadOfQ49Lineage) {
+        for (const auto mutation : {
+            EGlobalRankMutation::ValidPartition,
+            EGlobalRankMutation::TwoOrderKeys,
+            EGlobalRankMutation::Direction,
+            EGlobalRankMutation::NullOrder,
+            EGlobalRankMutation::CurrentRow,
+            EGlobalRankMutation::NoncanonicalName,
+            EGlobalRankMutation::DuplicateGlobalName,
+            EGlobalRankMutation::TypedMixedRatio,
+            EGlobalRankMutation::WrongAggregateFunction})
+        {
+            const auto result = ExportGlobalRankPlan(mutation);
+            UNIT_ASSERT_C(result.IsSupported(), TStringBuilder()
+                << static_cast<ui32>(mutation) << ": " << result.UnsupportedReason);
+            const auto repeated = ExportGlobalRankPlan(mutation);
+            UNIT_ASSERT_VALUES_EQUAL(result.Json, repeated.Json);
+            if (mutation == EGlobalRankMutation::Direction) {
+                const auto snapshot = ParseSupported(result);
+                TVector<const NJson::TJsonValue*> pending{&snapshot};
+                bool descending = false;
+                while (!pending.empty()) {
+                    const auto* value = pending.back();
+                    pending.pop_back();
+                    if (value->IsMap()) {
+                        if ((*value)["kind"].IsString() && (*value)["kind"].GetStringSafe() == "window_rank") {
+                            const auto& order = (*value)["order_by"][0];
+                            const bool ascending = order["ascending"].GetBooleanSafe();
+                            UNIT_ASSERT_VALUES_EQUAL(order["nulls_first"].GetBooleanSafe(), ascending);
+                            descending |= !ascending;
+                        }
+                        for (const auto& [key, child] : value->GetMapSafe()) {
+                            pending.push_back(&child);
+                        }
+                    } else if (value->IsArray()) {
+                        for (const auto& child : value->GetArraySafe()) {
+                            pending.push_back(&child);
+                        }
+                    }
+                }
+                UNIT_ASSERT(descending);
+            }
         }
     }
 
@@ -20788,6 +21010,13 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     }
 
     Y_UNIT_TEST(ExportsWholePartitionDecimalWindowAvgWithInt64Partition) {
+        const auto mixed = ParseSupported(ExportWholePartitionWindowAvg(
+            EWholePartitionWindowAvgShape::Int64Key, EWholePartitionWindowAvgMutation::MixedRank));
+        THashSet<TString> kinds;
+        for (const auto& column : FindNode(mixed, "project")["columns"].GetArraySafe()) {
+            kinds.insert(column["expression"]["kind"].GetStringSafe());
+        }
+        UNIT_ASSERT(kinds.contains("window_rank") && kinds.contains("window_avg"));
         const auto snapshot = ParseSupported(ExportWholePartitionWindowAvg(
             EWholePartitionWindowAvgShape::Int64Key));
 
@@ -20826,6 +21055,14 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     }
 
     Y_UNIT_TEST(ExportsQ89FourKeyWholePartitionDecimalWindowAvg) {
+        const auto five = ParseSupported(ExportWholePartitionWindowAvg(
+            EWholePartitionWindowAvgShape::FourStringKeys,
+            EWholePartitionWindowAvgMutation::FivePartitions));
+        for (const auto& column : FindNode(five, "project")["columns"].GetArraySafe()) {
+            if (column["output"].GetStringSafe() == "window_avg") {
+                UNIT_ASSERT_VALUES_EQUAL(column["expression"]["partition_by"].GetArraySafe().size(), 5);
+            }
+        }
         const auto snapshot = ParseSupported(ExportWholePartitionWindowAvg(
             EWholePartitionWindowAvgShape::FourStringKeys));
 
@@ -20921,12 +21158,12 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             {
                 EWholePartitionWindowAvgShape::Int64Key,
                 EWholePartitionWindowAvgMutation::NoPartitions,
-                "between one and four partition expressions",
+                "between one and five partition expressions",
             },
             {
                 EWholePartitionWindowAvgShape::FourStringKeys,
                 EWholePartitionWindowAvgMutation::TooManyPartitions,
-                "between one and four partition expressions",
+                "between one and five partition expressions",
             },
             {
                 EWholePartitionWindowAvgShape::Int64Key,
@@ -21563,6 +21800,71 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 test.Reason);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsBinary64VarianceStateAndExplicitScalarMode) {
+        for (const bool split : {false, true}) {
+            for (const bool nullable : {false, true}) {
+                TExportTestContext ctx;
+                const auto& table = AddTable(ctx, "/Root/A", {{"x", "Int64", !nullable}});
+                auto read = MakeRead(ctx, table, "a", {"x"});
+                SetOutputType(ctx, *read, {{"a.x", NUdf::EDataSlot::Int64, nullable}});
+                const auto makeVariance = [&](TIntrusivePtr<IOperator> input, TString source, TString output, EOpPhase phase) {
+                    auto aggregate = MakeIntrusive<TOpAggregate>(input,
+                        TVector<TOpAggregationTraits>{TOpAggregationTraits(TInfoUnit(source), "variance_1_1", TInfoUnit(output))},
+                        TVector<TInfoUnit>{}, phase, false, TPositionHandle{});
+                    SetOutputType(ctx, *aggregate, {{output, NUdf::EDataSlot::Double, nullable || phase != EOpPhase::Intermediate}});
+                    return aggregate;
+                };
+                auto aggregate = split
+                    ? makeVariance(makeVariance(read, "a.x", "partial", EOpPhase::Intermediate), "partial", "deviation", EOpPhase::Final)
+                    : makeVariance(read, "a.x", "deviation", EOpPhase::Undefined);
+                const auto* doubleType = ScalarType(ctx, NUdf::EDataSlot::Double);
+                const auto* optionalDouble = ScalarType(ctx, NUdf::EDataSlot::Double, true);
+                auto expression = TypedCallable(ctx, "/", {
+                    TypedMember(ctx, "deviation", optionalDouble),
+                    TypedLiteral(ctx, "Double", "2", doubleType),
+                }, optionalDouble);
+                const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+                auto present = ctx.ExprCtx.NewArgument(TPositionHandle{}, "present");
+                present->SetTypeAnn(doubleType);
+                auto equalsZero = TypedCallable(ctx, "==", {
+                    present,
+                    TypedLiteral(ctx, "Int32", "0", ScalarType(ctx, NUdf::EDataSlot::Int32)),
+                }, boolType);
+                auto optionalTest = TypedCallable(ctx, "Map", {
+                    TypedMember(ctx, "deviation", optionalDouble),
+                    TypedUnaryLambda(ctx, present, std::move(equalsZero)),
+                }, ScalarType(ctx, NUdf::EDataSlot::Bool, true));
+                auto condition = TypedCallable(ctx, "Coalesce", {
+                    std::move(optionalTest), TypedLiteral(ctx, "Bool", "false", boolType),
+                }, boolType);
+                expression = TypedCallable(ctx, "If", {
+                    std::move(condition),
+                    TypedMember(ctx, "deviation", optionalDouble),
+                    std::move(expression),
+                }, optionalDouble);
+                auto map = MakeComputedMap(ctx, aggregate, "result", std::move(expression));
+                SetOutputType(ctx, *map, {
+                    {"deviation", NUdf::EDataSlot::Double, true},
+                    {"result", NUdf::EDataSlot::Double, true},
+                });
+                TOpRoot root(map, TPositionHandle{}, {"result"});
+                const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+                UNIT_ASSERT_VALUES_EQUAL(snapshot["semantic_mode"].GetStringSafe(), "binary64_uf_universal_v1");
+                const auto& trait = FindNode(snapshot, "aggregate")["aggregates"][0];
+                UNIT_ASSERT_VALUES_EQUAL(trait["function"].GetStringSafe(), "stddev_samp");
+                UNIT_ASSERT_VALUES_EQUAL(trait["state"]["count_type"].GetStringSafe(), "Double");
+                UNIT_ASSERT_VALUES_EQUAL(trait["state"]["nullable"].GetBooleanSafe(), nullable);
+                const auto& scalar = FindNode(snapshot, "project")["columns"].GetArraySafe().back()["expression"];
+                UNIT_ASSERT_VALUES_EQUAL(scalar["kind"].GetStringSafe(), "if");
+                UNIT_ASSERT_VALUES_EQUAL(scalar["else"]["kind"].GetStringSafe(), "div");
+                UNIT_ASSERT_VALUES_EQUAL(scalar["else"]["right"]["value"]["bits"].GetStringSafe(), "4000000000000000");
+                const auto& mapped = scalar["condition"]["optional"];
+                UNIT_ASSERT_VALUES_EQUAL(mapped["kind"].GetStringSafe(), "if_present");
+                UNIT_ASSERT_VALUES_EQUAL(mapped["present"]["then"]["right"]["kind"].GetStringSafe(), "cast_double");
+            }
         }
     }
 
@@ -25764,6 +26066,43 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "Exact scalar expression exceeds the node audit limit");
     }
 
+    Y_UNIT_TEST(ExportsPrivateRankInsideClosedLeafInSubplan) {
+        TInSubplanExportFixture fixture;
+        auto& ctx = fixture.Ctx;
+        const auto* keyType = DecimalType(ctx, "15", "4");
+        const auto* rankType = ScalarType(ctx, NUdf::EDataSlot::Uint64);
+        auto keys = MakeComputedMap(ctx, fixture.InnerRead, "key",
+            TypedDecimalLiteral(ctx, "1", "15", "4", keyType));
+        SetExactOutputType(ctx, *keys, {{"inner.k", fixture.Int32}, {"key", keyType}});
+        auto ranked = MakeIntrusive<TOpMap>(keys, fixture.Pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("ranking"), GlobalRankExpression(ctx, 0, "key", EGlobalRankMutation::None)),
+        });
+        SetExactOutputType(ctx, *ranked, {
+            {"inner.k", fixture.Int32}, {"key", keyType}, {"ranking", rankType},
+        });
+        auto predicate = TypedCallable(ctx, "<=", {
+            TypedMember(ctx, "ranking", rankType), TypedLiteral(ctx, "Uint64", "1", rankType),
+        }, fixture.Bool);
+        auto filtered = MakeIntrusive<TOpFilter>(ranked, fixture.Pos,
+            TExpression(std::move(predicate), &ctx.ExprCtx, &ctx.ExpressionProps));
+        SetExactOutputType(ctx, *filtered, {
+            {"inner.k", fixture.Int32}, {"key", keyType}, {"ranking", rankType},
+        });
+        auto output = MakeCopyMap(ctx, filtered, "in.value", "inner.k");
+        SetExactOutputType(ctx, *output, {
+            {"key", keyType}, {"ranking", rankType}, {"in.value", fixture.Int32},
+        });
+        fixture.Entry().Plan = output;
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(*fixture.Root, ctx.RboCtx));
+        UNIT_ASSERT_VALUES_EQUAL(FindSubplan(snapshot, "_rbo_in")["kind"].GetStringSafe(), "in");
+
+        fixture.Entry().Type = ESubplanType::EXISTS;
+        fixture.Entry().Tuple.clear();
+        const auto rejected = ExportSemanticSnapshotV1(*fixture.Root, ctx.RboCtx);
+        UNIT_ASSERT(!rejected.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.UnsupportedReason, "separate from subplan evaluation");
+    }
+
     Y_UNIT_TEST(ExportsExactUncorrelatedNonNullIntegralInSubplan) {
         TInSubplanExportFixture fixture;
         const auto catalog = CaptureSemanticSnapshotCatalogV1(
@@ -26067,6 +26406,45 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             mainConsumer["predicate"]["column"].GetStringSafe(),
             "_rbo_in");
         UNIT_ASSERT_VALUES_UNEQUAL(nestedConsumerId, mainConsumerId);
+
+        // The same immediate IN consumer may invoke a leaf scalar using its
+        // own inner.week, not the outer row performing the membership test.
+        auto outerBind = MakeIntrusive<TOpAddDependencies>(
+            scalarRead, pos,
+            TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>{
+                {TInfoUnit("inner.week"), optionalInt64}});
+        SetExactOutputType(ctx, *outerBind, {
+            {"scalar.week", optionalInt64}, {"inner.week", optionalInt64},
+        });
+        auto equality = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(TInfoUnit("scalar.week"), pos, &ctx.ExprCtx, &root.PlanProps),
+            MakeColumnAccess(TInfoUnit("inner.week"), pos, &ctx.ExprCtx, &root.PlanProps));
+        AnnotateBinaryExpression(equality, optionalInt64, optionalInt64, optionalBool);
+        auto correlation = MakeIntrusive<TOpFilter>(outerBind, pos, equality);
+        SetExactOutputType(ctx, *correlation, {
+            {"scalar.week", optionalInt64}, {"inner.week", optionalInt64},
+        });
+        auto minimum = MakeIntrusive<TOpAggregate>(
+            correlation,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("scalar.week"), "min", TInfoUnit("scalar.minimum"))},
+            TVector<TInfoUnit>{}, EOpPhase::Undefined, false, pos);
+        SetExactOutputType(ctx, *minimum, {{"scalar.minimum", optionalInt64}});
+        auto& scalarEntry = root.PlanProps.Subplans.PlanMap.at(scalarBinding);
+        scalarEntry.Plan = minimum;
+        scalarEntry.DependentIUs = {TInfoUnit("inner.week")};
+        const auto correlatedSnapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& correlatedScalar = FindSubplan(correlatedSnapshot, "_rbo_scalar");
+        UNIT_ASSERT_VALUES_EQUAL(Strings(correlatedScalar["dependencies"]),
+            TVector<TString>{"inner.week"});
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNodeById(correlatedSnapshot, correlatedScalar["root"].GetStringSafe())
+                ["op"].GetStringSafe(),
+            "aggregate");
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            correlatedScalar["consumers"][0].GetStringSafe(),
+            FindSubplan(correlatedSnapshot, "_rbo_in")["consumers"][0].GetStringSafe());
     }
 
     Y_UNIT_TEST(ExportsOneLevelClosedNestedInSubplan) {
@@ -26193,7 +26571,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "only an uncorrelated scalar or a one-level closed IN "
+                "only a leaf scalar or a one-level closed IN "
                 "binding may be consumed inside an IN subplan");
         }
 
@@ -26493,120 +26871,110 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "must be a direct positive Filter conjunct");
     }
 
-    Y_UNIT_TEST(ExportsNullableDateInOnlyAsPositiveFilterConjunct) {
-        TInSubplanExportFixture fixture(EInSubplanColumnKind::Date);
-        const auto catalog = CaptureSemanticSnapshotCatalogV1(
-            *fixture.Root,
-            fixture.Ctx.RboCtx);
-        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+    Y_UNIT_TEST(ExportsNullableDateAndStringInOnlyAsPositiveFilterConjunct) {
+        for (auto kind : {EInSubplanColumnKind::Date, EInSubplanColumnKind::String}) {
+            TInSubplanExportFixture fixture(kind);
+            const bool isDate = kind == EInSubplanColumnKind::Date;
+            const auto* required = isDate ? fixture.Date : fixture.String;
+            const auto* optional = isDate ? fixture.OptionalDate : fixture.OptionalString;
+            const TString typeName = isDate ? "Date" : "String";
+            const auto catalog = CaptureSemanticSnapshotCatalogV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx);
+            UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
 
-        const auto assertNullability = [&](
-            const TTypeAnnotationNode* lookupType,
-            const TTypeAnnotationNode* outputType,
-            bool lookupNullable,
-            bool outputNullable)
-        {
-            SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
-                {"outer.k", lookupType},
-            });
-            SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
-                {"inner.k", outputType},
-            });
-            SetExactOutputType(fixture.Ctx, *fixture.Consumer, {
-                {"outer.k", lookupType},
-            });
-            const auto snapshot = ParseSupported(
+            const auto assertNullability = [&](
+                const TTypeAnnotationNode* lookupType,
+                const TTypeAnnotationNode* outputType,
+                bool lookupNullable,
+                bool outputNullable)
+            {
+                SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+                    {"outer.k", lookupType},
+                });
+                SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+                    {"inner.k", outputType},
+                });
+                SetExactOutputType(fixture.Ctx, *fixture.Consumer, {
+                    {"outer.k", lookupType},
+                });
+                const auto snapshot = ParseSupported(
+                    ExportSemanticSnapshotV1(
+                        *fixture.Root,
+                        fixture.Ctx.RboCtx,
+                        catalog.Catalog));
+                const auto& descriptor =
+                    snapshot["plan"]["subplans"].GetArraySafe()[0];
+                UNIT_ASSERT_VALUES_EQUAL(
+                    descriptor["lookup"]["type"].GetStringSafe(),
+                    typeName);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    descriptor["lookup"]["nullable"].GetBooleanSafe(),
+                    lookupNullable);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    descriptor["output"]["type"].GetStringSafe(),
+                    typeName);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    descriptor["output"]["nullable"].GetBooleanSafe(),
+                    outputNullable);
+            };
+            assertNullability(required, required, false, false);
+            assertNullability(optional, required, true, false);
+            assertNullability(required, optional, false, true);
+            assertNullability(optional, optional, true, true);
+
+            auto direct = fixture.BindingValue.GetExpressionBody();
+            fixture.Consumer->FilterExpr = TExpression(
+                TypedCallable(
+                    fixture.Ctx,
+                    "And",
+                    {
+                        direct,
+                        TypedLiteral(
+                            fixture.Ctx,
+                            "Bool",
+                            "true",
+                            fixture.Bool),
+                    },
+                    fixture.Bool),
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps);
+            UNIT_ASSERT_C(
                 ExportSemanticSnapshotV1(
                     *fixture.Root,
                     fixture.Ctx.RboCtx,
-                    catalog.Catalog));
-            const auto& descriptor =
-                snapshot["plan"]["subplans"].GetArraySafe()[0];
-            UNIT_ASSERT_VALUES_EQUAL(
-                descriptor["lookup"]["type"].GetStringSafe(),
-                "Date");
-            UNIT_ASSERT_VALUES_EQUAL(
-                descriptor["lookup"]["nullable"].GetBooleanSafe(),
-                lookupNullable);
-            UNIT_ASSERT_VALUES_EQUAL(
-                descriptor["output"]["type"].GetStringSafe(),
-                "Date");
-            UNIT_ASSERT_VALUES_EQUAL(
-                descriptor["output"]["nullable"].GetBooleanSafe(),
-                outputNullable);
-        };
-        assertNullability(
-            fixture.Date,
-            fixture.Date,
-            false,
-            false);
-        assertNullability(
-            fixture.OptionalDate,
-            fixture.Date,
-            true,
-            false);
-        assertNullability(
-            fixture.Date,
-            fixture.OptionalDate,
-            false,
-            true);
-        assertNullability(
-            fixture.OptionalDate,
-            fixture.OptionalDate,
-            true,
-            true);
+                    catalog.Catalog).IsSupported(),
+                "a direct positive nullable IN conjunct must remain supported");
 
-        auto direct = fixture.BindingValue.GetExpressionBody();
-        fixture.Consumer->FilterExpr = TExpression(
-            TypedCallable(
-                fixture.Ctx,
-                "And",
-                {
-                    direct,
-                    TypedLiteral(
-                        fixture.Ctx,
-                        "Bool",
-                        "true",
-                        fixture.Bool),
-                },
-                fixture.Bool),
-            &fixture.Ctx.ExprCtx,
-            &fixture.Root->PlanProps);
-        UNIT_ASSERT_C(
-            ExportSemanticSnapshotV1(
+            fixture.Consumer->FilterExpr = TExpression(
+                TypedCallable(
+                    fixture.Ctx,
+                    "Not",
+                    {direct},
+                    fixture.Bool),
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps);
+            const auto negated = ExportSemanticSnapshotV1(
                 *fixture.Root,
                 fixture.Ctx.RboCtx,
-                catalog.Catalog).IsSupported(),
-            "a direct positive nullable Date IN conjunct must remain supported");
+                catalog.Catalog);
+            UNIT_ASSERT(!negated.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                negated.UnsupportedReason,
+                "must be a direct positive Filter conjunct");
 
-        fixture.Consumer->FilterExpr = TExpression(
-            TypedCallable(
-                fixture.Ctx,
-                "Not",
-                {direct},
-                fixture.Bool),
-            &fixture.Ctx.ExprCtx,
-            &fixture.Root->PlanProps);
-        const auto negated = ExportSemanticSnapshotV1(
-            *fixture.Root,
-            fixture.Ctx.RboCtx,
-            catalog.Catalog);
-        UNIT_ASSERT(!negated.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(
-            negated.UnsupportedReason,
-            "must be a direct positive Filter conjunct");
-
-        SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
-            {"outer.k", fixture.OptionalInt32},
-        });
-        const auto mismatched = ExportSemanticSnapshotV1(
-            *fixture.Root,
-            fixture.Ctx.RboCtx,
-            catalog.Catalog);
-        UNIT_ASSERT(!mismatched.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(
-            mismatched.UnsupportedReason,
-            "lookup and result must have the same supported type");
+            SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+                {"outer.k", fixture.OptionalInt32},
+            });
+            const auto mismatched = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog);
+            UNIT_ASSERT(!mismatched.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                mismatched.UnsupportedReason,
+                "lookup and result must have the same supported type");
+        }
     }
 
     Y_UNIT_TEST(ExportsExactUncorrelatedNonNullStringInSubplan) {
@@ -26684,20 +27052,16 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 {{"outer.k", type}});
         };
 
-        setResultType(fixture.OptionalString);
-        reject("result must be a fixed-width integer, Date, or non-null String");
         setResultType(fixture.Utf8);
-        reject("result must be a fixed-width integer, Date, or non-null String");
+        reject("result must be a fixed-width integer, Date, or String");
         setResultType(fixture.Bool);
-        reject("result must be a fixed-width integer, Date, or non-null String");
+        reject("result must be a fixed-width integer, Date, or String");
         setResultType(fixture.Date);
         reject("lookup and result must have the same supported type");
         setResultType(DecimalType(fixture.Ctx, "12", "2"));
-        reject("result must be a fixed-width integer, Date, or non-null String");
+        reject("result must be a fixed-width integer, Date, or String");
         setResultType(fixture.String);
 
-        setLookupType(fixture.OptionalString);
-        reject("nullable lookup must be a fixed-width integer or Date");
         setLookupType(fixture.Utf8);
         reject("lookup and result must have the same supported type");
         setLookupType(fixture.Int32);
@@ -26762,7 +27126,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
             {"inner.k", fixture.Bool},
         });
-        reject("result must be a fixed-width integer, Date, or non-null String");
+        reject("result must be a fixed-width integer, Date, or String");
         SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
             {"inner.k", fixture.Int32},
         });
@@ -26966,6 +27330,59 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_UNEQUAL(
             (*consumer)["id"].GetStringSafe(),
             (*correlationFilter)["id"].GetStringSafe());
+    }
+
+    Y_UNIT_TEST(ExportsCompositeEqualityCorrelatedScalarSubplanFailClosed) {
+        TCorrelatedScalarExportFixture fixture(true);
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root, fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(
+            *fixture.Root, fixture.Ctx.RboCtx, catalog.Catalog));
+        const auto& descriptor = snapshot["plan"]["subplans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(Strings(descriptor["dependencies"]),
+            TVector<TString>({"outer.second", "outer.k"}));
+        TVector<const NJson::TJsonValue*> binds;
+        for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "outer_bind") {
+                binds.push_back(&node);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(binds.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL((*binds[0])["dependency"].GetStringSafe(), "outer.k");
+        UNIT_ASSERT_VALUES_EQUAL((*binds[0])["type"].GetStringSafe(), "Int32");
+        UNIT_ASSERT_VALUES_EQUAL((*binds[1])["dependency"].GetStringSafe(), "outer.second");
+        UNIT_ASSERT_VALUES_EQUAL((*binds[1])["type"].GetStringSafe(), "Int64");
+        UNIT_ASSERT((*binds[0])["nullable"].GetBooleanSafe());
+        UNIT_ASSERT((*binds[1])["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL((*binds[1])["input"].GetStringSafe(),
+            (*binds[0])["id"].GetStringSafe());
+
+        const auto reject = [&](TStringBuf reason) {
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root, fixture.Ctx.RboCtx, catalog.Catalog);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, reason);
+        };
+        auto& entry = fixture.Entry();
+        const auto dependencies = entry.DependentIUs;
+        entry.DependentIUs.pop_back();
+        reject("dependency registry disagrees with AddDependencies");
+        entry.DependentIUs = dependencies;
+        entry.DependentIUs[1] = entry.DependentIUs[0];
+        reject("duplicate outer dependency");
+        entry.DependentIUs = dependencies;
+
+        fixture.CorrelationFilter->FilterExpr = MakeConjunction({fixture.Equality, fixture.Residual});
+        AnnotateExpression(fixture.CorrelationFilter->FilterExpr, fixture.OptionalBool);
+        reject("has no equality for its outer dependency");
+        fixture.CorrelationFilter->FilterExpr = fixture.CorrelationPredicate;
+        fixture.OuterBind->Types[1] = fixture.Int64;
+        reject("outer_bind output type disagrees with AddDependencies");
+        fixture.OuterBind->Types[1] = fixture.OptionalInt64;
+        UNIT_ASSERT_C(ExportSemanticSnapshotV1(
+            *fixture.Root, fixture.Ctx.RboCtx, catalog.Catalog).IsSupported(),
+            "restored composite correlation must remain supported");
     }
 
     Y_UNIT_TEST(ExportsCommonEqualityOrCorrelatedScalarSubplanFailClosed) {
@@ -27172,7 +27589,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         fixture.OuterBind->Types = savedTypes;
 
         entry.DependentIUs.push_back(TInfoUnit("outer.second"));
-        reject("exactly one outer dependency");
+        reject("dependency registry disagrees with AddDependencies");
         entry.DependentIUs.pop_back();
 
         fixture.CorrelationFilter->FilterExpr = fixture.Residual;
@@ -28575,7 +28992,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             result.UnsupportedReason,
-            "only an uncorrelated scalar or a one-level closed IN "
+            "only a leaf scalar or a one-level closed IN "
             "binding may be consumed inside an IN subplan");
     }
 

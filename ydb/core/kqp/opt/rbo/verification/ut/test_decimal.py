@@ -404,6 +404,24 @@ def _ref_integral_cast(value, precision, scale):
     return decimal.INF if coefficient > 0 else -decimal.INF
 
 
+def _ref_decimal_cast(value, source, target):
+    """Independent rational oracle, with the runtime's pre-round overflow gate."""
+
+    if value in {-decimal.INF, decimal.INF, decimal.NAN}:
+        return value
+    exact = Fraction(value, 10**source.scale)
+    if (
+        target.integral_digits < source.integral_digits
+        and source.scale != target.scale
+        and abs(exact) >= 10**target.integral_digits
+    ):
+        return decimal.INF if value > 0 else -decimal.INF
+    coefficient = round(exact * 10**target.scale)
+    if abs(coefficient) >= 10**target.precision:
+        return decimal.INF if coefficient > 0 else -decimal.INF
+    return coefficient
+
+
 def _ref_value(code, scalar_type):
     """Decode a small-domain code without reproducing YDB's scale alignment."""
 
@@ -934,6 +952,46 @@ class DecimalKernelTest(unittest.TestCase):
                     result_type,
                 )
                 self.assertEqual(_ground(actual), expected)
+
+    def test_decimal_cast_matches_small_domain_rational_reference(self):
+        sources = tuple(
+            decimal.Type(precision, scale)
+            for precision in (1, 2)
+            for scale in range(precision + 1)
+        )
+        targets = (decimal.Type(1, 0), decimal.Type(2, 0), decimal.Type(2, 1))
+        for source, target in product(sources, targets):
+            if source.integral_digits == 0 and target.scale == 0:
+                continue  # Frontend weak cast is Impossible, not a rounding case.
+            evaluate = _compile_ground(decimal.cast_decimal(
+                smt.symbol("left", smt.INT), _type_name(source), _type_name(target),
+            ))
+            for value in (*range(1 - 10**source.precision, 10**source.precision),
+                          -decimal.INF, decimal.INF, decimal.NAN):
+                self.assertEqual(
+                    evaluate(value, 0), _ref_decimal_cast(value, source, target),
+                    (source, target, value),
+                )
+
+    def test_decimal_rescale_thresholds_even_ties_and_rounding_overflow(self):
+        cases = (
+            (decimal.Type(35, 2), decimal.Type(15, 4),
+             (10**13 - 1, 10**13, 10**13 + 1)),
+            (decimal.Type(35, 2), decimal.Type(35, 9),
+             (10**28 - 1, 10**28, 10**28 + 1)),
+            (decimal.Type(5, 2), decimal.Type(3, 1),
+             (124, 125, 126, 135, 9994, 9995, 9999, 10000)),
+        )
+        for source, target, values in cases:
+            for value in (*values, *(-item for item in values),
+                          -decimal.INF, decimal.INF, decimal.NAN):
+                actual = decimal.cast_decimal(smt.int_value(value), _type_name(source), _type_name(target))
+                self.assertEqual(_ground(actual), _ref_decimal_cast(value, source, target))
+
+        for source, target in (("Decimal(2,2)", "Decimal(3,0)"),
+                               ("Decimal(35,35)", "Decimal(35,0)")):
+            with self.assertRaisesRegex(ValueError, "impossible precision/scale overlap"):
+                decimal.cast_decimal(smt.ZERO, source, target)
 
     def test_narrow_same_scale_rejects_unaudited_shapes(self):
         for source_type, result_type in (
@@ -1648,13 +1706,7 @@ class DecimalIrTest(unittest.TestCase):
         decimal_source["arg"]["column"] = "a.d"
         decimal_source["source_type"] = "Decimal(7,2)"
         decimal_source["nullable"] = True
-        cases.append(
-            (
-                "Decimal narrowing",
-                snapshot(decimal_source),
-                "must not decrease precision",
-            )
-        )
+        parse_snapshot(snapshot(decimal_source))  # Same-scale narrowing is exact.
 
         cross_scale = copy.deepcopy(decimal_source)
         cross_scale["type"] = "Decimal(12,3)"
@@ -1662,13 +1714,14 @@ class DecimalIrTest(unittest.TestCase):
         cross_scale_snapshot["plan"]["nodes"][1]["predicate"]["right"]["type"] = (
             "Decimal(12,3)"
         )
-        cases.append(
-            (
-                "cross-scale Decimal",
-                cross_scale_snapshot,
-                "must preserve scale",
-            )
-        )
+        parse_snapshot(cross_scale_snapshot)
+
+        impossible = snapshot(copy.deepcopy(decimal_source))
+        impossible["schema"]["tables"][0]["columns"][0]["type"] = "Decimal(2,2)"
+        predicate = impossible["plan"]["nodes"][1]["predicate"]
+        predicate["left"].update(source_type="Decimal(2,2)", type="Decimal(3,0)")
+        predicate["right"]["type"] = "Decimal(3,0)"
+        cases.append(("Impossible weak cast", impossible, "impossible precision/scale overlap"))
 
         for source_type in ("Bool", "Date", "String"):
             non_integral_source = snapshot(copy.deepcopy(base))

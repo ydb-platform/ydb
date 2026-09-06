@@ -6,6 +6,8 @@ from itertools import product
 from pathlib import Path
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    BINARY64_ORDER_COMPARISON,
+    BINARY64_SEMANTIC_MODE,
     INTEGRAL_AVG_RANK_COMPARISON,
     INTEGRAL_DOUBLE_AVERAGE_STATE,
     MAX_BOUND_DEPTH,
@@ -851,6 +853,80 @@ def passive_double_snapshot():
 
 
 class SnapshotTest(unittest.TestCase):
+    def test_binary64_mode_is_explicit_and_scalar_types_remain_strict(self):
+        value = minimal_snapshot()
+        value["semantic_mode"] = BINARY64_SEMANTIC_MODE
+        cast = {
+            "kind": "cast_double", "arg": {"kind": "column", "column": "a.k"},
+            "source_type": "Int64", "type": "Double", "nullable": False,
+        }
+        one = {"kind": "literal", "type": "Double", "value": {"bits": "3ff0000000000000"}}
+        expression = {
+            "kind": "div", "left": cast, "right": one,
+            "type": "Double", "nullable": False,
+        }
+        value["plan"]["nodes"][1]["predicate"] = {
+            "kind": "gt", "left": expression, "right": one,
+        }
+        self.assertEqual(parse_snapshot(value).semantic_mode, BINARY64_SEMANTIC_MODE)
+        for mutation in ("mode", "source", "mixed", "nullability", "bits", "null_safe"):
+            broken = copy.deepcopy(value)
+            predicate = broken["plan"]["nodes"][1]["predicate"]
+            if mutation == "mode":
+                del broken["semantic_mode"]
+            elif mutation == "source":
+                predicate["left"]["left"]["source_type"] = "Int32"
+            elif mutation == "mixed":
+                predicate["right"] = {"kind": "literal", "type": "Int64", "value": 1}
+            elif mutation == "nullability":
+                predicate["left"]["nullable"] = True
+            elif mutation == "bits":
+                predicate["right"]["value"]["bits"] = "3FF0000000000000"
+            else:
+                predicate.update(kind="eq", null_safe=True)
+            with self.subTest(mutation=mutation), self.assertRaises(SnapshotError):
+                parse_snapshot(broken)
+
+    def test_binary64_variance_tuple_has_one_typed_final_consumer(self):
+        value = minimal_snapshot()
+        value["semantic_mode"] = BINARY64_SEMANTIC_MODE
+        state = {
+            "kind": "binary64_variance_v1", "source_type": "Int64", "nullable": False,
+            "mean_type": "Double", "count_type": "Double", "m2_type": "Double",
+        }
+
+        def aggregate(node_id, source, input_column, output, phase):
+            return {
+                "id": node_id, "op": "aggregate", "input": source,
+                "keys": [], "phase": phase, "distinct_all": False,
+                "aggregates": [{
+                    "input": input_column, "function": "stddev_samp", "output": output,
+                    "type": "Double", "nullable": phase != "intermediate",
+                    "distinct": False, "unwrap": False, "state": copy.deepcopy(state),
+                }],
+            }
+        value["plan"]["nodes"] += [
+            aggregate("partial", "filter", "a.k", "state", "intermediate"),
+            aggregate("final", "partial", "state", "result", "final"),
+            {"id": "sort", "op": "sort", "input": "final", "phase": "undefined", "limit": None,
+             "order": [{"column": "result", "ascending": True, "nulls_first": True,
+                        "comparison": BINARY64_ORDER_COMPARISON}]},
+        ]
+        value["plan"].update(root="sort", output=["result"])
+        parse_snapshot(value)
+        for mutation in ("count_type", "descriptor", "leak", "fanout"):
+            broken = copy.deepcopy(value)
+            if mutation == "count_type":
+                broken["plan"]["nodes"][2]["aggregates"][0]["state"]["count_type"] = "Uint64"
+            elif mutation == "descriptor":
+                broken["plan"]["nodes"][3]["aggregates"][0]["state"]["source_type"] = "Int32"
+            elif mutation == "leak":
+                broken["plan"].update(root="partial", output=["state"])
+            else:
+                broken["plan"]["nodes"].append(aggregate("second", "partial", "state", "copy", "final"))
+            with self.subTest(mutation=mutation), self.assertRaises(SnapshotError):
+                parse_snapshot(broken)
+
     def test_valid_snapshot_has_inferred_root_schema(self):
         snapshot = parse_snapshot(minimal_snapshot())
         self.assertEqual([(column.name, column.type, column.nullable) for column in snapshot.output_schema()], [

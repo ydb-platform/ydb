@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, TypeAlias
 
-from . import decimal, smt
+from . import decimal, floating, smt
 from .ir import Expr
-from .types import BOOL, DATE, MAX_DATE, VOID, family, integer_bounds, integer_width
+from .types import BOOL, DATE, DOUBLE, MAX_DATE, VOID, family, integer_bounds, integer_width
 
 
 DecimalSumState = decimal.DecimalSumState
@@ -110,6 +110,8 @@ class Value:
     # remains authoritative and is used whenever the certificate cannot be
     # transported to its one matching final aggregate.
     decimal_sum_state: DecimalSumState | None = None
+    # Physical binary64 wire state in explicit floating mode, never proof hints.
+    binary64_state: floating.State | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,11 +128,19 @@ class _OpaqueApplication:
 
 
 class Encoder:
-    def __init__(self, script: smt.Script) -> None:
+    def __init__(self, script: smt.Script, *, semantic_mode: str | None = None) -> None:
+        if semantic_mode not in {None, floating.SEMANTIC_MODE}:
+            raise smt.SmtError(f"unknown scalar semantic mode {semantic_mode!r}")
         self.script = script
+        self.semantic_mode = semantic_mode
+        self.binary64 = floating.Kernel(script) if semantic_mode is not None else None
         self._opaque: dict[tuple[object, ...], _OpaqueFunctions] = {}
         self._checked_concat_failure: dict[tuple[object, ...], smt.Function] = {}
         self._integral_average: smt.Function | None = None
+
+    @property
+    def uses_abstract_integral_average(self) -> bool:
+        return self._integral_average is not None
 
     def integral_int64_average(
         self,
@@ -140,6 +150,14 @@ class Encoder:
     ) -> smt.Term:
         """Shared carrier, interpreted exactly only after proving count <= 2."""
 
+        if self.binary64 is not None:
+            # The existing domain exclusion still proves count <= 2. Finite
+            # Int64 casts and their two-term sum cannot overflow binary64; their
+            # runtime sum is independent of the two input/partition orders.
+            lower = self.binary64.from_integer(minimum, "Int64")
+            upper = self.binary64.from_integer(maximum, "Int64")
+            pair = self.binary64.div(self.binary64.add(lower, upper), floating.literal_bits(0x4000000000000000))
+            return smt.ite(smt.eq(count, smt.ONE), lower.bits, pair.bits)
         if self._integral_average is None:
             self._integral_average = self.script.fresh_function(
                 "integral_int64_average_at_most_two",
@@ -270,6 +288,11 @@ class Encoder:
                 expression.args[1], row, bindings, relational_values
             )
             operand_is_null = smt.or_(left.is_null, right.is_null)
+            if expression.result_type == DOUBLE:
+                if self.binary64 is None:
+                    raise smt.SmtError("floating arithmetic requires explicit binary64 semantic mode")
+                value = getattr(self.binary64, expression.kind)(self._binary64_value(left), self._binary64_value(right))
+                return Value(DOUBLE, operand_is_null, value.bits)
             if decimal.is_type(expression.result_type):
                 if expression.kind == "add":
                     value = decimal.add(left.value, right.value, expression.result_type)
@@ -334,6 +357,18 @@ class Encoder:
                 operand_is_null,
                 _wrap_integer(raw, expression.result_type),
             )
+
+        if expression.kind in {"cast_double", "sqrt_double", "is_nan_double"}:
+            if self.binary64 is None:
+                raise smt.SmtError("floating scalar requires explicit binary64 semantic mode")
+            argument = self._evaluate(expression.args[0], row, bindings, relational_values)
+            if expression.kind == "cast_double":
+                value = self.binary64.from_integer(argument.value, argument.type)
+            elif expression.kind == "sqrt_double":
+                value = self.binary64.sqrt(self._binary64_value(argument))
+            else:
+                return Value(BOOL, argument.is_null, floating.is_nan(self._binary64_value(argument)))
+            return Value(DOUBLE, argument.is_null, value.bits)
 
         if expression.kind == "decimal_abs":
             assert expression.result_type is not None
@@ -407,6 +442,8 @@ class Encoder:
             )
             assert condition.type == BOOL
             assert then.type == otherwise.type == expression.result_type
+            if then.binary64_state is not None or otherwise.binary64_state is not None:
+                raise smt.SmtError("scalar If cannot consume binary64 physical state")
             bound = (
                 _selected_decimal_finite_abs_bound(then, otherwise)
                 if decimal.is_type(expression.result_type)
@@ -430,6 +467,8 @@ class Encoder:
             optional = self._evaluate(
                 expression.args[0], row, bindings, relational_values
             )
+            if optional.binary64_state is not None:
+                raise smt.SmtError("scalar IfPresent cannot consume binary64 physical state")
             present_expression = expression.args[1]
             missing_expression = expression.args[2]
             if (
@@ -469,6 +508,8 @@ class Encoder:
                 missing_expression, row, bindings, relational_values
             )
             assert present.type == missing.type == expression.result_type
+            if present.binary64_state is not None or missing.binary64_state is not None:
+                raise smt.SmtError("scalar IfPresent cannot return binary64 physical state")
             bound = (
                 _selected_decimal_finite_abs_bound(present, missing)
                 if decimal.is_type(expression.result_type)
@@ -593,7 +634,8 @@ class Encoder:
         elif family(result.type) == "carrier":
             # A passive Double is an uninterpreted identity token.  No
             # arithmetic or ordering domain is attached to its SMT integer.
-            pass
+            if self.binary64 is not None:
+                self.binary64.from_bits(result.value)
         return result
 
     def checked_concat_failure(
@@ -665,6 +707,10 @@ class Encoder:
         scalar_type: str,
         value: bool | int | str | decimal.Literal | None,
     ) -> smt.Term:
+        if scalar_type == DOUBLE:
+            if self.binary64 is None:
+                raise smt.SmtError("Double literal requires explicit binary64 semantic mode")
+            return floating.literal_bits(value).bits
         if family(scalar_type) == "string":
             assert isinstance(value, str)
             return self.script.string_atom(value)
@@ -680,6 +726,20 @@ class Encoder:
         right: Value,
         null_safe: bool,
     ) -> Value:
+        if self.binary64 is not None and DOUBLE in {left.type, right.type}:
+            if null_safe:
+                raise smt.SmtError("null-safe binary64 scalar comparison is not admitted")
+            lhs, rhs = self._binary64_value(left), self._binary64_value(right)
+            equal = floating.equal(lhs, rhs)
+            if kind == "eq":
+                compared = equal
+            elif kind in {"lt", "lte"}:
+                compared = floating.less(lhs, rhs)
+            else:
+                compared = floating.less(rhs, lhs)
+            if kind in {"lte", "gte"}:
+                compared = smt.or_(equal, compared)
+            return Value(BOOL, smt.or_(left.is_null, right.is_null), compared)
         decimal_operands = decimal.is_type(left.type) or decimal.is_type(right.type)
         left_value, right_value = (
             decimal.align(left.value, left.type, right.value, right.type)
@@ -733,6 +793,16 @@ class Encoder:
             assert kind == "gte"
             comparison = smt.not_(smt.lt(left_value, right_value))
         return Value(BOOL, smt.or_(left.is_null, right.is_null), comparison)
+
+    def _binary64_value(self, value: Value) -> floating.Binary64:
+        if self.binary64 is None or value.type != DOUBLE:
+            raise smt.SmtError("binary64 operation requires Double in explicit floating mode")
+        if value.binary64_state is not None or isinstance(value.average_metadata, (DecimalAverageState, IntegralAverageState)):
+            raise smt.SmtError("binary64 scalar operation cannot consume physical aggregate state")
+        # In this mode every admitted Double producer establishes bit bounds;
+        # selection and transport preserve them. Only external opaque producers
+        # need from_bits admission, not every subsequent scalar read of a DAG.
+        return floating.Binary64(value.value)
 
     @staticmethod
     def _and(arguments: tuple[Value, ...]) -> Value:
@@ -878,13 +948,20 @@ def _decimal_cast_finite_abs_bound(
         if argument.decimal_finite_abs_bound is not None
         else 10**source.precision - 1
     )
-    if source.scale == result.scale:
-        assert result.precision >= source.precision
-        return source_bound
-    assert source == decimal.Type(35, 2) and result == decimal.Type(15, 4)
-    # The first recursive cast retains exactly |coefficient| < 10**13;
-    # the second scale-up contributes two decimal places.
-    return min(source_bound, 10**13 - 1) * 100
+    if result.integral_digits < source.integral_digits and result.scale != source.scale:
+        # Match the runtime's source-scale narrowing before any rescaling.
+        precision = result.integral_digits + source.scale
+        source_bound = min(source_bound, 10**precision - 1)
+    if source.scale < result.scale:
+        source_bound *= 10**(result.scale - source.scale)
+    elif source.scale > result.scale:
+        divisor = 10**(source.scale - result.scale)
+        quotient, remainder = divmod(source_bound, divisor)
+        source_bound = quotient + int(
+            2 * remainder > divisor
+            or (2 * remainder == divisor and quotient % 2 == 1)
+        )
+    return min(source_bound, 10**result.precision - 1)
 
 
 def _wrap_integer(value: smt.Term, scalar_type: str) -> smt.Term:

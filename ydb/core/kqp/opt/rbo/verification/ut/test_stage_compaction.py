@@ -16,11 +16,14 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     stage_task_counts,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
+    BoundedChoice,
     Database,
     Evaluator as RelationEvaluator,
     Occurrence,
+    Outcome,
     PartitionFact,
     Relation,
+    RelationFamily,
     Row,
     single,
     sort_family,
@@ -1218,6 +1221,88 @@ class DerivedUniqueStageGraphTest(unittest.TestCase):
             outcome.decisions or outcome.choices
             for outcome in merged.outcomes
         ))
+
+    def test_merge_pads_variable_outcomes_without_changing_observations(self):
+        script = smt.Script()
+        evaluator = object.__new__(stages.Evaluator)
+        evaluator.scalar = ScalarEncoder(script)
+        columns = (Column("k", "Int64", False),)
+        order = (SortOrder("k", True, False),)
+        selector = smt.symbol("producer_case", smt.INT)
+        error = smt.symbol("producer_error", smt.BOOL)
+        peer_error = smt.symbol("peer_error", smt.BOOL)
+        choice = BoundedChoice(smt.symbol("producer_choice", smt.INT), 2)
+        edge = StageEdge("merge", "source", "root", 0, 0, 0, "merge", order=order)
+
+        for explicit_ordinals in (False, True):
+            def producer(values):
+                # Explicit ordinals, not tuple position, define producer order.
+                physical = tuple(reversed(values)) if explicit_ordinals else values
+                return Relation(
+                    columns,
+                    tuple(
+                        Row(smt.TRUE, {"k": Value("Int64", smt.FALSE, smt.int_value(k))})
+                        for k in physical
+                    ),
+                    sequence=True,
+                    order=order,
+                    ordinals=(
+                        tuple(smt.int_value(i) for i in reversed(range(len(values))))
+                        if explicit_ordinals else None
+                    ),
+                    present_prefix=not explicit_ordinals,
+                )
+
+            cases = ((), (3,), (1, 5))
+            family = RelationFamily(tuple(
+                Outcome(
+                    smt.eq(selector, smt.int_value(index)), producer(values), error,
+                    (("producer", index),), (choice,),
+                )
+                for index, values in enumerate(cases)
+            ))
+            padded = stages._pad_merge_alternatives(family, evaluator.scalar)
+            for original, result in zip(family.outcomes, padded.outcomes):
+                count = len(original.relation.rows)
+                self.assertEqual(result.relation.rows[:count], original.relation.rows)
+                self.assertTrue(all(
+                    row.present == smt.FALSE for row in result.relation.rows[count:]
+                ))
+                self.assertEqual(len(result.relation.rows), 2)
+                self.assertEqual(
+                    result.relation.ordinals,
+                    (original.relation.ordinals + (smt.ZERO,) * (2 - count)
+                     if explicit_ordinals else None),
+                )
+            peer = RelationFamily((Outcome(smt.TRUE, producer((2, 4)), peer_error),))
+            self.assertIs(stages._pad_merge_alternatives(peer, evaluator.scalar), peer)
+            merged = evaluator._connect(
+                edge, stages.Partitions((family, peer)), 1, 0,
+            ).relations[0]
+
+            for index, failed, peer_failed in product(
+                range(len(cases)), (False, True), (False, True),
+            ):
+                constants = {
+                    "producer_case": index, "producer_error": failed, "peer_error": peer_failed,
+                }
+                with self.subTest(
+                    ordinals=explicit_ordinals, case=index, errors=(failed, peer_failed),
+                ):
+                    self.assertEqual(
+                        _family_sequences(merged, constants, None),
+                        {tuple((k,) for k in sorted(cases[index] + (2, 4)))},
+                    )
+                    active = [
+                        item for item in merged.outcomes if _ground(item.enabled, constants)
+                    ]
+                    self.assertTrue(active)
+                    for outcome in active:
+                        self.assertEqual(
+                            _ground(outcome.error, constants), failed or peer_failed,
+                        )
+                        self.assertEqual(dict(outcome.decisions)["producer"], index)
+                        self.assertEqual(outcome.choices, (choice,))
 
     def test_gather_drops_task_local_key_when_cross_task_duplicates_are_possible(self):
         columns = (Column("k", "Int64", True),)

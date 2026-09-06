@@ -2,10 +2,10 @@
 // semantic_snapshot.cpp's anonymous namespace.
 
     void TPlanExporter::PrepareGlobalRankProjection(
-        TOpMap& map,
-        const THashSet<TString>& inputNames)
+        TOpMap& map, const THashSet<TString>& inputNames)
     {
         TVector<std::pair<const TMapElement*, TGlobalRankWindow>> ranks;
+        THashMap<TString, NJson::TJsonValue> definitions;
         for (const auto& element : map.MapElements) {
             const auto& expression = element.GetExpression();
             if (!expression.Node || !expression.Node->IsLambda() ||
@@ -13,61 +13,34 @@
             {
                 continue;
             }
-            ranks.emplace_back(
-                &element,
-                ExportGlobalRankWindow(expression, inputNames));
+            auto rank = ExportGlobalRankWindow(expression, inputNames, *OutputStructType(*map.GetInput()));
+            const auto [previous, inserted] = definitions.emplace(rank.WindowName, rank.Expression);
+            if (!inserted && previous->second != rank.Expression) {
+                Unsupported("One Rank window name must describe one definition");
+            }
+            ranks.emplace_back(&element, std::move(rank));
         }
         if (ranks.empty()) {
             return;
         }
-        if (ranks.size() != 2) {
-            Unsupported(
-                "Global rank Project requires exactly two direct rank leaves");
+        if (ranks.size() > 2) {
+            Unsupported("Rank Project exceeds its two-leaf audit bound");
         }
-        std::sort(
-            ranks.begin(),
-            ranks.end(),
-            [](const auto& left, const auto& right) {
-                return left.second.SourceOrdinal < right.second.SourceOrdinal;
-            });
-        if (ranks[0].second.SourceOrdinal % 2 != 0 ||
-            ranks[1].second.SourceOrdinal !=
-                ranks[0].second.SourceOrdinal + 1)
-        {
-            Unsupported(
-                "Global rank Project window names must be one canonical "
-                "consecutive even/odd source pair");
-        }
-
         auto& projection = GlobalRankProjectionWindows[&map];
-        projection.reserve(ranks.size());
         for (size_t index = 0; index < ranks.size(); ++index) {
             auto& [element, rank] = ranks[index];
             const TString output = element->GetElementName().GetFullName();
-            if (output.empty() ||
-                !IsExactDataAnnotation(
-                    OutputType(map, output),
-                    NUdf::EDataSlot::Uint64,
-                    false))
+            if (output.empty() || !IsExactDataAnnotation(
+                OutputType(map, output), NUdf::EDataSlot::Uint64, false))
             {
-                Unsupported(
-                    "Global rank Project output must be exact non-null Uint64");
+                Unsupported("Rank Project output must be exact non-null Uint64");
             }
-            rank.Expression["execution_order"] =
-                static_cast<ui64>(index);
+            rank.Expression["execution_order"] = static_cast<ui64>(index);
             AuditExactScalarExpression(rank.Expression);
-            projection.push_back({
-                .Output = output,
-                .WindowName = rank.WindowName,
-                .OrderColumn = rank.OrderColumn,
-                .SourceOrdinal = rank.SourceOrdinal,
-                .ExecutionOrder = static_cast<ui32>(index),
-            });
-            if (!PreparedGlobalRankWindows.emplace(
-                    element,
-                    std::move(rank)).second)
-            {
-                Unsupported("Global rank expression was prepared twice");
+            projection.push_back({.Output = output, .WindowName = rank.WindowName,
+                .OrderColumns = rank.OrderColumns, .ExecutionOrder = static_cast<ui32>(index)});
+            if (!PreparedGlobalRankWindows.emplace(element, std::move(rank)).second) {
+                Unsupported("Rank expression was prepared twice");
             }
         }
     }
@@ -77,6 +50,9 @@
         const TWholePartitionWindow& window)
     {
         const TStringBuf label = WindowLabel(window.Function);
+        if (window.Function == EWholePartitionWindowFunction::Sum && ++WholePartitionSumCount > 1) {
+            Unsupported("Exactly one whole-partition SUM expression is modeled");
+        }
         if (map.GetInput()->GetKind() != EOperator::Aggregate) {
             Unsupported(TStringBuilder()
                 << label
@@ -210,6 +186,42 @@
         }
     }
 
+    void TPlanExporter::ValidateWindowSubplanSeparation(const IOperator& project, bool allowClosedInRank) const {
+        // Ordinary subplans below the window have already contributed to its
+        // shared source outcome. A window may not itself invoke one. Rank may
+        // belong to one closed leaf IN relation, with the same family semantics.
+        THashSet<const IOperator*> main;
+        VisitOperators(Root.GetInput(), main, [](IOperator&) {});
+        size_t owners = 0;
+        for (const auto& subplan : Subplans) {
+            if (std::find(subplan.Consumers.begin(), subplan.Consumers.end(), &project) != subplan.Consumers.end()) {
+                Unsupported("Window Project must be separate from subplan evaluation");
+            }
+            THashSet<const IOperator*> visited;
+            VisitOperators(subplan.ExportedRoot, visited, [](IOperator&) {});
+            if (!visited.contains(&project)) {
+                continue;
+            }
+            if (!allowClosedInRank || main.contains(&project) || ++owners != 1 ||
+                !std::holds_alternative<TInSubplanDetails>(subplan.Details) ||
+                std::any_of(subplan.Consumers.begin(), subplan.Consumers.end(),
+                    [&](const IOperator* consumer) { return !main.contains(consumer); }))
+            {
+                Unsupported("Window Project must be separate from subplan evaluation");
+            }
+            for (const auto& nested : Subplans) {
+                if (std::any_of(nested.Consumers.begin(), nested.Consumers.end(),
+                    [&](const IOperator* consumer) { return visited.contains(consumer); }))
+                {
+                    Unsupported("Window Project must be separate from subplan evaluation");
+                }
+            }
+        }
+        if (!owners && !main.contains(&project)) {
+            Unsupported("Window Project must belong to the main result plan or one closed leaf IN relation");
+        }
+    }
+
     void TPlanExporter::ValidateWholePartitionWindowProjectionTopology() {
         size_t markedCount = 0;
         for (const auto& [_, outputs] : WindowProjectionOutputs) {
@@ -218,327 +230,43 @@
         if (markedCount == 0) {
             return;
         }
-        if (markedCount != 1 || !Subplans.empty()) {
-            Unsupported(
-                "Whole-partition window requires exactly one main "
-                "projection and no subplans");
+        if (markedCount > 3) {
+            Unsupported("Whole-partition window exceeds its three-leaf snapshot audit bound");
         }
-
         THashSet<const IOperator*> mainNodes;
         THashMap<const IOperator*, TVector<IOperator*>> parents;
-        VisitOperators(
-            Root.GetInput(),
-            mainNodes,
-            [&](IOperator& op) {
-                for (const auto& child : op.GetChildren()) {
-                    parents[child.Get()].push_back(&op);
-                }
-            });
-
-        const auto& [producer, outputs] =
-            *WindowProjectionOutputs.begin();
-        if (!mainNodes.contains(producer) || outputs.size() != 1 ||
-            producer->GetInput()->GetKind() != EOperator::Aggregate)
-        {
-            Unsupported(
-                "Whole-partition window must be a private main-plan Project");
-        }
-        auto* aggregate = producer->GetInput().Get();
-        const auto* aggregateConsumers = parents.FindPtr(aggregate);
-        if (!aggregateConsumers || aggregateConsumers->size() != 1 ||
-            aggregateConsumers->front() != producer)
-        {
-            Unsupported(
-                "Whole-partition window Aggregate must have exactly one "
-                "direct Project consumer");
-        }
-        auto* aggregateOp = static_cast<TOpAggregate*>(aggregate);
-        if (aggregateOp->GetAggregationPhase() == EOpPhase::Final)
-        {
-            const auto* intermediate = aggregateOp->GetInput().Get();
-            const auto* intermediateConsumers = parents.FindPtr(intermediate);
-            if (!intermediateConsumers ||
-                intermediateConsumers->size() != 1 ||
-                intermediateConsumers->front() != aggregate)
+        VisitOperators(Root.GetInput(), mainNodes, [&](IOperator& op) {
+            for (const auto& child : op.GetChildren()) {
+                parents[child.Get()].push_back(&op);
+            }
+        });
+        for (const auto& [producer, outputs] : WindowProjectionOutputs) {
+            ValidateWindowSubplanSeparation(*producer);
+            if (!mainNodes.contains(producer) || outputs.size() != 1 ||
+                producer->GetInput()->GetKind() != EOperator::Aggregate)
             {
-                Unsupported(
-                    "Whole-partition window intermediate Aggregate must "
-                    "have exactly one direct final Aggregate consumer");
+                Unsupported("Whole-partition window requires exactly one leaf per private main-plan Project");
             }
-        }
-        if (const auto* consumers = parents.FindPtr(producer);
-            consumers && consumers->size() > 1)
-        {
-            Unsupported("Whole-partition window Project may not fan out");
-        }
-    }
-
-    TPlanExporter::TQ49RatioReference TPlanExporter::TraceGlobalRankOrderToRatio(
-        TOpMap& rankProject,
-        TString orderColumn,
-        const THashMap<const IOperator*, TVector<IOperator*>>& parents)
-    {
-        IOperator* consumer = &rankProject;
-        IOperator* current = rankProject.GetInput().Get();
-        for (size_t depth = 0; depth < 32; ++depth) {
-            if (!current || current->GetKind() != EOperator::Map) {
-                Unsupported(
-                    "Global rank order key does not resolve to its ratio Project");
-            }
-            auto& map = static_cast<TOpMap&>(*current);
-            RequireOnlyMainConsumer(
-                parents,
-                map,
-                *consumer,
-                "Global rank ratio/rename corridor");
-
-            const auto* element =
-                map.FindOutputElement(TInfoUnit(orderColumn));
-            if (element && !element->IsColumnAccess()) {
-                const auto body = element->GetExpression().GetExpressionBody();
-                if (!body->IsCallable("DecimalDiv")) {
-                    Unsupported(
-                        "Global rank order key must be produced by one direct DecimalDiv");
-                }
-                return {&map, element};
-            }
-
-            for (const auto& candidate : map.MapElements) {
-                if (!candidate.IsColumnAccess()) {
-                    Unsupported(
-                        "Global rank alias corridor may contain only direct columns");
-                }
-            }
-
-            TString inputColumn = orderColumn;
-            if (element) {
-                inputColumn = element->GetColumnAccess().GetFullName();
-            } else if (!OutputNames(*map.GetInput()).contains(orderColumn)) {
-                Unsupported(
-                    "Global rank alias corridor loses its order column");
-            }
-            if (inputColumn.empty() ||
-                !SameType(
-                    ExactType(OutputType(map, orderColumn)),
-                    ExactType(OutputType(*map.GetInput(), inputColumn))))
+            auto* aggregate = producer->GetInput().Get();
+            const auto* aggregateConsumers = parents.FindPtr(aggregate);
+            if (!aggregateConsumers || aggregateConsumers->size() != 1 ||
+                aggregateConsumers->front() != producer)
             {
-                Unsupported(
-                    "Global rank alias corridor changes its order-column type");
+                Unsupported("Whole-partition window Aggregate must have exactly one direct Project consumer");
             }
-            orderColumn = std::move(inputColumn);
-            consumer = &map;
-            current = map.GetInput().Get();
-        }
-        Unsupported("Global rank alias corridor exceeds its audit depth");
-    }
-
-    TPlanExporter::TQ49RatioSources TPlanExporter::AuditQ49RatioExpression(
-        TOpMap& map,
-        const TMapElement& element)
-    {
-        const auto* rowArgument = AuditWholePartitionWindowLambda(
-            element.GetExpression(),
-            "Global rank ratio");
-        const auto& body = *element.GetExpression().GetExpressionBody();
-        CheckExactWindowSafetyTree(body);
-        if (!body.IsCallable("DecimalDiv") || body.ChildrenSize() != 2) {
-            Unsupported(
-                "Global rank key must be one direct DecimalDiv expression");
-        }
-        const auto signature = CheckDecimalArithmeticCallable(body);
-        if (signature.ResultType != "Decimal(15,4)" ||
-            signature.ResultNullable)
-        {
-            Unsupported(
-                "Global rank ratio must return non-null Decimal(15,4)");
-        }
-        const TString output = element.GetElementName().GetFullName();
-        if (!SameType(
-                ExactType(OutputType(map, output)),
-                TExactType{"Decimal(15,4)", false}))
-        {
-            Unsupported(
-                "Global rank ratio Project output type disagrees with its expression");
-        }
-
-        TQ49RatioSources result;
-        for (size_t index = 0; index < result.Columns.size(); ++index) {
-            const auto& castNode = *body.Child(index);
-            const auto cast = CheckExactDecimalSafeCastCallable(castNode);
-            if (cast.ResultType != "Decimal(15,4)" || cast.Nullable ||
-                (cast.SourceType != "Int64" &&
-                 cast.SourceType != "Decimal(35,2)"))
-            {
-                Unsupported(
-                    "Global rank ratio requires exact non-null Int64 or "
-                    "Decimal(35,2) casts to Decimal(15,4)");
-            }
-            if (index == 0) {
-                result.Type = cast.SourceType;
-            } else if (result.Type != cast.SourceType) {
-                Unsupported(
-                    "Global rank ratio numerator and denominator source families disagree");
-            }
-
-            const auto& member = *castNode.Child(0);
-            bool nullable = false;
-            if (!member.IsCallable("Member") || member.ChildrenSize() != 2 ||
-                member.Child(0) != rowArgument ||
-                !member.Child(1)->IsAtom() ||
-                member.Child(1)->Content().empty() ||
-                ScalarTypeName(member, &nullable) != cast.SourceType ||
-                nullable)
-            {
-                Unsupported(
-                    "Global rank ratio cast source must be one direct non-null Member");
-            }
-            const TString column(member.Child(1)->Content());
-            if (!OutputNames(*map.GetInput()).contains(column) ||
-                !SameType(
-                    ExactType(OutputType(*map.GetInput(), column)),
-                    TExactType{cast.SourceType, false}))
-            {
-                Unsupported(
-                    "Global rank ratio cast source is unavailable or has the wrong type");
-            }
-            result.Columns[index] = column;
-        }
-        if (result.Columns[0] == result.Columns[1]) {
-            Unsupported(
-                "Global rank ratio must use distinct numerator and denominator sums");
-        }
-        return result;
-    }
-
-    void TPlanExporter::AuditQ49Aggregate(
-        TOpAggregate& aggregate,
-        const THashMap<TString, TString>& expectedOutputs,
-        const THashMap<const IOperator*, TVector<IOperator*>>& parents,
-        TOpMap& ratioProject)
-    {
-        RequireOnlyMainConsumer(
-            parents,
-            aggregate,
-            ratioProject,
-            "Global rank Aggregate");
-        const auto phase = aggregate.GetAggregationPhase();
-        const auto& keys = aggregate.GetKeyColumns();
-        const auto traits = aggregate.GetAggregationTraits();
-        if ((phase != EOpPhase::Undefined && phase != EOpPhase::Final) ||
-            aggregate.IsDistinctAll() || keys.size() != 1 ||
-            traits.size() != 4 || expectedOutputs.size() != 4)
-        {
-            Unsupported(
-                "Global rank requires one four-SUM grouped logical or final Aggregate");
-        }
-        const TString key = keys.front().GetFullName();
-        if (key.empty() ||
-            !SameType(
-                ExactType(OutputType(aggregate, key)),
-                TExactType{"Int64", false}))
-        {
-            Unsupported(
-                "Global rank Aggregate requires one non-null Int64 key");
-        }
-
-        THashSet<TString> traitOutputs;
-        for (const auto& trait : traits) {
-            const TString output = trait.ResultColName.GetFullName();
-            const auto* expectedType = expectedOutputs.FindPtr(output);
-            if (!expectedType || !traitOutputs.insert(output).second ||
-                trait.AggFunction != "sum" || trait.Distinct || trait.Unwrap ||
-                !SameType(
-                    ExactType(OutputType(aggregate, output)),
-                    TExactType{*expectedType, false}))
-            {
-                Unsupported(
-                    "Global rank Aggregate outputs must be the four distinct plain sums");
-            }
-        }
-
-        TOpAggregate* sourceAggregate = &aggregate;
-        THashMap<TString, TString> finalStates;
-        if (phase == EOpPhase::Final) {
-            if (aggregate.GetInput()->GetKind() != EOperator::Aggregate) {
-                Unsupported(
-                    "Final global rank Aggregate must directly consume its intermediate Aggregate");
-            }
-            auto& intermediate =
-                static_cast<TOpAggregate&>(*aggregate.GetInput());
-            RequireOnlyMainConsumer(
-                parents,
-                intermediate,
-                aggregate,
-                "Global rank intermediate Aggregate");
-            const auto intermediateTraits =
-                intermediate.GetAggregationTraits();
-            if (intermediate.GetAggregationPhase() != EOpPhase::Intermediate ||
-                intermediate.IsDistinctAll() ||
-                intermediate.GetKeyColumns() != keys ||
-                intermediateTraits.size() != 4)
-            {
-                Unsupported(
-                    "Global rank final Aggregate requires one matching four-SUM intermediate");
-            }
-            for (const auto& trait : traits) {
-                const TString output = trait.ResultColName.GetFullName();
-                const TString state = trait.OriginalColName.GetFullName();
-                if (state.empty() || !finalStates.emplace(state, output).second) {
-                    Unsupported(
-                        "Global rank final Aggregate SUM states must be unique");
-                }
-            }
-            for (const auto& trait : intermediateTraits) {
-                const TString state = trait.ResultColName.GetFullName();
-                const auto* finalOutput = finalStates.FindPtr(state);
-                const auto* expectedType = finalOutput
-                    ? expectedOutputs.FindPtr(*finalOutput)
-                    : nullptr;
-                if (!expectedType || trait.AggFunction != "sum" ||
-                    trait.Distinct || trait.Unwrap ||
-                    !SameType(
-                        ExactType(OutputType(intermediate, state)),
-                        TExactType{*expectedType, false}))
+            auto* aggregateOp = static_cast<TOpAggregate*>(aggregate);
+            if (aggregateOp->GetAggregationPhase() == EOpPhase::Final) {
+                const auto* intermediate = aggregateOp->GetInput().Get();
+                const auto* intermediateConsumers = parents.FindPtr(intermediate);
+                if (!intermediateConsumers || intermediateConsumers->size() != 1 ||
+                    intermediateConsumers->front() != aggregate)
                 {
-                    Unsupported(
-                        "Global rank intermediate Aggregate states must match the four final sums");
+                    Unsupported("Whole-partition window intermediate Aggregate must have exactly one direct final Aggregate consumer");
                 }
             }
-            sourceAggregate = &intermediate;
-        }
-
-        const auto sourceTraits = sourceAggregate->GetAggregationTraits();
-        THashSet<TString> sourceInputs;
-        for (const auto& trait : sourceTraits) {
-            const TString stateOrOutput = trait.ResultColName.GetFullName();
-            const TString* finalOutput = phase == EOpPhase::Final
-                ? finalStates.FindPtr(stateOrOutput)
-                : &stateOrOutput;
-            const auto* expectedType = finalOutput
-                ? expectedOutputs.FindPtr(*finalOutput)
-                : nullptr;
-            const TString input = trait.OriginalColName.GetFullName();
-            const TString expectedInputType = expectedType &&
-                    *expectedType == "Int64"
-                ? TString("Int64")
-                : TString("Decimal(7,2)");
-            if (!expectedType || input.empty() ||
-                !sourceInputs.insert(input).second ||
-                !SameType(
-                    ExactType(OutputType(*sourceAggregate->GetInput(), input)),
-                    TExactType{expectedInputType, false}))
-            {
-                Unsupported(
-                    "Global rank Aggregate inputs must be two non-null Int64 "
-                    "and two non-null Decimal(7,2) values");
+            if (const auto* consumers = parents.FindPtr(producer); consumers && consumers->size() > 1) {
+                Unsupported("Whole-partition window Project may not fan out");
             }
-        }
-        if (!SameType(
-                ExactType(OutputType(*sourceAggregate->GetInput(), key)),
-                TExactType{"Int64", false}))
-        {
-            Unsupported(
-                "Global rank Aggregate input key must remain non-null Int64");
         }
     }
 
@@ -546,148 +274,32 @@
         if (GlobalRankProjectionWindows.empty()) {
             return;
         }
-        if (GlobalRankProjectionWindows.size() != 3 || !Subplans.empty()) {
-            Unsupported(
-                "Global rank requires exactly three main q49 Projects and no subplans");
-        }
-
-        THashSet<const IOperator*> mainNodes;
+        THashSet<const IOperator*> reachableNodes;
         THashMap<const IOperator*, TVector<IOperator*>> parents;
-        VisitOperators(
-            Root.GetInput(),
-            mainNodes,
-            [&](IOperator& op) {
+        VisitOperators(Root.GetInput(), reachableNodes, [&](IOperator& op) {
+            for (const auto& child : op.GetChildren()) {
+                parents[child.Get()].push_back(&op);
+            }
+        });
+        for (const auto& subplan : Subplans) {
+            VisitOperators(subplan.ExportedRoot, reachableNodes, [&](IOperator& op) {
                 for (const auto& child : op.GetChildren()) {
                     parents[child.Get()].push_back(&op);
                 }
             });
-
-        THashSet<ui32> ordinals;
-        THashSet<TString> names;
-        THashSet<TOpMap*> ratioProjects;
-        THashSet<TOpAggregate*> aggregates;
-        size_t rankCount = 0;
-        for (const auto& [rankProject, ranks] :
-             GlobalRankProjectionWindows)
-        {
-            if (!mainNodes.contains(rankProject) || ranks.size() != 2) {
-                Unsupported(
-                    "Global rank Project must be a two-leaf main-plan Project");
-            }
-            if (const auto* consumers = parents.FindPtr(rankProject);
-                consumers && consumers->size() > 1)
-            {
-                Unsupported("Global rank Project may not fan out");
-            }
-            size_t computedElements = 0;
-            for (const auto& element : rankProject->MapElements) {
-                if (!element.IsColumnAccess()) {
-                    ++computedElements;
-                    if (!PreparedGlobalRankWindows.contains(&element)) {
-                        Unsupported(
-                            "Global rank Project may compute only its two direct ranks");
-                    }
-                }
-            }
-            if (computedElements != 2) {
-                Unsupported(
-                    "Global rank Project must compute exactly two direct ranks");
-            }
-
-            std::array<TQ49RatioReference, 2> references;
-            for (const auto& rank : ranks) {
-                if (!ordinals.insert(rank.SourceOrdinal).second ||
-                    !names.insert(rank.WindowName).second ||
-                    rank.ExecutionOrder > 1)
-                {
-                    Unsupported(
-                        "Global rank names, source ordinals, and execution order must be unique");
-                }
-                references[rank.ExecutionOrder] =
-                    TraceGlobalRankOrderToRatio(
-                        *rankProject,
-                        rank.OrderColumn,
-                        parents);
-                ++rankCount;
-            }
-            if (!references[0].Project || !references[1].Project ||
-                references[0].Project != references[1].Project ||
-                references[0].Element == references[1].Element)
-            {
-                Unsupported(
-                    "Global rank pair must consume two distinct ratios from one Project");
-            }
-            auto& ratioProject = *references[0].Project;
-            size_t ratioCount = 0;
-            for (const auto& element : ratioProject.MapElements) {
-                if (!element.IsColumnAccess()) {
-                    ++ratioCount;
-                    if (&element != references[0].Element &&
-                        &element != references[1].Element)
-                    {
-                        Unsupported(
-                            "Global rank ratio Project may compute only its two ratios");
-                    }
-                }
-            }
-            if (ratioCount != 2 ||
-                ratioProject.GetInput()->GetKind() != EOperator::Aggregate ||
-                !ratioProjects.insert(&ratioProject).second)
-            {
-                Unsupported(
-                    "Global rank pair requires one private two-ratio Project over Aggregate");
-            }
-
-            const auto first = AuditQ49RatioExpression(
-                ratioProject,
-                *references[0].Element);
-            const auto second = AuditQ49RatioExpression(
-                ratioProject,
-                *references[1].Element);
-            if (first.Type != "Int64" ||
-                second.Type != "Decimal(35,2)")
-            {
-                Unsupported(
-                    "Global rank source order must be return ratio then currency ratio");
-            }
-            THashMap<TString, TString> expectedOutputs;
-            for (const auto& source : first.Columns) {
-                expectedOutputs.emplace(source, first.Type);
-            }
-            for (const auto& source : second.Columns) {
-                expectedOutputs.emplace(source, second.Type);
-            }
-            if (expectedOutputs.size() != 4) {
-                Unsupported(
-                    "Global rank ratios must consume four distinct Aggregate sums");
-            }
-
-            auto& aggregate =
-                static_cast<TOpAggregate&>(*ratioProject.GetInput());
-            if (!aggregates.insert(&aggregate).second) {
-                Unsupported(
-                    "Global rank branches must use distinct grouped Aggregates");
-            }
-            AuditQ49Aggregate(
-                aggregate,
-                expectedOutputs,
-                parents,
-                ratioProject);
         }
-
-        if (rankCount != 6 || names.size() != 6 || ordinals.size() != 6) {
-            Unsupported("Global rank requires the exact six q49 definitions");
-        }
-        for (ui32 ordinal = 0;
-             ordinal <= MaxGlobalRankWindowOrdinal;
-             ++ordinal)
-        {
-            if (!ordinals.contains(ordinal) ||
-                !names.contains(TStringBuilder()
-                    << GlobalRankWindowNamePrefix << ordinal))
-            {
-                Unsupported(
-                    "Global rank definitions must be the exact canonical q49 set");
+        size_t count = 0;
+        for (const auto& [project, ranks] : GlobalRankProjectionWindows) {
+            ValidateWindowSubplanSeparation(*project, true);
+            if (!reachableNodes.contains(project) || ranks.empty() || ranks.size() > 2) {
+                Unsupported("Rank requires one bounded private Project");
             }
+            if (const auto* consumers = parents.FindPtr(project); consumers && consumers->size() > 1) {
+                Unsupported("Rank Project may not fan out");
+            }
+            count += ranks.size();
+        }
+        if (count > 6) {
+            Unsupported("Rank exceeds its six-leaf snapshot audit bound");
         }
     }

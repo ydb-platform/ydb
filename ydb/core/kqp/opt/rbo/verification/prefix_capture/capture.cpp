@@ -105,6 +105,10 @@ TCaptureOutput ClassifyCapture(
 
     auto& initial = boundaries[0];
     auto& candidate = boundaries[1];
+    if (initial.RootCount != 1 || candidate.RootCount != 1 ||
+        initial.RootOrdinal != 0 || candidate.RootOrdinal != 0) {
+        ythrow yexception() << "transformation-prefix capture requires a single optimizer root";
+    }
     if (initial.Boundary != ERBOSemanticSnapshotBoundaryV1::Initial ||
         !initial.TransformationEvents.empty())
     {

@@ -58,12 +58,15 @@ STAGE_CONNECTION_KINDS = frozenset({"map", "broadcast", "hash_shuffle", "union_a
 HASH_FUNCTIONS = frozenset({"HashV1", "HashV2"})
 OPERATOR_PHASES = frozenset({"undefined", "intermediate", "final"})
 INTEGRAL_AVG_RANK_COMPARISON = "integral_avg_rank_v1"
+BINARY64_SEMANTIC_MODE = "binary64_uf_universal_v1"
+BINARY64_ORDER_COMPARISON = "binary64_total_v1"
 WHOLE_PARTITION_DECIMAL_SUM_TYPE = "Decimal(35,2)"
 WINDOW_RANK_ORDER_TYPE = "Decimal(15,4)"
 WINDOW_RANK_RESULT_TYPE = "Uint64"
 WINDOW_RANK_FRAME = "rows_unbounded_preceding_current_row"
 MAX_WINDOW_RANKS_PER_PROJECT = 2
 MAX_WINDOW_RANKS_PER_SNAPSHOT = 6
+MAX_WHOLE_PARTITION_WINDOWS_PER_SNAPSHOT = 3
 WINDOW_ROWS_KINDS = frozenset({"window_rows_sum", "window_rows_max"})
 WINDOW_ROWS_PARTITION_TYPE = "Int64"
 WINDOW_ROWS_ORDER_TYPE = DATE
@@ -130,7 +133,7 @@ class Expr:
     window_input: str | None = None
     # Relation-dependent window leaves normalize their partition columns to an
     # ordered tuple.  window_sum deliberately retains its one-string wire
-    # spelling; window_avg uses an explicit 1..4 element JSON array.
+    # spelling; window_avg uses an explicit 1..5 element JSON array.
     partition_by: tuple[str, ...] | None = None
     # Ordered Rank is deliberately separate from the aggregate-window subset.
     # The source name and local definition order prevent two transported calls
@@ -166,6 +169,8 @@ class Projection:
     output: str
     expression: Expr
     error_on_null: bool = False
+    # A mandatory bounded-totality obligation, never an assumed non-NULL fact.
+    require_total: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,6 +249,18 @@ INTEGRAL_DOUBLE_AVERAGE_STATE = AverageStateType(
 
 
 @dataclass(frozen=True, slots=True)
+class VarianceStateType:
+    """Literal Welford physical tuple; its count is Double, not Uint64."""
+
+    source_type: str
+    nullable: bool
+    kind: str = "binary64_variance_v1"
+    mean_type: str = DOUBLE
+    count_type: str = DOUBLE
+    m2_type: str = DOUBLE
+
+
+@dataclass(frozen=True, slots=True)
 class AggregateTrait:
     input: str
     function: str
@@ -252,7 +269,7 @@ class AggregateTrait:
     output_nullable: bool
     distinct: bool
     unwrap: bool
-    state: AverageStateType | None = None
+    state: AverageStateType | VarianceStateType | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,7 +341,7 @@ class ScalarSubplan:
     root: str
     output: SubplanOutput
     consumers: tuple[str, ...]
-    dependency: str | None = None
+    dependencies: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -409,6 +426,7 @@ class Snapshot:
     tables: tuple[Table, ...]
     plan: Plan
     stage_graph: StageGraph | None = None
+    semantic_mode: str | None = None
 
     def table_map(self) -> dict[str, Table]:
         return {table.name: table for table in self.tables}
@@ -545,7 +563,26 @@ def _parse_average_state(value: Any, path: str) -> AverageStateType:
     )
 
 
+def _parse_variance_state(value: Any, path: str) -> VarianceStateType:
+    state = _object(value, path)
+    _keys(state, {"kind", "source_type", "nullable", "mean_type", "count_type", "m2_type"}, path)
+    source_type = _scalar_type(state["source_type"], f"{path}.source_type")
+    expected = VarianceStateType(source_type, _bool(state["nullable"], f"{path}.nullable"))
+    if any(state[field] != getattr(expected, field) for field in ("kind", "mean_type", "count_type", "m2_type")):
+        _fail(path, "stddev_samp requires the exact binary64 Welford state descriptor")
+    if source_type != DOUBLE and integer_bounds(source_type) is None:
+        _fail(path, "stddev_samp source must be an integer or Double")
+    return expected
+
+
 def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str | decimal.Literal:
+    if scalar_type == DOUBLE:
+        obj = _object(value, path)
+        _keys(obj, {"bits"}, path)
+        bits = _string(obj["bits"], f"{path}.bits")
+        if len(bits) != 16 or any(char not in "0123456789abcdef" for char in bits):
+            _fail(path, "Double literal requires exactly 16 lowercase hexadecimal bit digits")
+        return int(bits, 16)
     if decimal.is_type(scalar_type):
         return _decimal_literal(value, scalar_type, path)
     scalar_family = family(scalar_type)
@@ -688,8 +725,8 @@ def _parse_expr(
                 "window_avg result must be Optional<Decimal(35,2)>",
             )
         raw_partition = _array(obj["partition_by"], f"{path}.partition_by")
-        if not 1 <= len(raw_partition) <= 4:
-            _fail(f"{path}.partition_by", "must contain between 1 and 4 columns")
+        if not 1 <= len(raw_partition) <= 5:
+            _fail(f"{path}.partition_by", "must contain between 1 and 5 columns")
         partition_by = tuple(
             _string(column, f"{path}.partition_by[{index}]")
             for index, column in enumerate(raw_partition)
@@ -786,21 +823,21 @@ def _parse_expr(
         if not window_name:
             _fail(f"{path}.window_name", "must not be empty")
         raw_partition = _array(obj["partition_by"], f"{path}.partition_by")
-        if raw_partition:
-            _fail(
-                f"{path}.partition_by",
-                "global window_rank requires an empty partition",
-            )
+        if len(raw_partition) > 4:
+            _fail(f"{path}.partition_by", "window_rank admits at most four partition columns")
+        partition_by = tuple(
+            _string(column, f"{path}.partition_by[{index}]")
+            for index, column in enumerate(raw_partition)
+        )
+        _unique(partition_by, f"{path}.partition_by")
         order_by = _parse_sort_order(obj["order_by"], f"{path}.order_by")
         if (
-            len(order_by) != 1
-            or not order_by[0].ascending
-            or not order_by[0].nulls_first
-            or order_by[0].comparison is not None
+            not 1 <= len(order_by) <= 2
+            or any(item.comparison is not None for item in order_by)
         ):
             _fail(
                 f"{path}.order_by",
-                "window_rank requires one ascending nulls-first direct order key",
+                "window_rank requires one or two untagged direct order keys",
             )
         frame = _string(obj["frame"], f"{path}.frame")
         if frame != WINDOW_RANK_FRAME:
@@ -816,7 +853,7 @@ def _parse_expr(
             kind=kind,
             result_type=result_type,
             nullable=nullable,
-            partition_by=(),
+            partition_by=partition_by,
             window_name=window_name,
             execution_order=_index(
                 obj["execution_order"],
@@ -910,7 +947,7 @@ def _parse_expr(
             nullable=nullable,
         )
 
-    if kind == "cast_decimal":
+    if kind in {"cast_decimal", "cast_double"}:
         _keys(obj, {"kind", "arg", "source_type", "type", "nullable"}, path)
         return Expr(
             kind=kind,
@@ -919,6 +956,15 @@ def _parse_expr(
                 obj["source_type"],
                 f"{path}.source_type",
             ),
+            result_type=_scalar_type(obj["type"], f"{path}.type"),
+            nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
+
+    if kind in {"sqrt_double", "is_nan_double"}:
+        _keys(obj, {"kind", "arg", "type", "nullable"}, path)
+        return Expr(
+            kind=kind,
+            args=(parse_child(obj["arg"], f"{path}.arg"),),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
@@ -1049,7 +1095,7 @@ def _parse_sort_order(value: Any, path: str) -> tuple[SortOrder, ...]:
         )
         if (
             comparison is not None
-            and comparison != INTEGRAL_AVG_RANK_COMPARISON
+            and comparison not in {INTEGRAL_AVG_RANK_COMPARISON, BINARY64_ORDER_COMPARISON}
         ):
             _fail(
                 f"{item_path}.comparison",
@@ -1167,7 +1213,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                 column,
                 {"output", "expression"},
                 column_path,
-                {"error_on_null"},
+                {"error_on_null", "require_total"},
             )
             columns.append(
                 Projection(
@@ -1176,6 +1222,10 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                     error_on_null=_bool(
                         column.get("error_on_null", False),
                         f"{column_path}.error_on_null",
+                    ),
+                    require_total=_bool(
+                        column.get("require_total", False),
+                        f"{column_path}.require_total",
                     ),
                 )
             )
@@ -1273,7 +1323,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             fields = {
                 "input", "function", "output", "type", "nullable", "distinct", "unwrap"
             }
-            if trait.get("function") == "avg":
+            if trait.get("function") in {"avg", "stddev_samp"}:
                 fields.add("state")
             _keys(
                 trait,
@@ -1287,6 +1337,8 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                     trait["state"],
                     f"{trait_path}.state",
                 )
+            elif function == "stddev_samp":
+                state = _parse_variance_state(trait["state"], f"{trait_path}.state")
             aggregates.append(
                 AggregateTrait(
                     input=_string(trait["input"], f"{trait_path}.input"),
@@ -1567,16 +1619,11 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
                 f"{path}.nullable",
                 "a scalar subplan binding must be nullable because zero rows yield NULL",
             )
-        if len(dependencies) > 1:
-            _fail(
-                f"{path}.dependencies",
-                "scalar subplans support at most one outer dependency",
-            )
         return ScalarSubplan(
             binding=binding,
             root=root,
             output=output,
-            dependency=dependencies[0] if dependencies else None,
+            dependencies=dependencies,
             consumers=consumers,
         )
     if kind == "in":
@@ -1596,15 +1643,6 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
             _fail(
                 path,
                 "IN lookup and output types must match exactly",
-            )
-        if (
-            (lookup.nullable or output.nullable)
-            and integer_bounds(lookup.type) is None
-            and lookup.type != DATE
-        ):
-            _fail(
-                path,
-                "nullable-column IN supports only fixed-width integral or Date columns",
             )
         if (
             integer_bounds(lookup.type) is None
@@ -1652,7 +1690,10 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
 
 def parse_snapshot(value: Any) -> Snapshot:
     obj = _object(value, "snapshot")
-    _keys(obj, {"format", "version", "schema", "plan", "stage_graph"}, "snapshot")
+    _keys(obj, {"format", "version", "schema", "plan", "stage_graph"}, "snapshot", {"semantic_mode"})
+    semantic_mode = obj.get("semantic_mode")
+    if "semantic_mode" in obj and semantic_mode != BINARY64_SEMANTIC_MODE:
+        _fail("snapshot.semantic_mode", "unsupported semantic mode")
     if obj["format"] != FORMAT:
         _fail("snapshot.format", f"expected {FORMAT!r}")
     if type(obj["version"]) is not int or obj["version"] != VERSION:
@@ -1685,6 +1726,7 @@ def parse_snapshot(value: Any) -> Snapshot:
         )
     )
     snapshot = Snapshot(
+        semantic_mode=semantic_mode,
         tables=tables,
         plan=Plan(
             nodes=nodes,
@@ -1726,7 +1768,12 @@ def _infer_expr(
     columns: Mapping[str, Column],
     path: str,
     bindings: tuple[ValueType, ...] = (),
+    *,
+    binary64_mode: bool = False,
 ) -> ValueType:
+    def infer(child, scope, child_path, bound=bindings):
+        return _infer_expr(child, scope, child_path, bound, binary64_mode=binary64_mode)
+
     def shallow_type(candidate: Expr) -> str | None:
         if candidate.kind == "column":
             column = columns.get(candidate.column or "")
@@ -1755,7 +1802,7 @@ def _infer_expr(
     # Double has no interpreted scalar semantics in v1.  It is only an SMT
     # identity token created by the one audited constructor and thereafter
     # transported by direct column references.
-    if expr.kind not in {"column", "opaque_double"}:
+    if not binary64_mode and expr.kind not in {"column", "opaque_double"}:
         if shallow_type(expr) == DOUBLE:
             _fail(
                 path,
@@ -1784,7 +1831,7 @@ def _infer_expr(
         assert expr.result_type is not None and expr.nullable is not None
         if expr.kind == "opaque":
             for index, arg in enumerate(expr.args):
-                _infer_expr(arg, columns, f"{path}.args[{index}]", bindings)
+                infer(arg, columns, f"{path}.args[{index}]", bindings)
         return ValueType(expr.result_type, expr.nullable)
 
     if expr.kind in {"window_sum", "window_avg"}:
@@ -1877,33 +1924,29 @@ def _infer_expr(
         if (
             expr.result_type != WINDOW_RANK_RESULT_TYPE
             or expr.nullable is not False
-            or expr.partition_by != ()
+            or expr.partition_by is None
+            or len(expr.partition_by) > 4
             or expr.window_name is None
             or not expr.window_name
             or expr.execution_order is None
             or expr.order_by is None
-            or len(expr.order_by) != 1
+            or not 1 <= len(expr.order_by) <= 2
             or expr.window_frame != WINDOW_RANK_FRAME
         ):
-            _fail(path, "window_rank must carry the audited global Rank shape")
-        order = expr.order_by[0]
-        if (
-            not order.ascending
-            or not order.nulls_first
-            or order.comparison is not None
-        ):
-            _fail(
-                path,
-                "window_rank requires one ascending nulls-first direct order key",
-            )
-        key = columns.get(order.column)
-        if key is None:
-            _fail(path, f"window rank order column {order.column!r} is not available")
-        if key.value_type != ValueType(WINDOW_RANK_ORDER_TYPE, False):
-            _fail(
-                path,
-                f"window_rank order key must be non-null {WINDOW_RANK_ORDER_TYPE}",
-            )
+            _fail(path, "window_rank must carry the audited ANSI Rank shape")
+        for order in expr.order_by:
+            if order.comparison is not None:
+                _fail(path, "window_rank requires untagged direct order keys")
+            key = columns.get(order.column)
+            if key is None:
+                _fail(path, f"window rank order column {order.column!r} is not available")
+            _validate_order_column(key, order, path)
+        for partition in expr.partition_by:
+            column = columns.get(partition)
+            if column is None:
+                _fail(path, f"window rank partition column {partition!r} is not available")
+            if not is_scalar_type(column.type) or column.type == DOUBLE:
+                _fail(path, f"window rank partition type {column.type!r} is unsupported")
         return ValueType(WINDOW_RANK_RESULT_TYPE, False)
 
     if expr.kind == "checked_concat":
@@ -1931,7 +1974,7 @@ def _infer_expr(
         if len(set(argument_columns)) != len(argument_columns):
             _fail(path, "checked_concat arguments must reference distinct columns")
         for index, arg in enumerate(expr.args):
-            argument = _infer_expr(
+            argument = infer(
                 arg,
                 columns,
                 f"{path}.args[{index}]",
@@ -1969,7 +2012,7 @@ def _infer_expr(
         if len(set(argument_columns)) != 3:
             _fail(path, "opaque_double arguments must reference three distinct columns")
         for index, arg in enumerate(expr.args):
-            argument = _infer_expr(
+            argument = infer(
                 arg,
                 columns,
                 f"{path}.args[{index}]",
@@ -1984,7 +2027,7 @@ def _infer_expr(
 
     if expr.kind in {"and", "or", "not"}:
         argument_types = [
-            _infer_expr(arg, columns, f"{path}.args[{index}]", bindings)
+            infer(arg, columns, f"{path}.args[{index}]", bindings)
             for index, arg in enumerate(expr.args)
         ]
         if any(argument.name != BOOL for argument in argument_types):
@@ -1992,15 +2035,15 @@ def _infer_expr(
         return ValueType(BOOL, any(argument.nullable for argument in argument_types))
 
     if expr.kind == "exists":
-        _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
+        infer(expr.args[0], columns, f"{path}.arg", bindings)
         return ValueType(BOOL, False)
 
     if expr.kind == "in":
-        lookup = _infer_expr(expr.args[0], columns, f"{path}.lookup", bindings)
+        lookup = infer(expr.args[0], columns, f"{path}.lookup", bindings)
         item_name = None
         for index, item_expr in enumerate(expr.args[1:]):
             item_path = f"{path}.items[{index}]"
-            item = _infer_expr(item_expr, columns, item_path, bindings)
+            item = infer(item_expr, columns, item_path, bindings)
             if item.nullable:
                 _fail(item_path, "IN items must be non-nullable")
             if item_name is None:
@@ -2018,8 +2061,12 @@ def _infer_expr(
         return ValueType(BOOL, lookup.nullable)
 
     if expr.kind in {"eq", "lt", "lte", "gt", "gte"}:
-        left = _infer_expr(expr.args[0], columns, f"{path}.left", bindings)
-        right = _infer_expr(expr.args[1], columns, f"{path}.right", bindings)
+        left = infer(expr.args[0], columns, f"{path}.left", bindings)
+        right = infer(expr.args[1], columns, f"{path}.right", bindings)
+        if DOUBLE in {left.name, right.name}:
+            if not binary64_mode or left.name != DOUBLE or right.name != DOUBLE or expr.null_safe:
+                _fail(path, "binary64 comparison requires two Double operands and ordinary SQL comparison")
+            return ValueType(BOOL, left.nullable or right.nullable)
         if not equality_comparison_compatible(left.name, right.name):
             label = "equality" if expr.kind == "eq" else "comparison"
             _fail(path, f"{label} type mismatch: {left.name!r} and {right.name!r}")
@@ -2035,9 +2082,12 @@ def _infer_expr(
 
     if expr.kind in {"add", "sub", "mul", "div"}:
         assert expr.result_type is not None and expr.nullable is not None
-        left = _infer_expr(expr.args[0], columns, f"{path}.left", bindings)
-        right = _infer_expr(expr.args[1], columns, f"{path}.right", bindings)
-        if decimal.is_type(expr.result_type):
+        left = infer(expr.args[0], columns, f"{path}.left", bindings)
+        right = infer(expr.args[1], columns, f"{path}.right", bindings)
+        if expr.result_type == DOUBLE:
+            if not binary64_mode or left.name != DOUBLE or right.name != DOUBLE:
+                _fail(path, "binary64 arithmetic requires two Double operands in explicit mode")
+        elif decimal.is_type(expr.result_type):
             if left.name != expr.result_type:
                 _fail(path, f"Decimal {expr.kind} left operand must exactly match its result type")
             right_may_be_integral = expr.kind in {"mul", "div"} and family(right.name) == "int"
@@ -2065,7 +2115,7 @@ def _infer_expr(
                 )
         nullable = (
             True
-            if expr.kind == "div" and not decimal.is_type(expr.result_type)
+            if expr.kind == "div" and family(expr.result_type) == "int"
             else left.nullable or right.nullable
         )
         if expr.nullable != nullable:
@@ -2073,15 +2123,29 @@ def _infer_expr(
                 path,
                 (
                     "integral div result must be nullable"
-                    if expr.kind == "div" and not decimal.is_type(expr.result_type)
+                    if expr.kind == "div" and family(expr.result_type) == "int"
                     else f"{expr.kind} nullability must equal the OR of operand nullability"
                 ),
             )
         return ValueType(expr.result_type, nullable)
 
+    if expr.kind in {"cast_double", "sqrt_double", "is_nan_double"}:
+        if not binary64_mode:
+            _fail(path, "active Double expressions require explicit binary64 semantics")
+        argument = infer(expr.args[0], columns, f"{path}.arg", bindings)
+        expected_type = BOOL if expr.kind == "is_nan_double" else DOUBLE
+        if expr.result_type != expected_type or expr.nullable != argument.nullable:
+            _fail(path, "binary64 unary result type and source nullability must match exactly")
+        if expr.kind == "cast_double":
+            if expr.source_type != argument.name or integer_bounds(argument.name) is None:
+                _fail(path, "cast_double requires its exact integral source type")
+        elif argument.name != DOUBLE:
+            _fail(path, f"{expr.kind} requires a Double argument")
+        return ValueType(expected_type, argument.nullable)
+
     if expr.kind == "decimal_abs":
         assert expr.result_type is not None and expr.nullable is not None
-        argument = _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
+        argument = infer(expr.args[0], columns, f"{path}.arg", bindings)
         expected = ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True)
         if ValueType(expr.result_type, expr.nullable) != expected:
             _fail(path, "decimal_abs result must be Optional<Decimal(35,2)>")
@@ -2091,7 +2155,7 @@ def _infer_expr(
 
     if expr.kind == "cast_decimal":
         assert expr.result_type is not None and expr.nullable is not None
-        argument = _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
+        argument = infer(expr.args[0], columns, f"{path}.arg", bindings)
         if expr.source_type is None:
             _fail(path, "Decimal cast requires its audited source type")
         if expr.source_type != argument.name:
@@ -2110,25 +2174,15 @@ def _infer_expr(
             pass
         elif source is None:
             _fail(path, "Decimal cast source must be integral or Decimal")
-        elif source.scale != result.scale:
-            if not (
-                source == decimal.Type(35, 2)
-                and result == decimal.Type(15, 4)
-            ):
-                _fail(
-                    path,
-                    "Decimal widening must preserve scale except for the exact "
-                    "Decimal(35,2) to Decimal(15,4) rank-key cast",
-                )
-        elif source.precision > result.precision:
-            _fail(path, "Decimal widening must not decrease precision")
+        elif not decimal.cast_is_possible(source, result):
+            _fail(path, "Decimal cast has impossible precision/scale overlap")
         if expr.nullable != argument.nullable:
             _fail(path, "Decimal cast result nullability must match its source")
         return ValueType(expr.result_type, expr.nullable)
 
     if expr.kind == "cast_integral":
         assert expr.result_type is not None and expr.nullable is not None
-        argument = _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
+        argument = infer(expr.args[0], columns, f"{path}.arg", bindings)
         if family(argument.name) != "int":
             _fail(path, "integral SafeCast source must be an integer")
         if family(expr.result_type) != "int":
@@ -2146,7 +2200,7 @@ def _infer_expr(
 
     if expr.kind == "if":
         assert expr.result_type is not None and expr.nullable is not None
-        condition = _infer_expr(
+        condition = infer(
             expr.args[0],
             columns,
             f"{path}.condition",
@@ -2154,8 +2208,8 @@ def _infer_expr(
         )
         if condition.name != BOOL:
             _fail(f"{path}.condition", "If condition must be Boolean")
-        then = _infer_expr(expr.args[1], columns, f"{path}.then", bindings)
-        otherwise = _infer_expr(expr.args[2], columns, f"{path}.else", bindings)
+        then = infer(expr.args[1], columns, f"{path}.then", bindings)
+        otherwise = infer(expr.args[2], columns, f"{path}.else", bindings)
         if then.name != expr.result_type or otherwise.name != expr.result_type:
             _fail(path, "If branch types must exactly match its result type")
         expected_nullable = condition.nullable or then.nullable or otherwise.nullable
@@ -2165,17 +2219,17 @@ def _infer_expr(
 
     if expr.kind == "if_present":
         assert expr.result_type is not None and expr.nullable is not None
-        optional = _infer_expr(expr.args[0], columns, f"{path}.optional", bindings)
+        optional = infer(expr.args[0], columns, f"{path}.optional", bindings)
         if not optional.nullable:
             _fail(f"{path}.optional", "IfPresent optional must be nullable")
         result = ValueType(expr.result_type, expr.nullable)
-        present = _infer_expr(
+        present = infer(
             expr.args[1],
             columns,
             f"{path}.present",
             (ValueType(optional.name, False), *bindings),
         )
-        missing = _infer_expr(expr.args[2], columns, f"{path}.missing", bindings)
+        missing = infer(expr.args[2], columns, f"{path}.missing", bindings)
         if present != result:
             _fail(
                 f"{path}.present",
@@ -2203,6 +2257,8 @@ def _validate_order_column(
     """Admit Double ordering only for one independently derived AVG lineage."""
 
     if column.type == DOUBLE:
+        if item.comparison == BINARY64_ORDER_COMPARISON:
+            return
         if item.comparison != INTEGRAL_AVG_RANK_COMPARISON:
             _fail(
                 path,
@@ -2376,7 +2432,8 @@ def _validate_average_state_dataflow(
 ) -> frozenset[tuple[str, str]]:
     """Recognize the two reviewed hidden-AVG-state lineages.
 
-    Integral AVG remains confined to one direct intermediate-to-final edge.
+    Integral AVG and binary64 variance remain confined to one direct
+    intermediate-to-final edge.
     Decimal AVG additionally admits the exact keyless expansion emitted for
     multi-aggregate branches: one direct Project of the intermediate state,
     logical-null Project pads for every other branch, and an unordered,
@@ -2450,7 +2507,7 @@ def _validate_average_state_dataflow(
                 "an intermediate avg state may feed only one final avg",
             )
         if (
-            source_trait.function != "avg"
+            source_trait.function != final_trait.function
             or source_trait.distinct
             or source_trait.unwrap
             or source_trait.output_type != final_trait.output_type
@@ -2678,7 +2735,7 @@ def _validate_average_state_dataflow(
         if not isinstance(node, Aggregate) or node.phase != "final":
             continue
         final_traits = tuple(
-            trait for trait in node.aggregates if trait.function == "avg"
+            trait for trait in node.aggregates if trait.function in {"avg", "stddev_samp"}
         )
         if not final_traits:
             continue
@@ -2700,7 +2757,7 @@ def _validate_average_state_dataflow(
             continue
         for trait in node.aggregates:
             if (
-                trait.function == "avg"
+                trait.function in {"avg", "stddev_samp"}
                 and (node.id, trait.output) not in claimed_sources
             ):
                 _fail(
@@ -2713,7 +2770,7 @@ def _validate_average_state_dataflow(
 
 
 def _validate_error_projection_dataflow(snapshot: Snapshot) -> None:
-    """Keep eager Project failures on one of two demand-safe boundaries."""
+    """Require a demand-safe boundary or a separate bounded-totality proof."""
 
     nodes = snapshot.plan.node_map()
     subplan_nodes: set[str] = set()
@@ -2741,7 +2798,9 @@ def _validate_error_projection_dataflow(snapshot: Snapshot) -> None:
         marked = tuple(
             column.output
             for column in node.columns
-            if column.error_on_null
+            if column.error_on_null and not (
+                column.require_total and node.id not in subplan_nodes
+            )
         )
         if not marked:
             continue
@@ -3593,22 +3652,29 @@ def _node_expression_columns(node: PlanNode) -> frozenset[str]:
 
 
 def _is_exact_nested_subplan(owner: Subplan, nested: Subplan) -> bool:
-    """The deliberately narrow closed nesting admitted by the v1 model."""
+    """One closed IN root may consume a leaf scalar or a closed leaf IN.
+
+    A scalar's dependencies, if any, bind its immediate consumer row inside
+    that IN root, never the row testing membership in the enclosing query.
+    """
 
     return (
         isinstance(owner, InSubplan)
-        and (
-            isinstance(nested, InSubplan)
-            or (
-                isinstance(nested, ScalarSubplan)
-                and nested.dependency is None
-            )
-        )
+        and isinstance(nested, (InSubplan, ScalarSubplan))
     )
 
 
 def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     """Validate references and types, returning every node's output schema."""
+
+    if snapshot.semantic_mode not in {None, BINARY64_SEMANTIC_MODE}:
+        _fail("snapshot.semantic_mode", "unsupported semantic mode")
+    binary64_mode = snapshot.semantic_mode == BINARY64_SEMANTIC_MODE
+    orders = [item for node in snapshot.plan.nodes if isinstance(node, Sort) for item in node.order]
+    if snapshot.stage_graph is not None:
+        orders.extend(item for edge in snapshot.stage_graph.edges for item in edge.order)
+    if not binary64_mode and any(item.comparison == BINARY64_ORDER_COMPARISON for item in orders):
+        _fail("snapshot.semantic_mode", "binary64 ordering requires explicit binary64 semantics")
 
     _unique([table.name for table in snapshot.tables], "snapshot.schema.tables")
     for table in snapshot.tables:
@@ -3677,7 +3743,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     "an EXISTS binding must have exactly one Filter consumer",
                 )
         elif isinstance(subplan, ScalarSubplan):
-            if subplan.dependency is not None and len(subplan.consumers) != 1:
+            _unique(subplan.dependencies, f"{path}.dependencies")
+            if subplan.dependencies and len(subplan.consumers) != 1:
                 _fail(
                     f"{path}.consumers",
                     "a correlated scalar binding must have exactly one consumer",
@@ -3777,6 +3844,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     node.predicate,
                     result,
                     f"node {node.id!r}.predicate",
+                    binary64_mode=binary64_mode,
                 )
                 if predicate_type.name != BOOL:
                     _fail(
@@ -3799,6 +3867,10 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             result = {}
             for index, column in enumerate(node.columns):
                 expression_path = f"node {node.id!r}.columns[{index}]"
+                if type(column.require_total) is not bool:
+                    _fail(expression_path, "require_total must be a Boolean")
+                if column.require_total and not column.error_on_null:
+                    _fail(expression_path, "require_total requires error_on_null")
                 if column.expression.kind == "checked_concat":
                     for argument_index, argument in enumerate(
                         column.expression.args
@@ -3845,6 +3917,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         column.expression,
                         expression_schema,
                         expression_path,
+                        binary64_mode=binary64_mode,
                     )
                 if column.error_on_null:
                     value_type = ValueType("String", False)
@@ -3882,6 +3955,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 node.predicate,
                 expression_schema,
                 f"node {node.id!r}.predicate",
+                binary64_mode=binary64_mode,
             )
             if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "filter predicate must be Boolean")
@@ -3954,11 +4028,14 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if input_column is None:
                     _fail(trait_path, f"input column {trait.input!r} is not available")
                 integral_average = _is_integral_double_average(trait)
+                variance = trait.function == "stddev_samp"
+                if variance and not binary64_mode:
+                    _fail(trait_path, "stddev_samp requires explicit binary64 semantics")
                 if input_column.type == DOUBLE and not (
-                    integral_average and node.phase == "final"
+                    (integral_average and node.phase == "final") or variance
                 ):
                     _fail(trait_path, "aggregate inputs may not consume Double")
-                if trait.output_type == DOUBLE and not integral_average:
+                if trait.output_type == DOUBLE and not (integral_average or variance):
                     _fail(trait_path, "aggregates may not produce Double")
                 if input_column.type == VOID and (
                     node.distinct_all
@@ -4076,6 +4153,18 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                             f"{function} output nullability does not match its "
                             "input, phase, and keys",
                         )
+                elif variance:
+                    state = trait.state
+                    if not isinstance(state, VarianceStateType) or state != VarianceStateType(state.source_type, state.nullable):
+                        _fail(trait_path, "stddev_samp requires the exact binary64 Welford state descriptor")
+                    if state.source_type != DOUBLE and integer_bounds(state.source_type) is None:
+                        _fail(trait_path, "stddev_samp source must be an integer or Double")
+                    expected_input = DOUBLE if node.phase == "final" else state.source_type
+                    if input_column.type != expected_input or input_column.nullable != state.nullable:
+                        _fail(trait_path, "stddev_samp input must match its physical state source and nullability")
+                    expected_nullable = state.nullable or (not node.keys and node.phase != "intermediate")
+                    if trait.output_type != DOUBLE or trait.output_nullable != expected_nullable:
+                        _fail(trait_path, "stddev_samp output must be Double with exact input/phase nullability")
                 elif trait.function == "avg":
                     if integral_average:
                         _validate_integral_double_average(
@@ -4184,6 +4273,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 node.predicate,
                 left | right,
                 f"node {node.id!r}.predicate",
+                binary64_mode=binary64_mode,
             )
             if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "join predicate must be Boolean")
@@ -4361,27 +4451,28 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 for node_id in subplan_nodes[subplan.binding]
                 if isinstance(nodes[node_id], OuterBind)
             )
-            if subplan.dependency is None:
+            if not subplan.dependencies:
                 if outer_binds:
                     _fail(
                         f"{path}.root",
                         "an uncorrelated scalar root may not contain outer_bind",
                     )
             else:
-                if len(outer_binds) != 1:
+                if len(outer_binds) != len(subplan.dependencies):
                     _fail(
                         f"{path}.root",
-                        "a correlated scalar root must contain exactly one outer_bind",
+                        "a correlated scalar root must contain exactly one outer_bind "
+                        "per dependency",
                     )
-                outer_bind = outer_binds[0]
-                assert isinstance(outer_bind, OuterBind)
-                outer_bind_owners[outer_bind.id].append(subplan.binding)
-                if outer_bind.id in main_nodes:
-                    _fail(
-                        f"node {outer_bind.id!r}",
-                        "outer_bind may not be reachable from the main plan",
-                    )
-                if outer_bind.dependency != subplan.dependency:
+                for outer_bind in outer_binds:
+                    assert isinstance(outer_bind, OuterBind)
+                    outer_bind_owners[outer_bind.id].append(subplan.binding)
+                    if outer_bind.id in main_nodes:
+                        _fail(
+                            f"node {outer_bind.id!r}",
+                            "outer_bind may not be reachable from the main plan",
+                        )
+                if {bind.dependency for bind in outer_binds} != set(subplan.dependencies):
                     _fail(
                         f"{path}.dependencies",
                         "scalar dependency disagrees with outer_bind",
@@ -4426,19 +4517,29 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         "a correlated scalar root path must contain exactly "
                         "one Aggregate among Project wrappers",
                     )
-                if (
-                    not isinstance(shape, Filter)
-                    or shape.input != outer_bind.id
-                ):
+                if not isinstance(shape, Filter):
                     _fail(
                         f"{path}.root",
                         "the correlated scalar unary path must end in Filter "
                         "over outer_bind",
                     )
                 correlation_filter = shape
+                # One AddDependencies tuple is serialized as adjacent typed
+                # bindings. No other operation may intervene or own a key.
+                binding_input = nodes[correlation_filter.input]
+                chain: list[OuterBind] = []
+                while isinstance(binding_input, OuterBind):
+                    chain.append(binding_input)
+                    binding_input = nodes[binding_input.input]
+                if {bind.id for bind in chain} != {bind.id for bind in outer_binds}:
+                    _fail(
+                        f"{path}.root",
+                        "the correlation Filter must directly consume one "
+                        "contiguous outer_bind chain covering every dependency",
+                    )
                 if (
                     len(parents[correlation_filter.id]) != 1
-                    or len(parents[outer_bind.id]) != 1
+                    or any(len(parents[bind.id]) != 1 for bind in chain)
                 ):
                     _fail(
                         f"{path}.root",
@@ -4465,53 +4566,52 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 consumer = nodes[subplan.consumers[0]]
                 assert isinstance(consumer, (Project, Filter))
                 outer_schema = schemas[consumer.input]
-                dependency = subplan.dependency
-                outer_column = outer_schema.get(dependency)
-                if outer_column is None:
-                    _fail(
-                        f"{path}.dependencies",
-                        f"outer column {dependency!r} is not available to the consumer",
-                    )
-                declared_dependency = Column(
-                    dependency,
-                    outer_bind.type,
-                    outer_bind.nullable,
-                )
-                if outer_column != declared_dependency:
-                    _fail(
-                        f"{path}.dependencies",
-                        "outer_bind type or nullability disagrees with its consumer input",
-                    )
-
-                inner_schema = schemas[outer_bind.input]
+                inner_schema = schemas[binding_input.id]
                 predicate = correlation_filter.predicate
-                inner_column = _scalar_correlation_inner_column(
-                    predicate,
-                    dependency,
-                    inner_schema,
-                    f"node {correlation_filter.id!r}.predicate",
-                    "correlated scalar",
-                    "the outer_bind input",
-                )
-                if outer_column.type != inner_schema[inner_column].type:
-                    _fail(
-                        f"node {correlation_filter.id!r}.predicate",
-                        "correlated scalar equality column types must match exactly",
+                for outer_bind in chain:
+                    dependency = outer_bind.dependency
+                    outer_column = outer_schema.get(dependency)
+                    if outer_column is None:
+                        _fail(
+                            f"{path}.dependencies",
+                            f"outer column {dependency!r} is not available to the consumer",
+                        )
+                    declared_dependency = Column(
+                        dependency, outer_bind.type, outer_bind.nullable,
                     )
+                    if outer_column != declared_dependency:
+                        _fail(
+                            f"{path}.dependencies",
+                            "outer_bind type or nullability disagrees with its consumer input",
+                        )
+                    inner_column = _scalar_correlation_inner_column(
+                        predicate,
+                        dependency,
+                        inner_schema,
+                        f"node {correlation_filter.id!r}.predicate",
+                        "correlated scalar",
+                        "the outer_bind input",
+                    )
+                    if outer_column.type != inner_schema[inner_column].type:
+                        _fail(
+                            f"node {correlation_filter.id!r}.predicate",
+                            "correlated scalar equality column types must match exactly",
+                        )
 
+                dependencies = set(subplan.dependencies)
                 for node_id in correlated_nodes:
                     candidate = nodes[node_id]
                     if candidate.id == correlation_filter.id:
                         continue
                     if isinstance(candidate, Aggregate):
-                        if dependency in candidate.keys:
+                        if dependencies.intersection(candidate.keys):
                             _fail(
                                 f"node {candidate.id!r}.keys",
                                 "a correlated scalar may not aggregate by "
                                 "its outer dependency",
                             )
                         if any(
-                            trait.input == dependency
+                            trait.input in dependencies
                             for trait in candidate.aggregates
                         ):
                             _fail(
@@ -4521,18 +4621,17 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                             )
                     if isinstance(candidate, Project):
                         invalid_use = any(
-                            dependency in expression_columns(column.expression)
+                            dependencies.intersection(expression_columns(column.expression))
                             and not (
-                                column.output == dependency
+                                column.output in dependencies
                                 and column.expression.kind == "column"
-                                and column.expression.column == dependency
+                                and column.expression.column == column.output
                             )
                             for column in candidate.columns
                         )
                     else:
                         invalid_use = (
-                            dependency
-                            in _node_expression_columns(candidate)
+                            dependencies.intersection(_node_expression_columns(candidate))
                         )
                     if invalid_use:
                         _fail(
@@ -4609,6 +4708,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     predicate,
                     predicate_schema,
                     f"{path}.predicate",
+                    binary64_mode=binary64_mode,
                 )
                 if predicate_type.name != BOOL:
                     _fail(f"{path}.predicate", "EXISTS predicate must be Boolean")
@@ -4678,7 +4778,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             if not _is_exact_nested_subplan(subplan, nested):
                 _fail(
                     f"{path}.root",
-                    "only an uncorrelated scalar or a one-level closed IN "
+                    "only a leaf scalar or a one-level closed IN "
                     "binding may be consumed inside an IN subplan",
                 )
             if (
@@ -4718,7 +4818,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if not _is_exact_nested_subplan(owner, subplan):
                     _fail(
                         f"{path}.consumers",
-                        "only an uncorrelated scalar or a one-level closed "
+                        "only a leaf scalar or a one-level closed "
                         "IN binding may be consumed inside an IN subplan",
                     )
     for node_id, owners in outer_bind_owners.items():

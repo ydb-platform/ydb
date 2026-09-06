@@ -22,15 +22,13 @@ struct TWholePartitionWindow {
 struct TGlobalRankWindow {
     NJson::TJsonValue Expression;
     TString WindowName;
-    TString OrderColumn;
-    ui32 SourceOrdinal = 0;
+    TVector<TString> OrderColumns;
 };
 
 struct TGlobalRankProjectionWindow {
     TString Output;
     TString WindowName;
-    TString OrderColumn;
-    ui32 SourceOrdinal = 0;
+    TVector<TString> OrderColumns;
     ui32 ExecutionOrder = 0;
 };
 
@@ -125,13 +123,13 @@ TVector<TWholePartitionWindowKey> AuditWholePartitionWindowDefinition(
     if (!partitions.IsList() ||
         (function == EWholePartitionWindowFunction::Sum
             ? partitionCount != 1
-            : partitionCount < 1 || partitionCount > 4))
+            : partitionCount < 1 || partitionCount > 5))
     {
         Unsupported(TStringBuilder()
             << label << " requires "
             << (function == EWholePartitionWindowFunction::Sum
                     ? TStringBuf("exactly one")
-                    : TStringBuf("between one and four"))
+                    : TStringBuf("between one and five"))
             << " partition expressions");
     }
 
@@ -458,271 +456,228 @@ const TExprNode* AuditWholePartitionWindowLambda(
     return expression.Node->Child(0)->Child(0);
 }
 
-constexpr TStringBuf GlobalRankWindowNamePrefix =
-    "_yql_anonymous_window";
-constexpr ui32 MaxGlobalRankWindowOrdinal = 5;
+// Anonymous names are meaningful only within their owning source SELECT.
+constexpr TStringBuf GlobalRankWindowNamePrefix = "_yql_anonymous_window";
 
-ui32 AuditGlobalRankWindowName(TStringBuf windowName) {
-    if (!windowName.StartsWith(GlobalRankWindowNamePrefix)) {
-        Unsupported(
-            "Global rank window name must use the exact q49 anonymous prefix");
-    }
-    const TStringBuf suffix =
-        windowName.SubStr(GlobalRankWindowNamePrefix.size());
-    const ui32 ordinal = ParseInteger<ui32>(
-        suffix,
-        "global rank window ordinal");
-    if (suffix != ToString(ordinal) ||
-        ordinal > MaxGlobalRankWindowOrdinal)
-    {
-        Unsupported(
-            "Global rank window name has a noncanonical or out-of-range ordinal");
-    }
-    return ordinal;
+bool IsRankKeyType(TStringBuf type, bool partition) {
+    return IsIntegerType(type) || type == "String" || type == "Utf8" ||
+        type == "Date" || ParseCanonicalDecimalType(type) ||
+        (partition && type == "Bool");
 }
 
-TString AuditGlobalRankWindowDefinition(
-    const TExpression& expression,
-    TStringBuf windowName,
-    const THashSet<TString>& visibleColumns)
+TString AuditRankKey(const TExprNode& key, const TExpression& expression,
+    const THashSet<TString>& visibleColumns, const TStructExprType& inputType, bool partition)
 {
-    const auto& metadata = expression.GetWindowMetadata();
-    if (!metadata || !metadata->Definition) {
-        Unsupported("Global rank expression has no source window metadata");
-    }
-    const auto& definition = *metadata->Definition;
-    CheckExactWindowSafetyTree(definition);
-    if (!definition.IsCallable("YqlWindow") ||
-        definition.ChildrenSize() != 5)
-    {
-        Unsupported("Global rank requires an exact five-child YqlWindow");
-    }
-
-    const auto& definitionName = *definition.Child(0);
-    if (!definitionName.IsAtom(windowName)) {
-        Unsupported("Global rank definition name does not match YqlWin");
-    }
-    CheckExactWindowAtom(
-        *definition.Child(1),
-        "",
-        "Global rank inherited window");
-
-    const auto& partitions = *definition.Child(2);
-    if (!partitions.IsList() || partitions.ChildrenSize() != 0 ||
-        !expression.GetWindowPartitionBy().empty())
-    {
-        Unsupported("Global rank requires an empty partition list");
-    }
-
-    const auto& order = *definition.Child(3);
-    if (!order.IsList() || order.ChildrenSize() != 1) {
-        Unsupported("Global rank requires exactly one order expression");
-    }
-    const auto& sort = *order.Child(0);
-    if (!sort.IsCallable("YqlSort") || sort.ChildrenSize() != 4) {
-        Unsupported("Global rank order must be one exact YqlSort");
-    }
-
-    const auto& rowDescriptor = *sort.Child(0);
-    if (!rowDescriptor.IsCallable("StructType") ||
-        rowDescriptor.ChildrenSize() != 1)
-    {
-        Unsupported(
-            "Global rank order row descriptor must contain exactly one field");
-    }
-    const auto& field = *rowDescriptor.Child(0);
-    if (!field.IsList() || field.ChildrenSize() != 2 ||
-        !field.Child(0)->IsAtom() || field.Child(0)->Content().empty())
-    {
-        Unsupported("Global rank order field descriptor is not canonical");
-    }
-    bool fieldNullable = false;
-    if (DataTypeDescriptorName(*field.Child(1), &fieldNullable) !=
-            "Decimal(15,4)" ||
-        fieldNullable)
-    {
-        Unsupported(
-            "Global rank order descriptor must be non-null Decimal(15,4)");
-    }
-    const auto& describedRow = DescribedType(
-        rowDescriptor,
-        "Global rank order row descriptor");
-    if (describedRow.GetKind() != ETypeAnnotationKind::Struct) {
-        Unsupported("Global rank order row descriptor must describe Struct");
-    }
-    const auto& rowItems = describedRow.Cast<TStructExprType>()->GetItems();
-    if (rowItems.size() != 1 ||
-        rowItems.front()->GetName() != field.Child(0)->Content() ||
-        TypeName(rowItems.front()->GetItemType()) != "Decimal(15,4)" ||
-        !IsSameAnnotation(
-            DescribedType(
-                *field.Child(1),
-                "Global rank order field descriptor"),
-            *rowItems.front()->GetItemType()))
-    {
-        Unsupported("Global rank order row descriptor annotation disagrees");
-    }
-
-    const auto& lambda = *sort.Child(1);
-    if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
-        !lambda.Child(0)->IsArguments() ||
-        lambda.Child(0)->ChildrenSize() != 1 ||
+    const auto& descriptor = *key.Child(0);
+    const auto& lambda = *key.Child(1);
+    if (!descriptor.IsCallable("StructType") || descriptor.ChildrenSize() != 1 ||
+        !descriptor.Child(0)->IsList() || descriptor.Child(0)->ChildrenSize() != 2 ||
+        !descriptor.Child(0)->Child(0)->IsAtom() ||
+        descriptor.Child(0)->Child(0)->Content().empty() ||
+        !lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() || lambda.Child(0)->ChildrenSize() != 1 ||
         !lambda.Child(0)->Child(0)->IsArgument())
     {
-        Unsupported("Global rank order must be one unary lambda");
+        Unsupported("Rank key requires one exactly typed direct-column lambda");
     }
-    const auto& argument = *lambda.Child(0)->Child(0);
-    if (!argument.GetTypeAnn() ||
-        !IsSameAnnotation(*argument.GetTypeAnn(), describedRow))
+    const auto& field = *descriptor.Child(0);
+    bool nullable = false;
+    const TString type = DataTypeDescriptorName(*field.Child(1), &nullable);
+    if (!IsRankKeyType(type, partition)) {
+        Unsupported(TStringBuilder() << "Unsupported Rank key type " << type);
+    }
+    const auto& described = DescribedType(descriptor, "Rank key row descriptor");
+    if (described.GetKind() != ETypeAnnotationKind::Struct) {
+        Unsupported("Rank key descriptor must describe Struct");
+    }
+    const auto& fields = described.Cast<TStructExprType>()->GetItems();
+    if (fields.size() != 1 || fields.front()->GetName() != field.Child(0)->Content() ||
+        !IsSameAnnotation(DescribedType(*field.Child(1), "Rank key field"),
+            *fields.front()->GetItemType()))
     {
-        Unsupported(
-            "Global rank order lambda argument disagrees with its row descriptor");
+        Unsupported("Rank key descriptor annotation disagrees with its field");
     }
+    const auto* argument = lambda.Child(0)->Child(0);
     const auto& member = *lambda.Child(1);
-    bool memberNullable = false;
-    if (!member.IsCallable("Member") || member.ChildrenSize() != 2 ||
-        member.Child(0) != &argument || !member.Child(1)->IsAtom() ||
-        member.Child(1)->Content() != field.Child(0)->Content() ||
-        ScalarTypeName(member, &memberNullable) != "Decimal(15,4)" ||
-        memberNullable)
+    if (!argument->GetTypeAnn() || !IsSameAnnotation(*argument->GetTypeAnn(), described) ||
+        !member.IsCallable("Member") || member.ChildrenSize() != 2 ||
+        member.Child(0) != argument || !member.Child(1)->IsAtom(field.Child(0)->Content()) ||
+        !member.GetTypeAnn() || !IsSameAnnotation(*member.GetTypeAnn(), *fields.front()->GetItemType()))
     {
-        Unsupported(
-            "Global rank order must be one direct non-null Decimal(15,4) Member");
+        Unsupported("Rank key must be a direct Member with matching row and value types");
     }
-    CheckExactWindowAtom(*sort.Child(2), "asc", "Global rank direction");
-    CheckExactWindowAtom(*sort.Child(3), "first", "Global rank NULL order");
-
-    const auto& frame = *definition.Child(4);
-    if (!frame.IsList() || frame.ChildrenSize() != 4) {
-        Unsupported(
-            "Global rank requires the exact cumulative ROWS frame");
+    // Validate the descriptor's written type as well as its attached annotation.
+    bool annotatedNullable = false;
+    if (TypeName(fields.front()->GetItemType(), &annotatedNullable) != type || annotatedNullable != nullable) {
+        Unsupported("Rank key written type disagrees with its annotation");
     }
-    const std::array<std::pair<TStringBuf, TStringBuf>, 3> settings = {{
-        {"type", "rows"},
-        {"from", "up"},
-        {"to", "f"},
-    }};
-    for (size_t index = 0; index < settings.size(); ++index) {
-        const auto& setting = *frame.Child(index);
-        if (!setting.IsList() || setting.ChildrenSize() != 2) {
-            Unsupported("Global rank has a malformed frame setting");
-        }
-        CheckExactWindowAtom(
-            *setting.Child(0),
-            settings[index].first,
-            "Global rank frame setting name");
-        CheckExactWindowAtom(
-            *setting.Child(1),
-            settings[index].second,
-            "Global rank frame setting value");
-    }
-    const auto& currentRow = *frame.Child(3);
-    if (!currentRow.IsList() || currentRow.ChildrenSize() != 2) {
-        Unsupported("Global rank current-row frame setting is malformed");
-    }
-    CheckExactWindowAtom(
-        *currentRow.Child(0),
-        "to_value",
-        "Global rank current-row setting name");
-    const auto& zero = *currentRow.Child(1);
-    if (!zero.IsCallable("Int32") || zero.ChildrenSize() != 1 ||
-        !zero.Child(0)->IsAtom("0") ||
-        !IsExactDataAnnotation(
-            zero.GetTypeAnn(),
-            NUdf::EDataSlot::Int32,
-            false))
-    {
-        Unsupported("Global rank frame endpoint must be exact Int32(0)");
-    }
-    LiteralExpr(zero);
-
     TInfoUnit resolved(TString(member.Child(1)->Content()));
-    for (const auto& renameMap : metadata->RenameHistory) {
-        if (const auto it = renameMap.find(resolved);
-            it != renameMap.end())
-        {
+    for (const auto& renames : expression.GetWindowMetadata()->RenameHistory) {
+        if (const auto it = renames.find(resolved); it != renames.end()) {
             resolved = it->second;
         }
     }
-    const TString resolvedName = resolved.GetFullName();
-    const auto resolvedByApi = expression.GetWindowOrderBy();
-    if (resolvedName.empty() || resolvedByApi.size() != 1 ||
-        resolvedByApi.front().GetFullName() != resolvedName ||
-        !visibleColumns.contains(resolvedName))
-    {
-        Unsupported(
-            "Global rank resolved order key is unavailable or disagrees with metadata");
+    const TString name = resolved.GetFullName();
+    const auto* actual = inputType.FindItemType(name);
+    if (!visibleColumns.contains(name) || !actual || !IsSameAnnotation(*actual, *member.GetTypeAnn())) {
+        Unsupported("Rank key is unavailable or has changed type at its actual input");
     }
-    return resolvedName;
+    return name;
 }
 
-TGlobalRankWindow ExportGlobalRankWindow(
-    const TExpression& expression,
-    const THashSet<TString>& visibleColumns)
+void AuditRankFrame(const TExprNode& frame) {
+    // Rank is frame-independent, but malformed/unsupported source syntax must
+    // still fail closed. Admit default frames and constant ROWS/current RANGE.
+    if (!frame.IsList()) {
+        Unsupported("Rank frame must be a settings list");
+    }
+    if (!frame.ChildrenSize()) {
+        return;
+    }
+    THashMap<TStringBuf, const TExprNode*> settings;
+    for (const auto& setting : frame.Children()) {
+        if (!setting->IsList() || setting->ChildrenSize() != 2 || !setting->Child(0)->IsAtom() ||
+            !settings.emplace(setting->Child(0)->Content(), setting->Child(1)).second)
+        {
+            Unsupported("Rank frame has malformed or duplicate settings");
+        }
+    }
+    const auto get = [&](TStringBuf name) -> const TExprNode* {
+        const auto* value = settings.FindPtr(name);
+        return value ? *value : nullptr;
+    };
+    const auto* type = get("type");
+    if (!type || (!type->IsAtom("rows") && !type->IsAtom("range"))) {
+        Unsupported("Rank frame requires ROWS or RANGE");
+    }
+    size_t used = 1;
+    const auto bound = [&](TStringBuf name, TStringBuf valueName, bool first) -> i64 {
+        const auto* direction = get(name);
+        const auto* value = get(valueName);
+        if (!direction || !direction->IsAtom()) {
+            Unsupported("Rank frame endpoint is missing");
+        }
+        ++used;
+        if (direction->IsAtom(first ? "up" : "uf") && !value) {
+            return first ? Min<i64>() : Max<i64>();
+        }
+        if (direction->IsAtom("c") && !value) {
+            return 0;
+        }
+        if (type->IsAtom("rows") && (direction->IsAtom("p") || direction->IsAtom("f")) &&
+            value && value->IsCallable("Int32") && value->ChildrenSize() == 1 &&
+            value->Child(0)->IsAtom() && IsExactDataAnnotation(value->GetTypeAnn(), NUdf::EDataSlot::Int32, false))
+        {
+            const i32 count = ParseInteger<i32>(value->Child(0)->Content(), "Rank frame offset");
+            if (count >= 0 && value->Child(0)->Content() == ToString(count)) {
+                ++used;
+                LiteralExpr(*value);
+                return direction->IsAtom("p") ? -i64(count) : i64(count);
+            }
+        }
+        Unsupported("Rank frame endpoint is outside the audited constant-frame contract");
+    };
+    const i64 begin = bound("from", "from_value", true);
+    const i64 end = bound("to", "to_value", false);
+    if (used != settings.size() || begin > end) {
+        Unsupported("Rank frame has unknown settings or reversed bounds");
+    }
+}
+
+TGlobalRankWindow ExportGlobalRankWindow(const TExpression& expression,
+    const THashSet<TString>& visibleColumns, const TStructExprType& inputType)
 {
-    const auto* rowArgument =
-        AuditWholePartitionWindowLambda(expression, "Global rank");
-    Y_UNUSED(rowArgument);
+    AuditWholePartitionWindowLambda(expression, "ANSI Rank");
     const auto& window = *expression.GetExpressionBody();
     CheckExactWindowSafetyTree(window);
-    bool resultNullable = false;
     if (!window.IsCallable("YqlWin") || window.ChildrenSize() != 4 ||
-        ScalarTypeName(window, &resultNullable) != "Uint64" ||
-        resultNullable)
+        !window.Child(0)->IsAtom("rank") || !window.Child(1)->IsAtom() ||
+        window.Child(1)->Content().empty() || !window.Child(2)->IsList() ||
+        window.Child(2)->ChildrenSize() != 0 ||
+        !IsExactDataAnnotation(window.GetTypeAnn(), NUdf::EDataSlot::Uint64, false))
     {
-        Unsupported("Global rank requires one direct non-null Uint64 YqlWin");
+        Unsupported("Rank requires one direct option-free non-null Uint64 YqlWin");
     }
-    CheckExactWindowAtom(*window.Child(0), "rank", "Global rank function");
-    const auto& name = *window.Child(1);
-    if (!name.IsAtom() || name.Content().empty()) {
-        Unsupported("Global rank has an invalid window name");
-    }
-    const TString windowName(name.Content());
-    const ui32 sourceOrdinal = AuditGlobalRankWindowName(windowName);
-    const auto& options = *window.Child(2);
-    if (!options.IsList() || options.ChildrenSize() != 0) {
-        Unsupported("Global rank does not admit function options");
-    }
-    bool descriptorNullable = false;
-    if (DataTypeDescriptorName(
-            *window.Child(3),
-            &descriptorNullable) != "Uint64" ||
-        descriptorNullable ||
-        !IsSameAnnotation(
-            DescribedType(
-                *window.Child(3),
-                "Global rank result descriptor"),
-            *window.GetTypeAnn()))
+    bool nullable = false;
+    if (DataTypeDescriptorName(*window.Child(3), &nullable) != "Uint64" || nullable ||
+        !IsSameAnnotation(DescribedType(*window.Child(3), "Rank result"), *window.GetTypeAnn()))
     {
-        Unsupported(
-            "Global rank descriptor must exactly match non-null Uint64");
+        Unsupported("Rank result descriptor disagrees with its annotation");
     }
-
-    const TString orderColumn = AuditGlobalRankWindowDefinition(
-        expression,
-        windowName,
-        visibleColumns);
+    const auto& metadata = expression.GetWindowMetadata();
+    if (!metadata || !metadata->Definition) {
+        Unsupported("Rank expression has no source window metadata");
+    }
+    const auto& definition = *metadata->Definition;
+    CheckExactWindowSafetyTree(definition);
+    if (!definition.IsCallable("YqlWindow") || definition.ChildrenSize() != 5 ||
+        !definition.Child(0)->IsAtom(window.Child(1)->Content()) || !definition.Child(1)->IsAtom("") ||
+        !definition.Child(2)->IsList() || definition.Child(2)->ChildrenSize() > 4 ||
+        !definition.Child(3)->IsList() || definition.Child(3)->ChildrenSize() < 1 ||
+        definition.Child(3)->ChildrenSize() > 2)
+    {
+        Unsupported("Rank requires one non-inherited definition with at most four partition keys and one or two order keys");
+    }
+    auto partitionBy = JsonArray();
+    THashSet<TString> partitions;
+    for (const auto& key : definition.Child(2)->Children()) {
+        if (!key->IsCallable("YqlGroup") || key->ChildrenSize() != 2) {
+            Unsupported("Rank partition key must be a YqlGroup");
+        }
+        const TString name = AuditRankKey(*key, expression, visibleColumns, inputType, true);
+        if (!partitions.insert(name).second) {
+            Unsupported("Rank partition keys must be unique");
+        }
+        partitionBy.AppendValue(name);
+    }
+    if (expression.GetWindowPartitionBy().size() != partitions.size()) {
+        Unsupported("Rank tracked partition dependencies disagree with source metadata");
+    }
+    for (const auto& tracked : expression.GetWindowPartitionBy()) {
+        if (!partitions.contains(tracked.GetFullName())) {
+            Unsupported("Rank tracked partition dependency disagrees with source metadata");
+        }
+    }
+    const auto trackedOrder = expression.GetWindowOrderBy();
+    const auto& sourceOrder = definition.Child(3)->Children();
+    if (trackedOrder.size() != sourceOrder.size()) {
+        Unsupported("Rank tracked order dependencies disagree with source metadata");
+    }
     auto orderBy = JsonArray();
-    auto orderItem = JsonMap();
-    orderItem["column"] = orderColumn;
-    orderItem["ascending"] = true;
-    orderItem["nulls_first"] = true;
-    orderBy.AppendValue(std::move(orderItem));
-
+    TVector<TString> orderColumns;
+    for (size_t index = 0; index < sourceOrder.size(); ++index) {
+        const auto& sort = *sourceOrder[index];
+        if (!sort.IsCallable("YqlSort") || sort.ChildrenSize() != 4 ||
+            (!sort.Child(2)->IsAtom("asc") && !sort.Child(2)->IsAtom("desc")) ||
+            (!sort.Child(3)->IsAtom("first") && !sort.Child(3)->IsAtom("last")))
+        {
+            Unsupported("Rank order requires exact direction and NULL placement");
+        }
+        const TString column = AuditRankKey(sort, expression, visibleColumns, inputType, false);
+        if (trackedOrder[index].GetFullName() != column) {
+            Unsupported("Rank tracked order dependency disagrees with source metadata");
+        }
+        auto item = JsonMap();
+        item["column"] = column;
+        item["ascending"] = sort.Child(2)->IsAtom("asc");
+        // Native BuildSortTraits reverses the complete ascending key for DESC,
+        // including its NULL placement. The snapshot records absolute placement.
+        item["nulls_first"] = sort.Child(2)->IsAtom("asc") == sort.Child(3)->IsAtom("first");
+        orderBy.AppendValue(std::move(item));
+        orderColumns.push_back(column);
+    }
+    AuditRankFrame(*definition.Child(4));
     auto result = JsonMap();
     result["kind"] = "window_rank";
-    result["window_name"] = windowName;
-    result["partition_by"] = JsonArray();
+    result["window_name"] = TString(window.Child(1)->Content());
+    result["partition_by"] = std::move(partitionBy);
     result["order_by"] = std::move(orderBy);
+    // Canonical semantic frame: every admitted source frame has this same Rank.
     result["frame"] = "rows_unbounded_preceding_current_row";
     result["type"] = "Uint64";
     result["nullable"] = false;
-    return {
-        .Expression = std::move(result),
-        .WindowName = windowName,
-        .OrderColumn = orderColumn,
-        .SourceOrdinal = sourceOrdinal,
-    };
+    return {.Expression = std::move(result), .WindowName = TString(window.Child(1)->Content()),
+        .OrderColumns = std::move(orderColumns)};
 }
 
 constexpr ui32 MaxQ51WindowOrdinal = 3;
@@ -1246,7 +1201,8 @@ TWholePartitionWindow ExportWholePartitionWindowSum(
             {},
             budget,
             2,
-            2),
+            2,
+            false),
         std::move(windowExpr));
     result["type"] = rootSignature.ResultType;
     result["nullable"] = rootSignature.ResultNullable;

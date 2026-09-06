@@ -474,7 +474,7 @@ def _in_snapshot(
     }
 
 
-def _nested_scalar_in_snapshot():
+def _nested_scalar_in_snapshot(*, correlated=False):
     raw = _in_snapshot()
     raw["schema"]["tables"][1]["columns"].append(
         {"name": "group", "type": "Int32", "nullable": False}
@@ -528,6 +528,33 @@ def _nested_scalar_in_snapshot():
             "consumers": ["inner_filter"],
         }
     )
+    if correlated:
+        raw["schema"]["tables"][2]["columns"].append(
+            {"name": "key", "type": "Int32", "nullable": False}
+        )
+        scalar_scan = next(node for node in raw["plan"]["nodes"]
+                           if node["id"] == "scalar_scan")
+        scalar_scan["columns"].append({"source": "key", "output": "scalar.key"})
+        raw["plan"]["nodes"].extend((
+            {"id": "bind_group", "op": "outer_bind", "input": "scalar_scan",
+             "dependency": "inner.group", "type": "Int32", "nullable": False},
+            {"id": "bind_key", "op": "outer_bind", "input": "bind_group",
+             "dependency": "inner.k", "type": "Int32", "nullable": False},
+            {"id": "scalar_filter", "op": "filter", "input": "bind_key",
+             "predicate": {"kind": "and", "args": [
+                 _equality("inner.group", "scalar.value"),
+                 _equality("inner.k", "scalar.key"),
+             ]}},
+            {"id": "scalar_min", "op": "aggregate", "input": "scalar_filter",
+             "keys": [], "phase": "undefined", "distinct_all": False,
+             "aggregates": [{"input": "scalar.value", "function": "min",
+                             "output": "scalar.minimum", "type": "Int32",
+                             "nullable": True, "distinct": False, "unwrap": False}]},
+        ))
+        descriptor = raw["plan"]["subplans"][1]
+        descriptor["root"] = "scalar_min"
+        descriptor["output"] = {"column": "scalar.minimum", "type": "Int32", "nullable": True}
+        descriptor["dependencies"] = ["inner.k", "inner.group"]
     return raw
 
 
@@ -856,7 +883,7 @@ def _lower_nested_in_snapshot(raw, *, omit_inner_membership=False):
     return result
 
 
-def _correlated_scalar_snapshot(function="count"):
+def _correlated_scalar_snapshot(function="count", *, composite=False):
     if function not in {"avg", "count", "sum"}:
         raise AssertionError(f"unknown correlated aggregate {function!r}")
     input_type = "Decimal(7,2)" if function == "avg" else "Int64"
@@ -881,7 +908,7 @@ def _correlated_scalar_snapshot(function="count"):
             "count_type": "Uint64",
             "nullable": True,
         }
-    return {
+    raw = {
         "format": "ydb-rbo-semantic-snapshot",
         "version": 1,
         "schema": {
@@ -1035,6 +1062,35 @@ def _correlated_scalar_snapshot(function="count"):
         },
         "stage_graph": None,
     }
+    if composite:
+        for table in raw["schema"]["tables"]:
+            table["columns"].append(
+                {"name": "second", "type": "Int32", "nullable": True}
+            )
+        nodes = {node["id"]: node for node in raw["plan"]["nodes"]}
+        for side in ("outer", "inner"):
+            nodes[f"{side}_scan"]["columns"].append(
+                {"source": "second", "output": f"{side}.second"}
+            )
+        raw["plan"]["nodes"].append({
+            "id": "outer_bind_second",
+            "op": "outer_bind",
+            "input": "outer_bind",
+            "dependency": "outer.second",
+            "type": "Int32",
+            "nullable": True,
+        })
+        nodes["correlation_filter"]["input"] = "outer_bind_second"
+        nodes["correlation_filter"]["predicate"] = {
+            "kind": "and",
+            "args": [
+                nodes["correlation_filter"]["predicate"],
+                _equality("inner.second", "outer.second"),
+            ],
+        }
+        # Registry order need not be the binding-chain or predicate order.
+        raw["plan"]["subplans"][0]["dependencies"] = ["outer.second", "outer.k"]
+    return raw
 
 
 def _lowered_scalar_snapshot(*, check_mode, empty_outer=False):
@@ -1333,6 +1389,7 @@ def _nested_scalar_in_constants(
     outer_present=None,
     inner_present=None,
     scalar_present=None,
+    scalar_keys=None,
 ):
     constants = _in_constants(
         database,
@@ -1352,6 +1409,9 @@ def _nested_scalar_in_constants(
     ):
         constants[row.present.atom] = present
         constants[row.cells["value"].value.atom] = value
+    if scalar_keys is not None:
+        for row, key in zip(database.witness["Scalar"], scalar_keys):
+            constants[row.cells["key"].value.atom] = key
     return constants
 
 
@@ -1440,6 +1500,8 @@ def _correlated_constants(
     *,
     outer_present=(True, True),
     inner_present=(True, True),
+    outer_second=(None, None),
+    inner_second=(None, None),
 ):
     constants = {}
 
@@ -1464,6 +1526,10 @@ def _correlated_constants(
         constants[row.present.atom] = present
         bind_cell(row.cells["k"], key)
         bind_cell(row.cells["v"], value)
+    for table, second_keys in (("Outer", outer_second), ("Inner", inner_second)):
+        for row, key in zip(database.witness[table], second_keys):
+            if "second" in row.cells:
+                bind_cell(row.cells["second"], key)
     return constants
 
 
@@ -2217,6 +2283,81 @@ class CorrelatedScalarSubplanEvaluationTest(unittest.TestCase):
                     _ground(family.outcomes[0].error, constants)
                 )
                 self.assertEqual(self._results(family, constants), expected)
+
+    def test_composite_correlation_keeps_all_keys_nulls_and_empty_aggregate(self):
+        cases = (
+            ((1, 1), (10, 20), ((1, 7), (1, 8)), (10, 20), (True, True)),
+            ((1, 1), (10, 20), ((1, 7), (1, 8)), (10, 10), (True, True)),
+            ((1, 1), (None, 10), ((1, 7), (1, 8)), (None, 10), (True, True)),
+            ((None, 1), (10, 10), ((None, 7), (1, None)), (10, 10), (True, True)),
+            ((1, 1), (10, 20), ((1, 7), (1, 8)), (10, 20), (False, True)),
+        )
+        for function in ("count", "sum"):
+            _, database, family = self._evaluate(
+                _correlated_scalar_snapshot(function, composite=True)
+            )
+            for outer, outer_second, inner, inner_second, present in cases:
+                with self.subTest(
+                    function=function, outer=outer, second=outer_second,
+                    inner=inner, inner_second=inner_second, present=present,
+                ):
+                    constants = _correlated_constants(
+                        database, outer, inner, outer_second=outer_second,
+                        inner_second=inner_second, inner_present=present,
+                    )
+                    # Independent concrete SQL membership, not symbolic helpers.
+                    expected = []
+                    for key, second in zip(outer, outer_second):
+                        members = [
+                            value
+                            for (inner_key, value), inner_second_key, exists
+                            in zip(inner, inner_second, present)
+                            if exists and key is not None and second is not None
+                            and key == inner_key and second == inner_second_key
+                            and value is not None
+                        ]
+                        expected.append(
+                            (False, len(members)) if function == "count"
+                            else (not members, sum(members))
+                        )
+                    actual = self._results(family, constants)
+                    self.assertEqual(
+                        [null for null, _ in actual],
+                        [null for null, _ in expected],
+                    )
+                    for (null, value), (_, wanted) in zip(actual, expected):
+                        if not null:
+                            self.assertEqual(value, wanted)
+
+    def test_composite_correlation_rejects_missing_duplicate_and_mistyped_keys(self):
+        raw = _correlated_scalar_snapshot(composite=True)
+        mutations = []
+        missing = copy.deepcopy(raw)
+        missing["plan"]["subplans"][0]["dependencies"].pop()
+        mutations.append((missing, "exactly one outer_bind"))
+        duplicate = copy.deepcopy(raw)
+        duplicate["plan"]["subplans"][0]["dependencies"] = ["outer.k", "outer.k"]
+        mutations.append((duplicate, "duplicate"))
+        wrong_type = copy.deepcopy(raw)
+        wrong_type["plan"]["nodes"][-1]["nullable"] = False
+        mutations.append((wrong_type, "consumer input"))
+        for repeated in (False, True):
+            predicate = copy.deepcopy(raw)
+            node = next(
+                node for node in predicate["plan"]["nodes"]
+                if node["id"] == "correlation_filter"
+            )
+            if repeated:
+                node["predicate"]["args"].append(
+                    copy.deepcopy(node["predicate"]["args"][1])
+                )
+            else:
+                node["predicate"]["args"].pop()
+            mutations.append((predicate, "exactly one dependency-bearing conjunct"))
+        for mutation, message in mutations:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(mutation)
 
     def test_common_correlation_across_or_branches_keeps_original_predicate(self):
         raw = _correlated_scalar_snapshot()
@@ -3261,6 +3402,28 @@ class InSubplanEvaluationTest(unittest.TestCase):
             [],
         )
 
+    def test_correlated_scalar_inside_in_binds_its_local_row_and_shares_budget(self):
+        evaluator, database, family = self._evaluate(
+            _nested_scalar_in_snapshot(correlated=True), row_bound=2,
+        )
+        outcome = family.outcomes[0]
+        for keys, values, present, expected in (
+            ((2, 1), (7, 7), (True, True), [1]),
+            ((1, 2), (7, 8), (True, True), [1, 2]),
+            ((1, 2), (7, 8), (False, True), [2]),
+            ((1, 2), (7, 8), (False, False), []),
+        ):
+            with self.subTest(keys=keys, values=values, present=present):
+                constants = _nested_scalar_in_constants(
+                    database, outer=(1, 2), inner=(1, 2), groups=(7, 8),
+                    scalar_values=values, scalar_keys=keys, scalar_present=present,
+                )
+                self.assertFalse(_ground(outcome.error, constants))
+                self.assertEqual(self._present_values(outcome.relation, constants), expected)
+        self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
+        with self.assertRaisesRegex(RelationError, "correlated scalar evaluation requires"):
+            self._evaluate(_nested_scalar_in_snapshot(correlated=True), row_bound=129)
+
     def test_nested_scalar_cardinality_error_is_gated_by_consumer_rows(self):
         _evaluator, database, family = self._evaluate(
             _nested_scalar_in_snapshot(),
@@ -3723,8 +3886,8 @@ class InSubplanSolverTest(unittest.TestCase):
         self.assertEqual(result.status, "COUNTEREXAMPLE")
         self.assertIsNotNone(result.witness)
 
-    def test_nullable_fixed_width_in_is_bounded_equivalent_to_left_semi(self):
-        for scalar_type in ("Int32", "Date"):
+    def test_nullable_in_is_bounded_equivalent_to_left_semi(self):
+        for scalar_type in ("Int32", "Date", "String"):
             for lookup_nullable, output_nullable in (
                 (True, False),
                 (False, True),
@@ -4107,18 +4270,30 @@ class ScalarSubplanValidationTest(unittest.TestCase):
         raw["plan"]["subplans"][0]["consumers"].append("sub_value")
         with self.assertRaisesRegex(
             SnapshotError,
-            "only an uncorrelated scalar or a one-level closed IN binding",
+            "only a leaf scalar or a one-level closed IN binding",
         ):
             parse_snapshot(raw)
 
-    def test_exact_closed_bindings_may_be_nested_inside_in(self):
+    def test_exact_leaf_bindings_may_be_nested_inside_in(self):
         for raw in (
             _nested_scalar_in_snapshot(),
+            _nested_scalar_in_snapshot(correlated=True),
             _nested_in_snapshot(),
         ):
             parse_snapshot(raw)
             raw["plan"]["subplans"].reverse()
             parse_snapshot(raw)
+
+        wrong_scope = _nested_scalar_in_snapshot(correlated=True)
+        descriptor = wrong_scope["plan"]["subplans"][1]
+        descriptor["dependencies"][0] = "outer.k"
+        for node in wrong_scope["plan"]["nodes"]:
+            if node["id"] == "bind_key":
+                node["dependency"] = "outer.k"
+            elif node["id"] == "scalar_filter":
+                node["predicate"]["args"][1] = _equality("outer.k", "scalar.key")
+        with self.assertRaisesRegex(SnapshotError, "not available to the consumer"):
+            parse_snapshot(wrong_scope)
 
     def test_general_scalar_shapes_pass_schema_validation(self):
         raw = _base_snapshot()
@@ -4805,7 +4980,7 @@ class InSubplanValidationTest(unittest.TestCase):
         owner["predicate"] = None
         with self.assertRaisesRegex(
             SnapshotError,
-            "only an uncorrelated scalar or a one-level closed IN binding",
+            "only a leaf scalar or a one-level closed IN binding",
         ):
             parse_snapshot(raw)
 
@@ -4832,7 +5007,7 @@ class InSubplanValidationTest(unittest.TestCase):
                     parse_snapshot(raw)
 
     def test_lookup_and_output_accept_audited_dynamic_in_types(self):
-        integral_types = (
+        supported_types = (
             "Int8",
             "Int16",
             "Int32",
@@ -4841,8 +5016,10 @@ class InSubplanValidationTest(unittest.TestCase):
             "Uint16",
             "Uint32",
             "Uint64",
+            "Date",
+            "String",
         )
-        for scalar_type in integral_types:
+        for scalar_type in supported_types:
             for lookup_nullable, output_nullable in product(
                 (False, True),
                 repeat=2,
@@ -4855,45 +5032,6 @@ class InSubplanValidationTest(unittest.TestCase):
                     parse_snapshot(
                         _in_snapshot(
                             scalar_type=scalar_type,
-                            lookup_nullable=lookup_nullable,
-                            output_nullable=output_nullable,
-                        )
-                    )
-
-        parse_snapshot(_in_snapshot(scalar_type="String"))
-        for lookup_nullable, output_nullable in product(
-            (False, True),
-            repeat=2,
-        ):
-            with self.subTest(
-                scalar_type="Date",
-                lookup_nullable=lookup_nullable,
-                output_nullable=output_nullable,
-            ):
-                parse_snapshot(
-                    _in_snapshot(
-                        scalar_type="Date",
-                        lookup_nullable=lookup_nullable,
-                        output_nullable=output_nullable,
-                    )
-                )
-        for lookup_nullable, output_nullable in (
-            (True, False),
-            (False, True),
-            (True, True),
-        ):
-            with self.subTest(
-                scalar_type="String",
-                lookup_nullable=lookup_nullable,
-                output_nullable=output_nullable,
-            ):
-                with self.assertRaisesRegex(
-                    SnapshotError,
-                    "nullable.*fixed-width integral or Date",
-                ):
-                    parse_snapshot(
-                        _in_snapshot(
-                            scalar_type="String",
                             lookup_nullable=lookup_nullable,
                             output_nullable=output_nullable,
                         )

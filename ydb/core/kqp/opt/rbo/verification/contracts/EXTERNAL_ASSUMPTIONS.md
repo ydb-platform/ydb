@@ -1,5 +1,24 @@
 # External runtime assumptions
 
+`semantic_mode: "binary64_uf_universal_v1"` is an explicit, sufficient-proof
+contract, not the default exact outcome-language comparison. Every Double is an
+unsigned IEEE-754 payload. Classification, ordinary comparison and aggregate
+ordering are bit-defined; casts/arithmetic/sqrt are shared deterministic primitive
+functions, with no assumed associativity or other algebraic laws. Welford state
+initialization, update, merge and finalization are expanded operation by operation
+in `floating.py`; no whole-aggregate black box is used. A single visitation is
+shared by every trait, and intermediate hash-combine flushes split that visitation
+into shared epochs. Final hash aggregation retains one state per group even when
+spilling. Extra orders/flushes conservatively enlarge possible executions.
+
+The obligation requires **every enabled left/right schedule pair to agree**
+(and both execution languages to be nonempty). Thus UNSAT proves the bounded
+claim provided the runtime primitives instantiate the shared functions. SAT is
+always `UNKNOWN`, never a runtime counterexample. Ambient allocation failure is
+outside this model, as elsewhere in the verifier. Mixed result bundles use this
+same mode for every root and side; receipts record it. The existing integral-AVG
+count-at-most-two exclusion remains mandatory, including in this mode.
+
 The production optimizer claim additionally relies on facts not established by
 the SMT obligation itself:
 
@@ -32,13 +51,16 @@ the SMT obligation itself:
   payload for a present value and raises an observable query error for a
   present NULL; a main result-root Project is demanded, and the accepted
   private keyed `left_semi` RHS is evaluated as the eager/build side even when
-  the left input is empty;
+  the left input is empty. Outside that reviewed storage/demand corridor,
+  `require_total` makes absence of reachable NULL a mandatory bounded proof,
+  not an assumed demand property;
 - for an accepted compact ordered singleton, a `sequence` relation without an
   ordinal vector is in the exact fixed runtime row order represented by its
   tuple; each enumerated StageGraph Merge outcome establishes one fixed global
   order before `Limit`, while unordered gather does not preserve `sequence`,
   and runtime `Limit(1)` returns the first present row in that order;
-- each accepted `outer_bind` represents one fresh correlated scalar invocation
+- each accepted contiguous `outer_bind` chain supplies the complete typed
+  dependency tuple from one outer row to one fresh correlated scalar invocation,
   with no hidden row-selection, ordering, error, or nondeterministic choice
   semantics beyond the explicitly modeled root;
 - each accepted relational `EXISTS` descriptor represents one Boolean presence
@@ -48,14 +70,15 @@ the SMT obligation itself:
   coercion, correlation, or fanout beyond the admitted form;
 - each accepted dynamic-`IN` descriptor represents one uncorrelated
   existential membership test over the recorded lookup/result columns; for an
-  independently nullable fixed-width-integral or Date pair, the binding occurs
+  independently nullable fixed-width-integral, Date, or String pair, the binding occurs
   only as a direct positive top-level Filter conjunct where FALSE and UNKNOWN
   both reject the outer row; Date values obey the recorded bounded domain, and
   there is no hidden coercion, correlation, cardinality-error, or fanout
   semantics in the `IN` operator itself;
 - each scalar binding consumed inside an accepted dynamic-`IN` root is exactly
-  the recorded uncorrelated scalar plan, is demanded at the recorded immediate
-  unary consumer, and has no hidden dependency, invocation, choice, error, or
+  the recorded leaf scalar plan, with any dependencies taken from its immediate
+  consumer row inside that root, is demanded at the recorded immediate unary
+  consumer, and has no hidden dependency, invocation, choice, error, or
   cardinality semantics beyond the ordinary scalar-subplan model;
 - each leaf `IN` binding consumed inside an accepted dynamic-`IN` root is
   exactly the recorded second uncorrelated membership test, has no hidden
@@ -134,13 +157,24 @@ the SMT obligation itself:
   aggregate addition. AVG additionally carries exact widened Decimal SUM and
   `Uint64` count state, returns NULL for count zero, and for positive count uses
   runtime Decimal division with nearest/even rounding plus same-scale
-  narrowing;
-- each accepted q49 `YqlWin(rank)` spelling evaluates its complete unpartitioned
-  task input using the recorded ascending/null-first Decimal key, ordinary
-  Decimal equality for peers, SQL rank gaps, and one independent unstable-sort
-  ordinal family per leaf; raw Decimal order is `-Inf < finite < +Inf < NaN`,
-  separate NaN rows need not be peers, `CalcOverWindow` publishes no output
-  sequence, and the final TopSort supplies the observed order;
+  narrowing. Up to three independently private whole-partition corridors are
+  admitted (at most one SUM); each retains its direct grouped-SUM lineage and
+  finite accumulator headroom checks. AVG admits one to five nullable keys;
+- each accepted option-free `YqlWin(rank)` is lowered with ANSI peer semantics:
+  rank is one plus the number of present, strictly preceding rows in the same
+  NULL-safe partition of the current task input. Supported keys are typed
+  integers, String/Utf8, Date and Decimal (Bool also for partition keys), with
+  lexicographic one- or two-key ordering, either direction and recorded NULL
+  placement. Runtime `AggrEquals` makes
+  duplicate Decimal NaNs peers, as it does NULLs; raw Decimal order is
+  `-Inf < finite < +Inf < NaN`. Rank ignores its frame and peer permutations,
+  hence needs no ordinal choices and publishes no output sequence. The
+  independent `KqpRboRankContract::ForcedYqlSelectDecimalPeers` runtime witness
+  checks repeated calls, NULL/NaN peers, both directions and a non-default frame;
+- a Project containing Rank and whole-partition AVG evaluates both from the
+  same source outcome. Ordinary subplans below that input are already reflected
+  in its rows, errors and choices; the window Project cannot itself bind a
+  subplan or belong to one. Ordered ROWS windows remain a separate capability;
 - each accepted q51 `YqlAggWin(sum|max)` spelling evaluates over exactly the
   rows visible in its current task; SUM partitions required Int64 item values
   and outer MAX partitions nullable Int64 item values, both by `IS NOT DISTINCT
@@ -182,11 +216,12 @@ the SMT obligation itself:
   unreachable;
 - each accepted `cast_decimal` `source_type` names the actual runtime source,
   weak integral-to-Decimal `SafeCast` propagates source NULL but saturates
-  present overflow to signed infinity, and same-scale non-decreasing-precision
-  Decimal `SafeCast` preserves every finite and special encoded value; the six
-  accepted q49 `Decimal(35,2)`-to-`Decimal(15,4)` casts multiply finite raw
-  coefficients by 100, saturate at the target precision boundary, preserve
-  specials, and propagate NULL;
+  present overflow to signed infinity; Decimal-to-Decimal casts first narrow
+  at the source scale if integral digits shrink while scale changes, then
+  scale up by multiplication or scale down by nearest/even rounding followed
+  by target bounds. Same-scale widening preserves the coefficient; narrowing
+  checks target bounds. Every branch preserves NULL and Decimal specials, and
+  frontend-Impossible precision/scale pairs remain unsupported;
 - every propagated Decimal integral-arithmetic bound covers all finite runtime
   outputs under the recorded integer type domain; NULL and Decimal specials do
   not create an additional finite result outside that bound;

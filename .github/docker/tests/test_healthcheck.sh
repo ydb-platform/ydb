@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Run: bash .github/docker/tests/test_healthcheck.sh
+# Run: IMAGE=your-built-image bash .github/docker/tests/test_healthcheck.sh
 # Only /ydb is replaced; timeout, flock, procfs and Docker restart are real.
 set -Eeuo pipefail
+: "${IMAGE:?Set IMAGE to the Docker image under test}"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 TEST_ROOT=$(mktemp -d "${RUNNER_TEMP:-/tmp}/local-ydb-healthcheck.XXXXXX")
@@ -72,7 +73,7 @@ probe() {
     local -a command=(docker exec)
     for setting in "$@"; do command+=(-e "$setting"); done
     # Bound the test even if the probe's own deadline regresses.
-    command+=("$container" timeout --signal=KILL 15s /health_check)
+    command+=("$container" timeout --signal=KILL 25s /health_check)
     if [[ "$mode" == readiness ]]; then command+=(--readiness); fi
     "${command[@]}" >"${TEST_ROOT}/probe.log" 2>&1
 }
@@ -222,11 +223,11 @@ test_deadline_cleanup() {
 test_liveness_lock() {
     probe cached
     shell ': >/tmp/fixture/calls; touch /tmp/fixture/pause_live'
-    docker exec -e YDB_LIVENESS_TIMEOUT=8s "$container" timeout --signal=KILL 15s /health_check >"${TEST_ROOT}/background.log" 2>&1 &
+    docker exec -e YDB_LIVENESS_TIMEOUT=8s "$container" timeout --signal=KILL 25s /health_check >"${TEST_ROOT}/background.log" 2>&1 &
     FOREGROUND_DOCKER_PID=$!
     wait_for_file "$container" /tmp/fixture/live_entered 5
     shell 'echo select >/tmp/fixture/fail'
-    expect_failure probe readiness
+    expect_failure probe cached
     assert_calls liveness
     shell 'touch /tmp/fixture/release_live'
     wait "$FOREGROUND_DOCKER_PID"
@@ -249,7 +250,7 @@ test_local_target() {
 test_readiness_lock() {
     probe cached
     shell 'touch /tmp/fixture/hang'
-    docker exec -e YDB_READINESS_TIMEOUT=8s "$container" timeout --signal=KILL 15s \
+    docker exec -e YDB_READINESS_TIMEOUT=8s "$container" timeout --signal=KILL 25s \
         /health_check --readiness >"${TEST_ROOT}/background.log" 2>&1 &
     FOREGROUND_DOCKER_PID=$!
     wait_for_file "$container" /tmp/fixture/entered 5
@@ -290,43 +291,100 @@ test_read_only_cache() {
     probe readiness
     # Seed the frozen volume through a writer container; the probe sees it read-only.
     shell 'cat /dev/shm/ydb_health/last_readiness_ok' |
-        docker run --rm -i --platform linux/amd64 --network none \
-            --volume "${frozen_volume}:/state" "${HEALTHCHECK_TEST_IMAGE:-ubuntu:22.04}" \
-            bash -ec 'cat >/state/last_readiness_ok'
+        docker run --rm -i --pull never --platform linux/amd64 --network none --no-healthcheck --entrypoint bash \
+            --volume "${frozen_volume}:/state" "$IMAGE" \
+            -ec 'cat >/state/last_readiness_ok'
     shell ': >/tmp/fixture/calls'
     expect_failure probe cached YDB_HEALTH_STATE_DIR=/frozen
     assert_calls ''
 }
 
-for mode in writable read-only; do
+test_readiness_waits_for_lock() {
+    shell 'mkdir -p /dev/shm/ydb_health'
+    docker exec "$container" bash -ec 'exec 9>/dev/shm/ydb_health/readiness.lock
+        flock --exclusive 9; touch /tmp/fixture/entered; sleep 2' &
+    FOREGROUND_DOCKER_PID=$!
+    wait_for_file "$container" /tmp/fixture/entered 5
+    probe readiness
+    wait "$FOREGROUND_DOCKER_PID"
+    FOREGROUND_DOCKER_PID=""
+    assert_calls $'select\nscheme\ncreate\ndrop'
+}
+
+test_runtime_requirements() {
+    shell 'mkdir /tmp/fixture/bin'
+    # Inspect the diagnostic, not just an unrelated command-not-found failure.
+    docker exec -e PATH=/tmp/fixture/bin "$container" /bin/bash /health_check >"${TEST_ROOT}/probe.log" 2>&1 && return 1
+    grep -Fq 'requires flock' "${TEST_ROOT}/probe.log"
+    docker exec "$container" /bin/sh /health_check >"${TEST_ROOT}/probe.log" 2>&1 && return 1
+    grep -Fq 'requires Bash' "${TEST_ROOT}/probe.log"
+    assert_calls ''
+}
+
+test_private_state_directory() {
+    probe cached
+    [[ $(shell 'stat -c %a /dev/shm/ydb_health') == 700 ]]
+    docker exec --user 65534 "$container" test ! -w /dev/shm/ydb_health
+}
+
+test_unsafe_state_directory() {
+    local kind
+    for kind in foreign-owner symlink group-writable; do
+        case "$kind" in
+            foreign-owner) shell 'mkdir /dev/shm/ydb_health; chown 65534 /dev/shm/ydb_health' ;;
+            symlink) shell 'mkdir /tmp/fixture/target; ln -s /tmp/fixture/target /dev/shm/ydb_health' ;;
+            group-writable) shell 'mkdir -m 0770 /dev/shm/ydb_health' ;;
+        esac
+        expect_failure probe cached
+        shell 'test ! -e /dev/shm/ydb_health/readiness.lock; rm -rf /dev/shm/ydb_health'
+        assert_calls ''
+    done
+}
+
+test_masked_procfs() {
+    probe cached
+    shell 'test ! -e /dev/shm/ydb_health/last_readiness_ok; : >/tmp/fixture/calls'
+    probe cached
+    assert_calls $'select\nscheme\ncreate\ndrop'
+    shell 'echo select >/tmp/fixture/fail'
+    expect_failure probe cached
+}
+
+passed=0
+for mode in writable read-only masked-uptime; do
     container="${NAME_PREFIX}-${mode}"
     fixture_volume="${container}-fixture"
     frozen_volume="${container}-frozen"
     create_volume "$fixture_volume"
     create_volume "$frozen_volume"
     register_container "$container"
-    command=(docker run -d --platform linux/amd64 --network none --name "$container")
+    command=(docker run -d --pull never --platform linux/amd64 --network none --no-healthcheck --entrypoint sleep --name "$container")
     if [[ "$mode" == read-only ]]; then command+=(--read-only); fi
-    # Mount only the public healthcheck, with no companion script or writable image files.
+    if [[ "$mode" == masked-uptime ]]; then
+        command+=(--mount type=bind,src=/dev/null,dst=/proc/uptime,readonly)
+    fi
+    # Exercise the packaged healthcheck, even in the tests-only CI checkout.
     "${command[@]}" \
-        --volume "${SCRIPT_DIR}/../files/health_check:/health_check:ro" \
         --volume "${TEST_ROOT}/ydb:/ydb:ro" \
         --volume "${fixture_volume}:/tmp/fixture" \
         --volume "${frozen_volume}:/frozen:ro" \
-        "${HEALTHCHECK_TEST_IMAGE:-ubuntu:22.04}" sleep infinity >/dev/null
+        "$IMAGE" infinity >/dev/null
 
     tests=(test_readiness test_rpc_errors test_ddl_disabled test_no_internal_retries
         test_cached_liveness test_expiry test_changed_settings test_corrupt_cache
         test_cache_write_failure test_zero_deadline test_total_deadline test_liveness_deadline
-        test_restart test_deadline_cleanup test_liveness_lock test_local_target test_readiness_lock)
+        test_restart test_deadline_cleanup test_liveness_lock test_local_target test_readiness_lock
+        test_readiness_waits_for_lock test_runtime_requirements test_private_state_directory test_unsafe_state_directory)
     if [[ "$mode" == read-only ]]; then
         tests+=(test_custom_state test_read_only_state test_persistent_cache_restart test_read_only_cache)
     fi
+    if [[ "$mode" == masked-* ]]; then tests=(test_masked_procfs); fi
     for test in "${tests[@]}"; do
         scenario "healthcheck ($mode): $test"
         reset_fixture
         "$test"
+        passed=$((passed + 1))
     done
     docker rm -f "$container" >/dev/null
 done
-printf '\nAll 38 healthcheck scenarios passed.\n'
+printf '\nAll %s healthcheck scenarios passed.\n' "$passed"

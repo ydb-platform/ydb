@@ -1,0 +1,33 @@
+name: Docker healthcheck
+
+on:
+  pull_request:
+    paths:
+      - '.github/docker/**'
+      - '.github/workflows/docker_healthcheck.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/docker/**'
+      - '.github/workflows/docker_healthcheck.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/docker
+      - name: Check Bash syntax
+        run: |
+          for script in health_common health_check health_readiness health_liveness initialize_local_ydb; do
+            bash -n ".github/docker/files/$script"
+          done
+      - name: Exercise readiness, failures, deadlines and restarts
+        run: python3 .github/docker/tests/test_healthcheck.py

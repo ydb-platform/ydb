@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Shared settings and readiness cache for the Linux local-ydb image.
+: "${GRPC_PORT:=2136}"
+: "${YDB_ENDPOINT:=grpc://localhost:${GRPC_PORT}}"
+: "${YDB_DATABASE:=/local}"
+: "${YDB_READINESS_ENABLE_DDL:=true}"
+: "${YDB_READINESS_INTERVAL_SECONDS:=60}"
+
+HEALTH_STATE_DIR=/tmp/ydb_health
+HEALTH_STATE_FILE=${HEALTH_STATE_DIR}/last_readiness_ok
+
+if [[ ! "$YDB_READINESS_INTERVAL_SECONDS" =~ ^[1-9][0-9]{0,8}$ ]] ||
+   [[ "$YDB_READINESS_ENABLE_DDL" != true && "$YDB_READINESS_ENABLE_DDL" != false ]]; then
+    echo 'healthcheck: invalid readiness interval or DDL setting' >&2
+    exit 1
+fi
+
+health_validate_timeout() {
+    # GNU timeout accepts zero as "no deadline"; health probes must stay bounded.
+    [[ "$1" =~ ^[0-9]+([.][0-9]+)?[smhd]?$ && "$1" =~ [1-9] ]] || {
+        echo 'healthcheck: timeout must be a positive duration' >&2
+        return 1
+    }
+}
+
+health_uptime() {
+    local uptime idle
+    read -r uptime idle </proc/uptime || return 1
+    printf '%s\n' "${uptime%%.*}"
+}
+
+health_context() {
+    local boot_id pid_stat
+    local -a fields
+    read -r boot_id </proc/sys/kernel/random/boot_id || return 1
+    IFS= read -r pid_stat </proc/1/stat || return 1
+    # comm (field 2) can contain spaces and parentheses. Fields below start at 3.
+    read -r -a fields <<<"${pid_stat##*) }"
+    printf '%s\n' "$boot_id ${fields[19]}" "$YDB_ENDPOINT" "$YDB_DATABASE" "$YDB_READINESS_ENABLE_DDL"
+}
+
+health_cache_is_fresh() {
+    local cached checked context now
+    [[ -r "$HEALTH_STATE_FILE" ]] || return 1
+    cached=$(<"$HEALTH_STATE_FILE")
+    checked=${cached%%$'\n'*}
+    context=${cached#*$'\n'}
+    [[ "$checked" =~ ^(0|[1-9][0-9]{0,9})$ ]] || return 1
+    [[ "$context" == "$(health_context)" ]] || return 1
+    now=$(health_uptime) || return 1
+    # Monotonic uptime avoids wall-clock jumps; reject future/corrupt state too.
+    (( now >= checked && now - checked < YDB_READINESS_INTERVAL_SECONDS ))
+}
+
+health_record_readiness() {
+    # The caller holds readiness.lock. Readers see either a complete record or
+    # no record; a killed writer's .new file is never treated as a success.
+    { health_uptime && health_context; } >"${HEALTH_STATE_FILE}.new" || return 1
+    mv -f "${HEALTH_STATE_FILE}.new" "$HEALTH_STATE_FILE"
+}

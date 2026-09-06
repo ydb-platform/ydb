@@ -29,8 +29,9 @@ SH
 
     create_volume "$data_volume"
     create_volume "$certificates_volume"
+    # Keep Docker healthchecks enabled: they share readiness/DDL with the
+    # entrypoint and must not race init scripts or produce stale successes.
     start_detached "$container" \
-        --no-healthcheck \
         --volume "${data_volume}:/ydb_data" \
         --volume "${certificates_volume}:/ydb_certs" \
         --volume "${init_dir}:/init.d:ro"

@@ -39,7 +39,7 @@ RUN ./ya make -r -T \
 
 FROM ubuntu:22.04
 RUN apt-get update  \
-    && apt-get install --no-install-recommends -y libidn12 libaio1 jq \
+    && apt-get install --no-install-recommends -y libidn12 libaio1 jq util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
@@ -69,6 +69,6 @@ EXPOSE ${GRPC_PORT}
 EXPOSE ${MON_PORT}
 EXPOSE ${YDB_KAFKA_PROXY_PORT}
 
-HEALTHCHECK --start-period=5s --interval=2s --timeout=3s --retries=3 CMD bash /health_check
+HEALTHCHECK --start-period=60s --interval=10s --timeout=12s --retries=3 CMD ["/health_check"]
 
 ENTRYPOINT ["bash", "/initialize_local_ydb"]

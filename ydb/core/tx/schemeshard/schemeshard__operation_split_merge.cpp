@@ -1,11 +1,16 @@
+#include "schemeshard_schema.h"
+
 #include <ydb/core/tx/datashard/datashard.h>
-#include "schemeshard_info_types.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__tenant_shred_manager.h"
+#include "schemeshard_shard_deleter.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -245,7 +250,7 @@ public:
 
         // Switch table partitioning: exclude src shard and include all dst shards
         TPathId tableId = txState->TargetPathId;
-        TTableInfo::TPtr tableInfo = *context.SS->Tables.FindPtr(tableId);
+        TIntrusivePtr<TTableInfo> tableInfo = *context.SS->Tables.FindPtr(tableId);
         Y_ABORT_UNLESS(tableInfo);
 
         // Replace all Src datashard(s) with Dst datashard(s)
@@ -562,7 +567,7 @@ public:
             TTxId txId,
             const TPathId& pathId,
             const TVector<ui64>& srcPartitionIdxs,
-            const TTableInfo::TCPtr tableInfo,
+            const TIntrusiveConstPtr<TTableInfo> tableInfo,
             TTxState& op,
             const TChannelsBindings& channels,
             TString& errStr,
@@ -650,7 +655,7 @@ public:
             TTxId txId,
             const TPathId& pathId,
             ui64 srcPartitionIdx,
-            const TTableInfo::TCPtr tableInfo,
+            const TIntrusiveConstPtr<TTableInfo> tableInfo,
             TTxState& op,
             const TChannelsBindings& channels,
             TString& errStr,
@@ -748,7 +753,7 @@ public:
             TTxId txId,
             const TPathId& pathId,
             const TVector<ui64>& srcPartitionIdxs,
-            const TTableInfo::TCPtr tableInfo,
+            const TIntrusiveConstPtr<TTableInfo> tableInfo,
             TTxState& op,
             const TChannelsBindings& channels,
             TString& errStr,
@@ -895,7 +900,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
-        TTableInfo::TCPtr tableInfo = context.SS->Tables.at(path.Base()->PathId);
+        TIntrusiveConstPtr<TTableInfo> tableInfo = context.SS->Tables.at(path.Base()->PathId);
         Y_ABORT_UNLESS(tableInfo);
 
         if (tableInfo->IsBackup) {
@@ -1087,7 +1092,7 @@ public:
             context.DbChanges.PersistShard(shard.Idx);
         }
 
-        TTableInfo::TPtr mutableTableInfo = context.SS->Tables.at(path->PathId);
+        TIntrusivePtr<TTableInfo> mutableTableInfo = context.SS->Tables.at(path->PathId);
 
         mutableTableInfo->RegisterSplitMergeOp(OperationId, op);
         context.SS->CreateTx(OperationId, TTxState::TxSplitTablePartition, path->PathId) = op;
@@ -1140,7 +1145,7 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
+        TIntrusivePtr<TTableInfo> tableInfo = context.SS->Tables.at(pathId);
         Y_ABORT_UNLESS(tableInfo);
 
         // Undo the in-memory changes made by Propose() using inverse operations.

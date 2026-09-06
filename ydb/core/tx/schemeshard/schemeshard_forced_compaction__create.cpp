@@ -1,3 +1,6 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 #include "schemeshard_forced_compaction.h"
 #include "olap/table/table.h"
 #include "schemeshard_impl.h"

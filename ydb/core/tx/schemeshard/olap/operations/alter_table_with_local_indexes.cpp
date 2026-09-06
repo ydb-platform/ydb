@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
@@ -300,4 +301,3 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
 }
 
 } // namespace NKikimr::NSchemeShard
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>

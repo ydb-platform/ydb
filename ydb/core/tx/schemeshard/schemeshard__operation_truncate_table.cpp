@@ -1,3 +1,6 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
+
 #include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_db_changes.h"
@@ -273,7 +276,7 @@ public:
         // Begin create local transaction
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(tablePath.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
 
         {
@@ -595,4 +598,3 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
 }
 
 }
-

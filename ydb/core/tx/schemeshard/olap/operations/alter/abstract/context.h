@@ -1,4 +1,8 @@
 #pragma once
+
+namespace NKikimr::NIceDb {
+class TNiceDb;
+}
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>

@@ -1,4 +1,6 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
 
+#include "schemeshard_forced_compaction.h"
 #include "schemeshard_impl.h"
 
 #define LOG_T(stream) LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)

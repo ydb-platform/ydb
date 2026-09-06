@@ -1,4 +1,6 @@
-#include "schemeshard_info_types.h"
+#include "schemeshard_schema.h"
+
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
 #include "schemeshard_impl.h"
 
 namespace NKikimr {

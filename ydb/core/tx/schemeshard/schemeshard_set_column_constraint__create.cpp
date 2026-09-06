@@ -1,4 +1,5 @@
-#include "schemeshard_info_types.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>

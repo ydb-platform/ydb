@@ -1,7 +1,10 @@
 #pragma once
 
+namespace NKikimr::NIceDb {
+class TNiceDb;
+}
+
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
 
 #include "schemeshard_private.h"
 
@@ -11,9 +14,16 @@ namespace NKikimr::TEvHive {
     struct TEvAdoptTablet;
 }
 
+namespace NKikimrTxDataShard {
+class TFlatSchemeTransaction;
+}
+
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
+struct TShardInfo;
+struct TTableInfo;
+struct TTableShardInfo;
 
 template<typename T>
 struct TEvSchemaChangedTraits;
@@ -67,7 +77,7 @@ void AckAllSchemaChanges(const TOperationId& operationId, TTxState& txState, TOp
 bool CheckPartitioningChangedForTableModification(TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForTableModification(TOperationId txId, TTxState& txState, TOperationContext& context);
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState& txState, TSchemeShard* ss);
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TIntrusivePtr<TTableInfo> srcTableInfo, TTxState& txState, TSchemeShard* ss);
 
 bool SourceTablePartitioningChangedForCopyTable(const TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState& txState, TOperationContext& context);
@@ -330,7 +340,7 @@ namespace NKikimr::NSchemeShard::NTableIndexVersion {
 // Returns: vector of index PathIds that were published
 TVector<TPathId> SyncChildIndexVersions(
     TPathElement::TPtr path,
-    TTableInfo::TPtr table,
+    TIntrusivePtr<TTableInfo> table,
     ui64 targetVersion,
     TOperationId operationId,
     TOperationContext& context,

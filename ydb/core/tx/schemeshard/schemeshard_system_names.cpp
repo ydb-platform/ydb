@@ -148,4 +148,3 @@ const TVector<TString>& GetReservedNamesExceptions() {
 }
 
 }  // namespace NSchemeShardUT_Private
-

@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr {
 

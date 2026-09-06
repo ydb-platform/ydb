@@ -3,6 +3,8 @@
 #include "schemeshard_path.h"
 
 #include <ydb/core/base/auth.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 
 namespace {
 
@@ -13,6 +15,7 @@ bool CheckSidExistsOrIsNonYdb(const TSchemeShard& ss, const TString& sid) {
     // non-YDB user's sid format is <login>@<subsystem>
     return sid.Contains('@') || NOperationHelpers::SidExists(ss, sid);
 }
+
 
 class TModifyACL: public TSubOperationBase {
 public:
@@ -99,7 +102,7 @@ public:
         }
 
         THashSet<TPathId> affectedPaths;
-        NIceDb::TNiceDb db(context.GetDB());
+        auto& db = context.GetDB();
 
         if (acl) {
             ++path.Base()->ACLVersion;

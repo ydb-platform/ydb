@@ -1,3 +1,5 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard_impl.h"
 #include "schemeshard__conditional_erase.h"
@@ -15,7 +17,7 @@ using namespace NTabletFlatExecutor;
 
 namespace {
 
-    std::tuple<TTableInfo::TPtr, TPathId, TShardIdx> ResolveInfo(const TSchemeShard* self, TTabletId tabletId) {
+    std::tuple<TIntrusivePtr<TTableInfo>, TPathId, TShardIdx> ResolveInfo(const TSchemeShard* self, TTabletId tabletId) {
         const auto shardIdx = self->GetShardIdx(tabletId);
         if (!self->ShardInfos.contains(shardIdx)) {
             return std::make_tuple(nullptr, InvalidPathId, InvalidShardIdx);
@@ -37,7 +39,7 @@ namespace {
 } // anonymous
 
 struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
-    TTableInfo::TPtr TableInfo;
+    TIntrusivePtr<TTableInfo> TableInfo;
     TPathId TablePathId;
     THashMap<TTabletId, NKikimrTxDataShard::TEvConditionalEraseRowsRequest> RunOnTablets;
 
@@ -48,7 +50,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
         Y_UNUSED(ev);
     }
 
-    TTxRunConditionalErase(TSelf *self, TTableInfo::TPtr tableInfo, TPathId tablePathId)
+    TTxRunConditionalErase(TSelf *self, TIntrusivePtr<TTableInfo> tableInfo, TPathId tablePathId)
         : TRwTxBase(self)
         , TableInfo(tableInfo)
         , TablePathId(tablePathId)
@@ -79,7 +81,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
         }
     }
 
-    void DoExecuteOnTable(TTableInfo::TPtr tableInfo, const TPathId tablePathId, const TActorContext& ctx) {
+    void DoExecuteOnTable(TIntrusivePtr<TTableInfo> tableInfo, const TPathId tablePathId, const TActorContext& ctx) {
         if (!tableInfo->IsTTLEnabled()) {
             LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTL is not enabled for table #P1"
                 << ", at schemeshard: " << Self->TabletID());
@@ -152,7 +154,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
     }
 
     bool DoExecuteOnShard(
-        TTableInfo::TPtr tableInfo,
+        TIntrusivePtr<TTableInfo> tableInfo,
         const TTableShardInfo& tableShardInfo,
         const NKikimrSchemeOp::TTTLSettings::TEnabled& settings,
         const TDuration expireAfter,
@@ -301,7 +303,7 @@ private:
         return Self->Indexes.at(indexPath->PathId);
     }
 
-    std::pair<TPathId, TTableInfo::TPtr> GetIndexImplTable(TPathElement::TPtr indexPath) const {
+    std::pair<TPathId, TIntrusivePtr<TTableInfo>> GetIndexImplTable(TPathElement::TPtr indexPath) const {
         Y_ABORT_UNLESS(indexPath->GetChildren().size() == 1);
 
         for (const auto& [_, indexImplPathId] : indexPath->GetChildren()) {
@@ -316,7 +318,7 @@ private:
         Y_ABORT("Unreachable");
     }
 
-    static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {
+    static TVector<std::pair<ui32, ui32>> MakeColumnIds(TIntrusivePtr<TTableInfo> mainTable, TTableIndexInfo::TPtr index, TIntrusivePtr<TTableInfo> indexImplTable) {
         Y_ABORT_UNLESS(DoesIndexSupportTTL(index->Type));
         TVector<std::pair<ui32, ui32>> result;
         THashSet<TString> keys;
@@ -348,7 +350,7 @@ private:
         return result;
     }
 
-    static THashMap<TString, ui32> MakeColumnNameToId(const TMap<ui32, TTableInfo::TColumn>& columns) {
+    static THashMap<TString, ui32> MakeColumnNameToId(const TMap<ui32, TTableColumn>& columns) {
         THashMap<TString, ui32> result;
 
         for (const auto& [id, column] : columns) {
@@ -388,7 +390,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
     TDuration ProcessCondEraseResponse(
         const TActorContext& ctx,
         TPathId tablePathId,
-        TTableInfo::TPtr tableInfo,
+        TIntrusivePtr<TTableInfo> tableInfo,
         TShardIdx shardIdx,
         const NKikimrTxDataShard::TEvConditionalEraseRowsResponse& record,
         TInstant now

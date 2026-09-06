@@ -1,3 +1,5 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
 #include "schemeshard_cdc_stream_common.h"
 
 #include <ydb/core/protos/tx_datashard.pb.h>

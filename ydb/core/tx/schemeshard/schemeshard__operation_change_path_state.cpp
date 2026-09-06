@@ -4,6 +4,7 @@
 
 #include "schemeshard__operation_base.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 #include "schemeshard__operation_states.h"
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)

@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "layout.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/library/actors/core/log.h>

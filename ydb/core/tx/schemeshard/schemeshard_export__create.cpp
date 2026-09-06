@@ -1,3 +1,7 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_export.h>
+#include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 #include "schemeshard_audit_log.h"
 #include "olap/table/table.h"
 #include "schemeshard_export.h"
@@ -899,7 +903,7 @@ private:
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }
 
-        TTableInfo::TPtr table = Self->Tables.at(itemPathId);
+        TIntrusivePtr<TTableInfo> table = Self->Tables.at(itemPathId);
         return GetIssues(table, itemPathId, backupTxId);
     }
 

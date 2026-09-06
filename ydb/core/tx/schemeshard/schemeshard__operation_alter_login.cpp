@@ -1,8 +1,13 @@
-#include "schemeshard_info_types.h"
+#include "schemeshard_schema.h"
+
+#include <ydb/core/protos/config.pb.h>
+
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/login/login.h>
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/local_user_token.h>

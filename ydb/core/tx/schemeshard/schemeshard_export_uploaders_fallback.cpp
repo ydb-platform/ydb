@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "schemeshard_export_uploaders.h"
 
 #include <ydb/core/backup/common/encryption.h>

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
 

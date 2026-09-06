@@ -1,3 +1,6 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_transfer.h>
+
+#include <ydb/core/base/feature_flags.h>
 #include "schemeshard_import_getters.h"
 
 #include <ydb/core/base/path.h>

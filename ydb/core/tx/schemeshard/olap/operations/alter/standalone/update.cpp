@@ -1,6 +1,7 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 

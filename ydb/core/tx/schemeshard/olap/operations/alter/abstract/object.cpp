@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 
 #include "object.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -16,4 +17,3 @@ std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntity> ISSEntity::GetE
 }
 
 }
-#include <ydb/core/tx/schemeshard/olap/table/table.h>

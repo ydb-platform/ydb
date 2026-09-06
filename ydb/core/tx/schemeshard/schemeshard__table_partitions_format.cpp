@@ -1,3 +1,6 @@
+#include "schemeshard_schema.h"
+
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {

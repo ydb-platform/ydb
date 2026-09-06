@@ -3,7 +3,8 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_objects.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
 #include "schemeshard__operation.h"
 
 #include "schemeshard__dispatch_op.h"

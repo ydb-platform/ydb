@@ -1,3 +1,6 @@
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_db_changes.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_memory_changes.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
@@ -57,7 +60,7 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
 
         TPathId pathId = txState->TargetPathId;
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(pathId);
 
         txState->ClearShardsInProgress();
 
@@ -142,7 +145,7 @@ public:
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
-        const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
+        const TIntrusivePtr<TTableInfo> tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
         tableInfo->MutablePartitionConfig().ClearShadowData();
         tableInfo->MutablePartitionConfig().MutableCompactionPolicy()->SetKeepEraseMarkers(false);
@@ -342,7 +345,7 @@ public:
 
         {
             Y_ABORT_UNLESS(context.SS->Tables.contains(tablePathId));
-            TTableInfo::TPtr tableInfo = context.SS->Tables.at(tablePathId);
+            TIntrusivePtr<TTableInfo> tableInfo = context.SS->Tables.at(tablePathId);
             const NKikimrSchemeOp::TPartitionConfig &srcPartitionConfig = tableInfo->PartitionConfig();
             if (!srcPartitionConfig.GetShadowData()) {
                 errStr = TStringBuilder()
@@ -372,7 +375,7 @@ public:
 
         context.SS->PersistTxState(db, OperationId);
 
-        TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(tablePathId);
         Y_ABORT_UNLESS(table->GetSplitOpsInFlight().empty());
 
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);

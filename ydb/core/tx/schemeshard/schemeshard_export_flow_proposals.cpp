@@ -1,3 +1,6 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_export.h>
 #include "schemeshard_export_flow_proposals.h"
 
 #include "schemeshard_path_describer.h"

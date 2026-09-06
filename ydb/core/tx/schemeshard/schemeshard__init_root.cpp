@@ -1,5 +1,12 @@
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_schema.h"
+
+#include <ydb/core/protos/config.pb.h>
+
+#include "schemeshard_info_types_objects.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/login/login.h>
 #include "schemeshard_path_describer.h"
 
 #include <ydb/core/tablet/tablet_exception.h>

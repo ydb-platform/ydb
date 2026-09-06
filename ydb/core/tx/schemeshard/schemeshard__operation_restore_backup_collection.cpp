@@ -1,3 +1,5 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
 #include "schemeshard__operation_restore_backup_collection.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
@@ -8,6 +10,7 @@
 #include "schemeshard__operation_base.h"
 #include "schemeshard__operation_change_path_state.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 #include "schemeshard__operation_states.h"
 
 #include <ydb/core/base/test_failure_injection.h>

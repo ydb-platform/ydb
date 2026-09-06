@@ -1,3 +1,5 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 #include "schemeshard_impl.h"
 #include "olap/table/table.h"
 
@@ -66,4 +68,3 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUnmarkRestoreTables(TVe
 }
 
 } // NKikimr::NSchemeShard
-

@@ -1,4 +1,9 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include <ydb/core/tx/schemeshard/schemeshard_schema.h>
+#include <ydb/core/tx/schemeshard/dedicated_pipe_pool.h>
+
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
@@ -350,7 +355,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
 // flag: the base table's setting may have been persisted while the flag was on, and an
 // unguarded copy would make the impl table's TCreateTable reject the whole build.
 static void InheritDetailedMetricsSettings(
-    const TTableInfo::TPtr& tableInfo, NKikimrSchemeOp::TTableDescription& implTableDesc)
+    const TIntrusivePtr<TTableInfo>& tableInfo, NKikimrSchemeOp::TTableDescription& implTableDesc)
 {
     if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && tableInfo->HasDetailedMetricsSettings()) {
         *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
@@ -1352,7 +1357,7 @@ private:
         auto& indexShardStatus = buildInfo.Shards.at(shardIdx);
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        TIntrusivePtr<TTableInfo> table = Self->Tables.at(path->PathId);
 
         record.SetOwnerId(path->PathId.OwnerId);
         record.SetPathId(path->PathId.LocalPathId);
@@ -2701,7 +2706,7 @@ private:
         LOG_N("TTxBuildProgress: Performing cross shard unique index validation: " << BuildId << " " << buildInfo.State);
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        TIntrusivePtr<TTableInfo> table = Self->Tables.at(path->PathId);
 
         // Make index columns type info
         std::vector<NScheme::TTypeInfoOrder> indexColumnTypeInfos;
@@ -3321,7 +3326,7 @@ public:
         Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
         LOG_D("InitiateShards table: " << path.PathString());
 
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        TIntrusivePtr<TTableInfo> table = Self->Tables.at(path->PathId);
 
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         static constexpr std::string_view LogPrefix = "";

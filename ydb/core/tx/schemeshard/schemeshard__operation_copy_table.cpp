@@ -1,5 +1,7 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_objects_storage.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
@@ -8,6 +10,7 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_tx_infly.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -18,7 +21,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& name, const TTableInfo::TPtr srcTableInfo, TOperationContext &context) {
+void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& name, const TIntrusivePtr<TTableInfo> srcTableInfo, TOperationContext &context) {
     const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
 
     NKikimrSchemeOp::TTableDescription completedSchema;
@@ -80,8 +83,8 @@ public:
 
         Y_ABORT_UNLESS(txState->SourcePathId != InvalidPathId);
         Y_ABORT_UNLESS(txState->TargetPathId != InvalidPathId);
-        const TTableInfo::TPtr srcTableInfo = *context.SS->Tables.FindPtr(txState->SourcePathId);
-        const TTableInfo::TPtr dstTableInfo = *context.SS->Tables.FindPtr(txState->TargetPathId);
+        const TIntrusivePtr<TTableInfo> srcTableInfo = *context.SS->Tables.FindPtr(txState->SourcePathId);
+        const TIntrusivePtr<TTableInfo> dstTableInfo = *context.SS->Tables.FindPtr(txState->TargetPathId);
 
         Y_ABORT_UNLESS(srcTableInfo->GetPartitions().size() == dstTableInfo->GetPartitions().size(),
                  "CopyTable partition counts don't match");
@@ -232,7 +235,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TTableInfo::TPtr table = context.SS->Tables[pathId];
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables[pathId];
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
@@ -682,7 +685,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
-        TTableInfo::TPtr srcTableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
+        TIntrusivePtr<TTableInfo> srcTableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
 
         {
             const NKikimrSchemeOp::TPartitionConfig &srcPartitionConfig = srcTableInfo->PartitionConfig();
@@ -766,14 +769,14 @@ public:
             .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
             .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
         };
-        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
+        TIntrusivePtr<TTableAlterInfo> alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }
 
-        TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
+        TIntrusivePtr<TTableInfo> tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
 
         // Preserve table partitions storage format from source table.

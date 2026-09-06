@@ -19,7 +19,7 @@
 //     across all event boundaries (mirrors ut_incr_backup_reboots pattern).
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>

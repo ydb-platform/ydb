@@ -1,3 +1,6 @@
+#include "schemeshard_schema.h"
+
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
 #include <ydb/core/persqueue/events/global.h>
 #include "schemeshard_backup.h"
 

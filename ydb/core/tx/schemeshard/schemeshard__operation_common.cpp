@@ -1,5 +1,11 @@
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects.h"
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
 #include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
+#include "schemeshard__tenant_shred_manager.h"
+#include <ydb/library/login/login.h>
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_helpers.h"
@@ -7,6 +13,7 @@
 #include "schemeshard__tenant_shred_manager.h"
 
 #include "olap/store/store.h"
+#include "olap/table/table.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/blob_depot/events.h>
@@ -105,15 +112,18 @@ TPathElement::TPtr FindPathElement(const TSchemeShard& ss, TPathId pathId) {
     return it != ss.PathsById.end() ? it->second : nullptr;
 }
 
-void PersistACL(TSchemeShard& ss, NIceDb::TNiceDb& db, const TPathElement::TPtr& path) {
+void PersistACL(TSchemeShard& ss, NTable::TDatabase& database, const TPathElement::TPtr& path) {
+    NIceDb::TNiceDb db(database);
     ss.PersistACL(db, path);
 }
 
-void PersistOwner(TSchemeShard& ss, NIceDb::TNiceDb& db, const TPathElement::TPtr& path) {
+void PersistOwner(TSchemeShard& ss, NTable::TDatabase& database, const TPathElement::TPtr& path) {
+    NIceDb::TNiceDb db(database);
     ss.PersistOwner(db, path);
 }
 
-void PersistPathDirAlterVersion(TSchemeShard& ss, NIceDb::TNiceDb& db, const TPathElement::TPtr& path) {
+void PersistPathDirAlterVersion(TSchemeShard& ss, NTable::TDatabase& database, const TPathElement::TPtr& path) {
+    NIceDb::TNiceDb db(database);
     ss.PersistPathDirAlterVersion(db, path);
 }
 
@@ -845,7 +855,7 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
 
 bool CheckPartitioningChangedForTableModificationImpl(TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-    TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
+    TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(txState.TargetPathId);
 
     THashSet<TShardIdx> shardIdxsLeft;
     for (const auto* shard : table->GetPartitions()) {
@@ -909,7 +919,7 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     Y_ABORT_UNLESS(txState.ShardsInProgress.empty());
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-    TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
+    TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(txState.TargetPathId);
     TTxState::ETxState commonShardOp = TTxState::CreateParts;
 
     if (txState.TxType == TTxState::TxAlterTable) {
@@ -1018,7 +1028,7 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
 bool SourceTablePartitioningChangedForCopyTable(const TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(txState.SourcePathId != InvalidPathId);
     Y_ABORT_UNLESS(txState.TargetPathId != InvalidPathId);
-    const TTableInfo::TPtr srcTableInfo = *context.SS->Tables.FindPtr(txState.SourcePathId);
+    const TIntrusivePtr<TTableInfo> srcTableInfo = *context.SS->Tables.FindPtr(txState.SourcePathId);
 
     THashSet<TShardIdx> srcShardIdxsLeft;
     for (const auto* p : srcTableInfo->GetPartitions()) {
@@ -1149,7 +1159,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     txState.TxShardsListFinalized = true;
 }
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TIntrusivePtr<TTableInfo> srcTableInfo, TTxState &txState, TSchemeShard *ss) {
     // Build a mutable copy of src partitions for the dst table.
     TVector<TTableShardInfo> dstPartitions;
     {
@@ -1536,7 +1546,7 @@ namespace NKikimr::NSchemeShard::NTableIndexVersion {
 
 TVector<TPathId> SyncChildIndexVersions(
     TPathElement::TPtr path,
-    TTableInfo::TPtr table,
+    TIntrusivePtr<TTableInfo> table,
     ui64 targetVersion,
     TOperationId operationId,
     TOperationContext& context,

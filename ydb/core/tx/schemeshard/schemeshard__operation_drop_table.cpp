@@ -1,5 +1,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
-#include "schemeshard_info_types.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
@@ -587,7 +588,7 @@ public:
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(path.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
         for (const auto* shard : table->GetPartitions()) {
             auto shardIdx = shard->ShardIdx;

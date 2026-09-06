@@ -1,35 +1,16 @@
 #pragma once
 
-#include <ydb/core/tx/schemeshard/defs.h>
+#include "build_index_fwd.h"
 
 #include <ydb/core/protos/index_builder.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TEvIndexBuilder {
-    enum EEv {
-        EvCreateRequest = EventSpaceBegin(TKikimrEvents::ES_INDEX_BUILD),
-        EvCreateResponse,
-        EvGetRequest,
-        EvGetResponse,
-        EvCancelRequest,
-        EvCancelResponse,
-        EvForgetRequest,
-        EvForgetResponse,
-        EvListRequest,
-        EvListResponse,
-        EvUploadSampleKResponse,
+#define DEFINE_INDEX_BUILDER_EVENT(event, id) \
+    struct TEvIndexBuilder::event: public TEventPB<event, NKikimrIndexBuilder::event, TEvIndexBuilder::id>
 
-        EvEnd
-    };
-
-    static_assert(
-        EvEnd < EventSpaceEnd(TKikimrEvents::ES_INDEX_BUILD),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_INDEX_BUILD)"
-        );
-
-    struct TEvCreateRequest: public TEventPB<TEvCreateRequest, NKikimrIndexBuilder::TEvCreateRequest, EvCreateRequest> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvCreateRequest, EvCreateRequest) {
         TEvCreateRequest() = default;
 
         explicit TEvCreateRequest(
@@ -43,7 +24,7 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvCreateResponse: public TEventPB<TEvCreateResponse, NKikimrIndexBuilder::TEvCreateResponse, EvCreateResponse> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvCreateResponse, EvCreateResponse) {
         TEvCreateResponse() = default;
 
         explicit TEvCreateResponse(const ui64 txId) {
@@ -51,7 +32,7 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvGetRequest: public TEventPB<TEvGetRequest, NKikimrIndexBuilder::TEvGetRequest, EvGetRequest> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvGetRequest, EvGetRequest) {
 
         TEvGetRequest() = default;
 
@@ -61,10 +42,10 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrIndexBuilder::TEvGetResponse, EvGetResponse> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvGetResponse, EvGetResponse) {
     };
 
-    struct TEvCancelRequest: public TEventPB<TEvCancelRequest, NKikimrIndexBuilder::TEvCancelRequest, EvCancelRequest> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvCancelRequest, EvCancelRequest) {
         TEvCancelRequest() = default;
 
         explicit TEvCancelRequest(
@@ -78,7 +59,7 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvCancelResponse: public TEventPB<TEvCancelResponse, NKikimrIndexBuilder::TEvCancelResponse, EvCancelResponse> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvCancelResponse, EvCancelResponse) {
         TEvCancelResponse() = default;
 
         explicit TEvCancelResponse(const ui64 txId) {
@@ -86,7 +67,7 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvForgetRequest: public TEventPB<TEvForgetRequest, NKikimrIndexBuilder::TEvForgetRequest, EvForgetRequest> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvForgetRequest, EvForgetRequest) {
         TEvForgetRequest() = default;
 
         explicit TEvForgetRequest(
@@ -100,7 +81,7 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvForgetResponse: public TEventPB<TEvForgetResponse, NKikimrIndexBuilder::TEvForgetResponse, EvForgetResponse> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvForgetResponse, EvForgetResponse) {
         TEvForgetResponse() = default;
 
         explicit TEvForgetResponse(const ui64 txId) {
@@ -108,7 +89,7 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvListRequest: public TEventPB<TEvListRequest, NKikimrIndexBuilder::TEvListRequest, EvListRequest> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvListRequest, EvListRequest) {
         TEvListRequest() = default;
 
         explicit TEvListRequest(const TString& dbName, ui64 pageSize, TString pageToken) {
@@ -118,13 +99,13 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrIndexBuilder::TEvListResponse, EvListResponse> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvListResponse, EvListResponse) {
     };
 
-    struct TEvUploadSampleKResponse: public TEventPB<TEvUploadSampleKResponse, NKikimrIndexBuilder::TEvUploadSampleKResponse, EvUploadSampleKResponse> {
+    DEFINE_INDEX_BUILDER_EVENT(TEvUploadSampleKResponse, EvUploadSampleKResponse) {
     };
 
-}; // TEvIndexBuilder
+#undef DEFINE_INDEX_BUILDER_EVENT
 
 } // NSchemeShard
 } // NKikimr

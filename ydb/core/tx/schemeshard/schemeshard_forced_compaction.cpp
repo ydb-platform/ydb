@@ -1,7 +1,12 @@
+#include "schemeshard_schema.h"
+
 #include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard_forced_compaction.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_topic.h>
 
 #include "schemeshard_impl.h"
+#include "schemeshard_impl_queues.h"
 
 namespace NKikimr::NSchemeShard {
 

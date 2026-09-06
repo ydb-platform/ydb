@@ -1,5 +1,7 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard_impl.h"
+#include "schemeshard_impl_queues.h"
 
 namespace NKikimr::NSchemeShard {
 

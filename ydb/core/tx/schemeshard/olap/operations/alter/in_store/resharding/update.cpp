@@ -1,4 +1,5 @@
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 
 #include "update.h"
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/task.h>
@@ -64,4 +65,3 @@ TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializati
 }
 
 }
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>

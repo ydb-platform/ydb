@@ -1,6 +1,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+
+#include <ydb/library/actors/core/log.h>
 
 namespace {
 
@@ -38,7 +39,7 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         Y_ABORT_UNLESS(Response);
 
-        const auto ssId = context.SS->SelfTabletId();
+        const auto ssId = context.SchemeShardTabletId();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TReject Propose"

@@ -1,7 +1,12 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_transfer.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 #include "schemeshard_audit_log.h"
 #include "olap/table/table.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_import.h"
+#include "index/build_index.h"
+#include "schemeshard_private_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
@@ -1127,7 +1132,7 @@ private:
             return GetIssues(table, restoreTxId);
         } else {
             Y_ABORT_UNLESS(Self->Tables.contains(item.DstPathId));
-            TTableInfo::TPtr table = Self->Tables.at(item.DstPathId);
+            TIntrusivePtr<TTableInfo> table = Self->Tables.at(item.DstPathId);
             return GetIssues(table, restoreTxId);
         }
     }

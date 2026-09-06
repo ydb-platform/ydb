@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_transfer.h>
 #include "schemeshard_impl.h"
 #include "schemeshard_import.h"
 #include "schemeshard_import_helpers.h"

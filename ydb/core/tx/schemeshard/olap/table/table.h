@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
@@ -41,9 +41,9 @@ public:
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
     NKikimrSchemeOp::TBackupTask BackupSettings;
-    TMap<TTxId, TTableInfo::TBackupRestoreResult> BackupHistory;
+    TMap<TTxId, TTableBackupRestoreResult> BackupHistory;
     NKikimrSchemeOp::TRestoreTask RestoreSettings;
-    TMap<TTxId, TTableInfo::TBackupRestoreResult> RestoreHistory;
+    TMap<TTxId, TTableBackupRestoreResult> RestoreHistory;
 
     TAggregatedStats Stats;
 

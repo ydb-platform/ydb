@@ -1,4 +1,6 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_schema.h>
 #include <ydb/core/tx/schemeshard/schemeshard_generated_column_utils.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
@@ -98,7 +100,7 @@ bool IsVirtualGeneratedIndexColumn(const NKikimrSchemeOp::TTableDescription& tab
     return false;
 }
 
-bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableInfo, const TString& columnName) {
+bool IsVirtualGeneratedIndexColumn(const TIntrusivePtr<NSchemeShard::TTableInfo>& tableInfo, const TString& columnName) {
     for (const auto& [_, column] : tableInfo->Columns) {
         if (column.IsDropped()) {
             continue;
@@ -110,7 +112,7 @@ bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableIn
     return false;
 }
 
-TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
+TTableColumns ExtractInfo(const TIntrusivePtr<NSchemeShard::TTableInfo> &tableInfo) {
     TTableColumns result;
     for (auto& item: tableInfo->Columns) {
         const auto& column = item.second;
@@ -252,7 +254,7 @@ void FillIndexImplTableColumns(
     for (ui32 i = Max<ui32>() / 2; auto& columnIt: baseTableColumns) {
         NKikimrSchemeOp::TColumnDescription* column = nullptr;
         using TColumn = std::decay_t<decltype(columnIt)>;
-        if constexpr (std::is_same_v<TColumn, std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>>) {
+        if constexpr (std::is_same_v<TColumn, std::pair<const ui32, NSchemeShard::TTableColumn>>) {
             const auto& columnInfo = columnIt.second;
             if (!columnInfo.IsDropped() && columns.contains(columnInfo.Name)) {
                 column = implTableDesc.AddColumns();
@@ -295,15 +297,15 @@ void FillIndexImplTableColumns(
     }
 }
 
-bool GetIsRestore(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+bool GetIsRestore(const TIntrusivePtr<NSchemeShard::TTableInfo>& tableInfo) {
     return tableInfo->IsRestore;
 }
 
-const auto& GetPartitionConfig(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+const auto& GetPartitionConfig(const TIntrusivePtr<NSchemeShard::TTableInfo>& tableInfo) {
     return tableInfo->PartitionConfig();
 }
 
-const auto& GetColumns(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+const auto& GetColumns(const TIntrusivePtr<NSchemeShard::TTableInfo>& tableInfo) {
     return tableInfo->Columns;
 }
 
@@ -803,7 +805,7 @@ auto CalcFulltextStatsImplTableDescImpl(
 }
 
 void FillIndexTableColumns(
-    const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
+    const TMap<ui32, NSchemeShard::TTableColumn>& baseTableColumns,
     std::span<const TString> keys,
     const THashSet<TString>& columns,
     NKikimrSchemeOp::TTableDescription& implTableDesc) {
@@ -811,7 +813,7 @@ void FillIndexTableColumns(
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     ui32 uniqueKeySize)
@@ -869,7 +871,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -891,7 +893,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
     const THashSet<TString>& indexKeyColumns,
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
@@ -910,7 +912,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeBuildOverlapTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -920,7 +922,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeBuildOverlapTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -944,7 +946,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
@@ -968,7 +970,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const TVector<TString>& indexColumns,
@@ -990,7 +992,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -1010,7 +1012,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
@@ -1028,7 +1030,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const TVector<TString>& prefixColumns)
@@ -1064,7 +1066,7 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
     return true;
 }
 
-bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain) {
+bool ExtractTypes(const TIntrusivePtr<NSchemeShard::TTableInfo>& baseTableInfo, TColumnTypes& columnsTypes, TString& explain) {
     Y_UNUSED(explain);
 
     for (const auto& [_, column] : baseTableInfo->Columns) {
@@ -1112,7 +1114,7 @@ bool CheckSingleIntegerPrimaryKey(
 }
 
 TFulltextRowIdClassification ClassifyFulltextRowId(
-    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& tableInfo,
     const TMap<TString, TPathId>& tableChildren,
     const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
     const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
@@ -1162,7 +1164,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
     }
 
     // Look for a live __ydb_row_id column on the main table.
-    const NSchemeShard::TTableInfo::TColumn* rowIdColumn = nullptr;
+    const NSchemeShard::TTableColumn* rowIdColumn = nullptr;
     for (const auto& [_, column] : tableInfo->Columns) {
         if (column.IsDropped()) {
             continue;
@@ -1387,7 +1389,7 @@ TFulltextRowIdClassification ClassifyFulltextRowIdForCreate(
 }
 
 bool MaybeEnableFulltextRowIdMode(
-    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const TIntrusivePtr<NSchemeShard::TTableInfo>& tableInfo,
     const TMap<TString, TPathId>& tableChildren,
     const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
     NKikimrSchemeOp::TIndexCreationConfig& indexDesc,

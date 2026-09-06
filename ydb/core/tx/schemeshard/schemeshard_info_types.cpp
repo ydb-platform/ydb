@@ -1,4 +1,7 @@
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects.h"
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include "schemeshard_info_types_subdomain.h"
 
 #include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
@@ -18,6 +21,7 @@
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/util/pb.h>
@@ -76,7 +80,6 @@ EUserFacingStorageType GetUserFacingStorageType(const TString& poolKind) {
 
 namespace NKikimr {
 namespace NSchemeShard {
-
 void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSettings& diff) {
     if (diff.Defined()) {
         const auto& input = diff.GetRef();
@@ -433,7 +436,7 @@ ui32 TTableInfo::GetColumnIdByNameSlow(const TString& columnName) const {
     return InvalidColumnId;
 }
 
-TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
+TIntrusivePtr<TTableAlterInfo> TTableInfo::CreateAlterData(
     TPtr source,
     NKikimrSchemeOp::TTableDescription& op,
     const NScheme::TTypeRegistry& typeRegistry,
@@ -443,7 +446,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     TString& errStr,
     const THashSet<TString>& localSequences)
 {
-    TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
+    TAlterDataPtr alterData = new TTableAlterInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
 
     alterData->PartitionConfigFull().CopyFrom(op.GetPartitionConfig());
@@ -557,7 +560,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             ui32 colId = colName2Id[colName];
-            const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
+            const TTableColumn& sourceColumn = source->Columns[colId];
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
                 if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily) {
@@ -645,7 +648,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 }
             }
 
-            TTableInfo::TColumn& column = alterData->Columns[colId];
+            TTableColumn& column = alterData->Columns[colId];
             column = sourceColumn;
 
             if (isChangeNotNullConstraint) {
@@ -753,8 +756,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             alterData->NextColumnId = Max(colId + 1, alterData->NextColumnId);
 
             colName2Id[colName] = colId;
-            TTableInfo::TColumn& column = alterData->Columns[colId];
-            column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
+            TTableColumn& column = alterData->Columns[colId];
+            column = TTableColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
             column.IsBuildInProgress = col.GetIsBuildInProgress();
             column.SetNotNullInProgress = col.GetSetNotNullInProgress();
@@ -1063,7 +1066,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         ui32 colId = colName2Id[keyName];
-        TTableInfo::TColumn& column = alterData->Columns[colId];
+        TTableColumn& column = alterData->Columns[colId];
         if (column.KeyOrder != (ui32)-1) {
             errStr = Sprintf("Column '%s' specified more than once in key column list", keyName.data());
             return nullptr;
@@ -3199,7 +3202,7 @@ const TString &TColumnFamiliesMerger::CanonizeName(const TString &familyName) {
     return familyName;
 }
 
-void TTopicTabletInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const {
+void TTopicKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const {
     if (FromBound) {
         proto.SetFromBound(*FromBound);
     }
@@ -3209,7 +3212,7 @@ void TTopicTabletInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange
     }
 }
 
-void TTopicTabletInfo::TKeyRange::DeserializeFromProto(const NKikimrPQ::TPartitionKeyRange& proto) {
+void TTopicKeyRange::DeserializeFromProto(const NKikimrPQ::TPartitionKeyRange& proto) {
     if (proto.HasFromBound()) {
         FromBound = proto.GetFromBound();
     }

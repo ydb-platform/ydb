@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include <ydb/core/tx/schemeshard/olap/store/store.h>
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
@@ -577,4 +577,3 @@ ISubOperation::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state
 }
 
 }
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>

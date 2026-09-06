@@ -3,6 +3,7 @@
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_info_types_core.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>

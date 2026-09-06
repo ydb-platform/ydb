@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include "table.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/object.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/standalone/object.h>

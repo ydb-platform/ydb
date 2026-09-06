@@ -1,4 +1,12 @@
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_schema.h"
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
+
+#include <ydb/core/protos/config.pb.h>
+
+#include "schemeshard_info_types_objects.h"
+#include "schemeshard_info_types_subdomain.h"
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_db_changes.h"
@@ -6,6 +14,10 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_forced_compaction.h"
+#include "schemeshard__root_shred_manager.h"
+#include "schemeshard__tenant_shred_manager.h"
+#include <ydb/library/login/login.h>
 
 #include "olap/manager/manager.h"
 
@@ -1929,7 +1941,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
                 Y_VERIFY_S(Self->Tables.FindPtr(pathId) == nullptr, "Table duplicated in DB, pathId: " << pathId);
 
-                TTableInfo::TPtr tableInfo = new TTableInfo();
+                TIntrusivePtr<TTableInfo> tableInfo = new TTableInfo();
                 tableInfo->NextColumnId = std::get<1>(rec);
                 tableInfo->AlterVersion = std::get<2>(rec);
 
@@ -2251,7 +2263,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable() || Self->PathsById.at(pathId)->IsExternalTable(), "Path is not a table or external table, pathId: " << pathId);
                 Y_VERIFY_S(Self->Tables.FindPtr(pathId) || Self->ExternalTables.FindPtr(pathId), "Table or external table don't exist, pathId: " << pathId);
 
-                TTableInfo::TColumn colInfo(colName, colId, typeInfo, typeMod, notNull);
+                TTableColumn colInfo(colName, colId, typeInfo, typeMod, notNull);
                 colInfo.KeyOrder = keyOrder;
                 colInfo.CreateVersion = createVersion;
                 colInfo.DeleteVersion = deleteVersion;
@@ -2263,7 +2275,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.SetNotNullInProgress = setNotNullInProgress;
 
                 if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
-                    TTableInfo::TPtr tableInfo = it->second;
+                    TIntrusivePtr<TTableInfo> tableInfo = it->second;
                     Y_VERIFY_S(colId < tableInfo->NextColumnId, "Column id should be less than NextColId"
                                 << ", columnId: " << colId
                                 << ", NextColId: " << tableInfo->NextColumnId);
@@ -2314,13 +2326,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 Y_VERIFY_S(Self->Tables.FindPtr(pathId), "Table doesn't exist, pathId: " << pathId);
 
-                TTableInfo::TPtr tableInfo = Self->Tables[pathId];
+                TIntrusivePtr<TTableInfo> tableInfo = Self->Tables[pathId];
                 tableInfo->InitAlterData();
                 if (colId >= tableInfo->AlterData->NextColumnId) {
                     tableInfo->AlterData->NextColumnId = colId + 1; // calc next NextColumnId
                 }
 
-                TTableInfo::TColumn colInfo(colName, colId, typeInfo, typeMod, notNull);
+                TTableColumn colInfo(colName, colId, typeInfo, typeMod, notNull);
                 colInfo.KeyOrder = keyOrder;
                 colInfo.CreateVersion = createVersion;
                 colInfo.DeleteVersion = deleteVersion;
@@ -2478,7 +2490,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (prevTableId) {
                         Y_ABORT_UNLESS(!partitions.empty());
                         Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                        TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
+                        TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(prevTableId);
                         Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
                         partitions.clear();
                         Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
@@ -2512,7 +2524,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (prevTableId) {
                 Y_ABORT_UNLESS(!partitions.empty());
                 Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
+                TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(prevTableId);
                 Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
                 partitions.clear();
                 Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
@@ -2535,7 +2547,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
                 Y_ABORT_UNLESS(!partitions.empty(), "tablePathId %s", ToString(tablePathId).c_str());
                 Y_ABORT_UNLESS(Self->Tables.contains(tablePathId), "tablePathId %s", ToString(tablePathId).c_str());
-                TTableInfo::TPtr tableInfo = Self->Tables.at(tablePathId);
+                TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(tablePathId);
                 Y_ABORT_UNLESS(!tableInfo->Columns.empty(), "tablePathId %s", ToString(tablePathId).c_str());
                 // tables must not have mixed format partitions
                 Y_ABORT_UNLESS(tableInfo->GetPartitions().empty(), "tablePathId %s", ToString(tablePathId).c_str());
@@ -2666,7 +2678,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (tableId != prevTableId) {
                     if (prevTableId) {
                         Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                        TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
+                        TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(prevTableId);
                         if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
                             Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
                         }
@@ -2676,7 +2688,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 Y_ABORT_UNLESS(Self->Tables.contains(tableId));
-                TTableInfo::TPtr tableInfo = Self->Tables.at(tableId);
+                TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(tableId);
 
                 const ui64 partitionId = rowSet.GetValue<Schema::TablePartitionStats::PartitionId>();
                 Y_ABORT_UNLESS(partitionId < tableInfo->GetPartitions().size());
@@ -2764,7 +2776,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (prevTableId) {
                 Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
+                TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(prevTableId);
                 if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
                     Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
                 }
@@ -2795,7 +2807,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     // that is acceptable since the domain aggregate will self-correct on the
                     // first live stats update from any shard.)
                     if (prevTableId && Self->Tables.contains(prevTableId)) {
-                        TTableInfo::TPtr prevTableInfo = Self->Tables.at(prevTableId);
+                        TIntrusivePtr<TTableInfo> prevTableInfo = Self->Tables.at(prevTableId);
                         if (!prevTableInfo->IsBackup && !prevTableInfo->IsShardsStatsDetached()) {
                             Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, prevTableInfo->GetStats().Aggregated);
                         }
@@ -2809,7 +2821,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                     continue;
                 }
-                TTableInfo::TPtr tableInfo = Self->Tables.at(tableId);
+                TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(tableId);
                 if (!tableInfo->GetPartitionStore().contains(shardIdx)) {
                     if (!rowSet.Next()) {
                         return false;
@@ -2871,7 +2883,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             if (prevTableId && Self->Tables.contains(prevTableId)) {
-                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
+                TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(prevTableId);
                 if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
                     Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
                 }
@@ -4070,7 +4082,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                         // legacy, ???
                         Y_ABORT_UNLESS(Self->Tables.contains(tablePathId));
-                        TTableInfo::TPtr tableInfo = Self->Tables.at(tablePathId);
+                        TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(tablePathId);
                         tableInfo->InitAlterData();
                         tableInfo->DeserializeAlterExtraData(extraData);
                     }
@@ -4451,7 +4463,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Y_ABORT_UNLESS(txState->SplitDescription);
 
             Y_ABORT_UNLESS(Self->Tables.contains(txState->TargetPathId));
-            TTableInfo::TPtr tableInfo = Self->Tables.at(txState->TargetPathId);
+            TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.at(txState->TargetPathId);
             tableInfo->RegisterSplitMergeOp(opId, *txState);
 
             for (ui32 i = 0; i < txState->SplitDescription->DestinationRangesSize(); ++i) {
@@ -4642,7 +4654,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto task = rowSet.GetValue<Schema::RestoreTasks::Task>();
 
                 if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
-                    TTableInfo::TPtr tableInfo = it->second;
+                    TIntrusivePtr<TTableInfo> tableInfo = it->second;
                     Y_ABORT_UNLESS(tableInfo.Get() != nullptr);
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(tableInfo->RestoreSettings, task));
                 } else if (Self->ColumnTables.contains(pathId)) {
@@ -4766,9 +4778,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto totalShardCount = std::get<4>(rec);
                 auto startTime = std::get<5>(rec);
                 auto dataSize = std::get<6>(rec);
-                auto kind = static_cast<TTableInfo::TBackupRestoreResult::EKind>(std::get<7>(rec));
+                auto kind = static_cast<TTableBackupRestoreResult::EKind>(std::get<7>(rec));
 
-                TTableInfo::TBackupRestoreResult info;
+                TTableBackupRestoreResult info;
                 info.CompletionDateTime = completeTime;
                 info.TotalShardCount = totalShardCount;
                 info.SuccessShardCount = successShardsCount;
@@ -4798,10 +4810,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 auto fillBackupInfo = [&](auto& tableInfo) {
                     switch (kind) {
-                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
+                    case TTableBackupRestoreResult::EKind::Backup:
                         tableInfo->BackupHistory[txId] = std::move(info);
                         break;
-                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
+                    case TTableBackupRestoreResult::EKind::Restore:
                         tableInfo->RestoreHistory[txId] = std::move(info);
                         if (tableInfo->IsRestore) {
                             RestoreTablesToUnmark.push_back(pathId);

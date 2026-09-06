@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include "operation_queue_timer.h"
 
 #include <ydb/core/cms/console/console.h>

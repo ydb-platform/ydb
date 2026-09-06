@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
@@ -82,4 +83,3 @@ NKikimr::TConclusionStatus TInStoreShardsUpdate::DoFinishImpl(const TUpdateFinis
 }
 
 }
-#include <ydb/core/tx/schemeshard/olap/table/table.h>

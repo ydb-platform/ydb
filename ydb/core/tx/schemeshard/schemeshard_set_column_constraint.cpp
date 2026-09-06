@@ -1,4 +1,7 @@
+#include "schemeshard_schema.h"
+
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include "schemeshard_impl.h"
 #include "schemeshard_set_column_constraint.h"
 #include <util/string/split.h>

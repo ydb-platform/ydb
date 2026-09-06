@@ -1,4 +1,7 @@
-#include "schemeshard_info_types.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include "schemeshard_info_types_objects_storage.h"
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_path.h"
 #include "olap/table/table.h"
 
@@ -1847,7 +1850,7 @@ bool TPath::IsBackupTable() const {
         return false;
     }
 
-    TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
+    TIntrusiveConstPtr<TTableInfo> tableInfo = SS->Tables.at(Base()->PathId);
 
     return tableInfo->IsBackup;
 }
@@ -1870,7 +1873,7 @@ bool TPath::IsAsyncReplicaTable() const {
         return false;
     }
 
-    TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
+    TIntrusiveConstPtr<TTableInfo> tableInfo = SS->Tables.at(Base()->PathId);
 
     return tableInfo->IsAsyncReplica();
 }

@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "validator.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>

@@ -3,11 +3,18 @@
 #include "schemeshard_identificators.h"
 #include "schemeshard_types.h"
 
-#include <ydb/core/tablet/pipe_tracker.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
-
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
+
+#include <memory>
+
+namespace NKikimr::NTabletFlatExecutor {
+class TTransactionContext;
+}
+
+namespace NKikimrSchemeOp {
+enum EPathState : int;
+}
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -24,7 +31,6 @@ private:
     using TSendRec = std::tuple<TActorId, TAutoPtr<::NActors::IEventBase>, ui64, ui32>;
     using TBindMsgRec = std::tuple<TOperationId, TTabletId, TPipeMessageId, TAutoPtr<::NActors::IEventBase>>;
     using TBindMsgAck = std::tuple<TOperationId, TTabletId, TPipeMessageId>;
-    using TNotifyRec = std::tuple<TActorId, TTxId>;
     using TProposeRec = std::tuple<TOperationId, TPathId, TStepId>;
     using TProposeShards = std::tuple<TOperationId, TTabletId>;
     using TRelationByTabletId = std::tuple<TOperationId, TTabletId>;
@@ -35,47 +41,17 @@ private:
     using TActivateShardCreated = std::tuple<TShardIdx, TTxId>;
     using TWaitPublication = std::tuple<TOperationId, TPathId>;
     using TBarrierRec = std::tuple<TOperationId, TString>;
-
-    THashSet<TTxId> ActivationOps;
-    THashSet<TOperationId> ActivationParts;
-
-    TDeque<TCoordinatorAck> CoordinatorAcks;
-    TDeque<TMediatorAck> MediatorAcks;
-    TDeque<TSendRec> Messages;
-    TDeque<TBindMsgRec> BindedMessages;
-    TDeque<TBindMsgAck> BindedMessageAcks;
-    TPublications PublishPaths;
-    TPublications RePublishPaths; // only for UpgradeSubDomain
-    TDeque<TProposeRec> CoordinatorProposes;
-    TDeque<TProposeShards> CoordinatorProposesShards;
-    TPendingPipeTrackerCommands PendingPipeTrackerCommands;
-    TDeque<TOperationId> RelationsByTabletsFromOperation;
-    TDeque<TRelationByTabletId> RelationsByTabletId;
-    TDeque<TRelationByShardIdx> RelationsByShardIdx;
-    THashSet<TOperationId> ReadyToNotifyOperations;
-    THashSet<TOperationId> DoneOperations;
-    THashSet<TTxId> DoneTransactions;
-    THashSet<TShardIdx> ToDeleteShards;
-    THashSet<TShardIdx> ToDeleteSystemShards;  // temporary: special case for deleting tenant's system shards
-    TDeque<TDependence> Dependencies;
-    TDeque<TPathStateRec> ReleasePathStateRecs;
-    THashSet<TPathId> TenantsToUpdate;
-    TDeque<TIndexBuildId> IndexToProgress;
-    TVector<TWaitShardCreated> PendingWaitShardCreated;
-    TVector<TActivateShardCreated> PendingActivateShardCreated;
-    TDeque<TWaitPublication> WaitPublications;
-    TDeque<TBarrierRec> Barriers;
-    THashMap<TActorId, TVector<TPathId>> TempDirsToMakeState;
-    THashMap<TActorId, TVector<TPathId>> TempDirsToRemoveState;
-
-    // Per-item done events staged in ApplyOnExecute, sent in ApplyOnComplete.
-    // Fields: <FullBackupId, DstPathId, Success>
     using TFullBackupItemDoneRec = std::tuple<ui64, TPathId, bool>;
-    TVector<TFullBackupItemDoneRec> PendingFullBackupItemDone;
+
+    struct TImpl;
+    std::unique_ptr<TImpl> Impl;
 
 public:
     using TPtr = TIntrusivePtr<TSideEffects>;
-    ~TSideEffects() = default;
+    TSideEffects();
+    TSideEffects(TSideEffects&&) noexcept;
+    TSideEffects& operator=(TSideEffects&&) noexcept;
+    ~TSideEffects();
 
     void ProposeToCoordinator(TOperationId opId, TPathId pathId, TStepId minStep);
     template <class TContainer>
@@ -83,7 +59,7 @@ public:
         ProposeToCoordinator(opId, pathId, minStep);
 
         for(auto& shard: txShards) {
-            CoordinatorProposesShards.push_back(TProposeShards(opId, shard));
+            ProposeShardToCoordinator(opId, shard);
         }
     }
     void CoordinatorAck(TActorId coordinator, TStepId stepId, TTxId txId);
@@ -141,6 +117,7 @@ public:
     void Barrier(TOperationId opId, TString barrierName);
 
 private:
+    void ProposeShardToCoordinator(TOperationId opId, TTabletId shard);
     bool CheckDecouplingProposes(const TSchemeShard* ss, TString& errExpl) const;
     void ExpandCoordinatorProposes(TSchemeShard* ss, const TActorContext& ctx);
     void DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx);

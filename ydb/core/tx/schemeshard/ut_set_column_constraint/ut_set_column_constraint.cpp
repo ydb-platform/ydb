@@ -2910,4 +2910,3 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         env.TestWaitNotification(runtime, truncateTxId);
     }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)
-

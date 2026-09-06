@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "alter/abstract/object.h"
 #include "alter/abstract/update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>

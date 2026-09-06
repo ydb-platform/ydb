@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 #include <ydb/core/tx/schemeshard/olap/store/store.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
@@ -634,4 +635,3 @@ ISubOperation::TPtr CreateAlterOlapStore(TOperationId id, TTxState::ETxState sta
 }
 
 }
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>

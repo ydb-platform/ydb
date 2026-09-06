@@ -1,6 +1,6 @@
-#include "schemeshard_info_types.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
 #include "common/validation.h"
-#include "schemeshard_info_types.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -8,19 +8,19 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 namespace {
-static inline bool IsDropped(const TTableInfo::TColumn& col) {
+static inline bool IsDropped(const TTableColumn& col) {
     return col.IsDropped();
 }
 
-static inline NScheme::TTypeInfo GetType(const TTableInfo::TColumn& col) {
+static inline NScheme::TTypeInfo GetType(const TTableColumn& col) {
     return col.PType;
 }
 
 }
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
-    const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
-    const TMap<ui32, TTableInfo::TColumn>& alterColumns,
+    const TMap<ui32, TTableColumn>& sourceColumns,
+    const TMap<ui32, TTableColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr)
 {
@@ -37,7 +37,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
-        const TTableInfo::TColumn* column = nullptr;
+        const TTableColumn* column = nullptr;
         const ui32 colId = it->second;
         if (auto x = alterColumns.find(colId); x != alterColumns.end()) {
             column = &x->second;
@@ -57,7 +57,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
-        auto effectiveColumn = [&](ui32 id) -> const TTableInfo::TColumn* {
+        auto effectiveColumn = [&](ui32 id) -> const TTableColumn* {
             if (auto x = alterColumns.find(id); x != alterColumns.end()) {
                 return &x->second;
             }

@@ -1,7 +1,11 @@
 #pragma once
 
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+
+#include <util/generic/string.h>
+#include <util/system/yassert.h>
+
+#include <utility>
 #include <variant>
 
 namespace NKikimr::NSchemeShard {
@@ -68,4 +72,3 @@ TString SerializeSettings(const TSettingsPB& settings) {
 }
 
 } // namespace NKikimr::NSchemeShard
-

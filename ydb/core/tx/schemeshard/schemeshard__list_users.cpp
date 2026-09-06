@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include <ydb/library/login/login.h>
 
 #include <ydb/core/protos/auth.pb.h>
 

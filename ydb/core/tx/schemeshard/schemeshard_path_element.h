@@ -4,8 +4,6 @@
 #include "schemeshard_types.h"
 #include "user_attributes.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actorid.h>
 
@@ -13,6 +11,13 @@
 
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
+
+namespace NKikimrSchemeOp {
+enum EPathState : int;
+enum EPathSubType : int;
+enum EPathType : int;
+class TUserAttribute;
+}
 
 namespace NKikimr::NSchemeShard {
 
@@ -52,8 +57,8 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TString Owner;
     TString ACL;
 
-    EPathType PathType = EPathType::EPathTypeDir;
-    EPathState PathState = EPathState::EPathStateNotExist;
+    EPathType PathType = static_cast<EPathType>(1); // EPathTypeDir
+    EPathState PathState = static_cast<EPathState>(1); // EPathStateNotExist
 
     TStepId StepCreated = InvalidStepId;
     TTxId CreateTxId = InvalidTxId;

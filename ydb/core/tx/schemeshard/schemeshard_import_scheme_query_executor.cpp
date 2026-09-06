@@ -1,7 +1,7 @@
 #include "schemeshard_import_scheme_query_executor.h"
 
 #include "schemeshard_import_helpers.h"
-#include "schemeshard_private.h"
+#include "schemeshard_private_import.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/common/events/events.h>

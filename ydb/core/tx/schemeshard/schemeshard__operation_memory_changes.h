@@ -1,101 +1,18 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_info_types.h"
-#include "schemeshard_path_element.h"
-
-#include <ydb/core/tx/schemeshard/olap/table/table.h>
 
 #include <util/generic/ptr.h>
-#include <util/generic/stack.h>
 
-#include <optional>
+#include <memory>
 
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
 class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
-    using TPathState = std::pair<TPathId, TPathElement::TPtr>;
-    TStack<TPathState> Paths;
-
-    using TIndexState = std::pair<TPathId, TTableIndexInfo::TPtr>;
-    TStack<TIndexState> Indexes;
-
-    using TCdcStreamState = std::pair<TPathId, TCdcStreamInfo::TPtr>;
-    TStack<TCdcStreamState> CdcStreams;
-
-    using TTableSnapshotState = std::pair<TPathId, TTxId>;
-    TStack<TTableSnapshotState> TablesWithSnapshots;
-
-    using TLockState = std::pair<TPathId, TTxId>;
-    TStack<TLockState> LockedPaths;
-
-    using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
-    TStack<TTableState> Tables;
-
-    using TColumnTableState = std::pair<TPathId, TColumnTableInfo::TPtr>;
-    TStack<TColumnTableState> ColumnTables;
-
-    using TSequenceState = std::pair<TPathId, TSequenceInfo::TPtr>;
-    TStack<TSequenceState> Sequences;
-
-    using TShardState = std::pair<TShardIdx, THolder<TShardInfo>>;
-    TStack<TShardState> Shards;
-
-    // Actually, any single subdomain should not be grabbed at more than one version
-    // per transaction/operation.
-    // And transaction/operation could not work on more than one subdomain.
-    // But just to be on the safe side (migrated paths, anyone?) we allow several
-    // subdomains to be grabbed.
-    THashMap<TPathId, TIntrusivePtr<TSubDomainInfo>> SubDomains;
-
-    using TTxState = std::pair<TOperationId, THolder<TTxState>>;
-    TStack<TTxState> TxStates;
-
-    using TExternalTableState = std::pair<TPathId, TExternalTableInfo::TPtr>;
-    TStack<TExternalTableState> ExternalTables;
-
-    using TExternalDataSourceState = std::pair<TPathId, TExternalDataSourceInfo::TPtr>;
-    TStack<TExternalDataSourceState> ExternalDataSources;
-
-    using TViewState = std::pair<TPathId, TViewInfo::TPtr>;
-    TStack<TViewState> Views;
-
-    using TResourcePoolState = std::pair<TPathId, TResourcePoolInfo::TPtr>;
-    TStack<TResourcePoolState> ResourcePools;
-
-    using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
-    TStack<TBackupCollectionState> BackupCollections;
-
-    using TSysViewState = std::pair<TPathId, TSysViewInfo::TPtr>;
-    TStack<TSysViewState> SysViews;
-
-    using TLongIncrementalRestoreOpState = std::pair<TOperationId, std::optional<NKikimrSchemeOp::TLongIncrementalRestoreOp>>;
-    TStack<TLongIncrementalRestoreOpState> LongIncrementalRestoreOps;
-
-    using TIncrementalBackupState = std::pair<ui64, TIncrementalBackupInfo::TPtr>;
-    TStack<TIncrementalBackupState> IncrementalBackups;
-
-    // Mirrors IncrementalBackups: UnDo erases the id from Self->FullBackups.
-    using TFullBackupState = std::pair<ui64, TFullBackupInfo::TPtr>;
-    TStack<TFullBackupState> FullBackups;
-
-    // UnDo erases the (bcPathId -> id) entry, keeping BCPathToFullBackup atomic with FullBackups.
-    using TBCPathToFullBackupState = std::pair<TPathId, std::optional<ui64>>;
-    TStack<TBCPathToFullBackupState> BCPathToFullBackup;
-
-    using TSecretState = std::pair<TPathId, TSecretInfo::TPtr>;
-    TStack<TSecretState> Secrets;
-
-    using TStreamingQueryState = std::pair<TPathId, TStreamingQueryInfo::TPtr>;
-    TStack<TStreamingQueryState> StreamingQueries;
-
-    using TSharedShardEntry = std::tuple<TShardIdx, TPathId, std::optional<TTxId>>;
-    TStack<TSharedShardEntry> SharedShardEntries;
-
-    using TTestShardSetState = std::pair<TPathId, TTestShardSetInfo::TPtr>;
-    TStack<TTestShardSetState> TestShardSets;
+    struct TImpl;
+    std::unique_ptr<TImpl> Impl;
 
 public:
     TMemoryChanges();

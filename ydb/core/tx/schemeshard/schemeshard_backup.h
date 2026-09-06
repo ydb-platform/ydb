@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h"
+#include "schemeshard_backup_fwd.h"
 
 #include <ydb/public/api/protos/draft/ydb_backup.pb.h>
 
@@ -9,54 +9,10 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TEvBackup {
-    enum EEv {
-        EvFetchBackupCollectionsRequest = EventSpaceBegin(TKikimrEvents::ES_BACKUP_SERVICE),
-        EvFetchBackupCollectionsResponse,
-        EvListBackupCollectionsRequest,
-        EvListBackupCollectionsResponse,
-        EvCreateBackupCollectionRequest,
-        EvCreateBackupCollectionResponse,
-        EvReadBackupCollectionRequest,
-        EvReadBackupCollectionResponse,
-        EvUpdateBackupCollectionRequest,
-        EvUpdateBackupCollectionResponse,
-        EvDeleteBackupCollectionRequest,
-        EvDeleteBackupCollectionResponse,
-
-        EvGetIncrementalBackupRequest,
-        EvGetIncrementalBackupResponse,
-        EvForgetIncrementalBackupRequest,
-        EvForgetIncrementalBackupResponse,
-        EvListIncrementalBackupsRequest,
-        EvListIncrementalBackupsResponse,
-
-        EvGetBackupCollectionRestoreRequest,
-        EvGetBackupCollectionRestoreResponse,
-        EvForgetBackupCollectionRestoreRequest,
-        EvForgetBackupCollectionRestoreResponse,
-        EvListBackupCollectionRestoresRequest,
-        EvListBackupCollectionRestoresResponse,
-
-        EvGetFullBackupRequest,
-        EvGetFullBackupResponse,
-        EvForgetFullBackupRequest,
-        EvForgetFullBackupResponse,
-        EvListFullBackupsRequest,
-        EvListFullBackupsResponse,
-
-        EvEnd
-    };
-
-    static_assert(
-        EvEnd < EventSpaceEnd(TKikimrEvents::ES_BACKUP_SERVICE),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BACKUP_SERVICE)"
-    );
-
 #ifdef DECLARE_EVENT_CLASS
 #error DECLARE_EVENT_CLASS macro redefinition
 #else
-#define DECLARE_EVENT_CLASS(NAME) struct T##NAME: public TEventPB<T##NAME, NKikimrBackup::T##NAME, NAME>
+#define DECLARE_EVENT_CLASS(NAME) struct TEvBackup::T##NAME: public TEventPB<T##NAME, NKikimrBackup::T##NAME, TEvBackup::NAME>
 #endif
 
     DECLARE_EVENT_CLASS(EvFetchBackupCollectionsRequest) {};
@@ -195,69 +151,64 @@ struct TEvBackup {
 
 #undef DECLARE_EVENT_CLASS
 
-    template <class T>
-    struct TEvApiMapping;
-
     template <>
-    struct TEvApiMapping<Ydb::Backup::FetchBackupCollectionsRequest> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::FetchBackupCollectionsRequest> {
         using TEv = TEvFetchBackupCollectionsRequest;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::FetchBackupCollectionsResponse> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::FetchBackupCollectionsResponse> {
         using TEv = TEvFetchBackupCollectionsResponse;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::ListBackupCollectionsRequest> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::ListBackupCollectionsRequest> {
         using TEv = TEvListBackupCollectionsRequest;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::ListBackupCollectionsResponse> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::ListBackupCollectionsResponse> {
         using TEv = TEvListBackupCollectionsResponse;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::CreateBackupCollectionRequest> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::CreateBackupCollectionRequest> {
         using TEv = TEvCreateBackupCollectionRequest;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::CreateBackupCollectionResponse> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::CreateBackupCollectionResponse> {
         using TEv = TEvCreateBackupCollectionResponse;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::ReadBackupCollectionRequest> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::ReadBackupCollectionRequest> {
         using TEv = TEvReadBackupCollectionRequest;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::ReadBackupCollectionResponse> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::ReadBackupCollectionResponse> {
         using TEv = TEvReadBackupCollectionResponse;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::UpdateBackupCollectionRequest> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::UpdateBackupCollectionRequest> {
         using TEv = TEvUpdateBackupCollectionRequest;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::UpdateBackupCollectionResponse> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::UpdateBackupCollectionResponse> {
         using TEv = TEvUpdateBackupCollectionResponse;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::DeleteBackupCollectionRequest> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::DeleteBackupCollectionRequest> {
         using TEv = TEvDeleteBackupCollectionRequest;
     };
 
     template <>
-    struct TEvApiMapping<Ydb::Backup::DeleteBackupCollectionResponse> {
+    struct TEvBackup::TEvApiMapping<Ydb::Backup::DeleteBackupCollectionResponse> {
         using TEv = TEvDeleteBackupCollectionResponse;
     };
-}; // TEvBackup
-
 } // NSchemeShard
 } // NKikimr

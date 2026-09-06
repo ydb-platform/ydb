@@ -6,7 +6,7 @@
 #include <util/datetime/base.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -17,7 +17,7 @@ struct TCondEraseAffectedShard {
     TDuration Next;
 };
 struct TCondEraseAffectedTable {
-    TTableInfo::TPtr TableInfo;
+    TIntrusivePtr<TTableInfo> TableInfo;
     TVector<TCondEraseAffectedShard> AffectedShards;
 };
 

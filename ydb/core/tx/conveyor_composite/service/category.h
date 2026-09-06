@@ -71,10 +71,7 @@ public:
     }
 
     bool HasTasks() const;
-    void ApplyConfig(const NConfig::TCategory& config) {
-        Y_ENSURE(config.GetCategory() == Category, "category config type mismatch");
-        Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
-    }
+    void ApplyConfig(const NConfig::TCategory& config);
     std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds);
     TProcessScope& MutableProcessScope(const TString& scopeName);
     TProcessScope* MutableProcessScopeOptional(const TString& scopeName);

@@ -262,12 +262,6 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
 }
 
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
-    if (config.HasCompositeConveyorConfig()) {
-        auto result = ValidateCompositeConveyorConfig(config.GetCompositeConveyorConfig(), msg);
-        if (result == EValidationResult::Error) {
-            return result;
-        }
-    }
     if (config.HasAuthConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateAuthConfig(config.GetAuthConfig(), msg);
         if (result == NKikimr::NConfig::EValidationResult::Error) {
@@ -338,6 +332,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
     NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateStateStorageConfig(config, msg);
     if (result == NKikimr::NConfig::EValidationResult::Error) {
         return EValidationResult::Error;
+    }
+    if (config.HasCompositeConveyorConfig()) {
+        result = ValidateCompositeConveyorConfig(config.GetCompositeConveyorConfig(), msg);
+        if (result == EValidationResult::Error) {
+            return result;
+        }
     }
     if (msg.size() > 0) {
         return EValidationResult::Warn;

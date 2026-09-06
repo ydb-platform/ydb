@@ -1,11 +1,14 @@
 #include "manager.h"
 #include "service.h"
 
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/tx/conveyor_composite/tracing/probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+
+#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
 
@@ -79,6 +82,10 @@ void TDistributor::TryApplyLatestConfig() {
     Y_ENSURE(!Manager->HasWorkersUpdateInProgress(), "config update attempt while another update is in progress");
 
     const auto& candidateProto = LatestConfigNotification->Get()->Record.GetConfig().GetCompositeConveyorConfig();
+    std::vector<TString> validationErrors;
+    Y_ENSURE(NKikimr::NConfig::ValidateCompositeConveyorConfig(candidateProto, validationErrors) !=
+            NKikimr::NConfig::EValidationResult::Error,
+        "invalid composite conveyor config: " << JoinSeq("; ", validationErrors));
     auto desiredConfig = NConfig::TConfig::BuildFromProto(candidateProto).DetachResult();
     if (Manager->IsCurrentConfig(desiredConfig)) {
         ReplyConfigNotification(LatestConfigNotification);

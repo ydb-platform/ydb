@@ -54,7 +54,7 @@ class TExtractJoinExpressionsRule : public IRule {
  */
 class TInlineScalarSubplanRule : public IRule {
   public:
-    TInlineScalarSubplanRule() : IRule("Inline scalar subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+    TInlineScalarSubplanRule() : IRule("Inline scalar subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireLiveness) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

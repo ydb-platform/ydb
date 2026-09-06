@@ -98,7 +98,8 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhysicalQueryTransformer(const T
 TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryBlocksTransformer(TAutoPtr<NYql::IGraphTransformer> queryBlockTransformer);
 
 THolder<NYql::TVisitorTransformerBase> CreateKqpTypeAnnotationTransformer(const TString& cluster,
-    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TIntrusivePtr<NYql::TKikimrConfiguration> config);
+    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TIntrusivePtr<NYql::TKikimrConfiguration> config,
+    NYql::TTypeAnnotationContext& types);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckQueryTransformer();
 

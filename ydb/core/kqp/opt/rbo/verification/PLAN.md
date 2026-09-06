@@ -13,8 +13,9 @@ implementation notes remain in the [historical plan](history/pre-audit-refactor/
 
 Initial capture occurs after `TOpRoot` construction and parent computation,
 before the first RBO stage. Final capture occurs after the final stage and
-property recomputation, before `ConvertToPhysical`. Exactly two boundary
-results must arrive in Initial-then-Final order. A later preparation failure
+property recomputation, before `ConvertToPhysical`. Each root must have exactly
+one Initial-then-Final pair. Multiple results additionally require a complete,
+distinct mapping from roots to client-visible result slots. A later preparation failure
 does not invalidate an already captured pair; preparation is a separate axis.
 
 Snapshots carry catalog constraints, the operator DAG, ordered output columns,
@@ -30,6 +31,11 @@ choices; shared-DAG choices remain correlated and independent task executions
 remain independent. Equality distinguishes success from query error, but not
 error text/code beyond the modeled distinction. Root names, order, types, and
 nullability are checked before formula construction.
+
+Buffered multi-result queries compare one joint tuple-or-error language, not
+independent result marginals. Explicit binary64 mode uses a stronger sufficient
+all-schedules obligation instead of language equality; see the
+[theorem](contracts/THEOREM.md) for both contracts and their status rules.
 
 ## Operator review unit
 
@@ -111,9 +117,13 @@ does not authorize neighboring shapes.
   results with count above two. Its abstract carrier/rank is not general Double
   arithmetic; semantic SAT in that restricted model remains UNKNOWN.
 - Passive Double payloads and opaque scalar functions use closed fingerprints
-  with exact argument/type identity. General floating arithmetic, arbitrary
-  Double consumers, and unreviewed callable envelopes remain unsupported.
+  with exact argument/type identity. Outside explicit binary64 mode, general
+  floating arithmetic and arbitrary Double consumers remain unsupported.
   Over-approximate opaque functions can make symbolic candidates spurious.
+- Explicit `binary64_uf_universal_v1` admits reviewed scalar operations and
+  sample standard deviation through shared primitive functions and literal
+  Welford transitions. All enabled schedule pairs must agree; SAT is UNKNOWN,
+  never a concrete runtime counterexample. Unreviewed callable envelopes still reject.
 - Checked projections and scalar subplans model demanded local errors and eager
   inherited errors. No general assumption of eager projection or lazy subplan
   evaluation replaces the admitted topology checks.

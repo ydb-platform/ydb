@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, TypeAlias
 
@@ -13,18 +13,25 @@ from . import smt
 from .analysis import AnalysisError, ValidatedPlan, analyze_validated
 from .ir import (
     Aggregate,
+    BINARY64_ORDER_COMPARISON,
+    BINARY64_SEMANTIC_MODE,
     Filter,
     INTEGRAL_DOUBLE_AVERAGE_STATE,
+    INTEGRAL_AVG_RANK_COMPARISON,
     Join,
     Limit,
+    Project,
     Scan,
     Snapshot,
+    Sort,
+    SortOrder,
     checked_concat_corridor,
 )
 from .relation import (
     Database,
     Evaluator,
     FamilyComparison,
+    FamilyMismatch,
     MismatchBranch,
     NodeObserver,
     Relation,
@@ -78,6 +85,8 @@ class Problem:
     soundness_exclusions: tuple[MismatchBranch, ...] = ()
     # Optional exact stable portfolio that replaces the canonical-first probe.
     preferred_branches: tuple[MismatchBranch, ...] | None = None
+    semantic_mode: str | None = None
+    abstract_integral_average: bool = False
 
     def witness_values(self) -> tuple[smt.Term, ...]:
         values: list[smt.Term] = []
@@ -142,6 +151,7 @@ class Result:
     task_bound: int = TASKS
     witness: Mapping[str, list[dict[str, Any]]] | None = None
     reason: str | None = None
+    semantic_mode: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -153,6 +163,8 @@ class Result:
             result["witness"] = self.witness
         if self.reason is not None:
             result["reason"] = self.reason
+        if self.semantic_mode is not None:
+            result["semantic_mode"] = self.semantic_mode
         return result
 
 
@@ -358,27 +370,67 @@ def _integral_average_observer(
     ) -> None:
         if external is not None:
             external(scope, node_id, family)
-        for trait in traits_by_node.get(node_id, ()):
+        traits = traits_by_node.get(node_id, ())
+        if traits:
+            outputs = ":".join(trait.output for trait in traits)
+            # One source outcome is shared by every trait. Existential
+            # reachability distributes over their disjunction, so audit its
+            # full choice/state DAG once, not once per AVG output.
             predicate = successful_family_reachable(
                 family,
                 script,
                 (
                     f"{side}:integral_avg_exactness:"
-                    f"{scope}:{node_id}:{trait.output}"
+                    f"{scope}:{node_id}:{outputs}"
                 ),
-                lambda relation, output=trait.output: (
-                    _integral_average_count_gt_two(relation, output)
-                ),
+                lambda relation: smt.or_(*(
+                    _integral_average_count_gt_two(relation, trait.output)
+                    for trait in traits
+                )),
             )
             soundness_exclusions.append(
                 MismatchBranch(
                     (
                         f"{side}:integral_avg_count_gt_2:"
-                        f"{scope}:{node_id}:{trait.output}"
+                        f"{scope}:{node_id}:{outputs}"
                     ),
                     predicate,
                 )
             )
+
+    return observe
+
+
+def _required_totality_observer(
+    snapshot: Snapshot,
+    side: str,
+    script: smt.Script,
+    exclusions: list[MismatchBranch],
+) -> NodeObserver | None:
+    """Exclude a reachable NULL before a required-total Project evaluates it.
+
+    This does not constrain the database or assume the projection is total.
+    The solver must discharge every such obligation before comparing results.
+    """
+    checked = {
+        node.id: tuple(column for column in node.columns if column.require_total)
+        for node in snapshot.plan.nodes
+        if isinstance(node, Project) and any(column.require_total for column in node.columns)
+    }
+    if not checked:
+        return None
+
+    def observe(scope: str, node_id: str, source: RelationFamily) -> None:
+        columns = checked[node_id]
+        name = f"{side}:string_unwrap_non_total:{scope}:{node_id}"
+        predicate = successful_family_reachable(
+            source, script, name,
+            lambda relation: smt.or_(*(
+                smt.and_(row.present, row.values[column.expression.column].is_null)
+                for row in relation.rows for column in columns
+            )),
+        )
+        exclusions.append(MismatchBranch(name, predicate))
 
     return observe
 
@@ -439,17 +491,42 @@ def _check_checked_concat_eager_bound(
             )
 
 
-def _build_problem(
+def _problem_snapshots(snapshots: tuple[Snapshot, ...]) -> tuple[Snapshot, ...]:
+    """One scalar interpretation for both sides and every buffered result.
+
+    Passive snapshots retain their original wire contract. If any root requires
+    binary64, interpret every Double as bits and promote legacy AVG order tags;
+    otherwise leave even the snapshot objects unchanged.
+    """
+    if not any(snapshot.semantic_mode == BINARY64_SEMANTIC_MODE for snapshot in snapshots):
+        return snapshots
+
+    def order(items: tuple[SortOrder, ...]) -> tuple[SortOrder, ...]:
+        return tuple(
+            replace(item, comparison=BINARY64_ORDER_COMPARISON)
+            if item.comparison == INTEGRAL_AVG_RANK_COMPARISON else item
+            for item in items
+        )
+
+    return tuple(replace(
+        snapshot,
+        semantic_mode=BINARY64_SEMANTIC_MODE,
+        plan=replace(snapshot.plan, nodes=tuple(
+            replace(node, order=order(node.order)) if isinstance(node, Sort) else node
+            for node in snapshot.plan.nodes
+        )),
+        stage_graph=None if snapshot.stage_graph is None else replace(
+            snapshot.stage_graph,
+            edges=tuple(replace(edge, order=order(edge.order)) for edge in snapshot.stage_graph.edges),
+        ),
+    ) for snapshot in snapshots)
+
+
+def _validate_pair(
     before: Snapshot,
     after: Snapshot,
     row_bound: int,
-    timeout_ms: int | None,
-    before_node_observer: NodeObserver | None,
-    after_node_observer: NodeObserver | None,
-    after_edge_observer: EdgeObserver | None,
-    boundary_observer: BoundaryObserver | None,
-    comparison_observer: ComparisonObserver | None,
-) -> Problem:
+) -> tuple[ValidatedPlan, ValidatedPlan]:
     if row_bound < 0:
         raise VerificationError("row bound must not be negative")
     _check_checked_concat_eager_bound(before, row_bound)
@@ -473,66 +550,70 @@ def _build_problem(
                 f"root output nullability differs at position {index}: "
                 f"{left.nullable!r} and {right.nullable!r}"
             )
+    return before_validated, after_validated
+
+
+def _evaluate_boundary(
+    snapshot: Snapshot,
+    validated: ValidatedPlan,
+    database: Database,
+    scalar: ScalarEncoder,
+    router: Router,
+    side: str,
+    exclusions: list[MismatchBranch],
+    node_observer: NodeObserver | None = None,
+    edge_observer: EdgeObserver | None = None,
+    *,
+    choice_scope: str | None = None,
+) -> RelationFamily:
+    context = analyze_validated(validated)
+    scope = side if choice_scope is None else choice_scope
+    observed = _integral_average_observer(snapshot, scope, scalar.script, exclusions, node_observer)
+    totality = _required_totality_observer(snapshot, scope, scalar.script, exclusions)
+    if snapshot.stage_graph is None:
+        return Evaluator(
+            snapshot, database, scalar,
+            choice_scope=f"{scope}:logical",
+            node_observer=observed,
+            project_input_observer=totality,
+            _context=context,
+        ).root()
+    return StageEvaluator(
+        snapshot, database, scalar, router,
+        node_observer=observed,
+        project_input_observer=totality,
+        edge_observer=edge_observer,
+        choice_scope="" if choice_scope is None else choice_scope,
+        _context=context,
+    ).root()
+
+
+def _build_problem(
+    before: Snapshot,
+    after: Snapshot,
+    row_bound: int,
+    timeout_ms: int | None,
+    before_node_observer: NodeObserver | None,
+    after_node_observer: NodeObserver | None,
+    after_edge_observer: EdgeObserver | None,
+    boundary_observer: BoundaryObserver | None,
+    comparison_observer: ComparisonObserver | None,
+) -> Problem:
+    before, after = _problem_snapshots((before, after))
+    before_validated, after_validated = _validate_pair(before, after, row_bound)
     try:
-        before_analysis = analyze_validated(before_validated)
-        after_analysis = analyze_validated(after_validated)
         script = smt.Script(timeout_ms)
         database = Database(before, row_bound, script)
-        scalar = ScalarEncoder(script)
+        scalar = ScalarEncoder(script, semantic_mode=before.semantic_mode)
         router = Router(script)
         soundness_exclusions: list[MismatchBranch] = []
-        observed_before = _integral_average_observer(
-            before,
-            "before",
-            script,
-            soundness_exclusions,
-            before_node_observer,
+        before_family = _evaluate_boundary(
+            before, before_validated, database, scalar, router, "before",
+            soundness_exclusions, before_node_observer,
         )
-        observed_after = _integral_average_observer(
-            after,
-            "after",
-            script,
-            soundness_exclusions,
-            after_node_observer,
-        )
-        before_family = (
-            Evaluator(
-                before,
-                database,
-                scalar,
-                choice_scope="before:logical",
-                node_observer=observed_before,
-                _context=before_analysis,
-            ).root()
-            if before.stage_graph is None
-            else StageEvaluator(
-                before,
-                database,
-                scalar,
-                router,
-                node_observer=observed_before,
-                _context=before_analysis,
-            ).root()
-        )
-        after_family = (
-            Evaluator(
-                after,
-                database,
-                scalar,
-                choice_scope="after:logical",
-                node_observer=observed_after,
-                _context=after_analysis,
-            ).root()
-            if after.stage_graph is None
-            else StageEvaluator(
-                after,
-                database,
-                scalar,
-                router,
-                node_observer=observed_after,
-                edge_observer=after_edge_observer,
-                _context=after_analysis,
-            ).root()
+        after_family = _evaluate_boundary(
+            after, after_validated, database, scalar, router, "after",
+            soundness_exclusions, after_node_observer, after_edge_observer,
         )
         if boundary_observer is not None:
             boundary_observer("before", before_family)
@@ -545,13 +626,28 @@ def _build_problem(
             mismatch = family_mismatch(before_family, after_family, scalar)
     except (AnalysisError, RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error
+    return _finish_problem(
+        script, database, mismatch, soundness_exclusions, scalar.semantic_mode,
+        abstract_integral_average=scalar.uses_abstract_integral_average,
+    )
+
+
+def _finish_problem(
+    script: smt.Script,
+    database: Database,
+    mismatch: FamilyMismatch,
+    soundness_exclusions: list[MismatchBranch],
+    semantic_mode: str | None = None,
+    *,
+    abstract_integral_average: bool = False,
+) -> Problem:
     semantic_mismatch = MismatchBranch(
         "semantic_mismatch",
         mismatch.counterexample,
     )
     soundness_exclusion = (
         MismatchBranch(
-            "integral_avg_model_domain",
+            "bounded_model_domain",
             smt.or_(
                 *(branch.predicate for branch in soundness_exclusions)
             ),
@@ -577,6 +673,8 @@ def _build_problem(
         soundness_exclusion=soundness_exclusion,
         soundness_exclusions=tuple(soundness_exclusions),
         preferred_branches=mismatch.preferred_branches,
+        semantic_mode=semantic_mode,
+        abstract_integral_average=abstract_integral_average,
     )
 
 
@@ -616,7 +714,7 @@ def query_solver(
             return SolverQuery(
                 "unknown",
                 {},
-                "integral AVG count greater than two is reachable within "
+                "a model-domain exclusion is reachable within "
                 "the bound; equivalence is inconclusive",
                 "soundness",
             )
@@ -624,13 +722,13 @@ def query_solver(
             return SolverQuery(
                 "unknown",
                 {},
-                "could not rule out integral AVG count greater than two: "
+                "could not rule out a model-domain exclusion: "
                 f"{exactness.reason or 'solver returned unknown'}",
                 "soundness",
             )
         if exactness.status != "unsat":
             raise SolverError(
-                "unexpected integral AVG exactness status "
+                "unexpected model-domain status "
                 f"{exactness.status!r}"
             )
 
@@ -639,11 +737,18 @@ def query_solver(
     # distinct (count, min, max) tuples can round to the same Double.  Avoid a
     # model query and never report such a candidate as a counterexample.
     exact_requested = (
-        () if problem.soundness_exclusion is not None else requested
+        () if problem.abstract_integral_average or problem.semantic_mode is not None else requested
     )
 
     def classify_exact(query: SolverQuery) -> SolverQuery:
-        if query.status != "sat" or problem.soundness_exclusion is None:
+        if query.status == "sat" and problem.semantic_mode == BINARY64_SEMANTIC_MODE:
+            return SolverQuery(
+                "unknown", {},
+                "binary64 primitive abstraction or visitation/flush order admits a mismatch; "
+                "the all-schedules sufficient proof is inconclusive",
+                "abstract",
+            )
+        if query.status != "sat" or not problem.abstract_integral_average:
             return query
         return SolverQuery(
             "unknown",
@@ -856,11 +961,11 @@ def solve(
 ) -> Result:
     query = query_solver(problem, solver, problem.witness_values(), timeout_ms)
     if query.status == "unsat":
-        return Result("VERIFIED_BOUNDED", row_bound)
+        return Result("VERIFIED_BOUNDED", row_bound, semantic_mode=problem.semantic_mode)
     if query.status == "unknown":
-        if query.phase == "model":
+        if query.phase == "model" and problem.semantic_mode is None:
             return Result("COUNTEREXAMPLE", row_bound, reason=query.reason)
-        return Result("UNKNOWN", row_bound, reason=query.reason)
+        return Result("UNKNOWN", row_bound, reason=query.reason, semantic_mode=problem.semantic_mode)
     if query.status != "sat":
         raise SolverError(f"unexpected solver status {query.status!r}")
 

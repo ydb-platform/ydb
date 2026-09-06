@@ -322,7 +322,6 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
  * Compute metadata for map operator. 
  */
 void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
-    Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     if (!GetInput()->Props.Metadata.has_value()) {
         return;
@@ -333,7 +332,18 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->Type = inputMetadata.Type;
     Props.Metadata->StorageType = inputMetadata.StorageType;
     const auto outputIUs = GetOutputIUs();
-    Y_ENSURE(MakeInfoUnitSet(outputIUs).size() == outputIUs.size(), "Map output must not contain duplicate columns");
+    if (MakeInfoUnitSet(outputIUs).size() != outputIUs.size()) {
+        TStringBuilder diagnostic;
+        diagnostic << "Map output must not contain duplicate columns: " << ToString(ctx.ExprCtx) << "; input IUs: [";
+        for (const auto& iu : GetInput()->GetOutputIUs()) {
+            diagnostic << iu.GetFullName() << "; ";
+        }
+        diagnostic << "]; output IUs: [";
+        for (const auto& iu : outputIUs) {
+            diagnostic << iu.GetFullName() << "; ";
+        }
+        Y_ENSURE(false, diagnostic << "]");
+    }
     Props.Metadata->ColumnsCount = outputIUs.size();
 
     auto propertyPreservingMappings = GetPropertyPreservingMappings(planProps);

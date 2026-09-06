@@ -318,27 +318,32 @@ def cast_decimal(
     source_type: str,
     result_type: str,
 ) -> smt.Term:
-    """Exactly evaluate the two audited Decimal-to-Decimal cast families.
+    """Apply YDB's weak Decimal cast, preserving the runtime operation order.
 
-    Existing same-scale casts are non-decreasing-precision identity casts.
-    TPC-DS q49 additionally needs exactly Decimal(35,2) to Decimal(15,4):
-    YDB first narrows to Decimal(13,2), saturating coefficients whose absolute
-    value is at least 10**13, and then multiplies retained finite values by 100.
-    Specials remain their canonical in-band codes throughout.
+    If integral digits shrink while scale changes, narrow at the source scale
+    first. Scale-up multiplies; scale-down rounds to nearest/even and checks
+    target bounds. Overflow becomes signed infinity, not NULL; specials pass
+    through. The caller transports source NULL separately.
     """
 
     source = parse_type(source_type)
     result = parse_type(result_type)
     if source is None or result is None:
         raise ValueError("Decimal cast requires Decimal source and result types")
-    if source.scale == result.scale and result.precision >= source.precision:
-        return value
-    if source == Type(35, 2) and result == Type(15, 4):
-        return _cast_decimal(value, source, result)
-    raise ValueError(
-        "Decimal cast requires same-scale widening or the exact "
-        "Decimal(35,2) to Decimal(15,4) rank-key shape"
-    )
+    if result.integral_digits < 1:
+        raise ValueError("Decimal cast result must have at least one integral digit")
+    if not cast_is_possible(source, result):
+        raise ValueError("Decimal cast has impossible precision/scale overlap")
+    return _cast_decimal(value, source, result)
+
+
+def cast_is_possible(source: Type, target: Type) -> bool:
+    """The frontend's weak-cast overlap test, not a finite-value theorem."""
+
+    return (
+        min(source.integral_digits, target.integral_digits)
+        + min(source.scale, target.scale)
+    ) > 0
 
 
 def narrow_same_scale(
@@ -683,14 +688,19 @@ def _alignment_conversion(left_type: str, right_type: str) -> tuple[int, Type, T
 
 
 def _cast_decimal(value: smt.Term, source: Type, target: Type) -> smt.Term:
-    if source.scale > target.scale:
-        raise ValueError("comparison alignment must not reduce Decimal scale")
     if target.integral_digits < source.integral_digits and target.scale != source.scale:
         intermediate = Type(target.integral_digits + source.scale, source.scale)
         narrowed = _cast_decimal(value, source, intermediate)
         return _cast_decimal(narrowed, intermediate, target)
     if source.scale < target.scale:
         return _scale_up(value, target.scale - source.scale)
+    if source.scale > target.scale:
+        scaled = smt.ite(
+            _normal(value, MAX_PRECISION),
+            _round_divide(value, 10**(source.scale - target.scale)),
+            value,
+        )
+        return _check_bounds(scaled, target.precision)
     if target.precision < source.precision:
         return _check_bounds(value, target.precision)
     return value

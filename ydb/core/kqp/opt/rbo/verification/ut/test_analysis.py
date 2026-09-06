@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import analysis, relation, smt, stages, verify
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
-    Column, Expr, Filter, Limit, Plan, Project, Projection, Scan, ScanColumn,
+    Aggregate, AggregateTrait, Column, Expr, Filter, Limit, Plan, Project, Projection, Scan, ScanColumn,
     Snapshot, Stage, StageEdge, StageGraph, StageOutput, Table, UnionAll, UnionInput,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Encoder
@@ -26,6 +26,58 @@ def _snapshot(*, staged=False):
 
 
 class AnalyzedPlanTest(unittest.TestCase):
+    def test_limit_fanout_ignores_only_cardinality_certified_takes(self):
+        base = _snapshot()
+
+        def literal(value):
+            return Expr("literal", value=value, result_type="Uint64", nullable=False)
+        aggregate = Aggregate("aggregate", "scan", (), (
+            AggregateTrait("a.k", "count", "n", "Uint64", False, False, False),
+        ), "undefined", False)
+        for grouped in (False, True):
+            for count in (0, 1, 2):
+                producer = replace(aggregate, keys=("a.k",) if grouped else ())
+                plan = Plan((
+                    base.plan.nodes[0], producer,
+                    Limit("left", producer.id, literal(count), None, "undefined"),
+                    Limit("right", producer.id, literal(count), None, "undefined"),
+                    UnionAll("union", (UnionInput("left", ("n",)), UnionInput("right", ("n",))),
+                             ("n",), False),
+                ), "union", ("n",), ())
+                snapshot = replace(base, plan=plan)
+                with self.subTest(grouped=grouped, count=count):
+                    if grouped and count:
+                        with self.assertRaisesRegex(analysis.AnalysisError, "correlated fan-out"):
+                            analysis.analyze_snapshot(snapshot)
+                    else:
+                        analysis.analyze_snapshot(snapshot)
+                        problem = verify.build_logical_kernel_problem_for_tests(snapshot, snapshot, 2)
+                        self.assertIsNotNone(problem.semantic_mismatch)
+
+        # A global aggregate emits one row per producer task, not one overall.
+        # Broadcasting both rows to one task cannot certify its LIMIT 1.
+        plan = Plan((
+            base.plan.nodes[0], aggregate,
+            Limit("right", "aggregate", literal(1), None, "undefined"),
+        ), "right", ("n",), ())
+        graph = StageGraph("result", (
+            Stage("source", ("scan",), (), (StageOutput(0, "scan"),), "row"),
+            Stage("groups", ("aggregate",), ("scan",), (StageOutput(0, "aggregate"),), None),
+            Stage("result", ("right",), ("aggregate",), (StageOutput(0, "right"),), None),
+        ), (
+            StageEdge("aggregate_input", "source", "groups", 0, 0, 0, "map"),
+            StageEdge("copied_input", "groups", "result", 0, 0, 0, "broadcast"),
+        ))
+        snapshot = Snapshot((Table("A", (Column("k", "Uint64", False),), ()),), plan, graph)
+        analysis.validate_snapshot(snapshot)
+        self.assertNotIn("right", analysis._order_insensitive_limits(snapshot, plan.node_map()))
+        wide = replace(plan, nodes=tuple(
+            replace(node, count=literal(2)) if node.id == "right" else node for node in plan.nodes
+        ))
+        snapshot = replace(snapshot, plan=wide)
+        analysis.validate_snapshot(snapshot)
+        self.assertIn("right", analysis._order_insensitive_limits(snapshot, wide.node_map()))
+
     def test_root_schema_mismatch_precedes_relational_fanout_rejection(self):
         base = _snapshot()
         count = Expr("literal", value=1, result_type="Uint64", nullable=False)

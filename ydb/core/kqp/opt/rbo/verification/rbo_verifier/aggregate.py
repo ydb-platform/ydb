@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from . import decimal, smt
+from . import decimal, floating, smt
 from .errors import RelationError
 from .ir import AggregateTrait
 from .scalar import (
@@ -25,6 +25,53 @@ from .scalar import (
 GuardedValues = tuple[tuple[smt.Term, Value], ...]
 ValueEquality = Callable[[Value, Value], smt.Term]
 IntegralAverage = Callable[[smt.Term, smt.Term, smt.Term], smt.Term]
+
+
+def variance_value(
+    trait: AggregateTrait,
+    phase: str,
+    values: tuple[Value, ...],
+    guards: tuple[smt.Term, ...],
+    kernel: floating.Kernel,
+) -> Value:
+    """Literal Welford fold in the caller's shared visitation/flush segment.
+
+    Empty/all-NULL groups are NULL; a singleton is finalized by the runtime
+    divide-and-sqrt operations (a non-NULL NaN, not an invented NULL result).
+    A physical final fold consumes the complete incoming three-field state.
+    """
+    def select(
+        guard: smt.Term,
+        left: floating.VarianceState,
+        right: floating.VarianceState,
+    ) -> floating.VarianceState:
+        return floating.VarianceState(*(floating.Binary64(smt.ite(guard, a, b))
+            for a, b in zip(floating.state_terms(left), floating.state_terms(right))))
+
+    state = floating.VarianceState(floating.ZERO, floating.ZERO, floating.ZERO)
+    seen = smt.FALSE
+    for guard, value in zip(guards, values):
+        if guard == smt.FALSE:
+            continue
+        if phase == "final":
+            incoming = value.binary64_state
+            if not isinstance(incoming, floating.VarianceState):
+                raise RelationError("final stddev_samp requires its complete Welford state")
+            updated = incoming if seen == smt.FALSE else kernel.variance_merge(incoming, state)
+        else:
+            if value.binary64_state is not None or value.average_metadata is not None:
+                raise RelationError("stddev_samp raw input cannot contain physical aggregate state")
+            item = kernel.from_bits(value.value) if value.type == "Double" else kernel.from_integer(value.value, value.type)
+            incoming = kernel.variance_init(item)
+            updated = incoming if seen == smt.FALSE else kernel.variance_update(state, item)
+        state = select(guard, select(seen, updated, incoming), state)
+        seen = smt.or_(seen, guard)
+    return Value(
+        trait.output_type,
+        smt.not_(seen) if trait.output_nullable else smt.FALSE,
+        smt.ZERO if phase == "intermediate" else kernel.stddev_sample_finish(state).bits,
+        binary64_state=state if phase == "intermediate" else None,
+    )
 
 
 def non_null_membership(
@@ -143,7 +190,57 @@ def extremum(
     )
 
 
+def _literal_sum_interval(value: smt.Term) -> tuple[int, int] | None:
+    """Bound a literal/CASE sum without assuming any condition or symbol value.
+
+    ITE takes the union of both value ranges; addition sums their endpoints.
+    Unknown leaves fail closed. The local postorder memo handles deep/shared
+    payload DAGs without walking Boolean conditions or carrying plan metadata.
+    """
+
+    intervals: dict[int, tuple[int, int] | None] = {}
+    pending = [value]
+    while pending:
+        term = pending[-1]
+        identity = id(term)
+        if identity in intervals:
+            pending.pop()
+            continue
+        if term.sort != smt.INT:
+            intervals[identity] = None
+        elif term.operation == "int" and type(term.atom) is int:
+            intervals[identity] = (term.atom, term.atom)
+        elif term.operation in {"ite", "+"}:
+            children = term.arguments[1:] if term.operation == "ite" else term.arguments
+            missing = [child for child in children if id(child) not in intervals]
+            if missing:
+                pending.extend(missing)
+                continue
+            ranges = [intervals[id(child)] for child in children]
+            if any(interval is None for interval in ranges):
+                intervals[identity] = None
+            else:
+                known = [interval for interval in ranges if interval is not None]
+                intervals[identity] = (
+                    (min(low for low, _ in known), max(high for _, high in known))
+                    if term.operation == "ite"
+                    else (sum(low for low, _ in known), sum(high for _, high in known))
+                )
+        else:
+            intervals[identity] = None
+    return intervals[id(value)]
+
+
 def wrap_sum(value: smt.Term, scalar_type: str) -> smt.Term:
+    # Modular wrapping is the identity when the whole raw sum is in range.
+    # This is only an encoding simplification: unknown/overflowing intervals
+    # retain the original wrap, independently of SQL NULL and row guards.
+    if scalar_type in {"Int64", "Uint64"}:
+        interval = _literal_sum_interval(value)
+        lower = -(1 << 63) if scalar_type == "Int64" else 0
+        upper = (1 << (63 if scalar_type == "Int64" else 64)) - 1
+        if interval is not None and lower <= interval[0] <= interval[1] <= upper:
+            return value
     modulus = 1 << 64
     if scalar_type == "Uint64":
         return smt.mod(value, modulus)

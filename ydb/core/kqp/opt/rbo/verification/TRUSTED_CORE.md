@@ -15,17 +15,18 @@ fixed regressions, bounded routing findings, and model false positives.
 | [semantic_snapshot.cpp](semantic_snapshot.cpp), [semantic_snapshot.h](semantic_snapshot.h), private exporter helpers | Faithful boundary/catalog/scalar/operator/StageGraph export, exact admission, and fail-closed diagnostics. |
 | [ir.py](rbo_verifier/ir.py), [analysis.py](rbo_verifier/analysis.py), [window_admission.py](rbo_verifier/window_admission.py) | Strict versioned decoding, immutable validated plan facts shared across evaluations, and mandatory normalized-window capability checks. |
 | [types.py](rbo_verifier/types.py), [scalar.py](rbo_verifier/scalar.py), [decimal.py](rbo_verifier/decimal.py), [string_order.py](rbo_verifier/string_order.py) | Domains, NULLs, scalar semantics, closed opaque identities, and certified aggregate/value metadata. |
+| [floating.py](rbo_verifier/floating.py) | Explicit binary64 primitive identities, bit comparisons, and literal Welford state transitions; requires the sufficient-proof mode, not default language equality. |
 | [join.py](rbo_verifier/join.py), [relation.py](rbo_verifier/relation.py) | Operator semantics, baseline and optimized encodings, family composition, and equality of bags/sequences/result languages. |
 | [aggregate.py](rbo_verifier/aggregate.py), [window.py](rbo_verifier/window.py) | Typed group reductions and task-local window values over admitted presences, values, and ordinals; grouping, routing, choices, and provenance stay with their callers. |
 | [value_transport.py](rbo_verifier/value_transport.py), [stages.py](rbo_verifier/stages.py) | Explicit scalar/physical-state/proof-hint transport, task execution, routing, locality, and occurrence/certificate propagation. |
 | [sort_strategy.py](rbo_verifier/sort_strategy.py) | Pure cost/certificate-based encoding selection; choosing an encoding still affects the trusted proof path. |
 | [sort_network.py](rbo_verifier/sort_network.py), [smt.py](rbo_verifier/smt.py) | Exact network topology, typed owned terms, binder hygiene, structural sharing, and SMT serialization. |
-| [verify.py](rbo_verifier/verify.py) | Shared database, model-domain observation, exact solver portfolio, one-deadline status interpretation, and witness extraction. |
+| [verify.py](rbo_verifier/verify.py), [bundle.py](rbo_verifier/bundle.py) | Shared database, joint buffered result slots, explicit comparison mode, model-domain observation, exact solver portfolio, one-deadline status interpretation, and witness extraction. |
 
 Private exporter helpers include [read ranges](read_range_predicate_impl.h),
 [opaque-expression audit and identity](opaque_expression_audit_impl.h),
-[window leaves](window_expression_export_impl.h), and the audited window
-[projection plan](q51_window_projection_audit_impl.h). They remain part of the
+[window leaves](window_expression_export_impl.h), [window dataflow](window_projection_audit_impl.h),
+and the separately audited [ordered-ROWS corridor](q51_window_projection_audit_impl.h). They remain part of the
 same trusted exporter, not independent serialization APIs.
 The shared [RelationError boundary](rbo_verifier/errors.py) classifies unsupported
 relational semantics consistently across the extracted kernels and their callers.
@@ -86,8 +87,9 @@ runtime semantics, and a correct solver/protocol; see
 The emitted canonical SMT formula is not a transcript of the internal branch
 portfolio. A proof requires the mandatory model-domain exclusions and either
 canonical UNSAT or every required exact branch UNSAT under one deadline.
-Unknown/untried branches never establish a proof. Integral-AVG domain/abstract
-value restrictions apply to standalone SMT as well.
+Unknown/untried branches never establish a proof. Checked-String totality,
+integral-AVG domain/abstract-value restrictions and explicit binary64
+SAT-to-UNKNOWN rules apply to standalone SMT as well.
 
 Do not broaden an admission gate, replace a certificate with an unchecked flag,
 erase an opaque fingerprint detail, or change a runtime/hash/solver assumption

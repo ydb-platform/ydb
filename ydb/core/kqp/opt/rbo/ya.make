@@ -14,6 +14,7 @@ SRCS(
     kqp_rbo_utils.cpp
     kqp_rbo.cpp
     kqp_rewrite_select.cpp
+    kqp_set_operations.cpp
     kqp_stage_graph.cpp
     verification/semantic_snapshot.cpp
     analysis/logical_aliases.cpp

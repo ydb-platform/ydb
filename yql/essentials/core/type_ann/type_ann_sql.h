@@ -22,6 +22,18 @@ struct TInput {
 
 using TInputs = TVector<TInput>;
 
+namespace NDetail {
+
+// Alpha-equivalence for SQL grouping/projection expressions. Only the given
+// enclosing row arguments are aliases; all other free variables retain identity.
+bool SqlExprsEqual(
+    const TExprNode& left,
+    const TExprNode& right,
+    const TExprNode& leftRow,
+    const TExprNode& rightRow);
+
+} // namespace NDetail
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool IsPlainMemberOverArg(const TExprNode& expr, TStringBuf& memberName);

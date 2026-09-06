@@ -8,6 +8,7 @@
 
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/type_ann/type_ann_impl.h>
+#include <yql/essentials/core/type_ann/type_ann_list.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -2860,13 +2861,12 @@ TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) 
     auto typeItems = structType->GetItems();
 
     for (const auto& item: typeItems) {
-        auto columnName = TString(item->GetName());
-        if (auto it = columnName.find("."); it != TString::npos) {
-            columnName = columnName.substr(it+1);
-        }
-
-        auto alias = TString(input->ChildPtr(TKqpOpReplaceAlias::idx_Alias)->Content());
-        columnName = alias + "." + columnName;
+        // A SELECT's output names are literal column names, including dots
+        // retained by by-name set operations. Prefix the new source alias;
+        // stripping an apparent old alias can collapse distinct columns.
+        const auto alias = input->Child(TKqpOpReplaceAlias::idx_Alias)->Content();
+        const TString columnName = alias.empty()
+            ? TString(item->GetName()) : TStringBuilder() << alias << "." << item->GetName();
         structItemTypes.push_back(ctx.MakeType<TItemExprType>(columnName, item->GetItemType()));
     }
 
@@ -2986,51 +2986,20 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateOpSetOp(const TExprNode::TPtr& input, TExprContext& ctx) {
-    auto leftInputType = input->ChildPtr(TKqpOpSetOp::idx_LeftInput)->GetTypeAnn();
-    auto rightInputType = input->ChildPtr(TKqpOpSetOp::idx_RightInput)->GetTypeAnn();
-    auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto leftItems = leftStructType->GetItems();
-    auto rightItems = rightStructType->GetItems();
-    Y_ENSURE(leftItems.size() == rightItems.size(), "Invalid number of fields for set operation.");
-
-    const TTypeAnnotationNode* resultType;
-
-    TString setOp = TString(input->ChildPtr(TKqpOpSetOp::idx_SetOp)->Content());
-
-    if (setOp == "union" || setOp == "union_all") {
-        TVector<const TItemExprType*> newItemTypes;
-        for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
-            if (leftItems[i]->GetItemType()->IsOptionalOrNull()) {
-                newItemTypes.push_back(leftItems[i]);
-            } else {
-                newItemTypes.push_back(rightItems[i]);
-            }
-        }
-        resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+TStatus AnnotateOpSetOp(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& types) {
+    // Forced YqlSelect uses by-name set operations, including NULL padding and
+    // common-type conversion. Share its inference; sorted struct fields are not SQL positions.
+    NTypeAnnImpl::TExtContext ext(ctx, types);
+    const TStructExprType* rowType = nullptr;
+    bool universal = false;
+    const auto status = NTypeAnnImpl::InferUnionType(input->Pos(),
+        {input->ChildPtr(TKqpOpSetOp::idx_LeftInput), input->ChildPtr(TKqpOpSetOp::idx_RightInput)},
+        rowType, ext, input->Child(TKqpOpSetOp::idx_SetOp)->Content() != "union_all", universal);
+    if (status == TStatus::Ok) {
+        Y_ENSURE(!universal && rowType, "RBO set operations require a concrete row type");
+        input->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
     }
-    else if (setOp == "intersect" || setOp == "intersect_all") {
-        TVector<const TItemExprType*> newItemTypes;
-        for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
-            auto itemType = leftItems[i]->GetItemType();
-            if (itemType->IsOptionalOrNull() && !rightItems[i]->GetItemType()->IsOptionalOrNull()) {
-                auto nonOptType = ETypeAnnotationKind::Optional == itemType->GetKind() ? itemType->Cast<TOptionalExprType>()->GetItemType() : itemType;
-                newItemTypes.push_back(ctx.MakeType<TItemExprType>(leftItems[i]->GetName(), nonOptType));
-            } else {
-                newItemTypes.push_back(leftItems[i]);
-            }
-        }
-        resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
-    } else if (setOp == "except" || setOp == "except_all") {
-        resultType = leftInputType;
-    } else {
-        Y_ENSURE(false, TStringBuilder() << "Illegal set operator: " << setOp);
-    }
-
-    input->SetTypeAnn(resultType);
-
-    return TStatus::Ok;
+    return status;
 }
 
 TStatus AnnotateOpLimit(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -3127,7 +3096,8 @@ TStatus AnnotateOpRoot(const TExprNode::TPtr& input, TExprContext& ctx) {
 
 class TKiTypeAnnotationTransformer final : public TVisitorTransformerBase {
 public:
-    TKiTypeAnnotationTransformer(const TString& cluster, TIntrusivePtr<TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config)
+    TKiTypeAnnotationTransformer(const TString& cluster, TIntrusivePtr<TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
+                                TTypeAnnotationContext& types)
         : TVisitorTransformerBase(/* failOnUnknown */ true)
         , Cluster(cluster)
         , TablesData(std::move(tablesData))
@@ -3237,7 +3207,9 @@ public:
         AddHandler({TKqpOpFilter::CallableName()}, Hndl(&AnnotateOpFilter));
         AddHandler({TKqpOpJoinFilter::CallableName()}, Hndl(&AnnotateOpJoinFilter));
         AddHandler({TKqpOpJoin::CallableName()}, Hndl(&AnnotateOpJoin));
-        AddHandler({TKqpOpSetOp::CallableName()}, Hndl(&AnnotateOpSetOp));
+        AddHandler({TKqpOpSetOp::CallableName()}, [&types](TExprNode::TPtr input, TExprNode::TPtr&, TExprContext& ctx) {
+            return AnnotateOpSetOp(input, ctx, types);
+        });
         AddHandler({TKqpOpLimit::CallableName()}, Hndl(&AnnotateOpLimit));
         AddHandler({TKqpOpSortElement::CallableName()}, Hndl(&AnnotateOpSortElement));
         AddHandler({TKqpOpSort::CallableName()}, Hndl(&AnnotateOpSort));
@@ -3272,8 +3244,9 @@ private:
 
 } // anonymous namespace
 
-THolder<TVisitorTransformerBase> CreateKqpTypeAnnotationTransformer(const TString& cluster, TIntrusivePtr<TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config) {
-    return MakeHolder<TKiTypeAnnotationTransformer>(cluster, std::move(tablesData), std::move(config));
+THolder<TVisitorTransformerBase> CreateKqpTypeAnnotationTransformer(const TString& cluster, TIntrusivePtr<TKikimrTablesData> tablesData,
+    TKikimrConfiguration::TPtr config, TTypeAnnotationContext& types) {
+    return MakeHolder<TKiTypeAnnotationTransformer>(cluster, std::move(tablesData), std::move(config), types);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpCheckQueryTransformer() {

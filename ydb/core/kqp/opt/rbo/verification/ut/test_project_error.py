@@ -1,7 +1,11 @@
+import copy
+import subprocess
 import unittest
+from dataclasses import replace
 from itertools import product
+from unittest import mock
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt, verify
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Column,
     SnapshotError,
@@ -9,10 +13,12 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Database,
+    BoundedChoice,
     Evaluator,
     Outcome,
     Relation,
     RelationFamily,
+    RelationError,
     Row,
     Value,
     family_equal,
@@ -236,6 +242,22 @@ def _evaluate_override(raw, script, source):
 
 
 class ErrorOnNullSchemaTest(unittest.TestCase):
+    def test_totality_flag_is_boolean_and_requires_the_exact_error_projection(self):
+        for marker in (0, 1, "true", None):
+            raw = _snapshot()
+            raw["plan"]["nodes"][1]["columns"][0]["require_total"] = marker
+            with self.subTest(marker=marker), self.assertRaisesRegex(SnapshotError, "expected a Boolean"):
+                parse_snapshot(raw)
+        raw = _snapshot(marked=False)
+        column = raw["plan"]["nodes"][1]["columns"][0]
+        column["require_total"] = True
+        with self.assertRaisesRegex(SnapshotError, "require_total requires error_on_null"):
+            parse_snapshot(raw)
+        column["error_on_null"] = True
+        column["expression"] = _literal("String", "not a physical input")
+        with self.assertRaisesRegex(SnapshotError, "direct nullable String input column"):
+            parse_snapshot(raw)
+
     def test_marker_defaults_false_and_true_makes_output_non_nullable(self):
         absent = parse_snapshot(_snapshot(marked=None))
         marked = parse_snapshot(_snapshot(marked=True))
@@ -747,6 +769,121 @@ class ErrorOnNullEvaluationTest(unittest.TestCase):
                     _ground(outcome.error, constants(*arguments)),
                     expected,
                 )
+
+
+class RequiredTotalityTest(unittest.TestCase):
+    @staticmethod
+    def _raw(*, reject_null=False):
+        raw = _snapshot()
+        raw["plan"]["nodes"][1]["columns"][0]["require_total"] = True
+        raw["plan"]["nodes"][1]["input"] = "input_filter"
+        raw["plan"]["nodes"].insert(1, {
+            "id": "input_filter", "op": "filter", "input": "scan",
+            "predicate": {"kind": "exists", "arg": _column("a.text")} if reject_null else _literal("Bool", True),
+        })
+        # A downstream discard cannot justify eagerly evaluating Unwrap.
+        raw["plan"]["nodes"].append({
+            "id": "discard", "op": "filter", "input": "project", "predicate": _literal("Bool", False),
+        })
+        raw["plan"]["root"] = "discard"
+        return raw
+
+    def test_hook_is_mandatory_and_observes_edge_input_once_before_projection(self):
+        snapshot = parse_snapshot(self._raw())
+        script = smt.Script()
+        database = Database(snapshot, 0, script)
+        source = _source_family((Column("a.text", "String", True),), (
+            Row(smt.TRUE, {"a.text": Value("String", smt.TRUE, smt.ZERO)}),
+        ))
+        arguments = dict(edge_inputs={("project", 0): source})
+        with self.assertRaisesRegex(RelationError, "mandatory totality observer"):
+            Evaluator(snapshot, database, ScalarEncoder(script), **arguments).root()
+        exclusions = []
+        observe = verify._required_totality_observer(snapshot, "before", script, exclusions)
+        evaluator = Evaluator(
+            snapshot, database, ScalarEncoder(script), project_input_observer=observe, **arguments,
+        )
+        outcome = evaluator.root().outcomes[0]
+        evaluator.root()
+        self.assertIs(outcome.error, smt.TRUE)  # The eager kernel is unchanged.
+        self.assertTrue(all(row.present == smt.FALSE for row in outcome.relation.rows))
+        self.assertEqual(len(exclusions), 1)
+        self.assertIs(exclusions[0].predicate, smt.TRUE)
+
+    def test_obligation_quantifies_legal_choices_and_excludes_disabled_or_failed_inputs(self):
+        snapshot = parse_snapshot(self._raw())
+        script = smt.Script()
+        enabled, error, present, is_null = (
+            script.fresh_constant(name, smt.BOOL) for name in ("enabled", "error", "present", "null")
+        )
+        choice = BoundedChoice(script.fresh_constant("schedule", smt.INT), 2)
+        source = _source_family((Column("a.text", "String", True),), (
+            Row(present, {"a.text": Value("String", is_null, smt.ZERO)}),
+        ), error=error)
+        source = RelationFamily((replace(
+            source.outcomes[0], enabled=smt.and_(enabled, smt.eq(choice.term, smt.ONE)), choices=(choice,),
+        ),))
+        exclusions = []
+        verify._required_totality_observer(snapshot, "before", script, exclusions)("scope", "project", source)
+        predicate = exclusions[0].predicate
+        self.assertEqual(predicate.operation, "exists")
+        self.assertEqual(predicate.arguments[:-1], (choice.term,))
+        for values in product((False, True), repeat=4):
+            constants = {term.atom: value for term, value in zip((enabled, error, present, is_null), values)}
+            reachable = any(_ground(predicate.arguments[-1], constants | {choice.term.atom: value})
+                            for value in range(choice.bound))
+            self.assertEqual(reachable, values[0] and not values[1] and values[2] and values[3])
+
+    def test_logical_and_routed_stage_totality_is_checked_before_result_equivalence(self):
+        for reject_null, project_in_source in product((False, True), repeat=2):
+            with self.subTest(reject_null=reject_null, project_in_source=project_in_source):
+                raw = self._raw(reject_null=reject_null)
+                staged = copy.deepcopy(raw)
+                boundary = "project" if project_in_source else "input_filter"
+                staged["stage_graph"] = {
+                    "root_stage": "consumer", "assumptions": [],
+                    "stages": [
+                        {"id": "source", "nodes": ["scan", "input_filter"] + (["project"] if project_in_source else []),
+                         "inputs": [], "outputs": [{"index": 0, "node": boundary}], "source_storage": "column"},
+                        {"id": "consumer", "nodes": ["discard"] if project_in_source else ["project", "discard"],
+                         "inputs": [boundary], "outputs": [{"index": 0, "node": "discard"}], "source_storage": None},
+                    ],
+                    "edges": [{"id": "edge", "producer": "source", "consumer": "consumer", "occurrence": 0,
+                               "producer_output": 0, "consumer_input": 0, "kind": "map"}],
+                }
+                problem = verify.build_problem(parse_snapshot(raw), parse_snapshot(staged), 1)
+                self.assertEqual(len(problem.soundness_exclusions), 3)  # Logical + both physical tasks.
+                self.assertFalse(problem.abstract_integral_average)
+                predicate = problem.soundness_exclusion.predicate
+                symbols = set()
+                pending = [predicate]
+                while pending:
+                    term = pending.pop()
+                    if term.operation == "symbol":
+                        self.assertEqual(term.sort, smt.BOOL)
+                        symbols.add(term.atom)
+                    pending.extend(term.arguments)
+                witness = problem.witness["A"][0]
+                for values in product((False, True), repeat=len(symbols)):
+                    constants = dict(zip(sorted(symbols), values))
+                    expected = (not reject_null and constants[witness.present.atom]
+                                and constants[witness.cells["text"].is_null.atom])
+                    self.assertEqual(_ground(predicate, constants), expected)
+                statuses = ("unsat", "unsat") if reject_null else ("sat",)
+                responses = [subprocess.CompletedProcess(["z3"], 0, status + "\n", "") for status in statuses]
+                with mock.patch.object(verify, "_run_solver", side_effect=responses) as run:
+                    query = verify.query_solver(problem, "z3")
+                self.assertEqual(query.status, "unsat" if reject_null else "unknown")
+                self.assertEqual(run.call_count, len(statuses))
+                if not reject_null:
+                    self.assertEqual(query.phase, "soundness")
+                    self.assertFalse(query.values)
+                else:
+                    # Totality is not an abstract-value model: after discharge,
+                    # a genuine semantic SAT remains a counterexample candidate.
+                    responses[-1] = subprocess.CompletedProcess(["z3"], 0, "sat\n", "")
+                    with mock.patch.object(verify, "_run_solver", side_effect=responses):
+                        self.assertEqual(verify.query_solver(problem, "z3").status, "sat")
 
 
 class ErrorOnNullEqualityTest(unittest.TestCase):

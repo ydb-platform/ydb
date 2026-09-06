@@ -62,6 +62,10 @@ struct TCoverageRunConfig {
     ui64 TimeoutMs = DefaultTimeoutMs;
 };
 
+bool RetainRunEvidence(ECoverageMode mode) {
+    return mode != ECoverageMode::FormulaDashboard;
+}
+
 TString CoveragePolicyPath() {
     return ArcadiaSourceRoot() +
         "/ydb/core/kqp/opt/rbo/verification/benchmark_ut/coverage_policy.json";
@@ -91,12 +95,76 @@ private:
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
 };
 
-bool IsExactSnapshotPair(
+using TSnapshotPair = std::pair<const TRBOSemanticSnapshotBoundaryResultV1*, const TRBOSemanticSnapshotBoundaryResultV1*>;
+
+TVector<TSnapshotPair> CompleteSnapshotBundle(
     const TVector<TRBOSemanticSnapshotBoundaryResultV1>& captures)
 {
-    return captures.size() == 2 &&
-        captures[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial &&
-        captures[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final;
+    if (captures.empty()) {
+        return {};
+    }
+    const ui32 count = captures.front().RootCount;
+    if (!count || captures.size() % 2 || count != captures.size() / 2) {
+        return {};
+    }
+    TVector<TSnapshotPair> pairs(count);
+    for (const auto& capture : captures) {
+        if (capture.RootCount != count || capture.RootOrdinal >= count) {
+            return {};
+        }
+        auto& [initial, final] = pairs[capture.RootOrdinal];
+        if (capture.Boundary == ERBOSemanticSnapshotBoundaryV1::Initial && !initial && !final) {
+            initial = &capture;
+        } else if (capture.Boundary == ERBOSemanticSnapshotBoundaryV1::Final && initial && !final) {
+            final = &capture;
+        } else {
+            return {};
+        }
+    }
+    for (const auto& [initial, final] : pairs) {
+        if (!initial || !final) {
+            return {};
+        }
+    }
+    return pairs;
+}
+
+bool IsExactSnapshotPair(const TVector<TRBOSemanticSnapshotBoundaryResultV1>& captures) {
+    return CompleteSnapshotBundle(captures).size() == 1;
+}
+
+bool HasCompleteResultSlotMapping(const TVector<TSnapshotPair>& bundle) {
+    std::set<ui32> ordinals;
+    for (const auto& [initial, final] : bundle) {
+        if (initial->ResultCount != bundle.size() || final->ResultCount != bundle.size() ||
+            !initial->ResultOrdinal || initial->ResultOrdinal != final->ResultOrdinal ||
+            *initial->ResultOrdinal >= bundle.size() || !ordinals.insert(*initial->ResultOrdinal).second) {
+            return false;
+        }
+    }
+    return !bundle.empty();
+}
+
+NJson::TJsonValue ResultBundleManifest(const TVector<TSnapshotPair>& bundle, TStringBuf stem) {
+    Y_ENSURE(HasCompleteResultSlotMapping(bundle), "result bundle requires a complete result-slot mapping");
+    NJson::TJsonValue manifest(NJson::JSON_MAP);
+    manifest["format"] = "ydb-rbo-result-bundle";
+    manifest["version"] = 1;
+    manifest["observation"] = "buffered_tuple_or_error";
+    manifest["results"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+    TVector<TSnapshotPair> ordered(bundle.size());
+    for (const auto& pair : bundle) {
+        ordered[*pair.first->ResultOrdinal] = pair;
+    }
+    for (const auto& [initial, final] : ordered) {
+        Y_UNUSED(final);
+        const TString root = TStringBuilder() << stem << ".root" << initial->RootOrdinal;
+        NJson::TJsonValue result(NJson::JSON_MAP);
+        result["before"] = root + ".initial.json";
+        result["after"] = root + ".final.json";
+        manifest["results"].AppendValue(std::move(result));
+    }
+    return manifest;
 }
 
 TString DataPath(TStringBuf relative) {
@@ -471,6 +539,38 @@ NJson::TJsonValue PreserveCaptureArtifacts(
     return artifacts;
 }
 
+NJson::TJsonValue PreserveBundleArtifacts(
+    TStringBuf suiteSlug,
+    ui32 queryId,
+    TStringBuf query,
+    const TVector<TSnapshotPair>& bundle)
+{
+    const TString stem = TStringBuilder() << suiteSlug << "_q" << queryId;
+    NJson::TJsonValue artifacts(NJson::JSON_MAP);
+    artifacts["roots"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+    bool supported = true;
+    for (const auto& [initial, final] : bundle) {
+        NJson::TJsonValue root(NJson::JSON_MAP);
+        root["root_ordinal"] = initial->RootOrdinal;
+        if (initial->ResultOrdinal) {
+            root["result_ordinal"] = *initial->ResultOrdinal;
+        }
+        for (const auto& [side, capture] : {std::pair{"initial", initial}, std::pair{"final", final}}) {
+            supported &= capture->IsSupported();
+            const TString name = TStringBuilder() << stem << ".root" << initial->RootOrdinal << "." << side;
+            PreserveTextArtifact(root, side, name + (capture->IsSupported() ? ".json" : ".unsupported.txt"),
+                capture->IsSupported() ? capture->Json : capture->UnsupportedReason);
+        }
+        artifacts["roots"].AppendValue(std::move(root));
+    }
+    PreserveTextArtifact(artifacts, "query", stem + ".query.yql", query);
+    if (supported && HasCompleteResultSlotMapping(bundle)) {
+        PreserveTextArtifact(artifacts, "bundle", stem + ".bundle.json",
+            NJson::WriteJson(ResultBundleManifest(bundle, stem), true, true));
+    }
+    return artifacts;
+}
+
 NJson::TJsonValue PreserveArtifacts(
     TStringBuf suiteSlug,
     ui32 queryId,
@@ -478,16 +578,14 @@ NJson::TJsonValue PreserveArtifacts(
     TStringBuf verifierVerdict,
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final,
-    const NJson::TJsonValue& processArtifacts)
+    const NJson::TJsonValue& processArtifacts,
+    const TVector<TSnapshotPair>& bundle = {})
 {
     const TString stem = TStringBuilder()
         << suiteSlug << "_q" << queryId;
-    NJson::TJsonValue artifacts = PreserveCaptureArtifacts(
-        suiteSlug,
-        queryId,
-        query,
-        initial,
-        final);
+    NJson::TJsonValue artifacts = bundle.empty()
+        ? PreserveCaptureArtifacts(suiteSlug, queryId, query, initial, final)
+        : PreserveBundleArtifacts(suiteSlug, queryId, query, bundle);
     PreserveTextArtifact(
         artifacts,
         "verifier_verdict",
@@ -582,18 +680,20 @@ TOutcome ClassifyVerifierProcess(
     const TRBOSemanticSnapshotBoundaryResultV1& final,
     const TVerifierProcess& process,
     const TFsPath& formulaPath,
-    bool preserveArtifacts)
+    bool preserveArtifacts,
+    const TVector<TSnapshotPair>& bundle = {})
 {
     const auto harnessError = [&](TString reason) {
-        auto outcome = HarnessError(queryId, prepareMs, 2, reason);
+        auto outcome = HarnessError(queryId, prepareMs, bundle.empty() ? 2 : 2 * bundle.size(), reason);
         // A protocol failure is itself a diagnostic outcome, even when query
         // preparation succeeded. Never drop evidence merely because decoding
         // did not produce one of the normal verifier statuses.
         try {
             outcome.Json["process_artifacts"] = PreserveVerifierProcess(
                 suiteSlug, queryId, process, formulaPath);
-            outcome.Json["artifacts"] = PreserveCaptureArtifacts(
-                suiteSlug, queryId, query, initial, final);
+            outcome.Json["artifacts"] = bundle.empty()
+                ? PreserveCaptureArtifacts(suiteSlug, queryId, query, initial, final)
+                : PreserveBundleArtifacts(suiteSlug, queryId, query, bundle);
         } catch (const std::exception& error) {
             outcome.Json["artifact_error"] = error.what();
         }
@@ -625,6 +725,11 @@ TOutcome ClassifyVerifierProcess(
     }
 
     const TString status = verdict["status"].GetStringSafe();
+    if (!bundle.empty() && (!verdict.Has("comparison_scope") ||
+        !verdict["comparison_scope"].IsString() ||
+        verdict["comparison_scope"].GetStringSafe() != "BUFFERED_RESULT_BUNDLE")) {
+        return harnessError("bundle verifier verdict has no buffered-result-bundle scope");
+    }
     static const THashSet<TString> Statuses = {
         "VERIFIED_BOUNDED",
         "FORMULA_EMITTED",
@@ -659,7 +764,7 @@ TOutcome ClassifyVerifierProcess(
     outcome.Json["reason"] = outcome.Reason;
     outcome.Json["prepare_ms"] = prepareMs;
     outcome.Json["verify_ms"] = process.ElapsedMs;
-    outcome.Json["capture_count"] = 2;
+    outcome.Json["capture_count"] = bundle.empty() ? 2 : 2 * bundle.size();
     outcome.Json["verdict"] = VerdictForCoverageReport(std::move(verdict), status);
     if (preserveArtifacts || status == "COUNTEREXAMPLE" || status == "UNKNOWN" ||
         status == "SCHEMA_MISMATCH" || status == "SOLVER_ERROR")
@@ -674,7 +779,8 @@ TOutcome ClassifyVerifierProcess(
                 verifierVerdict,
                 initial,
                 final,
-                outcome.Json["process_artifacts"]);
+                outcome.Json["process_artifacts"],
+                bundle);
         } catch (const std::exception& error) {
             outcome.Json["artifact_error"] = error.what();
             outcome.Fatal = true;
@@ -692,23 +798,35 @@ TOutcome RunVerifier(
     const TRBOSemanticSnapshotBoundaryResultV1& final,
     ui64 timeoutMs,
     const TMaybe<TString>& solver,
-    bool preserveArtifacts)
+    bool preserveArtifacts,
+    const TVector<TSnapshotPair>& bundle = {})
 {
     TTempDir tempDir;
-    const auto initialPath = tempDir.Path() / "initial.json";
-    const auto finalPath = tempDir.Path() / "final.json";
     const auto formulaPath = tempDir.Path() / "problem.smt2";
-    TFileOutput(initialPath.GetPath()).Write(initial.Json);
-    TFileOutput(finalPath.GetPath()).Write(final.Json);
     TVerifierProcess process;
-    process.Arguments = {
-        BinaryPath("ydb/core/kqp/opt/rbo/verification/bin/kqp_rbo_verify"),
-        initialPath.GetPath(),
-        finalPath.GetPath(),
+    process.Arguments = {BinaryPath("ydb/core/kqp/opt/rbo/verification/bin/kqp_rbo_verify")};
+    if (bundle.empty()) {
+        const auto initialPath = tempDir.Path() / "initial.json";
+        const auto finalPath = tempDir.Path() / "final.json";
+        TFileOutput(initialPath.GetPath()).Write(initial.Json);
+        TFileOutput(finalPath.GetPath()).Write(final.Json);
+        process.Arguments.insert(process.Arguments.end(), {initialPath.GetPath(), finalPath.GetPath()});
+    } else {
+        const auto manifest = ResultBundleManifest(bundle, "bundle");
+        for (const auto& [left, right] : bundle) {
+            const TString stem = TStringBuilder() << "bundle.root" << left->RootOrdinal;
+            TFileOutput((tempDir.Path() / (stem + ".initial.json")).GetPath()).Write(left->Json);
+            TFileOutput((tempDir.Path() / (stem + ".final.json")).GetPath()).Write(right->Json);
+        }
+        const auto manifestPath = tempDir.Path() / "bundle.json";
+        TFileOutput(manifestPath.GetPath()).Write(NJson::WriteJson(manifest, true, true));
+        process.Arguments.insert(process.Arguments.end(), {"--bundle", manifestPath.GetPath()});
+    }
+    process.Arguments.insert(process.Arguments.end(), {
         "--rows", ToString(RowBound),
         "--timeout-ms", ToString(timeoutMs),
         "--emit-smt", formulaPath.GetPath(),
-    };
+    });
     if (solver) {
         process.Arguments.push_back("--solver");
         process.Arguments.push_back(*solver);
@@ -731,7 +849,7 @@ TOutcome RunVerifier(
     process.Stderr = command.GetError();
     return ClassifyVerifierProcess(
         suiteSlug, queryId, query, prepareMs, initial, final,
-        process, formulaPath, preserveArtifacts);
+        process, formulaPath, preserveArtifacts, bundle);
 }
 
 TOutcome OptimizerFailure(
@@ -825,6 +943,61 @@ TOutcome ClassifyCapturedPair(
         preserveArtifacts);
 }
 
+TOutcome ClassifyCapturedBundle(
+    const TSuite& suite,
+    ui32 queryId,
+    TStringBuf query,
+    ui64 prepareMs,
+    const TVector<TSnapshotPair>& bundle,
+    ui64 timeoutMs,
+    const TMaybe<TString>& solver,
+    bool preserveArtifacts)
+{
+    TOutcome outcome;
+    if (!HasCompleteResultSlotMapping(bundle)) {
+        outcome.Status = "UNSUPPORTED";
+        outcome.Layer = "result_bundle";
+        outcome.Reason = "compiler roots have no complete distinct result-slot mapping";
+        outcome.UnsupportedReasons.emplace_back(outcome.Layer, outcome.Reason);
+    } else {
+        for (const auto& [initial, final] : bundle) {
+            for (const auto& [layer, capture] : {std::pair{"initial_export", initial}, std::pair{"final_export", final}}) {
+                if (!capture->IsSupported()) {
+                    outcome.UnsupportedReasons.emplace_back(layer, TStringBuilder()
+                        << "result " << *initial->ResultOrdinal << ": " << capture->UnsupportedReason);
+                }
+            }
+        }
+        if (outcome.UnsupportedReasons.empty()) {
+            outcome = RunVerifier(suite.Slug, queryId, query, prepareMs,
+                *bundle.front().first, *bundle.front().second,
+                timeoutMs, solver, preserveArtifacts, bundle);
+        } else {
+            outcome.Status = "UNSUPPORTED";
+            outcome.Layer = outcome.UnsupportedReasons.front().first;
+            outcome.Reason = outcome.UnsupportedReasons.front().second;
+        }
+    }
+    if (preserveArtifacts && !outcome.Json.Has("artifacts")) {
+        outcome.Json["artifacts"] = PreserveBundleArtifacts(suite.Slug, queryId, query, bundle);
+    }
+    outcome.Json["query_id"] = queryId;
+    outcome.Json["status"] = outcome.Status;
+    outcome.Json["layer"] = outcome.Layer;
+    outcome.Json["reason"] = outcome.Reason;
+    outcome.Json["prepare_ms"] = prepareMs;
+    if (!outcome.Json.Has("verify_ms")) {
+        outcome.Json["verify_ms"] = 0;
+    }
+    outcome.Json["capture_count"] = 2 * bundle.size();
+    outcome.Json["root_count"] = bundle.size();
+    outcome.Json["bundle_complete"] = true;
+    outcome.Json["result_slot_mapping_complete"] = HasCompleteResultSlotMapping(bundle);
+    outcome.Json["result_count"] = bundle.front().first->ResultCount;
+    outcome.Json["formula_scope"] = "buffered_result_bundle";
+    return outcome;
+}
+
 TOutcome ClassifyQuery(
     TKikimrRunner& kikimr,
     const NYql::IModuleResolver::TPtr& moduleResolver,
@@ -851,7 +1024,9 @@ TOutcome ClassifyQuery(
     });
     const ui64 prepareMs = (TInstant::Now() - started).MilliSeconds();
     const auto captures = sink->Take();
-    const bool snapshotPairCaptured = IsExactSnapshotPair(captures);
+    const auto bundle = CompleteSnapshotBundle(captures);
+    const bool completeResultMapping = HasCompleteResultSlotMapping(bundle);
+    const bool snapshotPairCaptured = !bundle.empty();
     const bool prepareSucceeded = prepared.Success();
     TString prepareReason = prepareSucceeded
         ? TString()
@@ -861,42 +1036,39 @@ TOutcome ClassifyQuery(
     }
 
     TOutcome outcome;
-    const auto preserveExceptionalPair = [&] {
-        if (prepareSucceeded || captures.size() != 2 ||
-            captures[0].Boundary != ERBOSemanticSnapshotBoundaryV1::Initial ||
-            captures[1].Boundary != ERBOSemanticSnapshotBoundaryV1::Final)
-        {
-            return;
-        }
+    const auto preserveExceptionalCaptures = [&] {
         try {
-            outcome.Json["artifacts"] = PreserveCaptureArtifacts(
-                suite.Slug,
-                queryId,
-                query,
-                captures[0],
-                captures[1]);
+            if (bundle.size() > 1) {
+                outcome.Json["artifacts"] = PreserveBundleArtifacts(suite.Slug, queryId, query, bundle);
+            } else if (bundle.size() == 1) {
+                outcome.Json["artifacts"] = PreserveCaptureArtifacts(
+                    suite.Slug, queryId, query, *bundle.front().first, *bundle.front().second);
+            }
         } catch (const std::exception& artifactError) {
             outcome.Json["artifact_error"] = artifactError.what();
         }
     };
     try {
-        if (captures.size() == 2) {
+        if (bundle.size() == 1) {
             outcome = ClassifyCapturedPair(
                 suite,
                 queryId,
                 query,
                 prepareMs,
-                captures[0],
-                captures[1],
+                *bundle.front().first,
+                *bundle.front().second,
                 timeoutMs,
                 solver,
                 !prepareSucceeded || preserveArtifacts);
+        } else if (bundle.size() > 1) {
+            outcome = ClassifyCapturedBundle(suite, queryId, query, prepareMs,
+                bundle, timeoutMs, solver, preserveArtifacts || !prepareSucceeded);
         } else if (prepareSucceeded) {
             outcome = HarnessError(
                 queryId,
                 prepareMs,
                 captures.size(),
-                "snapshot callback count is invalid");
+                "semantic snapshot root bundle is incomplete or malformed");
         } else {
             outcome = OptimizerFailure(
                 queryId,
@@ -911,14 +1083,53 @@ TOutcome ClassifyQuery(
             captures.size(),
             TStringBuilder()
                 << "captured-pair classification threw: " << error.what());
-        preserveExceptionalPair();
+        preserveExceptionalCaptures();
     } catch (...) {
         outcome = HarnessError(
             queryId,
             prepareMs,
             captures.size(),
             "captured-pair classification threw a non-standard exception");
-        preserveExceptionalPair();
+        preserveExceptionalCaptures();
+    }
+    if (!bundle.empty() && !completeResultMapping &&
+        (outcome.Status == "FORMULA_EMITTED" || outcome.Status == "VERIFIED_BOUNDED")) {
+        outcome.Status = "UNSUPPORTED";
+        outcome.Layer = "result_bundle";
+        outcome.Reason = "compiler roots have no complete distinct result-slot mapping; per-root formulas are diagnostic only";
+        outcome.UnsupportedReasons.emplace_back(outcome.Layer, outcome.Reason);
+        outcome.Json["status"] = outcome.Status;
+        outcome.Json["layer"] = outcome.Layer;
+        outcome.Json["reason"] = outcome.Reason;
+        outcome.Json["result_slot_mapping_complete"] = false;
+    }
+    if (bundle.empty() && !captures.empty()) {
+        // Partial bundles are evidence only, never a snapshot/formula floor.
+        outcome.Json["bundle_complete"] = false;
+        outcome.Json["root_count"] = captures.front().RootCount;
+        outcome.Json["captures"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        try {
+            PreserveTextArtifact(outcome.Json["artifacts"], "query",
+                TStringBuilder() << suite.Slug << "_q" << queryId << ".query.yql", query);
+            for (size_t index = 0; index < captures.size(); ++index) {
+                const auto& capture = captures[index];
+                NJson::TJsonValue item(NJson::JSON_MAP);
+                item["root_ordinal"] = capture.RootOrdinal;
+                item["root_count"] = capture.RootCount;
+                if (capture.ResultOrdinal) {
+                    item["result_ordinal"] = *capture.ResultOrdinal;
+                }
+                item["result_count"] = capture.ResultCount;
+                item["boundary"] = capture.Boundary == ERBOSemanticSnapshotBoundaryV1::Initial
+                    ? "initial" : capture.Boundary == ERBOSemanticSnapshotBoundaryV1::Final ? "final" : "prefix";
+                const TString name = TStringBuilder() << suite.Slug << "_q" << queryId << ".capture" << index;
+                PreserveTextArtifact(item, "artifact", name + (capture.IsSupported() ? ".json" : ".unsupported.txt"),
+                    capture.IsSupported() ? capture.Json : capture.UnsupportedReason);
+                outcome.Json["captures"].AppendValue(std::move(item));
+            }
+        } catch (const std::exception& error) {
+            outcome.Json["artifact_error"] = error.what();
+        }
     }
     SetPreparationOutcome(outcome, prepareSucceeded, prepareReason);
     outcome.SnapshotPairCaptured = snapshotPairCaptured;
@@ -1010,7 +1221,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
                     queryId,
                     timeoutMs,
                     solver,
-                    mode == ECoverageMode::ProofFloor);
+                    RetainRunEvidence(mode));
             } catch (const std::exception& error) {
                 outcome = HarnessError(
                     queryId,
@@ -1178,13 +1389,21 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
 Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
     Y_UNIT_TEST(PolicyFileMatchesFixedContract) {
         const auto policy = LoadCoveragePolicy();
+        const auto allQueries = [](ui32 count) {
+            std::set<ui32> queries;
+            for (ui32 query = 1; query <= count; ++query) {
+                queries.insert(query);
+            }
+            return queries;
+        };
+        const auto tpchQueries = allQueries(22);
+        const auto tpcdsFormulaQueries = allQueries(99);
+        auto tpcdsPrepareQueries = tpcdsFormulaQueries;
+        tpcdsPrepareQueries.erase(51);
         UNIT_ASSERT_VALUES_EQUAL(policy.Suites.size(), 2);
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries ==
-            std::set<ui32>({
-                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19,
-                21, 22,
-            }));
+            tpchQueries);
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredSnapshotPairQueries.empty());
         UNIT_ASSERT(
@@ -1192,29 +1411,18 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({1, 13, 16}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredFormulaQueries ==
-            std::set<ui32>({
-                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19,
-                21, 22,
-            }));
+            tpchQueries);
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
             std::set<ui32>({
-                3, 4, 6, 7, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22,
+                3, 4, 6, 7, 10, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22,
             }));
         UNIT_ASSERT_VALUES_EQUAL(
             SnapshotPairFloorQueries(policy.Suites.at(Tpch.Name)).size(),
-            20);
+            22);
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries ==
-            std::set<ui32>({
-                2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24,
-                25, 26, 28, 29, 31,
-                33, 34, 35, 37, 38, 40, 41, 42, 43, 45, 46, 48, 50, 52, 54, 55,
-                56,
-                58, 59,
-                60, 61, 62, 64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78,
-                79, 80, 82, 83, 84, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97, 99,
-            }));
+            tpcdsPrepareQueries);
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredSnapshotPairQueries.empty());
         UNIT_ASSERT(
@@ -1222,27 +1430,16 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({5, 8, 9, 59, 65, 72, 78, 80}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
-            std::set<ui32>({
-                2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21,
-                22, 24, 25, 26, 28, 29, 31, 33, 34, 35, 37, 38, 40, 41, 42, 43,
-                45, 46, 48, 49, 50, 51, 52, 53, 54, 55, 56, 58, 59, 60, 61, 62,
-                63,
-                64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82,
-                83, 84,
-                85, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 98, 99,
-            }));
+            tpcdsFormulaQueries);
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
             std::set<ui32>({
-                3, 8, 9, 15, 16, 19, 21, 28, 34, 38, 41, 42, 43, 48, 52, 55,
-                62, 69, 73, 87, 88, 90, 93, 94, 95, 96, 97, 99,
+                3, 8, 9, 15, 16, 19, 21, 28, 34, 38, 41, 42, 43, 48, 50, 52,
+                55, 62, 68, 69, 73, 76, 79, 87, 88, 90, 93, 94, 95, 96, 97, 99,
             }));
         UNIT_ASSERT_VALUES_EQUAL(
             SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name)).size(),
-            82);
-        UNIT_ASSERT_VALUES_EQUAL(
-            policy.Suites.at(Tpcds.Name).RequiredFormulaQueries.size(),
-            82);
+            99);
 
         const auto report = CoverageReportHeader(Tpcds);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1435,10 +1632,15 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             process.Arguments = {"/verifier"};
             process.ExitCode = 0;
             process.Stdout = TStringBuilder() << "{\"status\":\"" << status << "\"}\n";
-            for (const bool retain : {false, true}) {
+            for (const auto& [mode, retain] : {
+                std::pair{ECoverageMode::FormulaDashboard, false},
+                std::pair{ECoverageMode::SolverExperiment, true},
+                std::pair{ECoverageMode::ProofFloor, true},
+            }) {
+                UNIT_ASSERT_VALUES_EQUAL(RetainRunEvidence(mode), retain);
                 const auto outcome = ClassifyVerifierProcess(
-                    "success_evidence", retain ? 2 : 1, "SELECT 1;\n", 0,
-                    initial, final, process, formulaPath, retain);
+                    "success_evidence", static_cast<ui32>(mode) + 1, "SELECT 1;\n", 0,
+                    initial, final, process, formulaPath, RetainRunEvidence(mode));
                 UNIT_ASSERT_VALUES_EQUAL(outcome.Status, status);
                 UNIT_ASSERT(!outcome.Fatal);
                 UNIT_ASSERT_VALUES_EQUAL(outcome.Json.Has("process_artifacts"), retain);
@@ -1550,6 +1752,64 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(!IsExactSnapshotPair({final, initial}));
         UNIT_ASSERT(IsExactSnapshotPair({initial, final}));
         UNIT_ASSERT(!IsExactSnapshotPair({initial, final, final}));
+    }
+
+    Y_UNIT_TEST(RootBundleRequiresEveryUniqueInitialFinalPair) {
+        const TRBOSemanticSnapshotBoundaryResultV1 initial0{
+            ERBOSemanticSnapshotBoundaryV1::Initial, {}, {}, {}, 0, 2};
+        const TRBOSemanticSnapshotBoundaryResultV1 final0{
+            ERBOSemanticSnapshotBoundaryV1::Final, {}, {}, {}, 0, 2};
+        auto initial1 = initial0;
+        auto final1 = final0;
+        initial1.RootOrdinal = final1.RootOrdinal = 1;
+        TVector<TRBOSemanticSnapshotBoundaryResultV1> captures{initial1, initial0, final0, final1};
+        const auto pairs = CompleteSnapshotBundle(captures);
+        UNIT_ASSERT_VALUES_EQUAL(pairs.size(), 2);
+        UNIT_ASSERT(pairs[0].first == &captures[1] && pairs[0].second == &captures[2]);
+        UNIT_ASSERT(pairs[1].first == &captures[0] && pairs[1].second == &captures[3]);
+        UNIT_ASSERT(!HasCompleteResultSlotMapping(pairs));
+        for (auto& capture : captures) {
+            capture.ResultCount = 2;
+            capture.ResultOrdinal = 1 - capture.RootOrdinal;
+        }
+        UNIT_ASSERT(HasCompleteResultSlotMapping(pairs));
+        const auto manifest = ResultBundleManifest(pairs, "ordered");
+        UNIT_ASSERT_VALUES_EQUAL(manifest["results"][0]["before"].GetStringSafe(), "ordered.root1.initial.json");
+        UNIT_ASSERT_VALUES_EQUAL(manifest["results"][1]["after"].GetStringSafe(), "ordered.root0.final.json");
+        TTempDir temporary;
+        const auto formulaPath = temporary.Path() / "problem.smt2";
+        TFileOutput(formulaPath.GetPath()).Write("(check-sat)\n");
+        TVerifierProcess process;
+        process.Arguments = {"/verifier", "--bundle", "bundle.json"};
+        process.ExitCode = 0;
+        for (const bool scoped : {false, true}) {
+            process.Stdout = scoped
+                ? "{\"status\":\"FORMULA_EMITTED\",\"comparison_scope\":\"BUFFERED_RESULT_BUNDLE\"}\n"
+                : "{\"status\":\"FORMULA_EMITTED\"}\n";
+            const auto outcome = ClassifyVerifierProcess("bundle_scope", scoped ? 2 : 1,
+                "SELECT 1; SELECT 2;\n", 0, *pairs[0].first, *pairs[0].second,
+                process, formulaPath, true, pairs);
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Status, scoped ? "FORMULA_EMITTED" : "HARNESS_ERROR");
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Json["capture_count"].GetUIntegerSafe(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Json["artifacts"]["roots"].GetArraySafe().size(), 2);
+            UNIT_ASSERT(outcome.Json["artifacts"].Has("bundle_sha256"));
+            UNIT_ASSERT(!outcome.Json["artifacts"].Has("initial_snapshot"));
+        }
+        captures[2].ResultOrdinal = 0;
+        UNIT_ASSERT(!HasCompleteResultSlotMapping(pairs)); // Initial/final slot disagreement.
+        captures[1].ResultOrdinal = 0;
+        UNIT_ASSERT(!HasCompleteResultSlotMapping(pairs)); // Two roots claim one result slot.
+        captures[1].ResultOrdinal = captures[2].ResultOrdinal = 2;
+        UNIT_ASSERT(!HasCompleteResultSlotMapping(pairs)); // Out-of-range slot.
+        UNIT_ASSERT(!IsExactSnapshotPair({initial0, final0}));
+        UNIT_ASSERT(CompleteSnapshotBundle({initial0, final0, initial1}).empty());
+        UNIT_ASSERT(CompleteSnapshotBundle({initial0, final0, initial0, final0}).empty());
+        UNIT_ASSERT(CompleteSnapshotBundle({initial0, final0, final1, initial1}).empty());
+        final1.RootCount = 1;
+        UNIT_ASSERT(CompleteSnapshotBundle({initial0, final0, initial1, final1}).empty());
+        final1.RootCount = 2;
+        final1.RootOrdinal = 2;
+        UNIT_ASSERT(CompleteSnapshotBundle({initial0, final0, initial1, final1}).empty());
     }
 
     Y_UNIT_TEST(OptimizerFailureRetainsCaptureMetadata) {

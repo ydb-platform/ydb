@@ -14,11 +14,13 @@ except ImportError:
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import (
     decimal,
+    floating,
     relation,
     smt,
     sort_network,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    BINARY64_ORDER_COMPARISON,
     Column,
     INTEGRAL_AVG_RANK_COMPARISON,
     SnapshotError,
@@ -626,6 +628,9 @@ def _ground_uncached(term, constants, script, cache):
             _ground(argument, constants, script, cache)
             for argument in term.arguments
         )
+    if term.operation == "-":
+        left, right = term.arguments
+        return _ground(left, constants, script, cache) - _ground(right, constants, script, cache)
     if term.operation == "mod":
         return _ground(
             term.arguments[0],
@@ -2553,6 +2558,69 @@ class IntegralAverageRankSortTest(unittest.TestCase):
 
 
 class SortingNetworkEncodingTest(unittest.TestCase):
+    def test_binary64_zero_and_nan_peers_share_lexicographic_and_network_order(self):
+        columns = (Column("d", "Double", False), Column("i", "Int64", False), Column("id", "Int64", False))
+        bits = (0, 0x8000000000000000, 0x7FF8000000000001, 0xFFF8000000000002)
+        rows = tuple(Row(smt.TRUE, {
+            "d": Value("Double", smt.FALSE, smt.int_value(value)),
+            "i": Value("Int64", smt.FALSE, smt.int_value(2 - index % 2)),
+            "id": Value("Int64", smt.FALSE, smt.int_value(index)),
+        }) for index, value in enumerate(bits))
+        order = (SortOrder("d", True, False, BINARY64_ORDER_COMPARISON), SortOrder("i", True, False))
+        for first, second in ((rows[0], rows[1]), (rows[2], rows[3])):
+            self.assertTrue(_ground(relation._sort_keys_equal(first, second, order[:1]), {}))
+            self.assertTrue(_ground(relation._row_less(second, first, order), {}))
+            self.assertFalse(_ground(relation._row_less(first, second, order), {}))
+        for keys in (order[:1], order):
+            script = smt.Script()
+            outcome = relation._sorting_network_family(single(Relation(columns, rows)), keys, script, "bits").outcomes[0]
+            for priorities in permutations(range(4)):
+                constants = {choice.term.atom: priority for choice, priority in zip(outcome.choices, priorities)}
+                actual = tuple(_ground(row.values["id"].value, constants, script) for row in outcome.relation.rows)
+                expected = (1, 0, 3, 2) if len(keys) == 2 else tuple(sorted(range(4), key=lambda i: (i // 2, priorities[i])))
+                self.assertEqual(actual, expected, (keys, priorities))
+
+    def test_aggregate_visitation_preserves_order_and_complete_binary64_states(self):
+        columns = (Column("id", "Int64", False), Column("var", "Double", True))
+        for represented_order in (False, True):
+            script = smt.Script()
+            presence = tuple(script.fresh_constant(f"present_{index}", smt.BOOL) for index in range(3))
+            rows = tuple(Row(present, {
+                "id": Value("Int64", smt.FALSE, smt.int_value(index)),
+                "var": Value("Double", smt.bool_value(index == 1), smt.int_value(index + 50),
+                             binary64_state=floating.VarianceState(*(floating.literal_bits(index + offset) for offset in (30, 40, 50)))),
+            }) for index, present in enumerate(presence))
+            source = single(Relation(columns, rows))
+            if represented_order:
+                ordinals, choices = relation._fresh_ordinals(script, "input", rows)
+                source = RelationFamily((replace(
+                    source.outcomes[0],
+                    relation=replace(source.outcomes[0].relation, sequence=True, ordinals=ordinals), choices=choices,
+                ),))
+            outcome = relation.visitation_family(source, script, "visit").outcomes[0]
+            self.assertEqual(len(outcome.choices), 3)
+            if represented_order:
+                self.assertEqual(outcome.choices, source.outcomes[0].choices)
+            self.assertTrue(outcome.relation.present_prefix)
+
+            def record(row, constants):
+                var = row.values["var"]
+                terms = (row.values["id"].value, var.is_null, var.value, *floating.state_terms(var.binary64_state))
+                return tuple(_ground(term, constants, script) for term in terms)
+            for mask in product((False, True), repeat=3):
+                for priorities in permutations(range(3)):
+                    constants = {term.atom: present for term, present in zip(presence, mask)}
+                    constants.update((choice.term.atom, priority) for choice, priority in zip(outcome.choices, priorities))
+                    self.assertTrue(_ground(outcome.enabled, constants, script))
+                    actual = tuple(record(row, constants) for row in outcome.relation.rows if _ground(row.present, constants, script))
+                    expected = tuple(record(rows[index], constants) for index in sorted(range(3), key=priorities.__getitem__) if mask[index])
+                    self.assertEqual(actual, expected, (represented_order, mask, priorities))
+            fixed = single(replace(source.outcomes[0].relation, sequence=True, ordinals=None))
+            self.assertIs(relation.visitation_family(fixed, script, "fixed"), fixed)
+            for cap in ("MAX_SORT_NETWORK_COMPARATORS", "MAX_SORT_NETWORK_PAYLOAD_CELLS"):
+                with patch.object(relation, cap, 0), self.assertRaisesRegex(RelationError, "construction audit bounds"):
+                    relation.visitation_family(single(Relation(columns, rows)), script, "too_wide")
+
     def test_zero_or_one_live_row_needs_no_packed_declaration(self):
         columns = (Column("k", "Int64", False),)
         value = {"k": Value("Int64", smt.FALSE, smt.ZERO)}

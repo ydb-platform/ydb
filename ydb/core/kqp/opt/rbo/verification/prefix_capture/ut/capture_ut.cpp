@@ -143,6 +143,13 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
     }
 
     Y_UNIT_TEST(RejectsMalformedOrUnrelatedOptimizerOutcomes) {
+        auto multiRootInitial = Supported(ERBOSemanticSnapshotBoundaryV1::Initial, "initial");
+        auto multiRootPrefix = Supported(ERBOSemanticSnapshotBoundaryV1::TransformationPrefix, "prefix", TwoEvents());
+        multiRootInitial.RootCount = multiRootPrefix.RootCount = 2;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            ClassifyCapture(2, false, {multiRootInitial, multiRootPrefix}),
+            yexception,
+            "requires a single optimizer root");
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             ClassifyCapture(0, false, {}),
             yexception,

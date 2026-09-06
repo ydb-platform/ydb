@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_sql.h>
 #include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -166,5 +167,100 @@ Y_UNIT_TEST(CommonTypeExpectedResults) {
 }
 
 } // Y_UNIT_TEST_SUITE(TYqlTryConvertToDecimal)
+
+Y_UNIT_TEST_SUITE(TYqlSqlExprEquivalence) {
+
+TExprNode::TPtr Lambda(
+    TExprContext& ctx,
+    TExprNode::TPtr argument,
+    TExprNode::TPtr body)
+{
+    return ctx.NewLambda(
+        TPositionHandle{}, ctx.NewArguments(TPositionHandle{}, {std::move(argument)}), std::move(body));
+}
+
+Y_UNIT_TEST(AlphaRenamingPreservesCapturedRowAndFreeVariableIdentity) {
+    TExprContext ctx;
+    const auto leftRow = ctx.NewArgument(TPositionHandle{}, "row");
+    const auto rightRow = ctx.NewArgument(TPositionHandle{}, "renamed_row");
+    const auto leftArg = ctx.NewArgument(TPositionHandle{}, "value");
+    const auto rightArg = ctx.NewArgument(TPositionHandle{}, "renamed_value");
+    const auto left = Lambda(ctx, leftArg, ctx.NewList(TPositionHandle{}, {leftRow, leftArg}));
+    const auto right = Lambda(ctx, rightArg, ctx.NewList(TPositionHandle{}, {rightRow, rightArg}));
+    const auto captured = Lambda(ctx, rightArg, ctx.NewList(TPositionHandle{}, {rightRow, rightRow}));
+    const auto equal = [&](const auto& first, const auto& second) {
+        return NTypeAnnImpl::NDetail::SqlExprsEqual(
+            *first, *second, *leftRow, *rightRow);
+    };
+
+    UNIT_ASSERT(equal(left, right));
+    UNIT_ASSERT(!equal(left, captured));
+    UNIT_ASSERT(equal(leftArg, leftArg));
+    UNIT_ASSERT(!equal(leftArg, rightArg));
+    // A right-side binder must not capture an identical free-variable node.
+    UNIT_ASSERT(!equal(Lambda(ctx, leftArg, rightArg), Lambda(ctx, rightArg, rightArg)));
+}
+
+Y_UNIT_TEST(SharedLambdaAtDifferentDepthDoesNotConfuseLocalAndCapturedArguments) {
+    TExprContext ctx;
+    const auto leftRow = ctx.NewArgument(TPositionHandle{}, "row");
+    const auto rightRow = ctx.NewArgument(TPositionHandle{}, "row");
+    const auto leftLocal = ctx.NewArgument(TPositionHandle{}, "local");
+    const auto leftOuter = ctx.NewArgument(TPositionHandle{}, "outer");
+    const auto rightFirst = ctx.NewArgument(TPositionHandle{}, "first");
+    const auto rightOuter = ctx.NewArgument(TPositionHandle{}, "outer");
+    const auto rightLocal = ctx.NewArgument(TPositionHandle{}, "local");
+    const auto sharedIdentity = Lambda(ctx, leftLocal, leftLocal);
+    const auto left = ctx.NewList(TPositionHandle{}, {
+        sharedIdentity,
+        Lambda(ctx, leftOuter, sharedIdentity),
+    });
+    const auto makeRight = [&](bool captureOuter) {
+        return ctx.NewList(TPositionHandle{}, {
+            Lambda(ctx, rightFirst, rightFirst),
+            Lambda(ctx, rightOuter, Lambda(
+                ctx, rightLocal, captureOuter ? rightOuter : rightLocal)),
+        });
+    };
+    const auto equivalent = makeRight(false);
+    const auto different = makeRight(true);
+
+    UNIT_ASSERT(NTypeAnnImpl::NDetail::SqlExprsEqual(
+        *left, *equivalent, *leftRow, *rightRow));
+    UNIT_ASSERT(!NTypeAnnImpl::NDetail::SqlExprsEqual(
+        *left, *different, *leftRow, *rightRow));
+    UNIT_ASSERT(!NTypeAnnImpl::NDetail::SqlExprsEqual(
+        *different, *left, *rightRow, *leftRow));
+}
+
+Y_UNIT_TEST(SharedLeftNodeIsComparedWithEveryRightNode) {
+    TExprContext ctx;
+    const auto leftRow = ctx.NewArgument(TPositionHandle{}, "row");
+    const auto rightRow = ctx.NewArgument(TPositionHandle{}, "row");
+    const auto shared = ctx.NewAtom(TPositionHandle{}, "same");
+    const auto left = ctx.NewList(TPositionHandle{}, {shared, shared});
+    const auto right = ctx.NewList(TPositionHandle{}, {
+        ctx.NewAtom(TPositionHandle{}, "same"), ctx.NewAtom(TPositionHandle{}, "different")});
+    UNIT_ASSERT(!NTypeAnnImpl::NDetail::SqlExprsEqual(
+        *left, *right, *leftRow, *rightRow));
+}
+
+Y_UNIT_TEST(InnerBinderShadowsEitherSideOfTheEnclosingRowAlias) {
+    TExprContext ctx;
+    const auto leftRow = ctx.NewArgument(TPositionHandle{}, "row");
+    const auto rightRow = ctx.NewArgument(TPositionHandle{}, "row");
+    const auto local = ctx.NewArgument(TPositionHandle{}, "local");
+    const auto captured = Lambda(ctx, local, leftRow);
+    const auto shadowed = Lambda(ctx, rightRow, rightRow);
+
+    // Whole-graph validation rejects duplicate declarations, but the internal
+    // matcher also handles partial graphs without assuming it has run already.
+    UNIT_ASSERT(!NTypeAnnImpl::NDetail::SqlExprsEqual(
+        *captured, *shadowed, *leftRow, *rightRow));
+    UNIT_ASSERT(!NTypeAnnImpl::NDetail::SqlExprsEqual(
+        *shadowed, *captured, *rightRow, *leftRow));
+}
+
+} // Y_UNIT_TEST_SUITE(TYqlSqlExprEquivalence)
 
 } // namespace NYql

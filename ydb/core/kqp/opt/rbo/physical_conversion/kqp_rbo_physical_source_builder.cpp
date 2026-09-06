@@ -30,6 +30,10 @@ THashMap<TString, TString> BuildOutputToPhysicalColumnMap(const TOpRead& read) {
 
 TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
+    const auto fanOut = [&](TExprNode::TPtr stream) {
+        return Read->IsSingleConsumer() ? stream : NPhysicalConvertionUtils::BuildMultiConsumerHandler(
+            std::move(stream), Read->GetNumOfConsumers(), Ctx, Pos);
+    };
     TVector<TExprNode::TPtr> columns;
     for (const auto& column : Read->Columns) {
         columns.push_back(Ctx.NewAtom(Pos, column));
@@ -72,7 +76,9 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 .Build()
                 .Program()
                     .Args({programArg})
-                    .Body(renameMap)
+                    // A row read already owns its stage. Fan out its stream,
+                    // not the whole TDqPhyStage consumed by outgoing edges.
+                    .Body(fanOut(renameMap))
                 .Build()
                 .Settings().Build()
             .Done().Ptr();
@@ -136,6 +142,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 .Input(narrowMap)
             .Done().Ptr();
             // clang-format on
+            source = fanOut(std::move(source));
             break;
         }
         default:

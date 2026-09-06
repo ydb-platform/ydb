@@ -5,9 +5,11 @@ PY_SRCS(
     rbo_verifier/__main__.py
     rbo_verifier/aggregate.py
     rbo_verifier/analysis.py
+    rbo_verifier/bundle.py
     rbo_verifier/cli.py
     rbo_verifier/decimal.py
     rbo_verifier/errors.py
+    rbo_verifier/floating.py
     rbo_verifier/ir.py
     rbo_verifier/join.py
     rbo_verifier/relation.py

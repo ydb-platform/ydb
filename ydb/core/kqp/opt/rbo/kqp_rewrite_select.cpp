@@ -89,7 +89,7 @@ bool IsTransportSafeWholePartitionWindowDefinition(
 
     const auto& partitions = *definition.Child(2);
     if (!partitions.IsList() || partitions.ChildrenSize() < 1 ||
-        partitions.ChildrenSize() > 4)
+        partitions.ChildrenSize() > 5)
     {
         return false;
     }
@@ -345,76 +345,60 @@ bool IsTransportSafeQ51OrderedAggregateWindow(
         IsRankCurrentRowFrameSetting(*frame.Child(3));
 }
 
+bool IsTransportSafeRankKey(const TExprNode& key) {
+    if (key.ChildrenSize() < 2 || !key.Child(0)->IsCallable("StructType") ||
+        key.Child(0)->ChildrenSize() != 1)
+    {
+        return false;
+    }
+    const auto& field = *key.Child(0)->Child(0);
+    const auto& lambda = *key.Child(1);
+    if (!field.IsList() || field.ChildrenSize() != 2 ||
+        !field.Child(0)->IsAtom() || field.Child(0)->Content().empty() ||
+        !lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() || lambda.Child(0)->ChildrenSize() != 1)
+    {
+        return false;
+    }
+    const auto& member = *lambda.Child(1);
+    return member.IsCallable("Member") && member.ChildrenSize() == 2 &&
+        member.Child(0) == lambda.Child(0)->Child(0) &&
+        member.Child(1)->IsAtom(field.Child(0)->Content());
+}
+
 bool IsTransportSafeRankWindowDefinition(
     const TExprNode& definition,
     TStringBuf windowName)
 {
-    if (windowName.empty() ||
-        !definition.IsCallable("YqlWindow") ||
-        definition.ChildrenSize() != 5 ||
-        !definition.Child(0)->IsAtom(windowName) ||
-        !definition.Child(1)->IsAtom("") ||
-        !definition.Child(2)->IsList() ||
-        definition.Child(2)->ChildrenSize() != 0)
+    if (windowName.empty() || !definition.IsCallable("YqlWindow") ||
+        definition.ChildrenSize() != 5 || !definition.Child(0)->IsAtom(windowName) ||
+        !definition.Child(1)->IsAtom("") || !definition.Child(2)->IsList() ||
+        definition.Child(2)->ChildrenSize() > 4)
     {
         return false;
     }
-
+    for (const auto& key : definition.Child(2)->Children()) {
+        if (!key->IsCallable("YqlGroup") || key->ChildrenSize() != 2 ||
+            !IsTransportSafeRankKey(*key))
+        {
+            return false;
+        }
+    }
     const auto& order = *definition.Child(3);
-    if (!order.IsList() || order.ChildrenSize() != 1) {
+    if (!order.IsList() || order.ChildrenSize() < 1 || order.ChildrenSize() > 2) {
         return false;
     }
-    const auto& sort = *order.Child(0);
-    if (!sort.IsCallable("YqlSort") || sort.ChildrenSize() != 4 ||
-        !sort.Child(2)->IsAtom("asc") ||
-        !sort.Child(3)->IsAtom("first"))
-    {
-        return false;
+    // Transport records dependencies only. The exporter separately checks
+    // exact key types and frame grammar against the typed input schema.
+    for (const auto& sort : order.Children()) {
+        if (!sort->IsCallable("YqlSort") || sort->ChildrenSize() != 4 ||
+            !IsTransportSafeRankKey(*sort) || !sort->Child(2)->IsAtom({"asc", "desc"}) ||
+            !sort->Child(3)->IsAtom({"first", "last"}))
+        {
+            return false;
+        }
     }
-
-    const auto& rowDescriptor = *sort.Child(0);
-    if (!rowDescriptor.IsCallable("StructType") ||
-        rowDescriptor.ChildrenSize() != 1)
-    {
-        return false;
-    }
-    const auto& field = *rowDescriptor.Child(0);
-    if (!field.IsList() ||
-        field.ChildrenSize() != 2 ||
-        !field.Child(0)->IsAtom() ||
-        field.Child(0)->Content().empty() ||
-        !IsExactDataTypeDescriptor(
-            *field.Child(1), {"Decimal", "15", "4"}))
-    {
-        return false;
-    }
-
-    const auto& lambda = *sort.Child(1);
-    if (!lambda.IsLambda() ||
-        lambda.ChildrenSize() != 2 ||
-        !lambda.Child(0)->IsArguments() ||
-        lambda.Child(0)->ChildrenSize() != 1 ||
-        !lambda.Child(0)->Child(0)->IsArgument())
-    {
-        return false;
-    }
-    const auto* argument = lambda.Child(0)->Child(0);
-    const auto& member = *lambda.Child(1);
-    if (!member.IsCallable("Member") ||
-        member.ChildrenSize() != 2 ||
-        member.Child(0) != argument ||
-        !member.Child(1)->IsAtom(field.Child(0)->Content()))
-    {
-        return false;
-    }
-
-    const auto& frame = *definition.Child(4);
-    return frame.IsList() &&
-        frame.ChildrenSize() == 4 &&
-        IsWholePartitionFrameSetting(*frame.Child(0), "type", "rows") &&
-        IsWholePartitionFrameSetting(*frame.Child(1), "from", "up") &&
-        IsWholePartitionFrameSetting(*frame.Child(2), "to", "f") &&
-        IsRankCurrentRowFrameSetting(*frame.Child(3));
+    return definition.Child(4)->IsList();
 }
 
 } // anonymous namespace
@@ -499,6 +483,14 @@ TString GetAggregationFunction(TExprNode::TPtr node) {
 }
 
 void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& aggregations) {
+    // Nested queries own their aggregate inputs and row arguments. Keep their
+    // bodies intact; only the enclosing expression is lowered by this pass.
+    // Do not stop at a sublink itself: its test expression can belong to the
+    // enclosing scope, while its SELECT child establishes the new scope.
+    if (node->IsCallable({"YqlSelect", "PgSelect"})) {
+        return;
+    }
+
     if (IsAggregation(node)) {
         if (node->ChildrenSize() == 2) {
             Y_ENSURE(node->ChildPtr(0)->Content() == "count", "Unsupported aggregation function for *");
@@ -1155,11 +1147,46 @@ void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPt
     // clang-format on
 }
 
+TExprNode::TPtr ReplaceGroupingMasks(TExprNode::TPtr expression, const THashSet<ui32>* groupingSet, TExprContext& ctx) {
+    TNodeOnNodeOwnedMap replacements;
+    VisitExpr(expression, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable({"YqlSelect", "YqlSubLink"})) {
+            return false;
+        }
+        if (!node->IsCallable("YqlGrouping")) {
+            return true;
+        }
+
+        Y_ENSURE(node->ChildrenSize() >= 1 && node->ChildrenSize() <= 31);
+        ui64 mask = 0;
+        for (const auto& groupRef : node->Children()) {
+            Y_ENSURE(groupRef->IsCallable("YqlGroupRef") &&
+                (groupRef->ChildrenSize() == 3 || groupRef->ChildrenSize() == 4));
+            const ui32 index = FromString<ui32>(groupRef->Child(2)->Content());
+            // The rightmost argument is the low bit. A real NULL key is still
+            // present in its grouping set; only a rolled-up key contributes 1.
+            mask = (mask << 1) | (groupingSet && !groupingSet->contains(index));
+        }
+        replacements[node.Get()] = Build<TCoUint64>(ctx, node->Pos()).Literal().Build(ToString(mask)).Done().Ptr();
+        return false;
+    });
+    return replacements.empty() ? expression : ctx.ReplaceNodes(std::move(expression), replacements);
+}
+
 TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPreAgg,
                                          TVector<std::pair<TInfoUnit, TExprNode::TPtr>>&& groupByKeysExpressionsMap, TAggregationTraits&& aggTraits,
-                                         TAggregationTraits&& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda,
+                                         TAggregationTraits&& distinctAggregationTraitsPostAggregate, TExprNode::TPtr havingFilterLambda,
                                          TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPostAgg, TExprContext& ctx,
-                                         TPositionHandle pos, const TExprNode::TPtr& windowSetting) {
+                                         TPositionHandle pos, const TExprNode::TPtr& windowSetting,
+                                         const THashSet<ui32>* groupingSet = nullptr) {
+    // Specialize copies for this branch before discarding grouping-set identity.
+    // Without grouping sets all GROUPING arguments are present, hence mask zero.
+    for (auto& expression : expressionsMapPostAgg) {
+        std::get<1>(expression) = ReplaceGroupingMasks(std::get<1>(expression), groupingSet, ctx);
+    }
+    if (havingFilterLambda) {
+        havingFilterLambda = ReplaceGroupingMasks(std::move(havingFilterLambda), groupingSet, ctx);
+    }
     // While processing aggregations and having we could have the same aggregations functions on the same column, here we want to eliminate them.
     // TODO: Make a special rule in optimizer for that and support more cases, currently we support only simple one aka:
     // select f(a) ... having f(a) > val ...;
@@ -1226,7 +1253,8 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, TString&& resultColNam
     //
     // map (expr1 -> a, expr2 -> b) - > agg(a, b) -> map(expr(a, b) -> c)
     //
-    if (auto aggregations = CollectAggregations(lambda.Body().Ptr()); !aggregations.empty()) {
+    if (auto aggregations = CollectAggregations(lambda.Body().Ptr());
+        !aggregations.empty() || GetCallable(lambda.Body().Ptr(), "YqlGrouping")) {
         for (const auto& aggregation : aggregations) {
             const TString aggFuncName = GetAggregationFunction(aggregation->ChildPtr(0));
             TInfoUnit aggColName;
@@ -1300,6 +1328,7 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, TString&& resultColNam
 
         TNodeOnNodeOwnedMap nodeReplacementMap;
         auto exprLambdaArg = ctx.NewArgument(pos, "_post_lambda_arg_");
+        nodeReplacementMap[lambda.Args().Arg(0).Ptr().Get()] = exprLambdaArg;
         for (const auto& [aggregation, colName] : aggregationsForReplacement) {
             // clang-format off
             auto member = Build<TCoMember>(ctx, pos)
@@ -1353,6 +1382,114 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, TString&& resultColNam
         distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
         distinctAggregationTraitsPostAggregate.KeyColumns.push_back(originalColName.GetFullName());
     }
+}
+
+// Window keys are ordinary scalar expressions evaluated after aggregation.
+// Extract aggregate/GROUPING leaves before the grouping-set Union, but leave
+// the complete expression above it, where rolled-up keys have been NULL-padded.
+TExprNode::TPtr PrepareRankWindowKeys(
+    const TExprNode::TPtr& result, TExprNode::TPtr windowSetting,
+    THashSet<TString>& aggregationUniqueColNames,
+    TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPreAgg,
+    TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
+    TAggregationTraits& aggTraits, TAggregationTraits& distinctTraits,
+    TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPostAgg,
+    TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& carryKeys,
+    ui64& uniqueId, TExprContext& ctx)
+{
+    if (!windowSetting) {
+        return windowSetting;
+    }
+    THashSet<TStringBuf> rankNames;
+    VisitExpr(result, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable({"YqlSelect", "YqlSubLink", "PgSelect", "PgSubLink"})) {
+            return false;
+        }
+        if (IsTransportSafeRankWindowCall(*node)) {
+            rankNames.insert(node->Child(1)->Content());
+            return false;
+        }
+        return true;
+    });
+    TNodeOnNodeOwnedMap definitions;
+    for (const auto& definition : windowSetting->Child(1)->Children()) {
+        if (!definition->IsCallable("YqlWindow") || definition->ChildrenSize() != 5 ||
+            !rankNames.contains(definition->Child(0)->Content()) ||
+            !definition->Child(1)->IsAtom("") ||
+            IsTransportSafeRankWindowDefinition(*definition, definition->Child(0)->Content()))
+        {
+            continue;
+        }
+        TNodeOnNodeOwnedMap keys;
+        for (ui32 listIndex : {2U, 3U}) {
+            for (const auto& key : definition->Child(listIndex)->Children()) {
+                auto lambda = TCoLambda(ctx.DeepCopyLambda(*key->Child(1)));
+                const auto pos = key->Pos();
+                const TTypeAnnotationNode* keyType = key->Child(1)->Child(1)->GetTypeAnn();
+                Y_ENSURE(keyType, "Rank key requires its inferred scalar type");
+                TNodeOnNodeOwnedMap leaves;
+                VisitExpr(lambda.Body().Ptr(), [&](const TExprNode::TPtr& leaf) {
+                    if (leaf->IsCallable({"YqlSelect", "YqlSubLink", "PgSelect", "PgSubLink"})) {
+                        return false;
+                    }
+                    if (leaf->IsCallable({"YqlAgg", "YqlGrouping"})) {
+                        const TString column = GenerateUniqueColumnName(uniqueId, "window", "input");
+                        auto leafLambda = ctx.NewLambda(pos,
+                            ctx.NewArguments(pos, {lambda.Args().Arg(0).Ptr()}), {leaf});
+                        ProcessAggregations(leafLambda, TString(column), aggregationUniqueColNames,
+                            expressionsMapPreAgg, groupByKeysExpressionsMap, aggTraits, distinctTraits,
+                            expressionsMapPostAgg, uniqueId, false, ctx, pos);
+                        leaves[leaf.Get()] = ctx.NewCallable(pos, "Member", {
+                            lambda.Args().Arg(0).Ptr(), ctx.NewAtom(pos, column)});
+                        return false;
+                    }
+                    if (leaf->IsCallable("YqlGroupRef")) {
+                        leaves[leaf.Get()] = ctx.NewCallable(pos, "Member", {
+                            lambda.Args().Arg(0).Ptr(),
+                            ctx.NewAtom(pos, GetColumnNameFromGroupRef(leaf, groupByKeysExpressionsMap))});
+                        return false;
+                    }
+                    return true;
+                });
+                const TString column = GenerateUniqueColumnName(uniqueId, "window", "key");
+                carryKeys.emplace_back(TInfoUnit(column), ctx.ReplaceNodes(lambda.Ptr(), leaves));
+
+                // The source definition now names a self-contained, typed carry
+                // column. Later renames are tracked by the existing metadata API.
+                const auto* rowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+                    ctx.MakeType<TItemExprType>(column, keyType)});
+                auto argument = ctx.NewArgument(pos, "window_row");
+                argument->SetTypeAnn(rowType);
+                auto member = ctx.NewCallable(pos, "Member", {argument, ctx.NewAtom(pos, column)});
+                member->SetTypeAnn(keyType);
+                auto keyLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), {member});
+                keyLambda->SetTypeAnn(keyType);
+                auto children = key->ChildrenList();
+                children[0] = ExpandType(pos, *rowType, ctx);
+                children[1] = keyLambda;
+                keys[key.Get()] = ctx.ChangeChildren(*key, std::move(children));
+            }
+        }
+        definitions[definition.Get()] = ctx.ReplaceNodes(TExprNode::TPtr(definition), keys);
+    }
+    return definitions.empty() ? windowSetting : ctx.ReplaceNodes(std::move(windowSetting), definitions);
+}
+
+TExprNode::TPtr AddRankWindowKeys(TExprNode::TPtr input,
+    const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& carryKeys, TExprContext& ctx)
+{
+    if (carryKeys.empty()) {
+        return input;
+    }
+    TVector<TExprNode::TPtr> elements;
+    for (const auto& [column, lambda] : carryKeys) {
+        elements.push_back(Build<TKqpOpMapElementLambda>(ctx, lambda->Pos())
+            .Input(input).Variable().Value(column.GetFullName()).Build()
+            .Lambda(lambda).ForceOptional().Value("False").Build().Done().Ptr());
+    }
+    // Omitting Project means append: ordinary result and sort columns survive.
+    return Build<TKqpOpMap>(ctx, input->Pos()).Input(input)
+        .MapElements().Add(elements).Build().Done().Ptr();
 }
 
 void ProcessAggregationsInHaving(TExprNode::TPtr having, THashSet<TString>& aggregationUniqueColNames,
@@ -1894,10 +2031,40 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         }
 
         auto result = GetSetting(setItem->Tail(), "result");
-        const auto windowSetting = GetSetting(setItem->Tail(), "window");
+        auto windowSetting = GetSetting(setItem->Tail(), "window");
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
                                          distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll, ctx, node->Pos());
+
+        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> rankCarryKeys;
+        if (!distinctAll) {
+            windowSetting = PrepareRankWindowKeys(result, std::move(windowSetting), aggregationUniqueColNames,
+                expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
+                distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, rankCarryKeys,
+                uniqueAggColumnId, ctx);
+        }
+
+        auto sort = GetSetting(setItem->Tail(), "sort");
+        if (sort) {
+            TNodeOnNodeOwnedMap replacements;
+            for (const auto& sortItem : sort->Child(1)->Children()) {
+                const auto lambda = sortItem->ChildPtr(1);
+                if (!GetCallable(lambda, "YqlGrouping")) {
+                    continue;
+                }
+                const TString column = GenerateUniqueColumnName(uniqueAggColumnId, "grouping", "sort");
+                ProcessAggregations(lambda, TString(column), aggregationUniqueColNames, expressionsMapPreAgg,
+                    groupByKeysExpressionsMap, aggregationTraits, distinctAggregationTraitsPostAggregate,
+                    expressionsMapPostAgg, uniqueAggColumnId, distinctAll, ctx, node->Pos());
+                replacements[lambda.Get()] = Build<TCoLambda>(ctx, lambda->Pos())
+                    .Args({"arg"})
+                    .Body<TCoMember>().Struct("arg").Name().Build(column).Build()
+                    .Done().Ptr();
+            }
+            if (!replacements.empty()) {
+                sort = ctx.ReplaceNodes(std::move(sort), replacements);
+            }
+        }
 
         if (hasRollup) {
             Y_ENSURE(groupBySets.size() == 1, "Invalid group sets size for rollup.");
@@ -1957,7 +2124,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     resultExpr, std::move(expressionsMapPreAggForSet), std::move(groupByKeysExpressionsMapForSet),
                     std::move(aggregationTraitsForSet),
                     std::move(distinctAggregationTraitsPostAggregateForSet), havingFilterLambda, std::move(expressionsMapPostAggForSet), ctx, node->Pos(),
-                    windowSetting);
+                    windowSetting, &indexInGroupBySet);
 
                 if (rollupResultExpr) {
                     // clang-format off
@@ -1981,18 +2148,20 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                                                   std::move(expressionsMapPostAgg), ctx, node->Pos(), windowSetting);
         }
 
-        finalColumnOrder.clear();
+        resultExpr = AddRankWindowKeys(std::move(resultExpr), rankCarryKeys, ctx);
+
         TVector<TString> finalProjection;
         auto processResultColumn = [&](TExprNode::TPtr column, TExprNode::TPtr itemLambda) {
             TString columnName = TString(column->Content());
             auto lambda = TCoLambda(ctx.DeepCopyLambda(*(itemLambda)));
 
             auto aggregation = GetCallable(lambda.Body().Ptr(), "YqlAgg");
+            auto grouping = GetCallable(lambda.Body().Ptr(), "YqlGrouping");
             auto groupRef = GetCallable(lambda.Body().Ptr(), "YqlGroupRef");
             // Eliminate aggregation or reference to a group by expression from result lambda.
             auto aggColName = columnName;
-            if (aggregation || groupRef || distinctAll) {
-                if (groupRef) {
+            if (aggregation || grouping || groupRef || distinctAll) {
+                if (groupRef && !aggregation && !grouping) {
                     aggColName = GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap);
                 }
 
@@ -2016,7 +2185,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                 resultElementCounters[columnName] = 1;
             }
 
-            finalColumnOrder.push_back(columnName);
+            if (std::find(finalColumnOrder.begin(), finalColumnOrder.end(), columnName) == finalColumnOrder.end()) {
+                finalColumnOrder.push_back(columnName);
+            }
             auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
 
             // clang-format off
@@ -2102,7 +2273,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         }
 
         // Sort clause may contain extra columns that we need to keep in the projection in order for sort to work
-        auto sort = GetSetting(setItem->Tail(), "sort");
         if (sort) {
             auto sortDependencies = GetSortDependencies(sort, groupByKeysExpressionsMap);
             for (const auto& iu : sortDependencies) {

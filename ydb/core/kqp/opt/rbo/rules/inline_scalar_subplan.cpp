@@ -14,6 +14,61 @@ enum class EScalarEmptyInputRepair {
     Count,
 };
 
+// Inlining introduces a column that did not exist when join namespaces were
+// resolved. A shared consumer can expose it through both join inputs. Rename
+// only these new, dead scratch columns on the right edge; never merge values
+// or rename a live key, predicate, or public result.
+void ProtectInlinedScalarOutputs(IOperator& consumer, const TInfoUnit& scalar,
+    TRBOContext& ctx, TPlanProps& props)
+{
+    THashSet<IOperator*> seen;
+    TVector<IOperator*> ancestors;
+    const auto visit = [&](const auto& self, IOperator* op) -> void {
+        if (!seen.insert(op).second) {
+            return;
+        }
+        for (const auto& [parent, _] : op->Parents) {
+            self(self, parent);
+        }
+        ancestors.push_back(op);
+    };
+    visit(visit, &consumer);
+    TInfoUnitSet introduced{scalar};
+    TInfoUnitSet used;
+    for (auto* op : ancestors) {
+        AddInfoUnits(used, op->GetOutputIUs());
+        op->Props.OutputIUs.reset();
+    }
+    // Reverse the parent DFS: repair lower joins before their consumers.
+    for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it) {
+        auto* op = *it;
+        if (op->Kind != EOperator::Join) {
+            continue;
+        }
+        auto& join = *static_cast<TOpJoin*>(op);
+        if (!JoinOutputsLeft(join.JoinKind) || !JoinOutputsRight(join.JoinKind)) {
+            continue;
+        }
+        const auto left = MakeInfoUnitSet(join.GetLeftInput()->GetOutputIUs());
+        const auto right = join.GetRightInput()->GetOutputIUs();
+        const auto referenced = MakeInfoUnitSet(join.GetUsedIUs(props));
+        TVector<TMapElement> renames;
+        for (const auto& iu : right) {
+            if (!introduced.contains(iu) || !left.contains(iu)) {
+                continue;
+            }
+            Y_ENSURE(!GetLiveOut(&join).contains(iu) && !referenced.contains(iu),
+                "Scalar inlining would expose an ambiguous live column " << iu.GetFullName());
+            const auto fresh = NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, used);
+            introduced.insert(fresh);
+            renames.emplace_back(fresh, iu, join.Pos, &ctx.ExprCtx, &props);
+        }
+        if (!renames.empty()) {
+            join.SetRightInput(MakeIntrusive<TOpMap>(join.GetRightInput(), join.Pos, renames));
+        }
+    }
+}
+
 size_t CountInfoUnit(
     const TVector<TInfoUnit>& ius,
     const TInfoUnit& needle)
@@ -293,6 +348,64 @@ bool IsExactComputedResultPathMap(
     return true;
 }
 
+bool HasExactAlignedCorrelationDependencies(
+    const TVector<TInfoUnit>& registered,
+    TOpAddDependencies& dependencies,
+    IOperator& outer,
+    const TExpression& filter)
+{
+    const auto& added = dependencies.Dependencies;
+    if (registered.empty() || registered.size() != added.size() ||
+        added.size() != dependencies.Types.size() ||
+        !outer.Type || !dependencies.Type)
+    {
+        return false;
+    }
+
+    for (size_t index = 0; index < added.size(); ++index) {
+        const auto& iu = added[index];
+        if (CountInfoUnit(registered, iu) != 1 ||
+            CountInfoUnit(added, iu) != 1 ||
+            CountInfoUnit(outer.GetOutputIUs(), iu) != 1 ||
+            CountInfoUnit(dependencies.GetOutputIUs(), iu) != 1)
+        {
+            return false;
+        }
+        const auto* outerType = outer.GetIUType(iu);
+        const auto* addedType = dependencies.GetIUType(iu);
+        const auto* declaredType = dependencies.Types[index];
+        if (!outerType || !addedType || !declaredType ||
+            !IsSameAnnotation(*outerType, *declaredType) ||
+            !IsSameAnnotation(*addedType, *declaredType))
+        {
+            return false;
+        }
+    }
+
+    // Pull-up must preserve every dependency as an ordinary SQL equality.
+    // Multiple correlation keys change the grouping key, not NULL matching.
+    TInfoUnitSet covered;
+    for (const auto& condition : filter.SplitConjunct()) {
+        if (!condition.MaybeEquiJoinCondition()) {
+            return false;
+        }
+        const TEquiJoinCondition equality(condition);
+        auto outerKey = equality.GetLeftIU();
+        auto innerKey = equality.GetRightIU();
+        if (ContainsInfoUnit(added, innerKey)) {
+            std::swap(outerKey, innerKey);
+        }
+        if (!ContainsInfoUnit(added, outerKey) ||
+            ContainsInfoUnit(added, innerKey) ||
+            CountInfoUnit(dependencies.GetInput()->GetOutputIUs(), innerKey) != 1)
+        {
+            return false;
+        }
+        covered.insert(outerKey);
+    }
+    return covered.size() == added.size();
+}
+
 TIntrusivePtr<TOpAggregate> FindOnlyMarkedAggregate(
     const TIntrusivePtr<IOperator>& root)
 {
@@ -406,15 +519,15 @@ struct TDirectScalarAggregateResult {
     TString AggFunction;
 };
 
-// Constructed only after the exact AVG/strict-factor/Map/dependency premises
+// Constructed only after the exact AVG-or-SUM/strict-factor/Map/dependency premises
 // below have been checked. This is optimizer applicability, not verifier input.
-struct TExactScaledNullableAverageResult {
+struct TExactScaledNullableAggregateResult {
 };
 
 using TScalarResultPath = std::variant<
     TUnmarkedScalarResult,
     TDirectScalarAggregateResult,
-    TExactScaledNullableAverageResult>;
+    TExactScaledNullableAggregateResult>;
 
 TScalarResultPath AnalyzeScalarResultPath(
     const TIntrusivePtr<IOperator>& root,
@@ -461,21 +574,23 @@ TScalarResultPath AnalyzeScalarResultPath(
         }
         Y_ENSURE(
             marked->AggregationTraitsList.size() == 1 &&
-                selectedTrait->AggFunction == "avg",
+                (selectedTrait->AggFunction == "avg" ||
+                 selectedTrait->AggFunction == "sum"),
             "Computed correlated scalar DecimalMul requires one unique direct "
-            "AVG trait");
+            "AVG or SUM trait");
         Y_ENSURE(
             hasExactAlignedCorrelationDependency,
-            "Computed correlated scalar DecimalMul requires one matching "
-            "registered and AddDependencies correlation IU");
+            "Computed correlated scalar DecimalMul requires matching unique "
+            "typed registered and AddDependencies equality correlation IUs");
 
-        // AVG(empty) is NULL.  This exact DecimalMul is strict and its factor
-        // is a row-independent direct Decimal literal or String/Utf8-literal
+        // AVG(empty) and SUM(empty) are NULL. This exact DecimalMul is strict;
+        // its factor is a row-independent Decimal literal or String/Utf8-literal
         // SafeCast (including a constant NULL when that cast fails).  The
         // synthetic NULL introduced by the Left join therefore already has
         // the scalar expression's empty-input value; unlike COUNT, it needs
-        // no post-join repair.
-        return TExactScaledNullableAverageResult{};
+        // no post-join repair. The computed right Map stays after aggregation:
+        // no multiplication is distributed and no SUM order/type is changed.
+        return TExactScaledNullableAggregateResult{};
     }
     return TDirectScalarAggregateResult{selectedTrait->AggFunction};
 }
@@ -562,10 +677,11 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         auto uncorrSubplan = addDeps->GetInput();
         const bool hasExactAlignedCorrelationDependency =
-            subplanEntry.DependentIUs.size() == 1 &&
-            addDeps->Dependencies.size() == 1 &&
-            subplanEntry.DependentIUs.front() ==
-                addDeps->Dependencies.front();
+            HasExactAlignedCorrelationDependencies(
+                subplanEntry.DependentIUs,
+                *addDeps,
+                *child,
+                subplanFilter->FilterExpr);
         const auto resultPath = AnalyzeScalarResultPath(
             uncorrSubplan,
             subplanResIU,
@@ -766,6 +882,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         unaryOp->SetInput(cross);
     }
 
+    ProtectInlinedScalarOutputs(*input, scalarIU, ctx, props);
     props.Subplans.Remove(scalarIU);
 
     return true;

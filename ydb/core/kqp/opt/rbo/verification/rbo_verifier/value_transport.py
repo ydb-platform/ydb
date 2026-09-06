@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
-from . import decimal, smt
+from . import decimal, floating, smt
 from .scalar import DecimalAverageState, DecimalSumState, IntegralAverageState, Value
 
 
@@ -45,6 +45,8 @@ def select_scalar(
         raise ValueTransportError("scalar selection requires identical value types")
     if any(value.average_metadata is not None for value in values):
         raise ValueTransportError("scalar selection cannot select hidden AVG metadata")
+    if any(value.binary64_state is not None for value in values):
+        raise ValueTransportError("scalar selection cannot select binary64 physical state")
     return Value(
         fallback.type,
         _select_terms(tuple((guard, value.is_null) for guard, value in candidates), fallback.is_null),
@@ -94,10 +96,11 @@ def merge_exclusive_values(
     payload = select(value.value for value in values)
     bound = _finite_bound(values)
     average = _merge_average_states(values, select)
+    binary64 = _merge_binary64_states(values, select)
 
     sum_states = tuple(validated_decimal_sum_state(value, nullable) for value in values)
     summed = None
-    if average is None and all(state is not None for state in sum_states):
+    if average is None and binary64 is None and all(state is not None for state in sum_states):
         states = tuple(state for state in sum_states if state is not None)
         if all(state.sum_type == states[0].sum_type for state in states):
             summed = DecimalSumState(
@@ -112,7 +115,22 @@ def merge_exclusive_values(
             is_null = smt.not_(summed.any_non_null) if nullable else smt.FALSE
             payload = decimal.finish_sum_state(summed)
             bound = summed.finite_abs_bound
-    return Value(values[0].type, is_null, payload, bound, average, summed)
+    return Value(values[0].type, is_null, payload, bound, average, summed, binary64)
+
+
+def _merge_binary64_states(
+    values: tuple[Value, ...],
+    select: Callable[[Iterable[smt.Term]], smt.Term],
+) -> floating.State | None:
+    states = tuple(value.binary64_state for value in values)
+    if all(state is None for state in states):
+        return None
+    if any(value.average_metadata is not None or value.decimal_sum_state is not None for value in values):
+        raise ValueTransportError("binary64 physical state cannot carry legacy aggregate metadata")
+    if any(not isinstance(state, floating.VarianceState) for state in states):
+        raise ValueTransportError("exclusive row compaction mixed binary64 physical state layouts")
+    fields = tuple(select(items) for items in zip(*(floating.state_terms(state) for state in states)))
+    return floating.VarianceState(*(floating.Binary64(term) for term in fields))
 
 
 def _merge_average_states(

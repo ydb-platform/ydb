@@ -8,7 +8,6 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <algorithm>
-#include <optional>
 
 namespace NKikimr::NKqp {
 
@@ -18,24 +17,6 @@ using namespace NYql;
 using namespace NNodes;
 
 using DependencyPairType = std::pair<TInfoUnit, const TTypeAnnotationNode*>;
-
-std::optional<TInfoUnit> ResolveVisibleIUByColumnName(const TVector<TInfoUnit>& visibleIUs, const TInfoUnit& iu) {
-    if (ContainsInfoUnit(visibleIUs, iu)) {
-        return iu;
-    }
-
-    std::optional<TInfoUnit> candidate;
-    for (const auto& visible : visibleIUs) {
-        if (visible.GetColumnName() != iu.GetColumnName()) {
-            continue;
-        }
-        if (candidate) {
-            return std::nullopt;
-        }
-        candidate = visible;
-    }
-    return candidate;
-}
 
 bool OutputsBothJoinSides(const TString& joinKind) {
     return joinKind != "LeftOnly" && joinKind != "LeftSemi" && joinKind != "RightOnly" && joinKind != "RightSemi";
@@ -172,18 +153,6 @@ bool GetProject(const TKqpOpMap& map) {
 bool GetDistinct(const TKqpOpAggregationTraits& aggTraits) {
     auto maybeDistinct = aggTraits.Distinct();
     return maybeDistinct && maybeDistinct.Cast().StringValue() == "distinct";
-}
-
-TVector<TInfoUnit> GetStructIUs(const TTypeAnnotationNode* type) {
-    Y_ENSURE(type);
-    const auto* structType = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-
-    TVector<TInfoUnit> result;
-    result.reserve(structType->GetItems().size());
-    for (const auto& item : structType->GetItems()) {
-        result.emplace_back(TString(item->GetName()));
-    }
-    return result;
 }
 
 } // anonymous namespace
@@ -482,124 +451,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
 
     return MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters);
 }
-
-TExprNode::TPtr MaybeForceColumnToOptional(const TTypeAnnotationNode* unionAllType, TExprNode::TPtr input, TExprContext& ctx) {
-    Y_ENSURE(unionAllType);
-    auto inputType = input->GetTypeAnn();
-    Y_ENSURE(inputType);
-
-    Y_ENSURE(TMaybeNode<TKqpOpMap>(input), "Input is not a KqpOpMap.");
-    auto unionAllStructType = unionAllType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-
-    const auto unionAllSize = unionAllStructType->GetItems().size();
-    Y_ENSURE(unionAllSize == inputStructType->GetItems().size());
-    auto map = TExprBase(input).Cast<TKqpOpMap>();
-    Y_ENSURE(unionAllSize == map.MapElements().Size(), "Invalid number of input fields.");
-
-    TVector<TExprNode> mapElements;
-    for (ui32 i = 0; i < unionAllSize; ++i) {
-        const auto mapElement = map.MapElements().Item(i).Ptr();
-        const TString fieldName = TString(mapElement->ChildPtr(1)->Content());
-        auto inputFieldType = inputStructType->FindItemType(fieldName);
-        Y_ENSURE(inputFieldType, TStringBuilder() << "Cannot find type for item " << fieldName;);
-        auto unionAllFieldType = unionAllStructType->FindItemType(fieldName);
-        Y_ENSURE(unionAllFieldType, TStringBuilder() << "Cannot find type for item " << fieldName;);
-        // In case union all field type is optional but the same field for input is not - force optional.
-        if (unionAllFieldType->IsOptionalOrNull() && !inputFieldType->IsOptionalOrNull()) {
-            mapElement->ChildRef(3) = Build<TCoAtom>(ctx, input->Pos()).Value("True").Done().Ptr();
-        }
-    }
-
-    return input;
-}
-
-TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node) {
-    auto opSetOp = TKqpOpSetOp(node);
-
-    auto leftInputPtr = opSetOp.LeftInput().Ptr();
-    auto rightInputPtr = opSetOp.RightInput().Ptr();
-    if (TMaybeNode<TKqpOpMap>(leftInputPtr)) {
-        leftInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), leftInputPtr, Ctx);
-    }
-    if (TMaybeNode<TKqpOpMap>(rightInputPtr)) {
-        rightInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), rightInputPtr, Ctx) ;
-    }
-
-    auto leftInput = ExprNodeToOperator(leftInputPtr);
-    auto rightInput = ExprNodeToOperator(rightInputPtr);
-
-    TString setOpKind = opSetOp.SetOp().StringValue();
-    TIntrusivePtr<IOperator> result;
-
-    if (setOpKind == "intersect_all" || setOpKind == "except_all") {
-        Y_ENSURE(false, TStringBuilder() << "Set operation " << setOpKind << " is not currently supported");
-    }
-
-    if (setOpKind == "union_all" || setOpKind == "union") {
-        const auto outputIUs = GetStructIUs(node->GetTypeAnn());
-
-        const auto lhsSourceIUs = GetStructIUs(leftInputPtr->GetTypeAnn());
-        const auto rhsSourceIUs = GetStructIUs(rightInputPtr->GetTypeAnn());
-        Y_ENSURE(outputIUs.size() == lhsSourceIUs.size(), "UnionAll output and left input column counts mismatch");
-        Y_ENSURE(outputIUs.size() == rhsSourceIUs.size(), "UnionAll output and right input column counts mismatch");
-
-        result = MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos(), outputIUs);
-    } else if (setOpKind == "intersect" || setOpKind == "except" ) {
-
-        auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        TVector<TInfoUnit> setOpColumns;
-        for (const auto& t : itemType->GetItems()) {
-            if (t->GetItemType()->IsOptionalOrNull()) {
-                Y_ENSURE(false, TStringBuilder() << "Intersect/except key columns cannot be nullable: " << t->GetName());
-            }
-            setOpColumns.push_back(TInfoUnit(TString(t->GetName())));
-        }
-
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        TVector<TExpression> joinFilters;
-
-        for (const auto& iu : setOpColumns) {
-            joinKeys.push_back(std::make_pair(iu, iu));
-        }
-
-        TString joinKind = "LeftSemi";
-        if (setOpKind == "except") {
-            joinKind = "LeftOnly";
-        }
-
-        result = MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters);
-    } else {
-        Y_ENSURE(false, TStringBuilder() << "Unknow set operation: " << opSetOp.SetOp().StringValue());
-    }
-
-    if (setOpKind == "union" || setOpKind == "intersect" || setOpKind == "except") {
-        auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        TVector<TInfoUnit> setOpColumns;
-        for (const auto& t : itemType->GetItems()) {
-            setOpColumns.push_back(TInfoUnit(TString(t->GetName())));
-        }
-
-        TVector<TOpAggregationTraits> opAggTraitsList;
-        for (const auto& col : setOpColumns) {
-            const auto originalColName = TInfoUnit(col);
-            const auto aggFuncName = "distinct";
-            const auto resultColName = TInfoUnit(col);
-            TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName);
-            opAggTraitsList.push_back(opAggTraits);
-        }
-
-        TVector<TInfoUnit> keyColumns;
-        for (const auto& keyColumn : setOpColumns) {
-            keyColumns.push_back(TInfoUnit(keyColumn));
-        }
-
-        result = MakeIntrusive<TOpAggregate>(result, opAggTraitsList, keyColumns, EOpPhase::Undefined, true, node->Pos());
-
-    }
-    return result;
-}
-
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node) {
     const auto opLimit = TKqpOpLimit(node);
     const auto input = ExprNodeToOperator(opLimit.Input().Ptr());
@@ -669,26 +520,31 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPtr node) {
-    const auto input = ExprNodeToOperator(TKqpOpReplaceAlias(node).Input().Ptr());
+    const auto replaceAlias = TKqpOpReplaceAlias(node);
+    const auto input = ExprNodeToOperator(replaceAlias.Input().Ptr());
     const auto inputIUs = input->GetOutputIUs();
+    const auto* inputStructType = replaceAlias.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     const auto* outputStructType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     TVector<TMapElement> mapElements;
     TInfoUnitSet renamedSources;
-    THashSet<TString> outputColumnNames;
+    TInfoUnitSet outputs;
 
-    for (const auto& item : outputStructType->GetItems()) {
-        const auto output = TInfoUnit(TString(item->GetName()));
-        const auto source = ResolveVisibleIUByColumnName(inputIUs, TInfoUnit(output.GetColumnName()));
-        Y_ENSURE(source, "Cannot resolve source column " << output.GetColumnName() << " for ReplaceAlias");
+    for (const auto* item : inputStructType->GetItems()) {
+        const auto source = TInfoUnit(TString(item->GetName()));
+        Y_ENSURE(ContainsInfoUnit(inputIUs, source), "Cannot resolve source column " << item->GetName() << " for ReplaceAlias");
+        const TString outputName = replaceAlias.Alias().Value().empty()
+            ? TString(item->GetName()) : TStringBuilder() << replaceAlias.Alias().Value() << "." << item->GetName();
+        Y_ENSURE(outputStructType->FindItemType(outputName), "ReplaceAlias output schema disagrees with its source names");
+        const auto output = TInfoUnit(outputName);
 
-        mapElements.emplace_back(output, *source, node->Pos(), &Ctx, &PlanProps);
-        renamedSources.insert(*source);
-        outputColumnNames.insert(output.GetColumnName());
+        mapElements.emplace_back(output, source, node->Pos(), &Ctx, &PlanProps);
+        renamedSources.insert(source);
+        outputs.insert(output);
     }
 
     for (const auto& iu : inputIUs) {
-        if (outputColumnNames.contains(iu.GetColumnName()) && !renamedSources.contains(iu)) {
+        if (outputs.contains(iu) && !renamedSources.contains(iu)) {
             mapElements.emplace_back(MakeGeneratedIgnoreIU(PlanProps), iu, node->Pos(), &Ctx, &PlanProps);
         }
     }

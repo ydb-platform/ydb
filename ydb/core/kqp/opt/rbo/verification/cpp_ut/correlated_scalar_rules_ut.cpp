@@ -496,13 +496,20 @@ enum class EDecimalFactor {
 struct TCorrelatedDecimalAverageFixture {
     explicit TCorrelatedDecimalAverageFixture(
         bool factorFirst = false,
-        EDecimalFactor factor = EDecimalFactor::DirectDecimal)
+        EDecimalFactor factor = EDecimalFactor::DirectDecimal,
+        TStringBuf aggregateFunction = "avg",
+        bool compositeCorrelation = false)
         : Int32(DataType(Ctx, NUdf::EDataSlot::Int32))
+        , KeyType(compositeCorrelation
+              ? Ctx.ExprCtx.MakeType<TOptionalExprType>(Int32)
+              : Int32)
         , String(DataType(Ctx, NUdf::EDataSlot::String))
         , Utf8(DataType(Ctx, NUdf::EDataSlot::Utf8))
         , OptionalString(Ctx.ExprCtx.MakeType<TOptionalExprType>(String))
-        , Decimal(DecimalType(Ctx, "12", "2"))
-        , OptionalDecimal(DecimalType(Ctx, "12", "2", true))
+        , Precision(aggregateFunction == "sum" ? "35" : "12")
+        , Decimal(DecimalType(Ctx, Precision, "2"))
+        , OptionalDecimal(DecimalType(Ctx, Precision, "2", true))
+        , OptionalInputDecimal(DecimalType(Ctx, "12", "2", true))
         , WrongPrecisionDecimal(DecimalType(Ctx, "13", "2"))
         , OptionalWrongPrecisionDecimal(
               DecimalType(Ctx, "13", "2", true))
@@ -512,41 +519,44 @@ struct TCorrelatedDecimalAverageFixture {
         , ScalarResultType(OptionalDecimal)
         , Factor(factor)
     {
-        OuterRead = MakeRead({OuterKey}, Pos);
-        InnerRead = MakeRead({InnerKey, InnerValue}, Pos);
-        SetOutputType(Ctx, *OuterRead, {{OuterKey, Int32}});
-        SetOutputType(Ctx, *InnerRead, {
-            {InnerKey, Int32},
-            {InnerValue, OptionalDecimal},
-        });
+        if (compositeCorrelation) {
+            Correlations.emplace_back(ExtraDependency, ExtraInnerKey);
+        }
+        TVector<TInfoUnit> outerColumns;
+        TVector<TInfoUnit> innerColumns{InnerValue};
+        TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> outerTypes;
+        TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> innerTypes{
+            {InnerValue, OptionalInputDecimal}};
+        TVector<TExpression> equalities;
+        for (const auto& [outerKey, innerKey] : Correlations) {
+            outerColumns.push_back(outerKey);
+            innerColumns.push_back(innerKey);
+            outerTypes.emplace_back(outerKey, KeyType);
+            innerTypes.emplace_back(innerKey, KeyType);
+            equalities.push_back(MakeBinaryPredicate(
+                "==",
+                MakeColumnAccess(innerKey, Pos, &Ctx.ExprCtx, &Ctx.PlanProps),
+                MakeColumnAccess(outerKey, Pos, &Ctx.ExprCtx, &Ctx.PlanProps)));
+        }
+        OuterRead = MakeRead(outerColumns, Pos);
+        InnerRead = MakeRead(innerColumns, Pos);
+        SetOutputType(Ctx, *OuterRead, outerTypes);
+        SetOutputType(Ctx, *InnerRead, innerTypes);
+        SubplanDependencies = outerColumns;
 
         AddDependencies = MakeIntrusive<TOpAddDependencies>(
             InnerRead,
             Pos,
-            TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>{{
-                OuterKey,
-                Int32,
-            }});
+            outerTypes);
         CorrelationFilter = MakeIntrusive<TOpFilter>(
             AddDependencies,
             Pos,
-            MakeBinaryPredicate(
-                "==",
-                MakeColumnAccess(
-                    InnerKey,
-                    Pos,
-                    &Ctx.ExprCtx,
-                    &Ctx.PlanProps),
-                MakeColumnAccess(
-                    OuterKey,
-                    Pos,
-                    &Ctx.ExprCtx,
-                    &Ctx.PlanProps)));
+            MakeConjunction(equalities));
         Aggregate = MakeIntrusive<TOpAggregate>(
             CorrelationFilter,
             TVector<TOpAggregationTraits>{TOpAggregationTraits(
                 InnerValue,
-                "avg",
+                TString(aggregateFunction),
                 AverageResult)},
             TVector<TInfoUnit>{},
             EOpPhase::Undefined,
@@ -583,7 +593,7 @@ struct TCorrelatedDecimalAverageFixture {
                 Ctx,
                 Pos,
                 "20",
-                "12",
+                Precision,
                 literalScale,
                 literalType);
         }
@@ -643,7 +653,7 @@ struct TCorrelatedDecimalAverageFixture {
             {EDecimalFactor::NonOptionalTargetSafeCast, "12", "2",
              Decimal, nullptr},
         };
-        TDecimalTarget targetCase{Factor, "12", "2", Decimal, OptionalDecimal};
+        TDecimalTarget targetCase{Factor, Precision, "2", Decimal, OptionalDecimal};
         for (const auto& candidate : targetCases) {
             if (candidate.Factor == Factor) {
                 targetCase = candidate;
@@ -819,10 +829,12 @@ struct TCorrelatedDecimalAverageFixture {
             OuterRead,
             Pos,
             TVector<TMapElement>{TMapElement(Output, binding)});
-        SetOutputType(Ctx, *result, {
-            {OuterKey, Int32},
-            {Output, OptionalDecimal},
-        });
+        TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> columns{
+            {Output, OptionalDecimal}};
+        for (const auto& correlation : Correlations) {
+            columns.emplace_back(correlation.first, KeyType);
+        }
+        SetOutputType(Ctx, *result, columns);
         return result;
     }
 
@@ -838,7 +850,7 @@ struct TCorrelatedDecimalAverageFixture {
                 Ctx,
                 Pos,
                 "0",
-                "12",
+                Precision,
                 "2",
                 Decimal),
             &Ctx.ExprCtx,
@@ -848,7 +860,7 @@ struct TCorrelatedDecimalAverageFixture {
             OuterRead,
             Pos,
             MakeBinaryPredicate("==", binding, zero));
-        SetOutputType(Ctx, *result, {{OuterKey, Int32}});
+        result->Type = OuterRead->Type;
         return result;
     }
 
@@ -867,7 +879,7 @@ struct TCorrelatedDecimalAverageFixture {
         TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>
             aggregateColumns;
         for (const auto& key : Aggregate->KeyColumns) {
-            aggregateColumns.emplace_back(key, Int32);
+            aggregateColumns.emplace_back(key, KeyType);
         }
         for (const auto& trait : Aggregate->AggregationTraitsList) {
             aggregateColumns.emplace_back(
@@ -891,12 +903,14 @@ struct TCorrelatedDecimalAverageFixture {
         if (AddDependencies->GetInput().Get() == ResultMap.Get()) {
             dependentColumns = mapColumns;
         } else {
-            dependentColumns = {
-                {InnerKey, Int32},
-                {InnerValue, OptionalDecimal},
-            };
+            dependentColumns.emplace_back(InnerValue, OptionalInputDecimal);
+            for (const auto& correlation : Correlations) {
+                dependentColumns.emplace_back(correlation.second, KeyType);
+            }
         }
-        dependentColumns.emplace_back(OuterKey, Int32);
+        for (const auto& correlation : Correlations) {
+            dependentColumns.emplace_back(correlation.first, KeyType);
+        }
         SetOutputType(Ctx, *AddDependencies, dependentColumns);
         SetOutputType(Ctx, *CorrelationFilter, dependentColumns);
     }
@@ -913,12 +927,17 @@ struct TCorrelatedDecimalAverageFixture {
     const TInfoUnit Binding{"_rbo_decimal_scalar", true};
     const TInfoUnit Output{"result"};
     const TInfoUnit ExtraDependency{"outer.extra"};
+    const TInfoUnit ExtraInnerKey{"inner.extra"};
+    TVector<std::pair<TInfoUnit, TInfoUnit>> Correlations{{OuterKey, InnerKey}};
     const TTypeAnnotationNode* const Int32;
+    const TTypeAnnotationNode* const KeyType;
     const TTypeAnnotationNode* const String;
     const TTypeAnnotationNode* const Utf8;
     const TTypeAnnotationNode* const OptionalString;
+    const TStringBuf Precision;
     const TTypeAnnotationNode* const Decimal;
     const TTypeAnnotationNode* const OptionalDecimal;
+    const TTypeAnnotationNode* const OptionalInputDecimal;
     const TTypeAnnotationNode* const WrongPrecisionDecimal;
     const TTypeAnnotationNode* const OptionalWrongPrecisionDecimal;
     const TTypeAnnotationNode* const WrongScaleDecimal;
@@ -1046,10 +1065,18 @@ const TExprNode* AssertOptionalCountRepair(const TMapElement& element) {
 void AssertDecimalAverageInlineShape(
     bool factorFirst,
     bool filterConsumer,
-    EDecimalFactor factor)
+    EDecimalFactor factor,
+    TStringBuf aggregateFunction = "avg",
+    bool compositeCorrelation = false)
 {
-    TCorrelatedDecimalAverageFixture fixture(factorFirst, factor);
+    TCorrelatedDecimalAverageFixture fixture(
+        factorFirst, factor, aggregateFunction, compositeCorrelation);
     fixture.PullUpCorrelation();
+    if (compositeCorrelation) {
+        std::reverse(
+            fixture.SubplanDependencies.begin(),
+            fixture.SubplanDependencies.end());
+    }
     fixture.RegisterSubplan();
     const auto* originalComputation = fixture.ResultMap->MapElements
         .front()
@@ -1095,12 +1122,8 @@ void AssertDecimalAverageInlineShape(
     UNIT_ASSERT(!fixture.Ctx.PlanProps.Subplans.PlanMap.contains(
         fixture.Binding));
     UNIT_ASSERT_VALUES_EQUAL(join->JoinKind, "Left");
-    UNIT_ASSERT(
-        join->JoinKeys ==
-        (TVector<std::pair<TInfoUnit, TInfoUnit>>{{
-            fixture.OuterKey,
-            fixture.InnerKey,
-        }}));
+    UNIT_ASSERT(join->JoinKeys == fixture.Correlations);
+    UNIT_ASSERT(join->JoinFilters.empty());
 
     UNIT_ASSERT_VALUES_EQUAL(
         join->GetRightInput().Get(),
@@ -1134,7 +1157,7 @@ void AssertDecimalAverageInlineShape(
         UNIT_ASSERT(targetItem->IsCallable("DataType"));
         UNIT_ASSERT_VALUES_EQUAL(targetItem->ChildrenSize(), 3);
         UNIT_ASSERT_VALUES_EQUAL(targetItem->Child(0)->Content(), "Decimal");
-        UNIT_ASSERT_VALUES_EQUAL(targetItem->Child(1)->Content(), "12");
+        UNIT_ASSERT_VALUES_EQUAL(targetItem->Child(1)->Content(), fixture.Precision);
         UNIT_ASSERT_VALUES_EQUAL(targetItem->Child(2)->Content(), "2");
     }
 
@@ -1144,7 +1167,7 @@ void AssertDecimalAverageInlineShape(
         1);
     UNIT_ASSERT_VALUES_EQUAL(
         fixture.Aggregate->AggregationTraitsList.front().AggFunction,
-        "avg");
+        aggregateFunction);
 }
 
 void AssertDecimalAverageInlineRejectedWithoutMutation(
@@ -1504,20 +1527,26 @@ Y_UNIT_TEST_SUITE(KqpRboCorrelatedScalarRules) {
             fixture.Subplan.Get());
     }
 
-    Y_UNIT_TEST(InlineDecimalAverageKeepsComputedRightProject) {
-        for (const auto factor : {
-                 EDecimalFactor::DirectDecimal,
-                 EDecimalFactor::StringSafeCast,
-                 EDecimalFactor::Utf8SafeCast,
-                 EDecimalFactor::InvalidStringSafeCast,
-             })
-        {
-            for (const bool factorFirst : {false, true}) {
-                for (const bool filterConsumer : {false, true}) {
-                    AssertDecimalAverageInlineShape(
-                        factorFirst,
-                        filterConsumer,
-                        factor);
+    Y_UNIT_TEST(InlineDecimalNullableAggregateKeepsComputedRightProject) {
+        for (const TStringBuf function : {"avg", "sum"}) {
+            for (const auto factor : {
+                     EDecimalFactor::DirectDecimal,
+                     EDecimalFactor::StringSafeCast,
+                     EDecimalFactor::Utf8SafeCast,
+                     EDecimalFactor::InvalidStringSafeCast,
+                 })
+            {
+                for (const bool factorFirst : {false, true}) {
+                    for (const bool filterConsumer : {false, true}) {
+                        for (const bool composite : {false, true}) {
+                            AssertDecimalAverageInlineShape(
+                                factorFirst,
+                                filterConsumer,
+                                factor,
+                                function,
+                                composite);
+                        }
+                    }
                 }
             }
         }
@@ -1581,49 +1610,73 @@ Y_UNIT_TEST_SUITE(KqpRboCorrelatedScalarRules) {
         AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
     }
 
-    Y_UNIT_TEST(InlineDecimalAverageRejectsPostPullupNearMissesWithoutMutation) {
+    Y_UNIT_TEST(InlineDecimalNullableAggregateRejectsPostPullupNearMissesWithoutMutation) {
         using TFixture = TCorrelatedDecimalAverageFixture;
         struct TCase {
             TStringBuf Name;
             void (*Mutate)(TFixture&);
         };
         const TCase cases[] = {
-            {"non-AVG", [](TFixture& f) {
-                f.Aggregate->AggregationTraitsList.front().AggFunction = "sum";
+            {"COUNT needs a different empty-input repair", [](TFixture& f) {
+                f.Aggregate->AggregationTraitsList.front().AggFunction = "count";
             }},
             {"window semantics", [](TFixture& f) {
                 f.AddWindowMetadataToComputation();
             }},
-            {"multiple dependencies", [](TFixture& f) {
-                f.SubplanDependencies.push_back(f.ExtraDependency);
+            {"unregistered dependency", [](TFixture& f) {
+                f.SubplanDependencies.push_back(TInfoUnit("outer.missing"));
             }},
             {"misaligned dependency", [](TFixture& f) {
-                f.SubplanDependencies = {f.ExtraDependency};
+                f.SubplanDependencies.front() = TInfoUnit("outer.missing");
             }},
-            {"distinct AVG", [](TFixture& f) {
+            {"duplicate dependencies on both sides", [](TFixture& f) {
+                f.SubplanDependencies.push_back(f.OuterKey);
+                f.AddDependencies->Dependencies.push_back(f.OuterKey);
+                f.AddDependencies->Types.push_back(f.KeyType);
+            }},
+            {"misaligned dependency type", [](TFixture& f) {
+                f.AddDependencies->Types.front() = f.Int32;
+            }},
+            {"ambiguous outer IU", [](TFixture& f) {
+                f.OuterRead->Props.OutputIUs = TVector<TInfoUnit>{
+                    f.OuterKey, f.OuterKey, f.ExtraDependency};
+            }},
+            {"missing equality for second dependency", [](TFixture& f) {
+                f.CorrelationFilter->FilterExpr = MakeBinaryPredicate(
+                    "==",
+                    MakeColumnAccess(
+                        f.InnerKey, f.Pos, &f.Ctx.ExprCtx, &f.Ctx.PlanProps),
+                    MakeColumnAccess(
+                        f.OuterKey, f.Pos, &f.Ctx.ExprCtx, &f.Ctx.PlanProps));
+            }},
+            {"distinct aggregate", [](TFixture& f) {
                 f.Aggregate->AggregationTraitsList.front().Distinct = true;
             }},
-            {"unwrapped AVG", [](TFixture& f) {
+            {"unwrapped aggregate", [](TFixture& f) {
                 f.Aggregate->AggregationTraitsList.front().Unwrap = true;
             }},
-            {"final-phase AVG", [](TFixture& f) {
+            {"final-phase aggregate", [](TFixture& f) {
                 f.Aggregate->AggregationPhase = EOpPhase::Final;
             }},
             {"DistinctAll", [](TFixture& f) {
                 f.Aggregate->DistinctAll = true;
             }},
         };
-        for (const auto& test : cases) {
-            TCorrelatedDecimalAverageFixture fixture;
-            fixture.PullUpCorrelation();
-            test.Mutate(fixture);
-            const TString function =
-                fixture.Aggregate->AggregationTraitsList.front().AggFunction;
-            AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                fixture.Aggregate->AggregationTraitsList.front().AggFunction,
-                function,
-                test.Name);
+        for (const TStringBuf function : {"avg", "sum"}) {
+            for (const auto& test : cases) {
+                TCorrelatedDecimalAverageFixture fixture(
+                    false, EDecimalFactor::DirectDecimal, function,
+                    /* compositeCorrelation */ true);
+                fixture.PullUpCorrelation();
+                test.Mutate(fixture);
+                const TString mutatedFunction =
+                    fixture.Aggregate->AggregationTraitsList.front().AggFunction;
+                AssertDecimalAverageInlineRejectedWithoutMutation(fixture);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    fixture.Aggregate->AggregationTraitsList.front().AggFunction,
+                    mutatedFunction,
+                    test.Name);
+            }
         }
     }
 

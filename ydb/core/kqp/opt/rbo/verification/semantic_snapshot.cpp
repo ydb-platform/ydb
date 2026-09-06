@@ -11,6 +11,7 @@
 #include <library/cpp/json/writer/json_value.h>
 
 #include <yql/essentials/ast/yql_type_string.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_date_scaler.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -28,6 +29,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -40,6 +42,9 @@ namespace {
 
 using namespace NYql;
 using namespace NYql::NNodes;
+
+constexpr TStringBuf Binary64SemanticMode = "binary64_uf_universal_v1";
+constexpr TStringBuf Binary64OrderingComparison = "binary64_total_v1";
 
 class TUnsupportedSnapshot final : public yexception {
 };
@@ -580,7 +585,8 @@ void AuditExactScalarExpression(const NJson::TJsonValue& root) {
             continue;
         }
         if (kind == "not" || kind == "exists" || kind == "cast_decimal" ||
-            kind == "cast_integral" || kind == "decimal_abs")
+            kind == "cast_integral" || kind == "decimal_abs" ||
+            kind == "cast_double" || kind == "sqrt_double" || kind == "is_nan_double")
         {
             push(expression["arg"]);
             continue;
@@ -654,7 +660,26 @@ NJson::TJsonValue ExistsExpr(NJson::TJsonValue argument) {
     return result;
 }
 
-TString TypeName(const TTypeAnnotationNode* annotation, bool* nullable = nullptr) {
+NJson::TJsonValue AlwaysPresentOptionalExpr(
+    NJson::TJsonValue argument,
+    const TString& type)
+{
+    auto result = JsonMap();
+    result["kind"] = "if";
+    result["condition"] = JsonMap();
+    result["condition"]["kind"] = "literal";
+    result["condition"]["type"] = "Bool";
+    result["condition"]["value"] = true;
+    result["then"] = std::move(argument);
+    result["else"] = JsonMap();
+    result["else"]["kind"] = "null";
+    result["else"]["type"] = type;
+    result["type"] = type;
+    result["nullable"] = true;
+    return result;
+}
+
+TString TypeName(const TTypeAnnotationNode* annotation, bool* nullable = nullptr, bool allowDouble = false) {
     if (!annotation) {
         Unsupported("Scalar expression has no type annotation");
     }
@@ -676,7 +701,7 @@ TString TypeName(const TTypeAnnotationNode* annotation, bool* nullable = nullptr
     } else if (dynamic_cast<const TDataExprParamsType*>(data)) {
         Unsupported(TStringBuilder() << "Unsupported parameterized scalar type " << type);
     }
-    if (!IsSupportedType(type)) {
+    if (!IsSupportedType(type) && !(allowDouble && type == "Double")) {
         Unsupported(TStringBuilder() << "Unsupported scalar type " << type);
     }
     if (nullable) {
@@ -890,15 +915,11 @@ bool IsStringType(TStringBuf type) {
 
 bool IsExactDynamicInColumnType(TStringBuf type) {
     // Dynamic IN is modeled as same-type equality over one scalar domain.
-    // Nullable integers and Date are admitted only under the separately
+    // Nullable columns are admitted only under the separately
     // validated positive-Filter contract.  Keep this narrower than general
     // comparison compatibility: Utf8 and coercing comparisons have not been
     // audited.
     return IsIntegerType(type) || type == "Date" || type == "String";
-}
-
-bool IsExactNullableDynamicInColumnType(TStringBuf type) {
-    return IsIntegerType(type) || type == "Date";
 }
 
 bool StringComparisonCompatible(TStringBuf left, TStringBuf right) {
@@ -1031,8 +1052,8 @@ bool IsModeledOrderingType(TStringBuf type) {
         IsCanonicalDecimalType(type);
 }
 
-TString ScalarTypeName(const TExprNode& node, bool* nullable = nullptr) {
-    return TypeName(node.GetTypeAnn(), nullable);
+TString ScalarTypeName(const TExprNode& node, bool* nullable = nullptr, bool allowDouble = false) {
+    return TypeName(node.GetTypeAnn(), nullable, allowDouble);
 }
 
 void CheckScalarArity(const TExprNode& node, size_t minimum, size_t maximum) {
@@ -1106,7 +1127,8 @@ TString NothingTypeName(const TExprNode& node) {
 
 void CheckComparisonCallable(
     const TExprNode& node,
-    bool allowMissingAnnotations = false)
+    bool allowMissingAnnotations = false,
+    bool allowDouble = false)
 {
     if (node.ChildrenSize() != 2) {
         Unsupported(TStringBuilder()
@@ -1131,10 +1153,14 @@ void CheckComparisonCallable(
 
     bool leftNullable = false;
     bool rightNullable = false;
-    const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable);
-    const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable);
+    const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable, allowDouble);
+    const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable, allowDouble);
     const bool equality = node.IsCallable({"==", "!=", "IsNotDistinctFrom"});
-    if (!(equality
+    const bool binary64 = allowDouble && leftType == "Double" && rightType == "Double";
+    if (binary64 && node.IsCallable("IsNotDistinctFrom")) {
+        Unsupported("Null-safe Double scalar comparison is not audited");
+    }
+    if (!binary64 && !(equality
             ? ScalarEqualityComparisonCompatible(leftType, rightType)
             : ScalarOrderingComparisonCompatible(leftType, rightType)))
     {
@@ -1393,6 +1419,7 @@ struct TExactDecimalSafeCast {
     TString SourceType;
     TString ResultType;
     bool Nullable = false;
+    bool OptionalIdentity = false;
 };
 
 TExactDecimalSafeCast CheckExactDecimalSafeCastCallable(
@@ -1462,30 +1489,26 @@ TExactDecimalSafeCast CheckExactDecimalSafeCastCallable(
         Unsupported(
             "Exact Decimal SafeCast source must be an integer or Decimal");
     }
-    if (sourceNullable != resultNullable) {
-        Unsupported(
-            "Exact Decimal SafeCast result nullability must match its source");
-    }
-    const bool q49DecimalRescale =
-        sourceType == "Decimal(35,2)" &&
-        resultType == "Decimal(15,4)";
-    if (sourceDecimal &&
-        !q49DecimalRescale &&
-        (sourceDecimal->Scale != parameters->Scale ||
-         sourceDecimal->Precision > parameters->Precision))
-    {
-        Unsupported(
-            "Exact Decimal SafeCast supports only same-scale widening "
-            "or the audited Decimal(35,2)-to-Decimal(15,4) rescale");
-    }
-
     const auto options = CastResult<false>(
         source.GetTypeAnn(),
         node.GetTypeAnn());
+    // Set-operation alignment can add Optional without changing the Decimal
+    // payload. This is an always-present lift, not a nullable numeric cast.
+    const bool optionalIdentity = !sourceNullable && resultNullable &&
+        sourceType == resultType && options == NUdf::ECastOptions::Complete;
+    if (sourceNullable != resultNullable && !optionalIdentity) {
+        Unsupported(
+            "Exact Decimal SafeCast result nullability must match its source");
+    }
+    const bool decimalWidening = sourceDecimal &&
+        sourceDecimal->Precision - sourceDecimal->Scale <= parameters->Precision - parameters->Scale &&
+        sourceDecimal->Scale <= parameters->Scale;
+    // Weak casts retain source NULL and saturate finite overflow. In
+    // particular, Impossible is not permission to manufacture an infinity.
     const bool reviewedCast = sourceDecimal
-        ? options == (q49DecimalRescale
-            ? NUdf::ECastOptions::MayLoseData
-            : NUdf::ECastOptions::Complete)
+        ? options == (decimalWidening
+            ? NUdf::ECastOptions::Complete
+            : NUdf::ECastOptions::MayLoseData)
         : options == NUdf::ECastOptions::Complete ||
             options == NUdf::ECastOptions::MayLoseData;
     if (!reviewedCast) {
@@ -1497,6 +1520,7 @@ TExactDecimalSafeCast CheckExactDecimalSafeCastCallable(
         .SourceType = sourceType,
         .ResultType = resultType,
         .Nullable = resultNullable,
+        .OptionalIdentity = optionalIdentity,
     };
 }
 
@@ -1625,7 +1649,7 @@ struct TIfSignature {
     bool ResultNullable;
 };
 
-const TExprNode* CheckExistsCallable(const TExprNode& node) {
+const TExprNode* CheckExistsCallable(const TExprNode& node, bool allowDouble = false) {
     if (!node.IsCallable("Exists") || node.ChildrenSize() != 1) {
         Unsupported("Exists must have exactly one scalar argument");
     }
@@ -1634,26 +1658,26 @@ const TExprNode* CheckExistsCallable(const TExprNode& node) {
     if (ScalarTypeName(node, &resultNullable) != "Bool" || resultNullable) {
         Unsupported("Exists result must be non-null Bool");
     }
-    ScalarTypeName(*node.Child(0));
+    ScalarTypeName(*node.Child(0), nullptr, allowDouble);
     return node.Child(0);
 }
 
-TIfSignature CheckIfCallable(const TExprNode& node) {
+TIfSignature CheckIfCallable(const TExprNode& node, bool allowDouble = false) {
     if (!node.IsCallable("If") || node.ChildrenSize() != 3) {
         Unsupported("If must have one condition and two branches");
     }
 
     bool conditionNullable = false;
-    if (ScalarTypeName(*node.Child(0), &conditionNullable) != "Bool") {
+    if (ScalarTypeName(*node.Child(0), &conditionNullable, allowDouble) != "Bool") {
         Unsupported("If condition must be Bool or Optional<Bool>");
     }
 
     bool resultNullable = false;
     bool thenNullable = false;
     bool elseNullable = false;
-    const TString resultType = ScalarTypeName(node, &resultNullable);
-    if (ScalarTypeName(*node.Child(1), &thenNullable) != resultType ||
-        ScalarTypeName(*node.Child(2), &elseNullable) != resultType)
+    const TString resultType = ScalarTypeName(node, &resultNullable, allowDouble);
+    if (ScalarTypeName(*node.Child(1), &thenNullable, allowDouble) != resultType ||
+        ScalarTypeName(*node.Child(2), &elseNullable, allowDouble) != resultType)
     {
         Unsupported("If branches must have the result's scalar type");
     }
@@ -1732,11 +1756,11 @@ void CheckRestrictedSubstringCallable(const TExprNode& node) {
     bool inputNullable = false;
     bool resultNullable = false;
     if (ScalarTypeName(*node.Child(0), &inputNullable) != "String" ||
-        !inputNullable || ScalarTypeName(node, &resultNullable) != "String" ||
-        !resultNullable)
+        ScalarTypeName(node, &resultNullable) != "String" ||
+        inputNullable != resultNullable)
     {
         Unsupported(
-            "Restricted Substring requires Optional<String> input and result");
+            "Restricted Substring requires String input and result with matching nullability");
     }
 
     for (size_t index = 1; index < 3; ++index) {
@@ -1744,13 +1768,13 @@ void CheckRestrictedSubstringCallable(const TExprNode& node) {
     }
 }
 
-TIfPresentSignature CheckIfPresentCallable(const TExprNode& node) {
+TIfPresentSignature CheckIfPresentCallable(const TExprNode& node, bool allowDouble = false) {
     if (!node.IsCallable("IfPresent") || node.ChildrenSize() != 3) {
         Unsupported("IfPresent must have one optional, one unary handler, and one missing branch");
     }
 
     bool optionalNullable = false;
-    const TString optionalType = ScalarTypeName(*node.Child(0), &optionalNullable);
+    const TString optionalType = ScalarTypeName(*node.Child(0), &optionalNullable, allowDouble);
     if (!optionalNullable) {
         Unsupported("IfPresent input must be exactly Optional<Data>");
     }
@@ -1768,18 +1792,18 @@ TIfPresentSignature CheckIfPresentCallable(const TExprNode& node) {
 
     const auto& argument = *arguments.Child(0);
     bool argumentNullable = false;
-    if (ScalarTypeName(argument, &argumentNullable) != optionalType ||
+    if (ScalarTypeName(argument, &argumentNullable, allowDouble) != optionalType ||
         argumentNullable)
     {
         Unsupported("IfPresent handler argument must be the non-null input value");
     }
 
     bool resultNullable = false;
-    const TString resultType = ScalarTypeName(node, &resultNullable);
+    const TString resultType = ScalarTypeName(node, &resultNullable, allowDouble);
     bool presentNullable = false;
     bool missingNullable = false;
-    if (ScalarTypeName(*handler.Child(1), &presentNullable) != resultType ||
-        ScalarTypeName(*node.Child(2), &missingNullable) != resultType ||
+    if (ScalarTypeName(*handler.Child(1), &presentNullable, allowDouble) != resultType ||
+        ScalarTypeName(*node.Child(2), &missingNullable, allowDouble) != resultType ||
         presentNullable != resultNullable ||
         missingNullable != resultNullable)
     {
@@ -5303,7 +5327,8 @@ NJson::TJsonValue ExportExprNode(
     const TVector<const TExprNode*>& boundArguments,
     TExactScalarBudget& budget,
     size_t normalizedDepth,
-    size_t sourceDepth)
+    size_t sourceDepth,
+    bool binary64Mode)
 {
     if (sourceDepth > MaxExactScalarDepth) {
         Unsupported(TStringBuilder()
@@ -5312,7 +5337,285 @@ NJson::TJsonValue ExportExprNode(
     }
     budget.Charge(normalizedDepth);
 
-    if (IsPassiveDoubleCarrierCandidate(node)) {
+    // Active Double is a separate, explicit interpretation. Every primitive
+    // stays visible to the verifier; no aggregate or arithmetic subtree is
+    // replaced with the old passive identity carrier in this mode.
+    if (binary64Mode) {
+        CheckScalarSafetyMetadata(node, node.IsCallable({"==", "!=", "And", "Or"}));
+    }
+    if (binary64Mode && node.IsCallable("Double")) {
+        CheckScalarSafetyMetadata(node);
+        CheckScalarArity(node, 1, 1);
+        if (!node.Child(0)->IsAtom() ||
+            !IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Double, false))
+        {
+            Unsupported("Binary64 literal must have one atom and exact Double type");
+        }
+        const auto text = node.Child(0)->Content();
+        const auto parsed = NMiniKQL::ValueFromString(
+            NUdf::EDataSlot::Double, NUdf::TStringRef(text.data(), text.size()));
+        if (!parsed) {
+            Unsupported("Invalid binary64 literal");
+        }
+        const ui64 bits = std::bit_cast<ui64>(parsed.Get<double>());
+        TString encoded(16, '0');
+        constexpr char Hex[] = "0123456789abcdef";
+        for (size_t index = 0; index < 16; ++index) {
+            encoded[15 - index] = Hex[(bits >> (index * 4)) & 15];
+        }
+        auto result = JsonMap();
+        result["kind"] = "literal";
+        result["type"] = "Double";
+        result["value"] = JsonMap();
+        result["value"]["bits"] = encoded;
+        return result;
+    }
+
+    const bool binary64Result = binary64Mode && (
+        IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Double, false) ||
+        IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Double, true));
+    if (binary64Mode && node.IsCallable({"==", "!=", "<", "<=", ">", ">="}) &&
+        node.ChildrenSize() == 2)
+    {
+        bool leftNullable = false, rightNullable = false;
+        const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable, true);
+        const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable, true);
+        if ((leftType == "Double" && IsIntegerType(rightType)) ||
+            (rightType == "Double" && IsIntegerType(leftType)))
+        {
+            // MiniKQL's mixed numeric comparison casts the integral operand
+            // to the floating operand's type before comparing (Equals/Less).
+            // Keep that conversion visible instead of treating integers as bits.
+            bool resultNullable = false;
+            if (ScalarTypeName(node, &resultNullable) != "Bool" ||
+                resultNullable != (leftNullable || rightNullable))
+            {
+                Unsupported("Mixed binary64 comparison has inconsistent result type");
+            }
+            const bool negated = node.IsCallable("!=");
+            const size_t childDepth = normalizedDepth + (negated ? 2 : 1);
+            const auto operand = [&](size_t index, const TString& type, bool nullable) {
+                const bool convert = type != "Double";
+                auto value = ExportExprNode(*node.Child(index), rowArgument, visibleColumns,
+                    boundArguments, budget, childDepth + convert, sourceDepth + 1, true);
+                if (!convert) {
+                    return value;
+                }
+                budget.Charge(childDepth);
+                auto cast = JsonMap();
+                cast["kind"] = "cast_double";
+                cast["source_type"] = type;
+                cast["type"] = "Double";
+                cast["nullable"] = nullable;
+                cast["arg"] = std::move(value);
+                return cast;
+            };
+            const TStringBuf kind = node.IsCallable({"==", "!="}) ? "eq" :
+                node.IsCallable("<") ? "lt" : node.IsCallable("<=") ? "lte" :
+                node.IsCallable(">") ? "gt" : "gte";
+            auto result = BinaryExpr(kind, operand(0, leftType, leftNullable),
+                operand(1, rightType, rightNullable));
+            if (kind == "eq") {
+                result["null_safe"] = false;
+            }
+            if (negated) {
+                budget.Charge(normalizedDepth + 1);
+                result = NotExpr(std::move(result));
+            }
+            return result;
+        }
+    }
+    if (binary64Result && node.IsCallable({"+", "-", "*", "/"})) {
+        CheckScalarSafetyMetadata(node);
+        CheckScalarArity(node, 2, 2);
+        bool nullable = false, leftNullable = false, rightNullable = false;
+        ScalarTypeName(node, &nullable, true);
+        if (ScalarTypeName(*node.Child(0), &leftNullable, true) != "Double" ||
+            ScalarTypeName(*node.Child(1), &rightNullable, true) != "Double" ||
+            nullable != (leftNullable || rightNullable))
+        {
+            Unsupported("Binary64 arithmetic requires exact Double operands and strict nullability");
+        }
+        const TStringBuf kind = node.IsCallable("+") ? "add" :
+            node.IsCallable("-") ? "sub" : node.IsCallable("*") ? "mul" : "div";
+        auto result = BinaryExpr(kind,
+            ExportExprNode(*node.Child(0), rowArgument, visibleColumns, boundArguments,
+                budget, normalizedDepth + 1, sourceDepth + 1, true),
+            ExportExprNode(*node.Child(1), rowArgument, visibleColumns, boundArguments,
+                budget, normalizedDepth + 1, sourceDepth + 1, true));
+        result["type"] = "Double";
+        result["nullable"] = nullable;
+        return result;
+    }
+
+    if (binary64Result && node.IsCallable({"SafeCast", "Convert"})) {
+        CheckScalarSafetyMetadata(node);
+        CheckScalarArity(node, 2, 2);
+        bool nullable = false, sourceNullable = false;
+        ScalarTypeName(node, &nullable, true);
+        const TString sourceType = ScalarTypeName(*node.Child(0), &sourceNullable, true);
+        if ((!IsIntegerType(sourceType) && sourceType != "Double") || nullable != sourceNullable) {
+            Unsupported("Binary64 cast requires an integral or identical Double source with matching nullability");
+        }
+        if (!(node.IsCallable("Convert") && node.Child(1)->IsAtom("Double"))) {
+            CheckDataDescriptor(*node.Child(1), NUdf::EDataSlot::Double, nullable, "Binary64 cast target");
+        }
+        const auto options = CastResult<false>(node.Child(0)->GetTypeAnn(), node.GetTypeAnn());
+        if (options != NUdf::ECastOptions::Complete && options != NUdf::ECastOptions::MayLoseData) {
+            Unsupported("Binary64 cast may fail or has impossible semantics");
+        }
+        auto argument = ExportExprNode(*node.Child(0), rowArgument, visibleColumns,
+            boundArguments, budget, normalizedDepth + 1, sourceDepth + 1, true);
+        if (sourceType == "Double") {
+            return argument;
+        }
+        auto result = JsonMap();
+        result["kind"] = "cast_double";
+        result["arg"] = std::move(argument);
+        result["source_type"] = sourceType;
+        result["type"] = "Double";
+        result["nullable"] = nullable;
+        return result;
+    }
+
+    if (binary64Mode && node.IsCallable("Apply") && node.ChildrenSize() == 2 &&
+        node.Child(0)->IsCallable("Udf") && node.Child(0)->ChildrenSize() > 0 &&
+        node.Child(0)->Child(0)->IsAtom() &&
+        (node.Child(0)->Child(0)->IsAtom("Math.Sqrt") || node.Child(0)->Child(0)->IsAtom("Math.IsNaN")))
+    {
+        const bool isNaN = node.Child(0)->Child(0)->IsAtom("Math.IsNaN");
+        const TReviewedUdfSpec spec{
+            isNaN ? TStringBuf("Math.IsNaN") : TStringBuf("Math.Sqrt"),
+            {isNaN ? NUdf::EDataSlot::Bool : NUdf::EDataSlot::Double},
+            {{{NUdf::EDataSlot::Double}, ReviewedUdfAutoMap}, {}},
+            1, {}, 0, false}; // Math's SIMPLE_STRICT_UDF_WITH_IR has no block implementation.
+        CheckReviewedUdfApply(node, spec, spec.Name);
+        auto result = JsonMap();
+        result["kind"] = isNaN ? "is_nan_double" : "sqrt_double";
+        result["arg"] = ExportExprNode(*node.Child(1), rowArgument, visibleColumns,
+            boundArguments, budget, normalizedDepth + 1, sourceDepth + 1, true);
+        result["type"] = isNaN ? "Bool" : "Double";
+        result["nullable"] = false;
+        return result;
+    }
+
+    if (binary64Result && node.IsCallable("Nothing")) {
+        CheckScalarSafetyMetadata(node);
+        CheckScalarArity(node, 1, 1);
+        CheckDataDescriptor(*node.Child(0), NUdf::EDataSlot::Double, true, "Binary64 Nothing");
+        auto result = JsonMap();
+        result["kind"] = "null";
+        result["type"] = "Double";
+        return result;
+    }
+
+    if (binary64Result && node.IsCallable("Just")) {
+        CheckScalarSafetyMetadata(node);
+        CheckScalarArity(node, 1, 1);
+        if (!IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Double, true) ||
+            !IsExactDataAnnotation(node.Child(0)->GetTypeAnn(), NUdf::EDataSlot::Double, false))
+        {
+            Unsupported("Binary64 Just must wrap exactly one present Double");
+        }
+        budget.Charge(normalizedDepth + 1, 2);
+        auto result = JsonMap();
+        result["kind"] = "if";
+        result["condition"] = JsonMap();
+        result["condition"]["kind"] = "literal";
+        result["condition"]["type"] = "Bool";
+        result["condition"]["value"] = true;
+        result["then"] = ExportExprNode(*node.Child(0), rowArgument, visibleColumns,
+            boundArguments, budget, normalizedDepth + 1, sourceDepth + 1, true);
+        result["else"] = JsonMap();
+        result["else"]["kind"] = "null";
+        result["else"]["type"] = "Double";
+        result["type"] = "Double";
+        result["nullable"] = true;
+        return result;
+    }
+
+    if (binary64Mode && node.IsCallable("Map") && node.ChildrenSize() == 2 &&
+        IsExactDataAnnotation(node.Child(0)->GetTypeAnn(), NUdf::EDataSlot::Double, true))
+    {
+        // Optional AutoMap is a NULL-preserving scalar binder, not a relation
+        // Map. In particular Math.IsNaN's AutoMap wrapper has this spelling.
+        const auto& handler = *node.Child(1);
+        if (!handler.IsLambda() || handler.ChildrenSize() != 2 ||
+            !handler.Child(0)->IsArguments() || handler.Child(0)->ChildrenSize() != 1 ||
+            !handler.Child(0)->Child(0)->IsArgument() ||
+            !IsExactDataAnnotation(handler.Child(0)->Child(0)->GetTypeAnn(), NUdf::EDataSlot::Double, false))
+        {
+            Unsupported("Binary64 optional Map requires one present Double binder");
+        }
+        bool nullable = false, presentNullable = false;
+        const TString type = ScalarTypeName(node, &nullable, true);
+        if ((type != "Bool" && type != "Double") || !nullable ||
+            ScalarTypeName(*handler.Child(1), &presentNullable, true) != type || presentNullable)
+        {
+            Unsupported("Binary64 optional Map requires one non-null Bool or Double handler");
+        }
+        CheckScalarSafetyMetadata(handler);
+        CheckScalarSafetyMetadata(*handler.Child(0));
+        CheckScalarSafetyMetadata(*handler.Child(0)->Child(0));
+        if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+            Unsupported("Binary64 optional Map binding depth exceeds the audit limit");
+        }
+        auto bindings = boundArguments;
+        bindings.insert(bindings.begin(), handler.Child(0)->Child(0));
+        auto missing = JsonMap();
+        missing["kind"] = "null";
+        missing["type"] = type;
+        auto present = JsonMap();
+        present["kind"] = "if";
+        present["condition"] = JsonMap();
+        present["condition"]["kind"] = "literal";
+        present["condition"]["type"] = "Bool";
+        present["condition"]["value"] = true;
+        present["then"] = ExportExprNode(*handler.Child(1), rowArgument, visibleColumns,
+            bindings, budget, normalizedDepth + 2, sourceDepth + 1, true);
+        present["else"] = missing;
+        present["type"] = type;
+        present["nullable"] = true;
+        budget.Charge(normalizedDepth + 1, 2); // Present If and missing NULL.
+        budget.Charge(normalizedDepth + 2, 2); // Present true and unreachable NULL.
+        auto result = JsonMap();
+        result["kind"] = "if_present";
+        result["optional"] = ExportExprNode(*node.Child(0), rowArgument, visibleColumns,
+            boundArguments, budget, normalizedDepth + 1, sourceDepth + 1, true);
+        result["present"] = std::move(present);
+        result["missing"] = std::move(missing);
+        result["type"] = type;
+        result["nullable"] = true;
+        return result;
+    }
+
+    if (binary64Mode && node.IsCallable("Coalesce") && node.ChildrenSize() == 2) {
+        bool optionalNullable = false, fallbackNullable = false, resultNullable = false;
+        const TString type = ScalarTypeName(node, &resultNullable, true);
+        if ((type == "Bool" || type == "Double") && !resultNullable &&
+            ScalarTypeName(*node.Child(0), &optionalNullable, true) == type && optionalNullable &&
+            ScalarTypeName(*node.Child(1), &fallbackNullable, true) == type && !fallbackNullable)
+        {
+            // The present branch is the input itself; all actual scalar
+            // subtrees are recursively admitted by the explicit-mode exporter.
+            if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+                Unsupported("Binary64 Coalesce binding depth exceeds the audit limit");
+            }
+            budget.Charge(normalizedDepth + 1);
+            auto result = JsonMap();
+            result["kind"] = "if_present";
+            result["optional"] = ExportExprNode(*node.Child(0), rowArgument, visibleColumns,
+                boundArguments, budget, normalizedDepth + 1, sourceDepth + 1, true);
+            result["present"] = BoundExpr(0);
+            result["missing"] = ExportExprNode(*node.Child(1), rowArgument, visibleColumns,
+                boundArguments, budget, normalizedDepth + 1, sourceDepth + 1, true);
+            result["type"] = type;
+            result["nullable"] = false;
+            return result;
+        }
+    }
+
+    if (!binary64Mode && IsPassiveDoubleCarrierCandidate(node)) {
         return TPassiveDoubleCarrierAuditor(
             rowArgument,
             visibleColumns).ExportAsOpaque(
@@ -5321,7 +5624,7 @@ NJson::TJsonValue ExportExprNode(
                 normalizedDepth + 1);
     }
 
-    if (IsRestrictedFloatingPredicateCandidate(node)) {
+    if (!binary64Mode && IsRestrictedFloatingPredicateCandidate(node)) {
         return TRestrictedFloatingPredicateAuditor(
             rowArgument,
             visibleColumns).ExportAsOpaque(
@@ -5336,7 +5639,7 @@ NJson::TJsonValue ExportExprNode(
             Unsupported("Scalar expression contains a free Argument");
         }
         bool nullable = false;
-        ScalarTypeName(node, &nullable);
+        ScalarTypeName(node, &nullable, binary64Mode);
         if (nullable) {
             Unsupported("IfPresent bound argument must be non-nullable");
         }
@@ -5369,7 +5672,7 @@ NJson::TJsonValue ExportExprNode(
     }
 
     if (node.IsCallable("Exists")) {
-        const auto* argument = CheckExistsCallable(node);
+        const auto* argument = CheckExistsCallable(node, binary64Mode);
         CheckScalarSafetyMetadata(node);
 
         return ExistsExpr(ExportExprNode(
@@ -5379,11 +5682,11 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1));
+            sourceDepth + 1, binary64Mode));
     }
 
     if (node.IsCallable("If")) {
-        const auto signature = CheckIfCallable(node);
+        const auto signature = CheckIfCallable(node, binary64Mode);
 
         // Branch terms are built eagerly by the verifier.  Recursive export
         // keeps that equivalent to lazy YQL If by admitting only audited,
@@ -5399,7 +5702,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["then"] = ExportExprNode(
             *signature.Then,
             rowArgument,
@@ -5407,7 +5710,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["else"] = ExportExprNode(
             *signature.Else,
             rowArgument,
@@ -5415,7 +5718,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
@@ -5497,7 +5800,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 2);
+            sourceDepth + 2, binary64Mode);
         result["present"] = BoundExpr(0);
         result["missing"] = ConstantDateValue(static_cast<ui16>(0));
         result["type"] = "Date";
@@ -5513,7 +5816,7 @@ NJson::TJsonValue ExportExprNode(
         auto result = LiteralExpr(node);
         if (node.Content() == "Date") {
             bool nullable = false;
-            if (ScalarTypeName(node, &nullable) != node.Content() || nullable) {
+            if (ScalarTypeName(node, &nullable, binary64Mode) != node.Content() || nullable) {
                 Unsupported("Date literal type annotation does not match its callable");
             }
         }
@@ -5541,7 +5844,7 @@ NJson::TJsonValue ExportExprNode(
             rowArgument,
             visibleColumns,
             boundArguments).RequireExactLoweringSource(node);
-        const TString resultType = ScalarTypeName(*argument);
+        const TString resultType = ScalarTypeName(*argument, nullptr, binary64Mode);
 
         budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
         auto condition = JsonMap();
@@ -5562,7 +5865,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["else"] = std::move(missing);
         result["type"] = resultType;
         result["nullable"] = true;
@@ -5599,7 +5902,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 2,
-            sourceDepth + 2);
+            sourceDepth + 2, binary64Mode);
         repaired["present"] = BoundExpr(0);
         repaired["missing"] = ExportExprNode(
             *exact.Zero,
@@ -5608,7 +5911,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 2,
-            sourceDepth + 2);
+            sourceDepth + 2, binary64Mode);
         repaired["type"] = "Uint64";
         repaired["nullable"] = false;
 
@@ -5661,7 +5964,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["else"] = std::move(missing);
         result["type"] = "Uint64";
         result["nullable"] = true;
@@ -5679,32 +5982,19 @@ NJson::TJsonValue ExportExprNode(
             rowArgument,
             visibleColumns,
             boundArguments).RequireExactLoweringSource(node);
-        const TString resultType = ScalarTypeName(*argument);
+        const TString resultType = ScalarTypeName(*argument, nullptr, binary64Mode);
 
         budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
-        auto condition = JsonMap();
-        condition["kind"] = "literal";
-        condition["type"] = "Bool";
-        condition["value"] = true;
-        auto missing = JsonMap();
-        missing["kind"] = "null";
-        missing["type"] = resultType;
-
-        auto result = JsonMap();
-        result["kind"] = "if";
-        result["condition"] = std::move(condition);
-        result["then"] = ExportExprNode(
-            *argument,
-            rowArgument,
-            visibleColumns,
-            boundArguments,
-            budget,
-            normalizedDepth + 1,
-            sourceDepth + 1);
-        result["else"] = std::move(missing);
-        result["type"] = resultType;
-        result["nullable"] = true;
-        return result;
+        return AlwaysPresentOptionalExpr(
+            ExportExprNode(
+                *argument,
+                rowArgument,
+                visibleColumns,
+                boundArguments,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1, binary64Mode),
+            resultType);
     }
 
     if (const auto exactCoalesce = ExactCoalesceFalseArgument(node);
@@ -5775,7 +6065,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["present"] = BoundExpr(0);
         result["missing"] = ExportExprNode(
             *node.Child(1),
@@ -5784,7 +6074,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["type"] = "Bool";
         result["nullable"] = false;
         return result;
@@ -5819,7 +6109,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["present"] = BoundExpr(0);
         result["missing"] = ExportExprNode(
             *exact.Zero,
@@ -5828,14 +6118,14 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["type"] = exact.ResultType;
         result["nullable"] = false;
         return result;
     }
 
     if (node.IsCallable("IfPresent")) {
-        const auto signature = CheckIfPresentCallable(node);
+        const auto signature = CheckIfPresentCallable(node, binary64Mode);
 
         // The SMT encoder constructs both branch terms eagerly.  That is
         // equivalent to YQL's lazy branch choice only after this closed-world
@@ -5862,7 +6152,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["present"] = ExportExprNode(
             *signature.Present,
             rowArgument,
@@ -5870,7 +6160,7 @@ NJson::TJsonValue ExportExprNode(
             presentBindings,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["missing"] = ExportExprNode(
             *signature.Missing,
             rowArgument,
@@ -5878,7 +6168,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
@@ -5894,7 +6184,7 @@ NJson::TJsonValue ExportExprNode(
             Unsupported("Static-set Contains must have exactly two arguments");
         }
         bool resultNullable = false;
-        if (ScalarTypeName(node, &resultNullable) != "Bool" || resultNullable) {
+        if (ScalarTypeName(node, &resultNullable, binary64Mode) != "Bool" || resultNullable) {
             Unsupported("Static-set Contains result must be non-null Bool");
         }
 
@@ -5964,7 +6254,7 @@ NJson::TJsonValue ExportExprNode(
         }
 
         bool lookupNullable = false;
-        if (ScalarTypeName(lookup, &lookupNullable) != itemType || lookupNullable) {
+        if (ScalarTypeName(lookup, &lookupNullable, binary64Mode) != itemType || lookupNullable) {
             Unsupported("Static-set Contains lookup must exactly match its item type");
         }
 
@@ -5979,7 +6269,7 @@ NJson::TJsonValue ExportExprNode(
             }
             const auto& argument = *lambda.Child(0)->Child(0);
             bool nullable = false;
-            if (ScalarTypeName(argument, &nullable) != itemType || nullable) {
+            if (ScalarTypeName(argument, &nullable, binary64Mode) != itemType || nullable) {
                 Unsupported(TStringBuilder()
                     << "Static-set ToDict " << label << " argument has the wrong type");
             }
@@ -6037,7 +6327,7 @@ NJson::TJsonValue ExportExprNode(
         for (size_t index = 1; index < values.ChildrenSize(); ++index) {
             const auto& item = *values.Child(index);
             bool nullable = false;
-            if (ScalarTypeName(item, &nullable) != itemType || nullable) {
+            if (ScalarTypeName(item, &nullable, binary64Mode) != itemType || nullable) {
                 Unsupported("Static-set List items must have one non-null type");
             }
             items.AppendValue(ExportExprNode(
@@ -6047,7 +6337,7 @@ NJson::TJsonValue ExportExprNode(
                 boundArguments,
                 budget,
                 normalizedDepth + 1,
-                sourceDepth + 1));
+                sourceDepth + 1, binary64Mode));
         }
 
         auto result = JsonMap();
@@ -6091,14 +6381,14 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["type"] = resultType;
         result["nullable"] = true;
         return result;
     }
 
     if (node.IsCallable("SafeCast") &&
-        ParseCanonicalDecimalType(ScalarTypeName(node)))
+        ParseCanonicalDecimalType(ScalarTypeName(node, nullptr, binary64Mode)))
     {
         if (IsStringDecimalSafeCastCandidate(node)) {
             auto result = StringLiteralDecimalSafeCastExpr(node);
@@ -6124,6 +6414,15 @@ NJson::TJsonValue ExportExprNode(
             visibleColumns,
             boundArguments).RequireExactLoweringSource(node);
 
+        if (cast.OptionalIdentity) {
+            budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
+            return AlwaysPresentOptionalExpr(
+                ExportExprNode(*node.Child(0), rowArgument, visibleColumns,
+                    boundArguments, budget, normalizedDepth + 1,
+                    sourceDepth + 1, binary64Mode),
+                cast.ResultType);
+        }
+
         auto result = JsonMap();
         result["kind"] = "cast_decimal";
         result["arg"] = ExportExprNode(
@@ -6133,7 +6432,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["source_type"] = cast.SourceType;
         result["type"] = cast.ResultType;
         result["nullable"] = cast.Nullable;
@@ -6141,7 +6440,7 @@ NJson::TJsonValue ExportExprNode(
     }
 
     if (node.IsCallable("Convert") &&
-        ParseCanonicalDecimalType(ScalarTypeName(node)))
+        ParseCanonicalDecimalType(ScalarTypeName(node, nullptr, binary64Mode)))
     {
         return DecimalConstantCastExpr(node);
     }
@@ -6175,7 +6474,7 @@ NJson::TJsonValue ExportExprNode(
                 boundArguments,
                 budget,
                 normalizedDepth + 1,
-                sourceDepth + 1),
+                sourceDepth + 1, binary64Mode),
             ExportExprNode(
                 *node.Child(1),
                 rowArgument,
@@ -6183,7 +6482,7 @@ NJson::TJsonValue ExportExprNode(
                 boundArguments,
                 budget,
                 normalizedDepth + 1,
-                sourceDepth + 1));
+                sourceDepth + 1, binary64Mode));
     }
 
     if (node.IsCallable("SqlIn")) {
@@ -6193,9 +6492,9 @@ NJson::TJsonValue ExportExprNode(
         }
 
         bool lookupNullable = false;
-        const TString lookupType = ScalarTypeName(*node.Child(1), &lookupNullable);
+        const TString lookupType = ScalarTypeName(*node.Child(1), &lookupNullable, binary64Mode);
         bool resultNullable = false;
-        if (ScalarTypeName(node, &resultNullable) != "Bool") {
+        if (ScalarTypeName(node, &resultNullable, binary64Mode) != "Bool") {
             Unsupported("SqlIn result is not Bool");
         }
         if (resultNullable != lookupNullable) {
@@ -6270,7 +6569,7 @@ NJson::TJsonValue ExportExprNode(
         for (size_t index = 0; index < collection.ChildrenSize(); ++index) {
             const auto& item = *collection.Child(index);
             bool nullable = false;
-            const TString type = ScalarTypeName(item, &nullable);
+            const TString type = ScalarTypeName(item, &nullable, binary64Mode);
             if (nullable && !provenPresentItems[index]) {
                 Unsupported("SqlIn item is nullable");
             }
@@ -6284,7 +6583,7 @@ NJson::TJsonValue ExportExprNode(
                 boundArguments,
                 budget,
                 normalizedDepth + 1,
-                sourceDepth + 1));
+                sourceDepth + 1, binary64Mode));
         }
 
         const auto& options = *node.Child(2);
@@ -6326,7 +6625,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["items"] = std::move(items);
         return result;
     }
@@ -6346,7 +6645,7 @@ NJson::TJsonValue ExportExprNode(
                 boundArguments,
                 budget,
                 normalizedDepth + 1,
-                sourceDepth + 1));
+                sourceDepth + 1, binary64Mode));
         }
         result["args"] = std::move(args);
         return result;
@@ -6365,7 +6664,7 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         return result;
     }
 
@@ -6382,14 +6681,14 @@ NJson::TJsonValue ExportExprNode(
             boundArguments,
             budget,
             normalizedDepth + 1,
-            sourceDepth + 1);
+            sourceDepth + 1, binary64Mode);
         result["type"] = "Decimal(35,2)";
         result["nullable"] = true;
         return result;
     }
 
     if (node.IsCallable({"==", "!=", "<", "<=", ">", ">=", "IsNotDistinctFrom"})) {
-        CheckComparisonCallable(node, true);
+        CheckComparisonCallable(node, !binary64Mode, binary64Mode);
         const bool equality = node.IsCallable({"==", "!=", "IsNotDistinctFrom"});
         const bool negated = node.IsCallable("!=");
         if (negated) {
@@ -6407,10 +6706,10 @@ NJson::TJsonValue ExportExprNode(
             equality ? TStringBuf("eq") : TStringBuf(Kinds.at(TString(node.Content()))),
             ExportExprNode(
                 *node.Child(0), rowArgument, visibleColumns, boundArguments,
-                budget, childDepth, sourceDepth + 1),
+                budget, childDepth, sourceDepth + 1, binary64Mode),
             ExportExprNode(
                 *node.Child(1), rowArgument, visibleColumns, boundArguments,
-                budget, childDepth, sourceDepth + 1));
+                budget, childDepth, sourceDepth + 1, binary64Mode));
         if (node.IsCallable("IsNotDistinctFrom")) {
             result["null_safe"] = true;
         }
@@ -6421,9 +6720,9 @@ NJson::TJsonValue ExportExprNode(
         bool resultNullable = false;
         bool leftNullable = false;
         bool rightNullable = false;
-        const TString resultType = ScalarTypeName(node, &resultNullable);
-        const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable);
-        const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable);
+        const TString resultType = ScalarTypeName(node, &resultNullable, binary64Mode);
+        const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable, binary64Mode);
+        const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable, binary64Mode);
         const bool exactInteger =
             IsIntegerType(resultType) &&
             leftType == resultType &&
@@ -6455,10 +6754,10 @@ NJson::TJsonValue ExportExprNode(
                 kind,
                 ExportExprNode(
                     *node.Child(0), rowArgument, visibleColumns, boundArguments,
-                    budget, normalizedDepth + 1, sourceDepth + 1),
+                    budget, normalizedDepth + 1, sourceDepth + 1, binary64Mode),
                 ExportExprNode(
                     *node.Child(1), rowArgument, visibleColumns, boundArguments,
-                    budget, normalizedDepth + 1, sourceDepth + 1));
+                    budget, normalizedDepth + 1, sourceDepth + 1, binary64Mode));
             result["type"] = resultType;
             result["nullable"] = resultNullable;
             return result;
@@ -6466,7 +6765,7 @@ NJson::TJsonValue ExportExprNode(
     }
 
     if (node.IsCallable("/") &&
-        IsIntegerType(ScalarTypeName(node)))
+        IsIntegerType(ScalarTypeName(node, nullptr, binary64Mode)))
     {
         const auto signature = CheckIntegralDivisionCallable(node);
 
@@ -6482,10 +6781,10 @@ NJson::TJsonValue ExportExprNode(
             "div",
             ExportExprNode(
                 *node.Child(0), rowArgument, visibleColumns, boundArguments,
-                budget, normalizedDepth + 1, sourceDepth + 1),
+                budget, normalizedDepth + 1, sourceDepth + 1, binary64Mode),
             ExportExprNode(
                 *node.Child(1), rowArgument, visibleColumns, boundArguments,
-                budget, normalizedDepth + 1, sourceDepth + 1));
+                budget, normalizedDepth + 1, sourceDepth + 1, binary64Mode));
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
@@ -6506,10 +6805,10 @@ NJson::TJsonValue ExportExprNode(
             kind,
             ExportExprNode(
                 *node.Child(0), rowArgument, visibleColumns, boundArguments,
-                budget, normalizedDepth + 1, sourceDepth + 1),
+                budget, normalizedDepth + 1, sourceDepth + 1, binary64Mode),
             ExportExprNode(
                 *node.Child(1), rowArgument, visibleColumns, boundArguments,
-                budget, normalizedDepth + 1, sourceDepth + 1));
+                budget, normalizedDepth + 1, sourceDepth + 1, binary64Mode));
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
@@ -6525,7 +6824,8 @@ NJson::TJsonValue ExportExprWithBudget(
     const TExpression& expression,
     const THashSet<TString>& visibleColumns,
     TExactScalarBudget& budget,
-    size_t normalizedDepth)
+    size_t normalizedDepth,
+    bool binary64Mode = false)
 {
     if (!expression.Node || !expression.Node->IsLambda() || expression.Node->ChildrenSize() != 2) {
         Unsupported("RBO expression is not a one-body lambda");
@@ -6543,15 +6843,17 @@ NJson::TJsonValue ExportExprWithBudget(
         {},
         budget,
         normalizedDepth,
-        1);
+        1,
+        binary64Mode);
 }
 
 NJson::TJsonValue ExportExpr(
     const TExpression& expression,
-    const THashSet<TString>& visibleColumns)
+    const THashSet<TString>& visibleColumns,
+    bool binary64Mode = false)
 {
     TExactScalarBudget budget;
-    auto result = ExportExprWithBudget(expression, visibleColumns, budget, 1);
+    auto result = ExportExprWithBudget(expression, visibleColumns, budget, 1, binary64Mode);
     AuditExactScalarExpression(result);
     return result;
 }
@@ -6559,7 +6861,8 @@ NJson::TJsonValue ExportExpr(
 NJson::TJsonValue ExportExpr(
     const TExpression& expression,
     const THashSet<TString>& visibleColumns,
-    const TStoredStringColumns& storedStringColumns)
+    const TStoredStringColumns& storedStringColumns,
+    bool binary64Mode = false)
 {
     if (!expression.Node ||
         !expression.Node->IsLambda() ||
@@ -6576,7 +6879,7 @@ NJson::TJsonValue ExportExpr(
     }
     const auto body = expression.GetExpressionBody();
     if (!body->IsCallable("Concat")) {
-        return ExportExpr(expression, visibleColumns);
+        return ExportExpr(expression, visibleColumns, binary64Mode);
     }
 
     if (auto folded = TLiteralStringConcatFolder::TryFold(*body)) {
@@ -7678,6 +7981,90 @@ NJson::TJsonValue IntegralAverageStateContract() {
     return state;
 }
 
+bool RequiresBinary64Semantics(IOperator& root) {
+    THashSet<const IOperator*> seen;
+    TVector<IOperator*> pending{&root};
+    while (!pending.empty()) {
+        auto* node = pending.back();
+        pending.pop_back();
+        if (!seen.insert(node).second) {
+            continue;
+        }
+        if (node->GetKind() == EOperator::Aggregate) {
+            for (const auto& trait : static_cast<TOpAggregate&>(*node).GetAggregationTraits()) {
+                if (trait.AggFunction == "variance_1_1") {
+                    return true;
+                }
+            }
+        }
+        for (const auto& child : node->GetChildren()) {
+            pending.push_back(child.Get());
+        }
+    }
+    return false;
+}
+
+NJson::TJsonValue VarianceStateContract(TOpAggregate& aggregate, const TOpAggregationTraits& trait) {
+    if (trait.AggFunction != "variance_1_1" || trait.Distinct || trait.Unwrap || aggregate.IsDistinctAll()) {
+        Unsupported("Binary64 variance requires one plain stddev_samp trait");
+    }
+    const TTypeAnnotationNode* sourceAnnotation = nullptr;
+    if (aggregate.GetAggregationPhase() == EOpPhase::Final) {
+        if (aggregate.GetInput()->GetKind() != EOperator::Aggregate) {
+            Unsupported("Final binary64 variance must directly consume an intermediate Aggregate");
+        }
+        auto& intermediate = static_cast<TOpAggregate&>(*aggregate.GetInput());
+        if (intermediate.GetAggregationPhase() != EOpPhase::Intermediate ||
+            intermediate.GetKeyColumns() != aggregate.GetKeyColumns())
+        {
+            Unsupported("Final binary64 variance must preserve its intermediate's ordered keys");
+        }
+        const auto input = trait.OriginalColName.GetFullName();
+        size_t producerCount = 0, consumerCount = 0;
+        for (const auto& candidate : intermediate.GetAggregationTraits()) {
+            if (candidate.ResultColName.GetFullName() == input) {
+                if (candidate.AggFunction != "variance_1_1" || candidate.Distinct || candidate.Unwrap) {
+                    Unsupported("Final binary64 variance requires its matching intermediate state");
+                }
+                ++producerCount;
+                sourceAnnotation = OutputType(*intermediate.GetInput(), candidate.OriginalColName.GetFullName());
+            }
+        }
+        for (const auto& candidate : aggregate.GetAggregationTraits()) {
+            consumerCount += candidate.OriginalColName.GetFullName() == input;
+        }
+        if (producerCount != 1 || consumerCount != 1) {
+            Unsupported("Binary64 variance state requires one matching producer and consumer");
+        }
+    } else {
+        sourceAnnotation = OutputType(*aggregate.GetInput(), trait.OriginalColName.GetFullName());
+    }
+    bool sourceNullable = false;
+    const TString sourceType = TypeName(sourceAnnotation, &sourceNullable, true);
+    if (!IsIntegerType(sourceType) && sourceType != "Double") {
+        Unsupported("Binary64 variance source must be an integer or Double");
+    }
+    bool inputNullable = false, outputNullable = false;
+    const TString inputType = TypeName(OutputType(*aggregate.GetInput(), trait.OriginalColName.GetFullName()), &inputNullable, true);
+    const TString outputType = TypeName(OutputType(aggregate, trait.ResultColName.GetFullName()), &outputNullable, true);
+    const TString expectedInput = aggregate.GetAggregationPhase() == EOpPhase::Final ? TString("Double") : sourceType;
+    const bool expectedNullable = sourceNullable ||
+        (aggregate.GetKeyColumns().empty() && aggregate.GetAggregationPhase() != EOpPhase::Intermediate);
+    if (inputType != expectedInput || inputNullable != sourceNullable ||
+        outputType != "Double" || outputNullable != expectedNullable)
+    {
+        Unsupported("Binary64 variance types/nullability disagree with its physical state contract");
+    }
+    auto state = JsonMap();
+    state["kind"] = "binary64_variance_v1";
+    state["source_type"] = sourceType;
+    state["nullable"] = sourceNullable;
+    state["mean_type"] = "Double";
+    state["count_type"] = "Double";
+    state["m2_type"] = "Double";
+    return state;
+}
+
 class TPlanExporter {
 private:
     enum class ESubplanKind {
@@ -7686,10 +8073,14 @@ private:
         In,
     };
 
+    struct TOuterDependency {
+        TString Name;
+        const TTypeAnnotationNode* Type = nullptr;
+    };
+
     struct TScalarSubplanDetails {
         struct TCorrelation {
-            TString Dependency;
-            const TTypeAnnotationNode* DependencyType = nullptr;
+            TVector<TOuterDependency> Dependencies;
         };
 
         TString OutputColumn;
@@ -7698,14 +8089,9 @@ private:
         std::optional<TCorrelation> Correlation;
     };
 
-    struct TExistsDependency {
-        TString Name;
-        const TTypeAnnotationNode* Type = nullptr;
-    };
-
     struct TExistsCorrelation {
         NJson::TJsonValue Predicate;
-        TVector<TExistsDependency> Dependencies;
+        TVector<TOuterDependency> Dependencies;
     };
 
     struct TExistsSubplanDetails {
@@ -7742,6 +8128,7 @@ public:
         : Root(root)
         , Cluster(cluster)
         , StageGraphPresent(stageGraphPresent)
+        , Binary64Mode(RequiresBinary64Semantics(*root.GetInput()))
     {
         for (const auto& table : catalog.Tables) {
             if (table.Name.empty() || !Catalog.emplace(table.Name, &table).second) {
@@ -7758,6 +8145,7 @@ public:
             Unsupported("Root output order must not be empty");
         }
         PrepareDecimalAverageCarriers();
+        PrepareErrorOnNullProjectionDemands();
 
         TVector<TIntrusivePtr<IOperator>> subplanRoots;
         for (const auto& subplan : Subplans) {
@@ -7775,7 +8163,6 @@ public:
         ValidateCheckedConcatProjectionTopology();
         ValidateWholePartitionWindowProjectionTopology();
         ValidateGlobalRankProjectionTopology();
-        ValidateErrorOnNullProjectionTopology();
         const auto rootNames = OutputNames(*Root.GetInput());
         auto output = JsonArray();
         THashSet<TString> seen;
@@ -7825,6 +8212,10 @@ public:
 
     const TString& GetRootId() const {
         return RootId;
+    }
+
+    bool UsesBinary64Semantics() const {
+        return Binary64Mode;
     }
 
 private:
@@ -8415,7 +8806,8 @@ private:
         TStringBuf binding,
         TStringBuf dependency,
         const TExpression& predicate,
-        const THashSet<TString>& innerNames)
+        const THashSet<TString>& innerNames,
+        const THashSet<TString>& dependencies = {})
     {
         std::optional<TExpression> correlation;
         TString innerColumn;
@@ -8423,7 +8815,7 @@ private:
             const auto columns = ExpressionColumns(conjunct);
             if (!columns.contains(dependency)) {
                 for (const auto& column : columns) {
-                    if (!innerNames.contains(column)) {
+                    if (!innerNames.contains(column) && !dependencies.contains(column)) {
                         Unsupported(TStringBuilder()
                             << kind << " subplan binding " << binding
                             << " residual predicate references unavailable column "
@@ -8490,7 +8882,8 @@ private:
         TStringBuf binding,
         TStringBuf dependency,
         const TExpression& predicate,
-        const THashSet<TString>& innerNames)
+        const THashSet<TString>& innerNames,
+        const THashSet<TString>& dependencies)
     {
         if (!predicate.GetExpressionBody()->IsCallable("Or")) {
             return ExtractDirectCorrelation(
@@ -8498,7 +8891,8 @@ private:
                 binding,
                 dependency,
                 predicate,
-                innerNames);
+                innerNames,
+                dependencies);
         }
 
         const auto branches = predicate.SplitDisjunct();
@@ -8525,7 +8919,7 @@ private:
                 }
 
                 for (const auto& column : columns) {
-                    if (!innerNames.contains(column)) {
+                    if (!innerNames.contains(column) && !dependencies.contains(column)) {
                         Unsupported(TStringBuilder()
                             << "Scalar subplan binding " << binding
                             << " residual predicate references unavailable column "
@@ -8765,17 +9159,19 @@ private:
         const TSubplanEntry& entry,
         const TIntrusivePtr<IOperator>& plan)
     {
-        if (entry.DependentIUs.size() != 1) {
+        if (entry.DependentIUs.empty()) {
             Unsupported(TStringBuilder()
                 << "Scalar subplan binding " << binding
-                << " must have exactly one outer dependency");
+                << " must have at least one outer dependency");
         }
-        const auto& dependencyIU = entry.DependentIUs.front();
-        const TString dependency = dependencyIU.GetFullName();
-        if (dependency.empty()) {
-            Unsupported(TStringBuilder()
-                << "Scalar subplan binding " << binding
-                << " has an empty outer dependency");
+        THashSet<TString> dependencies;
+        for (const auto& dependencyIU : entry.DependentIUs) {
+            const TString dependency = dependencyIU.GetFullName();
+            if (dependency.empty() || !dependencies.insert(dependency).second) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " has an empty or duplicate outer dependency");
+            }
         }
 
         THashSet<const IOperator*> nodes;
@@ -8809,14 +9205,27 @@ private:
         }
 
         auto* outerBind = outerBinds.front();
-        if (outerBind->Dependencies.size() != 1 ||
-            outerBind->Types.size() != 1 ||
-            !outerBind->Types.front() ||
-            outerBind->Dependencies.front() != dependencyIU)
+        if (outerBind->Dependencies.size() != dependencies.size() ||
+            outerBind->Types.size() != dependencies.size())
         {
             Unsupported(TStringBuilder()
                 << "Scalar subplan binding " << binding
                 << " dependency registry disagrees with AddDependencies");
+        }
+        TScalarSubplanDetails::TCorrelation result;
+        for (const auto& dependencyIU : entry.DependentIUs) {
+            const auto begin = outerBind->Dependencies.begin();
+            const auto end = outerBind->Dependencies.end();
+            const auto found = std::find(begin, end, dependencyIU);
+            if (found == end || std::count(begin, end, dependencyIU) != 1 ||
+                !outerBind->Types[found - begin])
+            {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " dependency registry disagrees with AddDependencies");
+            }
+            result.Dependencies.push_back({
+                dependencyIU.GetFullName(), outerBind->Types[found - begin]});
         }
 
         auto shape = plan;
@@ -8883,17 +9292,26 @@ private:
 
         auto innerPlan = outerBind->GetInput();
         const auto innerNames = OutputNames(*innerPlan);
-        if (innerNames.contains(dependency)) {
-            Unsupported(TStringBuilder()
-                << "Scalar subplan binding " << binding
-                << " outer dependency collides with an inner column");
+        for (const auto& dependency : result.Dependencies) {
+            if (innerNames.contains(dependency.Name)) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " outer dependency collides with an inner column");
+            }
+            const auto correlation = ExtractScalarCorrelation(
+                binding, dependency.Name, filter->FilterExpr, innerNames, dependencies);
+            if (!SameType(
+                    ExactType(dependency.Type),
+                    ExactType(OutputType(*outerBind, dependency.Name))))
+            {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " outer_bind output type disagrees with AddDependencies");
+            }
+            ValidateCorrelationTypes(
+                "Scalar", binding, dependency.Name, dependency.Type,
+                *innerPlan, correlation.Expression, correlation.InnerColumn);
         }
-
-        const auto correlation = ExtractScalarCorrelation(
-            binding,
-            dependency,
-            filter->FilterExpr,
-            innerNames);
 
         THashSet<const IOperator*> expressionNodes;
         VisitOperators(plan, expressionNodes, [&](IOperator& op) {
@@ -8901,25 +9319,27 @@ private:
                 return;
             }
             for (const auto& expression : op.GetExpressions()) {
-                if (ExpressionColumns(expression.get()).contains(dependency)) {
-                    Unsupported(TStringBuilder()
-                        << "Scalar subplan binding " << binding
-                        << " uses its outer dependency outside the "
-                           "correlation Filter");
+                for (const auto& column : ExpressionColumns(expression.get())) {
+                    if (dependencies.contains(column)) {
+                        Unsupported(TStringBuilder()
+                            << "Scalar subplan binding " << binding
+                            << " uses its outer dependency outside the "
+                               "correlation Filter");
+                    }
                 }
             }
             if (op.GetKind() == EOperator::Aggregate) {
                 const auto& candidate =
                     static_cast<const TOpAggregate&>(op);
                 for (const auto& key : candidate.KeyColumns) {
-                    if (key == dependencyIU) {
+                    if (dependencies.contains(key.GetFullName())) {
                         Unsupported(TStringBuilder()
                             << "Scalar subplan binding " << binding
                             << " aggregates by its outer dependency");
                     }
                 }
                 for (const auto& trait : candidate.AggregationTraitsList) {
-                    if (trait.OriginalColName == dependencyIU) {
+                    if (dependencies.contains(trait.OriginalColName.GetFullName())) {
                         Unsupported(TStringBuilder()
                             << "Scalar subplan binding " << binding
                             << " aggregates its outer dependency");
@@ -8928,33 +9348,12 @@ private:
             }
         });
 
-        const auto declaredDependency =
-            ExactType(outerBind->Types.front());
-        const auto bindOutput =
-            ExactType(OutputType(*outerBind, dependency));
-        if (!SameType(declaredDependency, bindOutput)) {
-            Unsupported(TStringBuilder()
-                << "Scalar subplan binding " << binding
-                << " outer_bind output type disagrees with AddDependencies");
-        }
-        ValidateCorrelationTypes(
-            "Scalar",
-            binding,
-            dependency,
-            outerBind->Types.front(),
-            *innerPlan,
-            correlation.Expression,
-            correlation.InnerColumn);
-
         if (!AuthorizedOuterBinds.insert(outerBind).second) {
             Unsupported(TStringBuilder()
                 << "Correlated scalar subplan binding " << binding
                 << " shares AddDependencies with another subplan");
         }
-        return {
-            .Dependency = dependency,
-            .DependencyType = outerBind->Types.front(),
-        };
+        return result;
     }
 
     TVector<TString> ReferencedSubplanBindings(IOperator& op) {
@@ -9059,15 +9458,6 @@ private:
             return std::nullopt;
         }
 
-        const auto* inputProvenance =
-            StoredStringOutputs(*map.GetInput()).FindPtr(*source);
-        if (!inputProvenance || !inputProvenance->Nullable) {
-            Unsupported(TStringBuilder()
-                << "Exact error-on-null String Unwrap source " << *source
-                << " must have exact physical Optional<String> "
-                   "storage provenance at the Map input");
-        }
-
         bool expressionNullable = false;
         const TExactType expressionType{
             ScalarTypeName(
@@ -9089,29 +9479,6 @@ private:
         auto result = ColumnExpr(*source);
         AuditExactScalarExpression(result);
         return result;
-    }
-
-    THashSet<TString> ErrorOnNullProjectionOutputs(TOpMap& map) {
-        THashSet<TString> outputs;
-        const auto physicalInputColumns =
-            OutputNames(*map.GetInput());
-        for (const auto& element : map.MapElements) {
-            if (TryExportErrorOnNullStringProjection(
-                    map,
-                    element,
-                    physicalInputColumns))
-            {
-                const TString output =
-                    element.GetElementName().GetFullName();
-                if (!outputs.insert(output).second) {
-                    Unsupported(TStringBuilder()
-                        << "Exact error-on-null String Unwrap has duplicate "
-                           "Map output "
-                        << output);
-                }
-            }
-        }
-        return outputs;
     }
 
     bool HasErrorOnNullProjectionShape(IOperator& op) {
@@ -9143,30 +9510,7 @@ private:
 
     void ValidateWholePartitionWindowProjectionTopology();
 
-    struct TQ49RatioReference {
-        TOpMap* Project = nullptr;
-        const TMapElement* Element = nullptr;
-    };
-
-    struct TQ49RatioSources {
-        TString Type;
-        std::array<TString, 2> Columns;
-    };
-
-    TQ49RatioReference TraceGlobalRankOrderToRatio(
-        TOpMap& rankProject,
-        TString orderColumn,
-        const THashMap<const IOperator*, TVector<IOperator*>>& parents);
-
-    TQ49RatioSources AuditQ49RatioExpression(
-        TOpMap& map,
-        const TMapElement& element);
-
-    void AuditQ49Aggregate(
-        TOpAggregate& aggregate,
-        const THashMap<TString, TString>& expectedOutputs,
-        const THashMap<const IOperator*, TVector<IOperator*>>& parents,
-        TOpMap& ratioProject);
+    void ValidateWindowSubplanSeparation(const IOperator& project, bool allowClosedInRank = false) const;
 
     void ValidateGlobalRankProjectionTopology();
 
@@ -9305,7 +9649,7 @@ private:
         }
     }
 
-    void ValidateErrorOnNullProjectionTopology() {
+    void PrepareErrorOnNullProjectionDemands() {
         // A result-root Project is necessarily demanded. The second admitted
         // shape relies on the private keyed RHS being the eager/build side of
         // left_semi; the empty-left real-runtime regression locks that premise.
@@ -9327,65 +9671,27 @@ private:
                 continue;
             }
             auto& map = static_cast<TOpMap&>(*candidate);
-            const auto markedOutputs =
-                ErrorOnNullProjectionOutputs(map);
-            if (markedOutputs.empty()) {
-                continue;
-            }
-
             const auto* mapParents = parents.FindPtr(&map);
-            const bool isMainRoot =
-                Root.GetInput().Get() == &map;
-            if (isMainRoot) {
-                if (mapParents && !mapParents->empty()) {
-                    Unsupported(
-                        "An error-on-null Project at the main plan root "
-                        "must not have another plan parent");
-                }
-                THashSet<TString> rootOutputs(
+            if (Root.GetInput().Get() == &map && (!mapParents || mapParents->empty())) {
+                DemandedErrorProjectionOutputs[&map] = THashSet<TString>(
                     Root.ColumnOrder.begin(),
                     Root.ColumnOrder.end());
-                for (const auto& output : markedOutputs) {
-                    if (!rootOutputs.contains(output)) {
-                        Unsupported(TStringBuilder()
-                            << "Error-on-null Project output " << output
-                            << " must be a main root result output");
-                    }
-                }
                 continue;
             }
 
-            if (!mapParents || mapParents->size() != 1) {
-                Unsupported(
-                    "An error-on-null Project below the main root must have "
-                    "exactly one plan parent");
+            if (!mapParents || mapParents->size() != 1 || mapParents->front()->GetKind() != EOperator::Join) {
+                continue;
             }
-            auto* parent = mapParents->front();
-            if (parent->GetKind() != EOperator::Join) {
-                Unsupported(
-                    "An error-on-null Project below the main root must be "
-                    "the direct RHS of a left_semi Join");
-            }
-            auto& join = static_cast<TOpJoin&>(*parent);
+            auto& join = static_cast<TOpJoin&>(*mapParents->front());
             if (JoinKind(join.JoinKind) != "left_semi" ||
                 join.GetRightInput().Get() != &map)
             {
-                Unsupported(
-                    "An error-on-null Project below the main root must be "
-                    "the direct RHS of a left_semi Join");
+                continue;
             }
 
-            THashSet<TString> rightKeys;
             for (const auto& [left, right] : join.JoinKeys) {
                 Y_UNUSED(left);
-                rightKeys.insert(right.GetFullName());
-            }
-            for (const auto& output : markedOutputs) {
-                if (!rightKeys.contains(output)) {
-                    Unsupported(TStringBuilder()
-                        << "Error-on-null Project output " << output
-                        << " must be an exact RHS key of its left_semi Join");
-                }
+                DemandedErrorProjectionOutputs[&map].insert(right.GetFullName());
             }
         }
     }
@@ -9446,14 +9752,10 @@ private:
         }
 
         const auto outputType = ExactType(OutputType(*plan, output));
-        if (!IsExactDynamicInColumnType(outputType.Name) ||
-            (outputType.Nullable &&
-             !IsExactNullableDynamicInColumnType(outputType.Name)))
-        {
+        if (!IsExactDynamicInColumnType(outputType.Name)) {
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << binding
-                << " result must be a fixed-width integer, Date, or "
-                   "non-null String");
+                << " result must be a fixed-width integer, Date, or String");
         }
         return {
             .Binding = binding,
@@ -9710,7 +10012,7 @@ private:
             filter->FilterExpr,
             innerNames);
 
-        TVector<TExistsDependency> descriptorDependencies;
+        TVector<TOuterDependency> descriptorDependencies;
         descriptorDependencies.reserve(dependencies.size());
         for (size_t index = 0; index < dependencies.size(); ++index) {
             descriptorDependencies.push_back({
@@ -9797,23 +10099,23 @@ private:
         }
         Y_ENSURE(subplan.Consumers.size() == 1);
         auto* consumer = subplan.Consumers.front();
-        const TString& dependency = details.Correlation->Dependency;
         auto& input = *consumer->GetChildren().front();
         const auto inputNames = OutputNames(input);
-        if (!inputNames.contains(dependency)) {
-            Unsupported(TStringBuilder()
-                << "Scalar subplan binding " << subplan.Binding
-                << " dependency is absent from its consumer input");
-        }
-        const auto outerType =
-            ExactType(OutputType(input, dependency));
-        const auto declaredType =
-            ExactType(details.Correlation->DependencyType);
-        if (!SameType(outerType, declaredType)) {
-            Unsupported(TStringBuilder()
-                << "Scalar subplan binding " << subplan.Binding
-                << " dependency type or nullability disagrees with its "
-                   "consumer input");
+        for (const auto& dependency : details.Correlation->Dependencies) {
+            if (!inputNames.contains(dependency.Name)) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << subplan.Binding
+                    << " dependency is absent from its consumer input");
+            }
+            if (!SameType(
+                    ExactType(OutputType(input, dependency.Name)),
+                    ExactType(dependency.Type)))
+            {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << subplan.Binding
+                    << " dependency type or nullability disagrees with its "
+                       "consumer input");
+            }
         }
     }
 
@@ -9859,13 +10161,6 @@ private:
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << subplan.Binding
                 << " lookup and result must have the same supported type");
-        }
-        if (lookupType.Nullable &&
-            !IsExactNullableDynamicInColumnType(lookupType.Name))
-        {
-            Unsupported(TStringBuilder()
-                << "IN subplan binding " << subplan.Binding
-                << " nullable lookup must be a fixed-width integer or Date");
         }
         details.LookupNullable = lookupType.Nullable;
         if (details.LookupNullable || details.OutputNullable) {
@@ -10000,7 +10295,7 @@ private:
             std::get_if<TScalarSubplanDetails>(&nested.Details);
         const bool admissible =
             SubplanKind(owner) == ESubplanKind::In &&
-            ((scalar && !scalar->Correlation) ||
+            (scalar ||
              SubplanKind(nested) == ESubplanKind::In);
         if (!admissible) {
             Unsupported(TStringBuilder()
@@ -10008,9 +10303,12 @@ private:
                 << " subplan binding " << owner.Binding
                 << " contains an unsupported nested subplan reference to "
                 << KindName(nested) << " binding " << nested.Binding
-                << "; only an uncorrelated scalar or a one-level closed IN "
+                << "; only a leaf scalar or a one-level closed IN "
                    "binding may be consumed inside an IN subplan");
         }
+        // A correlated scalar is invoked by its immediate consumer inside
+        // the closed IN root. ValidateScalarConsumer checks those local row
+        // types; scalar roots still cannot own any nested binding.
         NestedSubplanReferences.emplace_back(
             owner.Binding,
             nested.Binding);
@@ -10201,6 +10499,40 @@ private:
         return result;
     }
 
+    void AuditInputMemberTypes(
+        const TExpression& expression,
+        IOperator& input) const
+    {
+        // A typed scalar spelling may select its encoder from Member's type.
+        // That annotation must agree with the actual row, not only its parent
+        // expression. Unannotated direct columns get their type from the schema.
+        if (!expression.Node || !expression.Node->IsLambda() ||
+            expression.Node->ChildrenSize() != 2 ||
+            !expression.Node->Child(0)->IsArguments() ||
+            expression.Node->Child(0)->ChildrenSize() != 1)
+        {
+            return; // The ordinary expression exporter diagnoses malformed lambdas.
+        }
+        const auto* row = expression.Node->Child(0)->Child(0);
+        const TStructExprType* schema = nullptr;
+        VisitExpr(expression.GetExpressionBody(), [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("Member") && node->ChildrenSize() == 2 &&
+                node->Child(0) == row && node->Child(1)->IsAtom() && node->GetTypeAnn())
+            {
+                if (!schema) {
+                    schema = OutputStructType(input);
+                }
+                const auto name = node->Child(1)->Content();
+                const auto* actual = schema->FindItemType(name);
+                if (actual && !IsSameAnnotation(*actual, *node->GetTypeAnn())) {
+                    Unsupported(TStringBuilder() << "Input Member " << name
+                        << " type annotation disagrees with the actual input column");
+                }
+            }
+            return true;
+        });
+    }
+
     void AuditVirtualBindingMemberTypes(
         const TExpression& expression,
         const IOperator& consumer) const
@@ -10270,8 +10602,9 @@ private:
             if (kind == ESubplanKind::Scalar) {
                 const auto& scalar = ScalarDetails(subplan);
                 if (scalar.Correlation) {
-                    dependencies.AppendValue(
-                        scalar.Correlation->Dependency);
+                    for (const auto& dependency : scalar.Correlation->Dependencies) {
+                        dependencies.AppendValue(dependency.Name);
+                    }
                 }
             } else if (kind == ESubplanKind::Exists) {
                 const auto& exists = ExistsDetails(subplan);
@@ -10874,23 +11207,21 @@ private:
                         "AddDependencies is not authorized as a correlated "
                         "scalar outer_bind");
                 }
-                if (outerBind.Dependencies.size() != 1 ||
-                    outerBind.Types.size() != 1 ||
-                    !outerBind.Types.front())
+                const size_t count = outerBind.Dependencies.size();
+                if (!count || outerBind.Types.size() != count ||
+                    std::any_of(outerBind.Types.begin(), outerBind.Types.end(),
+                        [](const auto* type) { return !type; }))
                 {
                     Unsupported(
-                        "A correlated scalar outer_bind must have exactly "
-                        "one typed dependency");
+                        "A correlated scalar outer_bind must have a nonempty "
+                        "aligned typed dependency tuple");
                 }
 
-                const TString dependency =
-                    outerBind.Dependencies.front().GetFullName();
                 const auto& inputIUs =
                     outerBind.GetInput()->GetOutputIUs();
                 const auto& outputIUs = outerBind.GetOutputIUs();
-                if (dependency.empty() ||
-                    OutputNames(*outerBind.GetInput()).contains(dependency) ||
-                    outputIUs.size() != inputIUs.size() + 1 ||
+                auto names = OutputNames(*outerBind.GetInput());
+                if (outputIUs.size() != inputIUs.size() + count ||
                     OutputStructType(outerBind)->GetItems().size() !=
                         outputIUs.size())
                 {
@@ -10912,23 +11243,40 @@ private:
                             "its input schema exactly and in order");
                     }
                 }
-                if (outputIUs.back().GetFullName() != dependency ||
-                    !SameType(
-                        ExactType(outerBind.Types.front()),
-                        ExactType(OutputType(outerBind, dependency))))
-                {
-                    Unsupported(
-                        "A correlated scalar outer_bind dependency type or "
-                        "output position is inconsistent");
+                for (size_t index = 0; index < count; ++index) {
+                    const TString dependency = outerBind.Dependencies[index].GetFullName();
+                    if (dependency.empty() || !names.insert(dependency).second ||
+                        outputIUs[inputIUs.size() + index].GetFullName() != dependency ||
+                        !SameType(
+                            ExactType(outerBind.Types[index]),
+                            ExactType(OutputType(outerBind, dependency))))
+                    {
+                        Unsupported(
+                            "A correlated scalar outer_bind dependency type or "
+                            "output position is inconsistent");
+                    }
                 }
 
-                const auto dependencyType =
-                    ExactType(outerBind.Types.front());
+                // Binding a tuple adds no rows or choices. Reuse the typed
+                // one-column operator as a contiguous chain; the final node
+                // retains the real operator id and its complete output schema.
                 node["op"] = "outer_bind";
-                node["input"] = children[0];
-                node["dependency"] = dependency;
-                node["type"] = dependencyType.Name;
-                node["nullable"] = dependencyType.Nullable;
+                TString input = children[0];
+                for (size_t index = 0; index < count; ++index) {
+                    const TString nodeId = index + 1 == count
+                        ? id
+                        : TString(TStringBuilder() << id << ":dependency:" << index);
+                    const auto type = ExactType(outerBind.Types[index]);
+                    node["id"] = nodeId;
+                    node["input"] = input;
+                    node["dependency"] = outerBind.Dependencies[index].GetFullName();
+                    node["type"] = type.Name;
+                    node["nullable"] = type.Nullable;
+                    if (index + 1 < count) {
+                        Nodes.AppendValue(node);
+                    }
+                    input = nodeId;
+                }
                 return node;
             }
 
@@ -10944,6 +11292,7 @@ private:
                 PrepareGlobalRankProjection(map, inputNames);
                 THashSet<TString> renameSources;
                 for (const auto& element : map.MapElements) {
+                    AuditInputMemberTypes(element.GetExpression(), *map.GetInput());
                     AuditVirtualBindingMemberTypes(
                         element.GetExpression(),
                         map);
@@ -11014,13 +11363,23 @@ private:
                                 element,
                                 physicalInputNames))
                     {
+                        const auto* stored = StoredStringOutputs(*map.GetInput()).FindPtr(
+                            (*exactUnwrap)["column"].GetStringSafe());
+                        const auto* demanded = DemandedErrorProjectionOutputs.FindPtr(&map);
+                        if (!stored || !stored->Nullable || !demanded || !demanded->contains(output)) {
+                            // Outside the reviewed eager/storage corridor, no
+                            // demand assumption is made. The verifier must first
+                            // prove that no successful input can reach NULL here.
+                            column["require_total"] = true;
+                        }
                         column["expression"] = std::move(*exactUnwrap);
                         column["error_on_null"] = true;
                     } else {
                         auto expression = ExportExpr(
                             element.GetExpression(),
                             inputNames,
-                            StoredStringOutputs(*map.GetInput()));
+                            StoredStringOutputs(*map.GetInput()),
+                            Binary64Mode);
                         if (expression["kind"].GetStringSafe() ==
                             "checked_concat")
                         {
@@ -11050,7 +11409,7 @@ private:
                 AuditVirtualBindingMemberTypes(filter.FilterExpr, filter);
                 node["op"] = "filter";
                 node["input"] = children[0];
-                node["predicate"] = ExportExpr(filter.FilterExpr, inputNames);
+                node["predicate"] = ExportExpr(filter.FilterExpr, inputNames, Binary64Mode);
                 return node;
             }
 
@@ -11107,14 +11466,17 @@ private:
                         IsExactDataAnnotation(
                             inputAnnotation,
                             NUdf::EDataSlot::Double,
-                            true);
+                            true) || (Binary64Mode && IsExactDataAnnotation(
+                                inputAnnotation, NUdf::EDataSlot::Double, false));
                     const bool outputPassiveDouble =
                         IsExactDataAnnotation(
                             outputAnnotation,
                             NUdf::EDataSlot::Double,
-                            true);
+                            true) || (Binary64Mode && IsExactDataAnnotation(
+                                outputAnnotation, NUdf::EDataSlot::Double, false));
                     if (inputPassiveDouble || outputPassiveDouble) {
-                        if (!inputPassiveDouble || !outputPassiveDouble) {
+                        if (!inputPassiveDouble || !outputPassiveDouble ||
+                            !IsSameAnnotation(*inputAnnotation, *outputAnnotation)) {
                             Unsupported(TStringBuilder()
                                 << "Sort passive Double carrier type "
                                    "disagrees with input IU "
@@ -11154,8 +11516,11 @@ private:
                     }
                     const auto* orderingType =
                         OutputType(*sort.GetInput(), column);
+                    const bool binary64Ordering = Binary64Mode && (
+                        IsExactDataAnnotation(orderingType, NUdf::EDataSlot::Double, false) ||
+                        IsExactDataAnnotation(orderingType, NUdf::EDataSlot::Double, true));
                     const bool integralAverageOrdering =
-                        IsExactDataAnnotation(
+                        !binary64Ordering && IsExactDataAnnotation(
                             orderingType,
                             NUdf::EDataSlot::Double,
                             true);
@@ -11168,7 +11533,7 @@ private:
                             << " is Optional<Double> without completed "
                                "integral avg provenance");
                     }
-                    if (!integralAverageOrdering) {
+                    if (!integralAverageOrdering && !binary64Ordering) {
                         const TString type = TypeName(orderingType);
                         if (!IsModeledOrderingType(type)) {
                             Unsupported(TStringBuilder()
@@ -11182,7 +11547,9 @@ private:
                     item["column"] = column;
                     item["ascending"] = element.Ascending;
                     item["nulls_first"] = element.NullsFirst;
-                    if (integralAverageOrdering) {
+                    if (binary64Ordering) {
+                        item["comparison"] = TString(Binary64OrderingComparison);
+                    } else if (integralAverageOrdering) {
                         item["comparison"] =
                             TString(IntegralAverageOrderingComparisonV1);
                     }
@@ -11280,7 +11647,8 @@ private:
                         }
                         return TypeName(
                             outputAnnotation,
-                            &outputNullable);
+                            &outputNullable,
+                            Binary64Mode);
                     }();
                     if (trait.Distinct && trait.Unwrap) {
                         Unsupported(
@@ -11390,6 +11758,13 @@ private:
                     item["nullable"] = outputNullable;
                     item["distinct"] = trait.Distinct;
                     item["unwrap"] = trait.Unwrap;
+                    if (trait.AggFunction == "variance_1_1") {
+                        if (!Binary64Mode) {
+                            Unsupported("Binary64 variance requires explicit semantics");
+                        }
+                        item["function"] = "stddev_samp";
+                        item["state"] = VarianceStateContract(aggregate, trait);
+                    }
                     if (trait.AggFunction == "avg") {
                         if (integralAverage) {
                             ValidateIntegralAverageContract(
@@ -11459,7 +11834,7 @@ private:
                                 "Integral avg output field must remain exact Optional<Double>");
                         }
                     } else {
-                        TypeName(item->GetItemType());
+                        TypeName(item->GetItemType(), nullptr, Binary64Mode);
                     }
                 }
                 if (expectedOutputs.size() != outputNames.size()) {
@@ -11610,8 +11985,10 @@ private:
     TOpRoot& Root;
     TString Cluster;
     bool StageGraphPresent = false;
+    bool Binary64Mode = false;
     THashMap<TString, const TSemanticSnapshotCatalogTableV1*> Catalog;
     THashMap<const IOperator*, TStoredStringColumns> StoredStringOutputMap;
+    THashMap<const TOpMap*, THashSet<TString>> DemandedErrorProjectionOutputs;
     THashMap<const IOperator*, TIntegralAverageOrderingColumns>
         IntegralAverageOrderingOutputMap;
     THashMap<const IOperator*, TDecimalAverageCarrierTypes>
@@ -11622,6 +11999,7 @@ private:
         CheckedConcatProjectionOutputs;
     THashMap<TOpMap*, THashSet<TString>>
         WindowProjectionOutputs;
+    size_t WholePartitionSumCount = 0;
     THashMap<const TMapElement*, TGlobalRankWindow>
         PreparedGlobalRankWindows;
     THashMap<TOpMap*, TVector<TGlobalRankProjectionWindow>>
@@ -11668,7 +12046,8 @@ public:
             const IOperator*,
             TDecimalAverageCarrierTypes>&
             decimalAverageCarrierOutputs,
-        TString rootNodeId)
+        TString rootNodeId,
+        bool binary64Mode)
         : Root(root)
         , Graph(root.PlanProps.StageGraph)
         , NodeIds(nodeIds)
@@ -11678,6 +12057,7 @@ public:
         , DecimalAverageCarrierOutputs(
             decimalAverageCarrierOutputs)
         , RootNodeId(std::move(rootNodeId))
+        , Binary64Mode(binary64Mode)
     {
     }
 
@@ -12193,8 +12573,11 @@ private:
                 }
                 const auto* orderingType =
                     OutputType(*boundary.ProducerNode, column);
+                const bool binary64Ordering = Binary64Mode && (
+                    IsExactDataAnnotation(orderingType, NUdf::EDataSlot::Double, false) ||
+                    IsExactDataAnnotation(orderingType, NUdf::EDataSlot::Double, true));
                 const bool integralAverageOrdering =
-                    IsExactDataAnnotation(
+                    !binary64Ordering && IsExactDataAnnotation(
                         orderingType,
                         NUdf::EDataSlot::Double,
                         true);
@@ -12206,7 +12589,7 @@ private:
                         << " is Optional<Double> without completed "
                            "integral avg provenance");
                 }
-                if (!integralAverageOrdering) {
+                if (!integralAverageOrdering && !binary64Ordering) {
                     const TString type = TypeName(orderingType);
                     if (!IsModeledOrderingType(type)) {
                         Unsupported(TStringBuilder()
@@ -12221,7 +12604,9 @@ private:
                 item["column"] = column;
                 item["ascending"] = sort.Ascending;
                 item["nulls_first"] = sort.NullsFirst;
-                if (integralAverageOrdering) {
+                if (binary64Ordering) {
+                    item["comparison"] = TString(Binary64OrderingComparison);
+                } else if (integralAverageOrdering) {
                     item["comparison"] =
                         TString(IntegralAverageOrderingComparisonV1);
                 }
@@ -12406,6 +12791,7 @@ private:
     const THashMap<const IOperator*, TDecimalAverageCarrierTypes>&
         DecimalAverageCarrierOutputs;
     TString RootNodeId;
+    bool Binary64Mode = false;
     size_t StageCount = 0;
     ui32 RootStageId = 0;
     TVector<TVector<IOperator*>> StageNodes;
@@ -12483,6 +12869,9 @@ TString SerializeSnapshot(
     snapshot["version"] = 1;
     snapshot["schema"] = ExportCatalog(catalog);
     snapshot["plan"] = planExporter.Export();
+    if (planExporter.UsesBinary64Semantics()) {
+        snapshot["semantic_mode"] = TString(Binary64SemanticMode);
+    }
     if (stageGraphPresent) {
         TStageGraphExporter stageGraphExporter(
             root,
@@ -12490,7 +12879,8 @@ TString SerializeSnapshot(
             planExporter.GetNodeOrder(),
             planExporter.GetIntegralAverageOrderingOutputs(),
             planExporter.GetDecimalAverageCarrierOutputs(),
-            planExporter.GetRootId());
+            planExporter.GetRootId(),
+            planExporter.UsesBinary64Semantics());
         snapshot["stage_graph"] = stageGraphExporter.Export();
         planExporter.ValidateStageProperties();
     } else {

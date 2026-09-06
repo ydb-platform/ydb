@@ -1,7 +1,9 @@
+import math
+import struct
 import unittest
 from unittest import mock
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, floating, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import scalar as scalar_module
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     OPAQUE_DOUBLE_FINGERPRINT_PREFIX,
@@ -26,6 +28,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.value_transport import (
     ValueTransportError,
+    merge_exclusive_values,
     select_scalar,
 )
 
@@ -773,6 +776,42 @@ class DecimalCastDispatchTest(unittest.TestCase):
             unbounded.decimal_finite_abs_bound,
             9_999_999,
         )
+
+    def test_decimal_rescale_transports_null_specials_and_finite_bounds(self):
+        cases = (
+            ("Decimal(35,2)", "Decimal(15,4)", None, (10**13 - 1) * 100),
+            ("Decimal(35,2)", "Decimal(35,9)", None, (10**28 - 1) * 10**7),
+            ("Decimal(7,2)", "Decimal(3,2)", None, 999),
+            ("Decimal(7,2)", "Decimal(12,3)", 125, 1_250),
+            ("Decimal(5,2)", "Decimal(3,1)", 125, 12),
+            ("Decimal(5,2)", "Decimal(3,1)", 135, 14),
+            ("Decimal(5,2)", "Decimal(3,1)", 9_995, 999),
+            ("Decimal(5,2)", "Decimal(3,1)", 0, 0),
+        )
+        payloads = (
+            (smt.FALSE, 0),
+            (smt.FALSE, -decimal.INF),
+            (smt.FALSE, decimal.INF),
+            (smt.FALSE, decimal.NAN),
+            (smt.TRUE, 0),
+        )
+        for source_type, result_type, bound, expected_bound in cases:
+            expression = Expr(
+                kind="cast_decimal",
+                args=(Expr(kind="column", column="source"),),
+                result_type=result_type,
+                nullable=True,
+            )
+            for is_null, coefficient in payloads:
+                with self.subTest(types=(source_type, result_type), bound=bound, payload=coefficient):
+                    actual = Encoder(smt.Script()).evaluate(
+                        expression,
+                        {"source": Value(source_type, is_null, smt.int_value(coefficient), bound)},
+                    )
+                    self.assertEqual(actual.type, result_type)
+                    self.assertEqual(actual.is_null, is_null)
+                    self.assertEqual(_ground(actual.value), coefficient)
+                    self.assertEqual(actual.decimal_finite_abs_bound, expected_bound)
 
 
 class DecimalFiniteAbsBoundTest(unittest.TestCase):
@@ -1940,6 +1979,176 @@ class ScalarValueTransportTest(unittest.TestCase):
                 ((smt.FALSE, Value("Int64", smt.FALSE, smt.ONE)),),
                 Value("Uint64", smt.FALSE, smt.ONE),
             )
+
+
+def _bits(value):
+    return int.from_bytes(struct.pack(">d", value), "big")
+
+
+def _float(bits):
+    return struct.unpack(">d", bits.to_bytes(8, "big"))[0]
+
+
+def _divide(left, right):
+    if right == 0.0:
+        if left == 0.0 or math.isnan(left):
+            return math.nan
+        return math.copysign(math.inf, left * math.copysign(1.0, right))
+    return left / right
+
+
+def _native(kernel, value):
+    """Interpret the UF syntax using host binary64, independently of the kernel."""
+    names = {function.name: operation for operation, function in kernel._functions.items()}
+
+    def visit(term):
+        if term.operation == "int":
+            return term.atom
+        operation = names[term.operation]
+        arguments = tuple(visit(argument) for argument in term.arguments)
+        if operation.startswith("from_"):
+            return _bits(float(arguments[0]))
+        values = tuple(_float(argument) for argument in arguments)
+        return _bits({
+            "add": lambda a, b: a + b, "sub": lambda a, b: a - b,
+            "mul": lambda a, b: a * b, "div": _divide,
+            "sqrt": lambda a: math.sqrt(a) if a >= 0.0 else math.nan,
+        }[operation](*values))
+    return _float(visit(value.bits))
+
+
+class FloatingKernelTest(unittest.TestCase):
+    def test_internal_selection_reuses_external_payload_domain(self):
+        script = smt.Script()
+        encoder = Encoder(script, semantic_mode=floating.SEMANTIC_MODE)
+        external = encoder.evaluate(PassiveDoubleScalarTest._expression(
+            OPAQUE_DOUBLE_FINGERPRINT_PREFIX + "bounded", ("source",),
+        ), {"source": Value("Int64", smt.FALSE, smt.ONE)})
+        self.assertIn(floating.domain(floating.Binary64(external.value)), script.assertions)
+        assertions = script.assertions
+        row = {"payload": external, "choose": Value("Bool", smt.FALSE, script.fresh_constant("choose", smt.BOOL))}
+
+        def column(name):
+            return Expr("column", column=name)
+
+        one = _literal("Double", 0x3FF0000000000000)
+        with mock.patch.object(encoder.binary64, "from_bits", side_effect=AssertionError("internal payload readmitted")):
+            for fallback in (one, Expr("null", result_type="Double", nullable=True)):
+                selected = _if(column("choose"), column("payload"), fallback, "Double", nullable=True)
+                value = encoder.evaluate(selected, row)
+                added = encoder.evaluate(_arithmetic("add", "Double", selected, one, nullable=True), row)
+                nan = encoder.evaluate(Expr("is_nan_double", args=(selected,)), row)
+                self.assertEqual(added.is_null, value.is_null)
+                self.assertEqual(nan.is_null, value.is_null)
+        self.assertEqual(script.assertions, assertions)
+
+    def test_explicit_mode_scalar_dispatch_and_legacy_average_bridge(self):
+        encoder = Encoder(smt.Script(), semantic_mode=floating.SEMANTIC_MODE)
+
+        def literal(bits):
+            return _literal("Double", bits)
+
+        nan = literal(0x7FF8000000000001)
+        for kind in ("eq", "lt", "lte", "gt", "gte"):
+            expression = Expr(kind, args=(nan, nan), result_type="Bool", nullable=False)
+            self.assertEqual(encoder.evaluate(expression, {}).value, smt.FALSE)
+        self.assertEqual(encoder.evaluate(Expr("is_nan_double", args=(nan,)), {}).value, smt.TRUE)
+        division = _arithmetic("div", "Double", literal(0x3FF0000000000000), literal(0))
+        divided = encoder.evaluate(division, {})
+        self.assertEqual(divided.is_null, smt.FALSE)  # Floating division by zero is not SQL NULL.
+        self.assertEqual(_native(encoder.binary64, floating.Binary64(divided.value)), math.inf)
+        cast = Expr("cast_double", args=(_literal("Int64", 2**53 + 1),), result_type="Double", nullable=False)
+        self.assertEqual(_native(encoder.binary64, floating.Binary64(encoder.evaluate(cast, {}).value)), float(2**53 + 1))
+        for count in (1, 2):
+            bits = encoder.integral_int64_average(smt.int_value(count), smt.int_value(-(2**63)), smt.int_value(2**63 - 1))
+            expected = float(-(2**63)) if count == 1 else (float(-(2**63)) + float(2**63 - 1)) / 2.0
+            self.assertEqual(_native(encoder.binary64, floating.Binary64(bits)), expected)
+        self.assertIsNone(Encoder(smt.Script()).binary64)
+        with self.assertRaises(smt.SmtError):
+            Encoder(smt.Script()).evaluate(cast, {})
+
+    def test_physical_state_is_not_scalar_and_every_exclusive_lane_is_selected(self):
+        state = floating.VarianceState(floating.ONE, floating.ONE, floating.ZERO)
+        hidden = Value("Double", smt.FALSE, smt.ZERO, binary64_state=state)
+        plain = Value("Double", smt.FALSE, smt.ZERO)
+        for selected, fallback in ((hidden, plain), (plain, hidden)):
+            with self.assertRaisesRegex(ValueTransportError, "binary64 physical state"):
+                select_scalar(((smt.FALSE, selected),), fallback)
+        other = floating.VarianceState(floating.ZERO, floating.ZERO, floating.ONE)
+        second = Value("Double", smt.TRUE, smt.ONE, binary64_state=other)
+        for guards in ((smt.TRUE, smt.FALSE), (smt.FALSE, smt.TRUE), (smt.FALSE, smt.FALSE)):
+            result = merge_exclusive_values(guards, (hidden, second), nullable=True)
+            self.assertEqual(result, hidden if guards[0] == smt.TRUE else second)
+        with self.assertRaisesRegex(ValueTransportError, "mixed binary64 physical state"):
+            merge_exclusive_values((smt.TRUE, smt.FALSE), (hidden, plain), nullable=True)
+
+    def test_bit_classification_and_comparison_match_native_binary64(self):
+        patterns = (0, 1 << 63, 1, (1 << 63) | 1, 0x0010000000000000,
+                    0x3FF0000000000000, 0xBFF0000000000000, 0x7FEFFFFFFFFFFFFF,
+                    0x7FF0000000000000, 0xFFF0000000000000,
+                    0x7FF8000000000001, 0xFFF0000000000001)
+        for left in patterns:
+            lhs = floating.literal_bits(left)
+            self.assertEqual(floating.is_nan(lhs), smt.bool_value(math.isnan(_float(left))))
+            for right in patterns:
+                rhs = floating.literal_bits(right)
+                with self.subTest(left=hex(left), right=hex(right)):
+                    a, b = _float(left), _float(right)
+                    self.assertEqual(floating.equal(lhs, rhs), smt.bool_value(a == b))
+                    self.assertEqual(floating.less(lhs, rhs), smt.bool_value(a < b))
+                    self.assertEqual(floating.aggregate_less(lhs, rhs), smt.bool_value(
+                        not math.isnan(a) and (math.isnan(b) or a < b)))
+
+    def test_state_steps_preserve_physical_types_and_operation_order(self):
+        kernel = floating.Kernel(smt.Script())
+        values = (10**16, 1, -(10**16), 3)
+        encoded = tuple(kernel.from_integer(smt.int_value(value), "Int64") for value in values)
+        variance = kernel.variance_init(encoded[0])
+        mean, count, m2 = float(values[0]), 1.0, 0.0
+        for item, value in zip(encoded[1:], values[1:]):
+            delta = float(value) - mean
+            next_count = count + 1.0
+            mean, count, m2 = mean + delta / next_count, next_count, m2 + ((delta * delta) * count) / next_count
+            variance = kernel.variance_update(variance, item)
+        self.assertEqual(tuple(_native(kernel, item) for item in (variance.mean, variance.count, variance.m2)),
+                         (mean, count, m2))
+        self.assertEqual(_native(kernel, kernel.stddev_sample_finish(variance)), math.sqrt(m2 / (count - 1.0)))
+        incoming = kernel.variance_init(encoded[0])
+        merged = kernel.variance_merge(incoming, variance)
+        self.assertEqual(merged.count.bits.arguments, (incoming.count.bits, variance.count.bits))
+        delta = float(values[0]) - mean
+        expected_m2 = (0.0 + m2) + (((delta * delta) * 1.0) * count) / (1.0 + count)
+        self.assertEqual(_native(kernel, merged.m2), expected_m2)
+        self.assertTrue(math.isnan(_native(kernel, kernel.stddev_sample_finish(incoming))))
+
+    def test_primitives_are_shared_without_algebraic_laws_and_keep_choice_domains(self):
+        script = smt.Script()
+        kernel = floating.Kernel(script)
+        choice = script.fresh_constant("choice", smt.INT)
+        script.register_quantified_choice(choice, 2)
+        left = kernel.from_bits(choice)
+        right = floating.ONE
+        assertions = tuple(script._assertions)
+        added = kernel.add(left, right)
+        self.assertEqual(added, kernel.add(left, right))
+        self.assertNotEqual(added, kernel.add(right, left))
+        self.assertEqual(kernel.from_bits(added.bits), added)
+        self.assertEqual(tuple(script._assertions), assertions)  # Primitive results are bounded by construction.
+        definition = next(item for item in script._declarations
+                          if isinstance(item, smt.DefinitionDeclaration) and item.name == added.bits.operation)
+        self.assertEqual(definition.body.operation, "mod")
+        self.assertEqual(definition.body.arguments[0].arguments, definition.parameters)
+        self.assertEqual(definition.body.arguments[1], smt.int_value(1 << 64))
+        for raw in (-1, 0, (1 << 64) - 1, 1 << 64, (1 << 64) + 7):
+            self.assertEqual(smt.mod(smt.int_value(raw), 1 << 64), smt.int_value(raw % (1 << 64)))
+        self.assertIn("(forall", script.render())
+        for bits in (-1, 1 << 64, True):
+            with self.assertRaises(smt.SmtError):
+                floating.literal_bits(bits)
+        with self.assertRaises(smt.SmtError):
+            floating.Binary64(smt.TRUE)
+        with self.assertRaises(smt.SmtError):
+            kernel.from_integer(smt.ZERO, "Double")
 
 
 if __name__ == "__main__":

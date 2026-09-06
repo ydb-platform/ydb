@@ -9,9 +9,9 @@ a newly measured corpus run.
 <!-- coverage-policy:start -->
 | Suite | Corpus | Prepare | Exact pair | Explicit entry | Formula | Proof |
 |---|---:|---:|---:|---:|---:|---:|
-| TPCH_YQL | 22 | 20 | 20 | 3 | 20 | 14 |
-| TPCDS_YQL | 99 | 74 | 82 | 8 | 82 | 28 |
-| Total | 121 | 94 | 102 | 11 | 102 | 42 |
+| TPCH_YQL | 22 | 22 | 22 | 3 | 22 | 15 |
+| TPCDS_YQL | 99 | 98 | 99 | 8 | 99 | 32 |
+| Total | 121 | 120 | 121 | 11 | 121 | 47 |
 <!-- coverage-policy:end -->
 
 The exact-pair floor is the union of supplemental pair, verifier-entry, and
@@ -27,6 +27,28 @@ The [archived measurements and findings](history/pre-audit-refactor/BENCHMARK_CO
 retain all earlier corpus inventories, focused solver results, artifacts,
 commit references, and corrected/superseded checkpoints. They are historical
 evidence, not results of the current working tree.
+
+## Complete measurement (2026-09-06)
+
+A fresh formula-only census covered the complete corrected corpus: TPCH
+22/22 and TPCDS 99/99 emitted whole-query formulas. Separately, all 47 pinned
+proofs passed at two rows per table, two tasks, and 60 seconds per query.
+This raises the formula floor from 102 to 121; the proof floor remains 47.
+
+The corpus includes three approved source corrections: explicit output aliases
+and a Decimal-typed comparison literal in TPCDS q47/q57, and a Decimal-typed
+zero in q67's `Coalesce`. These fix type-checking errors; joins, grouping,
+windows and row limits are unchanged. All three prepare and emit formulas.
+q51 is the only remaining physical-preparation failure; it still emits an
+auditable pre-physical formula. Formula coverage does not establish executability.
+
+TPCH ran as one complete suite; four disjoint TPCDS batches covered exactly
+1..99. Source, query and tool hashes were unchanged across the census. The local
+`/tmp/rbo-complete-corpus-twrb4n/receipt.json` indexes the reports and the
+companion `inputs.json` records their source/tool baseline. These are local
+receipts, not checked-in artifacts. The largest construction costs were q17
+at 321 seconds and q39 at 941 seconds; q39 compares both result
+slots jointly, not as separate proofs. Neither timing is a proof result.
 
 ## Fixed workload and host
 
@@ -101,7 +123,8 @@ means no exact normal pair was available. `HARNESS_ERROR` means capture,
 execution, or subprocess protocol failed; it is not a semantic verdict.
 
 Counterexamples, unknowns, schema mismatches, solver/protocol failures, failed-
-preparation pairs, and proof-floor results retain relevant evidence.
+preparation pairs, proof-floor results, and explicit solver-experiment results
+retain relevant evidence, including successful proofs and their paired inputs.
 Routine successful formula dashboards do not retain every large formula.
 The subprocess result is captured before decoding. Diagnostic/proof records
 retain raw stdout/stderr, command arguments, exit code, timing, and any emitted
@@ -125,6 +148,33 @@ current report.
 Every `COUNTEREXAMPLE` requires the separate
 [confirmation workflow](README.md#confirm-a-candidate) on explicit isolated
 targets. A missing witness or inconsistent artifact remains unresolved.
+
+## Literal SUM proof timing (2026-09-05)
+
+`aggregate.wrap_sum` now omits modular wrapping only when a literal/CASE sum's
+entire inferred interval fits its Int64/Uint64 result. Unknown or overflowing
+intervals retain the original encoding; no domain assumption is added.
+
+Against `77c6028e3f8`, three alternating cold-process old/new pairs per query
+used identical snapshots and Z3, two rows, two tasks, and 60 seconds. All twelve
+runs verified. Only `aggregate.py` differed between the measured versions.
+
+| Query | Old median | New median | Speedup |
+|---|---:|---:|---:|
+| TPCDS q62 | 43.880 s | 23.556 s | 1.86× |
+| TPCDS q99 | 56.192 s | 23.371 s | 2.40× |
+
+Times include snapshot loading, construction, canonical emission, and the full
+production solver portfolio; interpreter startup and receipt writes are excluded.
+Rendering stayed near 0.7 seconds: the improvement is in proof search. These are
+measurements, not CI timing gates or a claim about every query.
+Local receipts, source/input/solver hashes, and attempted formulas are indexed
+by `/tmp/rbo-sum-repeatability-yV3yki/summary.json`; they are not checked in.
+
+The proof floor adds TPCH q10 and TPCDS q50, q68, q76, q79. Same-input old/new
+replays distinguish the gains: q50 changed from `UNKNOWN` at 60 seconds to
+`VERIFIED_BOUNDED` in 40.692 seconds; the other four already proved on the
+baseline and are newly pinned coverage, not newly enabled semantics.
 
 ## Policy maintenance
 

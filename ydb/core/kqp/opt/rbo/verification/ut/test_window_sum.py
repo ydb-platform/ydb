@@ -456,7 +456,7 @@ class WindowSumTest(unittest.TestCase):
                 },
             }
         ]
-        with self.assertRaisesRegex(SnapshotError, "does not admit subplans"):
+        with self.assertRaisesRegex(SnapshotError, "separate from subplan evaluation"):
             parse_snapshot(raw)
 
     def test_window_sum_rejects_multiple_occurrences_and_pair_overflow(self):

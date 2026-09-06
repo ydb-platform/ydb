@@ -16,6 +16,7 @@ using TProjectionOrders = TVector<TMaybe<std::pair<TColumnOrder, bool>>>;
 
 struct TGroupExpr {
     TExprNode::TPtr OriginalRoot;
+    TExprNode::TPtr OriginalRow;
     ui64 Hash;
     TExprNode::TPtr TypeNode;
 };
@@ -102,13 +103,14 @@ ui64 CalculateExprHash(const TExprNode& root, TNodeMap<ui64>& visited) {
             break;
         case TExprNode::EType::World:
             break;
+        case TExprNode::EType::Argument:
+            // This is only a structural bucket: argument identity is checked
+            // by scoped equality below. A context-free hash can be memoized
+            // even when a shared lambda occurs at different nesting depths.
+            break;
         case TExprNode::EType::Lambda:
             hash = CseeHash(root.ChildrenSize(), hash);
             hash = CseeHash(root.Head().ChildrenSize(), hash);
-            for (ui32 argIndex = 0; argIndex < root.Head().ChildrenSize(); ++argIndex) {
-                visited.emplace(root.Head().Child(argIndex), argIndex);
-            }
-
             for (ui32 bodyIndex = 1; bodyIndex < root.ChildrenSize(); ++bodyIndex) {
                 hash = CombineHashes(CalculateExprHash(*root.Child(bodyIndex), visited), hash);
             }
@@ -123,8 +125,19 @@ ui64 CalculateExprHash(const TExprNode& root, TNodeMap<ui64>& visited) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool ExprNodesEquals(const TExprNode& left, const TExprNode& right, TNodeSet& visited) {
-    if (!visited.emplace(&left).second) {
+struct TSqlArgumentFrame {
+    const TSqlArgumentFrame* Outer;
+    TNodeMap<const TExprNode*> Bindings;
+};
+using TSqlExprPairs = THashSet<std::pair<const TExprNode*, const TExprNode*>>;
+
+bool ExprNodesEquals(
+    const TExprNode& left,
+    const TExprNode& right,
+    const TSqlArgumentFrame& arguments,
+    TSqlExprPairs& visited)
+{
+    if (!visited.emplace(&left, &right).second) {
         return true;
     }
 
@@ -145,7 +158,7 @@ bool ExprNodesEquals(const TExprNode& left, const TExprNode& right, TNodeSet& vi
             }
 
             for (ui32 i = 0; i < left.ChildrenSize(); ++i) {
-                if (!ExprNodesEquals(*left.Child(i), *right.Child(i), visited)) {
+                if (!ExprNodesEquals(*left.Child(i), *right.Child(i), arguments, visited)) {
                     return false;
                 }
             }
@@ -153,11 +166,24 @@ bool ExprNodesEquals(const TExprNode& left, const TExprNode& right, TNodeSet& vi
             return true;
         case TExprNode::EType::Atom:
             return left.Content() == right.Content() && left.GetFlagsToCompare() == right.GetFlagsToCompare();
-        case TExprNode::EType::Argument:
-            return left.GetArgIndex() == right.GetArgIndex();
+        case TExprNode::EType::Argument: {
+            for (auto frame = &arguments; frame; frame = frame->Outer) {
+                const auto binding = frame->Bindings.find(&left);
+                const bool rightBound = std::any_of(
+                    frame->Bindings.begin(), frame->Bindings.end(),
+                    [&](const auto& entry) { return entry.second == &right; });
+                // A binder on either side shadows outer bindings on that
+                // side. Equality requires the same paired lexical frame.
+                if (binding != frame->Bindings.end() || rightBound) {
+                    return binding != frame->Bindings.end() &&
+                        binding->second == &right;
+                }
+            }
+            return &left == &right;
+        }
         case TExprNode::EType::World:
             return true;
-        case TExprNode::EType::Lambda:
+        case TExprNode::EType::Lambda: {
             if (left.ChildrenSize() != right.ChildrenSize()) {
                 return false;
             }
@@ -166,21 +192,24 @@ bool ExprNodesEquals(const TExprNode& left, const TExprNode& right, TNodeSet& vi
                 return false;
             }
 
+            TSqlArgumentFrame nestedArguments{&arguments, {}};
+            for (ui32 i = 0; i < left.Head().ChildrenSize(); ++i) {
+                nestedArguments.Bindings[left.Head().Child(i)] = right.Head().Child(i);
+            }
+            // The same DAG node pair can occur under different binders. Do
+            // not reuse equality results from a different argument mapping.
+            TSqlExprPairs nestedVisited;
             for (ui32 i = 1; i < left.ChildrenSize(); ++i) {
-                if (!ExprNodesEquals(*left.Child(i), *right.Child(i), visited)) {
+                if (!ExprNodesEquals(*left.Child(i), *right.Child(i), nestedArguments, nestedVisited)) {
                     return false;
                 }
             }
 
             return true;
+        }
         default:
             YQL_ENSURE(false, "Unexpected node type");
     }
-}
-
-bool ExprNodesEquals(const TExprNode& left, const TExprNode& right) {
-    TNodeSet visited;
-    return ExprNodesEquals(left, right, visited);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -522,8 +551,6 @@ TMaybe<bool> ScanExprForMatchedGroup(
     if (root.IsCallable({"PgSubLink", "YqlSubLink"})) {
         const auto& testRowLambda = *root.Child(3);
         if (!testRowLambda.IsCallable("Void")) {
-            hashVisited[testRowLambda.Head().Child(0)] = 0; // original row
-            hashVisited[testRowLambda.Head().Child(1)] = 1; // sublink value
             ScanExprForMatchedGroup(testRowLambda.Head().ChildPtr(0), testRowLambda.Tail(),
                 exprs, replaces, hashVisited, nodeVisited, ctx, Nothing(), isYql);
         }
@@ -542,7 +569,10 @@ TMaybe<bool> ScanExprForMatchedGroup(
     }
 
     bool hasChanges = false;
-    for (const auto& child : root.Children()) {
+    // Lambda declarations are bindings, not candidate SQL expressions.
+    const ui32 firstChild = root.IsLambda() ? 1 : 0;
+    for (ui32 index = firstChild; index < root.ChildrenSize(); ++index) {
+        const auto& child = root.ChildPtr(index);
         auto childrenDepth = groupingDepth;
         if (childrenDepth.Defined()) {
             childrenDepth = *childrenDepth + 1;
@@ -584,7 +614,8 @@ TMaybe<bool> ScanExprForMatchedGroup(
             if (exprs[i].Hash != hash) {
                 continue;
             }
-            if (!ExprNodesEquals(*exprs[i].OriginalRoot, root)) {
+            if (!NDetail::SqlExprsEqual(
+                    *exprs[i].OriginalRoot, root, *exprs[i].OriginalRow, *row)) {
                 continue;
             }
 
@@ -647,11 +678,11 @@ TExprNode::TPtr ReplaceGroupByExpr(
         const auto& lambda = groupExprs.Child(index)->Tail();
 
         TNodeMap<ui64> visited;
-        visited[&lambda.Head().Head()] = 0;
         ui64 hash = CalculateExprHash(lambda.Tail(), visited);
 
         exprs.push_back({
             .OriginalRoot = lambda.TailPtr(),
+            .OriginalRow = lambda.Head().HeadPtr(),
             .Hash = hash,
             .TypeNode = std::move(types[index]),
         });
@@ -660,7 +691,6 @@ TExprNode::TPtr ReplaceGroupByExpr(
     TNodeOnNodeOwnedMap replaces;
     TNodeMap<ui64> hashVisited;
     TNodeMap<TMaybe<bool>> nodeVisited;
-    hashVisited[&root->Head().Head()] = 0;
     auto scanStatus = ScanExprForMatchedGroup(root->Head().HeadPtr(), root->Tail(), exprs, replaces, hashVisited, nodeVisited, ctx, Nothing(), isYql);
     if (!scanStatus) {
         return nullptr;
@@ -1561,7 +1591,6 @@ bool ValidateSort(
                                 continue;
                             }
                         }
-                        hashVisited[&lambda.Head().Head()] = 0;
                         ui64 hash = CalculateExprHash(lambda.Tail(), hashVisited);
                         projectionHashes[hash].push_back(i);
                     }
@@ -1571,12 +1600,13 @@ bool ValidateSort(
 
         if (canReplaceProjectionExpr && newLambda->Head().ChildrenSize() == 1) {
             TNodeMap<ui64> hashVisited;
-            hashVisited[&newLambda->Head().Head()] = 0;
             ui64 hash = CalculateExprHash(newLambda->Tail(), hashVisited);
             bool changedSort = false;
             for (auto projectionIndex : projectionHashes[hash]) {
                 const auto& projectionLambda = projection->Tail().Child(projectionIndex)->Tail();
-                if (ExprNodesEquals(newLambda->Tail(), projectionLambda.Tail())) {
+                if (NDetail::SqlExprsEqual(
+                        newLambda->Tail(), projectionLambda.Tail(),
+                        newLambda->Head().Head(), projectionLambda.Head().Head())) {
                     auto columnName = projectionOrders->at(projectionIndex)->first.front().PhysicalName;
                     newLambda = ctx.Expr.Builder(newLambda->Pos())
                         .Lambda()
@@ -1696,12 +1726,13 @@ ui32 RegisterGroupExpression(
     TExprContext& ctx)
 {
     TNodeMap<ui64> visitedHashes;
-    visitedHashes[&args->Head()] = 0;
     auto hash = CalculateExprHash(*root, visitedHashes);
     auto it = hashes.find(hash);
     if (it != hashes.end()) {
         for (auto i : it->second) {
-            if (ExprNodesEquals(*root, groupExprsItems[i]->Tail().Tail())) {
+            const auto& existingLambda = groupExprsItems[i]->Tail();
+            if (NDetail::SqlExprsEqual(
+                    *root, existingLambda.Tail(), args->Head(), existingLambda.Head().Head())) {
                 return i;
             }
         }
@@ -1939,6 +1970,18 @@ bool GatherExtraSortColumns(
 }
 
 } // namespace
+
+bool NDetail::SqlExprsEqual(
+    const TExprNode& left,
+    const TExprNode& right,
+    const TExprNode& leftRow,
+    const TExprNode& rightRow)
+{
+    YQL_ENSURE(leftRow.IsArgument() && rightRow.IsArgument());
+    const TSqlArgumentFrame arguments{nullptr, {{&leftRow, &rightRow}}};
+    TSqlExprPairs visited;
+    return ExprNodesEquals(left, right, arguments, visited);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

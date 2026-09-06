@@ -75,6 +75,14 @@ struct TRBOSemanticSnapshotBoundaryResultV1 {
     // Empty for Initial and for non-diagnostic runs. A diagnostic Prefix has
     // [1..target]; diagnostic Final has the complete shorter sequence.
     TVector<TRBOTransformationEventV1> TransformationEvents;
+    // Identity within one compiler root bundle, in deterministic AST traversal
+    // order. These are optimizer roots, not necessarily SQL result ordinals.
+    ui32 RootOrdinal = 0;
+    ui32 RootCount = 1;
+    // Present only for a complete read-only, distinct-root result-slot mapping.
+    // Unknown is not result zero. These fields describe capture, not a proof.
+    std::optional<ui32> ResultOrdinal = std::nullopt;
+    ui32 ResultCount = 0;
 };
 
 class IRBOSemanticSnapshotSink {

@@ -157,7 +157,7 @@ TPrepareRewriteInfo PrepareCreateTableAs(
     const auto& insertData = writeArgs.Get(3);
     YQL_ENSURE(insertData.Ptr()->Content() != "Void");
 
-    sessionCtx->SetInternalTypeAnnTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), sessionCtx->ConfigPtr()));
+    sessionCtx->SetInternalTypeAnnTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), sessionCtx->ConfigPtr(), typeCtx));
 
     auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
         .AddServiceTransformers()

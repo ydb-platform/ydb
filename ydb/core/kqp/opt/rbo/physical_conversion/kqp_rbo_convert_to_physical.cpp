@@ -105,10 +105,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
 
             currentStageBody = Build<TPhysicalSourceBuilder>(opRead, ctx, op->Pos);
 
-            if (!opRead->IsSingleConsumer()) {
-                currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, opRead->GetNumOfConsumers(), ctx, op->Pos);
-            }
-
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Read " << opStageId;
@@ -139,7 +135,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 currentStageBody = stageInput;
             }
 
-            currentStageBody = Build<TPhysicalMapBuilder>(map, ctx, op->Pos, currentStageBody);
+            currentStageBody = TPhysicalMapBuilder(map, ctx, op->Pos, rboCtx.TypeCtx)
+                .BuildPhysicalOp(currentStageBody);
 
             if (!map->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, map->GetNumOfConsumers(), ctx, op->Pos);

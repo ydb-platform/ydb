@@ -458,15 +458,12 @@ def _subplan(subplan: ir.Subplan) -> str:
         )
 
     if isinstance(subplan, ir.ScalarSubplan):
-        dependencies = (
-            () if subplan.dependency is None else (subplan.dependency,)
-        )
         return (
             f"subplan binding={_quote(subplan.binding)} kind=scalar "
             f"root={_quote(subplan.root)} "
             f"output={column_metadata(subplan.output)} "
             f"type={_quote(subplan.output.type)} nullable=true "
-            f"dependencies={_list(dependencies, _quote)} "
+            f"dependencies={_list(subplan.dependencies, _quote)} "
             f"consumers={_list(subplan.consumers, _quote)}"
         )
     if isinstance(subplan, ir.ExistsSubplan):

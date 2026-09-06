@@ -595,13 +595,8 @@ Y_UNIT_TEST_SUITE(KqpRboWindowTransport) {
             {ERankTransportMutation::WrongResultType, "wrong result type"},
             {ERankTransportMutation::NonemptyPartition, "nonempty partition"},
             {ERankTransportMutation::MissingOrder, "missing order"},
-            {ERankTransportMutation::WrongOrderType, "wrong order type"},
-            {ERankTransportMutation::WrongDirection, "wrong direction"},
-            {ERankTransportMutation::WrongNullOrder, "wrong null order"},
             {ERankTransportMutation::ForeignOrderBinder, "foreign order binder"},
             {ERankTransportMutation::MismatchedOrderMember, "mismatched order member"},
-            {ERankTransportMutation::WrongFrameEnd, "wrong frame end"},
-            {ERankTransportMutation::WrongCurrentRow, "wrong current row"},
         };
 
         for (const auto& test : cases) {
@@ -623,6 +618,24 @@ Y_UNIT_TEST_SUITE(KqpRboWindowTransport) {
                     setting),
                 TStringBuilder()
                     << "near miss unexpectedly transported: " << test.Name);
+        }
+    }
+
+    Y_UNIT_TEST(RankTransportRecordsKeysAndDefersTypeAndFrameAudit) {
+        for (const auto mutation : {
+            ERankTransportMutation::WrongOrderType,
+            ERankTransportMutation::WrongDirection,
+            ERankTransportMutation::WrongNullOrder,
+            ERankTransportMutation::WrongFrameEnd,
+            ERankTransportMutation::WrongCurrentRow})
+        {
+            TExprContext ctx;
+            const auto pos = TPositionHandle();
+            auto definition = RankDefinition(ctx, pos, "named_window", "key", mutation);
+            auto setting = WindowSetting(ctx, pos, {definition});
+            UNIT_ASSERT_VALUES_EQUAL(
+                NWindowTransport::FindTransportSafeWindowDefinition(
+                    RankCall(ctx, pos, "named_window"), setting).Get(), definition.Get());
         }
     }
 

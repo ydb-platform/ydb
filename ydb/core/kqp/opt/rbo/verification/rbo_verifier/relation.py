@@ -8,13 +8,14 @@ from math import factorial
 from typing import Callable, Iterator, Literal, Mapping, TypeAlias
 
 from . import aggregate as aggregate_kernel
-from . import decimal, join as join_kernel, smt, sort_network, sort_strategy
+from . import decimal, floating, join as join_kernel, smt, sort_network, sort_strategy
 from . import window as window_kernel
 from .errors import RelationError
 from .analysis import AnalysisError, AnalyzedPlan, analyze_snapshot
 from .ir import (
     Aggregate,
     AggregateTrait,
+    BINARY64_ORDER_COMPARISON,
     Column,
     EmptySource,
     Expr,
@@ -533,6 +534,7 @@ class Evaluator:
         _context: AnalyzedPlan | None = None,
         _correlated_pair_budget: _CorrelatedPairBudget | None = None,
         _boolean_subplan_pair_budget: _BooleanSubplanPairBudget | None = None,
+        project_input_observer: NodeObserver | None = None,
     ) -> None:
         self.snapshot = snapshot
         self.database = database
@@ -555,6 +557,7 @@ class Evaluator:
         self.choice_scope = choice_scope
         self.defer_pushed_limits = defer_pushed_limits
         self.node_observer = node_observer
+        self.project_input_observer = project_input_observer
         self.outer_bindings = outer_bindings or {}
         self.observed_nodes: set[str] = set()
         self.subplans_by_consumer = _context.subplans_by_consumer
@@ -699,6 +702,12 @@ class Evaluator:
 
         if isinstance(node, Project):
             source = self._input(node.id, 0, node.input)
+            if any(column.require_total for column in node.columns):
+                if self.project_input_observer is None:
+                    raise RelationError("require_total Project needs a mandatory totality observer")
+                # Observe the actual routed input before Unwrap changes NULLs
+                # or errors, including inputs supplied across stage edges.
+                self.project_input_observer(self.choice_scope, node.id, source)
             columns = self._columns(node.id)
             windows = tuple(
                 window
@@ -730,26 +739,23 @@ class Evaluator:
                     tuple[Mapping[Expr, Value], ...] | None
                 ) = None,
             ) -> Relation:
-                relational_values: tuple[Mapping[Expr, Value], ...]
-                if supplied_relational_values is not None:
-                    relational_values = supplied_relational_values
-                elif window is None:
-                    relational_values = tuple({} for _row in relation.rows)
-                else:
+                relational_values = tuple(
+                    dict(values) for values in (
+                        supplied_relational_values
+                        if supplied_relational_values is not None
+                        else ({} for _row in relation.rows)
+                    )
+                )
+                if window is not None:
                     _require_relation_row_pairs(
                         len(relation.rows) * len(relation.rows),
                         window.kind.replace("_", " "),
                     )
-                    relational_values = tuple(
-                        {
-                            window: self._whole_partition_decimal_window_value(
-                                window,
-                                relation,
-                                row,
-                            )
-                        }
-                        for row in relation.rows
-                    )
+                    # Whole-partition AVG/SUM and ANSI Rank are deterministic
+                    # over the same source outcome; neither can overwrite the
+                    # other's relational values or skip its bound checks.
+                    for values, row in zip(relational_values, relation.rows):
+                        values[window] = self._whole_partition_decimal_window_value(window, relation, row)
                 rows = []
                 for row_index, row in enumerate(relation.rows):
                     values = dict(row.values) | bindings(row_index, row)
@@ -825,8 +831,8 @@ class Evaluator:
                 )
 
             if ranks or row_windows:
-                # Ordered-window validation excludes subplans, so each source
-                # outcome can retain its unstable-sort choices directly.
+                # Windows cannot invoke subplans themselves. Subplans below
+                # this input are already represented by the same source outcome.
                 outcomes: list[Outcome] = []
                 for outcome_index, source_outcome in enumerate(source.outcomes):
                     if ranks:
@@ -924,6 +930,8 @@ class Evaluator:
             return family
 
         if isinstance(node, Aggregate):
+            if any(trait.function == "stddev_samp" for trait in node.aggregates):
+                return self._floating_aggregate_family(node, self._input(node.id, 0, node.input))
             return map_family(
                 self._input(node.id, 0, node.input),
                 lambda relation: self._aggregate(node, relation),
@@ -1025,50 +1033,35 @@ class Evaluator:
         smt.Term,
         tuple[BoundedChoice, ...],
     ]:
-        """Evaluate sequential global Rank definitions on one stage task.
+        """Evaluate ANSI Rank on this task's rows, without publishing order.
 
-        KQP physical-stage connection inputs are Streams.  Each source window
-        definition therefore lowers its Sort to UnstableSort, including the
-        second definition in a rebuilt CalcOverWindowGroup.  Equal-key orders
-        are consequently fresh between definitions.  CalcOverWindow exports no
-        sorted constraint, so these physical sort orders affect Rank values but
-        do not become an observable sequence contract for downstream operators.
+        Runtime NULL/NaN peers have one rank regardless of unstable tie order.
+        Repeated uses of a definition therefore need no shared choice state.
         """
 
         ordered_ranks = tuple(
             sorted(ranks, key=lambda rank: rank.execution_order)
         )
         _require_relation_row_pairs(
-            len(source.rows) * len(source.rows) * len(ordered_ranks),
+            len(source.rows) * len(source.rows) * sum(len(rank.order_by or ()) for rank in ordered_ranks),
             "window rank",
         )
         relation = source
-        enabled: list[smt.Term] = []
-        choices: tuple[BoundedChoice, ...] = ()
         relational_values: list[dict[Expr, Value]] = [
             {} for _row in source.rows
         ]
         for rank in ordered_ranks:
             assert rank.execution_order is not None
-            assert rank.order_by is not None and len(rank.order_by) == 1
+            assert rank.order_by is not None and 1 <= len(rank.order_by) <= 2
             order = rank.order_by
-            order_item = order[0]
             _require_order_columns(relation.columns, order, "window rank")
-            ordinals, rank_choices = _fresh_ordinals(
-                self.scalar.script,
-                f"{self.choice_scope}:window_rank:{node.id}:"
-                f"{outcome_index}:{rank.execution_order}:ordinal",
-                relation.rows,
-            )
-            enabled.append(
-                _ordinal_constraints(relation.rows, ordinals, order)
-            )
-            choices = _merge_choices(choices, rank_choices)
+            assert rank.partition_by is not None
             values = window_kernel.rank_values(
                 tuple(row.present for row in relation.rows),
-                tuple(row.values[order_item.column] for row in relation.rows),
-                ordinals,
-                lambda left, right: _ordered_value_less(left, right, order_item),
+                tuple(tuple(row.values[item.column] for item in order) for row in relation.rows),
+                tuple(tuple(row.values[column] for column in rank.partition_by) for row in relation.rows),
+                lambda left, right: _key_less(left, right, order),
+                self.scalar.not_distinct,
             )
             for row_values, value in zip(relational_values, values):
                 row_values[rank] = value
@@ -1083,8 +1076,8 @@ class Evaluator:
                 task_partition_key=source.task_partition_key,
             ),
             tuple(relational_values),
-            smt.and_(*enabled),
-            choices,
+            smt.TRUE,
+            (),
         )
 
     def _window_rows_values(
@@ -1197,11 +1190,55 @@ class Evaluator:
             self.scalar.not_distinct,
         )
 
+    def _floating_aggregate_family(self, node: Aggregate, source: RelationFamily) -> RelationFamily:
+        """Share one visitation and global flush epoch across all traits.
+
+        Numeric-limit DqHashCombine may flush its whole group map repeatedly.
+        Every such run is a nondecreasing segmentation of its visitation; one
+        row per (SQL key, epoch) carries that partial state. The direct final
+        DqHashAggregate emits one state per key, including when it spills.
+        Extra segmentations/orders only strengthen the universal obligation.
+        """
+        if self.scalar.binary64 is None:
+            raise RelationError("stddev_samp requires explicit binary64 problem semantics")
+        source = visitation_family(source, self.scalar.script, f"{self.choice_scope}:visit:{node.id}")
+        if node.phase != "intermediate":
+            return map_family(source, lambda relation: self._aggregate(node, relation))
+        epoch_name = "$binary64_flush_epoch"
+        while any(column.name == epoch_name for column in source.columns):
+            epoch_name += ":"
+        outcomes = []
+        for outcome in source.outcomes:
+            count = len(outcome.relation.rows)
+            choices = tuple(BoundedChoice(
+                self.scalar.script.fresh_constant(f"{self.choice_scope}:flush:{node.id}:{i}", smt.INT), count,
+            ) for i in range(count))
+            self.scalar.script.register_quantified_choices((choice.term, choice.bound) for choice in choices)
+            epochs = tuple(choice.term for choice in choices)
+            domain = smt.and_(
+                *(smt.and_(smt.not_(smt.lt(epoch, smt.ZERO)), smt.lt(epoch, smt.int_value(count))) for epoch in epochs),
+                *(smt.not_(smt.lt(b, a)) for a, b in zip(epochs, epochs[1:])),
+            )
+            segmented = Relation(
+                outcome.relation.columns + (Column(epoch_name, "Uint64", False),),
+                tuple(replace(row, values={**row.values, epoch_name: Value("Uint64", smt.FALSE, epoch)})
+                      for row, epoch in zip(outcome.relation.rows, epochs)),
+            )
+            rows = self._grouped_aggregate_rows(replace(node, keys=node.keys + (epoch_name,)), segmented)
+            relation = Relation(self._columns(node.id), tuple(replace(
+                row, values={name: value for name, value in row.values.items() if name != epoch_name},
+            ) for row in rows))
+            outcomes.append(replace(
+                outcome, enabled=smt.and_(outcome.enabled, domain), relation=relation,
+                choices=_merge_choices(outcome.choices, choices),
+            ))
+        return RelationFamily(tuple(outcomes))
+
     def _aggregate(self, node: Aggregate, source: Relation) -> Relation:
         modeled_functions = (
             {"distinct"}
             if node.distinct_all
-            else {"avg", "count", "max", "min", "sum"}
+            else {"avg", "count", "max", "min", "sum", "stddev_samp"}
         )
         unsupported = sorted(
             {trait.function for trait in node.aggregates}
@@ -1447,13 +1484,22 @@ class Evaluator:
             if candidate is None
             else {key: candidate.values[key] for key in node.keys}
         )
+        # One group has a fixed source, membership and shared visitation. Equal
+        # variance traits differ only in output name, so reuse the literal fold.
+        variance_values: dict[AggregateTrait, Value] = {}
         for trait in node.aggregates:
+            signature = replace(trait, output="") if trait.function == "stddev_samp" else None
+            if signature is not None and signature in variance_values:
+                values[trait.output] = variance_values[signature]
+                continue
             values[trait.output] = self._aggregate_value(
                 node,
                 trait,
                 source,
                 matches,
             )
+            if signature is not None:
+                variance_values[signature] = values[trait.output]
         return values
 
     def _aggregate_value(
@@ -1475,6 +1521,10 @@ class Evaluator:
             distinct=trait.distinct,
             equal=self.scalar.aggregate_equal,
         )
+        if trait.function == "stddev_samp":
+            if self.scalar.binary64 is None:
+                raise RelationError("stddev_samp requires explicit binary64 problem semantics")
+            return aggregate_kernel.variance_value(trait, node.phase, values, non_null, self.scalar.binary64)
         if (
             trait.function == "sum"
             and decimal.is_type(trait.output_type)
@@ -1975,7 +2025,7 @@ class Evaluator:
             for subplan in subplans
             if (
                 isinstance(subplan, ScalarSubplan)
-                and subplan.dependency is not None
+                and subplan.dependencies
             )
         )
         # These roots are closed and may be shared across outer rows.  An
@@ -2130,7 +2180,7 @@ class Evaluator:
         subplan: Subplan,
     ) -> SubplanFamily:
         if isinstance(subplan, ScalarSubplan):
-            if subplan.dependency is not None:
+            if subplan.dependencies:
                 raise RelationError(
                     "a correlated scalar subplan must be evaluated per outer row"
                 )
@@ -2193,8 +2243,9 @@ class Evaluator:
         outer_outcome_index: int,
         outer_outcome_enabled: smt.Term,
     ) -> tuple[tuple[Value, ...], tuple[smt.Term, ...]]:
-        outer_bind = self.scalar_outer_binds[subplan.binding]
-        closed = self.node(outer_bind.input)
+        outer_binds = self.scalar_outer_binds[subplan.binding]
+        closed_input = outer_binds[0].input
+        closed = self.node(closed_input)
         closed_outcome = self._deterministic_correlated_outcome(
             subplan,
             closed.outcomes,
@@ -2211,22 +2262,28 @@ class Evaluator:
                 values.append(self.scalar.null(subplan.output.type))
                 errors.append(smt.FALSE)
                 continue
-            assert subplan.dependency is not None
+            assert subplan.dependencies
             child = Evaluator(
                 self.snapshot,
                 self.database,
                 self.scalar,
-                node_overrides={outer_bind.input: closed},
+                node_overrides={closed_input: closed},
                 choice_scope=(
                     f"{self.choice_scope}:correlated_scalar:"
                     f"{subplan.binding}:outcome:{outer_outcome_index}:"
                     f"row:{row_index}"
                 ),
                 outer_bindings={
-                    outer_bind.id: outer_row.values[subplan.dependency],
+                    bind.id: outer_row.values[bind.dependency]
+                    for bind in outer_binds
                 },
                 node_observer=self._invocation_observer(
-                    smt.and_(outer_outcome_enabled, outer_row.present)
+                    self.node_observer,
+                    smt.and_(outer_outcome_enabled, outer_row.present),
+                ),
+                project_input_observer=self._invocation_observer(
+                    self.project_input_observer,
+                    smt.and_(outer_outcome_enabled, outer_row.present),
                 ),
                 _context=self._context,
                 _correlated_pair_budget=self._correlated_pair_budget,
@@ -2256,13 +2313,13 @@ class Evaluator:
             )
         return tuple(values), tuple(errors)
 
+    @staticmethod
     def _invocation_observer(
-        self,
+        observer: NodeObserver | None,
         invocation_enabled: smt.Term,
     ) -> NodeObserver | None:
         """Hide diagnostic node outcomes for invocations absent in a witness."""
 
-        observer = self.node_observer
         if observer is None:
             return None
 
@@ -2854,6 +2911,8 @@ def _require_order_columns(
                 f"{operation} column {item.column!r} is absent"
             )
         if column.type == DOUBLE:
+            if item.comparison == BINARY64_ORDER_COMPARISON:
+                continue
             if (
                 item.comparison != INTEGRAL_AVG_RANK_COMPARISON
                 or not column.integral_avg_rank
@@ -2944,16 +3003,8 @@ class _FamilyProduct:
     choices: tuple[BoundedChoice, ...] = ()
 
 
-def combine_families(
-    families: tuple[RelationFamily, ...],
-    combine: Callable[[tuple[Relation, ...]], Relation],
-    combine_errors: Callable[
-        [tuple[Relation, ...], tuple[smt.Term, ...]],
-        smt.Term,
-    ] | None = None,
-) -> RelationFamily:
-    """Take a compatible product, preserving choices and observable errors."""
-
+def _family_products(families: tuple[RelationFamily, ...]) -> tuple[_FamilyProduct, ...]:
+    """Compatible joint executions, before combining their observations."""
     partials = [_FamilyProduct()]
     for relation_family in families:
         expanded: list[_FamilyProduct] = []
@@ -2979,6 +3030,19 @@ def combine_families(
         partials = expanded
     if not partials:
         raise RelationError("relation family has no compatible outcomes")
+    return tuple(partials)
+
+
+def combine_families(
+    families: tuple[RelationFamily, ...],
+    combine: Callable[[tuple[Relation, ...]], Relation],
+    combine_errors: Callable[
+        [tuple[Relation, ...], tuple[smt.Term, ...]],
+        smt.Term,
+    ] | None = None,
+) -> RelationFamily:
+    """Take a compatible product, preserving choices and observable errors."""
+
     return RelationFamily(
         tuple(
             Outcome(
@@ -2992,7 +3056,7 @@ def combine_families(
                 partial.decisions,
                 partial.choices,
             )
-            for partial in partials
+            for partial in _family_products(families)
         )
     )
 
@@ -3266,6 +3330,7 @@ class _SortingNetworkColumnLayout:
     value_lane: int
     decimal_finite_abs_bound: int | None
     average_metadata: _SortingAverageStateLayout | None = None
+    binary64_state: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -3316,6 +3381,11 @@ class _SortingNetworkRowCodec:
                         "sorting network row lost its integral avg state"
                     )
                 lanes.extend((state.count, state.minimum, state.maximum))
+            if column.binary64_state is not None:
+                state = value.binary64_state
+                if not isinstance(state, floating.VarianceState):
+                    raise RelationError("sorting network row lost its binary64 physical state")
+                lanes.extend(floating.state_terms(state))
         return self.product.pack(*lanes)
 
     def present(self, payload: smt.Term) -> smt.Term:
@@ -3343,12 +3413,18 @@ class _SortingNetworkRowCodec:
                 maximum=self.product.select(payload, state_layout.maximum_lane),
                 count_bound=state_layout.count_bound,
             )
+        binary64_state = None
+        if column.binary64_state is not None:
+            binary64_state = floating.VarianceState(*(
+                floating.Binary64(self.product.select(payload, lane)) for lane in column.binary64_state
+            ))
         return Value(
             column.column.type,
             self.product.select(payload, column.null_lane),
             self.product.select(payload, column.value_lane),
             column.decimal_finite_abs_bound,
             average_state,
+            binary64_state=binary64_state,
         )
 
     def key_row(
@@ -3542,6 +3618,17 @@ def _sorting_network_layout(relation: Relation) -> _SortingNetworkLayout:
                     "sorting network received unsupported AVG metadata"
                 )
 
+        binary64_layout = None
+        binary64_states = tuple(value.binary64_state for value in values)
+        if any(state is not None for state in binary64_states):
+            first = binary64_states[0]
+            if any(not isinstance(state, floating.VarianceState) for state in binary64_states):
+                raise RelationError("sorting network mixed binary64 physical state layouts")
+            if any(value.average_metadata is not None or value.decimal_sum_state is not None for value in values):
+                raise RelationError("binary64 physical state cannot carry legacy aggregate metadata")
+            fields = floating.state_terms(first)
+            binary64_layout = tuple(range(len(lane_sorts), len(lane_sorts) + len(fields)))
+            lane_sorts.extend(smt.INT for _ in fields)
         columns.append(
             _SortingNetworkColumnLayout(
                 column,
@@ -3549,6 +3636,7 @@ def _sorting_network_layout(relation: Relation) -> _SortingNetworkLayout:
                 value_lane,
                 finite_abs_bound,
                 average_state_layout,
+                binary64_layout,
             )
         )
 
@@ -3565,6 +3653,26 @@ def _sorting_network_layout(relation: Relation) -> _SortingNetworkLayout:
     )
 
 
+def visitation_family(
+    source: RelationFamily,
+    script: smt.Script,
+    decision: str,
+) -> RelationFamily:
+    """Materialize one shared aggregate input order, including physical state.
+
+    Represented sequences keep their order. Unordered inputs receive one finite
+    permutation rank per candidate, shared by every downstream aggregate trait.
+    A bitonic payload network costs O(N log² N), without pairwise row selection.
+    """
+    if source.sequence and all(outcome.relation.ordinals is None for outcome in source.outcomes):
+        return source
+    comparisons = sum(_sorting_network_cost(_live_row_count(outcome.relation)) for outcome in source.outcomes)
+    payload_cells = sum(_sorting_network_payload_cells(outcome.relation) for outcome in source.outcomes)
+    if comparisons > MAX_SORT_NETWORK_COMPARATORS or payload_cells > MAX_SORT_NETWORK_PAYLOAD_CELLS:
+        raise RelationError("aggregate visitation exceeds sorting-network construction audit bounds")
+    return _sorting_network_family(source, (), script, decision, preserve_input_order=source.sequence)
+
+
 def _sorting_network_family(
     source: RelationFamily,
     order: tuple[SortOrder, ...],
@@ -3573,6 +3681,7 @@ def _sorting_network_family(
     producer_groups: tuple[tuple[int, ...], ...] | None = None,
     *,
     deterministic_ties: bool = False,
+    preserve_input_order: bool = False,
 ) -> RelationFamily:
     """Sort exactly with a compact, fixed-topology compare-exchange network.
 
@@ -3590,6 +3699,8 @@ def _sorting_network_family(
     """
 
     _require_order_columns(source.columns, order, "sort")
+    if preserve_input_order and (not source.sequence or order or producer_groups is not None or deterministic_ties):
+        raise RelationError("input-order materialization requires only one represented sequence")
     if deterministic_ties and any(
         not _order_covers_unique_key(outcome.relation, order)
         for outcome in source.outcomes
@@ -3652,7 +3763,12 @@ def _sorting_network_family(
         }
         tie_ranks: list[smt.Term] = []
         tie_choices: list[BoundedChoice] = []
-        if deterministic_ties:
+        if preserve_input_order:
+            tie_ranks.extend(
+                smt.int_value(index) if relation.ordinals is None else relation.ordinals[index]
+                for index in live_indices
+            )
+        elif deterministic_ties:
             tie_ranks.extend(
                 smt.int_value(row_index) for row_index in range(len(rows))
             )
@@ -3669,7 +3785,7 @@ def _sorting_network_family(
                 for rank in tie_ranks
             )
 
-        constraints = [] if deterministic_ties else [smt.distinct(*tie_ranks)]
+        constraints = [] if deterministic_ties or preserve_input_order else [smt.distinct(*tie_ranks)]
         if producer_groups is not None and not deterministic_ties:
             input_ordinals = relation.ordinals
             for group in producer_groups:
@@ -3860,9 +3976,10 @@ def _sort_keys_equal(
 ) -> smt.Term:
     return smt.and_(
         *(
-            ScalarEncoder.not_distinct(
+            _ordered_value_equal(
                 left.values[item.column],
                 right.values[item.column],
+                item,
             )
             for item in order
         )
@@ -4303,11 +4420,19 @@ def _rows_sorted(rows: tuple[Row, ...], order: tuple[SortOrder, ...]) -> smt.Ter
 
 
 def _row_less(left: Row, right: Row, order: tuple[SortOrder, ...]) -> smt.Term:
+    return _key_less(
+        tuple(left.values[item.column] for item in order),
+        tuple(right.values[item.column] for item in order),
+        order,
+    )
+
+
+def _key_less(
+    left: tuple[Value, ...], right: tuple[Value, ...], order: tuple[SortOrder, ...]
+) -> smt.Term:
     prefix_equal = smt.TRUE
     less = smt.FALSE
-    for item in order:
-        left_value = left.values[item.column]
-        right_value = right.values[item.column]
+    for left_value, right_value, item in zip(left, right, order):
         less = smt.or_(
             less,
             smt.and_(
@@ -4317,16 +4442,27 @@ def _row_less(left: Row, right: Row, order: tuple[SortOrder, ...]) -> smt.Term:
         )
         prefix_equal = smt.and_(
             prefix_equal,
-            ScalarEncoder.not_distinct(left_value, right_value),
+            _ordered_value_equal(left_value, right_value, item),
         )
     return less
+
+
+def _ordered_value_equal(left: Value, right: Value, order: SortOrder) -> smt.Term:
+    if order.comparison != BINARY64_ORDER_COMPARISON:
+        return ScalarEncoder.not_distinct(left, right)
+    a, b = floating.Binary64(left.value), floating.Binary64(right.value)
+    return smt.or_(
+        smt.and_(left.is_null, right.is_null),
+        smt.and_(smt.not_(left.is_null), smt.not_(right.is_null),
+                 smt.not_(floating.aggregate_less(a, b)), smt.not_(floating.aggregate_less(b, a))),
+    )
 
 
 def _ordered_value_less(left: Value, right: Value, order: SortOrder) -> smt.Term:
     if left.type != right.type:
         raise RelationError("sort comparison type mismatch")
     if left.type == DOUBLE:
-        if order.comparison != INTEGRAL_AVG_RANK_COMPARISON:
+        if order.comparison not in {INTEGRAL_AVG_RANK_COMPARISON, BINARY64_ORDER_COMPARISON}:
             raise RelationError(
                 "Double sort comparison requires the integral AVG rank tag"
             )
@@ -4342,7 +4478,10 @@ def _ordered_value_less(left: Value, right: Value, order: SortOrder) -> smt.Term
         if order.nulls_first
         else smt.and_(smt.not_(left.is_null), right.is_null)
     )
-    if left.value.sort == smt.BOOL:
+    if order.comparison == BINARY64_ORDER_COMPARISON:
+        ascending = floating.aggregate_less(floating.Binary64(left.value), floating.Binary64(right.value))
+        descending = floating.aggregate_less(floating.Binary64(right.value), floating.Binary64(left.value))
+    elif left.value.sort == smt.BOOL:
         ascending = smt.and_(smt.not_(left.value), right.value)
         descending = smt.and_(left.value, smt.not_(right.value))
     elif is_decimal_type(left.type):
@@ -4557,7 +4696,7 @@ def _can_compact_ordered_singleton(
         len(relation.rows) > 1
         and 0 < len(live_rows) <= MAX_ENUMERATED_SEQUENCE_ROWS
         and all(
-            value.average_metadata is None
+            value.average_metadata is None and value.binary64_state is None
             for row in live_rows
             for value in row.values.values()
         )
@@ -5416,6 +5555,8 @@ def _bounded_choice_family(
                 sum_state = value.decimal_sum_state
                 if sum_state is not None:
                     observable_terms.extend(decimal_sum_state_terms(sum_state))
+                if value.binary64_state is not None:
+                    observable_terms.extend(floating.state_terms(value.binary64_state))
         dependencies = set(
             script.quantified_choice_dependencies(observable_terms)
         )
@@ -5777,19 +5918,59 @@ def _family_mismatch(
     ordered: bool,
     left_to_right_equal: tuple[tuple[smt.Term, ...], ...],
 ) -> FamilyMismatch:
-    def choice_terms(outcome: Outcome) -> tuple[smt.Term, ...]:
+    universal = scalar.binary64 is not None
+    right_to_left_equal = () if universal else _outcome_equal_matrix(right, left, scalar, ordered)
+    mismatch = _language_mismatch(
+        left.outcomes, right.outcomes, left_to_right_equal, right_to_left_equal, universal=universal,
+    )
+    return mismatch if universal else replace(mismatch, preferred_branches=_preferred_keyed_mismatch_branches(
+        left, right, scalar, ordered,
+    ))
+
+
+def _language_mismatch(
+    left: tuple[Outcome | _FamilyProduct, ...],
+    right: tuple[Outcome | _FamilyProduct, ...],
+    left_to_right_equal: tuple[tuple[smt.Term, ...], ...],
+    right_to_left_equal: tuple[tuple[smt.Term, ...], ...],
+    *,
+    universal: bool,
+) -> FamilyMismatch:
+    """Choice quantifiers depend on joint executions, not their payload shape.
+
+    Callers audit complete choice flow and supply equality of the entire
+    observation (one relation or a buffered tuple), never equality of marginals.
+    """
+    if len(left) * len(right) > MAX_OUTCOME_COMPARISONS:
+        raise RelationError("outcome comparison exceeds the pair audit bound")
+
+    def choice_terms(outcome: Outcome | _FamilyProduct) -> tuple[smt.Term, ...]:
         return tuple(choice.term for choice in outcome.choices)
 
-    def exists_enabled(family: RelationFamily) -> smt.Term:
+    def exists_enabled(outcomes: tuple[Outcome | _FamilyProduct, ...]) -> smt.Term:
         return smt.or_(
             *(
                 smt.exists(choice_terms(outcome), outcome.enabled)
-                for outcome in family.outcomes
+                for outcome in outcomes
             )
         )
 
+    if universal:
+        # Every actual execution instantiates the primitive UFs and one modeled
+        # schedule. Require equality for ALL enabled pairs, not equality of two
+        # independently enlarged outcome languages. SAT is only ambiguity.
+        branches = (
+            MismatchBranch("left_language_empty", smt.not_(exists_enabled(left))),
+            MismatchBranch("right_language_empty", smt.not_(exists_enabled(right))),
+            *(MismatchBranch(
+                f"schedule_pair_{i}_{j}_differs",
+                smt.and_(l.enabled, r.enabled, smt.not_(left_to_right_equal[i][j])),
+            ) for i, l in enumerate(left) for j, r in enumerate(right)),
+        )
+        return FamilyMismatch(smt.or_(*(branch.predicate for branch in branches)), branches)
+
     def target_contains(
-        target: RelationFamily,
+        target: tuple[Outcome | _FamilyProduct, ...],
         equalities: tuple[smt.Term, ...],
     ) -> smt.Term:
         return smt.or_(
@@ -5801,13 +5982,13 @@ def _family_mismatch(
                         equalities[index],
                     ),
                 )
-                for index, target_outcome in enumerate(target.outcomes)
+                for index, target_outcome in enumerate(target)
             )
         )
 
     def unmatched(
-        source: RelationFamily,
-        target: RelationFamily,
+        source: tuple[Outcome | _FamilyProduct, ...],
+        target: tuple[Outcome | _FamilyProduct, ...],
         equality: tuple[tuple[smt.Term, ...], ...],
     ) -> tuple[smt.Term, ...]:
         # Source choices stay globally existential and inspectable.  Target
@@ -5818,20 +5999,14 @@ def _family_mismatch(
                 outcome.enabled,
                 smt.not_(target_contains(target, equality[index])),
             )
-            for index, outcome in enumerate(source.outcomes)
+            for index, outcome in enumerate(source)
         )
 
-    right_to_left_equal = _outcome_equal_matrix(
-        right,
-        left,
-        scalar,
-        ordered,
-    )
     left_exists = exists_enabled(left)
     right_exists = exists_enabled(right)
     globally_enabled = smt.and_(
-        smt.or_(*(outcome.enabled for outcome in left.outcomes)),
-        smt.or_(*(outcome.enabled for outcome in right.outcomes)),
+        smt.or_(*(outcome.enabled for outcome in left)),
+        smt.or_(*(outcome.enabled for outcome in right)),
     )
     left_unmatched = unmatched(left, right, left_to_right_equal)
     right_unmatched = unmatched(right, left, right_to_left_equal)
@@ -5863,16 +6038,7 @@ def _family_mismatch(
             for index, predicate in enumerate(right_unmatched)
         ),
     )
-    return FamilyMismatch(
-        counterexample,
-        branches,
-        _preferred_keyed_mismatch_branches(
-            left,
-            right,
-            scalar,
-            ordered,
-        ),
-    )
+    return FamilyMismatch(counterexample, branches)
 
 
 def compare_families(
@@ -5936,6 +6102,69 @@ def family_mismatch(
         ordered,
         left_to_right_equal,
     )
+
+
+def bundle_mismatch(
+    pairs: tuple[tuple[RelationFamily, RelationFamily], ...],
+    scalar: ScalarEncoder,
+) -> FamilyMismatch:
+    """Compare joint buffered tuples, or one query error, without flattening.
+
+    Within each pair of complete executions, successful tuples agree iff every
+    slot agrees under its own bag/sequence semantics. Only then do the language
+    quantifiers bind the complete joint choice vector; slots are not proved alone.
+    """
+    if not pairs:
+        raise RelationError("a result bundle must contain at least one result")
+    side_choices: tuple[set[smt.Term], ...] = (set(), set())
+    for side in (0, 1):
+        seen_choices = side_choices[side]
+        seen_decisions: set[str] = set()
+        for pair in pairs:
+            choices = {choice.term for outcome in pair[side].outcomes for choice in outcome.choices}
+            decisions = {name for outcome in pair[side].outcomes for name, _ in outcome.decisions}
+            if choices & seen_choices or decisions & seen_decisions:
+                raise RelationError("result roots share local choices; independent root scopes are required")
+            seen_choices.update(choices)
+            seen_decisions.update(decisions)
+    if side_choices[0] & side_choices[1]:
+        raise RelationError("comparison sides share bounded choice symbols")
+    # Audit every root against the whole registry, including choices declared
+    # by later hand-built roots. Evaluator-produced choices are already known.
+    scalar.script.register_quantified_choices(
+        (choice.term, choice.bound)
+        for pair in pairs for family in pair for outcome in family.outcomes for choice in outcome.choices
+    )
+    normalized = tuple(
+        _comparison_inputs(left, right, scalar.script, f"bundle:result:{index}")
+        for index, (left, right) in enumerate(pairs)
+    )
+    for left, right, _ in normalized:
+        if tuple((column.name, column.value_type) for column in left.columns) != tuple(
+            (column.name, column.value_type) for column in right.columns
+        ):
+            raise RelationError("bundle result schemas differ")
+    before = _family_products(tuple(left for left, _, _ in normalized))
+    after = _family_products(tuple(right for _, right, _ in normalized))
+    for execution in before + after:
+        _require_relation_rows(sum(len(relation.rows) for relation in execution.relations), "result bundle")
+    if len(before) * len(after) > MAX_OUTCOME_COMPARISONS:
+        raise RelationError("result bundle outcome comparison exceeds the pair audit bound")
+
+    def equal(left: _FamilyProduct, right: _FamilyProduct) -> smt.Term:
+        left_error, right_error = smt.or_(*left.errors), smt.or_(*right.errors)
+        return smt.or_(
+            smt.and_(left_error, right_error),
+            smt.and_(
+                smt.not_(left_error), smt.not_(right_error),
+                *(_relations_equal(a, b, scalar, ordered)
+                  for a, b, (_, _, ordered) in zip(left.relations, right.relations, normalized)),
+            ),
+        )
+
+    forward = tuple(tuple(equal(left, right) for right in after) for left in before)
+    reverse = tuple(tuple(column) for column in zip(*forward))  # Tuple equality is symmetric.
+    return _language_mismatch(before, after, forward, reverse, universal=scalar.binary64 is not None)
 
 
 def family_equal(

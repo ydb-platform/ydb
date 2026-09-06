@@ -1,4 +1,6 @@
+import copy
 import os
+import itertools
 import unittest
 
 try:
@@ -6,10 +8,11 @@ try:
 except ImportError:
     yatest_common = None
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt, window
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Expr,
+    SortOrder,
     SnapshotError,
     parse_snapshot,
 )
@@ -159,6 +162,35 @@ def _staged_snapshot(connection, rank_count=2):
     return snapshot
 
 
+def _rank_in_snapshot():
+    snapshot = _snapshot(1)
+    plan = snapshot["plan"]
+    plan["nodes"].extend([
+        {
+            "id": "rank_filter", "op": "filter", "input": "rank",
+            "predicate": {
+                "kind": "lte", "left": _column("rank_0"),
+                "right": {"kind": "literal", "type": "Uint64", "value": 1},
+            },
+        },
+        {
+            "id": "outer", "op": "scan", "table": "Rows",
+            "columns": [{"source": "id", "output": "id"}], "pushed_limit": None,
+        },
+        {"id": "in_filter", "op": "filter", "input": "outer", "predicate": _column("$in")},
+    ])
+    plan["root"] = "in_filter"
+    plan["output"] = ["id"]
+    plan["subplans"] = [{
+        "kind": "in", "binding": "$in", "root": "rank_filter",
+        "type": "Bool", "nullable": False, "dependencies": [],
+        "lookup": {"column": "id", "type": "Int64", "nullable": False},
+        "output": {"column": "id", "type": "Int64", "nullable": False},
+        "consumers": ["in_filter"],
+    }]
+    return snapshot
+
+
 def _cast_snapshot(result_type="Decimal(15,4)"):
     return {
         "format": "ydb-rbo-semantic-snapshot",
@@ -294,6 +326,58 @@ def _concrete_rank_values(keys):
 
 
 class WindowRankTest(unittest.TestCase):
+    def test_closed_leaf_in_rank_preserves_peers_and_rejects_other_owners(self):
+        snapshot = parse_snapshot(_rank_in_snapshot())
+        script = smt.Script()
+        database = relation_model.Database(snapshot, 0, script)
+        columns = snapshot.tables[0].columns
+        database.relations["Rows"] = relation_model.Relation(columns, tuple(
+            relation_model.Row(smt.TRUE, {
+                "id": Value("Int64", smt.FALSE, smt.int_value(index)),
+                "key_a": Value("Decimal(15,4)", smt.FALSE, smt.int_value(key)),
+                "key_b": Value("Decimal(15,4)", smt.FALSE, smt.int_value(key)),
+            })
+            for index, key in enumerate((10, 10, 20))
+        ))
+        outcomes = Evaluator(snapshot, database, Encoder(script)).node(snapshot.plan.root).outcomes
+        self.assertEqual(len(outcomes), 1)
+        outcome = outcomes[0]
+        self.assertFalse(_ground(outcome.error))
+        self.assertEqual([
+            _ground(row.values["id"].value)
+            for row in outcome.relation.rows if _ground(row.present)
+        ], [0, 1])
+
+        rejected = copy.deepcopy(_rank_in_snapshot())
+        rejected["plan"]["subplans"][0] = {
+            "kind": "exists", "binding": "$in", "root": "rank_filter",
+            "type": "Bool", "nullable": False,
+            "predicate": None, "dependencies": [], "consumers": ["in_filter"],
+        }
+        with self.assertRaisesRegex(SnapshotError, "separate from subplan evaluation"):
+            parse_snapshot(rejected)
+
+        attached = _rank_in_snapshot()
+        attached["plan"]["nodes"][1]["columns"].append({
+            "output": "bound", "expression": _column("$scalar"),
+        })
+        attached["plan"]["nodes"].extend([
+            {"id": "one", "op": "empty_source"},
+            {
+                "id": "scalar", "op": "project", "input": "one", "ordered": False,
+                "columns": [{"output": "value", "expression": {
+                    "kind": "literal", "type": "Int64", "value": 1,
+                }}],
+            },
+        ])
+        attached["plan"]["subplans"].append({
+            "kind": "scalar", "binding": "$scalar", "root": "scalar",
+            "type": "Int64", "nullable": True, "dependencies": [], "consumers": ["rank"],
+            "output": {"column": "value", "type": "Int64", "nullable": False},
+        })
+        with self.assertRaisesRegex(SnapshotError, "separate from subplan evaluation"):
+            parse_snapshot(attached)
+
     def test_decimal_rank_key_cast_thresholds_and_specials_are_exact(self):
         threshold = 10**13
         cases = (
@@ -333,8 +417,10 @@ class WindowRankTest(unittest.TestCase):
             encoded.decimal_finite_abs_bound,
             (10**13 - 1) * 100,
         )
-        with self.assertRaisesRegex(SnapshotError, "exact Decimal"):
-            parse_snapshot(_cast_snapshot("Decimal(15,3)"))
+        for target in ("Decimal(15,3)", "Decimal(35,9)", "Decimal(3,1)"):
+            parse_snapshot(_cast_snapshot(target))
+        with self.assertRaisesRegex(SnapshotError, "at least one integral digit"):
+            parse_snapshot(_cast_snapshot("Decimal(15,15)"))
 
     def test_rank_json_and_dataflow_gates_are_closed(self):
         parsed = parse_snapshot(_snapshot())
@@ -353,7 +439,8 @@ class WindowRankTest(unittest.TestCase):
 
         mutations = (
             ("window_name", "", "non-empty string"),
-            ("partition_by", ["id"], "empty partition"),
+            ("partition_by", ["missing"], "not available"),
+            ("partition_by", ["id"] * 5, "at most four"),
             ("frame", "rows_unbounded", "frame must be"),
             ("type", "Int64", "non-null Uint64"),
             ("nullable", True, "non-null Uint64"),
@@ -375,17 +462,14 @@ class WindowRankTest(unittest.TestCase):
             raw["plan"]["nodes"][1]["columns"][3]["expression"][
                 "order_by"
             ][0][order_field] = value
-            with self.subTest(order_field=order_field), self.assertRaisesRegex(
-                SnapshotError,
-                "ascending nulls-first",
-            ):
+            with self.subTest(order_field=order_field):
                 parse_snapshot(raw)
 
         duplicate_name = _snapshot()
         duplicate_name["plan"]["nodes"][1]["columns"][4]["expression"][
             "window_name"
         ] = "window0"
-        with self.assertRaisesRegex(SnapshotError, "duplicate name"):
+        with self.assertRaisesRegex(SnapshotError, "one definition"):
             parse_snapshot(duplicate_name)
 
         duplicate_order = _snapshot()
@@ -420,8 +504,7 @@ class WindowRankTest(unittest.TestCase):
 
         nullable_key = _snapshot()
         nullable_key["schema"]["tables"][0]["columns"][1]["nullable"] = True
-        with self.assertRaisesRegex(SnapshotError, r"non-null Decimal\(15,4\)"):
-            parse_snapshot(nullable_key)
+        parse_snapshot(nullable_key)
 
         fanout = _snapshot()
         projected = ["id", "key_a", "key_b", "rank_0", "rank_1"]
@@ -454,7 +537,7 @@ class WindowRankTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "must not fan out"):
             parse_snapshot(fanout)
 
-    def test_rank_ties_have_gaps_and_duplicate_nan_language_is_independent(self):
+    def test_ansi_rank_peers_have_gaps_without_publishing_order(self):
         ranks, ranked, values, enabled, choices, _script = _concrete_rank_values(
             ((10, 10), (10, 20), (20, 20))
         )
@@ -478,8 +561,9 @@ class WindowRankTest(unittest.TestCase):
         ranks, _ranked, values, enabled, choices, script = _concrete_rank_values(
             ((decimal.NAN, decimal.NAN), (decimal.NAN, decimal.NAN))
         )
-        # The first unstable sort places row 0 first; the second independently
-        # places row 1 first.  Both choices satisfy one sequential q49 Project.
+        # Forced YqlSelect emits ANSI Rank using AggrEquals. Runtime confirms
+        # NaNs are peers, so neither definition allocates tie-order choices.
+        self.assertEqual(choices, ())
         assignment = {
             choice.term.atom: ordinal
             for choice, ordinal in zip(choices, (0, 1, 1, 0))
@@ -493,7 +577,7 @@ class WindowRankTest(unittest.TestCase):
                 )
                 for row in values
             ),
-            ((1, 2), (2, 1)),
+            ((1, 1), (1, 1)),
         )
 
         family = RelationFamily(
@@ -523,8 +607,7 @@ class WindowRankTest(unittest.TestCase):
         self.assertNotIn(selector, choices)
         self.assertEqual(len(limited.relation.rows), 1)
         output = limited.relation.rows[0]
-        # The last Rank sort put row 1 first above, but CalcOverWindow declares
-        # no output order.  Unordered Take(1) must therefore retain its own
+        # CalcOverWindow declares no output order. Unordered Take(1) retains its own
         # fresh selection and may independently return either input row.
         for selected, expected_id in ((0, 0), (1, 1)):
             selected_assignment = assignment | {selector.term.atom: selected}
@@ -535,6 +618,77 @@ class WindowRankTest(unittest.TestCase):
                     _ground(output.values["id"].value, selected_assignment),
                     expected_id,
                 )
+
+    def test_partitioned_rank_matches_independent_sorted_group_scan(self):
+        # The oracle sorts each concrete group and uses the first peer's index;
+        # it does not call the encoder's comparison or rank implementation.
+        domain = (None, -1, 0, decimal.NAN)
+        partitions = (None, None, 7)
+        partition_values = tuple((Value(
+            "Int32", smt.bool_value(key is None), smt.int_value(key or 0),
+        ),) for key in partitions)
+        for keys in itertools.product(domain, repeat=3):
+            values = tuple(Value(
+                "Decimal(15,4)", smt.bool_value(key is None),
+                smt.int_value(decimal.NAN if key is None else key),
+            ) for key in keys)
+            for ascending, nulls_first, present in itertools.product(
+                (True, False), (True, False), ((True, True, True), (True, False, True))
+            ):
+                order = SortOrder("key", ascending, nulls_first)
+                actual = window.rank_values(
+                    tuple(smt.bool_value(value) for value in present),
+                    tuple((value,) for value in values), partition_values,
+                    lambda left, right: relation_model._key_less(left, right, (order,)),
+                    Encoder.not_distinct,
+                )
+
+                def sort_key(key):
+                    return (0 if nulls_first else 1, 0) if key is None else (
+                        1 if nulls_first else 0, key if ascending else -key)
+                for index, is_present in enumerate(present):
+                    if not is_present:
+                        continue
+                    group = sorted((
+                        key for key, partition, live in zip(keys, partitions, present)
+                        if live and partition == partitions[index]
+                    ), key=sort_key)
+                    expected = group.index(keys[index]) + 1
+                    self.assertEqual(
+                        _ground(actual[index].value), expected,
+                        (keys, ascending, nulls_first, present, index),
+                    )
+
+    def test_lexicographic_rank_and_partition_tuples_match_sorted_groups(self):
+        domain = ((None, 1), (None, 2), (decimal.NAN, 0), (decimal.NAN, 1), (-1, 0), (0, 0))
+        partitions = ((None, None), (None, None), (None, 7))
+        partition_values = tuple(
+            tuple(Value("Int32", smt.bool_value(key is None), smt.int_value(key or 0)) for key in partition)
+            for partition in partitions
+        )
+        for keys in itertools.product(domain, repeat=3):
+            values = tuple((
+                Value(
+                    "Decimal(15,4)", smt.bool_value(first is None),
+                    smt.int_value(decimal.NAN if first is None else first),
+                ),
+                Value("Int32", smt.FALSE, smt.int_value(second)),
+            ) for first, second in keys)
+            for ascending, nulls_first in itertools.product((True, False), repeat=2):
+                order = (SortOrder("first", ascending, nulls_first), SortOrder("second", not ascending, True))
+                actual = window.rank_values(
+                    (smt.TRUE,) * 3, values, partition_values,
+                    lambda left, right: relation_model._key_less(left, right, order), Encoder.not_distinct,
+                )
+
+                def key(value):
+                    first, second = value
+                    primary = ((0 if nulls_first else 1), 0) if first is None else (
+                        1 if nulls_first else 0, first if ascending else -first)
+                    return primary, -second if ascending else second
+                for index, partition in enumerate(partitions):
+                    group = sorted((value for value, owner in zip(keys, partitions) if owner == partition), key=key)
+                    self.assertEqual(_ground(actual[index].value), group.index(keys[index]) + 1)
 
     def test_global_rank_serial_gather_proves_and_hash_split_is_wrong(self):
         if SOLVER is None:

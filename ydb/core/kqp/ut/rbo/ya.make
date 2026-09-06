@@ -6,6 +6,10 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    kqp_rbo_aggregate_scope_ut.cpp
+    kqp_rbo_grouping_ut.cpp
+    kqp_rbo_rank_ut.cpp
+    kqp_rbo_set_operations_ut.cpp
     kqp_rbo_yql_ut.cpp
     kqp_rbo_olap_ut.cpp
 )

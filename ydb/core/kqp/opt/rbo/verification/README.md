@@ -5,6 +5,13 @@ Final pre-physical StageGraph over one shared bounded database. A bounded
 proof is about the accepted model, not unbounded SQL equivalence or runtime
 execution. The exporter and every encoding strategy are part of the trusted path.
 
+The default checks exact equality of modeled outcome languages. The explicit
+`binary64_uf_universal_v1` mode instead proves the stronger sufficient condition
+that every enabled initial/final schedule pair agrees under shared primitive
+floating-point abstractions. Its `SAT` result is `UNKNOWN`, never a concrete
+counterexample. See the [theorem](contracts/THEOREM.md) and the single
+[assumptions card](contracts/EXTERNAL_ASSUMPTIONS.md) for the precise boundary.
+
 Start with [the semantic contract](PLAN.md), [the audit map](TRUSTED_CORE.md),
 [the findings and regression ledger](FINDINGS.md), or
 [the benchmark runbook](BENCHMARK_COVERAGE.md). The
@@ -52,8 +59,24 @@ The verdict includes the row bound and fixed task bound of two. Without
 `--solver`, successful construction returns `FORMULA_EMITTED`, not a proof.
 `--emit-smt` writes the canonical obligation, not the actual internal solver
 portfolio. See the [theorem and solver protocol](contracts/THEOREM.md), especially
-the mandatory integral-AVG model-domain exclusion: standalone `SAT` of that
-raw disjunction is not a counterexample.
+the mandatory model-domain exclusions for checked-String totality and integral
+AVG: standalone `SAT` of the raw disjunction is not a counterexample.
+
+For multiple buffered results, pass `--bundle bundle.json` instead of the two
+snapshot paths. Its strict manifest lists result slots in client-visible order:
+
+```json
+{"format":"ydb-rbo-result-bundle","version":1,
+ "observation":"buffered_tuple_or_error",
+ "results":[{"before":"r0.initial.json","after":"r0.final.json"},
+            {"before":"r1.initial.json","after":"r1.final.json"}]}
+```
+
+Paths are relative to the manifest. The checker compares the joint result tuple
+over one shared database, not independent per-result proofs; any slot error is
+one buffered query error. Streaming prefixes and effects are excluded. If any
+root requests binary64 mode, it applies to every slot and both sides and is
+recorded in the verdict. Bundle proofs do not enable multi-result runtime replay.
 
 ```bash
 ydb/core/kqp/opt/rbo/verification/inspect_bin/kqp_rbo_inspect plan final.json

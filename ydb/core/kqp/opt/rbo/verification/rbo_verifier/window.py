@@ -1,8 +1,9 @@
 """Task-local window values for admitted partitions and unstable sort choices.
 
 Callers validate the window shape, admit construction bounds, and allocate
-independent constrained ordinals for each ordered definition. These kernels
-only consume slot-aligned value columns, row presence, and those ordinals;
+constrained ordinals only for ROWS frames. ANSI Rank and whole-partition
+SUM/AVG are independent of peer order. These kernels consume aligned values,
+row presence, and (where needed) ordinals;
 they neither choose task routing nor publish an observable output sequence.
 """
 
@@ -15,40 +16,35 @@ from .scalar import Value
 
 
 ValueComparison = Callable[[Value, Value], smt.Term]
+ValueKey = tuple[Value, ...]
 
 
 def rank_values(
     present: tuple[smt.Term, ...],
-    keys: tuple[Value, ...],
-    ordinals: tuple[smt.Term, ...],
-    less: ValueComparison,
+    keys: tuple[ValueKey, ...],
+    partitions: tuple[tuple[Value, ...], ...],
+    less: Callable[[ValueKey, ValueKey], smt.Term],
+    not_distinct: ValueComparison,
 ) -> tuple[Value, ...]:
-    """Rank is one plus preceding rows; Decimal NaNs do not form peer ties.
+    """ANSI Rank is one plus strictly preceding rows in the same partition.
 
-    Ordinary equal keys share a rank and leave gaps. Each NaN instead counts
-    earlier NaNs in this definition's independent unstable order.
+    Runtime AggrEquals makes NULLs and Decimal NaNs peers. Equal keys share a
+    rank and leave gaps; their unstable physical ordering cannot change Rank.
     """
 
     result: list[Value] = []
-    for candidate_index, candidate_key in enumerate(keys):
-        candidate_nan = smt.eq(candidate_key.value, smt.int_value(decimal.NAN))
+    for candidate_key, candidate_partition in zip(keys, partitions):
         preceding = tuple(
             smt.ite(
                 smt.and_(
                     other_present,
-                    smt.or_(
-                        less(other_key, candidate_key),
-                        smt.and_(
-                            candidate_nan,
-                            smt.eq(other_key.value, smt.int_value(decimal.NAN)),
-                            smt.lt(ordinals[other_index], ordinals[candidate_index]),
-                        ),
-                    ),
+                    *(not_distinct(left, right) for left, right in zip(candidate_partition, partition)),
+                    less(other_key, candidate_key),
                 ),
                 smt.ONE,
                 smt.ZERO,
             )
-            for other_index, (other_present, other_key) in enumerate(zip(present, keys))
+            for other_present, other_key, partition in zip(present, keys, partitions)
         )
         result.append(Value("Uint64", smt.FALSE, smt.add(smt.ONE, *preceding)))
     return tuple(result)

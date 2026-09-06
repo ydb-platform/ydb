@@ -101,7 +101,12 @@ private:
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
-    TIntrusivePtr<TOpRoot> OpRoot;
+    struct TConvertedRoot {
+        NYql::TExprNode::TPtr Source;
+        TIntrusivePtr<TOpRoot> Plan;
+        std::optional<ui32> ResultOrdinal = std::nullopt;
+    };
+    TVector<TConvertedRoot> OpRoots;
     TRuleBasedOptimizer RBO;
 };
 
@@ -112,16 +117,12 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<NOpt:
 
 class TKqpRBOCleanupTransformer : public NYql::TSyncTransformerBase {
 public:
-    TKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx)
-        : TypeCtx(typeCtx) {
+    TKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext&) {
     }
 
     // Main method of the transformer
     NYql::IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
     void Rewind() override;
-
-private:
-    NYql::TTypeAnnotationContext& TypeCtx;
 };
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx);

@@ -3,16 +3,19 @@
 #include "kqp_plan_conversion_utils.h"
 #include "kqp_rbo_rules.h"
 #include "traces/kqp_rbo_trace_output.h"
+#include "verification/semantic_snapshot.h"
 
 #include <ydb/core/kqp/host/kqp_transform.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <util/system/env.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <memory>
+#include <algorithm>
 #include <optional>
 #include <utility>
 
@@ -24,6 +27,74 @@ using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 namespace {
+
+// BuildKqlQuery preserves block order and each block's result order. Do not
+// infer client-visible result slots from a recursive traversal of the plan.
+TString CollectReadOnlyResultSlots(const TExprNode::TPtr& input, TStringBuf rootCallable,
+    TVector<TExprNode::TPtr>& slots)
+{
+    if (!input->IsList()) {
+        return "expected a query-block list";
+    }
+    THashSet<const TExprNode*> seen;
+    THashSet<const TExprNode*> ownedNodes;
+    for (const auto& block : input->Children()) {
+        if (!block->IsList() || block->ChildrenSize() != 2 ||
+            !block->Child(0)->IsList() || !block->Child(1)->IsList()) {
+            return "malformed query block";
+        }
+        if (block->Child(1)->ChildrenSize()) {
+            return "effects are not supported";
+        }
+        for (const auto& result : block->Child(0)->Children()) {
+            if (!result->IsList() || result->ChildrenSize() != 2 || !result->Child(1)->IsList()) {
+                return "malformed result slot";
+            }
+            if (!result->Child(0)->IsCallable(rootCallable)) {
+                return TStringBuilder() << "expected result root " << rootCallable << ", found "
+                    << result->Child(0)->Content() << "; result wrappers are not supported";
+            }
+            if (!seen.insert(result->Child(0)).second) {
+                return "shared result roots are not supported";
+            }
+            for (const auto& owned : FindNodes(result->ChildPtr(0), [](const TExprNode::TPtr& node) {
+                return (node->IsCallable() && node->Content().StartsWith("KqpOp")) ||
+                    TKqpPhysicalTx::Match(node.Get()) || TDqPhyStage::Match(node.Get());
+            })) {
+                if (!ownedNodes.insert(owned.Get()).second) {
+                    return "result roots share a relational plan or physical stage";
+                }
+            }
+            slots.push_back(result->ChildPtr(0));
+        }
+    }
+    return slots.empty() ? "query has no result slots" : TString();
+}
+
+class TRootSnapshotSink final : public IRBOSemanticSnapshotSink {
+public:
+    TRootSnapshotSink(IRBOSemanticSnapshotSink& sink, ui32 ordinal, ui32 count,
+        std::optional<ui32> resultOrdinal)
+        : Sink(sink), Ordinal(ordinal), Count(count), ResultOrdinal(resultOrdinal) {}
+
+    void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
+        result.RootOrdinal = Ordinal;
+        result.RootCount = Count;
+        result.ResultOrdinal = ResultOrdinal;
+        result.ResultCount = ResultOrdinal ? Count : 0;
+        Sink.OnSemanticSnapshot(std::move(result));
+    }
+
+    std::optional<ui64> GetTransformationPrefixTarget() const override {
+        return Sink.GetTransformationPrefixTarget();
+    }
+
+private:
+    IRBOSemanticSnapshotSink& Sink;
+    const ui32 Ordinal;
+    const ui32 Count;
+    const std::optional<ui32> ResultOrdinal;
+};
 
 NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
     const auto& cboStats = kqpCtx.CBOStats;
@@ -55,6 +126,32 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx,
     } else {
         return node;
     }
+}
+
+TExprNode::TPtr PushUnorderedIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const auto root = TCoUnordered(node).Input().Maybe<TKqpOpRoot>();
+    if (!root) {
+        return node;
+    }
+    // Forget only the public result order, after the complete SELECT (including
+    // Sort/Limit). The initial snapshot must carry this observation explicitly.
+    TVector<TExprBase> columns;
+    for (const auto& column : root.Cast().ColumnOrder()) {
+        columns.emplace_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
+            .Input(root.Cast().Input())
+            .Variable(column)
+            .From(column)
+            .Done());
+    }
+    return Build<TKqpOpRoot>(ctx, node->Pos())
+        .Input<TKqpOpMap>()
+            .Input(root.Cast().Input())
+            .MapElements().Add(columns).Build()
+            .Project().Build("true")
+            .Ordered().Build("false")
+        .Build()
+        .ColumnOrder(root.Cast().ColumnOrder())
+        .Done().Ptr();
 }
 
 void CollectTopLevelSelects(TExprNode::TPtr input, THashSet<TExprNode*>& topLevelSelects, THashSet<TExprNode*>& visited) {
@@ -118,6 +215,8 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
             if (TCoYqlSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
                 THashMap<const TExprNode*, TExprNode::TPtr> translated;
                 return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, translated, true);
+            } else if (TCoUnordered::Match(node.Get())) {
+                return PushUnorderedIntoPlan(node, ctx);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else {
@@ -145,6 +244,9 @@ void TKqpRewriteSelectTransformer::Rewind() {
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
+    OpRoots.clear();
+    CMColumnsByTableName.clear();
+    HistColumnsByTableName.clear();
 
     // At first step convert KqpOps to RBO Ops.
     auto status = OptimizeExpr(
@@ -152,8 +254,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
             if (TKqpOpRoot::Match(node.Get())) {
-                OpRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
-                OpRoot->ComputeParents();
+                auto root = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
+                root->ComputeParents();
+                OpRoots.push_back({node, std::move(root)});
                 return node;
             } else {
                 return node;
@@ -163,6 +266,22 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
     if (status != TStatus::Ok) {
         return status;
+    }
+
+    if (OpRoots.empty()) {
+        return TStatus::Ok;
+    }
+
+    TVector<TExprNode::TPtr> resultSlots;
+    if (CollectReadOnlyResultSlots(input, "KqpOpRoot", resultSlots).empty() &&
+        resultSlots.size() == OpRoots.size() &&
+        std::all_of(OpRoots.begin(), OpRoots.end(), [&](const auto& root) {
+            return std::find(resultSlots.begin(), resultSlots.end(), root.Source) != resultSlots.end();
+        })) {
+        for (auto& root : OpRoots) {
+            const auto slot = std::find(resultSlots.begin(), resultSlots.end(), root.Source);
+            root.ResultOrdinal = slot - resultSlots.begin();
+        }
     }
 
     if (IsSuitableToRequestStatistics()) {
@@ -251,12 +370,13 @@ void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>&
 }
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
-    Y_ENSURE(OpRoot);
-    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
-    OpRoot->ComputePlanMetadata(rboCtx);
-    for (const auto& it : *OpRoot) {
-        if (IsSuitableToCollectStatistics(it.Current)) {
-            CollectTablesAndColumnsNames(it.Current);
+    for (const auto& root : OpRoots) {
+        TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+        root.Plan->ComputePlanMetadata(rboCtx);
+        for (const auto& it : *root.Plan) {
+            if (IsSuitableToCollectStatistics(it.Current)) {
+                CollectTablesAndColumnsNames(it.Current);
+            }
         }
     }
 }
@@ -329,17 +449,25 @@ bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
 IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
-    Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
+    Y_ENSURE(!OpRoots.empty(), "NEW RBO roots are not initialized.");
 
     // Apply optimizations.
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TKqpOpRoot::Match(node.Get())) {
+                const auto root = std::find_if(OpRoots.begin(), OpRoots.end(), [&](const auto& candidate) {
+                    return candidate.Source == node;
+                });
+                Y_ENSURE(root != OpRoots.end(), "NEW RBO root was not converted");
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
                 TRBOTraceOutput traceOutput(rboCtx);
                 const auto semanticSnapshotSink = TransformCtx->RBOSemanticSnapshotSink;
-                auto output = RBO.Optimize(*OpRoot, rboCtx, semanticSnapshotSink.get());
+                std::optional<TRootSnapshotSink> rootSink;
+                if (semanticSnapshotSink) {
+                    rootSink.emplace(*semanticSnapshotSink, root - OpRoots.begin(), OpRoots.size(), root->ResultOrdinal);
+                }
+                auto output = RBO.Optimize(*root->Plan, rboCtx, rootSink ? &*rootSink : nullptr);
                 traceOutput.Flush();
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;
@@ -370,40 +498,105 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode:
     return ContinueOptimizations(input, output, ctx);
 }
 
-//FIXME: We currently support only a single plan, throw an exception if that's not the case
 void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan) {
     if (!execPlan.has_value() || !explainPlan.has_value()) {
         Y_ENSURE(false, "Explain plan wasn't computed in the optimizer");
     }
 
-    Y_ENSURE(!TransformCtx->PlanJson.has_value(), "Only a single explain is supported");
-
-    auto planJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-    auto plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    plans.AppendValue(execPlan.value());
-    planJson["Plans"] = plans;
-    planJson["SimplifiedPlan"] = explainPlan.value();
+    if (!TransformCtx->PlanJson) {
+        TransformCtx->PlanJson.emplace(NJson::JSON_MAP);
+        (*TransformCtx->PlanJson)["Plans"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        if (OpRoots.size() > 1) {
+            (*TransformCtx->PlanJson)["SimplifiedPlan"]["Node Type"] = "Query";
+            (*TransformCtx->PlanJson)["SimplifiedPlan"]["Plans"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        }
+    }
+    auto& planJson = *TransformCtx->PlanJson;
+    planJson["Plans"].AppendValue(std::move(*execPlan));
+    if (OpRoots.size() > 1) {
+        planJson["SimplifiedPlan"]["Plans"].AppendValue(std::move(*explainPlan));
+    } else {
+        planJson["SimplifiedPlan"] = std::move(*explainPlan);
+    }
     planJson["SimplifiedPlan"]["OptimizerStats"] = MakeNewRBOOptimizerStats(KqpCtx);
-
-    TransformCtx->PlanJson = planJson;
 }
 
 void TKqpNewRBOTransformer::Rewind() {
+    OpRoots.clear();
+    CMColumnsByTableName.clear();
+    HistColumnsByTableName.clear();
+    SharedState.reset();
+    ColumnStatisticsReadiness = {};
 }
 
 IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
-    TOptimizeExprSettings settings(&TypeCtx);
-    Y_UNUSED(ctx);
     YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << KqpExprToPrettyString(TExprBase(input), ctx) << Endl;
-
-    // We just need to find a physical query callable.
-    auto physicalQueries = FindNodes(input, [](const TExprNode::TPtr& node) { return TKqpPhysicalQuery::Match(node.Get()); });
-    if (physicalQueries.size() == 1) {
-        output = physicalQueries.front();
-        return IGraphTransformer::TStatus::Ok;
+    if (TKqpPhysicalQuery::Match(input.Get())) {
+        output = input;
+        return TStatus::Ok;
+    }
+    const auto fail = [&](const TString& reason) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "NEW RBO read-only result bundle: " + reason));
+        return TStatus::Error;
+    };
+    TVector<TExprNode::TPtr> slots;
+    if (const auto reason = CollectReadOnlyResultSlots(input, "KqpPhysicalQuery", slots); !reason.empty()) {
+        return fail(reason);
     }
 
-    return IGraphTransformer::TStatus::Error;
+    TVector<TExprBase> transactions;
+    TVector<TExprBase> results;
+    const auto querySettings = TKqpPhysicalQuery(slots.front()).Settings();
+    for (const auto& slot : slots) {
+        const auto query = TKqpPhysicalQuery(slot);
+        const TExprNode* settings = query.Settings().Raw();
+        const TExprNode* expectedSettings = querySettings.Raw();
+        if (query.Results().Size() != 1 || !CompareExprTrees(settings, expectedSettings)) {
+            return fail("roots must have one public result and identical query settings");
+        }
+        // All bindings, including materialization parameters inside transactions,
+        // use query-local transaction indexes. Result indexes stay transaction-local.
+        TNodeOnNodeOwnedMap replacements;
+        for (const auto& node : FindNodes(slot, [](const TExprNode::TPtr& node) {
+            return TKqpTxResultBinding::Match(node.Get());
+        })) {
+            const auto binding = TKqpTxResultBinding(node);
+            ui32 txIndex = 0;
+            ui32 resultIndex = 0;
+            if (!TryFromString(binding.TxIndex().Value(), txIndex) ||
+                !TryFromString(binding.ResultIndex().Value(), resultIndex) ||
+                txIndex >= query.Transactions().Size() ||
+                resultIndex >= query.Transactions().Item(txIndex).Results().Size()) {
+                return fail("transaction-result binding is outside its root's transaction list");
+            }
+            auto rebasedBinding = Build<TKqpTxResultBinding>(ctx, node->Pos())
+                .Type(binding.Type())
+                .TxIndex().Build(ToString(transactions.size() + txIndex))
+                .ResultIndex(binding.ResultIndex())
+                .Done().Ptr();
+            rebasedBinding->SetTypeAnn(node->GetTypeAnn());
+            replacements[node.Get()] = std::move(rebasedBinding);
+        }
+        if (!query.Results().Item(0).Maybe<TKqpTxResultBinding>()) {
+            return fail("public result is not a transaction-result binding");
+        }
+        if (slots.size() == 1) {
+            output = slot;
+            return TStatus::Ok;
+        }
+        // Rebasing changes no types; keep annotations required by compilation.
+        const auto rebased = TKqpPhysicalQuery(ctx.ReplaceNodes<true>({slot}, replacements).front());
+        for (const auto& tx : rebased.Transactions()) {
+            transactions.emplace_back(tx);
+        }
+        results.emplace_back(rebased.Results().Item(0));
+    }
+    output = Build<TKqpPhysicalQuery>(ctx, input->Pos())
+        .Transactions().Add(transactions).Build()
+        .Results().Add(results).Build()
+        .Settings(querySettings)
+        .Done().Ptr();
+    return TStatus::Ok;
 }
 
 TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,

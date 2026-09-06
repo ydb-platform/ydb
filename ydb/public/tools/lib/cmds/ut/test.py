@@ -1,6 +1,11 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
+
+import pytest
+
+from ydb.public.tools.lib import cmds
 
 from ydb.public.tools.lib.cmds import (
     EmptyArguments,
@@ -14,6 +19,65 @@ from ydb.public.tools.lib.cmds import (
     should_preserve_existing_config,
 )
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
+
+
+@pytest.mark.parametrize('tiny_mode', ['true', 'false'])
+@pytest.mark.parametrize('actor_system_config', [None, {'use_auto_config': True, 'cpu_count': 1}])
+def test_deploy_actor_system_override(tmp_path, monkeypatch, tiny_mode, actor_system_config):
+    monkeypatch.setenv('YDB_TINY_MODE', tiny_mode)
+    monkeypatch.setenv('YDB_GRPC_ENABLE_TLS', 'false')
+    arguments = EmptyArguments()
+    arguments.ydb_working_dir = str(tmp_path)
+    arguments.ydb_binary_path = '/ydbd'
+
+    class ConfigurationCaptured(Exception):
+        pass
+
+    # Exercise the real generator, stopping before any server process is started.
+    with mock.patch.object(cmds, 'KiKiMR', side_effect=ConfigurationCaptured) as cluster:
+        with pytest.raises(ConfigurationCaptured):
+            if actor_system_config is None:
+                cmds.deploy(arguments)
+            else:
+                cmds.deploy(arguments, actor_system_config=actor_system_config)
+
+    configuration = cluster.call_args.args[0]
+    actual = configuration.yaml_config['actor_system_config']
+    if actor_system_config is None:
+        assert not actual.get('use_auto_config', False)
+        assert [(pool['name'], pool['threads']) for pool in actual['executor']] == [
+            ('System', 2), ('User', 3), ('Batch', 2), ('IO', 1), ('IC', 1),
+        ]
+    else:
+        assert actual == actor_system_config
+    assert configuration.tiny_mode == (tiny_mode == 'true')
+
+
+@pytest.mark.parametrize('external', [True, False])
+def test_deploy_actor_override_preserves_custom_yaml(tmp_path, monkeypatch, external):
+    monkeypatch.setenv('YDB_GRPC_ENABLE_TLS', 'false')
+    arguments = EmptyArguments()
+    arguments.ydb_working_dir = str(tmp_path)
+    arguments.ydb_binary_path = '/ydbd'
+    configs = tmp_path / 'configs'
+    configs.mkdir()
+    target = configs / 'config.yaml'
+    original = 'actor_system_config:\n  use_auto_config: true\n  cpu_count: 3\n'
+    if external:
+        source = tmp_path / 'custom.yaml'
+        source.write_text(original)
+        arguments.config_path = str(source)
+    else:
+        target.write_text(original)
+
+    class ConfigurationCaptured(Exception):
+        pass
+
+    with mock.patch.object(cmds, 'KiKiMR', side_effect=ConfigurationCaptured) as cluster:
+        with pytest.raises(ConfigurationCaptured):
+            cmds.deploy(arguments, actor_system_config={'use_auto_config': True, 'cpu_count': 1})
+    cluster.call_args.args[0].write_proto_configs(str(configs))
+    assert target.read_text() == original
 
 
 def test_kikimr_config_generator_generic_connector_config():

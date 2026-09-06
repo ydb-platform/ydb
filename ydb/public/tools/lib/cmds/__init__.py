@@ -393,7 +393,8 @@ def resolve_http_proxy_config(arguments):
     return config
 
 
-def deploy(arguments):
+def deploy(arguments, actor_system_config=None):
+    """Deploy a cluster, optionally replacing actor-system defaults in a newly generated config."""
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
 
@@ -483,6 +484,7 @@ def deploy(arguments):
         verbose_memory_limit_exception=True,
         enforce_user_token_requirement=enforce_user_token_requirement,
         default_clusteradmin=default_clusteradmin,
+        overrided_actor_system_config=actor_system_config,
         **optionals
     )
 

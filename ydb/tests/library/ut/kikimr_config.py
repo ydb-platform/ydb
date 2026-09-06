@@ -3,31 +3,6 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 
 
-def test_default_actor_system_config():
-    config = KikimrConfigGenerator()
-    assert config.yaml_config["actor_system_config"] == {
-        "use_auto_config": True,
-        "cpu_count": 4,
-    }
-
-
-def test_tiny_mode_actor_system_config():
-    config = KikimrConfigGenerator(tiny_mode=True)
-    assert config.yaml_config["actor_system_config"] == {
-        "use_auto_config": True,
-        "cpu_count": 1,
-    }
-
-
-def test_tiny_mode_preserves_actor_system_override():
-    actor_system_config = {"use_auto_config": True, "cpu_count": 2}
-    config = KikimrConfigGenerator(
-        tiny_mode=True,
-        overrided_actor_system_config=actor_system_config,
-    )
-    assert config.yaml_config["actor_system_config"] == actor_system_config
-
-
 def test_kikimr_config_generator_generic_connector_config():
     generic_connector_config = TGenericConnectorConfig()
     generic_connector_config.Endpoint.host = "localhost"

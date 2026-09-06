@@ -6196,39 +6196,42 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([[240000u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
-    Y_UNIT_TEST(ExecuteQueryOnlyComments) {
-        auto kikimr = DefaultKikimrRunner();
+
+    Y_UNIT_TEST_TWIN(ExecuteQueryOnlyComments, PerStatementExecution) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableAstCache(true);
+        app.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(PerStatementExecution);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetQueryClient();
 
-        // Single-line comment
-        {
-            auto result = db.ExecuteQuery(
-                "-- Only a comment",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-            ).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetResultSets().empty());
+        const TVector<TString> queries = {
+            "-- Only a comment",
+            "/* Multi-line\n   comment */",
+            "-- First comment\n-- Second comment\n-- Third comment",
+            "-- Single-line\n/* Multi-line */\n-- Another single-line",
+            "   -- comment\n  ",
+            "   \n\t  ",
+            ";; /* SELECT 1 */;",
+        };
+        const TVector<NYdb::NQuery::TTxControl> txControls = {
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        };
+        for (const auto& txControl : txControls) {
+            for (const auto& query : queries) {
+                auto result = db.ExecuteQuery(query, txControl).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetResultSets().empty());
+            }
         }
 
-        // Multi-line comment
-        {
-            auto result = db.ExecuteQuery(
-                "/* Multi-line\n   comment */",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-            ).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetResultSets().empty());
+        for (const auto& query : {"/* Unterminated comment", "-- comment\nSELECT FROM;"}) {
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), query);
         }
 
-        // Whitespace and comments
-        {
-            auto result = db.ExecuteQuery(
-                "   -- comment\n  ",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-            ).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetResultSets().empty());
-        }
+        auto emptyResult = db.ExecuteQuery("", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(emptyResult.GetStatus(), EStatus::BAD_REQUEST);
     }
 
 }

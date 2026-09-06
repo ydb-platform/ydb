@@ -231,6 +231,10 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
     }
 
+    if (QueryType == NYql::EKikimrQueryType::Query) {
+        settings.Flags.insert("AllowNoStatements");
+    }
+
     // __ydb_row_id (added to a user table for the fulltext UseRowIdAsDocId opt-in) must not surface
     // in SELECT *, yet stay readable when named explicitly. Only this synthetic column leaks onto
     // user tables; the other __ydb_-prefixed columns live on index impl tables, where they must stay
@@ -385,6 +389,11 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         deprecatedSQL = false;
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
+        if (astStatements.empty() && settings.Flags.contains("AllowNoStatements")) {
+            // The compile service expects at least one AST. Translate the whole
+            // query to obtain the valid empty program produced by the SQL translator.
+            return {ParseQuery(queryText, /*syntax=*/{}, isSql, settingsBuilder)};
+        }
         for (size_t i = 0; i < astStatements.size(); ++i) {
             result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, false, stmtParseInfo[i].KeepInCache, stmtParseInfo[i].CommandTagName});
         }

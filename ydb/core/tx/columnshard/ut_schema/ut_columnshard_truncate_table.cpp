@@ -1325,6 +1325,91 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
+    // Review gap: "restart *after* plan". The existing TruncateSurvivesRestart test reboots
+    // between propose and plan. This test reboots *after* the TRUNCATE plan completes, verifying
+    // that the new generation (created by TRUNCATE) is correctly persisted to V1 and reloaded
+    // after a restart. The table must still be empty (new generation), and a pre-truncate
+    // time-travel read must still see the old data (old generation reloaded from V1).
+    Y_UNIT_TEST(TruncateRestartAfterPlan) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit 100 rows.
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        const auto snapshotBeforeTruncate = NOlap::TSnapshot(planStep, txId);
+
+        // TRUNCATE the table (propose + plan).
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+        const auto truncateSnapshot = NOlap::TSnapshot(planStep, txId);
+
+        // Verify the table is empty after truncate (before restart).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, truncateSnapshot);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // Restart the tablet *after* the plan completes.
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+
+        // After restart, the table must still be empty (new generation reloaded from V1).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, truncateSnapshot);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // Pre-truncate time-travel read must still see the old 100 rows (old generation
+        // reloaded from V1).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // Write and read new data after restart to confirm the table is functional.
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 200, 250 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 50);
+            UNIT_ASSERT(!reader.IsError());
+        }
+    }
+
     // Regression for review issue 1: crash in TryFinalizeDropPathOnComplete after TRUNCATE.
     //
     // Before the fix, TruncateTableProgress (no copies) called DropTable, which left the old

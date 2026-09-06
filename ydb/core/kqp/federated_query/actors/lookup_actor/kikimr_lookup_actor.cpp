@@ -453,6 +453,10 @@ namespace {
                     session->SessionId.clear();
                     [[fallthrough]];
                 default:
+                    if (!session->SessionId.empty()) {
+                        SendDeleteSession(std::move(session->SessionId), session->Database);
+                        session->SessionId.clear();
+                    }
                     CleanupStreamProcessor(session);
                     if (auto sender = session->Sender) {
                         session->Sender = {};

@@ -196,24 +196,18 @@ public:
                 Y_ENSURE(lock.IsPersistent() && lock.GetReadTables().empty(),
                     "Expected only qualifying persistent write-only locks");
 
-                // Add this shard as an ancestor entry for this lock
-                {
-                    auto& proto = Self->SrcLocksToTransfer.emplace_back();
-                    proto.SetTabletId(Self->TabletID());
-                    proto.SetLockId(lock.GetLockId());
-                    proto.SetLockNodeId(lock.GetLockNodeId());
-                    proto.SetGeneration(lock.GetGeneration());
-                    proto.SetCounter(lock.GetRawCounter());
-                    proto.SetCreateTimestamp(lock.GetCreationTime().MicroSeconds());
-                    proto.SetFlags(ui64(lock.GetFlags()));
-                }
+                auto& srcLockInfo = Self->SrcLocksToTransfer.emplace_back();
+                srcLockInfo.SetLockId(lock.GetLockId());
+                srcLockInfo.SetLockNodeId(lock.GetLockNodeId());
+                srcLockInfo.SetGeneration(lock.GetGeneration());
+                srcLockInfo.SetCounter(lock.GetRawCounter());
+                srcLockInfo.SetCreateTimestamp(lock.GetCreationTime().MicroSeconds());
+                srcLockInfo.SetFlags(ui64(lock.GetFlags()));
 
-                // Also forward any existing ancestor locks (multi-hop split/merge)
+                // Forward grandparent ancestor locks (multi-hop split/merge)
                 for (const auto& [tabletId, ancestorLock] : lock.GetAncestorLocks()) {
-                    auto& proto = Self->SrcLocksToTransfer.emplace_back();
+                    auto& proto = *srcLockInfo.AddAncestorLocks();
                     proto.SetTabletId(tabletId);
-                    proto.SetLockId(lock.GetLockId());
-                    proto.SetLockNodeId(lock.GetLockNodeId());
                     proto.SetGeneration(ancestorLock.Generation);
                     proto.SetCounter(ancestorLock.Counter);
                     proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());
@@ -465,7 +459,7 @@ public:
 
                 // Attach qualifying persistent write-only locks as ancestor locks for dst
                 for (const auto& ancestorLock : Self->SrcLocksToTransfer) {
-                    *snapshot->AddAncestorLocks() = ancestorLock;
+                    *snapshot->AddLocks() = ancestorLock;
                 }
 
                 // Persist snapshot data so that it can be sent if this datashard restarts

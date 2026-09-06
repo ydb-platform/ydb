@@ -2898,7 +2898,7 @@ private:
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // Persistent write-only locks collected during split to transfer to dst shards.
     // Populated in TTxStartSplit when all remaining locks are qualifying (persistent, no reads).
-    TVector<NKikimrTxDataShard::TAncestorLock> SrcLocksToTransfer;
+    TVector<NKikimrTxDataShard::TSplitSrcLockInfo> SrcLocksToTransfer;
     // TODO: make this persitent
     THashSet<ui64> ReceiveSnapshotsFrom;
     ui64 DstSplitOpId;

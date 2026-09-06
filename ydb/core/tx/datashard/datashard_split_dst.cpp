@@ -252,46 +252,57 @@ public:
 
         // Restore ancestor locks transferred from the src shard.
         // These represent persistent write-only locks whose uncommitted writes are in the borrowed snapshot.
-        if (record.AncestorLocksSize() > 0) {
+        if (record.LocksSize() > 0) {
             TDataShardLocksDb locksDb(*Self, txc);
-            THashSet<ui64> processedLockIds;
-            for (const auto& protoLock : record.GetAncestorLocks()) {
-                const ui64 lockId = protoLock.GetLockId();
+            for (const auto& srcLockInfo : record.GetLocks()) {
+                const ui64 lockId = srcLockInfo.GetLockId();
 
-                if (processedLockIds.insert(lockId).second) {
-                    // First time we see this lockId in this snapshot: create TLockInfo if needed
-                    if (!Self->SysLocksTable().GetRawLock(lockId)) {
-                        // Persist lock entry to Schema::Locks so it survives restarts
-                        locksDb.PersistAddLock(lockId, protoLock.GetLockNodeId(),
-                            protoLock.GetGeneration(), protoLock.GetCounter(),
-                            protoLock.GetCreateTimestamp(), /*flags=*/0);
+                // Create TLockInfo if needed
+                if (!Self->SysLocksTable().GetRawLock(lockId)) {
+                    // Persist lock entry to Schema::Locks so it survives restarts
+                    locksDb.PersistAddLock(lockId, srcLockInfo.GetLockNodeId(),
+                        srcLockInfo.GetGeneration(), srcLockInfo.GetCounter(),
+                        srcLockInfo.GetCreateTimestamp(), /*flags=*/0);
 
-                        // Create in-memory TLockInfo
-                        ILocksDb::TLockRow row;
-                        row.LockId = lockId;
-                        row.LockNodeId = protoLock.GetLockNodeId();
-                        row.Generation = protoLock.GetGeneration();
-                        row.Counter = protoLock.GetCounter();
-                        row.CreateTs = protoLock.GetCreateTimestamp();
-                        row.Flags = ui64(ELockFlags::Persistent);
-                        Self->SysLocksTable().AddPersistentLockFromRow(row);
-                    }
+                    // Create in-memory TLockInfo
+                    ILocksDb::TLockRow row;
+                    row.LockId = lockId;
+                    row.LockNodeId = srcLockInfo.GetLockNodeId();
+                    row.Generation = srcLockInfo.GetGeneration();
+                    row.Counter = srcLockInfo.GetCounter();
+                    row.CreateTs = srcLockInfo.GetCreateTimestamp();
+                    row.Flags = ui64(ELockFlags::Persistent);
+                    Self->SysLocksTable().AddPersistentLockFromRow(row);
                 }
 
-                TAncestorLock ancestorLock;
-                ancestorLock.TabletId = protoLock.GetTabletId();
-                ancestorLock.Generation = protoLock.GetGeneration();
-                ancestorLock.Counter = protoLock.GetCounter();
-                ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
-                ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
-
-                // Persist ancestor shard info to AncestorShardsLocks table
-                locksDb.PersistAddAncestorLock(lockId, ancestorLock);
-
-                // Add ancestor metadata to the in-memory TLockInfo
                 auto lockPtr = Self->SysLocksTable().GetRawLock(lockId);
                 Y_ENSURE(lockPtr, "Expected TLockInfo to exist after creation");
-                lockPtr->AddAncestorLock(std::move(ancestorLock));
+
+                // Add ancestor entry for the src shard itself
+                {
+                    TAncestorLock ancestorLock;
+                    ancestorLock.TabletId = srcTabletId;
+                    ancestorLock.Generation = srcLockInfo.GetGeneration();
+                    ancestorLock.Counter = srcLockInfo.GetCounter();
+                    ancestorLock.CreationTime = TInstant::MicroSeconds(srcLockInfo.GetCreateTimestamp());
+                    ancestorLock.Flags = ELockFlags(srcLockInfo.GetFlags());
+
+                    locksDb.PersistAddAncestorLock(lockId, ancestorLock);
+                    lockPtr->AddAncestorLock(std::move(ancestorLock));
+                }
+
+                // Add ancestor entries for grandparent shards (multi-hop split/merge)
+                for (const auto& protoLock : srcLockInfo.GetAncestorLocks()) {
+                    TAncestorLock ancestorLock;
+                    ancestorLock.TabletId = protoLock.GetTabletId();
+                    ancestorLock.Generation = protoLock.GetGeneration();
+                    ancestorLock.Counter = protoLock.GetCounter();
+                    ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
+                    ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
+
+                    locksDb.PersistAddAncestorLock(lockId, ancestorLock);
+                    lockPtr->AddAncestorLock(std::move(ancestorLock));
+                }
 
                 // Mark the lock as writing to all user tables so that reads
                 // with this LockTxId can see the uncommitted data in the borrowed snapshot.

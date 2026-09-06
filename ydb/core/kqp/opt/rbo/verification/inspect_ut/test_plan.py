@@ -60,12 +60,12 @@ class ExpressionRendererTest(unittest.TestCase):
                 ir.Expr(
                     kind="window_avg",
                     window_input="group_total",
-                    partition_by=("i_category", "i_brand"),
+                    partition_by=("a", "b", "c", "d", "e"),
                     result_type="Decimal(35,2)",
                     nullable=True,
                 ),
                 'window_avg(input="group_total", '
-                'partition_by=["i_category", "i_brand"], '
+                'partition_by=["a", "b", "c", "d", "e"], '
                 'type="Decimal(35,2)", nullable=true)',
             ),
             (
@@ -73,21 +73,23 @@ class ExpressionRendererTest(unittest.TestCase):
                     kind="window_rank",
                     window_name="window0",
                     execution_order=0,
-                    partition_by=(),
+                    partition_by=("a", "b", "c", "d"),
                     order_by=(
                         ir.SortOrder(
                             "currency_ratio",
                             ascending=True,
                             nulls_first=True,
                         ),
+                        ir.SortOrder("tie_breaker", False, False),
                     ),
                     window_frame=ir.WINDOW_RANK_FRAME,
                     result_type="Uint64",
                     nullable=False,
                 ),
                 'window_rank(name="window0", execution_order=0, '
-                'partition_by=[], order_by=[{column="currency_ratio", '
-                'direction=asc, nulls=first}], '
+                'partition_by=["a", "b", "c", "d"], '
+                'order_by=[{column="currency_ratio", direction=asc, nulls=first}, '
+                '{column="tie_breaker", direction=desc, nulls=last}], '
                 'frame="rows_unbounded_preceding_current_row", '
                 'type="Uint64", nullable=false)',
             ),
@@ -268,6 +270,61 @@ class ExpressionRendererTest(unittest.TestCase):
             with self.subTest(kind=expression.kind):
                 self.assertEqual(render_expression(expression), expected)
 
+    def test_binary64_and_checked_concat_fields_are_explicit(self):
+        for bits in (0, 0x8000000000000000, 0x7FF8000000000001):
+            self.assertEqual(
+                render_expression(_literal(bits, "Double")),
+                'literal(type="Double", value={"bits": "' + f'{bits:016x}' + '"})',
+            )
+        for kind, result_type in (
+            ("cast_double", "Double"),
+            ("sqrt_double", "Double"),
+            ("is_nan_double", "Bool"),
+        ):
+            expression = ir.Expr(
+                kind=kind, args=(_column(),), result_type=result_type, nullable=True,
+                source_type="Int64" if kind == "cast_double" else None,
+            )
+            source = ', source_type="Int64"' if kind == "cast_double" else ""
+            self.assertEqual(
+                render_expression(expression),
+                f'{kind}(arg=column("x"){source}, type="{result_type}", nullable=true)',
+            )
+            with self.assertRaisesRegex(InspectionError, "exactly one argument"):
+                render_expression(replace(expression, args=()))
+        fingerprint = ir.RESTRICTED_CONCAT_FINGERPRINT_PREFIX + "concat"
+        self.assertEqual(
+            render_expression(ir.Expr(
+                kind="checked_concat", fingerprint=fingerprint,
+                args=(_column(), _literal("!", "String")),
+                result_type="String", nullable=False,
+            )),
+            f'checked_concat(fingerprint="{fingerprint}", type="String", nullable=false, '
+            'args=[column("x"), literal(type="String", value="!")])',
+        )
+
+    def test_window_shape_limits_still_fail_closed(self):
+        rank = ir.Expr(
+            kind="window_rank", window_name="w", execution_order=0,
+            partition_by=(), order_by=(ir.SortOrder("x", True, True),),
+            window_frame=ir.WINDOW_RANK_FRAME, result_type="Uint64", nullable=False,
+        )
+        self.assertIn("partition_by=[]", render_expression(rank))
+        for changes in (
+            {"partition_by": ("a", "b", "c", "d", "e")},
+            {"partition_by": ("a", "a")},
+            {"order_by": rank.order_by * 3},
+            {"order_by": (ir.SortOrder("x", True, True, "future"),)},
+            {"nullable": True},
+        ):
+            with self.subTest(changes=changes), self.assertRaises(InspectionError):
+                render_expression(replace(rank, **changes))
+        with self.assertRaisesRegex(InspectionError, "between one and five"):
+            render_expression(ir.Expr(
+                kind="window_avg", window_input="x", partition_by=tuple("abcdef"),
+                result_type="Decimal(35,2)", nullable=True,
+            ))
+
     def test_unknown_or_malformed_expression_fails_closed(self):
         with self.assertRaisesRegex(InspectionError, "unknown expression kind"):
             render_expression(ir.Expr(kind="future"))
@@ -281,7 +338,7 @@ class ExpressionRendererTest(unittest.TestCase):
                     nullable=True,
                 )
             )
-        with self.assertRaisesRegex(InspectionError, "between one and four"):
+        with self.assertRaisesRegex(InspectionError, "between one and five"):
             render_expression(
                 ir.Expr(
                     kind="window_avg",
@@ -374,7 +431,7 @@ class OperatorRendererTest(unittest.TestCase):
                 ),
                 'node "project" project input="scan" '
                 'columns=[{output="out", expression=column("a.k"), '
-                'error_on_null=false}] ordered=true',
+                'error_on_null=false, require_total=false}] ordered=true',
             ),
             (
                 ir.Filter("filter", "scan", predicate),
@@ -516,7 +573,7 @@ class OperatorRendererTest(unittest.TestCase):
             with self.subTest(node=node.id):
                 self.assertEqual(render_node(node), expected)
 
-    def test_checked_projection_error_is_explicit(self):
+    def test_checked_projection_flags_are_explicit_and_digest_sensitive(self):
         node = ir.Project(
             "checked",
             "scan",
@@ -525,6 +582,7 @@ class OperatorRendererTest(unittest.TestCase):
                     "out",
                     _column("a.s"),
                     error_on_null=True,
+                    require_total=True,
                 ),
             ),
             True,
@@ -533,8 +591,30 @@ class OperatorRendererTest(unittest.TestCase):
             render_node(node),
             'node "checked" project input="scan" '
             'columns=[{output="out", expression=column("a.s"), '
-            'error_on_null=true}] ordered=true',
+            'error_on_null=true, require_total=true}] ordered=true',
         )
+        scan = ir.Scan("scan", "A", (ir.ScanColumn("s", "a.s"),), None, None)
+        snapshot = ir.Snapshot(
+            (ir.Table("A", (ir.Column("s", "String", True),), ()),),
+            ir.Plan((scan, node), "checked", ("out",), ()),
+        )
+        changed = replace(node, columns=(replace(node.columns[0], require_total=False),))
+        self.assertNotEqual(
+            snapshot_digest(snapshot),
+            snapshot_digest(replace(snapshot, plan=replace(snapshot.plan, nodes=(scan, changed)))),
+        )
+
+    def test_variance_state_is_explicit_and_unknown_kind_fails_closed(self):
+        state = ir.VarianceStateType("Int64", True)
+        trait = ir.AggregateTrait("x", "stddev_samp", "s", "Double", True, False, False, state)
+        node = ir.Aggregate("variance", "scan", (), (trait,), "undefined", False)
+        self.assertIn(
+            'state={kind="binary64_variance_v1", source_type="Int64", nullable=true, '
+            'mean_type="Double", count_type="Double", m2_type="Double"}',
+            render_node(node),
+        )
+        with self.assertRaisesRegex(InspectionError, "unknown variance state kind"):
+            render_node(replace(node, aggregates=(replace(trait, state=replace(state, kind="future")),)))
 
     def test_integral_average_rank_comparison_is_visible_only_when_present(self):
         tagged = ir.SortOrder(
@@ -688,7 +768,7 @@ def _stage_snapshot():
 class SnapshotRendererTest(unittest.TestCase):
     def test_complete_stage_snapshot_is_deterministic_and_exact(self):
         snapshot = _stage_snapshot()
-        expected = """semantic_snapshot format="ydb-rbo-semantic-snapshot" version=1
+        expected = """semantic_snapshot format="ydb-rbo-semantic-snapshot" version=1 semantic_mode=none
 schema tables=2
   table "A" columns=[{name="k", type="Int64", not_null}] unique_keys=[{columns=["k"], nulls_distinct=false}]
   table "B" columns=[{name="k", type="Int64", nullable}] unique_keys=[]
@@ -710,6 +790,21 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
     def test_absent_stage_graph_is_explicit(self):
         rendered = render_snapshot(replace(_stage_snapshot(), stage_graph=None))
         self.assertTrue(rendered.endswith("stage_graph none\n"))
+
+    def test_integral_average_rank_lineage_is_visible(self):
+        scan = ir.Scan("scan", "A", (ir.ScanColumn("x", "x"),), None, None)
+        trait = ir.AggregateTrait(
+            "x", "avg", "a", "Double", True, False, False, ir.INTEGRAL_DOUBLE_AVERAGE_STATE,
+        )
+        node = ir.Aggregate("avg", "scan", (), (trait,), "undefined", False)
+        snapshot = ir.Snapshot(
+            (ir.Table("A", (ir.Column("x", "Int64", True),), ()),),
+            ir.Plan((scan, node), "avg", ("a",), ()),
+        )
+        self.assertIn(
+            'output_schema=[{name="a", type="Double", nullable, integral_avg_rank=true}]',
+            render_snapshot(snapshot),
+        )
 
     def test_scalar_subplan_descriptor_is_explicit_and_digest_sensitive(self):
         nodes = (
@@ -1032,6 +1127,9 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
         self.assertEqual(len(digest), 64)
         self.assertEqual(digest, snapshot_digest(snapshot))
         self.assertNotEqual(digest, snapshot_digest(replace(snapshot, stage_graph=None)))
+        binary64 = replace(snapshot, semantic_mode=ir.BINARY64_SEMANTIC_MODE)
+        self.assertIn('semantic_mode="binary64_uf_universal_v1"', render_snapshot(binary64))
+        self.assertNotEqual(digest, snapshot_digest(binary64))
 
         join = snapshot.plan.nodes[-1]
         self.assertIsInstance(join, ir.Join)

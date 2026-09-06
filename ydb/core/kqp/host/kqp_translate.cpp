@@ -232,6 +232,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     }
 
     if (QueryType == NYql::EKikimrQueryType::Query) {
+        // Allow comment-only SQL via ExecuteQuery; preserve other APIs' existing behavior.
         settings.Flags.insert("AllowNoStatements");
     }
 
@@ -390,8 +391,10 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
         if (astStatements.empty() && settings.Flags.contains("AllowNoStatements")) {
-            // The compile service expects at least one AST. Translate the whole
-            // query to obtain the valid empty program produced by the SQL translator.
+            // An empty result also represents a full-text parse failure; the
+            // SqlToAstStatements API does not expose issues in that case. Reparse
+            // the original text to recover diagnostics or obtain a valid empty
+            // program. The compile service requires at least one AST result.
             return {ParseQuery(queryText, /*syntax=*/{}, isSql, settingsBuilder)};
         }
         for (size_t i = 0; i < astStatements.size(); ++i) {

@@ -1161,14 +1161,13 @@ class TDataShard
         struct AncestorShardsLocks : Table<41> {
             struct LockId          : Column<1, NScheme::NTypeIds::Uint64> {};
             struct TabletId        : Column<2, NScheme::NTypeIds::Uint64> {};  // ancestor shard
-            struct LockNodeId      : Column<3, NScheme::NTypeIds::Uint32> {};
-            struct Generation      : Column<4, NScheme::NTypeIds::Uint32> {};
-            struct Counter         : Column<5, NScheme::NTypeIds::Uint64> {};
-            struct CreateTimestamp : Column<6, NScheme::NTypeIds::Uint64> {};
-            struct Flags           : Column<7, NScheme::NTypeIds::Uint64> {};
+            struct Generation      : Column<3, NScheme::NTypeIds::Uint32> {};
+            struct Counter         : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
+            struct Flags           : Column<6, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<LockId, TabletId>;
-            using TColumns = TableColumns<LockId, TabletId, LockNodeId, Generation, Counter, CreateTimestamp, Flags>;
+            using TColumns = TableColumns<LockId, TabletId, Generation, Counter, CreateTimestamp, Flags>;
         };
 
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,

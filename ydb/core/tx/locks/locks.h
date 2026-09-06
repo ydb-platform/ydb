@@ -309,7 +309,6 @@ inline bool operator!(ELockRangeFlags c) { return ELockRangeFlagsRaw(c) == 0; }
 // writes were transferred to this shard during split/merge.
 struct TAncestorLock {
     ui64 TabletId = 0;      // ancestor shard
-    ui32 LockNodeId = 0;    // node hosting the lock transaction
     ui32 Generation = 0;
     ui64 Counter = 0;
     TInstant CreationTime;

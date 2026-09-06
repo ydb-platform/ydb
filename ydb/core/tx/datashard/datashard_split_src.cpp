@@ -213,7 +213,7 @@ public:
                     auto& proto = Self->SrcLocksToTransfer.emplace_back();
                     proto.SetTabletId(tabletId);
                     proto.SetLockId(lock.GetLockId());
-                    proto.SetLockNodeId(ancestorLock.LockNodeId);
+                    proto.SetLockNodeId(lock.GetLockNodeId());
                     proto.SetGeneration(ancestorLock.Generation);
                     proto.SetCounter(ancestorLock.Counter);
                     proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());

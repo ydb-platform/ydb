@@ -262,7 +262,6 @@ public:
                 db.Table<Schema::AncestorShardsLocks>()
                     .Key(lockId, protoLock.GetTabletId())
                     .Update(
-                        NIceDb::TUpdate<Schema::AncestorShardsLocks::LockNodeId>(protoLock.GetLockNodeId()),
                         NIceDb::TUpdate<Schema::AncestorShardsLocks::Generation>(protoLock.GetGeneration()),
                         NIceDb::TUpdate<Schema::AncestorShardsLocks::Counter>(protoLock.GetCounter()),
                         NIceDb::TUpdate<Schema::AncestorShardsLocks::CreateTimestamp>(protoLock.GetCreateTimestamp()),
@@ -294,7 +293,6 @@ public:
                 Y_ENSURE(lockPtr, "Expected TLockInfo to exist after creation");
                 TAncestorLock ancestorLock;
                 ancestorLock.TabletId = protoLock.GetTabletId();
-                ancestorLock.LockNodeId = protoLock.GetLockNodeId();
                 ancestorLock.Generation = protoLock.GetGeneration();
                 ancestorLock.Counter = protoLock.GetCounter();
                 ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());

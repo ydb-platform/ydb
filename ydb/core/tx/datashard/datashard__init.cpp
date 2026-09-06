@@ -702,7 +702,6 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             if (lockPtr) {
                 TAncestorLock ancestorLock;
                 ancestorLock.TabletId = rowset.GetValue<Schema::AncestorShardsLocks::TabletId>();
-                ancestorLock.LockNodeId = rowset.GetValue<Schema::AncestorShardsLocks::LockNodeId>();
                 ancestorLock.Generation = rowset.GetValue<Schema::AncestorShardsLocks::Generation>();
                 ancestorLock.Counter = rowset.GetValue<Schema::AncestorShardsLocks::Counter>();
                 ancestorLock.CreationTime = TInstant::MicroSeconds(rowset.GetValue<Schema::AncestorShardsLocks::CreateTimestamp>());

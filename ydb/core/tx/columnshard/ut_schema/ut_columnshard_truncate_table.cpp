@@ -653,6 +653,94 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
+    // Review gap: "truncate + move". There was no test verifying that a MOVE (rename) after
+    // TRUNCATE works correctly. TRUNCATE swaps the path to a new InternalPathId generation;
+    // a subsequent MOVE must rename the new generation to the destination path, the old source
+    // path must become unreadable, and a pre-truncate time-travel read on the old path must
+    // still see the old data (MVCC is preserved across the rename).
+    Y_UNIT_TEST(TruncateThenMove) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        const ui64 dstPathId = 2;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit 100 rows.
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        const auto snapshotBeforeTruncate = NOlap::TSnapshot(planStep, txId);
+
+        // TRUNCATE the table → new InternalPathId generation.
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(srcPathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+        const auto truncateSnapshot = NOlap::TSnapshot(planStep, txId);
+
+        // MOVE the table after TRUNCATE: rename srcPathId → dstPathId.
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+        const auto moveSnapshot = NOlap::TSnapshot(planStep, txId);
+
+        // The old source path is now unreadable (table was moved away).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, moveSnapshot);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // The new destination path is readable (empty, since truncate emptied the table).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, moveSnapshot);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // Write and read new data on the destination path to confirm the table is functional.
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, dstPathId, MakeTestBlob({ 200, 250 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 50);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // Pre-truncate time-travel read on the OLD source path still sees the old 100 rows —
+        // the move did not break MVCC on the old generation.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, snapshotBeforeTruncate);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+            UNIT_ASSERT(!reader.IsError());
+        }
+    }
+
     // Pins the MVCC boundary semantics of TRUNCATE: a read exactly at the truncate snapshot sees the
     // post-truncate (empty) generation, while a read strictly before it still sees the old data. This
     // guards ResolveInternalPathIdForSnapshot's `dropVersion <= readSnapshot` boundary condition.

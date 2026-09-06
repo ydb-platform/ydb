@@ -1,7 +1,92 @@
 #!/usr/bin/env bash
 # Docker uses cached readiness; --readiness always runs the full check for init.
 set -euo pipefail
-source /health_common
+: "${GRPC_PORT:=2136}"
+HEALTH_CLI=(/ydb --endpoint "grpc://localhost:${GRPC_PORT}" --database /local --no-discovery)
+: "${YDB_READINESS_ENABLE_DDL:=true}"
+: "${YDB_READINESS_INTERVAL_SECONDS:=60}"
+: "${YDB_READINESS_TIMEOUT:=8s}"
+: "${YDB_LIVENESS_TIMEOUT:=2s}"
+
+# Docker provides a writable /dev/shm tmpfs even with --read-only. Keep runtime
+# state off the image filesystem; callers can select another writable mount.
+: "${YDB_HEALTH_STATE_DIR:=/dev/shm/ydb_health}"
+HEALTH_STATE_DIR=$YDB_HEALTH_STATE_DIR
+HEALTH_STATE_FILE=${HEALTH_STATE_DIR}/last_readiness_ok
+
+health_validate_settings() {
+    if [[ ! "$YDB_READINESS_INTERVAL_SECONDS" =~ ^[1-9][0-9]{0,8}$ ]] ||
+       [[ "$YDB_READINESS_ENABLE_DDL" != true && "$YDB_READINESS_ENABLE_DDL" != false ]]; then
+        echo 'healthcheck: invalid readiness interval or DDL setting' >&2
+        return 1
+    fi
+    health_validate_timeout "$YDB_READINESS_TIMEOUT" && health_validate_timeout "$YDB_LIVENESS_TIMEOUT"
+}
+
+health_validate_timeout() {
+    # GNU timeout accepts zero as "no deadline"; health probes must stay bounded.
+    [[ "$1" =~ ^[0-9]+([.][0-9]+)?[smhd]?$ && "$1" =~ [1-9] ]] || {
+        echo 'healthcheck: timeout must be a positive duration' >&2
+        return 1
+    }
+}
+
+health_uptime() {
+    local uptime idle
+    read -r uptime idle </proc/uptime || return 1
+    printf '%s\n' "${uptime%%.*}"
+}
+
+health_context() {
+    local boot_id pid_stat
+    local -a fields
+    read -r boot_id </proc/sys/kernel/random/boot_id || return 1
+    IFS= read -r pid_stat </proc/1/stat || return 1
+    # comm (field 2) can contain spaces and parentheses. Fields below start at 3.
+    read -r -a fields <<<"${pid_stat##*) }"
+    printf '%s\n' "$boot_id ${fields[19]}" "$GRPC_PORT" "$YDB_READINESS_ENABLE_DDL"
+}
+
+health_cache_is_fresh() {
+    local cached checked context now
+    # A read-only record cannot be invalidated after a liveness failure. Never
+    # trust it, even if its timestamp and context otherwise look current.
+    [[ -r "$HEALTH_STATE_FILE" && -w "$HEALTH_STATE_FILE" && -w "$HEALTH_STATE_DIR" ]] || return 1
+    cached=$(<"$HEALTH_STATE_FILE")
+    checked=${cached%%$'\n'*}
+    context=${cached#*$'\n'}
+    [[ "$checked" =~ ^(0|[1-9][0-9]{0,9})$ ]] || return 1
+    [[ "$context" == "$(health_context)" ]] || return 1
+    now=$(health_uptime) || return 1
+    # Monotonic uptime avoids wall-clock jumps; reject future/corrupt state too.
+    (( now >= checked && now - checked < YDB_READINESS_INTERVAL_SECONDS ))
+}
+
+health_record_readiness() {
+    # The caller holds readiness.lock. Readers see either a complete record or
+    # no record; a killed writer's .new file is never treated as a success.
+    { health_uptime && health_context; } >"${HEALTH_STATE_FILE}.new" || return 1
+    mv -f "${HEALTH_STATE_FILE}.new" "$HEALTH_STATE_FILE"
+}
+
+health_readiness() {
+    # The caller holds fd 9 and runs this whole sequence under one timeout.
+    if [[ "${DEBUG:-false}" == true ]]; then
+        set -x
+    fi
+    rm -f "$HEALTH_STATE_FILE" || return 1
+    "${HEALTH_CLI[@]}" sql -s 'select 1' >/dev/null || return 1
+    "${HEALTH_CLI[@]}" scheme ls /local >/dev/null || return 1
+    if [[ "$YDB_READINESS_ENABLE_DDL" == true ]]; then
+        # IF NOT EXISTS recovers the table after an interrupted probe.
+        "${HEALTH_CLI[@]}" sql -s 'create table if not exists `/local/.sys_health/test` (key int32, value utf8, primary key(key))' >/dev/null || return 1
+        "${HEALTH_CLI[@]}" sql -s 'drop table `/local/.sys_health/test`' >/dev/null || return 1
+    fi
+    health_record_readiness
+}
+
+# The timeout child sources this same file to run readiness without taking the lock again.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --readiness ) ]]; then
     echo 'Usage: /health_check [--readiness]' >&2
@@ -33,4 +118,4 @@ fi
 # exec preserves fd 9 in timeout and its children. KILL at the deadline prevents
 # a TERM-ignoring CLI from surviving with the lock after its parent exits.
 exec timeout --signal=KILL "$YDB_READINESS_TIMEOUT" \
-    /bin/bash -c 'set -euo pipefail; source /health_common; health_readiness'
+    /bin/bash -c 'source "$1"; health_readiness' _ "${BASH_SOURCE[0]}"

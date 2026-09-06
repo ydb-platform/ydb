@@ -74,9 +74,9 @@ class HealthcheckTest(unittest.TestCase):
                         os.environ.get('HEALTHCHECK_TEST_IMAGE', 'ubuntu:22.04'),
                         'sleep', 'infinity'], check=True, stdout=subprocess.DEVNULL)
         cls.addClassCleanup(cls.cleanup_container)
-        for name in ('health_check', 'health_common'):
-            path = ROOT / 'files' / name
-            subprocess.run(['docker', 'cp', str(path), cls.name + ':/' + name], check=True)
+        # Install only the public script, as downstream images and bind mounts do.
+        subprocess.run(['docker', 'cp', str(ROOT / 'files' / 'health_check'),
+                        cls.name + ':/health_check'], check=True)
         cls.shell('chmod +x /health_check')
         cls.shell('cat >/ydb; chmod +x /ydb', input=MOCK_CLI)
         if cls.read_only:
@@ -300,7 +300,8 @@ class ReadOnlyHealthcheckTest(HealthcheckTest):
         # Seed a valid record via another container, then expose it read-only.
         # A liveness failure could not invalidate this record, so it must never
         # allow the target container to bypass readiness.
-        cached = self.shell('source /health_common; health_uptime; health_context').stdout
+        self.assert_ok(self.probe())
+        cached = self.shell('cat /dev/shm/ydb_health/last_readiness_ok; : >/tmp/fixture/calls').stdout
         subprocess.run(['docker', 'run', '--rm', '-i', '--platform', 'linux/amd64', '--network', 'none',
                         '--volume', self.name + '-frozen:/state', self.name,
                         'bash', '-c', 'cat >/state/last_readiness_ok'],

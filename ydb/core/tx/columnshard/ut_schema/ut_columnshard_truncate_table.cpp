@@ -587,8 +587,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         const auto* shard = csController.GetTheOnlyShard();
 
         // Capture the new generation's InternalPathId (the live one after TRUNCATE).
-        const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(
-            TSchemeShardLocalPathId::FromRawValue(pathId), false);
+        const auto newInternalPathId =
+            shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
         UNIT_ASSERT(newInternalPathId);
 
         // Before the alter, the new generation has no TTL.
@@ -606,12 +606,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         // (b) The TTL must now be present on the new generation.
         {
-            const auto resolved = shard->GetTablesManager().ResolveInternalPathId(
-                TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            const auto resolved =
+                shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(resolved);
             UNIT_ASSERT_VALUES_EQUAL(*resolved, *newInternalPathId);
-            UNIT_ASSERT_C(shard->GetTablesManager().GetTableTtl(*resolved).has_value(),
-                "TTL was not applied to the new generation after TRUNCATE+ALTER");
+            UNIT_ASSERT_C(
+                shard->GetTablesManager().GetTableTtl(*resolved).has_value(), "TTL was not applied to the new generation after TRUNCATE+ALTER");
         }
 
         // (c) Write and read new data after the alter to confirm the table is functional.
@@ -1284,8 +1284,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT(shard);
 
         // The old generation must be in PathsToDrop (it was dropped by DropTable).
-        const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(
-            TSchemeShardLocalPathId::FromRawValue(pathId), false);
+        const auto newInternalPathId =
+            shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
         UNIT_ASSERT(newInternalPathId);
         // Find the old (dropped) generation: it is in Tables but not the live one.
         TInternalPathId oldInternalPathId;
@@ -1423,6 +1423,16 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(!rb);
             UNIT_ASSERT(!reader.IsError());
         }
+
+        // Boundary: read exactly at t2 (g2's drop version). g2 is no longer visible,
+        // g3 has not appeared yet → empty.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, t2);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
     }
 
     // Regression for review issue 3: retention mode (TRUNCATE source while a copy is alive)
@@ -1479,8 +1489,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT(shard);
 
         // The old generation's InternalPathId (shared by the copy).
-        const auto oldInternalPathId = shard->GetTablesManager().ResolveInternalPathId(
-            TSchemeShardLocalPathId::FromRawValue(dstPathId), false);
+        const auto oldInternalPathId =
+            shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(dstPathId), false);
         UNIT_ASSERT(oldInternalPathId);
 
         // (a) The copy still reads the old data at the latest snapshot.
@@ -1526,8 +1536,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         {
             const auto* restartedShard = csController.GetShard();
             UNIT_ASSERT(restartedShard);
-            const auto recoveredOld = restartedShard->GetTablesManager().ResolveInternalPathId(
-                TSchemeShardLocalPathId::FromRawValue(dstPathId), false);
+            const auto recoveredOld =
+                restartedShard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(dstPathId), false);
             UNIT_ASSERT(recoveredOld);
             UNIT_ASSERT_VALUES_EQUAL(*recoveredOld, *oldInternalPathId);
         }

@@ -1,7 +1,6 @@
 #pragma once
 
-#include "scheme_cache_events.h"
-
+#include <ydb/core/tx/scheme_cache/scheme_cache_events.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>

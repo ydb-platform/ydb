@@ -1,12 +1,11 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include "schemeshard_impl.h"
 #include "schemeshard__tenant_shred_manager.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
 #include "schemeshard_shard_deleter.h"
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/schemeshard/schemeshard__tenant_shred_manager.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

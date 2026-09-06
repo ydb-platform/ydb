@@ -1,11 +1,11 @@
 #include "schemeshard_schema.h"
-#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
-
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include "olap/manager/tables_storage.h"
+#include "schemeshard_info_types_core.h"
 #include "schemeshard__operation_backup_restore_common.h"
 #include "olap/table/table.h"
 #include "schemeshard_billing_helpers.h"
+
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

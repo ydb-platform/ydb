@@ -10,11 +10,11 @@ private:
     using TBase = TOlapIndexUpsert;
     YDB_READONLY(ui32, Id, Max<ui32>());
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(NBackgroundTasks::TInterfaceProtoContainer<::NKikimr::NOlap::NIndexes::IIndexMeta>, IndexMeta);
+    YDB_READONLY_DEF(NBackgroundTasks::TInterfaceProtoContainer<NKikimr::NOlap::NIndexes::IIndexMeta>, IndexMeta);
 public:
     TOlapIndexSchema() = default;
 
-    TOlapIndexSchema(const ui32 id, const TString& name, const std::shared_ptr<::NKikimr::NOlap::NIndexes::IIndexMeta>& meta)
+    TOlapIndexSchema(const ui32 id, const TString& name, const std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta>& meta)
         : Id(id)
         , Name(name)
         , IndexMeta(meta)

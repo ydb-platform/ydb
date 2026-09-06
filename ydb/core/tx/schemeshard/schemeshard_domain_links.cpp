@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_domain_links.h"
 
 #include "schemeshard_impl.h"

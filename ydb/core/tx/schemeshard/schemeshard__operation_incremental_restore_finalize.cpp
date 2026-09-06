@@ -1,7 +1,6 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_misc.h"
+#include "schemeshard_info_types_objects_storage.h"
 #include "schemeshard__operation_incremental_restore_finalize.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
@@ -11,6 +10,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)

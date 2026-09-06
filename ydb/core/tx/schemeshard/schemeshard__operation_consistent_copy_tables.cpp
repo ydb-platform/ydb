@@ -1,12 +1,11 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
-#include "schemeshard_info_types_objects_storage.h"
-#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
-#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_common.h"
-#include "olap/table/table.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
+#include "schemeshard_info_types_objects_storage.h"
 #include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
+#include "olap/manager/tables_storage.h"
+#include "olap/table/table.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>

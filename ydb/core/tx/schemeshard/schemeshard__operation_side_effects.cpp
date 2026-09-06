@@ -3,7 +3,6 @@
 #include "schemeshard_info_types_topic.h"
 #include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_side_effects.h"
-#include <ydb/core/protos/config.pb.h>
 #include "schemeshard__operation_part.h"
 
 #include "schemeshard__operation_db_changes.h"
@@ -11,6 +10,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_domain_links.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tx/tx_processing.h>
 

@@ -1,10 +1,8 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_transfer.h>
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_transfer.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_helpers.h"
 #include "index/build_index.h"
-#include <ydb/core/ydb_convert/table_profiles.h>
-
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
@@ -14,6 +12,7 @@
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>

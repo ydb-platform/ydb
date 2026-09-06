@@ -16,8 +16,8 @@ private:
     YDB_ACCESSOR_DEF(std::optional<bool>, DeduplicationEnabled);
     YDB_ACCESSOR_DEF(std::optional<bool>, InsertOptionsBuildIndexesEnabled);
     YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
-    YDB_ACCESSOR_DEF(::NKikimr::NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
-    YDB_ACCESSOR_DEF(::NKikimr::NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
+    YDB_ACCESSOR_DEF(NKikimr::NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
+    YDB_ACCESSOR_DEF(NKikimr::NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
         SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
@@ -28,7 +28,7 @@ public:
             DeduplicationEnabled = alterRequest.GetOptions().GetDeduplicationEnabled();
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
-            auto container = ::NKikimr::NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
+            auto container = NKikimr::NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;
@@ -36,7 +36,7 @@ public:
             MetadataManagerConstructor = container.DetachResult();
         }
         if (alterRequest.GetOptions().HasCompactionPlannerConstructor()) {
-            auto container = ::NKikimr::NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetCompactionPlannerConstructor());
+            auto container = NKikimr::NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetCompactionPlannerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;

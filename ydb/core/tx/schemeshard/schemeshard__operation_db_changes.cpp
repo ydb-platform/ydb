@@ -1,6 +1,6 @@
 #include "schemeshard_info_types_table.h"
 #include "schemeshard_info_types_objects.h"
-#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
+#include "olap/manager/tables_storage.h"
 #include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"

@@ -1,9 +1,9 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "validator.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 namespace NKikimr::NSchemeShard {

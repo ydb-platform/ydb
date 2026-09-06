@@ -5,7 +5,6 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-
 namespace {
 
 using namespace NKikimr;
@@ -15,7 +14,6 @@ bool CheckSidExistsOrIsNonYdb(const TSchemeShard& ss, const TString& sid) {
     // non-YDB user's sid format is <login>@<subsystem>
     return sid.Contains('@') || NOperationHelpers::SidExists(ss, sid);
 }
-
 
 class TModifyACL: public TSubOperationBase {
 public:

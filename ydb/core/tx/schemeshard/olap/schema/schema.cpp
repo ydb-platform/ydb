@@ -1,8 +1,8 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "schema.h"
 
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/validator.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 
 namespace NKikimr::NSchemeShard {
 

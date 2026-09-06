@@ -31,11 +31,11 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(std::optional<TString>, StorageId);
         YDB_READONLY_DEF(std::optional<bool>, InheritPortionStorage);
     protected:
-        NBackgroundTasks::TInterfaceProtoContainer<::NKikimr::NOlap::NIndexes::IIndexMetaConstructor> IndexConstructor;
+        NBackgroundTasks::TInterfaceProtoContainer<NKikimr::NOlap::NIndexes::IIndexMetaConstructor> IndexConstructor;
     public:
         TOlapIndexUpsert() = default;
 
-        const NBackgroundTasks::TInterfaceProtoContainer<::NKikimr::NOlap::NIndexes::IIndexMetaConstructor>& GetIndexConstructor() const {
+        const NBackgroundTasks::TInterfaceProtoContainer<NKikimr::NOlap::NIndexes::IIndexMetaConstructor>& GetIndexConstructor() const {
             return IndexConstructor;
         }
 

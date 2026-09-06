@@ -1,9 +1,9 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include "table.h"
+#include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/object.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/standalone/object.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/object.h>
-#include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 
 namespace NKikimr::NSchemeShard {
 

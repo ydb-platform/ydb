@@ -1,7 +1,6 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_export.h>
-#include <ydb/core/backup/common/metadata.h>
-#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_export.h"
+#include "olap/manager/tables_storage.h"
 #include "schemeshard_audit_log.h"
 #include "olap/table/table.h"
 #include "schemeshard_export.h"
@@ -12,6 +11,7 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/tx/datashard/export_data_format.h>
 
 #include <ydb/public/api/protos/ydb_export.pb.h>

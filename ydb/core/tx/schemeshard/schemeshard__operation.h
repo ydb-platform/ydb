@@ -4,7 +4,6 @@
 #include "schemeshard_tx_infly.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-
 #include <util/generic/set.h>
 
 namespace NKikimr::NSchemeShard {

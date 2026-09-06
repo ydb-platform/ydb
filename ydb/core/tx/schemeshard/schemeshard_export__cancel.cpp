@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_export.h>
+#include "schemeshard_info_types_objects_export.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"

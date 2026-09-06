@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include "schemeshard_info_types_table.h"
 #include "schemeshard_scheme_builders.h"
 #include "schemeshard_export_helpers.h"
 

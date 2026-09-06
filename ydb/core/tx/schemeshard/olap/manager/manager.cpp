@@ -1,5 +1,5 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "manager.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 
 namespace NKikimr::NSchemeShard {
 

@@ -1,6 +1,5 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-
 #include <ydb/library/actors/core/log.h>
 
 namespace {

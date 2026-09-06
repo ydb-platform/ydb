@@ -1,11 +1,6 @@
 #pragma once
 #include "olap/manager/tables_storage.h"
-
 #include "schemeshard_schema.h"
-
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-
 #include "olap/table/table.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -17,6 +12,8 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 
 #include <util/generic/utility.h>
 

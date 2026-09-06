@@ -1,10 +1,10 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "alter/abstract/object.h"
 #include "alter/abstract/update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/columnshard.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "build_index_fwd.h"
+#include <ydb/core/tx/schemeshard/index/build_index_fwd.h>
 
 #include <ydb/core/protos/index_builder.pb.h>
 

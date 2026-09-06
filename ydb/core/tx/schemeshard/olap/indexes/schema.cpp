@@ -1,6 +1,6 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include "schema.h"
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>

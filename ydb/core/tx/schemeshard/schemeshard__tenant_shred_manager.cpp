@@ -1,13 +1,11 @@
 #include "schemeshard_schema.h"
-
-#include <ydb/core/protos/config.pb.h>
-
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
-#include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard__tenant_shred_manager.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 
 namespace NKikimr::NSchemeShard {
 

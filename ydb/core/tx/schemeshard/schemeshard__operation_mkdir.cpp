@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"

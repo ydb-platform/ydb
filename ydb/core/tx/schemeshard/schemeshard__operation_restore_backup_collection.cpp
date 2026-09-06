@@ -1,5 +1,5 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_misc.h"
 #include "schemeshard__operation_restore_backup_collection.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"

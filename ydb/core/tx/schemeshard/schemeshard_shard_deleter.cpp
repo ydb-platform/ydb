@@ -1,5 +1,5 @@
 #include "schemeshard_shard_deleter.h"
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
+#include "schemeshard_info_types_core.h"
 
 #include <ydb/core/mind/hive/hive.h>
 

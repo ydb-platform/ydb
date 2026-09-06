@@ -3,7 +3,6 @@
 namespace NKikimr::NIceDb {
 class TNiceDb;
 }
-
 #include "schemeshard_impl.h"
 
 #include <util/generic/ptr.h>

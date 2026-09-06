@@ -1,6 +1,5 @@
 #include "schemeshard_info_types_table.h"
 #include "schemeshard_info_types_objects.h"
-#include <ydb/core/protos/tx_datashard.pb.h>
 #include "schemeshard_info_types_subdomain.h"
 
 #include "schemeshard_generated_column_utils.h"
@@ -19,6 +18,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>

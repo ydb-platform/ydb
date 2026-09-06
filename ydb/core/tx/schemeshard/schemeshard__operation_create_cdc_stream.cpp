@@ -1,6 +1,5 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include "schemeshard_info_types_table.h"
 #include "schemeshard_info_types_objects_storage.h"
-#include <ydb/core/protos/tx_datashard.pb.h>
 #include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard__operation_db_changes.h"
@@ -12,6 +11,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <library/cpp/json/json_reader.h>

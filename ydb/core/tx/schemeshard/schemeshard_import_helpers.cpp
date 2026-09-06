@@ -1,5 +1,5 @@
 #include "schemeshard_import_helpers.h"
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_transfer.h>
+#include "schemeshard_info_types_objects_transfer.h"
 
 namespace NKikimr::NSchemeShard {
 

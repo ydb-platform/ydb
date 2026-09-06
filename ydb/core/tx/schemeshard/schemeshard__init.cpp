@@ -1,31 +1,24 @@
-#include "schemeshard_info_types_table.h"
-#include "schemeshard_schema.h"
-#include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
-
-#include <ydb/core/protos/config.pb.h>
-
-#include "schemeshard_info_types_objects.h"
-#include "schemeshard_info_types_subdomain.h"
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
-#include "schemeshard_impl.h"
 #include "schemeshard_forced_compaction.h"
-#include "schemeshard__root_shred_manager.h"
-#include "schemeshard__tenant_shred_manager.h"
-#include <ydb/library/login/login.h>
-
+#include "schemeshard_impl.h"
+#include "schemeshard_info_types_objects.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
+#include "schemeshard_schema.h"
 #include "olap/manager/manager.h"
 
-#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
-
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
 #include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
@@ -34,6 +27,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/library/login/login.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

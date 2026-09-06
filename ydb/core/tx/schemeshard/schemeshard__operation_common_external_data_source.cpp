@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_misc.h>
+#include "schemeshard_info_types_objects_misc.h"
 #include "schemeshard__operation_common_external_data_source.h"
 
 #include <utility>

@@ -1,5 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include "schemeshard_info_types_core.h"
 #include "schemeshard_impl.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
@@ -8,6 +7,7 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/split/split.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr {

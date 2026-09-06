@@ -1,20 +1,15 @@
-#include "schemeshard_info_types_table.h"
-#include "schemeshard_info_types_objects.h"
-#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-#include "schemeshard__tenant_shred_manager.h"
-#include <ydb/library/login/login.h>
 #include "schemeshard__operation_db_changes.h"
-#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_helpers.h"
-
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__tenant_shred_manager.h"
-
+#include "schemeshard_impl.h"
+#include "schemeshard_info_types_objects.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
+#include "olap/manager/tables_storage.h"
 #include "olap/store/store.h"
 #include "olap/table/table.h"
-
 #include <ydb/core/base/path.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -27,6 +22,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/library/login/login.h>
 
 
 namespace NKikimr {

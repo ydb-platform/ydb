@@ -1,47 +1,23 @@
-#include "schemeshard_info_types_table.h"
-#include "schemeshard_schema.h"
+#include "schemeshard_impl.h"
 #include "dedicated_pipe_pool.h"
-#include "schemeshard_shard_deleter.h"
+#include "index/build_index.h"
+#include "olap/manager/manager.h"
+#include "olap/manager/tables_storage.h"
+#include "schemeshard_backup.h"
 #include "schemeshard_domain_links.h"
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include "schemeshard_private_import.h"
-#include "schemeshard_private_stats.h"
-
-#include <ydb/core/tx/sequenceshard/public/events.h>
-#include <ydb/core/tx/replication/controller/public_events.h>
-#include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/kesus/tablet/events.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include "schemeshard_export.h"
+#include "schemeshard_forced_compaction.h"
+#include "schemeshard_generated_column_utils.h"
+#include "schemeshard_impl_queues.h"
+#include "schemeshard_import.h"
 #include "schemeshard_info_types_objects.h"
 #include "schemeshard_info_types_subdomain.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_impl_queues.h"
-#include "schemeshard_backup.h"
-#include "schemeshard_export.h"
-#include "schemeshard_import.h"
-#include "schemeshard_forced_compaction.h"
-#include "index/build_index.h"
-#include "olap/manager/tables_storage.h"
-
-#include <ydb/library/login/login.h>
-#include <ydb/core/ydb_convert/table_profiles.h>
-
-#include <ydb/core/blob_depot/events.h>
-#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
-#include <ydb/core/blockstore/core/blockstore.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/filestore/core/filestore.h>
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
-
-#include "olap/manager/manager.h"
-
-#include "schemeshard_generated_column_utils.h"
+#include "schemeshard_info_types_table.h"
 #include "schemeshard__local_index_migration.h"
+#include "schemeshard_private_import.h"
+#include "schemeshard_private_stats.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_shard_deleter.h"
 #include "schemeshard_svp_migration.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
@@ -54,9 +30,18 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -67,6 +52,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
@@ -75,12 +61,21 @@
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/test_tablet/events.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_sysviews_update.h>
+#include <ydb/core/ydb_convert/table_profiles.h>
 
 #include <ydb/library/login/account_lockout/account_lockout.h>
+#include <ydb/library/login/login.h>
 #include <ydb/library/login/password_checker/password_checker.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>

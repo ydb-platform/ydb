@@ -1,12 +1,12 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_storage.h"
 #include "schemeshard_impl.h"
 #include "schemeshard__conditional_erase.h"
 
-#include <util/string/join.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <util/string/join.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

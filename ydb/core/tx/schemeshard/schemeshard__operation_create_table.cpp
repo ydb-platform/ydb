@@ -1,16 +1,16 @@
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace {
 

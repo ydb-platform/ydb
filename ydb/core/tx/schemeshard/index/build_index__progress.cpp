@@ -2,7 +2,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
 #include <ydb/core/tx/schemeshard/schemeshard_schema.h>
 #include <ydb/core/tx/schemeshard/dedicated_pipe_pool.h>
-
 #include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/index/build_index_helpers.h>

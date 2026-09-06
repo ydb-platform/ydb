@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>

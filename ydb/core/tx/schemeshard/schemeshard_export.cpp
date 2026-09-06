@@ -1,7 +1,6 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include "schemeshard_info_types_table.h"
 #include "schemeshard_schema.h"
-
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_export.h>
+#include "schemeshard_info_types_objects_export.h"
 #include "schemeshard_export.h"
 
 #include "schemeshard_export_flow_proposals.h"

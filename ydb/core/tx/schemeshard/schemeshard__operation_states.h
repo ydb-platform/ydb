@@ -1,10 +1,9 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr::NSchemeShard {

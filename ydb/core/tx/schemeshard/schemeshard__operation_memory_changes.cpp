@@ -1,16 +1,14 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include "schemeshard_info_types_table.h"
 #include "schemeshard_info_types_objects_storage.h"
-#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
+#include "olap/manager/tables_storage.h"
 #include "schemeshard_info_types_objects_misc.h"
 #include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_memory_changes.h"
 
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/schemeshard/olap/table/table.h>
-
+#include "olap/table/table.h"
 #include <util/generic/stack.h>
-
 #include <optional>
 
 namespace NKikimr::NSchemeShard {

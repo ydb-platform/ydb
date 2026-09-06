@@ -1,7 +1,5 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include "schemeshard_info_types_table.h"
 #include "schemeshard_schema.h"
-
-#include <ydb/core/tx/datashard/datashard.h>
 #include "schemeshard_info_types_objects_storage.h"
 #include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_common.h"
@@ -12,6 +10,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace {
 

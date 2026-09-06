@@ -1,7 +1,6 @@
-#include <ydb/core/tx/schemeshard/olap/table/table.h>
-#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
-
 #include "object.h"
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
+#include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {

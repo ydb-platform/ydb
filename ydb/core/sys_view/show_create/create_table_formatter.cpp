@@ -2,7 +2,6 @@
 #include "formatters_common.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-
 #include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>

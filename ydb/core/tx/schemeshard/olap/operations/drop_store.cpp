@@ -455,4 +455,3 @@ ISubOperation::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState stat
 }
 
 }
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>

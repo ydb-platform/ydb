@@ -1,6 +1,5 @@
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
-
 #include "tasks_list.h"
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/schemeshard/olap/manager/manager.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import_helpers.h>
 #include <util/string/cast.h>
@@ -68,4 +67,3 @@ TTxTasksList::TTxTasksList(TSelf* self, TEvListRequest::TPtr& ev)
 }
 
 }
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>

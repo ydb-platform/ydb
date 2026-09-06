@@ -85,9 +85,6 @@
 #undef EventForwardDecl
 
 
-
-
-
 namespace NKikimr {
 namespace NTable {
 class TDatabase;

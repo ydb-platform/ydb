@@ -18,6 +18,10 @@ Start with [the semantic contract](PLAN.md), [the audit map](TRUSTED_CORE.md),
 [historical archive](history/README.md) preserves the previous milestone journals;
 historical test counts and workload outcomes are not current guarantees.
 
+For a local visual walkthrough, open the standalone
+[RBO Observatory](../verification_explorer/README.md): saved plan graphs,
+operator inspection and counterexample traces, outside the proof-producing code.
+
 ## Build and test
 
 From the repository root:

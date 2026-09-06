@@ -1,0 +1,49 @@
+{
+  "format": "rbo-explorer",
+  "version": 1,
+  "cases": [
+    {
+      "id": "tpcds-q40-candidate",
+      "title": "TPC-DS 40: inspect a saved candidate",
+      "description": "A real whole-query capture with a saved symbolic counterexample and fixed-database trace. Runtime attribution is unresolved; opaque Decimal zero/default wrappers suggest a model-abstraction issue. This is not a demonstrated runtime bug.",
+      "kind": "workload",
+      "revision": "6abc462dc40cb232268e994b7a7222940c4ed363",
+      "provenance_notes": "Snapshots, query and verdict are from the 6abc462dc40 census. The trace was generated later on the exact saved witness using d337c21e4b4 plus the inspector-fidelity update; see demo/README.md. It is not a runtime replay.",
+      "trace_producer": {
+        "base_revision": "d337c21e4b4e8fe57cb2b4c15db66795cab2e0fa",
+        "modified_source": "verification/inspector/plan.py",
+        "modified_source_sha256": "9150998e3693ecc7c8808d115cab9ac820c7d696e348aca6a5bce16f45009f5f",
+        "solver_sha256": "b497e052b101371eea902fb76c643808b6776a7746e67a804c4d0a13ef43e1fc"
+      },
+      "before": "q40.before.json",
+      "after": "q40.after.json",
+      "verdict": "q40.verdict.json",
+      "trace": "q40.trace.json",
+      "query": "q40.query.yql",
+      "hashes": {
+        "q40.before.json": "f9151a2ab21a04ac29809fffe5dce39b3aed197271e691d1253b7e426c8996bb",
+        "q40.after.json": "881a5db1b712c10985b27f41a92ab802a38e0a0584a6dfd6c9a013fae5ea9953",
+        "q40.verdict.json": "a3676e026e53846dca68857c6b65743f17dec954b77037ff590bab095f9c2415",
+        "q40.trace.json": "ac59fb45674c819e79b49370613a29e738762592bd8a7524bc1570c70127d408",
+        "q40.query.yql": "6b2e64d12a14440f6ba457affe9c5cf8adfbaefb0bfd8b32dc20c4d434b148be"
+      }
+    },
+    {
+      "id": "tpch-q12-verified",
+      "title": "TPC-H 12: a bounded proof",
+      "description": "A real join-and-aggregate query, before optimization and after staging. The saved verdict proves equivalence of the admitted prephysical model at two rows per table and two tasks, not unrestricted SQL or runtime correctness. A proof has no counterexample trace.",
+      "kind": "workload",
+      "revision": "6abc462dc40cb232268e994b7a7222940c4ed363",
+      "before": "tpch12.before.json",
+      "after": "tpch12.after.json",
+      "verdict": "tpch12.verdict.json",
+      "query": "tpch12.query.yql",
+      "hashes": {
+        "tpch12.before.json": "8889b6ae9013a3114c72afa739afcfb9a47ffc5f94c8102a74e28cbcd37adc57",
+        "tpch12.after.json": "d2437c6b877569882c69da11d08906a5e907bc244c885b40a008d180fbf4c17a",
+        "tpch12.verdict.json": "e24c0bcb3814cc5253ca359a85cea4b42c68b6fa5b2874f4c8dbc3bf577e776c",
+        "tpch12.query.yql": "dd81fd5b84ce24c28d8a5aef1ffaa73f006b9bf6ad4940c100d4a26e302a0a71"
+      }
+    }
+  ]
+}

@@ -26,4 +26,4 @@ This package was tested with the following type checkers:
 * [ty](https://docs.astral.sh/ty/) 0.0.59
 
 It was generated from typeshed commit
-[`9a0198f83bc8d3ab5dc0f79989f77612df53105f`](https://github.com/python/typeshed/commit/9a0198f83bc8d3ab5dc0f79989f77612df53105f).
+[`240fd757ebd7ad4018ff8fef2c43a3748d31458b`](https://github.com/python/typeshed/commit/240fd757ebd7ad4018ff8fef2c43a3748d31458b).

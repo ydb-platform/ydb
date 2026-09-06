@@ -5128,27 +5128,27 @@
         "PoolStats": [
             {
                 "Name": "System",
-                "Threads": 6,
+                "Threads": "number",
                 "Usage": "number"
             },
             {
                 "Name": "User",
-                "Threads": 9,
+                "Threads": "number",
                 "Usage": "number"
             },
             {
                 "Name": "Batch",
-                "Threads": 6,
+                "Threads": "number",
                 "Usage": "number"
             },
             {
                 "Name": "IO",
-                "Threads": 3,
+                "Threads": "number",
                 "Usage": "number"
             },
             {
                 "Name": "IC",
-                "Threads": 3,
+                "Threads": "number",
                 "Usage": "number"
             }
         ],
@@ -6038,34 +6038,48 @@
         },
         "viewer_config_monitoring": {
             "ActorSystemConfig": {
+                "ActorSystemProfile": 2,
                 "BatchExecutor": 2,
+                "CpuCount": 4,
                 "Executor": [
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 4,
                         "Name": "System",
-                        "SpinThreshold": "0",
-                        "Threads": 2,
+                        "Priority": 30,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 4,
                         "Name": "User",
-                        "SpinThreshold": "0",
-                        "Threads": 3,
+                        "Priority": 20,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 1,
                         "Name": "Batch",
-                        "SpinThreshold": "0",
-                        "Threads": 2,
+                        "Priority": 10,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
                         "Name": "IO",
                         "Threads": 1,
-                        "TimePerMailboxMicroSecs": 100,
                         "Type": 2
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxAvgPingDeviation": 500,
+                        "MaxThreads": 2,
                         "Name": "IC",
+                        "Priority": 40,
                         "SpinThreshold": "10",
                         "Threads": 1,
                         "TimePerMailboxMicroSecs": 100,
@@ -6073,6 +6087,7 @@
                     }
                 ],
                 "IoExecutor": 3,
+                "NodeType": 1,
                 "Scheduler": {
                     "ProgressThreshold": "10000",
                     "Resolution": "1024",
@@ -6084,8 +6099,9 @@
                         "ServiceName": "Interconnect"
                     }
                 ],
-                "SysExecutor": 0,
-                "UserExecutor": 1
+                "SysExecutor": 1,
+                "UseAutoConfig": true,
+                "UserExecutor": 0
             },
             "AllocatorConfig": {
                 "Param": {
@@ -6925,6 +6941,8 @@
                 }
             },
             "GRpcConfig": {
+                "GRpcProxyCount": 2,
+                "HandlersPerCompletionQueue": 132,
                 "Host": "[::]",
                 "Port": "not-zero-number",
                 "Services": [
@@ -6954,7 +6972,8 @@
                     "query_service",
                     "view"
                 ],
-                "StartGRpcProxy": true
+                "StartGRpcProxy": true,
+                "WorkerThreads": 2
             },
             "InterconnectConfig": {
                 "StartTcp": true
@@ -7092,34 +7111,48 @@
         },
         "viewer_config_root": {
             "ActorSystemConfig": {
+                "ActorSystemProfile": 2,
                 "BatchExecutor": 2,
+                "CpuCount": 4,
                 "Executor": [
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 4,
                         "Name": "System",
-                        "SpinThreshold": "0",
-                        "Threads": 2,
+                        "Priority": 30,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 4,
                         "Name": "User",
-                        "SpinThreshold": "0",
-                        "Threads": 3,
+                        "Priority": 20,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 1,
                         "Name": "Batch",
-                        "SpinThreshold": "0",
-                        "Threads": 2,
+                        "Priority": 10,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
                         "Name": "IO",
                         "Threads": 1,
-                        "TimePerMailboxMicroSecs": 100,
                         "Type": 2
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxAvgPingDeviation": 500,
+                        "MaxThreads": 2,
                         "Name": "IC",
+                        "Priority": 40,
                         "SpinThreshold": "10",
                         "Threads": 1,
                         "TimePerMailboxMicroSecs": 100,
@@ -7127,6 +7160,7 @@
                     }
                 ],
                 "IoExecutor": 3,
+                "NodeType": 1,
                 "Scheduler": {
                     "ProgressThreshold": "10000",
                     "Resolution": "1024",
@@ -7138,8 +7172,9 @@
                         "ServiceName": "Interconnect"
                     }
                 ],
-                "SysExecutor": 0,
-                "UserExecutor": 1
+                "SysExecutor": 1,
+                "UseAutoConfig": true,
+                "UserExecutor": 0
             },
             "AllocatorConfig": {
                 "Param": {
@@ -7979,6 +8014,8 @@
                 }
             },
             "GRpcConfig": {
+                "GRpcProxyCount": 2,
+                "HandlersPerCompletionQueue": 132,
                 "Host": "[::]",
                 "Port": "not-zero-number",
                 "Services": [
@@ -8008,7 +8045,8 @@
                     "query_service",
                     "view"
                 ],
-                "StartGRpcProxy": true
+                "StartGRpcProxy": true,
+                "WorkerThreads": 2
             },
             "InterconnectConfig": {
                 "StartTcp": true
@@ -8146,34 +8184,48 @@
         },
         "viewer_config_viewer": {
             "ActorSystemConfig": {
+                "ActorSystemProfile": 2,
                 "BatchExecutor": 2,
+                "CpuCount": 4,
                 "Executor": [
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 4,
                         "Name": "System",
-                        "SpinThreshold": "0",
-                        "Threads": 2,
+                        "Priority": 30,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 4,
                         "Name": "User",
-                        "SpinThreshold": "0",
-                        "Threads": 3,
+                        "Priority": 20,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxThreads": 1,
                         "Name": "Batch",
-                        "SpinThreshold": "0",
-                        "Threads": 2,
+                        "Priority": 10,
+                        "SpinThreshold": "1",
+                        "Threads": 1,
                         "Type": 1
                     },
                     {
                         "Name": "IO",
                         "Threads": 1,
-                        "TimePerMailboxMicroSecs": 100,
                         "Type": 2
                     },
                     {
+                        "AllThreadsAreShared": false,
+                        "MaxAvgPingDeviation": 500,
+                        "MaxThreads": 2,
                         "Name": "IC",
+                        "Priority": 40,
                         "SpinThreshold": "10",
                         "Threads": 1,
                         "TimePerMailboxMicroSecs": 100,
@@ -8181,6 +8233,7 @@
                     }
                 ],
                 "IoExecutor": 3,
+                "NodeType": 1,
                 "Scheduler": {
                     "ProgressThreshold": "10000",
                     "Resolution": "1024",
@@ -8192,8 +8245,9 @@
                         "ServiceName": "Interconnect"
                     }
                 ],
-                "SysExecutor": 0,
-                "UserExecutor": 1
+                "SysExecutor": 1,
+                "UseAutoConfig": true,
+                "UserExecutor": 0
             },
             "AllocatorConfig": {
                 "Param": {
@@ -9033,6 +9087,8 @@
                 }
             },
             "GRpcConfig": {
+                "GRpcProxyCount": 2,
+                "HandlersPerCompletionQueue": 132,
                 "Host": "[::]",
                 "Port": "not-zero-number",
                 "Services": [
@@ -9062,7 +9118,8 @@
                     "query_service",
                     "view"
                 ],
-                "StartGRpcProxy": true
+                "StartGRpcProxy": true,
+                "WorkerThreads": 2
             },
             "InterconnectConfig": {
                 "StartTcp": true
@@ -9564,31 +9621,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -9637,31 +9694,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -9713,31 +9770,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -9792,31 +9849,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -9873,31 +9930,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -9938,31 +9995,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -10006,31 +10063,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -10214,31 +10271,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -10588,31 +10645,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -10800,31 +10857,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -11002,31 +11059,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -11245,31 +11302,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -11661,31 +11718,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -11863,31 +11920,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -12019,31 +12076,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -12085,31 +12142,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -12154,31 +12211,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -12238,31 +12295,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -12304,31 +12361,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -12373,31 +12430,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -14024,31 +14081,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -14104,31 +14161,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -14184,31 +14241,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -14267,31 +14324,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -14346,31 +14403,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -14551,31 +14608,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -14956,31 +15013,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -15361,31 +15418,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -15766,31 +15823,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -16171,31 +16228,31 @@
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "System",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "User",
-                                "Threads": 3,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "Batch",
-                                "Threads": 2,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IO",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             },
                             {
                                 "Limit": "not-zero-number",
                                 "Name": "IC",
-                                "Threads": 1,
+                                "Threads": "number",
                                 "Usage": "number"
                             }
                         ],
@@ -16506,31 +16563,31 @@
                         {
                             "Limit": "not-zero-number",
                             "Name": "System",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Limit": "not-zero-number",
                             "Name": "User",
-                            "Threads": 3,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Limit": "not-zero-number",
                             "Name": "Batch",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Limit": "not-zero-number",
                             "Name": "IO",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Limit": "not-zero-number",
                             "Name": "IC",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         }
                     ],
@@ -16585,31 +16642,31 @@
                         {
                             "Limit": "not-zero-number",
                             "Name": "System",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Limit": "not-zero-number",
                             "Name": "User",
-                            "Threads": 3,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Limit": "not-zero-number",
                             "Name": "Batch",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Limit": "not-zero-number",
                             "Name": "IO",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Limit": "not-zero-number",
                             "Name": "IC",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         }
                     ],
@@ -16657,31 +16714,31 @@
                     {
                         "Limit": "not-zero-number",
                         "Name": "System",
-                        "Threads": 2,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "User",
-                        "Threads": 3,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "Batch",
-                        "Threads": 2,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "IO",
-                        "Threads": 1,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "IC",
-                        "Threads": 1,
+                        "Threads": "number",
                         "Usage": "number"
                     }
                 ],
@@ -16723,31 +16780,31 @@
                     {
                         "Limit": "not-zero-number",
                         "Name": "System",
-                        "Threads": 2,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "User",
-                        "Threads": 3,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "Batch",
-                        "Threads": 2,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "IO",
-                        "Threads": 1,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "IC",
-                        "Threads": 1,
+                        "Threads": "number",
                         "Usage": "number"
                     }
                 ],
@@ -16790,31 +16847,31 @@
                     {
                         "Limit": "not-zero-number",
                         "Name": "System",
-                        "Threads": 2,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "User",
-                        "Threads": 3,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "Batch",
-                        "Threads": 2,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "IO",
-                        "Threads": 1,
+                        "Threads": "number",
                         "Usage": "number"
                     },
                     {
                         "Limit": "not-zero-number",
                         "Name": "IC",
-                        "Threads": 1,
+                        "Threads": "number",
                         "Usage": "number"
                     }
                 ],
@@ -18294,27 +18351,27 @@
                     "PoolStats": [
                         {
                             "Name": "System",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "User",
-                            "Threads": 3,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "Batch",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IO",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IC",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         }
                     ],
@@ -18345,27 +18402,27 @@
                     "PoolStats": [
                         {
                             "Name": "System",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "User",
-                            "Threads": 3,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "Batch",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IO",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IC",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         }
                     ],
@@ -18439,27 +18496,27 @@
                     "PoolStats": [
                         {
                             "Name": "System",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "User",
-                            "Threads": 3,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "Batch",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IO",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IC",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         }
                     ],
@@ -18505,27 +18562,27 @@
                     "PoolStats": [
                         {
                             "Name": "System",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "User",
-                            "Threads": 3,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "Batch",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IO",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IC",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         }
                     ],
@@ -18552,27 +18609,27 @@
                     "PoolStats": [
                         {
                             "Name": "System",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "User",
-                            "Threads": 3,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "Batch",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IO",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IC",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         }
                     ],
@@ -18639,27 +18696,27 @@
                     "PoolStats": [
                         {
                             "Name": "System",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "User",
-                            "Threads": 3,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "Batch",
-                            "Threads": 2,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IO",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         },
                         {
                             "Name": "IC",
-                            "Threads": 1,
+                            "Threads": "number",
                             "Usage": "number"
                         }
                     ],

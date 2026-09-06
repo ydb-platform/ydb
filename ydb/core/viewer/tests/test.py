@@ -562,7 +562,22 @@ class TestViewer(object):
                 cls.delete_keys_recursively(item, keys_to_delete)
 
     @classmethod
+    def normalize_pool_threads(cls, data):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if key == 'PoolStats':
+                    # Auto-configured pools can change their thread allocation at runtime.
+                    # Keep pool names and thread types in the canonical response.
+                    data[key] = cls.replace_types_by_key(value, {'Threads'})
+                else:
+                    cls.normalize_pool_threads(value)
+        elif isinstance(data, list):
+            for item in data:
+                cls.normalize_pool_threads(item)
+
+    @classmethod
     def normalize_result(cls, result):
+        cls.normalize_pool_threads(result)
         cls.delete_keys_recursively(result, {'Version',
                                              'version',
                                              'MemoryUsed',

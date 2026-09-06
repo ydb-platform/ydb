@@ -356,6 +356,12 @@ class KikimrConfigGenerator(object):
         if self.cms_config:
             self.yaml_config["cms_config"] = self.cms_config
 
+        if tiny_mode:
+            self.yaml_config["actor_system_config"] = {
+                "use_auto_config": True,
+                "cpu_count": 1,
+            }
+
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
 

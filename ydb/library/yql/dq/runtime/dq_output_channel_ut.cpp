@@ -744,7 +744,7 @@ void TestBackPressureInMemory(TTestContext& ctx, bool multi) {
             }
             TVector<TColumnInfo> keyColumns;
             keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
-            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, EValuePackerVersion::V0, minFillPercentage, hashPartition, nullptr));
         }
         {
             TVector<IDqOutput::TPtr> outputs;
@@ -753,7 +753,7 @@ void TestBackPressureInMemory(TTestContext& ctx, bool multi) {
             }
             TVector<TColumnInfo> keyColumns;
             keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
-            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, EValuePackerVersion::V0, minFillPercentage, hashPartition, nullptr));
         }
         consumer = CreateOutputMultiConsumer(std::move(consumers));
     } else {
@@ -763,7 +763,7 @@ void TestBackPressureInMemory(TTestContext& ctx, bool multi) {
         }
         TVector<TColumnInfo> keyColumns;
         keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
-        consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+        consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, EValuePackerVersion::V0, minFillPercentage, hashPartition, nullptr);
     }
 
 
@@ -846,7 +846,7 @@ void TestBackPressureWithSpilling(TTestContext& ctx, bool multi) {
             }
             TVector<TColumnInfo> keyColumns;
             keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
-            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, EValuePackerVersion::V0, minFillPercentage, hashPartition, nullptr));
         }
         {
             TVector<IDqOutput::TPtr> outputs;
@@ -855,7 +855,7 @@ void TestBackPressureWithSpilling(TTestContext& ctx, bool multi) {
             }
             TVector<TColumnInfo> keyColumns;
             keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
-            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, EValuePackerVersion::V0, minFillPercentage, hashPartition, nullptr));
         }
         consumer = CreateOutputMultiConsumer(std::move(consumers));
     } else {
@@ -865,7 +865,7 @@ void TestBackPressureWithSpilling(TTestContext& ctx, bool multi) {
         }
         TVector<TColumnInfo> keyColumns;
         keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
-        consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+        consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, EValuePackerVersion::V0, minFillPercentage, hashPartition, nullptr);
     }
 
     UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
@@ -948,7 +948,7 @@ void TestBackPressureInMemoryLoad(TTestContext& ctx) {
     }
     TVector<TColumnInfo> keyColumns;
     keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
-    consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+    consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, EValuePackerVersion::V0, minFillPercentage, hashPartition, nullptr);
 
     UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
 
@@ -1022,7 +1022,7 @@ void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
     }
     TVector<TColumnInfo> keyColumns;
     keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
-    consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+    consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, EValuePackerVersion::V0, minFillPercentage, hashPartition, nullptr);
 
     UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
 
@@ -1075,6 +1075,7 @@ void TestFastBlockStringSlicing(EValuePackerVersion packerVersion) {
 
     TType* columnTypes[] = {
         TBlockType::Create(i64Type, TBlockType::EShape::Many, ctx.TypeEnv),
+        TBlockType::Create(stringType, TBlockType::EShape::Many, ctx.TypeEnv),
         TBlockType::Create(structType, TBlockType::EShape::Many, ctx.TypeEnv),
         TBlockType::Create(TDataType::Create(NUdf::TDataType<ui64>::Id, ctx.TypeEnv), TBlockType::EShape::Scalar, ctx.TypeEnv),
     };
@@ -1130,10 +1131,11 @@ void TestFastBlockStringSlicing(EValuePackerVersion packerVersion) {
     keyColumns.emplace_back(GetColumnInfo(outputType, "0"));
     auto consumer = CreateOutputHashPartitionConsumer(
         std::move(outputs), std::move(keyColumns), outputType, ctx.HolderFactory,
-        Nothing(), NDqProto::TTaskOutputHashPartition(), nullptr);
+        packerVersion, Nothing(), NDqProto::TTaskOutputHashPartition(), nullptr);
 
     TUnboxedValueVector values;
     values.emplace_back(ctx.HolderFactory.CreateArrowBlock(arrow::Datum(keyArray), NYql::DefaultDatumTestValidationMode));
+    values.emplace_back(ctx.HolderFactory.CreateArrowBlock(arrow::Datum(stringArray), NYql::DefaultDatumTestValidationMode));
     values.emplace_back(ctx.HolderFactory.CreateArrowBlock(arrow::Datum(structArray), NYql::DefaultDatumTestValidationMode));
     values.emplace_back(ctx.HolderFactory.CreateArrowBlock(
         arrow::Datum(std::make_shared<arrow::UInt64Scalar>(rowCount)), NYql::DefaultDatumTestValidationMode));
@@ -1163,12 +1165,13 @@ void TestFastBlockStringSlicing(EValuePackerVersion packerVersion) {
 
     UNIT_ASSERT_GT(nonEmptyChannels, 1);
     UNIT_ASSERT_VALUES_EQUAL(deserializedRows, rowCount);
-    UNIT_ASSERT_LT(serializedBytes, 2 * rowCount * stringSize);
+    const ui64 logicalStringBytes = 2 * rowCount * stringSize;
+    UNIT_ASSERT_LT(serializedBytes, 2 * logicalStringBytes);
 }
 
 Y_UNIT_TEST_SUITE(HashShuffle) {
 
-Y_UNIT_TEST(FastBlockStringSlicingV0) {
+Y_UNIT_TEST(BlockStringSlicingV0Fallback) {
     TestFastBlockStringSlicing(EValuePackerVersion::V0);
 }
 

@@ -151,7 +151,8 @@ namespace NKqp {
 IDqOutputConsumer::TPtr TKqpTaskRunnerExecutionContext::CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
     const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* /* pgBuilder */) const
+    TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* /* pgBuilder */,
+    NMiniKQL::EValuePackerVersion packerVersion) const
 {
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kRangePartition: {
@@ -163,7 +164,8 @@ IDqOutputConsumer::TPtr TKqpTaskRunnerExecutionContext::CreateOutputConsumer(con
         }
 
         default: {
-            return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), MinFillPercentage_);
+            return DqBuildOutputConsumer(
+                outputDesc, type, typeEnv, holderFactory, std::move(outputs), packerVersion, MinFillPercentage_);
         }
     }
 }

@@ -4,6 +4,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
@@ -40,14 +41,6 @@ using namespace NKikimr;
 using namespace NMiniKQL;
 using namespace NUdf;
 
-std::shared_ptr<arrow::Buffer> SliceBufferForTransport(
-    const std::shared_ptr<arrow::Buffer>& buffer, i64 offset, i64 length)
-{
-    // The serializer cannot untrack a parent allocation through a slice's interior pointer.
-    MKQLArrowUntrack(buffer->data());
-    return arrow::SliceBuffer(buffer, offset, length);
-}
-
 class IFastBlockReorderer {
 public:
     virtual ~IFastBlockReorderer() = default;
@@ -70,7 +63,7 @@ public:
         YQL_ENSURE(data.GetNullCount() == 0);
 
         std::shared_ptr<arrow::Buffer> values = ARROW_RESULT(arrow::AllocateBuffer(count * sizeof(T), pool));
-        const T* src = data.GetValues<T>(1);
+        const T* src = data.GetValues<T>(1, data.offset);
         T* dst = reinterpret_cast<T*>(values->mutable_data());
         for (size_t i = 0; i < count; ++i) {
             dst[i] = src[indexes[i]];
@@ -86,19 +79,7 @@ public:
         YQL_ENSURE(length <= static_cast<ui64>(data->length) - offset);
         YQL_ENSURE(data->buffers.size() == 2);
         YQL_ENSURE(data->GetNullCount() == 0);
-        if (offset == 0 && length == static_cast<ui64>(data->length)) {
-            return data;
-        }
-
-        const i64 sliceOffset = static_cast<i64>(offset);
-        const i64 sliceLength = static_cast<i64>(length);
-        const i64 absoluteOffset = data->offset + sliceOffset;
-        const i64 offsetRemainder = absoluteOffset % 8;
-        auto values = SliceBufferForTransport(
-            data->buffers[1],
-            (absoluteOffset - offsetRemainder) * sizeof(T),
-            (sliceLength + offsetRemainder) * sizeof(T));
-        return arrow::ArrayData::Make(data->type, sliceLength, {nullptr, std::move(values)}, 0, offsetRemainder);
+        return data->Slice(offset, length);
     }
 };
 
@@ -113,7 +94,7 @@ public:
         YQL_ENSURE(data.GetNullCount() == 0);
 
         using TOffset = i32;
-        const TOffset* srcOffsets = data.GetValues<TOffset>(1);
+        const TOffset* srcOffsets = data.GetValues<TOffset>(1, data.offset);
         const ui8* srcData = data.GetValues<ui8>(2, 0);
         YQL_ENSURE(srcOffsets[data.length] >= srcOffsets[0]);
         const size_t dataSize = srcOffsets[data.length] - srcOffsets[0];
@@ -144,21 +125,16 @@ public:
         YQL_ENSURE(length <= static_cast<ui64>(data->length) - offset);
         YQL_ENSURE(data->buffers.size() == 3);
         YQL_ENSURE(data->GetNullCount() == 0);
-        if (offset == 0 && length == static_cast<ui64>(data->length)) {
-            return data;
-        }
-
         using TOffset = i32;
-        const i64 sliceOffset = static_cast<i64>(offset);
         const i64 sliceLength = static_cast<i64>(length);
-        const i64 absoluteOffset = data->offset + sliceOffset;
-        const i64 offsetRemainder = absoluteOffset % 8;
-        const i64 offsetsLength = sliceLength + 1 + offsetRemainder;
-        const TOffset* srcOffsets = data->GetValues<TOffset>(1, absoluteOffset - offsetRemainder);
+        const i64 absoluteOffset = data->offset + static_cast<i64>(offset);
+        const i64 offsetsLength = sliceLength + 1;
+        const TOffset* srcOffsets = data->GetValues<TOffset>(1, absoluteOffset);
         const TOffset valuesOffset = srcOffsets[0];
         YQL_ENSURE(valuesOffset >= 0);
         YQL_ENSURE(srcOffsets[offsetsLength - 1] >= valuesOffset);
         const TOffset valuesSize = srcOffsets[offsetsLength - 1] - valuesOffset;
+        YQL_ENSURE(static_cast<i64>(data->buffers[2]->size()) >= static_cast<i64>(valuesOffset) + valuesSize);
 
         auto offsets = ARROW_RESULT(arrow::AllocateBuffer(offsetsLength * sizeof(TOffset), pool));
         TOffset* dstOffsets = reinterpret_cast<TOffset*>(offsets->mutable_data());
@@ -166,9 +142,11 @@ public:
             dstOffsets[i] = srcOffsets[i] - valuesOffset;
         }
 
-        auto values = SliceBufferForTransport(data->buffers[2], valuesOffset, valuesSize);
-        return arrow::ArrayData::Make(
-            data->type, sliceLength, {nullptr, std::move(offsets), std::move(values)}, 0, offsetRemainder);
+        auto values = ARROW_RESULT(arrow::AllocateBuffer(valuesSize, pool));
+        if (valuesSize) {
+            std::memcpy(values->mutable_data(), data->buffers[2]->data() + valuesOffset, valuesSize);
+        }
+        return arrow::ArrayData::Make(data->type, sliceLength, {nullptr, std::move(offsets), std::move(values)});
     }
 };
 
@@ -204,19 +182,11 @@ public:
         YQL_ENSURE(data->buffers.size() == 1);
         YQL_ENSURE(data->GetNullCount() == 0);
         YQL_ENSURE(data->child_data.size() == Children_.size());
-        if (offset == 0 && length == static_cast<ui64>(data->length)) {
-            return data;
-        }
-
-        std::vector<std::shared_ptr<arrow::ArrayData>> children;
-        children.reserve(Children_.size());
+        auto result = data->Slice(offset, length);
         for (size_t i = 0; i < Children_.size(); ++i) {
-            children.emplace_back(Children_[i]->Slice(data->child_data[i], offset, length, pool));
+            result->child_data[i] = Children_[i]->Slice(data->child_data[i], offset, length, pool);
         }
-
-        const i64 sliceLength = static_cast<i64>(length);
-        const i64 offsetRemainder = (data->offset + static_cast<i64>(offset)) % 8;
-        return arrow::ArrayData::Make(data->type, sliceLength, {nullptr}, std::move(children), 0, offsetRemainder);
+        return result;
     }
 
 private:
@@ -914,6 +884,7 @@ public:
     TDqOutputHashPartitionConsumerBlock(TVector<IDqOutput::TPtr>&& outputs, TVector<TColumnInfo>&& keyColumns,
         const  NKikimr::NMiniKQL::TType* outputType,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        NMiniKQL::EValuePackerVersion packerVersion,
         TMaybe<ui8> minFillPercentage,
         THashFunc hashFunc,
         NUdf::IPgBuilder* pgBuilder
@@ -924,6 +895,7 @@ public:
         , KeyColumns_(std::move(keyColumns))
         , OutputWidth_(OutputType_->GetElementsCount())
         , MinFillPercentage_(minFillPercentage)
+        , CanUseFastPath_(packerVersion == NMiniKQL::EValuePackerVersion::V1)
         , PgBuilder_(pgBuilder)
         , HashFunc(std::move(hashFunc))
     {
@@ -1207,7 +1179,7 @@ private:
 
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IFastBlockReorderer>> FastReorderers_;
-    bool CanUseFastPath_ = true;
+    bool CanUseFastPath_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
     ui64 BuildersMaxBlockLen_ = 0;
 
@@ -1324,6 +1296,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
     TVector<TColumnInfo>&& keyColumns, const NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    NMiniKQL::EValuePackerVersion packerVersion,
     TMaybe<ui8> minFillPercentage,
     const NDqProto::TTaskOutputHashPartition& hashPartition,
     NUdf::IPgBuilder* pgBuilder
@@ -1386,7 +1359,9 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 return MakeIntrusive<TDqOutputHashPartitionConsumerScalar<TColumnShardHashV1>>(std::move(outputs), std::move(keyColumns), outputType, std::move(hashFunc));
             }
 
-            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TColumnShardHashV1>>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(hashFunc), pgBuilder);
+            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TColumnShardHashV1>>(
+                std::move(outputs), std::move(keyColumns), outputType, holderFactory, packerVersion,
+                minFillPercentage, std::move(hashFunc), pgBuilder);
         }
         case NDqProto::TTaskOutputHashPartition::kHashV2: {
             if (AnyOf(keyColumns, [](const auto& info) { return !info.IsBlockOrScalar(); })) {
@@ -1401,7 +1376,9 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 return MakeIntrusive<TDqOutputHashPartitionConsumerScalar<TBlockHashV2>>(std::move(outputs), std::move(keyColumns), outputType, std::move(hashFunc));
             }
 
-            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TBlockHashV2>>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(hashFunc), pgBuilder);
+            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TBlockHashV2>>(
+                std::move(outputs), std::move(keyColumns), outputType, holderFactory, packerVersion,
+                minFillPercentage, std::move(hashFunc), pgBuilder);
         }
         case NDqProto::TTaskOutputHashPartition::kHashV1:
         default: {
@@ -1418,7 +1395,9 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 return MakeIntrusive<TDqOutputHashPartitionConsumerScalar<TBlockHashV1>>(std::move(outputs), std::move(keyColumns), outputType, std::move(hashFunc));
             }
 
-            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TBlockHashV1>>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(hashFunc), pgBuilder);
+            return MakeIntrusive<TDqOutputHashPartitionConsumerBlock<TBlockHashV1>>(
+                std::move(outputs), std::move(keyColumns), outputType, holderFactory, packerVersion,
+                minFillPercentage, std::move(hashFunc), pgBuilder);
         }
     }
 }

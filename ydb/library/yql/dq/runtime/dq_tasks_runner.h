@@ -172,7 +172,8 @@ public:
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const = 0;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder,
+        NKikimr::NMiniKQL::EValuePackerVersion packerVersion) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
@@ -189,7 +190,8 @@ public:
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const override;
+        TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder,
+        NKikimr::NMiniKQL::EValuePackerVersion packerVersion) const override;
 };
 
 class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {
@@ -251,11 +253,13 @@ NUdf::TUnboxedValue DqBuildInputValue(
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& channels, NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage = {});
+    TVector<IDqOutput::TPtr>&& channels, NUdf::IPgBuilder* pgBuilder,
+    NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<ui8> minFillPercentage = {});
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage = {});
+    TVector<IDqOutput::TPtr>&& channels, NKikimr::NMiniKQL::EValuePackerVersion packerVersion,
+    TMaybe<ui8> minFillPercentage = {});
 
 using TDqTaskRunnerParameterProvider = std::function<
     bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

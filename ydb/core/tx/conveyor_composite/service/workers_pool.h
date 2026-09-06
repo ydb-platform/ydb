@@ -78,12 +78,11 @@ private:
             StopRequested = true;
         }
 
-        void OnStartTask(TTaskCompletionContexts&& completionContexts);
+        void OnStartTask(TTaskCompletionContexts&& completionContexts, TSchedulableWorks&& schedulableWorks);
         void OnStopTask();
         const TTaskCompletionContext& GetCompletionContext(const ESpecialTaskCategory category) const;
-        const TSchedulableWorks& GetSchedulableWorks() const {
-            return SchedulableWorks;
-        }
+        const TSchedulableWorks& GetSchedulableWorks() const;
+    };
 
     struct TWorkersUpdateState {
         ui64 DesiredWorkersCount = 0;

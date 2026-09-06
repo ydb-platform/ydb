@@ -14,17 +14,20 @@ void TWeightedCategory::SetWeight(const double weight) {
     Counters->ValueWeight->Set(weight);
 }
 
-void TWorkersPool::TWorkerInfo::OnStartTask(TTaskCompletionContexts&& completionContexts) {
+void TWorkersPool::TWorkerInfo::OnStartTask(
+    TTaskCompletionContexts&& completionContexts, TSchedulableWorks&& schedulableWorks) {
     Y_ENSURE(!RunningTask, "worker already has a running task");
     Y_ENSURE(!completionContexts.empty(), "worker task has no completion contexts");
     RunningTask = true;
     CompletionContexts = std::move(completionContexts);
+    SchedulableWorks = std::move(schedulableWorks);
 }
 
 void TWorkersPool::TWorkerInfo::OnStopTask() {
     Y_ENSURE(RunningTask, "worker has no running task to stop");
     RunningTask = false;
     CompletionContexts.clear();
+    SchedulableWorks.clear();
 }
 
 const TWorkersPool::TTaskCompletionContext& TWorkersPool::TWorkerInfo::GetCompletionContext(
@@ -32,6 +35,10 @@ const TWorkersPool::TTaskCompletionContext& TWorkersPool::TWorkerInfo::GetComple
     const auto it = CompletionContexts.find(category);
     Y_ENSURE(it != CompletionContexts.end(), "completion context is missing for category " << category);
     return it->second;
+}
+
+const TSchedulableWorks& TWorkersPool::TWorkerInfo::GetSchedulableWorks() const {
+    return SchedulableWorks;
 }
 
 TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,

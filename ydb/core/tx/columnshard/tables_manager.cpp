@@ -79,26 +79,56 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
 std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
     const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& readSnapshot,
     const bool withTabletPathId) const {
-    // Scan AllPathIds for the given SS path, filtering by table membership and selecting the
-    // generation whose drop version (if any) covers the read snapshot.
+    // Deterministically resolve the generation that was live for `schemeShardLocalPathId`
+    // at `readSnapshot`. AllPathIds is a THashSet, so iteration order is non-deterministic;
+    // we must not return the first hash-order match.
+    //
+    // The usability test is PATH-LOCAL for `schemeShardLocalPathId` (not table-global):
+    //   appearVersion <= readSnapshot < dropVersion   (live path: dropVersion = +inf)
+    // where appearVersion is the path's copy version if present, else the table's min
+    // (first known) version. A generation whose drop version for THIS path has already
+    // passed is not usable through this path, even if another path on the same generation
+    // (e.g. a surviving copy) is still live — that other path is resolved through its own
+    // SS path id, not this one.
+    //
+    // Among all usable generations we pick the one with the largest appearVersion (the most
+    // recent generation that had already appeared at the read snapshot). This matches
+    // time-travel semantics: a snapshot sees the data of the newest generation that existed
+    // at that point in time.
+    //
+    // The previous implementation treated a live generation as "always valid" regardless of
+    // readSnapshot, which after several TRUNCATEs could non-deterministically resolve a
+    // historical snapshot to the empty new generation instead of the one holding the data.
     const auto* generations = Generations(schemeShardLocalPathId);
     if (generations) {
+        std::optional<TInternalPathId> best;
+        std::optional<NOlap::TSnapshot> bestAppear;
         for (const auto& genPathId : *generations) {
             const auto* table = Tables.FindPtr(genPathId);
             if (!table || !table->HasSchemeShardLocalPathId(schemeShardLocalPathId)) {
                 continue;
             }
+            // Path-local drop version: nullopt means this path is still live on the generation.
             const auto dropVersion = table->GetPathDropVersionOptional(schemeShardLocalPathId);
-            if (dropVersion) {
-                // This generation was dropped at dropVersion.
-                // It is valid for snapshots taken before the drop.
-                if (*dropVersion > readSnapshot) {
-                    return genPathId;
-                }
-            } else {
-                // Live generation (no drop version) — always valid.
-                return genPathId;
+            if (dropVersion && *dropVersion <= readSnapshot) {
+                // This path was already dropped at/ before the read snapshot.
+                continue;
             }
+            // Path-local appear version: copy version if present, else the table's min version.
+            const NOlap::TSnapshot appearVersion =
+                table->GetCopyVersionOptional(schemeShardLocalPathId).value_or(
+                    table->GetVersions().empty() ? NOlap::TSnapshot::Zero() : *table->GetVersions().begin());
+            if (appearVersion > readSnapshot) {
+                // This generation had not yet appeared at the read snapshot.
+                continue;
+            }
+            if (!bestAppear || *bestAppear < appearVersion) {
+                best = genPathId;
+                bestAppear = appearVersion;
+            }
+        }
+        if (best) {
+            return best;
         }
     }
     return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
@@ -701,7 +731,16 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
     for (const auto& unifiedPathId : itTable->second.GetPathIds()) {
         const auto ss = unifiedPathId.GetSchemeShardLocalPathId();
-        ForgetLivePathIdVerified(ss, pathId);
+        // Forget the live mapping only if it still points to the generation being
+        // finalized. After a TRUNCATE (no copies), DropTable leaves the old generation
+        // in Tables with a drop version on the same SS path, then RegisterTable
+        // overwrites LivePathIds[ss] with the new generation. When GC later finalizes
+        // the old generation, the live mapping no longer points to it — using
+        // ForgetLivePathIdVerified here would AFL_VERIFY-crash. ForgetGeneration is
+        // always required to drop the old generation from the AllPathIds history.
+        if (const auto itLive = LivePathIds.find(ss); itLive != LivePathIds.end() && itLive->second == pathId) {
+            LivePathIds.erase(itLive);
+        }
         ForgetGeneration(ss, pathId);
     }
     // Clean up TTL history for the dropped path so Ttl does not accumulate
@@ -828,10 +867,22 @@ bool TTablesManager::TruncateTableProgress(
     const bool hasCopies = oldTable->GetPathIds().size() > 1;
 
     if (hasCopies) {
-        // Retention mode: keep the old generation alive for copies.
+        // Retention mode: the source path is detached from the old generation with a
+        // drop version, but the old generation must remain queryable for time-travel
+        // reads on the surviving copies. We keep the SS path on the old generation
+        // (do NOT Remove/EraseTableInfoV1) so that:
+        //   - ResolveInternalPathIdForSnapshot can still reach the old generation via
+        //     this SS path for snapshots S < dropVersion (MVCC semantics, same as DROP);
+        //   - recovery from V1 re-loads the old generation with its drop version.
+        // Only the live mapping is forgotten, so new writes/reads resolve to the new
+        // generation. ForgetGeneration is intentionally NOT called here: the old
+        // generation stays in AllPathIds until it is finalized by GC (which also
+        // removes it from Tables and calls ForgetGeneration).
         oldTable->SetDropVersion(schemeShardLocalPathId, version);
-        Schema::EraseTableInfoV1(db, oldInternalPathId, schemeShardLocalPathId);
-        oldTable->Remove(schemeShardLocalPathId);
+        Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, oldInternalPathId, version.GetPlanStep(), version.GetTxId());
+        if (oldTable->IsDropped()) {
+            AFL_VERIFY(PathsToDrop[oldTable->GetDropVersionVerified()].emplace(oldInternalPathId).second);
+        }
         ForgetLivePathId(schemeShardLocalPathId);
         NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(
             TabletId, TUnifiedPathId::BuildValid(oldInternalPathId, schemeShardLocalPathId));

@@ -729,14 +729,25 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(!reader.IsError());
         }
 
-        // Pre-truncate time-travel read on the OLD source path still sees the old 100 rows —
-        // the move did not break MVCC on the old generation.
+        // Pre-truncate time-travel read on the DESTINATION path sees the old 100 rows —
+        // the move renamed the SS path on all generations (including the old dropped one),
+        // so time-travel via the new path reaches the old generation.
         {
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, snapshotBeforeTruncate);
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, snapshotBeforeTruncate);
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // The old source path has no generations at all (AllPathIds[src] was moved to dst),
+        // so a time-travel read on src returns empty.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, snapshotBeforeTruncate);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
             UNIT_ASSERT(!reader.IsError());
         }
     }

@@ -814,7 +814,22 @@ void TTablesManager::MoveTableProgress(
     AFL_VERIFY(table);
     table->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
+    // RenamePathId moves the entire AllPathIds[src] set to AllPathIds[dst]. After a TRUNCATE,
+    // this set contains both the old (dropped) and new (live) generations. The live table's
+    // SS path was already renamed above; now rename the SS path on ALL other generations in
+    // the set so that time-travel resolution via the new SS path can reach them.
     RenamePathId(oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
+    if (const auto* generations = Generations(newSchemeShardLocalPathId)) {
+        for (const auto& genId : *generations) {
+            if (genId == internalPathId) {
+                continue;   // already renamed above
+            }
+            auto* genTable = Tables.FindPtr(genId);
+            if (genTable && genTable->HasSchemeShardLocalPathId(oldSchemeShardLocalPathId)) {
+                genTable->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
+            }
+        }
+    }
     // Propose already ForgetLive'd the source; Rename does not recreate Live. Restore under dst.
     AFL_VERIFY(!ResolveLivePathId(newSchemeShardLocalPathId));
     SetLivePathId(newSchemeShardLocalPathId, internalPathId, /*isDropped=*/false);

@@ -35,6 +35,41 @@ using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 namespace {
 
+// Update a column in a RecordBatch to a constant value (seconds since epoch).
+// Copied from ut_columnshard_schema.cpp.
+std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBatch> batch, TString columnName, i64 seconds) {
+    std::string name(columnName.c_str(), columnName.size());
+    auto schema = batch->schema();
+    int pos = schema->GetFieldIndex(name);
+    UNIT_ASSERT(pos >= 0);
+    auto colType = batch->GetColumnByName(name)->type_id();
+    std::shared_ptr<arrow::Array> array;
+    if (colType == arrow::Type::TIMESTAMP) {
+        auto scalar = arrow::TimestampScalar(seconds * 1000 * 1000, arrow::timestamp(arrow::TimeUnit::MICRO));
+        UNIT_ASSERT_VALUES_EQUAL(scalar.value, seconds * 1000 * 1000);
+        auto res = arrow::MakeArrayFromScalar(scalar, batch->num_rows());
+        UNIT_ASSERT(res.ok());
+        array = *res;
+    } else if (colType == arrow::Type::UINT16) {
+        TInstant date(TInstant::Seconds(seconds));
+        auto res = arrow::MakeArrayFromScalar(arrow::UInt16Scalar(date.Days()), batch->num_rows());
+        UNIT_ASSERT(res.ok());
+        array = *res;
+    } else if (colType == arrow::Type::UINT32) {
+        auto res = arrow::MakeArrayFromScalar(arrow::UInt32Scalar(seconds), batch->num_rows());
+        UNIT_ASSERT(res.ok());
+        array = *res;
+    } else if (colType == arrow::Type::UINT64) {
+        auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(seconds), batch->num_rows());
+        UNIT_ASSERT(res.ok());
+        array = *res;
+    }
+    UNIT_ASSERT(array);
+    auto columns = batch->columns();
+    columns[pos] = array;
+    return arrow::RecordBatch::Make(schema, batch->num_rows(), columns);
+}
+
 // Controller that captures a pointer to the live TColumnShard so tests can inspect
 // internal TablesManager state (PathsToDrop, AllPathIds, LivePathIds) after operations.
 // Cleanup background is disabled by default so GC only runs when the test explicitly
@@ -499,10 +534,19 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
     // truncated generation must be replayed onto that new path id, otherwise the table would silently
     // lose its data-lifecycle configuration (SchemeShard does not resend TTL settings on TRUNCATE).
     // Tables with tiering are rejected on SchemeShard, so this test covers pure TTL (delete action).
+    //
+    // This test verifies:
+    //   (a) the TTL column name is preserved on the new generation;
+    //   (b) the TTL duration is preserved on the new generation;
+    //   (c) TTL actually expires rows on the new generation (end-to-end).
     Y_UNIT_TEST(TruncatePreservesTtl) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
+        csControllerGuard->SetOverrideCompactionActualizationLag(TDuration::Zero());
+        csControllerGuard->SetOverrideOptimizerFreshnessCheckDuration(TDuration::Zero());
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 pathId = 1;
@@ -510,7 +554,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         Y_UNUSED(PrepareTablet(runtime, pathId, testTable.Schema));
 
-        auto specials = TTestSchema::TTableSpecials().SetTtl(TDuration::Seconds(3600));
+        const auto ttlDuration = TDuration::Seconds(3600);
+        auto specials = TTestSchema::TTableSpecials().SetTtl(ttlDuration);
         specials.SetTtlColumn(TTestSchema::DefaultTtlColumn);
         const auto alterBody =
             TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/1, testTable.Schema, testTable.Pk, specials);
@@ -521,11 +566,18 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         auto& csController = *csControllerGuard.operator->();
         const auto* shard = csController.GetTheOnlyShard();
 
-        // Sanity: TTL is present for the original generation.
+        // Sanity: TTL is present for the original generation with correct column and duration.
         {
             const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(internalPathId);
-            UNIT_ASSERT(shard->GetTablesManager().GetTableTtl(*internalPathId).has_value());
+            const auto ttl = shard->GetTablesManager().GetTableTtl(*internalPathId);
+            UNIT_ASSERT_C(ttl.has_value(), "TTL settings missing on original generation");
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+            const auto& tiers = ttl->GetOrderedTiers();
+            UNIT_ASSERT_EQUAL(tiers.size(), 1);
+            const auto& tier = *tiers.begin();
+            UNIT_ASSERT_VALUES_EQUAL(tier->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+            UNIT_ASSERT_VALUES_EQUAL(tier->GetEvictDuration(), ttlDuration);
         }
 
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
@@ -533,12 +585,66 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         shard = csController.GetTheOnlyShard();
 
-        // After TRUNCATE the freshly generated InternalPathId must still carry the TTL settings.
+        // (a) + (b) After TRUNCATE the freshly generated InternalPathId must carry the same
+        //           TTL column name and duration.
         {
             const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(newInternalPathId);
             const auto ttl = shard->GetTablesManager().GetTableTtl(*newInternalPathId);
             UNIT_ASSERT_C(ttl.has_value(), "TTL settings were lost after TRUNCATE");
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+            const auto& tiers = ttl->GetOrderedTiers();
+            UNIT_ASSERT_EQUAL(tiers.size(), 1);
+            const auto& tier = *tiers.begin();
+            UNIT_ASSERT_VALUES_EQUAL(tier->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+            UNIT_ASSERT_VALUES_EQUAL(tier->GetEvictDuration(), ttlDuration);
+        }
+
+        // (c) Write data with a TTL column value that is already stale (older than the TTL
+        //     duration), then verify that TTL compaction actually deletes the rows on the
+        //     new generation. This proves the TTL is not just metadata but is functional.
+        {
+            const auto now = TAppData::TimeProvider->Now().Seconds();
+            const auto staleTs = now - 7200;   // 2 hours ago, TTL is 1 hour → stale
+            const auto freshTs = now - 1800;   // 30 minutes ago, TTL is 1 hour → fresh
+
+            // Write one stale row and one fresh row.
+            {
+                std::vector<ui64> writeIds;
+                auto blob = MakeTestBlob({ 0, 2 }, testTable.Schema);
+                // Set the TTL column (timestamp) to stale/fresh values.
+                auto rb = blob->GetRecordBatch(0);
+                auto updated = UpdateColumn(rb, TTestSchema::DefaultTtlColumn, staleTs);
+                UNIT_ASSERT(WriteData(runtime, sender, 100, pathId,
+                    NArrow::NTest::TTestBlob(updated), testTable.Schema, true, &writeIds));
+                UNIT_ASSERT(WriteData(runtime, sender, 101, pathId,
+                    NArrow::NTest::TTestBlob(UpdateColumn(rb, TTestSchema::DefaultTtlColumn, freshTs)),
+                    testTable.Schema, true, &writeIds));
+                planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+                PlanCommit(runtime, sender, planStep, txId);
+            }
+
+            // Before TTL compaction: both rows are visible.
+            {
+                TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot(planStep, txId));
+                reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+                auto rb = reader.ReadAll();
+                UNIT_ASSERT(rb);
+                UNIT_ASSERT_EQUAL(rb->num_rows(), 2);
+                UNIT_ASSERT(!reader.IsError());
+            }
+
+            // Trigger TTL compaction: the stale row must be deleted, the fresh row must survive.
+            csController.WaitTtl(TDuration::Seconds(30));
+
+            {
+                TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot(planStep, txId));
+                reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+                auto rb = reader.ReadAll();
+                UNIT_ASSERT(rb);
+                UNIT_ASSERT_EQUAL(rb->num_rows(), 1);
+                UNIT_ASSERT(!reader.IsError());
+            }
         }
     }
 

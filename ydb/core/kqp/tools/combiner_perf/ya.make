@@ -19,6 +19,11 @@ PEERDIR(
     yql/essentials/minikql/codegen/llvm16
     yql/essentials/minikql/invoke_builtins/llvm16
 
+    yql/essentials/ast
+    yql/essentials/core
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/udf_resolve
+
     library/cpp/testing/unittest
 
     ydb/core/kqp/runtime

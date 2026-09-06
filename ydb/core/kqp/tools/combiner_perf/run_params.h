@@ -51,6 +51,7 @@ struct TRunParams {
     std::vector<std::string> ParquetColumns;
     std::vector<std::string> ParquetKeyColumns;
     std::vector<std::string> ParquetAggregations;
+    std::string ParquetAstFile;
 
     size_t JoinOverlap = 0; // Table generation params for joins
     size_t JoinRightRows = 0;

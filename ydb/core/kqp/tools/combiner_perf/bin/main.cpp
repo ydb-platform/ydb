@@ -56,8 +56,12 @@ class TPrintingResultCollector : public TTestResultCollector {
         if (parquet) {
             Cout << "Parquet file: " << runParams.ParquetFile << Endl;
             Cout << "Columns: " << JoinSeq(",", runParams.ParquetColumns) << Endl;
-            Cout << "Keys: " << JoinSeq(",", runParams.ParquetKeyColumns) << Endl;
-            Cout << "Aggregations: " << JoinSeq(",", runParams.ParquetAggregations) << Endl;
+            if (runParams.ParquetAstFile.empty()) {
+                Cout << "Keys: " << JoinSeq(",", runParams.ParquetKeyColumns) << Endl;
+                Cout << "Aggregations: " << JoinSeq(",", runParams.ParquetAggregations) << Endl;
+            } else {
+                Cout << "Aggregation AST: " << runParams.ParquetAstFile << Endl;
+            }
             Cout << "Block size: " << runParams.BlockSize << Endl;
         } else {
             Cout << runParams.NumKeys << " distinct numeric keys" << Endl;
@@ -119,6 +123,7 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
         out["parquetColumns"] = JoinSeq(",", runParams.ParquetColumns);
         out["parquetKeys"] = JoinSeq(",", runParams.ParquetKeyColumns);
         out["parquetAggregations"] = JoinSeq(",", runParams.ParquetAggregations);
+        out["parquetAstFile"] = runParams.ParquetAstFile;
     } else {
         out["longStringKeys"] = runParams.LongStringKeys;
         out["numKeys"] = runParams.NumKeys;
@@ -483,11 +488,16 @@ int main(int argc, const char* argv[])
         .RequiredArgument("AGG,...")
         .SplitHandler(&runParams.ParquetAggregations, ',')
         .Help("Aggregations: sum:column_name or count");
+    options.AddLongOption("parquet-ast")
+        .RequiredArgument("PATH")
+        .StoreResult(&runParams.ParquetAstFile)
+        .Help("Textual AsTuple of extractKey/init/update/finalize lambdas and the output key width");
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
-    const std::array<TString, 5> parquetOptions = {
-        "parquet-file", "parquet-row-limit", "parquet-columns", "parquet-keys", "parquet-aggregations"};
+    const std::array<TString, 6> parquetOptions = {
+        "parquet-file", "parquet-row-limit", "parquet-columns", "parquet-keys", "parquet-aggregations",
+        "parquet-ast"};
     if (testType != ETestType::Parquet) {
         for (const auto& option : parquetOptions) {
             if (parsedOptions.Has(option)) {
@@ -497,8 +507,13 @@ int main(int argc, const char* argv[])
     } else {
         Y_ENSURE(parsedOptions.Has("parquet-file"), "--parquet-file is required with -t parquet");
         Y_ENSURE(parsedOptions.Has("parquet-columns"), "--parquet-columns is required with -t parquet");
-        Y_ENSURE(parsedOptions.Has("parquet-keys"), "--parquet-keys is required with -t parquet");
-        Y_ENSURE(parsedOptions.Has("parquet-aggregations"), "--parquet-aggregations is required with -t parquet");
+        const bool hasAst = parsedOptions.Has("parquet-ast");
+        const bool hasKeys = parsedOptions.Has("parquet-keys");
+        const bool hasAggregations = parsedOptions.Has("parquet-aggregations");
+        Y_ENSURE(hasAst || (hasKeys && hasAggregations),
+            "Specify either --parquet-ast or both --parquet-keys and --parquet-aggregations");
+        Y_ENSURE(!hasAst || (!hasKeys && !hasAggregations),
+            "--parquet-ast cannot be combined with --parquet-keys or --parquet-aggregations");
         Y_ENSURE(runParams.TestMode == NKikimr::NMiniKQL::ETestMode::Full ||
                 runParams.TestMode == NKikimr::NMiniKQL::ETestMode::GraphOnly,
             "The parquet test only supports mode=all and mode=graph");

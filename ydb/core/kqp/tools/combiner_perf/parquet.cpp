@@ -6,8 +6,15 @@
 
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/preallocated_spiller.h>
 
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/public/udf/udf_string.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -16,9 +23,12 @@
 #include <arrow/io/file.h>
 #include <parquet/arrow/reader.h>
 
+#include <util/stream/file.h>
 #include <util/stream/output.h>
+#include <util/string/cast.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -62,6 +72,113 @@ struct TAggregation {
     size_t Column = 0;
     EDataSlot ResultSlot = EDataSlot::Uint64;
 };
+
+struct TAggregationAst {
+    NYql::TExprContext ExprContext;
+    std::array<NYql::TExprNode::TPtr, 4> Lambdas;
+    std::vector<EDataSlot> OutputSlots;
+    size_t KeyWidth = 0;
+};
+
+bool IsAstLambda(const NYql::TAstNode& node)
+{
+    return node.IsList() && node.GetChildrenCount() > 0 &&
+        node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "lambda";
+}
+
+size_t ParseAstKeyWidth(const NYql::TAstNode& node)
+{
+    Y_ENSURE(node.IsList() && node.GetChildrenCount() == 2 &&
+        node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "Uint64",
+        "Aggregation AST key width must be a Uint64 literal");
+    const auto* quoted = node.GetChild(1);
+    Y_ENSURE(quoted->IsList() && quoted->GetChildrenCount() == 2 &&
+        quoted->GetChild(0)->IsAtom() && quoted->GetChild(0)->GetContent() == "quote" &&
+        quoted->GetChild(1)->IsAtom(),
+        "Aggregation AST key width must be a Uint64 literal");
+    const auto value = quoted->GetChild(1)->GetContent();
+    size_t result;
+    Y_ENSURE(TryFromString(value, result), "Invalid aggregation AST key width: " << value);
+    return result;
+}
+
+std::array<NYql::TAstNode*, 4> ExtractAggregationAstLambdas(
+    NYql::TAstNode& root,
+    size_t& keyWidth)
+{
+    Y_ENSURE(root.IsList() && root.GetChildrenCount() == 6,
+        "Aggregation AST must be an AsTuple of four lambdas and a key width");
+    Y_ENSURE(root.GetChild(0)->IsAtom() && root.GetChild(0)->GetContent() == "AsTuple",
+        "Aggregation AST must start with AsTuple");
+
+    std::array<NYql::TAstNode*, 4> result;
+    for (size_t i = 0; i < result.size(); ++i) {
+        result[i] = root.GetChild(i + 1);
+        Y_ENSURE(IsAstLambda(*result[i]), "Aggregation AST item " << i << " is not a lambda");
+    }
+    keyWidth = ParseAstKeyWidth(*root.GetChild(5));
+    return result;
+}
+
+THolder<TAggregationAst> LoadAggregationAst(const std::string& path)
+{
+    auto ast = NYql::ParseAst(TFileInput(path).ReadAll(), nullptr, TString(path));
+    Y_ENSURE(ast.IsOk(), "Cannot parse aggregation AST " << path << ": " << ast.Issues.ToString());
+    auto result = MakeHolder<TAggregationAst>();
+    const auto astLambdas = ExtractAggregationAstLambdas(*ast.Root, result->KeyWidth);
+    for (size_t i = 0; i < result->Lambdas.size(); ++i) {
+        // CompileExpr expects a statement program, so wrap each lambda in a return statement.
+        auto* returnAtom = NYql::TAstNode::NewAtom(
+            astLambdas[i]->GetPosition(), "return", *ast.Pool);
+        auto* returnStatement = NYql::TAstNode::NewList(
+            astLambdas[i]->GetPosition(), *ast.Pool, returnAtom, astLambdas[i]);
+        auto* lambdaProgram = NYql::TAstNode::NewList(
+            astLambdas[i]->GetPosition(), *ast.Pool, returnStatement);
+        Y_ENSURE(NYql::CompileExpr(
+            *lambdaProgram, result->Lambdas[i], result->ExprContext, nullptr, nullptr),
+            "Cannot compile aggregation lambda " << i << " from " << path << ": "
+                << result->ExprContext.IssueManager.GetIssues().ToString());
+        Y_ENSURE(result->Lambdas[i]->IsLambda(),
+            "Aggregation AST item " << i << " did not compile to a lambda");
+    }
+    return result;
+}
+
+void EnsureLambdaArity(const NYql::TExprNode& lambda, size_t expected, TStringBuf name)
+{
+    Y_ENSURE(lambda.Head().ChildrenSize() == expected,
+        name << " lambda expects " << lambda.Head().ChildrenSize()
+             << " arguments, but the aggregation operator supplies " << expected);
+}
+
+EDataSlot GetOutputDataSlot(TType* type)
+{
+    while (type->IsOptional()) {
+        type = static_cast<TOptionalType*>(type)->GetItemType();
+    }
+    Y_ENSURE(type->IsData(), "Custom aggregation outputs must be DataSlots, got " << *type);
+    const auto slot = static_cast<TDataType*>(type)->GetDataSlot();
+    Y_ENSURE(slot, "Custom aggregation output has an unknown data type: " << *type);
+    return *slot;
+}
+
+void SaveOutputSlots(TAggregationAst& aggregationAst, const TRuntimeNode::TList& output)
+{
+    std::vector<EDataSlot> slots;
+    slots.reserve(output.size());
+    for (const auto& node : output) {
+        slots.push_back(GetOutputDataSlot(node.GetStaticType()));
+    }
+    Y_ENSURE(aggregationAst.KeyWidth <= slots.size(),
+        "Aggregation AST key width " << aggregationAst.KeyWidth
+            << " exceeds output width " << slots.size());
+    if (aggregationAst.OutputSlots.empty()) {
+        aggregationAst.OutputSlots = std::move(slots);
+    } else {
+        Y_ENSURE(aggregationAst.OutputSlots == slots,
+            "Custom aggregation output types differ between graph implementations");
+    }
+}
 
 void EnsureArrowStatus(const arrow::Status& status, TStringBuf operation)
 {
@@ -410,7 +527,8 @@ THolder<IComputationGraph> BuildGraph(
     const std::vector<size_t>& keys,
     const std::vector<TAggregation>& aggregations,
     bool blocks,
-    bool dqAggregate)
+    bool dqAggregate,
+    TAggregationAst* aggregationAst = nullptr)
 {
     auto& pb = setup.GetKqpBuilder();
     std::vector<TType*> inputTypes;
@@ -426,6 +544,75 @@ THolder<IComputationGraph> BuildGraph(
 
     auto* streamType = pb.NewStreamType(pb.NewMultiType(inputTypes));
     auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
+
+    const auto input = pb.ToFlow(TRuntimeNode(streamCallable, false), {});
+    if (aggregationAst) {
+        NYql::TTypeAnnotationContext typeContext;
+        typeContext.DeprecatedSQL = true;
+        typeContext.TimeProvider = CreateDefaultTimeProvider();
+        typeContext.RandomProvider = CreateDefaultRandomProvider();
+        typeContext.UdfResolver = NYql::NCommon::CreateSimpleUdfResolver(
+            setup.FunctionRegistry.Get());
+        auto callableTransformer = NYql::CreateExtCallableTypeAnnotationTransformer(typeContext);
+        auto typeTransformer = NYql::CreateTypeAnnotationTransformer(
+            callableTransformer, typeContext);
+
+        NYql::NCommon::TMkqlCommonCallableCompiler compiler;
+        NYql::NCommon::TMkqlBuildContext buildContext(
+            compiler, pb, aggregationAst->ExprContext);
+
+        auto buildLambda = [&](size_t index, const TRuntimeNode::TList& args, TStringBuf name) {
+            auto& lambda = aggregationAst->Lambdas[index];
+            EnsureLambdaArity(*lambda, args.size(), name);
+
+            std::vector<const NYql::TTypeAnnotationNode*> argumentTypes;
+            argumentTypes.reserve(args.size());
+            for (const auto& arg : args) {
+                argumentTypes.push_back(NYql::NCommon::ConvertMiniKQLType(
+                    aggregationAst->ExprContext.GetPosition(lambda->Pos()),
+                    arg.GetStaticType(), aggregationAst->ExprContext));
+            }
+            Y_ENSURE(NYql::UpdateLambdaAllArgumentsTypes(
+                lambda, argumentTypes, aggregationAst->ExprContext));
+
+            typeTransformer->Rewind();
+            const auto status = NYql::InstantTransform(
+                *typeTransformer, lambda, aggregationAst->ExprContext);
+            Y_ENSURE(status.Level == NYql::IGraphTransformer::TStatus::Ok,
+                "Cannot type annotate " << name << " lambda: "
+                    << aggregationAst->ExprContext.IssueManager.GetIssues().ToString());
+            return NYql::NCommon::MkqlBuildWideLambda(*lambda, buildContext, args);
+        };
+
+        auto keyExtractor = [&](TRuntimeNode::TList items) {
+            return buildLambda(0, items, "extractKey");
+        };
+        auto init = [&](TRuntimeNode::TList keyNodes, TRuntimeNode::TList items) {
+            keyNodes.insert(keyNodes.end(), items.begin(), items.end());
+            return buildLambda(1, keyNodes, "init");
+        };
+        auto update = [&](TRuntimeNode::TList keyNodes, TRuntimeNode::TList items, TRuntimeNode::TList state) {
+            keyNodes.insert(keyNodes.end(), items.begin(), items.end());
+            keyNodes.insert(keyNodes.end(), state.begin(), state.end());
+            return buildLambda(2, keyNodes, "update");
+        };
+        auto finish = [&](TRuntimeNode::TList keyNodes, TRuntimeNode::TList state) {
+            keyNodes.insert(keyNodes.end(), state.begin(), state.end());
+            auto output = buildLambda(3, keyNodes, "finalize");
+            SaveOutputSlots(*aggregationAst, output);
+            return output;
+        };
+
+        TRuntimeNode output;
+        if (dqAggregate) {
+            output = pb.FromFlow(
+                pb.DqHashAggregate(input, Spilling, keyExtractor, init, update, finish));
+        } else {
+            output = pb.FromFlow(
+                pb.WideCombiner(input, 0, keyExtractor, init, update, finish));
+        }
+        return setup.BuildGraph(output, {streamCallable});
+    }
 
     auto keyExtractor = [&](TRuntimeNode::TList items) {
         TRuntimeNode::TList result;
@@ -464,7 +651,6 @@ THolder<IComputationGraph> BuildGraph(
         return keyNodes;
     };
 
-    const auto input = pb.ToFlow(TRuntimeNode(streamCallable, false), {});
     TRuntimeNode output;
     if (dqAggregate) {
         output = pb.FromFlow(pb.DqHashAggregate(input, Spilling, keyExtractor, init, update, finish));
@@ -720,20 +906,25 @@ void Verify(
     const TParquetData& data,
     const std::vector<size_t>& keys,
     const std::vector<TAggregation>& aggregations,
+    TAggregationAst* aggregationAst,
     size_t iterations)
 {
-    const auto outputSlots = MakeOutputSlots(data, keys, aggregations);
+    const auto outputSlots = aggregationAst
+        ? aggregationAst->OutputSlots
+        : MakeOutputSlots(data, keys, aggregations);
+    const size_t keyWidth = aggregationAst ? aggregationAst->KeyWidth : keys.size();
+    Y_ENSURE(keyWidth <= outputSlots.size(), "Key width exceeds aggregation output width");
     const std::vector<EDataSlot> aggregateSlots(
-        outputSlots.begin() + keys.size(), outputSlots.end());
-    auto actual = CollectBlockResults(blockGraph.GetValue(), outputSlots, keys.size());
+        outputSlots.begin() + keyWidth, outputSlots.end());
+    auto actual = CollectBlockResults(blockGraph.GetValue(), outputSlots, keyWidth);
 
     TKqpSetup<false, false> referenceSetup(GetPerfTestFactory());
     auto referenceGraph = BuildGraph(
-        referenceSetup, data, keys, aggregations, false, false);
+        referenceSetup, data, keys, aggregations, false, false, aggregationAst);
     auto scalarStream = TUnboxedValuePod(new TScalarParquetStream(data, iterations));
     referenceGraph->GetEntryPoint(0, true)->SetValue(
         referenceGraph->GetContext(), std::move(scalarStream));
-    auto expected = CollectScalarResults(referenceGraph->GetValue(), outputSlots, keys.size());
+    auto expected = CollectScalarResults(referenceGraph->GetValue(), outputSlots, keyWidth);
 
     Y_ENSURE(actual.size() == expected.size(), "Verification failed: DqHashAggregate produced "
         << actual.size() << " groups, reference produced " << expected.size());
@@ -754,13 +945,19 @@ void RunTestParquet(TRunParams params, TTestResultCollector& printout)
     NYql::NLog::InitLogger("cerr", false);
 
     auto data = ReadParquetData(params);
-    const auto keys = ResolveKeys(params, data);
-    const auto aggregations = ResolveAggregations(params, data);
+    auto aggregationAst = params.ParquetAstFile.empty()
+        ? THolder<TAggregationAst>()
+        : LoadAggregationAst(params.ParquetAstFile);
+    const auto keys = aggregationAst ? std::vector<size_t>() : ResolveKeys(params, data);
+    const auto aggregations = aggregationAst ? std::vector<TAggregation>() : ResolveAggregations(params, data);
     params.RowsPerRun = data.Rows;
 
     TKqpSetup<LLVM, Spilling> setup(GetPerfTestFactory());
     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(Spilling);
-    auto graph = BuildGraph(setup, data, keys, aggregations, true, true);
+    auto graph = BuildGraph(setup, data, keys, aggregations, true, true, aggregationAst.Get());
+    const size_t outputWidth = aggregationAst
+        ? aggregationAst->OutputSlots.size()
+        : keys.size() + aggregations.size();
     if constexpr (Spilling) {
         graph->GetContext().SpillerFactory = std::make_shared<TPreallocatedSpillerFactory>();
     }
@@ -773,7 +970,7 @@ void RunTestParquet(TRunParams params, TTestResultCollector& printout)
     for (int attempt = 1; attempt <= params.NumAttempts; ++attempt) {
         Cerr << "------ Parquet run " << attempt << " of " << params.NumAttempts << Endl;
         auto result = RunForked([&] {
-            return MeasureGraph<LLVM, Spilling>(*graph, keys.size() + aggregations.size());
+            return MeasureGraph<LLVM, Spilling>(*graph, outputWidth);
         });
         if (finalResult) {
             MergeRunResults(result, *finalResult);
@@ -784,7 +981,8 @@ void RunTestParquet(TRunParams params, TTestResultCollector& printout)
 
     if (params.EnableVerification) {
         RunForked([&] {
-            Verify<LLVM, Spilling>(*graph, data, keys, aggregations, params.NumRuns);
+            Verify<LLVM, Spilling>(
+                *graph, data, keys, aggregations, aggregationAst.Get(), params.NumRuns);
             return TRunResult{};
         });
     }

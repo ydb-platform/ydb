@@ -300,6 +300,13 @@ public:
                 ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
                 ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
                 lockPtr->AddAncestorLock(std::move(ancestorLock));
+
+                // Mark the lock as writing to all user tables so that reads
+                // with this LockTxId can see the uncommitted data in the borrowed snapshot.
+                for (const auto& kv : Self->GetUserTables()) {
+                    TPathId pathId(Self->GetPathOwnerId(), kv.first);
+                    Self->SysLocksTable().MarkAncestorLockAsWritingToTable(lockId, pathId);
+                }
             }
         }
 

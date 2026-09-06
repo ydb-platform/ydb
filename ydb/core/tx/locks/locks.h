@@ -1286,6 +1286,20 @@ public:
         return Locker.AddLock(row).Get();
     }
 
+    // Marks the given persistent lock as having uncommitted writes to a table.
+    // Used when restoring ancestor locks from split/merge snapshots.
+    void MarkAncestorLockAsWritingToTable(ui64 lockId, const TPathId& pathId) {
+        auto* lock = Locker.FindLockPtr(lockId);
+        if (!lock) {
+            return;
+        }
+        if (lock->AddWriteLock(pathId)) {
+            if (auto* table = Locker.FindTablePtr(TTableId(pathId))) {
+                table->AddWriteLock(lock);
+            }
+        }
+    }
+
     /**
      * Restores in-memory lock state migrated from previous generations
      *

@@ -172,7 +172,14 @@ public:
         AFL_VERIFY(InternalPathId == other.InternalPathId);
         Versions.insert(other.Versions.begin(), other.Versions.end());
         for (auto&& [schemeShardLocalPathId, pathInfo] : other.SchemeShardLocalPathIds) {
-            SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo);   // override
+            auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
+            if (it != SchemeShardLocalPathIds.end() && it->second.DropVersion && !pathInfo.DropVersion) {
+                // The existing entry has a path-local drop version (e.g. from V1 retention
+                // recovery) that the incoming entry (e.g. from v0) does not carry.
+                // Preserve the drop version — it is the authoritative state for this path.
+                pathInfo.DropVersion = it->second.DropVersion;
+            }
+            SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo);
         }
     }
 

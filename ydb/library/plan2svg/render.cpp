@@ -1410,6 +1410,7 @@ TString TVisualizer::PrintSvg() {
         << "  .textc { text-anchor:end; dominant-baseline:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  circle.stage { stroke:" << Config.Palette.StageMain << "; stroke-width:1; fill:" << Config.Palette.StageClone << "; }" << Endl
         << "  line.opdiv { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; stroke-dasharray:1,2; }" << Endl
+        << "  #columnHeaders text { font-weight:bold; }" << Endl
         << "  rect.columns { stroke-width:0; fill:" << Config.Palette.ColumnHeader << "; }" << Endl
         << "  line.columns { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; }" << Endl
         << "  text.clipped { clip-path:url(#clipTextPath); }" << Endl

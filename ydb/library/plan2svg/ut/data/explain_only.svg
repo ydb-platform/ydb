@@ -68,6 +68,7 @@
   .textc { text-anchor:end; dominant-baseline:middle; font-family:Verdana; font-size:8px; fill:var(--stage-text, #262626); }
   circle.stage { stroke:var(--stage-main, #F2F2F2); stroke-width:1; fill:var(--stage-clone, #D9D9D9); }
   line.opdiv { stroke-width:1; stroke:var(--stage-grid, #B2B2B2); stroke-dasharray:1,2; }
+  #columnHeaders text { font-weight:bold; }
   rect.columns { stroke-width:0; fill:var(--column-header, #D9D9D9); }
   line.columns { stroke-width:1; stroke:var(--stage-grid, #B2B2B2); }
   text.clipped { clip-path:url(#clipTextPath); }

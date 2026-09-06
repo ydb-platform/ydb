@@ -216,6 +216,40 @@ protected:
         WAIT_SHARDS,
     };
 
+    // CsWriteAffinity: collect shard IDs from MODE_FILL sinks for CTAS write affinity.
+    // The target column table's shards are NOT automatically added to shardIds by the
+    // scan path (because they are sinks, not scan sources). We add them here so they get
+    // resolved to nodes via the shard resolver, enabling per-shard task creation in
+    // CountComputeTasks and ColumnShardHashV1 shuffle routing.
+    static void CollectFillSinkShards(
+            const NKqpProto::TKqpPhyStage& stage,
+            const TStageInfo& stageInfo,
+            TSet<ui64>& shardIds)
+    {
+        if (!stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
+            return;
+        }
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.HasInternalSink()
+                    && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                        && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                    if (stageInfo.Meta.ShardKey) {
+                        for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                            shardIds.insert(partition.ShardId);
+                        }
+                    } else if (stageInfo.Meta.ColumnTableInfoPtr
+                            && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
+                        for (const auto& shardId : stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding().GetColumnShards()) {
+                            shardIds.insert(shardId);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     [[nodiscard]]
     ETableResolveStatus HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
@@ -314,30 +348,21 @@ protected:
                         Counters->Counters->FullScansExecuted->Inc();
                     }
                 }
-            } else {
-                // TODO: make sure we don't miss any shards
-                // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
-                // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
 
                 // CsWriteAffinity: For CTAS (MODE_FILL) sink stages with EnableCsWriteAffinity,
-                // the target column table's shards are NOT automatically added to shardIds above
+                // the target column table's shards are NOT automatically added to shardIds
                 // (because they are sinks, not scan sources). We add them here so they get
                 // resolved to nodes via the shard resolver, enabling per-shard task creation
                 // in CountComputeTasks and ColumnShardHashV1 shuffle routing.
-                if (stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
-                    for (const auto& sink : stage.GetSinks()) {
-                        if (sink.HasInternalSink()
-                                && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                            NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-                            if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
-                                    && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL
-                                    && stageInfo.Meta.ShardKey) {
-                                for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                                    shardIds.insert(partition.ShardId);
-                                }
-                            }
-                        }
-                    }
+                CollectFillSinkShards(stage, stageInfo, shardIds);
+            } else {
+                CollectFillSinkShards(stage, stageInfo, shardIds);
+                if (!stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
+                    // TODO: make sure we don't miss any shards.
+                    // When EnableCsWriteAffinity is true, CollectFillSinkShards above
+                    // already handles shard collection for MODE_FILL sinks.
+                    // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
+                    // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
                 }
             }
         }

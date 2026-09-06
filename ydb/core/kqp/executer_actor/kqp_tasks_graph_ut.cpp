@@ -31,7 +31,7 @@
  *     (IDs 1..NodeCount).  MinPartitionsCount is auto-set to UNIFORM_PARTITIONS
  *     at table-creation time, so empty shards are never auto-merged.
  *
- *  6. TasksGraph.ResolveShards() → populates ShardIdToNodeId / ShardsOnNode.
+ *  6. TasksGraph.ResolveShards(shardsToNodes) → populates ShardIdToNodeId / ShardsOnNode.
  *
  *  7. BuildAllTasks() → task counts collected into TTaskDistribution.
  */

@@ -1220,6 +1220,7 @@ private:
         const bool enableShuffleElimination = Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination())
             || Config->OptShuffleEliminationForAggregation.Get().GetOrElse(Config->GetDefaultEnableShuffleEliminationForAggregation());
         txProto.SetEnableShuffleElimination(enableShuffleElimination);
+        txProto.SetEnableCsWriteAffinity(Config->GetEnableCsWriteAffinity());
         txProto.SetHasEffects(hasEffectStage);
         txProto.SetHasPqSources(hasPqSources);
         txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));

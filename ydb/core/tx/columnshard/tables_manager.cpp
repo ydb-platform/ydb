@@ -878,7 +878,9 @@ bool TTablesManager::TruncateTableProgress(
     AFL_VERIFY(HasTable(oldInternalPathId));
     AFL_VERIFY(!GetTable(oldInternalPathId).IsReadOnly(schemeShardLocalPathId));
 
-    // Load last version info to carry over SchemaPresetId, SchemaPresetVersionAdj, and TTL.
+    // Load last version info to carry over TTL settings.
+    // TRUNCATE is only supported for standalone column tables (not in-store),
+    // so SchemaPresetId/SchemaPresetVersionAdj are not carried over.
 
     // Perform the generation swap.
     auto* oldTable = Tables.FindPtr(oldInternalPathId);
@@ -919,9 +921,6 @@ bool TTablesManager::TruncateTableProgress(
     AFL_VERIFY(TruncatingLocalToInternal.erase(schemeShardLocalPathId));
 
     // Register new table version with carried-over TTL settings.
-    // TRUNCATE is only supported for standalone column tables (not in-store),
-    // so we carry over only TtlSettings — SchemaPresetId/SchemaPresetVersionAdj
-    // are in-store fields that don't apply here.
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     newInternalPathId.ToProto(tableVerProto);
     const auto& lastVersionInfo = LoadLastTableVersionInfo(oldInternalPathId, db);

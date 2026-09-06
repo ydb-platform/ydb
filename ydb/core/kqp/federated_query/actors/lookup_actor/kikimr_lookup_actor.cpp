@@ -339,37 +339,35 @@ namespace {
             auto it = databaseState.BusySessions.find(sessionInfo.SessionId);
             Y_VALIDATE(it != databaseState.BusySessions.end(), "Releasing unexisting session");
             auto& session = it->second;
-            if (!databaseState.WaitingQueue.empty()) {
-                // serve and keep as BusySession
+            if (!databaseState.WaitingQueue.empty() && !sessionInfo.Invalidate && !session->SessionId.empty()) {
+                // fastpath: reuse/serve session and keep in BusySession
                 auto sender = std::move(databaseState.WaitingQueue.front());
                 databaseState.WaitingQueue.pop_front();
-                if (sessionInfo.Invalidate) {
-                    SendCreateSession(std::make_shared<TSessionState>(sender, sessionInfo.Database));
-                } else {
-                    TSessionInfo::TPtr sessionInfo(new TSessionInfo {
-                        .Database = session->Database,
-                        .SessionId = session->SessionId,
-                    });
-                    YDB_LOG_TRACE("Transfer ready session to waiting",
-                            {"senderId", sender},
-                            {"sessionId", session->SessionId},
-                            {"database", session->Database});
-                    Send(sender, new TEvSessionAcquired(std::move(sessionInfo)));
-                    return;
-                }
+                TSessionInfo::TPtr sessionInfo(new TSessionInfo {
+                    .Database = session->Database,
+                    .SessionId = session->SessionId,
+                });
+                YDB_LOG_TRACE("Transfer ready session to waiting",
+                        {"senderId", sender},
+                        {"sessionId", session->SessionId},
+                        {"database", session->Database});
+                Send(sender, new TEvSessionAcquired(std::move(sessionInfo)));
+                return;
             }
             if (sessionInfo.Invalidate) {
+                CleanupStreamProcessor(session);
                 if (session->SessionId) {
                     SendDeleteSession(std::move(session->SessionId), sessionInfo.Database);
                     session->SessionId.clear();
                 }
-            } else {
+            } else if (!session->SessionId.empty()) {
                 YDB_LOG_TRACE("Return session to ready pool",
                         {"sessionId", session->SessionId},
                         {"database", session->Database});
                 databaseState.ReadySessions.push_back(std::move(session));
             }
             databaseState.BusySessions.erase(it);
+            TryEnqueueWaiting(databaseState, session->Database);
         }
 
         void Handle(TEvQueryCreateSessionResponse::TPtr ev) {

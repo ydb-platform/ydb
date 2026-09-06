@@ -2757,7 +2757,7 @@ TCompositeConveyorInitializer::TCompositeConveyorInitializer(const TKikimrRunCon
 }
 
 void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NKikimrConfig::TCompositeConveyorConfig protoConfig = [&]() {
+    const NKikimrConfig::TCompositeConveyorConfig protoConfig = [&]() {
         if (Config.HasCompositeConveyorConfig()) {
             return Config.GetCompositeConveyorConfig();
         }

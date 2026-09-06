@@ -28,11 +28,7 @@ public:
         return Weight;
     }
 
-    void SetWeight(const double weight) {
-        Y_ENSURE(std::isfinite(weight) && weight > 0, "invalid worker pool category weight: " << weight);
-        Weight = weight;
-        Counters->ValueWeight->Set(weight);
-    }
+    void SetWeight(const double weight);
 
 };
 
@@ -74,24 +70,9 @@ private:
             StopRequested = true;
         }
 
-        void OnStartTask(TTaskCompletionContexts&& completionContexts) {
-            Y_ENSURE(!RunningTask, "worker already has a running task");
-            Y_ENSURE(!completionContexts.empty(), "worker task has no completion contexts");
-            RunningTask = true;
-            CompletionContexts = std::move(completionContexts);
-        }
-
-        void OnStopTask() {
-            Y_ENSURE(RunningTask, "worker has no running task to stop");
-            RunningTask = false;
-            CompletionContexts.clear();
-        }
-
-        const TTaskCompletionContext& GetCompletionContext(const ESpecialTaskCategory category) const {
-            const auto it = CompletionContexts.find(category);
-            Y_ENSURE(it != CompletionContexts.end(), "completion context is missing for category " << category);
-            return it->second;
-        }
+        void OnStartTask(TTaskCompletionContexts&& completionContexts);
+        void OnStopTask();
+        const TTaskCompletionContext& GetCompletionContext(const ESpecialTaskCategory category) const;
     };
 
     struct TWorkersUpdateState {

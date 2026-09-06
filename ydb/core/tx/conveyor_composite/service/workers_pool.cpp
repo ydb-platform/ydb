@@ -7,6 +7,33 @@
 #include <numeric>
 
 namespace NKikimr::NConveyorComposite {
+
+void TWeightedCategory::SetWeight(const double weight) {
+    Y_ENSURE(std::isfinite(weight) && weight > 0, "invalid worker pool category weight: " << weight);
+    Weight = weight;
+    Counters->ValueWeight->Set(weight);
+}
+
+void TWorkersPool::TWorkerInfo::OnStartTask(TTaskCompletionContexts&& completionContexts) {
+    Y_ENSURE(!RunningTask, "worker already has a running task");
+    Y_ENSURE(!completionContexts.empty(), "worker task has no completion contexts");
+    RunningTask = true;
+    CompletionContexts = std::move(completionContexts);
+}
+
+void TWorkersPool::TWorkerInfo::OnStopTask() {
+    Y_ENSURE(RunningTask, "worker has no running task to stop");
+    RunningTask = false;
+    CompletionContexts.clear();
+}
+
+const TWorkersPool::TTaskCompletionContext& TWorkersPool::TWorkerInfo::GetCompletionContext(
+    const ESpecialTaskCategory category) const {
+    const auto it = CompletionContexts.find(category);
+    Y_ENSURE(it != CompletionContexts.end(), "completion context is missing for category " << category);
+    return it->second;
+}
+
 TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))

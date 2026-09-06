@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 import yatest.common
+from library.python.port_manager import PortManager, PortManagerException
 
 
 TLS_FILES = ('ca.pem', 'cert.pem', 'key.pem')
@@ -128,7 +129,13 @@ def _set_default_log_level(config_path, level):
 class LocalYdb:
     def __init__(self, working_directory, environment=None):
         self.working_directory = Path(working_directory)
-        self.environment = environment if environment is not None else _command_environment()
+        self.environment = dict(environment if environment is not None else _command_environment())
+        # Keep the global reservation across CLI exits and server restarts. The
+        # child allocates individual ports inside this range using its own locks.
+        self.port_manager = PortManager()
+        first_port = self.port_manager.get_port_range(0, 32)
+        self.environment['VALID_PORT_RANGE'] = '{}:{}'.format(first_port, first_port + 32)
+        self.environment['PORT_SYNC_PATH'] = str(self.working_directory / 'port-sync')
 
     def _command(self, action, *extra_arguments, check=True):
         return _run(
@@ -270,6 +277,24 @@ class LocalYdb:
                 except ProcessLookupError:
                     pass
             shutil.rmtree(self.working_directory, ignore_errors=True)
+            self.port_manager.release()
+
+
+def test_ports_are_reserved_until_close(tmp_path, monkeypatch):
+    monkeypatch.setenv('PORT_SYNC_PATH', str(tmp_path / 'global-port-sync'))
+    instance = LocalYdb(tmp_path / 'ydb')
+    monkeypatch.setenv('VALID_PORT_RANGE', instance.environment['VALID_PORT_RANGE'])
+    try:
+        with PortManager() as competitor:
+            with pytest.raises(PortManagerException):
+                competitor.get_port()
+        # The CLI must be able to allocate inside the globally reserved range.
+        with PortManager(sync_dir=instance.environment['PORT_SYNC_PATH']) as child:
+            child.get_port()
+    finally:
+        instance.close()
+    with PortManager() as competitor:
+        competitor.get_port()
 
 
 @pytest.fixture

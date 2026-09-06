@@ -77,8 +77,8 @@ def _cgroup_cpu_limits():
                          ('cpu.cfs_quota_us', 'cpu.cfs_period_us')]
             try:
                 maximum, period = map(int, quota)
-                if maximum > 0 and period > 0:
-                    yield (maximum + period - 1) // period
+                if maximum >= 0 and period > 0:
+                    yield max(1, (maximum + period - 1) // period)
             except ValueError:
                 pass  # Includes unlimited quotas (v2 "max") and missing files.
             if directory == mountpoint:

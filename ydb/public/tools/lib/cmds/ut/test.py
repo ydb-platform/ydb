@@ -241,7 +241,7 @@ def cgroups(monkeypatch):
 
 @pytest.mark.parametrize('quota,expected', [
     ('100000 100000', 1), ('150000 100000', 2), ('50000 100000', 1),
-    ('1600000 100000', 8), ('max 100000', 8), ('', 8), ('bad', 8), ('100000 0', 8),
+    ('0 100000', 1), ('1600000 100000', 8), ('max 100000', 8), ('', 8), ('bad', 8), ('100000 0', 8),
 ])
 def test_cgroup_v2_quota(cgroups, quota, expected):
     cgroups.update({
@@ -252,7 +252,7 @@ def test_cgroup_v2_quota(cgroups, quota, expected):
     assert cmds.available_cpu_count() == expected
 
 
-@pytest.mark.parametrize('quota,expected', [('250000', 3), ('-1', 8), ('bad', 8)])
+@pytest.mark.parametrize('quota,expected', [('250000', 3), ('0', 1), ('-1', 8), ('bad', 8)])
 def test_cgroup_v1_quota(cgroups, quota, expected):
     cgroups.update({
         '/proc/self/cgroup': '3:cpu,cpuacct:/docker/container',
@@ -289,13 +289,13 @@ def test_affinity_without_cgroups(cgroups):
 
 
 def test_fallback_without_affinity(cgroups, monkeypatch):
-    monkeypatch.delattr(cmds.os, 'sched_getaffinity')
+    monkeypatch.delattr(cmds.os, 'sched_getaffinity', raising=False)
     monkeypatch.setattr(cmds.multiprocessing, 'cpu_count', lambda: 3)
     assert cmds.available_cpu_count() == 3
 
 
 def test_unavailable_cpu_count(cgroups, monkeypatch):
-    monkeypatch.delattr(cmds.os, 'sched_getaffinity')
+    monkeypatch.delattr(cmds.os, 'sched_getaffinity', raising=False)
 
     def unavailable():
         raise NotImplementedError

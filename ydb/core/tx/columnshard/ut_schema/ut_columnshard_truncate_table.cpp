@@ -608,18 +608,20 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             const auto staleTs = now - 7200;   // 2 hours ago, TTL is 1 hour → stale
             const auto freshTs = now - 1800;   // 30 minutes ago, TTL is 1 hour → fresh
 
-            // Write one stale row and one fresh row.
+            // Write one stale row and one fresh row (different PKs).
             {
                 std::vector<ui64> writeIds;
-                auto blob = MakeTestBlob({ 0, 2 }, testTable.Schema);
-                // Set the TTL column (timestamp) to stale/fresh values.
-                auto rb = blob->GetRecordBatch(0);
-                auto updated = UpdateColumn(rb, TTestSchema::DefaultTtlColumn, staleTs);
-                UNIT_ASSERT(WriteData(runtime, sender, 100, pathId,
-                    NArrow::NTest::TTestBlob(updated), testTable.Schema, true, &writeIds));
-                UNIT_ASSERT(WriteData(runtime, sender, 101, pathId,
-                    NArrow::NTest::TTestBlob(UpdateColumn(rb, TTestSchema::DefaultTtlColumn, freshTs)),
-                    testTable.Schema, true, &writeIds));
+                const auto arrowSchema = NArrow::MakeArrowSchema(testTable.Schema);
+                auto writeWithTtlTs = [&](const ui64 writeId, const std::pair<ui64, ui64> range, const i64 ts) {
+                    const TString blob = MakeTestBlob(range, testTable.Schema);
+                    auto batch = NArrow::DeserializeBatch(blob, arrowSchema);
+                    UNIT_ASSERT(batch);
+                    batch = UpdateColumn(batch, TTestSchema::DefaultTtlColumn, ts);
+                    const TString data = NArrow::SerializeBatchNoCompression(batch);
+                    UNIT_ASSERT(WriteData(runtime, sender, writeId, pathId, data, testTable.Schema, true, &writeIds));
+                };
+                writeWithTtlTs(100, { 0, 1 }, staleTs);
+                writeWithTtlTs(101, { 1, 2 }, freshTs);
                 planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
                 PlanCommit(runtime, sender, planStep, txId);
             }

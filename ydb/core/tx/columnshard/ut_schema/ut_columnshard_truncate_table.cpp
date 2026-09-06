@@ -1613,6 +1613,98 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
+    // Review risk 8: concurrent COPY + TRUNCATE with the reverse plan order (truncate first,
+    // then copy). The existing ConcurrentCopyTruncate test covers "plan copy, then truncate"
+    // (retention mode). This test covers "plan truncate, then copy": at the moment TRUNCATE
+    // is planned, no copies exist yet, so DropTable (full drop) is used. The COPY is then
+    // planned against the already-dropped old generation. The copy must fail gracefully
+    // (the source table's old generation is gone) or the copy must be created on the new
+    // generation (empty). This test verifies that the system does not crash and that the
+    // source table is in a consistent state.
+    Y_UNIT_TEST(ConcurrentTruncateCopyReverseOrder) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        const ui64 dstPathId = 2;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit 100 rows.
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        // Propose COPY asynchronously.
+        const auto copyTxId = ++txId;
+        {
+            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, copyTxId, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), 0, 0);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+        }
+
+        // Propose TRUNCATE asynchronously.
+        const auto truncateTxId = ++txId;
+        {
+            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, truncateTxId, TTestSchema::TruncateTableTxBody(srcPathId, 1), 0, 0);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+        }
+
+        // Wait for both PREPARED replies.
+        auto copyEv = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT(copyEv);
+        UNIT_ASSERT_EQUAL(copyEv->Get()->Record.GetTxId(), copyTxId);
+        UNIT_ASSERT_EQUAL(copyEv->Get()->Record.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        const auto copyPlanStep = TPlanStep{ copyEv->Get()->Record.GetMinStep() };
+
+        auto truncateEv = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT(truncateEv);
+        UNIT_ASSERT_EQUAL(truncateEv->Get()->Record.GetTxId(), truncateTxId);
+        UNIT_ASSERT_EQUAL(truncateEv->Get()->Record.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        const auto truncatePlanStep = TPlanStep{ truncateEv->Get()->Record.GetMinStep() };
+
+        // Plan the TRUNCATE first (reverse order: no copies exist yet → full drop).
+        PlanSchemaTx(runtime, sender, { truncatePlanStep, truncateTxId });
+
+        // Plan the COPY second. The copy was proposed against the old generation which is
+        // now dropped. The copy progress must handle this gracefully.
+        PlanSchemaTx(runtime, sender, { copyPlanStep, copyTxId });
+
+        // The source is empty (new generation from TRUNCATE).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(truncatePlanStep, truncateTxId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // The copy: either it was created on the new (empty) generation, or it failed.
+        // In either case, the system must be in a consistent state.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(truncatePlanStep, truncateTxId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            // The copy may be empty (created on new gen) or absent (failed).
+            // Both are acceptable — the key is that the system didn't crash.
+            if (rb) {
+                UNIT_ASSERT_EQUAL(rb->num_rows(), 0);
+            }
+            UNIT_ASSERT(!reader.IsError());
+        }
+    }
+
     // Regression for review issue 1: crash in TryFinalizeDropPathOnComplete after TRUNCATE.
     //
     // Before the fix, TruncateTableProgress (no copies) called DropTable, which left the old

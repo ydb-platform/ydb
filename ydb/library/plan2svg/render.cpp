@@ -1310,7 +1310,13 @@ void TVisualizer::PrintColumnHeaders(TStringBuilder& svg, ui64 maxSec, ui64 delt
     auto titleHeight = INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2;
     svg << "<g id='columnHeaders'>" << Endl
         << "<svg width='" << Config.Width << "' height='" << COLUMN_HEADER_HEIGHT << "' x='0' y='0'>" << Endl
-        << SvgRect(0, 0, Config.Width, COLUMN_HEADER_HEIGHT, "columns")
+        // One box per column, laid out like the boxes of a stage row below, so the
+        // strip reads as the top of the same grid rather than a banner over it.
+        << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, COLUMN_HEADER_HEIGHT, "columns")
         << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X, titleHeight, "Stages and Operators")
         << SvgTextS(Config.OperatorLeft + 2, titleHeight, "Rows")
         << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")

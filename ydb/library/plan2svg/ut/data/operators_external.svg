@@ -1894,7 +1894,11 @@
 <rect x='1277' y='0' width='3' height='1176' stroke-width='0' opacity='0.002364948967' fill='var(--stage-texthl, #FC2824)'/>
 <g id='columnHeaders'>
 <svg width='1280' height='18' x='0' y='0'>
-<rect x='0' y='0' width='1280' height='18' class='columns'/>
+<rect x='0' y='0' width='298' height='18' class='columns'/>
+<rect x='301' y='0' width='64' height='18' class='columns'/>
+<rect x='368' y='0' width='24' height='18' class='columns'/>
+<rect x='395' y='0' width='200' height='18' class='columns'/>
+<rect x='598' y='0' width='682' height='18' class='columns'/>
 <text x='2' y='13' class='texts'>Stages and Operators</text>
 <text x='303' y='13' class='texts'>Rows</text>
 <text x='390' y='13' class='texte'>Tasks</text>

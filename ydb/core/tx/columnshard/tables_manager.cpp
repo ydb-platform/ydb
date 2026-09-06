@@ -116,8 +116,8 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
             }
             // Path-local appear version: copy version if present, else the table's min version.
             const NOlap::TSnapshot appearVersion =
-                table->GetCopyVersionOptional(schemeShardLocalPathId).value_or(
-                    table->GetVersions().empty() ? NOlap::TSnapshot::Zero() : *table->GetVersions().begin());
+                table->GetCopyVersionOptional(schemeShardLocalPathId)
+                    .value_or(table->GetVersions().empty() ? NOlap::TSnapshot::Zero() : *table->GetVersions().begin());
             if (appearVersion > readSnapshot) {
                 // This generation had not yet appeared at the read snapshot.
                 continue;

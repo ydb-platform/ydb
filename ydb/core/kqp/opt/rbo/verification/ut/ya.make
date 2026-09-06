@@ -8,6 +8,7 @@ TEST_SRCS(
     test_analysis.py
     test_join.py
     test_decimal.py
+    test_diagnostics.py
     test_encoding_strategies.py
     test_limit.py
     test_logical_reference.py

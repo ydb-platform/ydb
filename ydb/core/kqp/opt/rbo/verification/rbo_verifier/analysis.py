@@ -14,8 +14,8 @@ from typing import Mapping
 
 from . import decimal
 from .ir import (
-    Aggregate, Column, EmptySource, Filter, Join, Limit, OuterBind, PlanNode, Project,
-    ScalarSubplan, Snapshot, Sort, Subplan, UnionAll, _plan_descendants,
+    Aggregate, Column, EmptySource, Expr, Filter, Join, Limit, OuterBind, PlanNode, Project,
+    ScalarSubplan, Snapshot, Sort, Subplan, UnionAll, WINDOW_ROWS_KINDS, _plan_descendants,
     plan_node_inputs, stage_input_slots, stage_task_counts, validate_snapshot,
 )
 
@@ -44,6 +44,22 @@ class ValidatedPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class ProjectEffects:
+    """Validated relational leaves and eager errors, in projection order.
+
+    These are syntactic facts, not discharged obligations: totality still needs
+    its observer, and error conditions still use the actual routed input rows.
+    """
+
+    partition_window: Expr | None
+    ranks: tuple[Expr, ...]
+    row_windows: tuple[Expr, ...]
+    require_totality: bool
+    null_error_sources: tuple[str, ...]
+    checked_concats: tuple[Expr, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AnalyzedPlan:
     snapshot: Snapshot
     nodes: Mapping[str, PlanNode]
@@ -53,6 +69,7 @@ class AnalyzedPlan:
     decimal_sum_state_consumers: frozenset[tuple[str, str]]
     subplans_by_consumer: Mapping[str, tuple[Subplan, ...]]
     scalar_outer_binds: Mapping[str, tuple[OuterBind, ...]]
+    project_effects: Mapping[str, ProjectEffects]
 
 
 def analyze_snapshot(snapshot: Snapshot) -> AnalyzedPlan:
@@ -100,7 +117,38 @@ def analyze_validated(validated: ValidatedPlan) -> AnalyzedPlan:
         consumers,
         MappingProxyType({key: tuple(value) for key, value in by_consumer.items()}),
         MappingProxyType(outer_binds),
+        MappingProxyType({
+            node.id: _project_effects(node)
+            for node in snapshot.plan.nodes if isinstance(node, Project)
+        }),
     )
+
+
+def _project_effects(node: Project) -> ProjectEffects:
+    expressions = tuple(column.expression for column in node.columns)
+    return ProjectEffects(
+        _partition_window(expressions),
+        tuple(expression for expression in expressions if expression.kind == "window_rank"),
+        tuple(expression for expression in expressions if expression.kind in WINDOW_ROWS_KINDS),
+        any(column.require_total for column in node.columns),
+        tuple(column.expression.column for column in node.columns if column.error_on_null),
+        tuple(expression for expression in expressions if expression.kind == "checked_concat"),
+    )
+
+
+def _partition_window(expressions: tuple[Expr, ...]) -> Expr | None:
+    """Validation admits at most one whole-partition leaf, possibly wrapped."""
+
+    matches = []
+    for expression in expressions:
+        window = (
+            expression if expression.kind in {"window_sum", "window_avg"}
+            else _partition_window(expression.args)
+        )
+        if window is not None:
+            matches.append(window)
+    assert len(matches) <= 1
+    return matches[0] if matches else None
 
 
 def _decimal_sum_state_lineages(

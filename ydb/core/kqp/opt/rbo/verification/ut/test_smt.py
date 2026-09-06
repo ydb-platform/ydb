@@ -1457,6 +1457,14 @@ class SmtTest(unittest.TestCase):
             "(+ rbo_let_1 rbo_let_1))",
         )
 
+        # A later assertion must also reserve names before any alias is made.
+        script = smt.Script()
+        shared = smt.add(script.fresh_constant("value", smt.INT), smt.ONE)
+        script.assert_term(smt.lt(shared, smt.add(shared, smt.ONE)))
+        script.assert_term(smt.lt(collision, shared))
+        self.assertIn("(let ((rbo_let_1 (+ v_0 1)))", script.render())
+        self.assertNotIn("(let ((rbo_let_0 ", script.render())
+
     def test_zero_variable_quantifier_is_the_body(self):
         body = smt.symbol("condition", smt.BOOL)
         self.assertIs(smt.forall((), body), body)

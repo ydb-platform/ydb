@@ -8,6 +8,7 @@ PY_SRCS(
     rbo_verifier/bundle.py
     rbo_verifier/cli.py
     rbo_verifier/decimal.py
+    rbo_verifier/diagnostics.py
     rbo_verifier/errors.py
     rbo_verifier/floating.py
     rbo_verifier/ir.py

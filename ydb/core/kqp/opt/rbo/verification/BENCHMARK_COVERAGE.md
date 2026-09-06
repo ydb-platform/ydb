@@ -9,9 +9,9 @@ a newly measured corpus run.
 <!-- coverage-policy:start -->
 | Suite | Corpus | Prepare | Exact pair | Explicit entry | Formula | Proof |
 |---|---:|---:|---:|---:|---:|---:|
-| TPCH_YQL | 22 | 22 | 22 | 3 | 22 | 15 |
-| TPCDS_YQL | 99 | 98 | 99 | 8 | 99 | 32 |
-| Total | 121 | 120 | 121 | 11 | 121 | 47 |
+| TPCH_YQL | 22 | 22 | 22 | 3 | 22 | 16 |
+| TPCDS_YQL | 99 | 98 | 99 | 8 | 99 | 34 |
+| Total | 121 | 120 | 121 | 11 | 121 | 50 |
 <!-- coverage-policy:end -->
 
 The exact-pair floor is the union of supplemental pair, verifier-entry, and
@@ -21,19 +21,19 @@ later physical preparation fails. Supplemental pair lists are currently empty.
 The explicit entry column is not the total number of formula/proof queries
 that necessarily pass through the verifier.
 
-Regenerate the table with `python3 benchmark_ut/render_policy.py` from this
-directory; use `--check` to check this document without writing it.
+Render the replacement table with `python3 benchmark_ut/render_policy.py` from
+this directory; use `--check` to check this document without writing it.
 The [archived measurements and findings](history/pre-audit-refactor/BENCHMARK_COVERAGE.md)
 retain all earlier corpus inventories, focused solver results, artifacts,
 commit references, and corrected/superseded checkpoints. They are historical
 evidence, not results of the current working tree.
 
-## Complete measurement (2026-09-06)
+## Initial complete measurement (2026-09-06)
 
 A fresh formula-only census covered the complete corrected corpus: TPCH
 22/22 and TPCDS 99/99 emitted whole-query formulas. Separately, all 47 pinned
 proofs passed at two rows per table, two tasks, and 60 seconds per query.
-This raises the formula floor from 102 to 121; the proof floor remains 47.
+This raised the formula floor from 102 to 121, with a proof floor of 47.
 
 The corpus includes three approved source corrections: explicit output aliases
 and a Decimal-typed comparison literal in TPCDS q47/q57, and a Decimal-typed
@@ -49,6 +49,59 @@ companion `inputs.json` records their source/tool baseline. These are local
 receipts, not checked-in artifacts. The largest construction costs were q17
 at 321 seconds and q39 at 941 seconds; q39 compares both result
 slots jointly, not as separate proofs. Neither timing is a proof result.
+
+## Proof usefulness and construction audit (2026-09-06)
+
+A complete solver census on the frozen `6abc462dc40` baseline measured
+**51 `VERIFIED_BOUNDED`, 69 `UNKNOWN`, and one `COUNTEREXAMPLE` candidate**
+(TPCDS q40, not runtime-confirmed), at two rows, two tasks, and 60 seconds.
+The receipt selects exactly 121 artifact-complete results; 28 infrastructure-
+affected captures were repaired, without selectively retrying solver outcomes.
+Reports, source/tool/input hashes, and the original failed captures are retained
+under `/tmp/rbo-proof-depth-1FnuVM/repaired-census-receipt.json`.
+
+TPCH q20 and TPCDS q23/q46 also proved on source replays and are newly pinned,
+raising the proof floor to 50. q23 proves its complete result bundle jointly.
+All three have modeled successful nonempty executions on both sides. q91
+proved in the census but timed out on repeat with identical canonical bytes;
+it is measured coverage, not a new mandatory proof. These promotions record
+existing capability, not newly enabled semantics. The final native gate proved
+all 50 pinned queries; `/tmp/rbo-proof-depth-1FnuVM/promoted-floor-receipt.json`
+binds the final source, policy, reports and checked artifact hashes.
+
+An optional nonempty-output sweep of the previous 47 pinned pairs found modeled
+successful nonempty executions on both sides for 45 queries. TPCDS q8 and q34
+returned `UNSAT` on both sides: their count thresholds cannot be reached at
+two rows per table. This is not exhaustive branch coverage or runtime replay.
+The same source-CLI sweep re-proved 46 pairs; q50 returned `UNKNOWN` at 60
+seconds despite its earlier proof. A subsequent native proof-floor run proved
+all 47, including q50 in 44.920 seconds with identical canonical bytes; retain
+both outcomes as evidence of proof-budget sensitivity.
+Raw per-query receipts are local `/tmp/rbo-proof-depth-1FnuVM/proof-depth/`.
+
+After the changes below, a formula-only replay on the final source again
+emitted **121/121 formulas**, with 76 byte-identical and 45 changed relative to
+the exact census inputs. This is not a second full solver census. Source and
+input hashes are cross-bound in `/tmp/rbo-final-formula-Qkud4F/receipt.json`
+and its `binding-receipt.json`. q39 still costs 702 seconds to build/render and
+produces a 1.176 GB formula, slightly larger (+0.029%); scaling is not solved.
+
+A frozen-source q17 comparison measured the following construction costs;
+these are single paired measurements, not solver results or timing gates:
+
+| Metric | Before | After |
+|---|---:|---:|
+| Build + render | 206.50 s | 188.83 s |
+| Peak RSS | 6,691,272 KiB | 5,966,436 KiB |
+| Formula size | 703,421,013 bytes | 688,647,908 bytes |
+
+The renderer alone preserves exact formula bytes while removing redundant
+alias-ordering structures. Reusing already computed aggregate membership
+predicates additionally shares their DAG and changes the serialization, not
+their meaning. Admission, resource ceilings, arithmetic and solver deadlines
+are unchanged. Source/input hashes and isolated renderer measurements are in
+`/tmp/rbo-smt-profile-gCkmtH/`; the combined receipt is
+`/tmp/rbo-final-q17-GYZKss/production_probe.log`.
 
 ## Fixed workload and host
 

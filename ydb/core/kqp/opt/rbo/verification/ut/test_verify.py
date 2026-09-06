@@ -6999,7 +6999,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                 source,
             )
         self.assertEqual(len(directional), 3)
-        self.assertEqual(same_group.call_count, 12)
+        self.assertEqual(same_group.call_count, 9)
 
         result = evaluator._shared_grouped_aggregate_rows(
             evaluator.nodes["aggregate"],

@@ -36,7 +36,6 @@ from .ir import (
     SortOrder,
     Subplan,
     UnionAll,
-    WINDOW_ROWS_KINDS,
     expression_columns,
     plan_node_inputs,
 )
@@ -702,35 +701,15 @@ class Evaluator:
 
         if isinstance(node, Project):
             source = self._input(node.id, 0, node.input)
-            if any(column.require_total for column in node.columns):
+            effects = self._context.project_effects[node.id]
+            if effects.require_totality:
                 if self.project_input_observer is None:
                     raise RelationError("require_total Project needs a mandatory totality observer")
                 # Observe the actual routed input before Unwrap changes NULLs
                 # or errors, including inputs supplied across stage edges.
                 self.project_input_observer(self.choice_scope, node.id, source)
             columns = self._columns(node.id)
-            windows = tuple(
-                window
-                for projection in node.columns
-                if (
-                    window := _whole_partition_decimal_window_expression(
-                        projection.expression
-                    )
-                )
-                is not None
-            )
-            assert len(windows) <= 1
-            window = windows[0] if windows else None
-            ranks = tuple(
-                projection.expression
-                for projection in node.columns
-                if projection.expression.kind == "window_rank"
-            )
-            row_windows = tuple(
-                projection.expression
-                for projection in node.columns
-                if projection.expression.kind in WINDOW_ROWS_KINDS
-            )
+            window, ranks, row_windows = effects.partition_window, effects.ranks, effects.row_windows
 
             def project(
                 relation: Relation,
@@ -796,17 +775,6 @@ class Evaluator:
                     ),
                 )
 
-            marked_sources = tuple(
-                projection.expression.column
-                for projection in node.columns
-                if projection.error_on_null
-            )
-            checked_concats = tuple(
-                projection.expression
-                for projection in node.columns
-                if projection.expression.kind == "checked_concat"
-            )
-
             def project_error(relation: Relation) -> smt.Term:
                 return smt.or_(
                     *(
@@ -815,7 +783,7 @@ class Evaluator:
                             row.values[source].is_null,
                         )
                         for row in relation.rows
-                        for source in marked_sources
+                        for source in effects.null_error_sources
                     ),
                     *(
                         smt.and_(
@@ -826,7 +794,7 @@ class Evaluator:
                             ),
                         )
                         for row in relation.rows
-                        for expression in checked_concats
+                        for expression in effects.checked_concats
                     ),
                 )
 
@@ -871,7 +839,7 @@ class Evaluator:
                                 source_outcome.error,
                                 (
                                     smt.FALSE
-                                    if not marked_sources and not checked_concats
+                                    if not effects.null_error_sources and not effects.checked_concats
                                     else project_error(windowed)
                                 ),
                             ),
@@ -890,7 +858,7 @@ class Evaluator:
                 project,
                 local_error=(
                     None
-                    if not marked_sources and not checked_concats
+                    if not effects.null_error_sources and not effects.checked_concats
                     else project_error
                 ),
             )
@@ -1343,10 +1311,7 @@ class Evaluator:
                     smt.and_(row.present, self._same_group(node, candidate, row))
                     for row in source.rows
                 )
-                earlier = tuple(
-                    smt.and_(row.present, self._same_group(node, candidate, row))
-                    for row in source.rows[:index]
-                )
+                earlier = matches[:index]
                 rows.append(
                     Row(
                         smt.and_(
@@ -2709,23 +2674,6 @@ class Evaluator:
 
     def _columns(self, node_id: str) -> tuple[Column, ...]:
         return tuple(self.schemas[node_id].values())
-
-
-def _whole_partition_decimal_window_expression(expression: Expr) -> Expr | None:
-    """Return the one validated relation-dependent leaf below an expression."""
-
-    if expression.kind in {"window_sum", "window_avg"}:
-        return expression
-    matches = tuple(
-        match
-        for argument in expression.args
-        if (
-            match := _whole_partition_decimal_window_expression(argument)
-        )
-        is not None
-    )
-    assert len(matches) <= 1
-    return matches[0] if matches else None
 
 
 def _derived_occurrence(

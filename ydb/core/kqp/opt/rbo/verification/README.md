@@ -78,6 +78,27 @@ one buffered query error. Streaming prefixes and effects are excluded. If any
 root requests binary64 mode, it applies to every slot and both sides and is
 recorded in the verdict. Bundle proofs do not enable multi-result runtime replay.
 
+### Check whether a bound exercises nonempty results
+
+Add `--diagnose-nonempty-output --diagnostic-timeout-ms 10000` to a solver
+invocation. After verification, a separate diagnostic asks whether each side can
+produce a successful nonempty result at the same bound. Its own shared deadline,
+errors and `SAT`/`UNSAT`/`UNKNOWN` answers never change the equivalence verdict.
+
+`SAT` means modeled reachability, not a runtime witness: opaque or floating
+abstractions may admit extra behaviors. `UNSAT` means no successful nonempty
+execution; it does not distinguish empty results from unavoidable errors.
+Model-domain exclusions must first be ruled out. For bundles, all result slots
+must succeed and at least one must contain a row; before and after may use
+different databases. This checks neither every branch nor mutation sensitivity.
+
+A passing proof can therefore have two `UNSAT` diagnostics. For example, TPCDS
+q8's `HAVING COUNT(*) > 10` cannot produce a group at two rows per table.
+Use targeted larger bounds or small semantic mutation checks to exercise such
+behavior; do not weaken the original query or count reachability as a proof.
+
+### Inspect a candidate
+
 ```bash
 ydb/core/kqp/opt/rbo/verification/inspect_bin/kqp_rbo_inspect plan final.json
 

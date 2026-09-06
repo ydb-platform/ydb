@@ -49,6 +49,9 @@ Shared analysis is structural evidence, not a license to accept extra semantics.
 `ValidatedPlan` performs strict schema/admission checks; cross-plan root schema
 comparison precedes `analyze_validated`'s relational capability checks. Thus an
 unsupported fanout cannot hide a definite root type/nullability mismatch.
+Its immutable `ProjectEffects` records window leaves and error-producing
+expressions once. These are syntactic facts, not proofs of totality: evaluation
+still observes actual routed inputs and discharges the existing obligations.
 A strategy choice must not change catalog constraints or the admitted snapshot.
 For a tiny accepted input, compare the baseline, forced eligible optimization,
 and an independent concrete reference; then mutate a semantic field and an
@@ -76,6 +79,11 @@ reports, all tests, documentation, and retained artifacts are outside the
 normal proof-producing encoder. Their correctness is still essential to
 operational use, replay safety, and attribution of findings. Passing them cannot
 repair an unsound exporter or semantic encoder.
+
+The optional [nonempty-output diagnostic](rbo_verifier/diagnostics.py) is also
+outside verdict classification. It reuses bounded family composition, errors,
+choice quantification and the solver protocol, replacing only the marked query
+predicate under a separate deadline after the equivalence verdict is complete.
 
 ## Preserve the theorem when refactoring
 

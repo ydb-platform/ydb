@@ -258,16 +258,6 @@ public:
             for (const auto& protoLock : record.GetAncestorLocks()) {
                 const ui64 lockId = protoLock.GetLockId();
 
-                // Persist ancestor shard info to AncestorShardsLocks table
-                db.Table<Schema::AncestorShardsLocks>()
-                    .Key(lockId, protoLock.GetTabletId())
-                    .Update(
-                        NIceDb::TUpdate<Schema::AncestorShardsLocks::Generation>(protoLock.GetGeneration()),
-                        NIceDb::TUpdate<Schema::AncestorShardsLocks::Counter>(protoLock.GetCounter()),
-                        NIceDb::TUpdate<Schema::AncestorShardsLocks::CreateTimestamp>(protoLock.GetCreateTimestamp()),
-                        NIceDb::TUpdate<Schema::AncestorShardsLocks::Flags>(protoLock.GetFlags())
-                    );
-
                 if (processedLockIds.insert(lockId).second) {
                     // First time we see this lockId in this snapshot: create TLockInfo if needed
                     if (!Self->SysLocksTable().GetRawLock(lockId)) {
@@ -288,15 +278,19 @@ public:
                     }
                 }
 
-                // Add ancestor metadata to the in-memory TLockInfo
-                auto lockPtr = Self->SysLocksTable().GetRawLock(lockId);
-                Y_ENSURE(lockPtr, "Expected TLockInfo to exist after creation");
                 TAncestorLock ancestorLock;
                 ancestorLock.TabletId = protoLock.GetTabletId();
                 ancestorLock.Generation = protoLock.GetGeneration();
                 ancestorLock.Counter = protoLock.GetCounter();
                 ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
                 ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
+
+                // Persist ancestor shard info to AncestorShardsLocks table
+                locksDb.PersistAddAncestorLock(lockId, ancestorLock);
+
+                // Add ancestor metadata to the in-memory TLockInfo
+                auto lockPtr = Self->SysLocksTable().GetRawLock(lockId);
+                Y_ENSURE(lockPtr, "Expected TLockInfo to exist after creation");
                 lockPtr->AddAncestorLock(std::move(ancestorLock));
 
                 // Mark the lock as writing to all user tables so that reads

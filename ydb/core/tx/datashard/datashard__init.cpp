@@ -690,30 +690,6 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    // Load ancestor shard lock entries and populate TLockInfo::AncestorLocks
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::AncestorShardsLocks::TableId)) {
-        auto rowset = db.Table<Schema::AncestorShardsLocks>().Range().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-        while (!rowset.EndOfSet()) {
-            const ui64 lockId = rowset.GetValue<Schema::AncestorShardsLocks::LockId>();
-            auto lockPtr = Self->SysLocks.GetRawLock(lockId);
-            if (lockPtr) {
-                TAncestorLock ancestorLock;
-                ancestorLock.TabletId = rowset.GetValue<Schema::AncestorShardsLocks::TabletId>();
-                ancestorLock.Generation = rowset.GetValue<Schema::AncestorShardsLocks::Generation>();
-                ancestorLock.Counter = rowset.GetValue<Schema::AncestorShardsLocks::Counter>();
-                ancestorLock.CreationTime = TInstant::MicroSeconds(rowset.GetValue<Schema::AncestorShardsLocks::CreateTimestamp>());
-                ancestorLock.Flags = ELockFlags(rowset.GetValue<Schema::AncestorShardsLocks::Flags>());
-                lockPtr->AddAncestorLock(std::move(ancestorLock));
-            }
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-    }
-
     if (Self->State != TShardState::Offline) {
         if (!Self->VolatileTxManager.Load(db)) {
             return false;

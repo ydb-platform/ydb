@@ -37,6 +37,37 @@ struct TWriteSeqNumState {
     TString SerializedResult; // last TEvWriteResult; empty if none
 };
 
+// ELockFlags type safe enum
+
+enum class ELockFlags : ui64 {
+    None = 0,
+    Frozen = 1,
+    WholeShard = 2,
+    Persistent = 4,
+    Removed = 8,
+    Pessimistic = 16,
+    PersistentMask = Frozen,
+};
+
+using ELockFlagsRaw = std::underlying_type<ELockFlags>::type;
+
+inline ELockFlags operator|(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) | ELockFlagsRaw(b)); }
+inline ELockFlags operator&(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) & ELockFlagsRaw(b)); }
+inline ELockFlags& operator|=(ELockFlags& a, ELockFlags b) { return a = a | b; }
+inline ELockFlags& operator&=(ELockFlags& a, ELockFlags b) { return a = a & b; }
+inline ELockFlags operator~(ELockFlags c) { return ELockFlags(~ELockFlagsRaw(c)); }
+inline bool operator!(ELockFlags c) { return ELockFlagsRaw(c) == 0; }
+
+// Info about an ancestor shard that originally held a persistent lock whose uncommitted
+// writes were transferred to this shard during split/merge.
+struct TAncestorLock {
+    ui64 TabletId = 0;      // ancestor shard
+    ui32 Generation = 0;
+    ui64 Counter = 0;
+    TInstant CreationTime;
+    ELockFlags Flags = ELockFlags::None;
+};
+
 class ILocksDb {
 protected:
     ~ILocksDb() = default;
@@ -64,6 +95,7 @@ public:
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
         TVector<ui64> VolatileDependencies;
+        TVector<TAncestorLock> AncestorLocks;
 
         // In-memory migration only (not persistent)
         TRowVersion BreakVersion = TRowVersion::Max();
@@ -87,6 +119,8 @@ public:
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
     virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
     virtual void PersistRemoveLockWriteSeqNum(ui64 lockId, ui64 writerIndex) = 0;
+    virtual void PersistAddAncestorLock(ui64 lockId, const TAncestorLock& lock) = 0;
+    virtual void PersistRemoveAncestorLock(ui64 lockId, ui64 tabletId) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -237,27 +271,6 @@ struct TPendingSubscribeLock {
     }
 };
 
-// ELockFlags type safe enum
-
-enum class ELockFlags : ui64 {
-    None = 0,
-    Frozen = 1,
-    WholeShard = 2,
-    Persistent = 4,
-    Removed = 8,
-    Pessimistic = 16,
-    PersistentMask = Frozen,
-};
-
-using ELockFlagsRaw = std::underlying_type<ELockFlags>::type;
-
-inline ELockFlags operator|(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) | ELockFlagsRaw(b)); }
-inline ELockFlags operator&(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) & ELockFlagsRaw(b)); }
-inline ELockFlags& operator|=(ELockFlags& a, ELockFlags b) { return a = a | b; }
-inline ELockFlags& operator&=(ELockFlags& a, ELockFlags b) { return a = a & b; }
-inline ELockFlags operator~(ELockFlags c) { return ELockFlags(~ELockFlagsRaw(c)); }
-inline bool operator!(ELockFlags c) { return ELockFlagsRaw(c) == 0; }
-
 // ELockConflictFlags type safe enum
 
 enum class ELockConflictFlags : ui8 {
@@ -304,16 +317,6 @@ inline ELockRangeFlags& operator|=(ELockRangeFlags& a, ELockRangeFlags b) { retu
 inline ELockRangeFlags& operator&=(ELockRangeFlags& a, ELockRangeFlags b) { return a = a & b; }
 inline ELockRangeFlags operator~(ELockRangeFlags c) { return ELockRangeFlags(~ELockRangeFlagsRaw(c)); }
 inline bool operator!(ELockRangeFlags c) { return ELockRangeFlagsRaw(c) == 0; }
-
-// Info about an ancestor shard that originally held a persistent lock whose uncommitted
-// writes were transferred to this shard during split/merge.
-struct TAncestorLock {
-    ui64 TabletId = 0;      // ancestor shard
-    ui32 Generation = 0;
-    ui64 Counter = 0;
-    TInstant CreationTime;
-    ELockFlags Flags = ELockFlags::None;
-};
 
 // Tags for various intrusive lists
 struct TLockInfoBreakListTag {};

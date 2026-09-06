@@ -303,6 +303,12 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     }
     WriteSeqNumStates.clear();
 
+    // Remove ancestor shard records
+    for (const auto& [tabletId, _] : AncestorLocks) {
+        db->PersistRemoveAncestorLock(LockId, tabletId);
+    }
+    AncestorLocks.clear();
+
     // Remove the lock itself
     db->PersistRemoveLock(LockId);
     Flags |= ELockFlags::Removed;
@@ -1784,6 +1790,9 @@ bool TSysLocks::Load(ILocksDb& db) {
         TLockInfo::TPtr lock = Locker.AddLock(lockRow);
         for (auto& rangeRow : lockRow.Ranges) {
             lock->RestorePersistentRange(rangeRow);
+        }
+        for (auto& ancestorLock : lockRow.AncestorLocks) {
+            lock->AddAncestorLock(std::move(ancestorLock));
         }
     }
 

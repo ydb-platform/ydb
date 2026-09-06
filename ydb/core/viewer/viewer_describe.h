@@ -428,11 +428,15 @@ public:
             return;
         }
 
-        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceTypes())};
+        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceDatabaseTypes())};
         const auto& sourceType = describe->GetPathDescription().GetExternalTableDescription().GetSourceType();
+        const auto databaseType = NYql::DatabaseTypeFromString(sourceType);
+        if (!databaseType) {
+            return;
+        }
         try {
             json["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
-            auto source = externalSourceFactory->GetOrCreate(sourceType);
+            auto source = externalSourceFactory->GetOrCreate(*databaseType);
             auto parameters = source->GetParameters(content);
             for (const auto& [key, items]: parameters) {
                 NJson::TJsonValue array{NJson::EJsonValueType::JSON_ARRAY};

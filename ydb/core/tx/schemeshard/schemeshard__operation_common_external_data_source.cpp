@@ -93,8 +93,14 @@ bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
         return false;
     }
 
+    const auto databaseType = NYql::DatabaseTypeFromString(desc.GetSourceType());
+    if (!databaseType) {
+        errStr = TStringBuilder() << "Unknown source type: " << desc.GetSourceType();
+        return false;
+    }
+
     try {
-        const auto source = factory->GetOrCreate(desc.GetSourceType());
+        const auto source = factory->GetOrCreate(*databaseType);
         source->ValidateExternalDataSource(desc.SerializeAsString());
         return ValidateLocationAndInstallation(desc.GetLocation(),
                                                desc.GetInstallation(),

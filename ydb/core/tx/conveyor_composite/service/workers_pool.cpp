@@ -275,6 +275,7 @@ bool TWorkersPool::DrainTasks(const TSchedulerContextGetter& schedulerContextGet
                 }
                 work = schedulerContext->CreateSchedulableWork();
                 Y_ENSURE(work, "scheduler returned an empty schedulable work");
+                work->RegisterForResume(DistributorId);
             }
 
             if (work->TryStartExecution(TMonotonic::Now())) {

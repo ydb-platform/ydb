@@ -44,6 +44,7 @@ private:
     void HandleMain(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev);
+    void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
     void HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& ev);
 
     void SubscribeToCompositeConveyorConfig();
@@ -67,6 +68,7 @@ public:
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleMain);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleMain);
             hFunc(NActors::TEvents::TEvUndelivered, HandleMain);
+            hFunc(NActors::TEvents::TEvWakeup, HandleMain);
             hFunc(TEvInternal::TEvRetryConfigSubscription, HandleMain);
             default:
                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "",

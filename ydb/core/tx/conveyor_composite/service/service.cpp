@@ -142,6 +142,10 @@ void TDistributor::HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& /*e
     SubscribeToCompositeConveyorConfig();
 }
 
+void TDistributor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+    Y_UNUSED(Manager->DrainTasks());
+}
+
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
     auto& ev = *evExt->Get();
     const TDuration backSendDuration = (TMonotonic::Now() - ev.GetConstructInstant());

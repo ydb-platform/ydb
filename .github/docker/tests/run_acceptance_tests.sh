@@ -30,6 +30,8 @@ trap cleanup EXIT
 source "${SCRIPT_DIR}/acceptance/test_image_metadata.sh"
 # shellcheck source=acceptance/test_default_startup.sh
 source "${SCRIPT_DIR}/acceptance/test_default_startup.sh"
+# shellcheck source=acceptance/test_actor_system_autoconfig.sh
+source "${SCRIPT_DIR}/acceptance/test_actor_system_autoconfig.sh"
 # shellcheck source=acceptance/test_custom_config.sh
 source "${SCRIPT_DIR}/acceptance/test_custom_config.sh"
 # shellcheck source=acceptance/test_default_tls.sh
@@ -51,6 +53,7 @@ source "${SCRIPT_DIR}/acceptance/test_interactive.sh"
 
 test_image_metadata
 test_default_startup
+test_actor_system_autoconfig
 test_custom_config
 test_default_tls
 test_custom_tls

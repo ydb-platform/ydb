@@ -96,42 +96,38 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
     // time-travel semantics: a snapshot sees the data of the newest generation that existed
     // at that point in time.
     //
-    // The previous implementation treated a live generation as "always valid" regardless of
-    // readSnapshot, which after several TRUNCATEs could non-deterministically resolve a
-    // historical snapshot to the empty new generation instead of the one holding the data.
+    // AllPathIds is populated at RegisterTable / AddToHistory. nullptr is only legitimate
+    // for rolling deploy (tables created before this binary, tablet not yet restarted and
+    // never truncated): fall back to the live mapping. If history exists but no generation
+    // covers `readSnapshot` (e.g. after GC of a truncated generation), return nullopt —
+    // do not fall back to live, which may not have been alive at that snapshot.
     const auto* generations = Generations(schemeShardLocalPathId);
-    if (generations) {
-        std::optional<TInternalPathId> best;
-        std::optional<NOlap::TSnapshot> bestAppear;
-        for (const auto& genPathId : *generations) {
-            const auto* table = Tables.FindPtr(genPathId);
-            if (!table || !table->HasSchemeShardLocalPathId(schemeShardLocalPathId)) {
-                continue;
-            }
-            // Path-local drop version: nullopt means this path is still live on the generation.
-            const auto dropVersion = table->GetPathDropVersionOptional(schemeShardLocalPathId);
-            if (dropVersion && *dropVersion <= readSnapshot) {
-                // This path was already dropped at/ before the read snapshot.
-                continue;
-            }
-            // Path-local appear version: copy version if present, else the table's min version.
-            const NOlap::TSnapshot appearVersion =
-                table->GetCopyVersionOptional(schemeShardLocalPathId)
-                    .value_or(table->GetVersions().empty() ? NOlap::TSnapshot::Zero() : *table->GetVersions().begin());
-            if (appearVersion > readSnapshot) {
-                // This generation had not yet appeared at the read snapshot.
-                continue;
-            }
-            if (!bestAppear || *bestAppear < appearVersion) {
-                best = genPathId;
-                bestAppear = appearVersion;
-            }
+    if (!generations) {
+        return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
+    }
+    std::optional<TInternalPathId> best;
+    std::optional<NOlap::TSnapshot> bestAppear;
+    for (const auto& genPathId : *generations) {
+        const auto* table = Tables.FindPtr(genPathId);
+        AFL_VERIFY(table)("gen", genPathId)("ss", schemeShardLocalPathId);
+        AFL_VERIFY(table->HasSchemeShardLocalPathId(schemeShardLocalPathId))("gen", genPathId)("ss", schemeShardLocalPathId);
+        // Path-local drop version: nullopt means this path is still live on the generation.
+        const auto dropVersion = table->GetPathDropVersionOptional(schemeShardLocalPathId);
+        if (dropVersion && *dropVersion <= readSnapshot) {
+            continue;
         }
-        if (best) {
-            return best;
+        AFL_VERIFY(!table->GetVersions().empty())("gen", genPathId)("ss", schemeShardLocalPathId);
+        const NOlap::TSnapshot appearVersion =
+            table->GetCopyVersionOptional(schemeShardLocalPathId).value_or(*table->GetVersions().begin());
+        if (appearVersion > readSnapshot) {
+            continue;
+        }
+        if (!bestAppear || *bestAppear < appearVersion) {
+            best = genPathId;
+            bestAppear = appearVersion;
         }
     }
-    return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
+    return best;
 }
 
 std::optional<NOlap::TSnapshot> TTablesManager::GetCopyVersionOptional(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
@@ -825,9 +821,9 @@ void TTablesManager::MoveTableProgress(
                 continue;   // already renamed above
             }
             auto* genTable = Tables.FindPtr(genId);
-            if (genTable && genTable->HasSchemeShardLocalPathId(oldSchemeShardLocalPathId)) {
-                genTable->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
-            }
+            AFL_VERIFY(genTable)("gen", genId)("from", oldSchemeShardLocalPathId)("to", newSchemeShardLocalPathId);
+            AFL_VERIFY(genTable->HasSchemeShardLocalPathId(oldSchemeShardLocalPathId))("gen", genId)("from", oldSchemeShardLocalPathId);
+            genTable->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
         }
     }
     // Propose already ForgetLive'd the source; Rename does not recreate Live. Restore under dst.
@@ -904,7 +900,8 @@ bool TTablesManager::TruncateTableProgress(
         if (oldTable->IsDropped()) {
             AFL_VERIFY(PathsToDrop[oldTable->GetDropVersionVerified()].emplace(oldInternalPathId).second);
         }
-        ForgetLivePathId(schemeShardLocalPathId);
+        // Propose already fenced the path; live mapping must be gone.
+        AFL_VERIFY(!ResolveLivePathId(schemeShardLocalPathId))("ss", schemeShardLocalPathId);
         NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(
             TabletId, TUnifiedPathId::BuildValid(oldInternalPathId, schemeShardLocalPathId));
     } else {
@@ -955,7 +952,7 @@ void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeSh
         // Already fenced — nothing more to do.
         return;
     }
-    ForgetLivePathId(schemeShardLocalPathId);
+    ForgetLivePathIdVerified(schemeShardLocalPathId, *internalPathId);
 }
 
 std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {
@@ -1030,6 +1027,14 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
     if (schemaAdapter) {
         return schemaAdapter->BuildMetadataAccessor(tablePath, TUnifiedOptionalPathId::BuildExternal(externalPathId, internalPathId));
     } else if (!internalPathId) {
+        // History is tracked but no generation covers this snapshot (e.g. after GC of a
+        // truncated generation). Empty result, not a malformed request.
+        if (Generations(externalPathId)) {
+            const auto live = ResolveLivePathId(externalPathId);
+            AFL_VERIFY(live)("ss", externalPathId)("snapshot", readSnapshot.DebugString());
+            return std::make_shared<NOlap::TAbsentTableAccessor>(
+                tablePath, NColumnShard::TUnifiedPathId::BuildValid(*live, externalPathId));
+        }
         return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());
     } else {
         if (!HasTable(*internalPathId, /*withDeleted=*/false, readSnapshot)) {

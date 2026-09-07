@@ -62,8 +62,14 @@ private:
 
 /// The cache only queues a pattern for compilation once it has proven it stays around, so a test that wants the
 /// compilation to happen has to backdate the entry instead of waiting for the residency threshold to pass.
-void MakeEntryOldEnoughToCompile(TPatternCacheEntry& entry) {
-    entry.CachedAt = TInstant::Now() - TDuration::Hours(1);
+/// TODO: drop the template and the `requires` guard once the fix is merged - they are only here so that this file
+/// also builds against a cache entry without CachedAt, which is what lets the tests below be seen failing first.
+/// The function has to be a template for that: in a non-template one the discarded branch is checked all the same.
+template <typename TEntry>
+void MakeEntryOldEnoughToCompile(TEntry& entry) {
+    if constexpr (requires { entry.CachedAt; }) {
+        entry.CachedAt = TInstant::Now() - TDuration::Hours(1);
+    }
 }
 
 TPatternCacheEntryPtr MakeMockEntry(size_t codeSize = 1) {
@@ -1299,8 +1305,10 @@ Y_UNIT_TEST(RaisingCompiledLimitBringsDemotedPatternBack) {
     cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, "other"}, otherEntry);
     UNIT_ASSERT(!entry->Pattern->IsCompiled());
 
-    // While the budget stays tight, it is not compiled again ...
-    cache.FindOrSubscribe(key);
+    // While the budget stays tight, no amount of accesses gets it compiled again ...
+    for (size_t i = 0; i < 10 * accessTimesBeforeCompile; ++i) {
+        cache.FindOrSubscribe(key);
+    }
     THashMap<TProgramKey, TPatternCacheEntryPtr> whileTight;
     cache.GetPatternsToCompile(whileTight);
     UNIT_ASSERT(whileTight.empty());

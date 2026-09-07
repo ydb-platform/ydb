@@ -617,16 +617,10 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
             AddString<TSchema::ResourcePool>([](const TExtractorValue& p) { return p.second.ResourcePool; });
             Add<TSchema::RetryCount, ui64>([](const TExtractorValue& p) { return p.second.RetryCount; });
             AddOpt<TSchema::LastFailAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.LastFailAt) {
-                    return p.second.LastFailAt.MicroSeconds();
-                }
-                return std::nullopt;
+                return p.second.LastFailAt ? std::optional<ui64>(p.second.LastFailAt.MicroSeconds()) : std::nullopt;
             });
             AddOpt<TSchema::SuspendedUntil, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.SuspendedUntil) {
-                    return p.second.SuspendedUntil.MicroSeconds();
-                }
-                return std::nullopt;
+                return p.second.SuspendedUntil ? std::optional<ui64>(p.second.SuspendedUntil.MicroSeconds()) : std::nullopt;
             });
             AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) { return p.second.LastExecutionId; });
             AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) { return p.second.PreviousExecutionIds; });
@@ -635,24 +629,19 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
             AddOptionalString<TSchema::StartedBy>([](const TExtractorValue& p) { return p.second.StartedBy; });
             AddOptionalString<TSchema::StoppedBy>([](const TExtractorValue& p) { return p.second.StoppedBy; });
             AddOpt<TSchema::CreatedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.CreatedAt) return p.second.CreatedAt.MicroSeconds();
-                return std::nullopt;
+                return p.second.CreatedAt ? std::optional<ui64>(p.second.CreatedAt.MicroSeconds()) : std::nullopt;
             });
             AddOpt<TSchema::ModifiedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.ModifiedAt) return p.second.ModifiedAt.MicroSeconds();
-                return std::nullopt;
+                return p.second.ModifiedAt ? std::optional<ui64>(p.second.ModifiedAt.MicroSeconds()) : std::nullopt;
             });
             AddOpt<TSchema::SubmittedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.SubmittedAt) return p.second.SubmittedAt.MicroSeconds();
-                return std::nullopt;
+                return p.second.SubmittedAt ? std::optional<ui64>(p.second.SubmittedAt.MicroSeconds()) : std::nullopt;
             });
             AddOpt<TSchema::StartedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.StartedAt) return p.second.StartedAt.MicroSeconds();
-                return std::nullopt;
+                return p.second.StartedAt ? std::optional<ui64>(p.second.StartedAt.MicroSeconds()) : std::nullopt;
             });
             AddOpt<TSchema::FinishedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.FinishedAt) return p.second.FinishedAt.MicroSeconds();
-                return std::nullopt;
+                return p.second.FinishedAt ? std::optional<ui64>(p.second.FinishedAt.MicroSeconds()) : std::nullopt;
             });
         }
 

@@ -120,6 +120,13 @@ namespace NKikimr {
                 EOpMode mode);
 
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
+        // Mark the SSTs that live in the stripe heap; called once the huge keeper has been recovered, since chunk
+        // ownership is what distinguishes them.
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks);
+        // Every stripe-heap extent the recovered database still points at. This is the sole authority on which
+        // stripes are live, so it has to run after ResolveStripeSsts has marked the SSTs.
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks,
+            const std::function<void(const TDiskPart&)>& callback) const;
         void BuildBarrierCache();
         void BuildBlocksCache();
         TSatisfactionRank GetSatisfactionRank(EHullDbType t, ESatisfactionRankType s) const;

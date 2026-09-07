@@ -373,7 +373,13 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->Type = inputMetadata.Type;
     Props.Metadata->StorageType = inputMetadata.StorageType;
     const auto outputIUs = GetOutputIUs();
-    Y_ENSURE(MakeInfoUnitSet(outputIUs).size() == outputIUs.size(), "Map output must not contain duplicate columns");
+    if (MakeInfoUnitSet(outputIUs).size() != outputIUs.size()) {
+        TStringBuilder columns;
+        for (const auto& iu : outputIUs) {
+            columns << (columns.empty() ? "" : ", ") << iu.GetFullName();
+        }
+        Y_ENSURE(false, "Map output must not contain duplicate columns: " << columns);
+    }
     Props.Metadata->ColumnsCount = outputIUs.size();
 
     auto propertyPreservingMappings = GetPropertyPreservingMappings(planProps);
@@ -676,6 +682,33 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     } else {
         Props.Cost = std::nullopt;
     }
+}
+
+// It does not have runtime support, it could be eliminated or we will rewrite it into cross join.
+void TOpDependentJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    if (!GetDomain()->Props.Metadata.has_value() || !GetInput()->Props.Metadata.has_value()) {
+        return;
+    }
+
+    Props.Metadata = TRBOMetadata();
+    Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
+    Props.Metadata->ColumnsCount = GetOutputIUs().size();
+}
+
+void TOpDependentJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    if (!GetDomain()->Props.Statistics.has_value() || !GetInput()->Props.Statistics.has_value()) {
+        return;
+    }
+
+    Props.Statistics = TRBOStatistics();
+    // Just a workaround, we do not have runtime support anyway.
+    Props.Statistics->ERows = GetDomain()->Props.Statistics->ERows * GetInput()->Props.Statistics->ERows;
+    Props.Statistics->EBytes = GetDomain()->Props.Statistics->EBytes + GetInput()->Props.Statistics->EBytes;
+    Props.Cost = std::nullopt;
 }
 
 void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {

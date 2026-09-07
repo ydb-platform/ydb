@@ -568,3 +568,7 @@ TString TTransQueue::TxInFlyToString() const
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

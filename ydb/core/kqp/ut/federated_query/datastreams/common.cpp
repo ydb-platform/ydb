@@ -859,9 +859,15 @@ void TStreamingTestFixture::CheckScriptExecutionsCount(ui64 expectedExecutionsCo
     });
 }
 
-void TStreamingTestFixture::WaitCheckpointUpdate(const TString& checkpointId) {
+void TStreamingTestFixture::WaitCheckpointUpdate(const TString& checkpointId, std::optional<std::pair<ui64, ui64>> initialBound) {
     std::optional<ui64> minGeneration;
     std::optional<ui64> minSeqNo;
+
+    if (initialBound) {
+        minGeneration = initialBound->first;
+        minSeqNo = initialBound->second;
+    }
+
     WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
         const auto& result = ExecQuery(fmt::format(
             R"sql(

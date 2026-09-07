@@ -33,8 +33,6 @@ bool TInlineJoinFiltersRule::QuickMatch(const TIntrusivePtr<IOperator>& input) c
 // Inline join filters. Temporarily inline join filters only of there are no equi-join conditions in the join
 
 TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
     if (input->Kind != EOperator::Join) {
         return input;
     }
@@ -44,13 +42,24 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
+    // Inner with empty keys - cross.
+    const bool isRealCrossJoin = join->JoinKind == "Cross" || (join->JoinKind == "Inner" && join->JoinKeys.empty());
+    const bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
+    const bool usingBlockCrossJoin = usingBlockJoin && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+
+    // Do not inline filters for cross join.
+    if (isRealCrossJoin && usingBlockCrossJoin) {
+        join->JoinKind = "Cross";
+        return join;
+    }
+
     // We inline join filters in the following cases:
     // - There implementation is a lookup join or reverse lookup join
     // - There are no equi-join conditions in the join
     // - We're not using BlockJoin, which supports join filters
 
-    bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
-    bool isLookupJoin = join->Props.JoinAlgo == EJoinAlgoType::LookupJoin || join->Props.JoinAlgo == EJoinAlgoType::LookupJoinReverse;
+    // Lookup join is not supported for join filters.
+    const bool isLookupJoin = join->Props.JoinAlgo == EJoinAlgoType::LookupJoin || join->Props.JoinAlgo == EJoinAlgoType::LookupJoinReverse;
     bool containsEquiJoinConditions = !join->JoinKeys.empty();
     for (const auto& f : join->JoinFilters) {
         if (f.MaybeEquiJoinCondition()) {
@@ -58,7 +67,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         }
     }
 
-    if (usingBlockJoin && !isLookupJoin && containsEquiJoinConditions) {
+    if (!isRealCrossJoin && usingBlockJoin && !isLookupJoin && containsEquiJoinConditions) {
         return input;
     }
 

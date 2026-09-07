@@ -123,7 +123,7 @@ public:
         virtual void Stop() = 0;
         virtual void ResumeExecution(EResumeSource source) = 0;
 
-        virtual void LoadState(TComputeActorState&& state) = 0;
+        virtual void LoadState(TComputeActorState&& state, const NDqProto::TCheckpoint& checkpoint) = 0;
 
         virtual ~ICallbacks() = default;
     };

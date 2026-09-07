@@ -34,9 +34,9 @@ public:
         : File(std::move(file))
         , Session(std::move(session))
         , ProducerId(producerId)
-        , FilePoller([this]() { PollFileForChanges(); })
         , CancelOnFileFinish(cancelOnFileFinish)
         , StartFuture(startFuture)
+        , FilePoller([this]() { PollFileForChanges(); })
     {
         Pool.Start(1);
     }
@@ -179,13 +179,13 @@ private:
     const TFile File;
     const TPartitionSession::TPtr Session;
     const TString ProducerId;
-    std::thread FilePoller;
     const bool CancelOnFileFinish = false;
     TEQueue EventsQ = TEQueue(4_MB);
+    NThreading::TFuture<TConfirmSessionInfo> StartFuture;
+    std::thread FilePoller;
     TThreadPool Pool;
     size_t MsgOffset = 0;
     ui64 SeqNo = 0;
-    NThreading::TFuture<TConfirmSessionInfo> StartFuture;
 };
 
 class TFileTopicWriteSession final : public IWriteSession, private TContinuationTokenIssuer {
@@ -351,11 +351,11 @@ private:
     }
 
     const TFile File;
-    std::thread FileWriter;
     TMsgQueue EventsMsgQ = TMsgQueue(4_MB);
     TEQueue EventsQ = TEQueue(128_KB);
     TThreadPool Pool;
     uint64_t SeqNo = 0;
+    std::thread FileWriter;
 };
 
 struct TDummyPartitionSession final : public TPartitionSessionControl {

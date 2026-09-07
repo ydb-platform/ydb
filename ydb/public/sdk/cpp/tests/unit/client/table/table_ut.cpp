@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/common/network.h>
@@ -7,6 +8,7 @@
 #include <util/string/cast.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
@@ -779,6 +781,29 @@ TEST(TableTest, AlterTableDroppedMetricsSettings) {
 
     ASSERT_TRUE(!tableService.LastAlterTableRequest->has_set_metrics_settings());
     ASSERT_TRUE(tableService.LastAlterTableRequest->has_drop_metrics_settings());
+}
+
+/**
+ * Verify proto round-trip for equi-height histogram multi-column statistics.
+ */
+TEST(TableTest, MultiColumnStatisticsEqHeightHistogramRoundTrip) {
+    NTable::TMultiColumnStatisticsDescription desc(
+        "h1",
+        {"a", "b"},
+        {NTable::EMultiColumnStatisticsType::EqHeightHistogram});
+
+    Ydb::Table::TableMultiColumnStatistics proto;
+    desc.SerializeTo(proto);
+    ASSERT_EQ(proto.name(), "h1");
+    ASSERT_EQ(proto.columns_size(), 2);
+    ASSERT_EQ(proto.types_size(), 1);
+    ASSERT_EQ(proto.types(0), Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM);
+
+    auto roundTrip = TProtoAccessor::FromProto(proto);
+    ASSERT_EQ(roundTrip.GetName(), "h1");
+    ASSERT_EQ(roundTrip.GetColumns().size(), 2u);
+    ASSERT_EQ(roundTrip.GetTypes().size(), 1u);
+    ASSERT_EQ(roundTrip.GetTypes()[0], NTable::EMultiColumnStatisticsType::EqHeightHistogram);
 }
 
 /**

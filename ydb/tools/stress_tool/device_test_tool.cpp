@@ -145,6 +145,7 @@ int main(int argc, char **argv) {
     TOpts opts = TOpts::Default();
     bool disablePDiskDataEncryption = false;
     bool disableDDiskChecksums = false;
+    bool forcePDiskFallback = false;
     TVector<TString> paths;
     opts.AddLongOption("path", "path to device (can be specified multiple times for multi-device tests)")
         .RequiredArgument("FILE")
@@ -163,6 +164,9 @@ int main(int argc, char **argv) {
     opts.AddLongOption("disable-ddisk-checksums",
             "disable DDisk and Persistent Buffer checksums (use on both client and server)")
         .StoreTrue(&disableDDiskChecksums);
+    opts.AddLongOption("force-ddisk-pdisk-fallback",
+            "force DDisk direct I/O through the PDisk actor instead of io_uring")
+        .StoreTrue(&forcePDiskFallback);
     opts.AddLongOption("log-level", "log level for BS_LOAD_TEST/BS_DDISK: warn|info|debug|trace (default warn). INTERCONNECT is floored at INFO; BS_DEVICE/BS_PDISK at WARN")
         .RequiredArgument("LEVEL").DefaultValue("warn");
     ui32 serverNodeId = 0;
@@ -281,7 +285,7 @@ int main(int argc, char **argv) {
     NKikimr::TPerfTestConfig config(paths, res.Get("name"), res.Get("type"),
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
             res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"), disablePDiskDataEncryption,
-            disableDDiskChecksums, logLevel);
+            disableDDiskChecksums, forcePDiskFallback, logLevel);
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
 

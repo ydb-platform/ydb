@@ -1,6 +1,6 @@
 #include "kqp_compute_scheduler_service.h"
 
-#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_base.h"
 #include "kqp_schedulable_task.h"
 #include "tree/dynamic.h"
 #include "tree/snapshot.h"
@@ -1133,9 +1133,9 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             }
         };
 
-        struct TSchedulableActorMock : public TSchedulableActorBase {
+        struct TSchedulableActorMock : public TSchedulableBase {
             explicit TSchedulableActorMock(NHdrf::NDynamic::TQueryPtr query)
-                : TSchedulableActorBase({.Query=std::move(query), .IsSchedulable=true}) {}
+                : TSchedulableBase({.Query=std::move(query), .IsSchedulable=true}) {}
 
             void ExecuteAndPassAway(std::atomic<bool>& shutdown) {
                 std::thread([&shutdown, this] {

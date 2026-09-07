@@ -16,6 +16,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/actors/core
     ydb/library/actors/wilson
+    library/cpp/lwtrace
 
     # Temporary fix dep ydb/core/tx/columnshard
     ydb/core/tablet_flat/protos

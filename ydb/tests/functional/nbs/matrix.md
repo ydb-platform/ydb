@@ -30,7 +30,7 @@ Update this file when a case lands. Legend:
 | F1.10 | Write across vchunk | P0 | — | — | yes | `F1_10_write_across_vchunk.py` |
 | F1.11 | Write across region | P0 | — | disk > 4 GiB | yes | `F1_11_write_across_region.py` |
 | F1.12 | Never-written reads zero | P0 | — | — | yes | `F1_12_never_written_reads_zero.py` |
-| F1.13 | Block sizes 4K / 8K / 16K / 32K / 64K / 128K, 512 GiB each | P0 | — | block size | yes | `F1_13_block_sizes.py` (known_bug xfail per size >4 KiB: VChunk hardcodes 4 KiB) |
+| F1.13 | Block sizes 4K / 8K / 16K / 32K / 64K / 128K, 512 GiB each | P0 | — | block size | yes | `F1_13_block_sizes.py` |
 | F1.14 | Vhost unaligned write | P0 | — | — | yes | `test_nbs_vhost_unaligned_write` |
 | F1.15 | Vhost after tablet restart | P0 | `tablet_kill` | — | yes | `F1_vhost/F1_15_vhost_after_tablet_restart.py` |
 | F1.16 | Two disks isolated | P0 | — | — | yes | `test_nbs_multiple_disks_creation` |
@@ -42,7 +42,7 @@ Update this file when a case lands. Legend:
 | F1.22 | Load-actor write then read | P1 | — | — | yes | `test_nbs_load_actor_write_then_read` |
 | F1.23 | ZeroBlocks | P0 | — | — | yes | `F1_vhost/F1_23_zero_blocks.py` (known_bug xfail) |
 | F1.24 | DeletePartition wipe | P0 | — | — | yes | `F1_24_delete_partition_wipe.py` |
-| F1.25 | Max disk size per block size, 2³¹ blocks each | P0 | — | 2³¹ blocks | yes | `F1_25_max_disk_size.py` (known_bug xfail, not run, per size >4 KiB) |
+| F1.25 | Max disk size per block size, 2³¹ blocks each | P0 | — | 2³¹ blocks | yes | `F1_25_max_disk_size.py` (known_bug xfail, not run, per size >4 KiB: eager vchunk metadata) |
 
 ---
 

@@ -72,6 +72,9 @@ DDisk and Persistent Buffer checksums are enabled by default. Pass
 actors and checksum handling in DDisk. For client/server DDisk tests, pass the
 option to both processes so the client and server use the same mode.
 
+Pass `--force-ddisk-pdisk-fallback` to route DDisk direct I/O through the PDisk
+actor instead of io_uring.
+
 #### Parameters for `DDiskLoad`
 - `Tag` - a unique numeric identifier for the load source.
 - `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.

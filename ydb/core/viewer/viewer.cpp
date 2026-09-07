@@ -338,6 +338,7 @@ public:
                     {"/viewer/acl", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/check_access", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/plan2svg", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/computation_graph", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/storage_stats", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/database_stats", {EViewerEndpointAccessType::Database, true}},
                     // The effective access level of healthcheck endpoint is checked in the handler:

@@ -155,6 +155,12 @@ TExpression MakeNegation(const TExpression& expr);
 // Make a binary predicate with an arbitrary callable, extract context and properties from one of the arguments
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right);
 
+// Make an unary callable
+TExpression MakeUnaryCallable(const TString& callable, const TExpression& arg);
+
+// Make ensure.
+TExpression MakeEnsure(const TExpression& value, const TExpression& predicate, const TString& message);
+
 // Get all members from a expression node
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs);
 

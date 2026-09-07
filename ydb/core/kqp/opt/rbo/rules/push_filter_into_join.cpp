@@ -66,9 +66,6 @@ bool TPushFilterIntoJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) 
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
 TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
-
     if (input->Kind != EOperator::Filter) {
         return input;
     }
@@ -90,6 +87,19 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
         YQL_CLOG(TRACE, CoreDq) << "Wrong join type " << join->JoinKind << Endl;
         return input;
+    }
+
+    const bool usingBlockCrossJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin() && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+    if (join->JoinKind == "Cross" && usingBlockCrossJoin) {
+        auto conjuncts = filter->GetFilterExpression().SplitConjunct();
+        // If all not equal - we cannot rewrite cross to inner, just adding them as join filters.
+        const bool containsEquiJoinCondition = AnyOf(conjuncts, [](const TExpression& conjunct) {
+            return conjunct.MaybeEquiJoinCondition();
+        });
+        if (!containsEquiJoinCondition) {
+            join->JoinFilters.insert(join->JoinFilters.end(), conjuncts.begin(), conjuncts.end());
+            return join;
+        }
     }
 
     auto output = input;

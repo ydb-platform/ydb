@@ -320,3 +320,7 @@ THashMap<ui64, ui64> TOutReadSets::RemoveExpectations(ui64 target) {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

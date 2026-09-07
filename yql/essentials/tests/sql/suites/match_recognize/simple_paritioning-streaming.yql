@@ -1,4 +1,3 @@
-pragma FeatureR010="prototype";
 pragma config.flags("MatchRecognizeStream", "force");
 
 $data = [

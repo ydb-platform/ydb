@@ -4,7 +4,10 @@
 #include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/algorithm.h>
 #include <util/string/vector.h>
 #include <algorithm>
 
@@ -12,7 +15,6 @@
 
 namespace NKikimr::NStat {
 
-static constexpr ui64 MAX_STATISTIC_SIZE = 8_MB;
 static constexpr ui64 MAX_STATISTICS_SIZE_IN_SINGLE_SCAN = 40_MB;
 
 namespace {
@@ -23,7 +25,11 @@ std::optional<EStatType> ConvertMultiColumnStatType(NKikimrSchemeOp::EMultiColum
         return std::nullopt;
     case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
         return EStatType::COUNT_MIN_SKETCH;
+    case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+        return EStatType::EQ_HEIGHT_HISTOGRAM;
     }
+    // Unknown protobuf value from a newer schemeshard: skip rather than fail ANALYZE.
+    return std::nullopt;
 }
 
 } // anonymous namespace
@@ -265,12 +271,16 @@ void TAnalyzeActor::HandleResolveDatabase(const NSchemeCache::TSchemeCacheNaviga
 
 void TAnalyzeActor::HandleNavigateResult() {
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
+    std::vector<std::pair<TString, ui32>> keyColumns;
     for (const auto& col : NavigateColumns) {
         tag2Column[col.second.Id] = col.second;
 
         if (col.second.KeyOrder >= 0) {
             KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), col.second.KeyOrder + 1));
             KeyColumnTypes[col.second.KeyOrder] = col.second.PType;
+
+            keyColumns.resize(Max<size_t>(keyColumns.size(), col.second.KeyOrder + 1));
+            keyColumns[col.second.KeyOrder] = {col.second.Name, col.second.Id};
         }
     }
 
@@ -293,22 +303,96 @@ void TAnalyzeActor::HandleNavigateResult() {
             continue;
         }
 
-        if (desc.ColumnIds.size() < 2) {
-            // A 1-column multi-column statistic is degenerate: its column_tags key would collide
-            // with the single-column stat's key in .metadata/statistics_v2, and single-column CMS
-            // already covers it. Skip gathering it.
-            continue;
-        }
+        auto addType = [&](EStatType statType) {
+            if (Find(desc.Types, statType) != desc.Types.end()) {
+                return;
+            }
+            // A 1-column COUNT_MIN_SKETCH would collide with the single-column sketch's
+            // (column_tags, stat_type) key, and is already covered by it. Other types have their own
+            // stat_type and cannot collide.
+            if (desc.ColumnIds.size() < 2 && statType == EStatType::COUNT_MIN_SKETCH) {
+                return;
+            }
+            if (statType == EStatType::EQ_HEIGHT_HISTOGRAM) {
+                TStringBuilder issue;
+                issue << "EQ_HEIGHT_HISTOGRAM '" << desc.Name
+                      << "' has a column type that PresortKey cannot encode";
+                bool anyUnsupported = false;
+                for (ui32 id : desc.ColumnIds) {
+                    const auto& col = tag2Column.at(id);
+                    if (!NScheme::NTypeIds::IsPresortEncodable(col.PType.GetTypeId())) {
+                        issue << (anyUnsupported ? ", " : ": ")
+                              << "column '" << col.Name << "' of type "
+                              << NScheme::TypeName(col.PType, col.PTypeMod);
+                        anyUnsupported = true;
+                    }
+                }
+                if (anyUnsupported) {
+                    // Skip this type only. Covers persisted descriptors and
+                    // STATISTICS without WITH; explicit WITH is rejected at DDL.
+                    YDB_LOG_WARN("Skipping EQ_HEIGHT_HISTOGRAM: column type is not encodable by PresortKey",
+                        {"operationId", OperationId.Quote()},
+                        {"pathId", PathId},
+                        {"details", TString(issue)});
+                    return;
+                }
+            }
+            desc.Types.push_back(statType);
+        };
 
-        for (auto type : def.GetTypes()) {
-            auto statType = ConvertMultiColumnStatType(
-                static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type));
-            if (statType) {
-                desc.Types.push_back(*statType);
+        if (def.GetTypes().empty()) {
+            // No WITH clause: collect every supported multi-column type.
+            for (auto type : IMultiColumnStatisticEval::SupportedMultiColumnTypes()) {
+                addType(type);
+            }
+        } else {
+            for (auto type : def.GetTypes()) {
+                auto statType = ConvertMultiColumnStatType(
+                    static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type));
+                if (statType) {
+                    addType(*statType);
+                }
             }
         }
         if (!desc.Types.empty()) {
             MultiColumnStatDescs.push_back(std::move(desc));
+        }
+    }
+
+    if (Config.CollectPrimaryKeyHistogram && !keyColumns.empty()) {
+        // Skip auto-PK histogram if a dropped key column left a gap in KeyOrder.
+        const bool hasDroppedKeyColumn = AnyOf(keyColumns, [](const auto& kc) {
+            return kc.first.empty();
+        });
+        const bool hasUnsupportedKeyType = AnyOf(keyColumns, [&](const auto& kc) {
+            auto it = tag2Column.find(kc.second);
+            return it == tag2Column.end() || !NScheme::NTypeIds::IsPresortEncodable(it->second.PType.GetTypeId());
+        });
+        if (hasDroppedKeyColumn) {
+            YDB_LOG_WARN("Skipping auto-PK EQ_HEIGHT_HISTOGRAM: key columns are not contiguous",
+                {"operationId", OperationId.Quote()},
+                {"pathId", PathId});
+        } else if (hasUnsupportedKeyType) {
+            YDB_LOG_WARN("Skipping auto-PK EQ_HEIGHT_HISTOGRAM: a key column type is not encodable by PresortKey",
+                {"operationId", OperationId.Quote()},
+                {"pathId", PathId});
+        } else {
+            TMultiColumnStatDesc pk;
+            pk.Name = "__pk";
+            for (const auto& [name, id] : keyColumns) {
+                pk.ColumnNames.push_back(name);
+                pk.ColumnIds.push_back(id);
+            }
+            pk.Types = {EStatType::EQ_HEIGHT_HISTOGRAM};
+
+            // Declared PK histogram (explicit WITH or no WITH) wins over auto-PK.
+            const bool alreadyDeclared = AnyOf(MultiColumnStatDescs, [&](const auto& d) {
+                return d.ColumnIds == pk.ColumnIds
+                    && Find(d.Types, EStatType::EQ_HEIGHT_HISTOGRAM) != d.Types.end();
+            });
+            if (!alreadyDeclared) {
+                MultiColumnStatDescs.push_back(std::move(pk));
+            }
         }
     }
 
@@ -651,12 +735,21 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                         == supportedMultiColumnTypes.end()) {
                     continue;
                 }
+                IMultiColumnStatisticEval::THistogramSizing sizing;
+                sizing.OversampleFactor = Config.HistogramOversampleFactor;
+                sizing.MaxStateBytes = Config.HistogramMaxStateBytes;
                 auto statEval = IMultiColumnStatisticEval::MaybeCreate(
-                    type, def.ColumnNames, def.ColumnIds, RowCount.value());
+                    type, def.ColumnNames, def.ColumnIds, RowCount.value(), sizing);
                 if (!statEval) {
                     continue;
                 }
-                if (statEval->EstimateSize() > MAX_STATISTIC_SIZE) {
+                if (statEval->EstimateSize() > TAnalyzeActor::MaxStatisticSize) {
+                    YDB_LOG_WARN("Skipping multi-column statistic: estimated size exceeds MaxStatisticSize",
+                        {"operationId", OperationId.Quote()},
+                        {"pathId", PathId},
+                        {"statType", static_cast<int>(type)},
+                        {"estimatedSize", statEval->EstimateSize()},
+                        {"maxStatisticSize", TAnalyzeActor::MaxStatisticSize});
                     continue;
                 }
                 PendingTasks.push(TColumnStatEvalTask{
@@ -684,7 +777,13 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 if (!statEval) {
                     continue;
                 }
-                if (statEval->EstimateSize() > MAX_STATISTIC_SIZE) {
+                if (statEval->EstimateSize() > TAnalyzeActor::MaxStatisticSize) {
+                    YDB_LOG_WARN("Skipping stage-2 statistic: estimated size exceeds MaxStatisticSize",
+                        {"operationId", OperationId.Quote()},
+                        {"pathId", PathId},
+                        {"statType", static_cast<int>(type)},
+                        {"estimatedSize", statEval->EstimateSize()},
+                        {"maxStatisticSize", TAnalyzeActor::MaxStatisticSize});
                     continue;
                 }
                 PendingTasks.push(TColumnStatEvalTask{
@@ -699,10 +798,13 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 task.Stage2StatEval->GetType(),
                 task.Stage2StatEval->ExtractData(result.AggColumns));
         } else {
-            resultItems.emplace_back(
-                task.MultiStatEval->GetColumnIds(),
-                task.MultiStatEval->GetType(),
-                task.MultiStatEval->ExtractData(result.AggColumns));
+            auto data = task.MultiStatEval->ExtractData(result.AggColumns);
+            if (data) {
+                resultItems.emplace_back(
+                    task.MultiStatEval->GetColumnIds(),
+                    task.MultiStatEval->GetType(),
+                    std::move(*data));
+            }
         }
     }
 

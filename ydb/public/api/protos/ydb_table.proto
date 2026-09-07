@@ -454,6 +454,7 @@ message TableMultiColumnStatistics {
     enum MultiColumnStatisticsType {
         STATISTIC_TYPE_UNSPECIFIED = 0;
         COUNT_MIN_SKETCH = 1;
+        EQ_HEIGHT_HISTOGRAM = 2;
     }
     // Name of statistics
     string name = 1;

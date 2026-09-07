@@ -36,6 +36,8 @@ SRCS(
     interconnect_proxy_wrapper.h
     interconnect_resolve.cpp
     interconnect_session_iface.h
+    interconnect_session_pool_mapping.cpp
+    interconnect_session_pool_mapping.h
     interconnect_stream.cpp
     interconnect_stream.h
     interconnect_tcp_input_session.cpp

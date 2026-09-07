@@ -1014,6 +1014,10 @@ public:
         return Inner_->GetClusterServer(cluster);
     }
 
+    TString GetClusterYtName(const TString& cluster) const final {
+        return Inner_->GetClusterYtName(cluster);
+    }
+
     NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         return Inner_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder, temp, anonymous);
     }

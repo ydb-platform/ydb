@@ -134,6 +134,14 @@ TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TS
     }
 }
 
+std::shared_ptr<IChunkedArray> TJsonPathAccessor::GetNativeStringArray() const {
+    if (!RemainingPath.empty() || ValueType != EValueType::String || !ChunkedArrayAccessor ||
+        ChunkedArrayAccessor->GetType() != IChunkedArray::EType::Array || ChunkedArrayAccessor->GetDataType()->id() != arrow::Type::STRING) {
+        return nullptr;
+    }
+    return ChunkedArrayAccessor;
+}
+
 void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
     if (!ChunkedArrayAccessor) {
         return;

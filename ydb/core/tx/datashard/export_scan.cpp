@@ -282,3 +282,7 @@ NTable::IScan* CreateExportScan(IBuffer::TPtr buffer, std::function<IActor*()>&&
 
 } // NDataShard
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

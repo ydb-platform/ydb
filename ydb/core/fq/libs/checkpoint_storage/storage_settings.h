@@ -53,6 +53,7 @@ private:
     YDB_ACCESSOR_MUTABLE(TStateStorageLimits, StateStorageLimits, {});
     YDB_ACCESSOR_MUTABLE(TGcSettings, CheckpointGarbageConfig, {});
     YDB_ACCESSOR_MUTABLE(TExternalStorageSettings, ExternalStorage, {});
+    YDB_ACCESSOR(bool, EnableCompression, false);
 };
 
 } // namespace NFq

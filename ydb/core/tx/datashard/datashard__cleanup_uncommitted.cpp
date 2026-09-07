@@ -89,3 +89,7 @@ void TDataShard::CleanupUncommitted(const TActorContext& ctx) {
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

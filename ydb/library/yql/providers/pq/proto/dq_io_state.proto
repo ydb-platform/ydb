@@ -28,4 +28,5 @@ message TDqPqTopicSinkState {
     string SourceId = 1;
     uint64 ConfirmedSeqNo = 2;
     uint64 EgressBytes = 3;
+    uint64 DeferredPublicationIntId = 4;
 }

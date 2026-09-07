@@ -877,6 +877,42 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
 }
 
 /**
+ * OpDependentJoin.
+ * Note: it does not have runtime support. We have to eliminate it or to rewrite it.
+ */
+
+TOpDependentJoin::TOpDependentJoin(TIntrusivePtr<IOperator> domain, TIntrusivePtr<IOperator> input, const TVector<TInfoUnit>& dependencies,
+                                   TPositionHandle pos)
+    : IBinaryOperator(EOperator::DependentJoin, pos, domain, input)
+    , Dependencies(dependencies) {
+    Y_ENSURE(!Dependencies.empty(), "Dependent join must have correlated columns");
+}
+
+void TOpDependentJoin::ComputeOutputIUs() {
+    TVector<TInfoUnit> res = GetDomain()->GetOutputIUs();
+    for (const auto& iu : GetInput()->GetOutputIUs()) {
+        if (!ContainsInfoUnit(res, iu)) {
+            res.push_back(iu);
+        }
+    }
+    Props.OutputIUs = std::move(res);
+}
+
+TString TOpDependentJoin::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "DependentJoin, Domain: [";
+    for (size_t i = 0; i < Dependencies.size(); i++) {
+        if (i) {
+            res << ", ";
+        }
+        res << Dependencies[i].GetFullName();
+    }
+    res << "]";
+    return res;
+}
+
+/**
  * OpUnionAll operator methods
  */
 
@@ -1381,6 +1417,33 @@ NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
     }
 
     return res;
+}
+
+/**
+ * OpGroupingSets operator. Logical representation of grouping sets.
+ */
+TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos)
+    : IUnaryOperator(EOperator::GroupingSets, pos, input)
+    , GroupingSets(std::move(groupingSets)) {
+    Y_ENSURE(!GroupingSets.empty(), "Grouping sets list must not be empty");
+}
+
+void TOpGroupingSets::ComputeOutputIUs() {
+    Props.OutputIUs = GetInput()->GetOutputIUs();
+}
+
+TString TOpGroupingSets::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    TStringBuilder result;
+    result << "GroupingSets [";
+    for (size_t setIndex = 0; setIndex < GroupingSets.size(); ++setIndex) {
+        if (setIndex != 0) {
+            result << ", ";
+        }
+        result << "(" << FormatInfoUnits(GroupingSets[setIndex]) << ")";
+    }
+    return result << "]";
 }
 
 /***

@@ -156,3 +156,7 @@ void TDataShard::SchedulePlanPredictedTxs() {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

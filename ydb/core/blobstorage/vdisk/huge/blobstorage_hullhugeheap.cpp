@@ -926,6 +926,13 @@ namespace NKikimr {
             }
         }
 
+        ui32 THeap::TryStealFreeChunk() {
+            if (FreeChunks.empty()) {
+                return 0;
+            }
+            return GetChunkIdFromFreeChunks();
+        }
+
         bool THeap::LockChunkForAllocation(ui32 chunkId, ui32 slotSize) {
             TChain *chain = Chains.GetChain(slotSize);
             Y_VERIFY_S(chain, VDiskLogPrefix);

@@ -117,6 +117,9 @@ public:
         if (columnsResult.IsFail()) {
             return columnsResult;
         }
+        if (columnsResult.GetResult()->IsValid() && columnsResult.GetResult()->GetRemainingPath().empty()) {
+            return columnsResult;
+        }
         auto othersResult = OthersData.GetPathAccessor(svPath, recordsCount);
         if (othersResult.IsFail()) {
             return othersResult;

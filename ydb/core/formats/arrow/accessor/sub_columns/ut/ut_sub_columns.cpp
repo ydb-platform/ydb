@@ -290,11 +290,11 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     Y_UNIT_TEST(JsonPathTrie) {
         TVector<TString> testPaths = {"$.a.b", "$.b", "$.c.d"};
         TVector<std::shared_ptr<IChunkedArray>> testAccessors;
-        TVector<ui64> testCookies;
+        TVector<ui32> testCookies;
         NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
 
         {
-            ui64 testCookie = 0;
+            ui32 testCookie = 0;
             for (const auto& path : testPaths) {
                 testAccessors.emplace_back(TTrivialArray::BuildEmpty(std::make_shared<arrow::BinaryType>()));
                 testCookies.emplace_back(testCookie++);
@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
                 UNIT_ASSERT(!jsonPathAccessor->IsValid());
                 UNIT_ASSERT_VALUES_EQUAL(nullptr, jsonPathAccessor->GetChunkedArrayAccessor().get());
-                UNIT_ASSERT_VALUES_EQUAL(std::optional<ui64>{}, jsonPathAccessor->GetCookie());
+                UNIT_ASSERT_VALUES_EQUAL(std::optional<ui32>{}, jsonPathAccessor->GetCookie());
                 UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessor->GetRemainingPath());
             }
         }
@@ -595,6 +595,25 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             values << (value ? *value : TStringBuf("<null>")) << ';';
         });
         UNIT_ASSERT_VALUES_EQUAL(values, "1;2;");
+    }
+
+    Y_UNIT_TEST(PartialArrayNeedsOthersForDeeperPath) {
+        auto columnsBuilder = NSubColumns::TDictStats::MakeBuilder();
+        columnsBuilder.Add(TString(R"("a")"), 2, 2, IChunkedArray::EType::Array, NSubColumns::EValueType::BinaryJson);
+        auto othersBuilder = NSubColumns::TDictStats::MakeBuilder();
+        othersBuilder.Add(TString(R"("a"."b")"), 2, 2, IChunkedArray::EType::Array, NSubColumns::EValueType::BinaryJson);
+
+        NKikimrArrowAccessorProto::TSubColumnsAccessor proto;
+        auto header = NSubColumns::TSubColumnsHeader(columnsBuilder.Finish(), othersBuilder.Finish(), std::move(proto), 0);
+        auto partial = std::make_shared<TSubColumnsPartialArray>(std::move(header), 2, arrow::binary(), NSubColumns::TSettings());
+
+        TTrivialArray::TPlainBuilder<arrow::BinaryType> valuesBuilder;
+        valuesBuilder.AddRecord(0, "");
+        valuesBuilder.AddRecord(1, "");
+        partial->AddColumn(R"("a")", valuesBuilder.Finish(2));
+
+        // Others was not loaded because only a.b was requested.
+        UNIT_ASSERT(!partial->HasSubColumnData(R"("a"."b")"));
     }
 };
 

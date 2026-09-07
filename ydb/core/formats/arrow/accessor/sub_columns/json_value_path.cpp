@@ -122,7 +122,7 @@ TString ToSubcolumnName(TStringBuf path) {
 }
 
 TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType,
-    const std::optional<ui64>& cookie)
+    const std::optional<ui32>& cookie)
     : ChunkedArrayAccessor(std::move(accessor))
     , RemainingPath(std::move(remainingPath))
     , ValueType(valueType)
@@ -203,7 +203,7 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
 }
 
 TConclusionStatus TJsonPathAccessorTrie::Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const EValueType valueType,
-    const std::optional<ui64>& cookie) {
+    const std::optional<ui32>& cookie) {
     auto splittedPathResult = NSubColumns::SplitJsonPath(jsonPath, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
     if (!splittedPathResult.IsSuccess()) {
         return splittedPathResult;

@@ -605,6 +605,7 @@ namespace {
             YDB_LOG_DEBUG("FinalizeSession",
                     COMMON_LOG,
                     {"sessionId", state->SessionId});
+            CleanupStreamProcessor(state);
             state->SessionId.clear();
         }
 

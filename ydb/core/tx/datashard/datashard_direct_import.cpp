@@ -110,6 +110,13 @@ bool TDataShard::TTxS3DirectWriteFinish::Execute(TTransactionContext& txc, const
     // atomically, so a restart after this commit resumes to completion (via the
     // stored ProcessedBytes == ContentLength) instead of writing a second part.
     txc.Env.AttachPart(localTableId, std::move(msg->Result));
+    Self->SetTableUpdateTime(fullTableId, TAppData::TimeProvider->Now());
+
+    if (auto it = Self->TableInfos.find(msg->TableId); it != Self->TableInfos.end()) {
+        // Direct part import bypasses the memtable and compaction, so the shard
+        // must invalidate cached stats explicitly.
+        it->second->StatsNeedUpdate = true;
+    }
 
     NIceDb::TNiceDb db(txc.DB);
     Self->S3Downloads.Store(db, msg->TxId, msg->Info);
@@ -121,6 +128,10 @@ bool TDataShard::TTxS3DirectWriteFinish::Execute(TTransactionContext& txc, const
 void TDataShard::TTxS3DirectWriteFinish::Complete(const TActorContext& ctx) {
     auto* msg = Ev->Get();
     ctx.Send(Ev->Sender, new TEvDataShard::TEvS3DirectWriteFinishResult(msg->TxId, Success, Error), 0, Ev->Cookie);
+
+    if (Success) {
+        Self->UpdateTableStats(ctx);
+    }
 }
 
 } // namespace NDataShard

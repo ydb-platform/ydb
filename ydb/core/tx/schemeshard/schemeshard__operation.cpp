@@ -1046,25 +1046,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
     TTxState* state = context.SS->FindTx(NextPartId());
     switch (txType) {
-#define SCHEME_OP_IMPLEMENTED(...)
-#define SCHEME_OP_INTERNAL(...)
-#define SCHEME_OP_UNSUPPORTED(...)
-#define SCHEME_OP_DEPRECATED(...)
-#define SCHEME_OP_STUB(...)
-#define SCHEME_OP_RETIRED(...)
-#define SCHEME_OP_UNSUPPORTED_TX(txType, opType) \
-    case TTxState::txType: AbortUnimplementedSchemeOperation<NKikimrSchemeOp::opType>();
-#define SCHEME_OP_TRANSIENT_TX(txType) \
-    case TTxState::txType: Y_ABORT("Transient operation has no persisted transaction");
-#include "schemeshard_operation_registry.inc"
-#undef SCHEME_OP_IMPLEMENTED
-#undef SCHEME_OP_INTERNAL
-#undef SCHEME_OP_UNSUPPORTED
-#undef SCHEME_OP_DEPRECATED
-#undef SCHEME_OP_STUB
-#undef SCHEME_OP_RETIRED
-#undef SCHEME_OP_UNSUPPORTED_TX
-#undef SCHEME_OP_TRANSIENT_TX
+    SCHEME_OPERATION_RECOVERY_CASES
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
     case TTxState::ETxType::TxRmDir:
@@ -1377,23 +1359,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         TOperationContext& context) const
 {
     switch (tx.GetOperationType()) {
-#define SCHEME_OP_IMPLEMENTED(name, ...) case NKikimrSchemeOp::name: { __VA_ARGS__ }
-#define SCHEME_OP_STUB(name, ...) SCHEME_OP_IMPLEMENTED(name, __VA_ARGS__)
-#define SCHEME_OP_RETIRED(name, ...) SCHEME_OP_IMPLEMENTED(name, __VA_ARGS__)
-#define SCHEME_OP_INTERNAL(name, reason) case NKikimrSchemeOp::name: Y_ABORT("%s", reason);
-#define SCHEME_OP_UNSUPPORTED(name) case NKikimrSchemeOp::name: AbortUnimplementedSchemeOperation<NKikimrSchemeOp::name>();
-#define SCHEME_OP_DEPRECATED(name) case NKikimrSchemeOp::name: Y_ABORT("impossible");
-#define SCHEME_OP_UNSUPPORTED_TX(...)
-#define SCHEME_OP_TRANSIENT_TX(...)
-#include "schemeshard_operation_registry.inc"
-#undef SCHEME_OP_IMPLEMENTED
-#undef SCHEME_OP_INTERNAL
-#undef SCHEME_OP_UNSUPPORTED
-#undef SCHEME_OP_DEPRECATED
-#undef SCHEME_OP_STUB
-#undef SCHEME_OP_RETIRED
-#undef SCHEME_OP_UNSUPPORTED_TX
-#undef SCHEME_OP_TRANSIENT_TX
+    SCHEME_OPERATION_FACTORY_CASES(op, tx, context)
     }
 
     Y_UNREACHABLE();

@@ -1204,26 +1204,9 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
     TPathRefs result;
     TRefSink out(result);
 
-    switch (tx.GetOperationType()) {
-#define SCHEME_OP_IMPLEMENTED(name, ...) \
-    case NKikimrSchemeOp::name: ExtractRegisteredOperation<NKikimrSchemeOp::name>(tx, out); break;
-#define SCHEME_OP_INTERNAL(name, ...) SCHEME_OP_IMPLEMENTED(name)
-#define SCHEME_OP_UNSUPPORTED(name) SCHEME_OP_IMPLEMENTED(name)
-#define SCHEME_OP_DEPRECATED(name) SCHEME_OP_IMPLEMENTED(name)
-#define SCHEME_OP_STUB(name, ...) SCHEME_OP_IMPLEMENTED(name)
-#define SCHEME_OP_RETIRED(name, ...) SCHEME_OP_IMPLEMENTED(name)
-#define SCHEME_OP_UNSUPPORTED_TX(...)
-#define SCHEME_OP_TRANSIENT_TX(...)
-#include "schemeshard_operation_registry.inc"
-#undef SCHEME_OP_IMPLEMENTED
-#undef SCHEME_OP_INTERNAL
-#undef SCHEME_OP_UNSUPPORTED
-#undef SCHEME_OP_DEPRECATED
-#undef SCHEME_OP_STUB
-#undef SCHEME_OP_RETIRED
-#undef SCHEME_OP_UNSUPPORTED_TX
-#undef SCHEME_OP_TRANSIENT_TX
-    }
+    DispatchSchemeOperation(tx.GetOperationType(), [&](auto tag) {
+        ExtractRegisteredOperation<decltype(tag)::value>(tx, out);
+    });
 
     // Every operation resolves ApplyIf IDs on this SchemeShard before proposing.
     for (size_t i = 0; i < size_t(tx.ApplyIfSize()); ++i) {

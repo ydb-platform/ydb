@@ -137,6 +137,14 @@ struct TScriptExecutionsYdbSetup {
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
     }
 
+    ~TScriptExecutionsYdbSetup() {
+        // Stop SDK requests and wait for their completion before the server is destroyed,
+        // otherwise SDK gRPC threads may outlive the server and race with its shutdown
+        if (YdbDriver) {
+            YdbDriver->Stop(true);
+        }
+    }
+
     TTestActorRuntime* GetRuntime() {
         return Server->GetRuntime();
     }

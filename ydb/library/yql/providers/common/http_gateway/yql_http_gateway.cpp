@@ -704,18 +704,38 @@ private:
     size_t BuffersSizePerStream = CURL_MAX_WRITE_SIZE << 3U;
     TCurlInitConfig InitConfig;
 
+    // libcurl requires curl_global_init() to be called once per process before any other thread is started,
+    // and curl_global_cleanup() to be called once after all other threads are finished (see man libcurl(3)).
+    // The gateway may be created and destroyed several times during the process lifetime (e.g. in tests),
+    // when other threads are already running, so the global state is initialized exactly once and is never
+    // cleaned up: the OS reclaims it at process exit, which libcurl explicitly allows.
+    //
+    // Never calling curl_global_cleanup() is essential rather than a shortcut. It drops the c-ares library
+    // reference count to zero and resets c-ares global state, while other c-ares users in the same process
+    // (grpc, ydb/library/actors/dnscachelib) do not take their own c-ares reference and may still be resolving
+    // names on their threads. This is the data race reported by ThreadSanitizer in ares_library_cleanup_unsafe
+    // (YDBBUGS-482, YDBBUGS-716, YQ-4880).
+    static void InitCurlGlobal() {
+        struct TCurlGlobalInit {
+            TCurlGlobalInit() {
+                const CURLcode globalInitResult = curl_global_init(CURL_GLOBAL_ALL);
+                if (globalInitResult != CURLE_OK) {
+                    throw yexception() << "curl_global_init error " << int(globalInitResult) << ": " << curl_easy_strerror(globalInitResult);
+                }
+            }
+        };
+        // If the constructor throws, the initialization is retried on the next call.
+        static const TCurlGlobalInit init;
+        Y_UNUSED(init);
+    }
+
     void InitCurl() {
-        // FIXME: NOT SAFE (see man libcurl(3))
-        const CURLcode globalInitResult = curl_global_init(CURL_GLOBAL_ALL);
-        if (globalInitResult != CURLE_OK) {
-           throw yexception() << "curl_global_init error " << int(globalInitResult) << ": " << curl_easy_strerror(globalInitResult) << Endl;
-        }
+        InitCurlGlobal();
         Handle = std::shared_ptr<CURLM>(curl_multi_init(), [](auto handle) {
             const CURLMcode multiCleanupResult = curl_multi_cleanup(handle);
             if (multiCleanupResult != CURLM_OK) {
                 Cerr << "curl_multi_cleanup error " << int(multiCleanupResult) << ": " << curl_multi_strerror(multiCleanupResult) << Endl;
             }
-            curl_global_cleanup(); // FIXME: NOT SAFE (see man libcurl(3))
         });
         if (!Handle) {
             throw yexception() << "curl_multi_init error";

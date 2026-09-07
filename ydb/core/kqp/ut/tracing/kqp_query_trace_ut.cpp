@@ -15,10 +15,12 @@
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <algorithm>
+#include <util/folder/dirut.h>
 
 namespace NKikimr {
 using namespace Tests;
@@ -30,6 +32,12 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));
         settings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(nodes).SetAppConfig(config);
+        if (config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable()) {
+            NKikimrKqp::TKqpSetting spilling;
+            spilling.SetName("_KqpEnableSpilling");
+            spilling.SetValue("true");
+            settings.SetEnableKqpSpilling(true).SetKqpSettings({spilling});
+        }
         TServer::TPtr server = new TServer(settings);
         auto& runtime = *server->GetRuntime();
         const auto sender = runtime.AllocateEdgeActor();
@@ -461,10 +469,226 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
     }
 
+    Y_UNIT_TEST(JoinAndAggregateDiagnosticsMatchTaskReports) {
+        auto [runtime, server, sender] = CreateServer(2);
+        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+        ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u), (2u, 20u), (4000000000u, 10u);", 0);
+        auto* uploader = RegisterUploader(runtime);
+        const TString sql = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel='0';
+            PRAGMA ydb.HashJoinMode='graceandself';
+            SELECT a.value AS v, COUNT(*) AS n FROM `/Root/table-1` AS a
+            FULL JOIN `/Root/table-1` AS b ON a.value = b.value GROUP BY a.value;
+        )";
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            for (const ui8 level : {6, 10}) {
+                ClearUploader(*uploader);
+                std::map<TActorId, NYql::NDqProto::TDqTaskStats> tasks;
+                const auto observer = runtime.AddObserver<NYql::NDq::TEvDqCompute::TEvState>(
+                    [&](NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+                        const auto& state = ev->Get()->Record;
+                        if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED && state.GetStats().TasksSize() == 1) {
+                            tasks[ev->Sender] = state.GetStats().GetTasks(0);
+                        }
+                    });
+                ExecSQL(runtime, sender, sql, level, Ydb::StatusIds::SUCCESS, {}, 0, type);
+                UNIT_ASSERT(uploader->BuildTraceTrees());
+                UNIT_ASSERT(!tasks.empty());
+                ui64 cpu = 0, input = 0, output = 0, wait = 0;
+                std::map<ui32, std::map<ui32, ui64>> nodesByStage;
+                for (const auto& [actor, task] : tasks) {
+                    ++nodesByStage[task.GetStageId()][actor.NodeId()];
+                    cpu += task.GetCpuTimeUs();
+                    input += task.GetInputRows();
+                    output += task.GetOutputRows();
+                    wait += task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
+                }
+                const auto* query = FindSpan(*uploader, "Execute query");
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.wait_us")->value().int_value(), wait);
+                UNIT_ASSERT(!FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value());
+                ui64 reported = 0, stageCpu = 0, stageInput = 0, stageOutput = 0;
+                bool hasJoin = false, hasAggregate = false;
+                for (const auto& span : uploader->Spans) {
+                    for (const auto& event : span.events()) {
+                        if (event.name() != "Stage statistics") {
+                            continue;
+                        }
+                        reported += FindAttribute(event, "ydb.reported_tasks")->value().int_value();
+                        stageCpu += FindAttribute(event, "ydb.cpu_us")->value().int_value();
+                        stageInput += FindAttribute(event, "ydb.input_rows")->value().int_value();
+                        stageOutput += FindAttribute(event, "ydb.output_rows")->value().int_value();
+                        const auto& operation = FindAttribute(event, "ydb.stage.operation")->value().string_value();
+                        hasJoin |= operation == "Join";
+                        hasAggregate |= operation == "Aggregate";
+                        TStringBuilder nodes;
+                        const auto stageId = FindAttribute(event, "ydb.stage_id")->value().int_value();
+                        for (const auto& [node, count] : nodesByStage.at(stageId)) {
+                            if (nodes) {
+                                nodes << ",";
+                            }
+                            nodes << node << ":" << count;
+                        }
+                        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks_by_node")->value().string_value(), nodes);
+                        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks")->value().int_value(),
+                            FindAttribute(event, "ydb.reported_tasks")->value().int_value());
+                    }
+                }
+                if (level == TComponentTracingLevels::TQueryProcessor::Basic) {
+                    UNIT_ASSERT_VALUES_EQUAL(reported, 0);
+                } else {
+                    UNIT_ASSERT_C(hasJoin && hasAggregate, uploader->PrintTraces());
+                    UNIT_ASSERT_VALUES_EQUAL(reported, tasks.size());
+                    UNIT_ASSERT_VALUES_EQUAL(stageCpu, cpu);
+                    UNIT_ASSERT_VALUES_EQUAL(stageInput, input);
+                    UNIT_ASSERT_VALUES_EQUAL(stageOutput, output);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RetriedReadAppearsInTaskDiagnostics) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        ExecSQL(runtime, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u);", 0);
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            ClearUploader(*uploader);
+            bool interrupted = false;
+            TTestActorRuntimeBase::TEventFilter previous;
+            previous = runtime.SetEventFilter([&](TTestActorRuntimeBase& rt, TAutoPtr<IEventHandle>& ev) {
+                if (!interrupted && ev->TraceId && ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
+                    const auto* forward = ev->Get<TEvPipeCache::TEvForward>();
+                    if (forward->Ev->Type() == TEvDataShard::TEvRead::EventType) {
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new TEvPipeCache::TEvDeliveryProblem(forward->TabletId, true)), 0, true);
+                        interrupted = true;
+                        return true;
+                    }
+                }
+                return previous ? previous(rt, ev) : false;
+            });
+            ExecSQL(runtime, sender, "SELECT SUM(value) FROM `/Root/table-1`;",
+                15, Ydb::StatusIds::SUCCESS, {}, 0, type);
+            runtime.SetEventFilter(std::move(previous));
+            UNIT_ASSERT(interrupted);
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            const auto* read = FindSpan(*uploader, "Read table");
+            UNIT_ASSERT(read);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*read, "ydb.read_retries")->value().int_value(), 1);
+            bool taskRetried = false;
+            for (const auto& span : uploader->Spans) {
+                for (const auto& event : span.events()) {
+                    if (event.name() == "Stage statistics") {
+                        for (const auto& task : FindAttribute(event, "ydb.interesting_tasks")->value().array_value().values()) {
+                            for (const auto& attr : task.kvlist_value().values()) {
+                                taskRetried |= attr.key() == "ydb.read_retries" && attr.value().int_value() == 1;
+                            }
+                        }
+                    }
+                }
+            }
+            UNIT_ASSERT(taskRetried);
+        }
+    }
+
+    Y_UNIT_TEST(FailedTaskMarksDiagnosticsIncomplete) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+        ExecSQL(runtime, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u), (4000000000u, 20u);", 0);
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            ClearUploader(*uploader);
+            bool failed = false;
+            const auto observer = runtime.AddObserver<NYql::NDq::TEvDqCompute::TEvState>(
+                [&](NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+                    failed |= ev->Get()->Record.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE;
+                });
+            ExecSQL(runtime, sender,
+                "SELECT Ensure(value, value = 0u, 'execution failed') FROM `/Root/table-1`;",
+                15, Ydb::StatusIds::PRECONDITION_FAILED, {}, 0, type);
+            UNIT_ASSERT(failed);
+            AssertStatus(*uploader, "Execute query", NTraceProto::Status::STATUS_CODE_ERROR);
+            const auto* execution = FindSpan(*uploader, "Execute");
+            const auto* query = FindSpan(*uploader, "Execute query");
+            UNIT_ASSERT(execution && query);
+            UNIT_ASSERT(FindAttribute(*execution, "ydb.task_stats_incomplete")->value().bool_value());
+            UNIT_ASSERT(FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value());
+            UNIT_ASSERT(std::ranges::any_of(execution->events(), [](const auto& event) {
+                return event.name() == "Stage statistics"
+                    && FindAttribute(event, "ydb.failed_tasks")->value().int_value() > 0;
+            }));
+        }
+    }
+
+    Y_UNIT_TEST(SpillingIsReportedWithBasicStats) {
+        NKikimrConfig::TAppConfig config;
+        auto& tableService = *config.MutableTableServiceConfig();
+        tableService.SetEnableQueryServiceSpilling(true);
+        tableService.SetEnableSpillingInHashJoinShuffleConnections(false);
+        auto& memory = *tableService.MutableResourceManager();
+        memory.SetMkqlLightProgramMemoryLimit(100);
+        memory.SetMkqlHeavyProgramMemoryLimit(300);
+        memory.SetSpillingPercent(0.01);
+        auto& spilling = *tableService.MutableSpillingServiceConfig()->MutableLocalFileConfig();
+        spilling.SetEnable(true);
+        spilling.SetRoot("./spilling/");
+        MakeDirIfNotExist("./spilling");
+        auto [runtime, server, sender] = CreateServer(1, config);
+        ExecSQL(runtime, sender, "CREATE TABLE `/Root/SpillData` (Key Uint64, Value String, PRIMARY KEY (Key));",
+            0, Ydb::StatusIds::SUCCESS, {}, 0, NKikimrKqp::QUERY_TYPE_SQL_DDL);
+        for (ui32 i = 0; i < 128; ++i) {
+            ExecSQL(runtime, sender, TStringBuilder() << "UPSERT INTO `/Root/SpillData` (Key, Value) VALUES ("
+                << i << "u, '" << TString(200000 + i, 'a' + i % 26) << "');", 0);
+        }
+        auto* uploader = RegisterUploader(runtime);
+        NKqp::TKqpCounters counters(runtime.GetAppData().Counters);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_SCAN, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            ClearUploader(*uploader);
+            std::map<TActorId, ui64> taskSpills;
+            const auto writesBefore = counters.ComputeSpilling.WriteBlobs->Val();
+            const auto readsBefore = counters.ComputeSpilling.ReadBlobs->Val();
+            const auto tasks = runtime.AddObserver<NKqp::TEvKqpNode::TEvStartKqpTasksRequest>(
+                [&](NKqp::TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(ev->Get()->Record.GetRuntimeSettings().GetStatsMode()),
+                        static_cast<int>(NYql::NDqProto::DQ_STATS_MODE_BASIC));
+                });
+            const auto states = runtime.AddObserver<NYql::NDq::TEvDqCompute::TEvState>(
+                [&](NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+                    const auto& state = ev->Get()->Record;
+                    if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+                        ui64 bytes = 0;
+                        for (const auto& task : state.GetStats().GetTasks()) {
+                            bytes += task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes();
+                        }
+                        taskSpills[ev->Sender] = bytes;
+                    }
+                });
+            ExecSQL(runtime, sender, R"(
+                PRAGMA ydb.EnableSpillingNodes='GraceJoin';
+                PRAGMA ydb.CostBasedOptimizationLevel='0';
+                PRAGMA ydb.HashJoinMode='graceandself';
+                SELECT COUNT(*) FROM `/Root/SpillData` AS a
+                FULL JOIN `/Root/SpillData` AS b ON a.Value = b.Value;
+            )", 15, Ydb::StatusIds::SUCCESS, {}, 0, type);
+            UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() > writesBefore);
+            UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() > readsBefore);
+            ui64 spilledBytes = 0;
+            for (const auto& [actor, bytes] : taskSpills) {
+                spilledBytes += bytes;
+            }
+            UNIT_ASSERT(spilledBytes > 0);
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            const auto* query = FindSpan(*uploader, "Execute query");
+            UNIT_ASSERT(query);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.spilled_bytes")->value().int_value(), spilledBytes);
+        }
+    }
+
     Y_UNIT_TEST(StageDiagnosticsPreserveAnomaliesAndTotals) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
-        NKqp::TExecutionTraceStats diagnostics;
+        NKqp::TExecutionTraceStats diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed);
         NKqpProto::TKqpPhyStage stage;
         stage.SetProgramAst("Aggregate");
         for (ui64 id = 1; id <= 10; ++id) {
@@ -524,10 +748,44 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*result, "ydb.locks_broken_as_victim")->value().int_value(), 3);
     }
 
+    Y_UNIT_TEST(BasicDiagnosticsKeepTotalsWithoutStageEvents) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        for (const ui8 level : {6, 10}) {
+            ClearUploader(*uploader);
+            NKqp::TExecutionTraceStats diagnostics(level);
+            NKqpProto::TKqpPhyStage stage;
+            for (ui64 id = 0; id < 3; ++id) {
+                NYql::NDqProto::TEvComputeActorState state;
+                state.SetState(NYql::NDqProto::COMPUTE_STATE_FINISHED);
+                auto& task = *state.MutableStats()->AddTasks();
+                task.SetTaskId(id + 1);
+                task.SetStageId(0);
+                task.SetWaitInputTimeUs(1);
+                task.SetSpillingComputeWriteBytes(2);
+                task.SetStartTimeMs(100);
+                task.SetFinishTimeMs(100 + id);
+                diagnostics.OnTaskFinished({0, 0}, stage, 3, state, 1);
+            }
+            NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
+                NWilson::TTraceId::NewTraceId(level, 4095), "Execute", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+            NYql::NDqProto::TDqExecutionStats stats;
+            diagnostics.Finish(span, stats, Ydb::StatusIds::SUCCESS);
+            span.EndOk();
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            const auto* execution = FindSpan(*uploader, "Execute");
+            UNIT_ASSERT_VALUES_EQUAL(execution->events_size(), level == 10 ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.wait_us")->value().int_value(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.spilled_bytes")->value().int_value(), 6);
+            UNIT_ASSERT_DOUBLES_EQUAL(FindAttribute(*execution, "ydb.max_task_skew")->value().double_value(), 2, 1e-9);
+            UNIT_ASSERT(!FindAttribute(*execution, "ydb.task_stats_incomplete")->value().bool_value());
+        }
+    }
+
     Y_UNIT_TEST(StageLimitsKeepTotalsAndTransactionIdentity) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
-        NKqp::TExecutionTraceStats diagnostics;
+        NKqp::TExecutionTraceStats diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed);
         NKqpProto::TKqpPhyStage stage;
         NYql::NDqProto::TDqTaskStats task;
         task.SetStageId(0);
@@ -535,7 +793,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         task.SetSpillingChannelWriteBytes(2);
         for (ui64 tx = 0; tx < NKqp::NQueryTraceSettings::MaxStages + 3; ++tx) {
             task.SetTaskId(tx + 1);
-            diagnostics.AddTask(tx, stage, 2, task, 0, 1, true);
+            diagnostics.AddTask(tx, stage, 2, task, std::nullopt, 1, true);
         }
         NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
             NWilson::TTraceId::NewTraceId(15, 4095), "Execute", NWilson::EFlags::NONE, runtime.GetActorSystem(0));

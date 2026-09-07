@@ -38,34 +38,33 @@ TString StageOperation(const NKqpProto::TKqpPhyStage& stage) {
 
 }
 
+TExecutionTraceStats::TExecutionTraceStats(ui8 verbosity)
+    : CollectDetails(verbosity >= TComponentTracingLevels::TQueryProcessor::Detailed) {
+}
+
 void TExecutionTraceStats::OnTaskFinished(std::pair<ui64, ui32> stageId, const NKqpProto::TKqpPhyStage& stage,
         ui64 taskCount, const NYql::NDqProto::TEvComputeActorState& state, ui32 nodeId) {
     NYql::NDqProto::TDqTaskStats empty;
     empty.SetTaskId(state.GetTaskId());
     empty.SetStageId(stageId.second);
     const auto& stats = state.GetStats();
-    AddTask(stageId.first, stage, taskCount, stats.TasksSize() ? stats.GetTasks(0) : empty,
-        stats.GetDurationUs(), nodeId, state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE);
+    const auto& task = stats.TasksSize() ? stats.GetTasks(0) : empty;
+    std::optional<ui64> durationUs;
+    if (stats.GetDurationUs()) {
+        durationUs = stats.GetDurationUs();
+    } else if (task.GetStartTimeMs() && task.GetFinishTimeMs() >= task.GetStartTimeMs()) {
+        durationUs = (task.GetFinishTimeMs() - task.GetStartTimeMs()) * 1000;
+    }
+    AddTask(stageId.first, stage, taskCount, task,
+        durationUs, nodeId, state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE);
 }
 
 void TExecutionTraceStats::AddTask(ui64 txIndex, const NKqpProto::TKqpPhyStage& stage, ui64 taskCount,
-        const NYql::NDqProto::TDqTaskStats& task, ui64 durationUs, ui32 nodeId, bool failed) {
-    TTask sample;
-    sample.Id = task.GetTaskId();
-    sample.Node = nodeId;
-    sample.DurationUs = durationUs;
-    sample.CpuUs = task.GetCpuTimeUs();
-    sample.InputRows = task.GetInputRows();
-    sample.OutputRows = task.GetOutputRows();
-    sample.WaitUs = task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
-    sample.SpilledBytes = task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes();
-    sample.Failed = failed;
-    NKqpProto::TKqpTaskExtraStats extra;
-    if (task.GetExtra().UnpackTo(&extra)) {
-        sample.Retries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
-    }
-    WaitUs += sample.WaitUs;
-    SpilledBytes += sample.SpilledBytes;
+        const NYql::NDqProto::TDqTaskStats& task, std::optional<ui64> durationUs, ui32 nodeId, bool failed) {
+    const ui64 waitUs = task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
+    const ui64 spilledBytes = task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes();
+    WaitUs += waitUs;
+    SpilledBytes += spilledBytes;
     auto it = Stages.find({txIndex, task.GetStageId()});
     if (it == Stages.end()) {
         if (Stages.size() == NQueryTraceSettings::MaxStages) {
@@ -73,29 +72,48 @@ void TExecutionTraceStats::AddTask(ui64 txIndex, const NKqpProto::TKqpPhyStage& 
             return;
         }
         it = Stages.try_emplace(std::make_pair(txIndex, task.GetStageId())).first;
-        it->second.Operation = StageOperation(stage);
+        if (CollectDetails) {
+            it->second.Operation = StageOperation(stage);
+        }
     }
     auto& summary = it->second;
     summary.TaskCount = taskCount;
     ++summary.Reports;
+    if (durationUs) {
+        if (!summary.Durations || *durationUs < summary.MinDurationUs) {
+            summary.MinDurationUs = *durationUs;
+            summary.FastestNode = nodeId;
+        }
+        if (!summary.Durations || *durationUs > summary.MaxDurationUs) {
+            summary.MaxDurationUs = *durationUs;
+            summary.SlowestNode = nodeId;
+        }
+        ++summary.Durations;
+        summary.SumDurationUs += *durationUs;
+    }
+    if (!CollectDetails) {
+        return;
+    }
+    TTask sample;
+    sample.Id = task.GetTaskId();
+    sample.Node = nodeId;
+    sample.DurationUs = durationUs.value_or(0);
+    sample.CpuUs = task.GetCpuTimeUs();
+    sample.InputRows = task.GetInputRows();
+    sample.OutputRows = task.GetOutputRows();
+    sample.WaitUs = waitUs;
+    sample.SpilledBytes = spilledBytes;
+    sample.Failed = failed;
+    NKqpProto::TKqpTaskExtraStats extra;
+    if (task.GetExtra().UnpackTo(&extra)) {
+        sample.Retries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
+    }
     summary.FailedTasks += failed;
     summary.CpuUs += sample.CpuUs;
     summary.InputRows += sample.InputRows;
     summary.OutputRows += sample.OutputRows;
-    summary.WaitUs += sample.WaitUs;
-    summary.SpilledBytes += sample.SpilledBytes;
-    if (durationUs) {
-        if (!summary.Durations || durationUs < summary.MinDurationUs) {
-            summary.MinDurationUs = durationUs;
-            summary.FastestNode = nodeId;
-        }
-        if (!summary.Durations || durationUs > summary.MaxDurationUs) {
-            summary.MaxDurationUs = durationUs;
-            summary.SlowestNode = nodeId;
-        }
-        ++summary.Durations;
-        summary.SumDurationUs += durationUs;
-    }
+    summary.WaitUs += waitUs;
+    summary.SpilledBytes += spilledBytes;
     if (summary.TasksByNode.contains(nodeId)
             || summary.TasksByNode.size() < NQueryTraceSettings::MaxNodesPerStage) {
         ++summary.TasksByNode[nodeId];
@@ -123,7 +141,7 @@ void TExecutionTraceStats::Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecu
             ? static_cast<double>(stage.MaxDurationUs) * stage.Durations / stage.SumDurationUs : 0;
         maxSkew = std::max(maxSkew, skew);
         incomplete |= stage.Reports != stage.TaskCount || stage.Durations != stage.Reports;
-        if (span.GetTraceId().GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Detailed) {
+        if (!CollectDetails) {
             continue;
         }
         NWilson::TArrayValue tasks;

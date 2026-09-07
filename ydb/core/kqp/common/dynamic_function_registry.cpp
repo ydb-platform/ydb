@@ -15,7 +15,7 @@
 #include <util/system/mutex.h>
 #include <util/system/spinlock.h>
 
-#include <atomic>
+#include <memory>
 #include <utility>
 
 namespace NKikimr::NKqp {
@@ -49,6 +49,8 @@ class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
         THashMap<TString, TUdfLibraryPtr> LoadedLibraries;
         TUdfModulesMap UdfModules;
         TUdfModulePathsMap SystemModulePaths;
+        NUdf::TBackTraceCallback BackTraceCallback = nullptr;
+        bool SupportsSizedAllocators = true;
 
         TSnapshot() = default;
 
@@ -56,6 +58,8 @@ class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
             : LoadedLibraries(other.LoadedLibraries)
             , UdfModules(other.UdfModules)
             , SystemModulePaths(other.SystemModulePaths)
+            , BackTraceCallback(other.BackTraceCallback)
+            , SupportsSizedAllocators(other.SupportsSizedAllocators)
         {
         }
     };
@@ -133,17 +137,12 @@ public:
     {
     }
 
-    //! Snapshot is copied; WriterMutex_ / LoadMutex_ are not shared with rhs.
+    //! Snapshot is copied; WriterMutex_ / per-path load mutexes are not shared with rhs.
     TDynamicFunctionRegistry(const TDynamicFunctionRegistry& rhs)
         : IDynamicFunctionRegistry()
         , Builtins_(rhs.Builtins_)
         , State_(MakeIntrusive<TSnapshot>(*rhs.State_.AtomicLoad()))
-        , SupportsSizedAllocators_(
-              rhs.SupportsSizedAllocators_.load(std::memory_order_relaxed))
     {
-        with_lock (rhs.WriterMutex_) {
-            BackTraceCallback_ = rhs.BackTraceCallback_;
-        }
     }
 
     void AllowUdfPatch() override {
@@ -156,9 +155,11 @@ public:
         const TString& customUdfPrefix = {},
         THashSet<TString>* modules = nullptr) override
     {
-        // Serialize unsafe .so entry points; readers stay on wait-free snapshots.
-        // Lock order: LoadMutex_ -> WriterMutex_ (never reverse).
-        TGuard<TMutex> loadGuard(LoadMutex_);
+        // Native .so only (WASM uses AddModule and never enters here).
+        // Per-path mutex: same libraryPath serializes dlopen/Register; different
+        // paths load in parallel. Lock order: path load mutex -> WriterMutex_.
+        auto pathLoadMutex = AcquireNativePathLoadMutex(libraryPath);
+        TGuard<TMutex> loadGuard(*pathLoadMutex);
 
         TUdfLibraryPtr lib;
         NUdf::TBackTraceCallback backTraceCallback = nullptr;
@@ -170,9 +171,7 @@ public:
                 lib = libIt->second;
             } else {
                 needOpen = true;
-                with_lock (WriterMutex_) {
-                    backTraceCallback = BackTraceCallback_;
-                }
+                backTraceCallback = snap->BackTraceCallback;
             }
         }
 
@@ -312,6 +311,7 @@ public:
     }
 
     void RemoveModule(const TStringBuf& moduleName) override {
+        TMaybe<TString> droppedLibraryPath;
         with_lock (WriterMutex_) {
             auto cur = State_.AtomicLoad();
             auto it = cur->UdfModules.find(TString(moduleName));
@@ -336,8 +336,13 @@ public:
             }
             if (!pathStillUsed) {
                 next->LoadedLibraries.erase(libraryPath);
+                droppedLibraryPath = libraryPath;
             }
             State_.AtomicStore(next);
+        }
+        // Drop per-path load mutex after publish (lock order: never under WriterMutex_).
+        if (droppedLibraryPath) {
+            ReleaseNativePathLoadMutex(*droppedLibraryPath);
         }
     }
 
@@ -496,7 +501,7 @@ public:
     }
 
     bool SupportsSizedAllocators() const override {
-        return SupportsSizedAllocators_.load(std::memory_order_relaxed);
+        return State_.AtomicLoad()->SupportsSizedAllocators;
     }
 
     void PrintInfoTo(IOutputStream& out) const override {
@@ -523,18 +528,36 @@ public:
 
     void SetBackTraceCallback(NUdf::TBackTraceCallback callback) override {
         with_lock (WriterMutex_) {
-            BackTraceCallback_ = callback;
+            auto next = MakeIntrusive<TSnapshot>(*State_.AtomicLoad());
+            next->BackTraceCallback = callback;
+            State_.AtomicStore(next);
         }
     }
 
 private:
+    //! Per libraryPath mutex for native LoadUdfs (dlopen/Register). WASM uses AddModule.
+    std::shared_ptr<TMutex> AcquireNativePathLoadMutex(const TString& libraryPath) {
+        with_lock (PathLoadMutexesLock_) {
+            auto& slot = PathLoadMutexes_[libraryPath];
+            if (!slot) {
+                slot = std::make_shared<TMutex>();
+            }
+            return slot;
+        }
+    }
+
+    void ReleaseNativePathLoadMutex(const TString& libraryPath) {
+        with_lock (PathLoadMutexesLock_) {
+            PathLoadMutexes_.erase(libraryPath);
+        }
+    }
+
     const IBuiltinFunctionRegistry::TPtr Builtins_;
 
     THotSwap<TSnapshot> State_;
     mutable TAdaptiveLock WriterMutex_;
-    TMutex LoadMutex_;
-    NUdf::TBackTraceCallback BackTraceCallback_ = nullptr;
-    std::atomic<bool> SupportsSizedAllocators_{true};
+    TAdaptiveLock PathLoadMutexesLock_;
+    THashMap<TString, std::shared_ptr<TMutex>> PathLoadMutexes_;
 };
 
 } // namespace

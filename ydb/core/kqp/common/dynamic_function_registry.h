@@ -15,9 +15,14 @@ namespace NKikimr::NKqp {
 //! - After RemoveModule publishes, new lookups do not observe the module
 //!   (no phantom re-fetch). An in-flight call that already held shared_ptr may
 //!   still finish — never use-after-free.
-//! - LoadUdfs runs dlopen / Register under a separate load mutex (not on the
-//!   reader path); do not hold actor mailboxes across that work when possible.
-//! - Clone() copies the current snapshot; module Impl pointers are shared.
+//! - LoadUdfs is for native .so modules only (WASM registers via AddModule).
+//!   Per libraryPath it serializes dlopen / Register so the same .so is not
+//!   opened/registered concurrently; different paths do not block each other.
+//!   Prefer not holding an actor mailbox across that work when possible.
+//! - Clone() copies the current snapshot (including BackTraceCallback /
+//!   SupportsSizedAllocators); module Impl pointers are shared.
+//! - Native per-path load mutexes are dropped when the last module for that
+//!   libraryPath is removed.
 class IDynamicFunctionRegistry: public NMiniKQL::IMutableFunctionRegistry {
 public:
     using TPtr = TIntrusivePtr<IDynamicFunctionRegistry>;

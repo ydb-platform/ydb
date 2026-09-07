@@ -489,7 +489,7 @@ public:
     void SendSessionClose(const TKqpSessionInfo* sessionInfo) {
         auto closeSessionEv = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
         closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo->SessionId);
-        Send(sessionInfo->WorkerId, closeSessionEv.release());
+        Send(sessionInfo->WorkerId, closeSessionEv.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void AskSelfNodeInfo() {
@@ -618,6 +618,13 @@ public:
                     {"requestId", ev->Cookie});
 
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, "Session not found.", ev->Cookie);
+                RemoveSession("", ev->Sender);
+                break;
+            }
+
+            case TKqpEvents::EvCloseSessionRequest: {
+                YDB_LOG_WARN("Session close request was undelivered",
+                    {"targetId", ev->Sender});
                 RemoveSession("", ev->Sender);
                 break;
             }

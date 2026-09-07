@@ -337,6 +337,14 @@ public:
             {"ctx", *GetUserRequestContext()},
             {"sender", ev->Sender},
             {"traceId", TraceId()});
+
+        if (Request.LocksOp == ELocksOp::Rollback) {
+            // The buffer may have finished a commit before its result lost a
+            // race with the query timeout. Cleanup rollback has no deadline,
+            // so it must reply even when that buffer actor is already gone.
+            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                NYql::TIssue("Cannot deliver rollback to the transaction buffer actor"));
+        }
     }
 
     void MakeResponseAndPassAway() {

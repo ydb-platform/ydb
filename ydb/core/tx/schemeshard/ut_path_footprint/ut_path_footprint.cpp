@@ -259,33 +259,80 @@ Y_UNIT_TEST(UnchangedFamiliesKeepTheirPaths) {
     }
 }
 
-// The bug the plan calls the id bypass: an id-addressed request used to log
-// JoinPath(WorkingDir, "") -- a bare working dir standing in for a target it
-// says nothing about. Resolving the id needs schemeshard state, so the honest
-// answer is no path at all, which makes the audit line omit the field.
-Y_UNIT_TEST(IdAddressedRequestsReportNoPath) {
+Y_UNIT_TEST(IdAddressedRequestsKeepLegacyPaths) {
     {
         auto tx = MakeTx(NKikimrSchemeOp::ESchemeOpDropTable, "/MyRoot");
         tx.MutableDrop()->SetId(36);
-        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/");
+        tx.MutableDrop()->SetName("T");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/T");
+
+        const auto refs = ExtractPathRefs(tx);
+        UNIT_ASSERT(refs[0].Kind == EPathRefKind::ById);
+        UNIT_ASSERT_VALUES_EQUAL(refs[0].LocalPathId, 36u);
+        UNIT_ASSERT(JoinPathRef(tx.GetWorkingDir(), refs[0], {}).empty());
     }
     {
         auto tx = MakeTx(NKikimrSchemeOp::ESchemeOpAlterTable, "/MyRoot");
         TPathId(TOwnerId(72057594046678944ull), TLocalPathId(7)).ToProto(
             tx.MutableAlterTable()->MutablePathId());
-        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/");
+        tx.MutableAlterTable()->SetName("T");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/T");
+    }
+    {
+        auto tx = MakeTx(NKikimrSchemeOp::ESchemeOpAlterTable, "/MyRoot");
+        tx.MutableAlterTable()->SetId_Deprecated(7);
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/");
+        tx.MutableAlterTable()->SetName("T");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/T");
+    }
+    {
+        auto tx = MakeTx(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup, "/MyRoot");
+        tx.MutableAlterPersQueueGroup()->SetPathId(7);
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/");
+        tx.MutableAlterPersQueueGroup()->SetName("topic");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/topic");
+    }
+    {
+        auto tx = MakeTx(NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume, "/MyRoot");
+        tx.MutableAlterBlockStoreVolume()->SetPathId(7);
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/");
+        tx.MutableAlterBlockStoreVolume()->SetName("volume");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/volume");
     }
     {
         auto tx = MakeTx(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions, "/MyRoot");
         tx.MutableSplitMergeTablePartitions()->SetTableOwnerId(72057594046678944ull);
         tx.MutableSplitMergeTablePartitions()->SetTableLocalId(7);
-        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/");
+        tx.MutableSplitMergeTablePartitions()->SetTablePath("/MyRoot/T");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot//MyRoot/T");
     }
-    {
-        auto tx = MakeTx(NKikimrSchemeOp::ESchemeOpAlterReplication, "/MyRoot");
+    for (const auto type : {NKikimrSchemeOp::ESchemeOpAlterReplication,
+            NKikimrSchemeOp::ESchemeOpAlterTransfer}) {
+        auto tx = MakeTx(type, "/MyRoot");
         TPathId(TOwnerId(72057594046678944ull), TLocalPathId(7)).ToProto(
             tx.MutableAlterReplication()->MutablePathId());
-        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "");
+        UNIT_ASSERT(MakeAuditLogFragment(tx).Paths.empty());
+        tx.MutableAlterReplication()->SetName("repl");
+        UNIT_ASSERT(MakeAuditLogFragment(tx).Paths.empty());
+    }
+    for (const auto type : {NKikimrSchemeOp::ESchemeOpDropResourcePool,
+            NKikimrSchemeOp::ESchemeOpDropStreamingQuery}) {
+        auto tx = MakeTx(type, "/MyRoot");
+        tx.MutableDrop()->SetId(7);
+        const auto paths = MakeAuditLogFragment(tx).Paths;
+        UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1u);
+        UNIT_ASSERT(paths[0].empty());
+        tx.MutableDrop()->SetName("name");
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "name");
+    }
+    {
+        auto tx = MakeTx(NKikimrSchemeOp::ESchemeOpMkDir, "/MyRoot");
+        tx.MutableMkDir()->SetName("dir");
+        tx.AddApplyIf()->SetPathId(7);
+        UNIT_ASSERT_VALUES_EQUAL(AuditPaths(tx), "/MyRoot/dir");
     }
 }
 

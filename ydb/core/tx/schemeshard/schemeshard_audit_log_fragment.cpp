@@ -2,6 +2,7 @@
 
 #include "schemeshard_path_footprint.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
@@ -323,8 +324,32 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     Y_ABORT("switch should cover all operation types");
 }
 
-// Report target and source paths. ID and implicit references are omitted
-// because resolving them requires SchemeShard state.
+TVector<TString> ExtractIdAuditPaths(const NKikimrSchemeOp::TModifyScheme& tx,
+        NKikimr::NSchemeShard::EPathField field) {
+    using NKikimr::NSchemeShard::EPathField;
+
+    switch (field) {
+    case EPathField::Drop_Id:
+        if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropResourcePool
+                || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropStreamingQuery) {
+            return {tx.GetDrop().GetName()};
+        }
+        return {NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()})};
+    case EPathField::AlterTable_PathId:
+    case EPathField::AlterTable_Id_Deprecated:
+        return {NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterTable().GetName()})};
+    case EPathField::AlterPersQueueGroup_PathId:
+        return {NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterPersQueueGroup().GetName()})};
+    case EPathField::SplitMergeTablePartitions_TableLocalId:
+        return {NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSplitMergeTablePartitions().GetTablePath()})};
+    case EPathField::AlterBlockStoreVolume_PathId:
+        return {NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterBlockStoreVolume().GetName()})};
+    default:
+        return {};
+    }
+}
+
+// Report target and source paths; implicit references require SchemeShard state.
 TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) {
     using namespace NKikimr::NSchemeShard;
 
@@ -337,6 +362,10 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     TVector<TString> joined;
     TVector<TString> result;
     for (const auto& ref : ExtractPathRefs(tx)) {
+        // Preserve legacy audit output for ID-addressed targets.
+        if (ref.Kind == EPathRefKind::ById && ref.Role == EPathRefRole::Target) {
+            return ExtractIdAuditPaths(tx, ref.Field);
+        }
         joined.push_back(JoinPathRef(tx.GetWorkingDir(), ref, joined));
         if (joined.back().empty()) {
             continue;

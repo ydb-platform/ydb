@@ -198,14 +198,13 @@ void EnsureLambdaArity(const NYql::TExprNode& lambda, size_t expected, TStringBu
 {
     Y_ENSURE(lambda.Head().ChildrenSize() == expected,
         name << " lambda expects " << lambda.Head().ChildrenSize()
-             << " arguments, but the aggregation operator supplies " << expected);
+             << " arguments, but the caller supplies " << expected);
 }
 
-TRuntimeNode::TList BuildAstLambda(
+void PrepareAstLambda(
     NYql::TExprNode::TPtr& lambda,
     const TRuntimeNode::TList& args,
     TStringBuf name,
-    TProgramBuilder& pb,
     IFunctionRegistry& functionRegistry,
     NYql::TExprContext& exprContext)
 {
@@ -231,10 +230,40 @@ TRuntimeNode::TList BuildAstLambda(
     Y_ENSURE(status.Level == NYql::IGraphTransformer::TStatus::Ok,
         "Cannot type annotate " << name << " lambda: "
             << exprContext.IssueManager.GetIssues().ToString());
+}
+
+TRuntimeNode::TList BuildAstWideLambda(
+    NYql::TExprNode::TPtr& lambda,
+    const TRuntimeNode::TList& args,
+    TStringBuf name,
+    TProgramBuilder& pb,
+    IFunctionRegistry& functionRegistry,
+    NYql::TExprContext& exprContext)
+{
+    PrepareAstLambda(lambda, args, name, functionRegistry, exprContext);
 
     NYql::NCommon::TMkqlCommonCallableCompiler compiler;
     NYql::NCommon::TMkqlBuildContext buildContext(compiler, pb, exprContext);
     return NYql::NCommon::MkqlBuildWideLambda(*lambda, buildContext, args);
+}
+
+TRuntimeNode BuildAstStreamLambda(
+    NYql::TExprNode::TPtr& lambda,
+    TRuntimeNode stream,
+    TStringBuf name,
+    TProgramBuilder& pb,
+    IFunctionRegistry& functionRegistry,
+    NYql::TExprContext& exprContext)
+{
+    const TRuntimeNode::TList args = {stream};
+    PrepareAstLambda(lambda, args, name, functionRegistry, exprContext);
+
+    NYql::NCommon::TMkqlCommonCallableCompiler compiler;
+    NYql::NCommon::TMkqlBuildContext buildContext(compiler, pb, exprContext);
+    auto result = NYql::NCommon::MkqlBuildLambda(*lambda, buildContext, args);
+    Y_ENSURE(result.GetStaticType()->IsStream(),
+        "Input transform must produce a stream, got " << *result.GetStaticType());
+    return result;
 }
 
 EDataSlot GetOutputDataSlot(TType* type)
@@ -652,15 +681,33 @@ std::vector<TType*> MakeBlockTypes(
     return result;
 }
 
-std::vector<TType*> ExtractTransformBlockTypes(const TRuntimeNode::TList& output)
+std::vector<TType*> ExtractTransformBlockTypes(TRuntimeNode output)
 {
-    Y_ENSURE(!output.empty(), "Input transform must produce at least one column");
+    Y_ENSURE(output.GetStaticType()->IsStream(),
+        "Input transform must produce a stream, got " << *output.GetStaticType());
+    auto* streamType = static_cast<TStreamType*>(output.GetStaticType());
+    Y_ENSURE(streamType->GetItemType()->IsMulti(),
+        "Input transform must produce a wide stream, got " << *output.GetStaticType());
+    auto* multiType = static_cast<TMultiType*>(streamType->GetItemType());
+    Y_ENSURE(multiType->GetElementsCount() >= 2,
+        "Input transform must produce at least one block column and a block height");
+
+    auto* heightType = multiType->GetElementType(multiType->GetElementsCount() - 1);
+    Y_ENSURE(heightType->IsBlock(),
+        "Input transform block height must be a BlockType, got " << *heightType);
+    auto* heightBlockType = static_cast<TBlockType*>(heightType);
+    Y_ENSURE(heightBlockType->GetShape() == TBlockType::EShape::Scalar &&
+        heightBlockType->GetItemType()->IsData() &&
+        static_cast<TDataType*>(heightBlockType->GetItemType())->GetDataSlot() == EDataSlot::Uint64,
+        "Input transform must end with a scalar Uint64 block height, got " << *heightType);
+
     std::vector<TType*> result;
-    result.reserve(output.size());
-    for (const auto& node : output) {
-        Y_ENSURE(node.GetStaticType()->IsBlock(),
-            "Input transform outputs must be BlockTypes, got " << *node.GetStaticType());
-        result.push_back(node.GetStaticType());
+    result.reserve(multiType->GetElementsCount() - 1);
+    for (ui32 i = 0; i + 1 < multiType->GetElementsCount(); ++i) {
+        auto* type = multiType->GetElementType(i);
+        Y_ENSURE(type->IsBlock(),
+            "Input transform outputs must be BlockTypes, got " << *type);
+        result.push_back(type);
     }
     return result;
 }
@@ -688,13 +735,11 @@ std::vector<TType*> MakeAggregationInputBlockTypes(
         return result;
     }
 
-    TRuntimeNode::TList args;
-    args.reserve(result.size());
-    for (auto* type : result) {
-        args.push_back(pb.Arg(type));
-    }
-    return ExtractTransformBlockTypes(BuildAstLambda(
-        aggregationAst->InputTransform, args, "input transform", pb,
+    result.push_back(pb.NewBlockType(
+        pb.NewDataType(EDataSlot::Uint64), TBlockType::EShape::Scalar));
+    auto* streamType = pb.NewStreamType(pb.NewMultiType(result));
+    return ExtractTransformBlockTypes(BuildAstStreamLambda(
+        aggregationAst->InputTransform, pb.Arg(streamType), "input transform", pb,
         *setup.FunctionRegistry, aggregationAst->ExprContext));
 }
 
@@ -711,17 +756,10 @@ THolder<IComputationGraph> BuildInputTransformGraph(
     auto* streamType = pb.NewStreamType(pb.NewMultiType(inputTypes));
     auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
     const auto input = TRuntimeNode(streamCallable, false);
-    auto output = pb.WideMap(input, [&](TRuntimeNode::TList items) {
-        const auto blockLength = items.back();
-        items.pop_back();
-        auto transformed = BuildAstLambda(
-            aggregationAst.InputTransform, items, "input transform", pb,
-            *setup.FunctionRegistry, aggregationAst.ExprContext);
-        outputBlockTypes = ExtractTransformBlockTypes(transformed);
-        transformed.push_back(blockLength);
-        return transformed;
-    });
-    output = pb.BlockExpandChunked(output);
+    auto output = BuildAstStreamLambda(
+        aggregationAst.InputTransform, input, "input transform", pb,
+        *setup.FunctionRegistry, aggregationAst.ExprContext);
+    outputBlockTypes = ExtractTransformBlockTypes(output);
     return setup.BuildGraph(output, {streamCallable});
 }
 
@@ -748,7 +786,7 @@ THolder<IComputationGraph> BuildGraph(
     const auto input = pb.ToFlow(TRuntimeNode(streamCallable, false), {});
     if (aggregationAst) {
         auto buildLambda = [&](size_t index, const TRuntimeNode::TList& args, TStringBuf name) {
-            return BuildAstLambda(
+            return BuildAstWideLambda(
                 aggregationAst->Lambdas[index], args, name, pb,
                 *setup.FunctionRegistry, aggregationAst->ExprContext);
         };

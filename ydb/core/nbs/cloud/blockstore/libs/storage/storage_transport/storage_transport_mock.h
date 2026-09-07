@@ -55,6 +55,13 @@ public:
     // coordinator.
     std::optional<TReplyStatusE> WriteToManyPBufferCoordinatorOnlyStatus;
 
+    // Every barrier erase sent: (pbuffer node id, barrier lsn).
+    TVector<std::pair<ui32, ui64>> BarrierErases;
+    // Unset: empty successful listing.
+    std::function<NThreading::TFuture<TEvListPersistentBufferResult>(
+        const THostConnection& connection)>
+        ListPBufferEntriesHandler;
+
     // Captures the ordered persistentBufferIds of the last WriteToManyPBuffers
     // call (the first element is expected to be the coordinator's DDisk).
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId>

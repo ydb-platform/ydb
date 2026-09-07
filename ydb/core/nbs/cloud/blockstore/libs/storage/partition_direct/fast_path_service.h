@@ -60,22 +60,6 @@ private:
     size_t DumpCount = 0;
     TMap<size_t, TDBGDumpResponse> DebugDumps;
 
-    struct TPBufferCleanupGather
-    {
-        std::atomic<bool> Active{false};
-        TVector<std::optional<TPBufferKey>> SafeBarriers;
-        std::atomic<size_t> PendingResponses{0};
-    };
-
-    TPBufferCleanupGather CleanupGather;
-
-    // Result of the last finished cleanup round: the lsn of the minimum safe
-    // barrier across all DBGs. 0 until the first round finishes.
-    std::atomic<ui64> LastSafeBarrier{0};
-
-    TAdaptiveLock PBufferBarrierLock;
-    TMap<NKikimr::NBsController::TDDiskId, ui64> LastSentBarrierByPBuffer;
-
     TAdaptiveLock CopyRangeBucketLock;
     std::optional<TSimpleLeakyBucket> CopyRangeBucket;
 
@@ -144,10 +128,6 @@ public:
 
     void StopTablet(const TString& reason) override;
 
-    bool TryAdvancePBufferBarrier(
-        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-        ui64 lsn) override;
-
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
 
     // Read-only info for the monitoring UI.
@@ -195,13 +175,6 @@ private:
     void ScheduleVChunkCountersUpdate();
     void QueryVChunkStats();
     void OnVChunkStats(const TVChunkStatsGatherResult& result);
-
-    void MaybeTriggerPBufferCleanup(ui64 lsn);
-    void PBufferCleanup();
-    void OnGatherSafeBarrierForErase(
-        size_t dbgIndex,
-        std::optional<TPBufferKey> safeBarrier);
-    void FinishPBufferCleanup();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

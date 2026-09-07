@@ -70,7 +70,6 @@ struct TFixture: public NUnitTest::TBaseFixture
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters{
         new NMonitoring::TDynamicCounters()};
     TVector<std::shared_ptr<TChaosInjectorControlMock>> ChaosInjectorControls;
-    TVector<std::shared_ptr<TDirectBlockGroupMock>> DirectBlockGroups;
 
     void SetUp(NUnitTest::TTestContext& context) override
     {
@@ -86,14 +85,10 @@ struct TFixture: public NUnitTest::TBaseFixture
             .Dcb = {}});
     }
 
-    std::shared_ptr<TFastPathService> MakeService(
-        ui64 copyRangeBandwidthMbs,
-        ui64 pbufferCleanupLsnStep = 0,
-        ui32 tabletGeneration = 1)
+    std::shared_ptr<TFastPathService> MakeService(ui64 copyRangeBandwidthMbs)
     {
         NProto::TStorageServiceConfig storageServiceConfig;
         storageServiceConfig.SetCopyRangeBandwidthMbs(copyRangeBandwidthMbs);
-        storageServiceConfig.SetPBufferCleanupLsnStep(pbufferCleanupLsnStep);
 
         TVector<IDirectBlockGroupPtr> directBlockGroups;
         directBlockGroups.reserve(DirectBlockGroupsCount);
@@ -101,13 +96,10 @@ struct TFixture: public NUnitTest::TBaseFixture
         chaosInjectorControls.reserve(DirectBlockGroupsCount);
         ChaosInjectorControls.clear();
         ChaosInjectorControls.reserve(DirectBlockGroupsCount);
-        DirectBlockGroups.clear();
-        DirectBlockGroups.reserve(DirectBlockGroupsCount);
 
         for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
-            auto dbg = std::make_shared<TDirectBlockGroupMock>();
-            DirectBlockGroups.push_back(dbg);
-            directBlockGroups.push_back(std::move(dbg));
+            directBlockGroups.push_back(
+                std::make_shared<TDirectBlockGroupMock>());
             auto control = std::make_shared<TChaosInjectorControlMock>();
             chaosInjectorControls.push_back(control);
             ChaosInjectorControls.push_back(std::move(control));
@@ -119,7 +111,7 @@ struct TFixture: public NUnitTest::TBaseFixture
             TDiskDescription{
                 .DiskId = "disk-id",
                 .TabletId = 100,
-                .Generation = tabletGeneration},
+                .Generation = 1},
             0,
             DefaultBlockSize,
             std::move(directBlockGroups),
@@ -247,58 +239,6 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
         UNIT_ASSERT(service->GetChaosConfig().NodeConfigs.empty());
         for (const auto& control: ChaosInjectorControls) {
             UNIT_ASSERT(!control->IsNodeDisabled(42));
-        }
-    }
-
-    // The PBuffer-side barrier erase drops every record of a previous
-    // generation regardless of the lsn bound. After a restart the restored
-    // records are live again, so while any of them is still inflight the
-    // tablet-wide cleanup must not send a barrier at all.
-    Y_UNIT_TEST_F(
-        ShouldSkipPBufferCleanupWhileOlderGenerationInflight,
-        TFixture)
-    {
-        auto service = MakeService(0, 1 /* every lsn ticks */, 2);
-
-        ui32 barrierErases = 0;
-        for (auto& dbg: DirectBlockGroups) {
-            dbg->GatherSafeBarrierForEraseHandler = []
-            {
-                // Restored from the previous life, not flushed yet.
-                return TPBufferKey{.Generation = 1, .Lsn = 5};
-            };
-            dbg->BarrierEraseFromPBufferHandler = [&](ui64)
-            {
-                ++barrierErases;
-            };
-        }
-
-        service->GenerateLsn();
-
-        UNIT_ASSERT_VALUES_EQUAL(0u, barrierErases);
-    }
-
-    Y_UNIT_TEST_F(ShouldIssuePBufferCleanupForCurrentGeneration, TFixture)
-    {
-        auto service = MakeService(0, 1 /* every lsn ticks */, 2);
-
-        TVector<ui64> barrierLsns;
-        for (auto& dbg: DirectBlockGroups) {
-            dbg->GatherSafeBarrierForEraseHandler = []
-            {
-                return TPBufferKey{.Generation = 2, .Lsn = 5};
-            };
-            dbg->BarrierEraseFromPBufferHandler = [&](ui64 lsn)
-            {
-                barrierLsns.push_back(lsn);
-            };
-        }
-
-        service->GenerateLsn();
-
-        UNIT_ASSERT_VALUES_EQUAL(DirectBlockGroupsCount, barrierLsns.size());
-        for (ui64 lsn: barrierLsns) {
-            UNIT_ASSERT_VALUES_EQUAL(4u, lsn);
         }
     }
 

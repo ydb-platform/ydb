@@ -199,16 +199,6 @@ public:
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) = 0;
 
-    // The bound is an lsn within the current tablet generation; the PBuffer
-    // side additionally drops every record of the previous generations.
-    virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;
-
-    // The lowest record id that must be preserved across all vchunks of this
-    // DirectBlockGroup. Used to compute the tablet-wide cleanup watermark.
-    // Resolves on the executor thread. nullopt means nothing is inflight here.
-    virtual NThreading::TFuture<std::optional<TPBufferKey>>
-    GatherSafeBarrierForErase() = 0;
-
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) = 0;

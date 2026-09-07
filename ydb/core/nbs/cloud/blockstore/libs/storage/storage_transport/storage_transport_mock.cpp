@@ -288,15 +288,20 @@ TStorageTransportMock::BarrierEraseFromPBuffer(
     ui64 lsn,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, lsn, span);
+    Y_UNUSED(span);
 
-    Y_ABORT("BarrierEraseFromPBuffer is not expected in this test");
+    BarrierErases.emplace_back(connection.DDiskId.NodeId, lsn);
+    TEvErasePersistentBufferResult result;
+    result.SetStatus(TReplyStatus::OK);
+    return NThreading::MakeFuture(std::move(result));
 }
 
 NThreading::TFuture<TEvListPersistentBufferResult>
 TStorageTransportMock::ListPBufferEntries(const THostConnection& connection)
 {
-    Y_UNUSED(connection);
+    if (ListPBufferEntriesHandler) {
+        return ListPBufferEntriesHandler(connection);
+    }
 
     TEvListPersistentBufferResult result;
     result.SetStatus(TReplyStatus::OK);

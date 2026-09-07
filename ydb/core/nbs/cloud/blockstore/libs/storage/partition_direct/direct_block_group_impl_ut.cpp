@@ -30,6 +30,7 @@ constexpr auto WaitTimeout = TDuration::Seconds(10);
 
 using EConnectionType = NTransport::THostConnection::EConnectionType;
 using TStorageTransportMock = NTransport::TStorageTransportMock;
+using THostConnection = NTransport::THostConnection;
 using TICStorageTransportTestAdapter =
     NTransport::NTestLib::TICStorageTransportTestAdapter;
 using TDDiskId = NBsController::TDDiskId;
@@ -75,6 +76,133 @@ NWilson::TTraceId CreateTraceId()
         NWilson::TTraceId::MAX_VERBOSITY,
         NWilson::TTraceId::MAX_TIME_TO_LIVE);
 }
+
+// PBuffer cleanup tests drive a DBG with real vchunks; inflight records are
+// seeded through the restore path from a scripted PBuffer listing.
+struct TCleanupFixture: public TDBGFixture
+{
+    using TListing = NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult;
+
+    static TListing MakeListing(const TVector<TPBufferKey>& keys)
+    {
+        TListing result;
+        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        for (const auto& key: keys) {
+            auto* record = result.AddRecords();
+            record->SetGeneration(key.Generation);
+            record->SetLsn(key.Lsn);
+            record->MutableSelector()->SetVChunkIndex(0);
+            record->MutableSelector()->SetOffsetInBytes(0);
+            record->MutableSelector()->SetSize(DefaultBlockSize);
+        }
+        return result;
+    }
+
+    std::shared_ptr<TVChunk> StartVChunk(
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        TPartitionDirectServiceMock& service,
+        const TExecutorPtr& executor,
+        ui32 vChunkIndex)
+    {
+        WaitReady(executor, dbg->Run(TraceService.get(), &service));
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            &service,
+            DiskDescription,
+            TVChunkConfig::MakeDefault(
+                vChunkIndex,
+                DirectBlockGroupHostCount,
+                DefaultPrimaryCount),
+            TDirtyMapStateProto{},
+            dbg,
+            3,   // syncRequestsBatchSize
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+        return vchunk;
+    }
+
+    void WaitDirtyMapReady(
+        const std::shared_ptr<TVChunk>& vchunk,
+        const TExecutorPtr& executor)
+    {
+        UNIT_ASSERT(DoExecutorAndRuntimeWorkWithPredicate(
+            executor,
+            [&] { return TBaseFixture::IsDirtyMapReady(*vchunk); },
+            WaitTimeout));
+    }
+
+    std::shared_ptr<TVChunk> StartVChunkAndWaitReady(
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        TPartitionDirectServiceMock& service,
+        const TExecutorPtr& executor,
+        ui32 vChunkIndex)
+    {
+        auto vchunk = StartVChunk(dbg, service, executor, vChunkIndex);
+        WaitDirtyMapReady(vchunk, executor);
+        return vchunk;
+    }
+
+    // Mints one write through the DBG so the cleanup step sees the lsn.
+    void WritePBufferKey(
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        const TExecutorPtr& executor,
+        TPBufferKey key)
+    {
+        TString buffer(DefaultBlockSize, 'w');
+        TGuardedSgList guardedSglist = MakeSgList(buffer);
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(2);
+        hosts.Set(3);
+
+        auto pending = RunOnExecutor(
+            executor,
+            [&]
+            {
+                auto promise = NThreading::NewPromise<
+                    TDBGWriteBlocksToManyPBuffersResponse>();
+                auto future = promise.GetFuture();
+                TDirectBlockGroup::TWriteBlocksToManyPBuffersCallback cb =
+                    [promise = std::move(promise)]   //
+                    (TDBGWriteBlocksToManyPBuffersResponse r) mutable
+                {
+                    promise.SetValue(std::move(r));
+                };
+                dbg->WriteBlocksToManyPBuffers(
+                    0,   // VChunkIndex
+                    2,   // Coordinator
+                    hosts,
+                    key,
+                    TBlockRange64::WithLength(0, 1),
+                    TDuration::Seconds(1),
+                    guardedSglist,
+                    CreateTraceId(),
+                    cb);
+                return future;
+            });
+        WaitFuture(executor, pending.GetValue(WaitTimeout), WaitTimeout);
+    }
+
+    void WaitBarrierErases(
+        const std::shared_ptr<TStorageTransportMock>& transport,
+        const TExecutorPtr& executor,
+        size_t count)
+    {
+        UNIT_ASSERT_C(
+            DoExecutorAndRuntimeWorkWithPredicate(
+                executor,
+                [&] { return transport->BarrierErases.size() >= count; },
+                WaitTimeout),
+            "barrier erases sent: " << transport->BarrierErases.size());
+    }
+
+    void DrainExecutorAndRuntime(const TExecutorPtr& executor)
+    {
+        DoAllExecutorAndRuntimeWork(executor);
+    }
+};
 
 }   // namespace
 
@@ -344,6 +472,125 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             hostStat.InflightCount(EOperation::ReadFromDDisk));
         UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
         UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
+    }
+
+    // PBuffer cleanup is owned by the DBG: on every lsn step it takes the
+    // minimum inflight key of its own vchunks and sends the barrier to its
+    // pbuffers. Inflight records are seeded through the real restore path.
+    Y_UNIT_TEST_F(
+        ShouldSendPBufferBarrierOfOwnVChunksOnLsnStep,
+        TCleanupFixture)
+    {
+        StorageServiceConfig.SetPBufferCleanupLsnStep(3);
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        transport->ListPBufferEntriesHandler = [](const THostConnection&)
+        {
+            return NThreading::MakeFuture(
+                MakeListing({{.Generation = 1, .Lsn = 100}}));
+        };
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        TPartitionDirectServiceMock service(true);
+        auto vchunk = StartVChunkAndWaitReady(dbg, service, executor, 0);
+
+        WritePBufferKey(dbg, executor, TPBufferKey{.Generation = 1, .Lsn = 3});
+        WaitBarrierErases(transport, executor, DirectBlockGroupHostCount);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            transport->BarrierErases.size());
+        for (const auto& [node, lsn]: transport->BarrierErases) {
+            UNIT_ASSERT_VALUES_EQUAL_C(99u, lsn, "node " << node);
+        }
+    }
+
+    Y_UNIT_TEST_F(ShouldHoldPBufferBarrierUntilVChunkRestores, TCleanupFixture)
+    {
+        StorageServiceConfig.SetPBufferCleanupLsnStep(3);
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        auto listing = NThreading::NewPromise<TListing>();
+        transport->ListPBufferEntriesHandler = [listing](const THostConnection&)
+        {
+            return listing.GetFuture();
+        };
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        TPartitionDirectServiceMock service(true);
+        auto vchunk = StartVChunk(dbg, service, executor, 0);
+        UNIT_ASSERT(!TBaseFixture::IsDirtyMapReady(*vchunk));
+
+        // Restore is still pending: the blocking bound, no barrier.
+        WritePBufferKey(dbg, executor, TPBufferKey{.Generation = 1, .Lsn = 3});
+        DrainExecutorAndRuntime(executor);
+        UNIT_ASSERT_VALUES_EQUAL(0u, transport->BarrierErases.size());
+
+        listing.SetValue(MakeListing({}));
+        WaitDirtyMapReady(vchunk, executor);
+
+        // Restored and idle: everything minted so far is safe to drop.
+        WritePBufferKey(dbg, executor, TPBufferKey{.Generation = 1, .Lsn = 6});
+        WaitBarrierErases(transport, executor, DirectBlockGroupHostCount);
+        for (const auto& [node, lsn]: transport->BarrierErases) {
+            UNIT_ASSERT_VALUES_EQUAL_C(6u, lsn, "node " << node);
+        }
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldHoldPBufferBarrierWhileOlderGenerationInflight,
+        TCleanupFixture)
+    {
+        StorageServiceConfig.SetPBufferCleanupLsnStep(3);
+        DiskDescription.Generation = 2;
+        auto executor = MakeExecutor();
+
+        // DBG 0 restored a record of the previous generation.
+        auto transport0 = std::make_shared<TStorageTransportMock>(100);
+        transport0->ListPBufferEntriesHandler = [](const THostConnection&)
+        {
+            return NThreading::MakeFuture(
+                MakeListing({{.Generation = 1, .Lsn = 5}}));
+        };
+        auto dbg0 = MakeDirectBlockGroup(executor, transport0, 0);
+        // DBG 1 is idle in the current generation.
+        auto transport1 = std::make_shared<TStorageTransportMock>(200);
+        auto dbg1 = MakeDirectBlockGroup(executor, transport1, 1);
+        TPartitionDirectServiceMock service(true);
+        auto vchunk0 = StartVChunkAndWaitReady(dbg0, service, executor, 0);
+        auto vchunk1 = StartVChunkAndWaitReady(dbg1, service, executor, 1);
+
+        WritePBufferKey(dbg0, executor, TPBufferKey{.Generation = 2, .Lsn = 3});
+        WritePBufferKey(dbg1, executor, TPBufferKey{.Generation = 2, .Lsn = 6});
+        WaitBarrierErases(transport1, executor, DirectBlockGroupHostCount);
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, transport0->BarrierErases.size());
+        for (const auto& [node, lsn]: transport1->BarrierErases) {
+            UNIT_ASSERT_VALUES_EQUAL_C(6u, lsn, "node " << node);
+        }
+    }
+
+    Y_UNIT_TEST_F(ShouldNotResendNonAdvancingPBufferBarrier, TCleanupFixture)
+    {
+        StorageServiceConfig.SetPBufferCleanupLsnStep(3);
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        transport->ListPBufferEntriesHandler = [](const THostConnection&)
+        {
+            return NThreading::MakeFuture(
+                MakeListing({{.Generation = 1, .Lsn = 100}}));
+        };
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        TPartitionDirectServiceMock service(true);
+        auto vchunk = StartVChunkAndWaitReady(dbg, service, executor, 0);
+
+        WritePBufferKey(dbg, executor, TPBufferKey{.Generation = 1, .Lsn = 3});
+        WaitBarrierErases(transport, executor, DirectBlockGroupHostCount);
+        // The minimum did not move: the same bound must not go out again.
+        WritePBufferKey(dbg, executor, TPBufferKey{.Generation = 1, .Lsn = 6});
+        DrainExecutorAndRuntime(executor);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            transport->BarrierErases.size());
     }
 
     Y_UNIT_TEST_F(

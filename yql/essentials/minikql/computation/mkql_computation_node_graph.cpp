@@ -852,23 +852,7 @@ private:
 
 class TComputationPatternImpl final: public IComputationPattern {
 public:
-    TComputationPatternImpl(THolder<TComputationGraphBuildingVisitor>&& builder, const TComputationPatternOpts& opts)
-#if defined(MKQL_DISABLE_CODEGEN)
-        : Codegen_()
-#elif defined(MKQL_FORCE_USE_CODEGEN)
-        : Codegen_(NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native))
-#else
-        : Codegen_((NYql::NCodegen::ICodegen::IsCodegenAvailable() && opts.OptLLVM != "OFF") ||
-                           GetEnv(TString("MKQL_FORCE_USE_LLVM"))
-                       ? NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native)
-                       : NYql::NCodegen::ICodegen::TPtr())
-#endif
-    {
-        /// TODO: Enable JIT for AARCH64/Win/Darwin (YDBREQUESTS-7823)
-#if defined(__aarch64__) || defined(_win_) || defined(_darwin_)
-        Codegen_ = {};
-#endif
-
+    TComputationPatternImpl(THolder<TComputationGraphBuildingVisitor>&& builder, const TComputationPatternOpts& opts) {
         const auto& nodes = builder->GetNodes();
         for (const auto& node : nodes) {
             node->PrepareStageOne();
@@ -880,7 +864,7 @@ public:
         MKQL_ADD_STAT(opts.Stats, Mkql_TotalNodes, nodes.size());
         PatternNodes_ = builder->GetPatternNodes();
 
-        if (Codegen_) {
+        if (IsCodegenEnabled(opts.OptLLVM)) {
             Compile(opts.OptLLVM, opts.Stats);
         }
     }
@@ -893,16 +877,21 @@ public:
     }
 
     void Compile(TString optLLVM, IStatsRegistry* stats) override {
+        // Serializes compilations of this pattern against each other. Note that
+        // no reader takes this mutex: a compilation runs for hundreds of
+        // milliseconds, and nobody has to wait for it - see Clone() below.
         TGuard<TMutex> lock(CompileMutex_);
 
-        if (IsPatternCompiled_) {
+        if (IsCompiled()) {
             return;
         }
 
 #ifndef MKQL_DISABLE_CODEGEN
-        if (!Codegen_) {
-            Codegen_ = NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native);
-        }
+        // Everything is built in a local codegen and published at the very end,
+        // so that concurrent readers either see the previous state or the fully
+        // compiled one, and never an intermediate one.
+        auto codegen = NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native);
+        NYql::NCodegen::TCompileStats compileStats;
 
         const auto& nodes = PatternNodes_->GetNodes();
 
@@ -912,8 +901,8 @@ public:
             TStatTimer timerGen(CodeGen_GenerateTime);
             timerGen.Acquire();
             for (const auto& node : Reversed(nodes)) {
-                if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
-                    codegen->GenerateFunctions(*Codegen_);
+                if (const auto codegenNode = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
+                    codegenNode->GenerateFunctions(*codegen);
                 }
             }
             timerGen.Release();
@@ -922,7 +911,7 @@ public:
 
         if (optLLVM.Contains("--dump-generated")) {
             Cerr << "############### Begin generated module ###############" << Endl;
-            Codegen_->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
+            codegen->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
             Cerr << "################ End generated module ################" << Endl;
         }
 
@@ -930,7 +919,7 @@ public:
         timerComp.Acquire();
 
         NYql::NCodegen::TCodegenStats codegenStats;
-        Codegen_->GetStats(codegenStats);
+        codegen->GetStats(codegenStats);
         MKQL_ADD_STAT(stats, CodeGen_TotalFunctions, codegenStats.TotalFunctions);
         MKQL_ADD_STAT(stats, CodeGen_TotalInstructions, codegenStats.TotalInstructions);
         MKQL_SET_MAX_STAT(stats, CodeGen_MaxFunctionInstructions, codegenStats.MaxFunctionInstructions);
@@ -941,42 +930,42 @@ public:
         }
 
         if (optLLVM.Contains("--dump-perf-map")) {
-            Codegen_->TogglePerfJITEventListener();
+            codegen->TogglePerfJITEventListener();
         }
 
         if (codegenStats.TotalFunctions >= TotalFunctionsLimit ||
             codegenStats.TotalInstructions >= TotalInstructionsLimit ||
             codegenStats.MaxFunctionInstructions >= MaxFunctionInstructionsLimit) {
-            Codegen_.reset();
+            codegen.reset();
         } else {
-            Codegen_->Verify();
-            Codegen_->Compile(GetCompileOptions(optLLVM), &CompileStats_);
+            codegen->Verify();
+            codegen->Compile(GetCompileOptions(optLLVM), &compileStats);
 
-            MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, CompileStats_.FunctionPassTime);
-            MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, CompileStats_.ModulePassTime);
-            MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, CompileStats_.FinalizeTime);
+            MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, compileStats.FunctionPassTime);
+            MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, compileStats.ModulePassTime);
+            MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, compileStats.FinalizeTime);
         }
 
         timerComp.Release();
         timerComp.Report(stats);
 
-        if (Codegen_) {
+        if (codegen) {
             if (optLLVM.Contains("--dump-compiled")) {
                 Cerr << "############### Begin compiled module ###############" << Endl;
-                Codegen_->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
+                codegen->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
                 Cerr << "################ End compiled module ################" << Endl;
             }
 
             if (optLLVM.Contains("--asm-compiled")) {
                 Cerr << "############### Begin compiled asm ###############" << Endl;
-                Codegen_->ShowGeneratedFunctions(&Cerr);
+                codegen->ShowGeneratedFunctions(&Cerr);
                 Cerr << "################ End compiled asm ################" << Endl;
             }
 
             ui64 count = 0U;
             for (const auto& node : nodes) {
-                if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
-                    codegen->FinalizeFunctions(*Codegen_);
+                if (const auto codegenNode = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
+                    codegenNode->FinalizeFunctions(*codegen);
                     ++count;
                 }
             }
@@ -988,35 +977,60 @@ public:
 
         timerFull.Release();
         timerFull.Report(stats);
+
+        {
+            TGuard<TAdaptiveLock> codegenLock(CodegenLock_);
+            Codegen_.swap(codegen);
+        }
+        // Release the previously generated code, if any, outside of the lock.
+        codegen.reset();
+
+        CompiledCodeSize_.store(compileStats.TotalObjectSize, std::memory_order_relaxed);
 #else
         Y_UNUSED(optLLVM);
         Y_UNUSED(stats);
 #endif
 
-        IsPatternCompiled_ = true;
+        // Release store, so that whoever observes the pattern as compiled also
+        // observes both the published codegen and the function pointers stored
+        // into the nodes by FinalizeFunctions() above.
+        IsPatternCompiled_.store(true, std::memory_order_release);
     }
 
     bool IsCompiled() const override {
-        TGuard<TMutex> lock(CompileMutex_);
-        return IsPatternCompiled_;
+        return IsPatternCompiled_.load(std::memory_order_acquire);
     }
 
     size_t CompiledCodeSize() const override {
-        TGuard<TMutex> lock(CompileMutex_);
-        return CompileStats_.TotalObjectSize;
+        return CompiledCodeSize_.load(std::memory_order_relaxed);
     }
 
     void RemoveCompiledCode() override {
-        TGuard<TMutex> lock(CompileMutex_);
+        // Stop handing the code out first, drop it afterwards: a Clone() racing
+        // in between just takes a reference and keeps the code alive for its own
+        // graph.
+        IsPatternCompiled_.store(false, std::memory_order_release);
+        CompiledCodeSize_.store(0, std::memory_order_relaxed);
 
-        IsPatternCompiled_ = false;
-        CompileStats_ = {};
-        Codegen_.reset();
+        NYql::NCodegen::ICodegen::TSharedPtr codegen;
+        {
+            TGuard<TAdaptiveLock> codegenLock(CodegenLock_);
+            codegen.swap(Codegen_);
+        }
+        // The code itself is released here, outside of the lock, and only once
+        // the last graph using it is gone.
     }
 
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) override {
-        TGuard<TMutex> lock(CompileMutex_);
-        return MakeHolder<TComputationGraph>(PatternNodes_, compOpts, IsPatternCompiled_ ? Codegen_ : nullptr);
+        // Never waits for a compilation in progress: until the compiled code is
+        // published, cloning an interpreted graph is both correct and cheap.
+        NYql::NCodegen::ICodegen::TSharedPtr codegen;
+        if (IsCompiled()) {
+            TGuard<TAdaptiveLock> codegenLock(CodegenLock_);
+            codegen = Codegen_;
+        }
+
+        return MakeHolder<TComputationGraph>(PatternNodes_, compOpts, std::move(codegen));
     }
 
     bool GetSuitableForCache() const override {
@@ -1024,6 +1038,20 @@ public:
     }
 
 private:
+    static bool IsCodegenEnabled(const TString& optLLVM) {
+        /// TODO: Enable JIT for AARCH64/Win/Darwin (YDBREQUESTS-7823)
+#if defined(MKQL_DISABLE_CODEGEN) || defined(__aarch64__) || defined(_win_) || defined(_darwin_)
+        Y_UNUSED(optLLVM);
+        return false;
+#elif defined(MKQL_FORCE_USE_CODEGEN)
+        Y_UNUSED(optLLVM);
+        return true;
+#else
+        return (NYql::NCodegen::ICodegen::IsCodegenAvailable() && optLLVM != "OFF") ||
+               GetEnv(TString("MKQL_FORCE_USE_LLVM"));
+#endif
+    }
+
     TStringBuf GetCompileOptions(const TString& s) {
         const TString flag = "--compile-options";
         auto lpos = s.rfind(flag);
@@ -1042,10 +1070,16 @@ private:
     TTypeEnvironment* TypeEnv_ = nullptr;
     TPatternNodes::TPtr PatternNodes_;
 
-    TMutex CompileMutex_;
-    NYql::NCodegen::ICodegen::TSharedPtr Codegen_; // protected by CompileMutex_
-    bool IsPatternCompiled_ = false;               // protected by CompileMutex_
-    NYql::NCodegen::TCompileStats CompileStats_;   // protected by CompileMutex_
+    TMutex CompileMutex_; // held for the whole compilation, taken by Compile() only
+
+    // Published by the compiling thread once the generated code is ready to be
+    // used, so that readers never block on a compilation in progress.
+    std::atomic<bool> IsPatternCompiled_ = false;
+    std::atomic<size_t> CompiledCodeSize_ = 0;
+
+    TAdaptiveLock CodegenLock_;                    // held just long enough to copy the pointer below
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen_; // protected by CodegenLock_
+
     NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
 };
 

@@ -571,6 +571,78 @@ Y_UNIT_TEST_TWIN(MapJoin, UseLLVM) {
 }
 } // Y_UNIT_TEST_SUITE(ComputationGraphDataRace)
 
+Y_UNIT_TEST_SUITE(ComputationPatternCompilation) {
+// Compiled code is published to and withdrawn from the pattern while other
+// threads keep cloning it, so a clone must produce the same result no matter
+// which compilation state it was made in.
+Y_UNIT_TEST(ClonesSurviveCompilationStateChanges) {
+    constexpr size_t vecSize = 100;
+
+    auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
+
+    auto entry = std::make_shared<TPatternCacheEntry>();
+    TScopedAlloc& alloc = entry->Alloc;
+    TTypeEnvironment& typeEnv = entry->Env;
+
+    TProgramBuilder pb(typeEnv, *functionRegistry);
+
+    TRuntimeNode progReturn;
+    with_lock (alloc) {
+        progReturn = CreateFilter<false>(pb, vecSize, /*list=*/nullptr);
+    }
+
+    TExploringNodeVisitor explorer;
+    explorer.Walk(progReturn.GetNode(), typeEnv);
+
+    TComputationPatternOpts opts(alloc.Ref(), typeEnv, GetListTestFactory(), functionRegistry.Get(),
+                                 NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
+                                 /*optLLVM=*/"", EGraphPerProcess::Multi);
+
+    {
+        auto guard = entry->Env.BindAllocator();
+        entry->Pattern = MakeComputationPattern(explorer, progReturn, {}, opts);
+    }
+
+    auto& pattern = *entry->Pattern;
+
+    auto runClone = [&]() {
+        auto randomProvider = CreateDeterministicRandomProvider(1);
+        auto timeProvider = CreateDeterministicTimeProvider(10000000);
+        TScopedAlloc graphAlloc(__LOCATION__);
+
+        TComputationPatternOpts cloneOpts(entry->Alloc.Ref(), entry->Env, GetListTestFactory(),
+                                          functionRegistry.Get(), NUdf::EValidateMode::Lazy,
+                                          NUdf::EValidatePolicy::Exception, /*optLLVM=*/"", EGraphPerProcess::Multi);
+
+        auto graph = pattern.Clone(cloneOpts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
+
+        ui64 acc = 0;
+        for (TUnboxedValue v = graph->GetValue(); v.HasValue(); v = graph->GetValue()) {
+            acc += v.Get<ui64>();
+        }
+        return acc;
+    };
+
+    const ui64 expected = runClone();
+
+    if (!pattern.IsCompiled()) {
+        // No codegen in this build or on this platform, nothing else to check.
+        return;
+    }
+
+    // Dropping the compiled code takes the pattern back to interpreted mode.
+    pattern.RemoveCompiledCode();
+    UNIT_ASSERT(!pattern.IsCompiled());
+    UNIT_ASSERT_VALUES_EQUAL(pattern.CompiledCodeSize(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(runClone(), expected);
+
+    // And compiling it again builds the code from scratch.
+    pattern.Compile(/*optLLVM=*/"", /*stats=*/nullptr);
+    UNIT_ASSERT(pattern.IsCompiled());
+    UNIT_ASSERT_VALUES_EQUAL(runClone(), expected);
+}
+} // Y_UNIT_TEST_SUITE(ComputationPatternCompilation)
+
 Y_UNIT_TEST_SUITE(ComputationPatternCache) {
 Y_UNIT_TEST(Smoke) {
     const ui32 cacheSize = 10'000'000;

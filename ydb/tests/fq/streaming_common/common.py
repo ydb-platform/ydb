@@ -170,8 +170,14 @@ def get_ydb_config(request, enable_fq_connector=None):
     return config
 
 
+def counter_nodes(cluster: KiKiMR) -> dict:
+    # Tests that create a tenant database run streaming queries on dynamic nodes (slots).
+    # Compatibility tests use only static nodes, so fall back to them when no slots exist.
+    return cluster.slots if cluster.slots else cluster.nodes
+
+
 def monitoring_endpoint(cluster: KiKiMR, node_id: int) -> str:
-    node = cluster.slots[node_id]
+    node = counter_nodes(cluster)[node_id]
     return f"http://localhost:{node.mon_port}"
 
 
@@ -185,7 +191,7 @@ def get_checkpoint_coordinator_metric(
 ) -> int:
     sensor_sum = 0
     found = False
-    for node_id in cluster.slots:
+    for node_id in counter_nodes(cluster):
         sensor = get_sensors(cluster, node_id, "kqp").find_sensor(
             {"path": path, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
         )
@@ -531,7 +537,7 @@ class StreamingTestBase(TestYdsBase):
         path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         sum = 0
         found = False
-        for node_id in kikimr.cluster.slots:
+        for node_id in counter_nodes(kikimr.cluster):
             sensor = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
                 {"path": path, "subsystem": "streaming_queries", "sensor": metric_name}
             )
@@ -543,7 +549,7 @@ class StreamingTestBase(TestYdsBase):
 
     def get_schemeshard_counter(self, kikimr: Kikimr, counter_name: str) -> int:
         total = 0
-        for node_id in kikimr.cluster.slots:
+        for node_id in counter_nodes(kikimr.cluster):
             sensor = get_sensors(kikimr.cluster, node_id, "tablets").find_sensor(
                 {"type": "SchemeShard", "category": "app", "sensor": counter_name}
             )

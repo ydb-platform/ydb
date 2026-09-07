@@ -1024,7 +1024,7 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     PrintStageBackground(s);
 
     for (auto& region : s->HotRegions) {
-        auto px = Config.TimelineLeft + region.first * (Config.TimelineWidth - timelineDelta) / maxTime;
+        auto px = Config.TimelineLeft + (TimeOffset + region.first) * (Config.TimelineWidth - timelineDelta) / maxTime;
         auto pw = (region.second - region.first) * (Config.TimelineWidth - timelineDelta) / maxTime;
         s->Svg
         << SvgRect(px, 0, pw, "100%", "hot");

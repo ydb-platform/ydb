@@ -1,6 +1,6 @@
 # CREATE RESOURCE POOL CLASSIFIER
 
-`CREATE RESOURCE POOL CLASSIFIER` создаёт [пул классификаторов ресурсов](../../../concepts/glossary.md#resource-pool-classifier.md).
+`CREATE RESOURCE POOL CLASSIFIER` создаёт [классификатор пулов ресурсов](../../../concepts/glossary.md#resource-pool-classifier).
 
 ## Синтаксис
 
@@ -28,12 +28,20 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 
 Предикат — условие, проверяемое для входящего запроса. Классификатор срабатывает, если выполнены **все** его предикаты (логическое **AND**). Для реализации логики **OR** необходимо создать несколько классификаторов с разными значениями `RANK`. Классификаторы обрабатываются в порядке возрастания `RANK`; обработка останавливается на первом сработавшем — к запросу применяется его `ACTION` или он направляется в его `RESOURCE_POOL`.
 
+Параметры-предикаты необязательны. Классификатор без предикатов срабатывает на любой запрос — это удобно для «закрывающего» классификатора с максимальным `RANK`, например, направить весь неклассифицированный трафик в конкретный пул (`RESOURCE_POOL`) или отклонить его (`ACTION='reject'`).
+
+{% note warning %}
+
+Будьте внимательны при создании «закрывающего» классификатора: все классификаторы, следующие за ним по `RANK`, никогда не сработают — обработка останавливается на первом совпадении, а «закрывающий» срабатывает всегда.
+
+{% endnote %}
+
 Список предикатов:
 
 * `MEMBER_NAME` (String) — SID пользователя или группы, от имени которых поступил запрос. Подробнее — [ниже](#member-name).
-* `HAS_PATH` (String) — путь к объекту YDB, к которому обращается запрос; поддерживает wildcard `*`. Подробнее — [ниже](#has-path).
+* `HAS_PATH` (String) — путь к объекту YDB, к которому обращается запрос; поддерживает подстановочные знаки `*` и `?`. Подробнее — [ниже](#has-path).
 * `HAS_APP_NAME` (String) — идентификатор клиентского приложения. Подробнее — [ниже](#has-app-name).
-* `HAS_FULL_SCAN` (String) — путь к объекту, по которому ожидается полное сканирование; поддерживает wildcard `*`. Подробнее — [ниже](#has-full-scan).
+* `HAS_FULL_SCAN` (String) — путь к объекту, по которому ожидается полное сканирование; поддерживает подстановочные знаки `*` и `?`. Подробнее — [ниже](#has-full-scan).
 * `HAS_STREAM` (Bool) — признак стримингового запроса. Подробнее — [ниже](#has-stream).
 
 #### MEMBER_NAME {#member-name} {#member-name-format}
@@ -59,7 +67,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_user WITH (
 
 #### HAS_PATH {#has-path}
 
-`HAS_PATH` сравнивает пути объектов YDB, к которым обращается запрос, с указанной маской. Маска поддерживает wildcard `*`, соответствующий любой последовательности символов в пути. Предикат срабатывает, если хотя бы один объект в плане запроса соответствует маске.
+`HAS_PATH` сравнивает пути объектов YDB, к которым обращается запрос, с указанной маской. Маска поддерживает подстановочные знаки: `*` — любая последовательность символов, `?` — один любой символ. Предикат срабатывает, если хотя бы один объект в плане запроса соответствует маске.
 
 **Пример.** Направить запросы к архивным таблицам в пул `pool_archive`:
 
@@ -73,7 +81,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_archive WITH (
 
 #### HAS_APP_NAME {#has-app-name}
 
-`HAS_APP_NAME` сравнивает значение с идентификатором клиентского приложения. Значение задаётся клиентом через заголовок `x-ydb-application-name` при создании сессии; сравнение — на точное совпадение (без wildcard).
+`HAS_APP_NAME` сравнивает значение с идентификатором клиентского приложения. Значение передаётся клиентом в метаданных gRPC-запроса через заголовок `x-ydb-application-name`; SDK YDB предоставляют способ задать его на стороне клиента. Сравнение — на точное совпадение (без подстановочных знаков).
 
 {% note warning %}
 
@@ -85,10 +93,10 @@ CREATE RESOURCE POOL CLASSIFIER cl_archive WITH (
 
 - **{{ ydb-short-name }} Embedded UI** — фиксированное значение `ydb-ui`, задаётся viewer-ом и не настраивается пользователем.
 - **YDB CLI** — не поддерживается: идентификатор клиентского приложения в запросе не отправляется.
-- **YDB CPP SDK** — на каждом запросе через параметр `Header` настроек [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, где константа [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) равна `x-ydb-application-name`.
+- **YDB C++ SDK** — на каждом запросе через параметр `Header` настроек [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, где константа [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) равна `x-ydb-application-name`.
 - **YDB Go SDK** — на драйвере через опцию [`WithApplicationName`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/options.go#L163) в вызове `ydb.Open`.
 - **YDB Java SDK** — на транспорте через метод [`GrpcTransportBuilder.withApplicationName`](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.4.11/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java#L280).
-- **YDB Python SDK** — dedicated параметра нет; задаётся на каждом запросе через generic-заголовок: `settings.with_header("x-ydb-application-name", "my-app")` (метод [`BaseRequestSettings.with_header`](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.4/ydb/settings.py#L66)).
+- **YDB Python SDK** — отдельного параметра нет; значение задаётся на каждом запросе через дополнительный заголовок: `settings.with_header("x-ydb-application-name", "my-app")` (метод [`BaseRequestSettings.with_header`](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.4/ydb/settings.py#L66)).
 
 **Пример.** Направить запросы от Embedded UI в пул `pool_adhoc`:
 
@@ -102,7 +110,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_adhoc_ui WITH (
 
 #### HAS_FULL_SCAN {#has-full-scan}
 
-`HAS_FULL_SCAN` определяет запросы, содержащие полное сканирование указанных объектов. Полное сканирование — чтение таблицы без ограничения по ключу или диапазону ключей. Аргумент — маска пути к объекту с поддержкой wildcard `*`; предикат срабатывает, если в плане запроса есть хотя бы один такой объект. Поддерживаются как row-store (OLTP), так и column-store (OLAP) таблицы. Объекты, к которым понятие full scan неприменимо (например, топики), не учитываются.
+`HAS_FULL_SCAN` определяет запросы, содержащие полное сканирование указанных объектов. Полное сканирование — чтение таблицы без ограничения по ключу или диапазону ключей. Аргумент — маска пути к объекту с поддержкой подстановочных знаков `*` и `?`; предикат срабатывает, если в плане запроса есть хотя бы один такой объект. Поддерживаются как [строковые](../../../concepts/glossary.md#row-oriented-table), так и [колоночные](../../../concepts/glossary.md#column-oriented-table) таблицы. Объекты, к которым понятие полного сканирования неприменимо (например, топики), не учитываются.
 
 Особенности определения полного сканирования:
 
@@ -156,7 +164,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_stream WITH (
 
 Также возможно наличие классификатора, который ссылается на несуществующий пул ресурсов или к которому у пользователя нет доступа. В таком случае такие классификаторы будут пропускаться.
 
-С ограничениями на число классификаторов можно ознакомиться на странице [ограничений](../../../../concepts/limits-ydb#resource_pool).
+С ограничениями на число классификаторов можно ознакомиться на странице [ограничений](../../../concepts/limits-ydb.md#resource_pool).
 
 ## Разрешения
 

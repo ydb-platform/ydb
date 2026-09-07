@@ -1,5 +1,22 @@
 # Actor library
 
+## Current Contributor Guide
+
+The [actor system guide](../../docs/en/core/contributor/actor-system/index.md)
+documents the current authoring contracts for actors and tablets. Start there
+for lifecycle, messaging, shutdown, stackless coroutines, and testing.
+
+Source entry points:
+
+- [core/](core/): actor ownership, events, mailboxes, scheduling, and dispatch.
+- [async/](async/): stackless handlers and cancellation-aware primitives.
+- [interconnect/](interconnect/): cross-node message transport.
+- [testlib/](testlib/): actor runtime test fixtures.
+- [examples/](examples/): runnable introductory examples.
+
+The introduction below provides historical background; the contributor guide
+and current behavioral tests describe the maintained runtime contracts.
+
 ## Часть первая, вводная
 
 Иногда приходится разрабатывать асинхронные, существенно параллельные, местами распределённые программы. Иногда ещё и внутренняя логика нетривиальна, разнородна, пишется разными командами не один год. Всё как мы любим. Человечеством придумано не так много способов внутренней организации структуры и кода таких программ. Большинство из них плохие (и именно из-за плохих подходов разработка асинхронных, многопоточных программ приобрела дурную славу). Некоторые получше. А серебряной пули как обычно нет.
@@ -19,7 +36,7 @@
 
 ## IActor
 
-https://github.com/ydb-platform/ydb/blob/9b7aebe722a327de2e05a0ad2cc6063e54ea557e/ydb/library/actors/core/actor.h#L367
+[IActor declaration](https://github.com/ydb-platform/ydb/blob/9b7aebe722a327de2e05a0ad2cc6063e54ea557e/ydb/library/actors/core/actor.h#L367)
 
 Базовый класс всех агентов, напрямую обычно не используется. Инстанцируется либо `TActor`, либо `TActorBootstrapped`. Фактически весь полезный код программы размещается в акторах.
 

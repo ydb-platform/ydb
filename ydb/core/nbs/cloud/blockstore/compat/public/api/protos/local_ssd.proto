@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Available storage
+
+message TAvailableStorageInfo
+{
+    string AgentId = 1;
+
+    // Size of single chunk (in bytes)
+    uint64 ChunkSize = 2;
+
+    uint32 ChunkCount = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Query information about available storage
+
+enum EStoragePoolKind
+{
+    // Named local pools.
+    STORAGE_POOL_KIND_LOCAL = 0;
+
+    // Default global pool without name.
+    STORAGE_POOL_KIND_DEFAULT = 1;
+
+    // Named global pools.
+    STORAGE_POOL_KIND_GLOBAL = 2;
+}
+
+message TQueryAvailableStorageRequest
+{
+    THeaders Headers = 1;
+
+    // List of agent ids.
+    repeated string AgentIds = 2;
+
+    // Storage pool name.
+    string StoragePoolName = 3;
+
+    // Storage pool kind.
+    EStoragePoolKind StoragePoolKind = 4;
+}
+
+message TQueryAvailableStorageResponse
+{
+    NYdb.NBS.NProto.TError Error = 1;
+
+    repeated TAvailableStorageInfo AvailableStorage = 2;
+}

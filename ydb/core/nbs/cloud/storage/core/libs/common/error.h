@@ -132,6 +132,8 @@ enum EWellKnownResultCodes: ui32
                // preconditions (e.g. unexpected order of operations, write
                // request in read-only state...). This error is not retryable
     E_TRANSPORT_ERROR = MAKE_ERROR(16),
+    E_BADMSG = MAKE_ERROR(17),   // Unable to decode(deserialize) message
+    E_UNAVAILABLE = MAKE_ERROR(18),
 
     E_GRPC_CANCELLED = MAKE_GRPC_ERROR(1),
     E_GRPC_UNKNOWN = MAKE_GRPC_ERROR(2),
@@ -273,6 +275,11 @@ public:
         return AsStrBuf();
     }
 };
+
+#define STORAGE_THROW_SERVICE_ERROR(x)                                         \
+    throw TServiceError(                                                       \
+        __FILE__ ":" Y_STRINGIZE(__LINE__) ": ",                               \
+        x)   // STORAGE_ERROR
 
 ////////////////////////////////////////////////////////////////////////////////
 

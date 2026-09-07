@@ -1,0 +1,62 @@
+{
+"sensors":
+[{
+    "kind":"GAUGE",
+    "labels":
+    {
+        "service":"compute",
+        "project":"cloudId",
+        "cluster":"folderId",
+        "disk":"diskId",
+        "name":"disk.io_quota_utilization_percentage"
+    },
+    "ts":12,
+    "value":1
+},{
+    "kind":"GAUGE",
+    "labels":
+    {
+        "service":"compute",
+        "project":"cloudId",
+        "cluster":"folderId",
+        "disk":"diskId",
+        "name":"disk.io_quota_utilization_percentage_burst"
+    },
+    "ts":12,
+    "value":10
+},{
+    "kind":"HIST_RATE",
+    "labels":
+    {
+        "service":"compute",
+        "project":"cloudId",
+        "cluster":"folderId",
+        "disk":"diskId",
+        "name":"disk.read_throttler_delay"
+    },
+    "ts":12,
+    "hist":
+    {
+        "bounds":[1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,35000],
+        "buckets":[46,2,3,4,5,6,7,8,9,10,11,12,13,14],
+        "inf":15
+    }
+},{
+    "kind":"HIST_RATE",
+    "labels":
+    {
+        "service":"compute",
+        "project":"cloudId",
+        "cluster":"folderId",
+        "disk":"diskId",
+        "name":"disk.write_throttler_delay"
+    },
+    "ts":12,
+    "hist":
+    {
+        "bounds":[1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,35000],
+        "buckets":[92,4,6,8,10,12,14,16,18,20,22,24,26,28],
+        "inf":30
+    }
+}]
+}

@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Placement strategy.
+
+enum EPlacementStrategy
+{
+    PLACEMENT_STRATEGY_SPREAD = 0;
+    PLACEMENT_STRATEGY_PARTITION = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Placement group settings.
+
+message TPlacementGroupSettings
+{
+    // Max disk count override.
+    uint32 MaxDisksInGroup = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Placement group description.
+
+message TPlacementGroup
+{
+    // Id of the group.
+    string GroupId = 1;
+
+    // Placement strategy.
+    EPlacementStrategy PlacementStrategy = 2;
+
+    // Volume ids belonging to this group.
+    repeated string DiskIds = 3;
+
+    // Current config version.
+    uint32 ConfigVersion = 4;
+
+    // Racks of all disks from this group.
+    repeated string Racks = 5;
+
+    // Number of placement partitions.
+    uint32 PlacementPartitionCount = 6;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Placement group creation request/response.
+
+message TCreatePlacementGroupRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Id of the group.
+    string GroupId = 2;
+
+    // Strategy to use.
+    EPlacementStrategy PlacementStrategy = 3;
+
+    // Number of placement partitions.
+    // Used for PLACEMENT_STRATEGY_PARTITION PlacementStrategy.
+    uint32 PlacementPartitionCount = 4;
+}
+
+message TCreatePlacementGroupResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Placement group destruction request/response.
+
+message TDestroyPlacementGroupRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Id of the group.
+    string GroupId = 2;
+}
+
+message TDestroyPlacementGroupResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Placement group membership alteration request/response.
+
+message TAlterPlacementGroupMembershipRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Id of the group.
+    string GroupId = 2;
+
+    // Add these disks to the group.
+    repeated string DisksToAdd = 3;
+
+    // Remove these disks from the group.
+    repeated string DisksToRemove = 4;
+
+    // Placement group configuration version this alter applies to.
+    uint32 ConfigVersion = 5;
+
+    // Index of the partition inside placement group.
+    // Takes values from 1 to PlacementPartitionCount.
+    uint32 PlacementPartitionIndex = 6;
+}
+
+message TAlterPlacementGroupMembershipResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Filled only if a non-retriable error occurred.
+    repeated string DisksImpossibleToAdd = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Get a list of all placement groups.
+
+message TListPlacementGroupsRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+}
+
+message TListPlacementGroupsResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // List of group ids.
+    repeated string GroupIds = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Get placement group information.
+
+message TDescribePlacementGroupRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Id of the group.
+    string GroupId = 2;
+}
+
+message TDescribePlacementGroupResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Placement group information.
+    TPlacementGroup Group = 2;
+}

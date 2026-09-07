@@ -1,0 +1,34 @@
+syntax = "proto2";
+
+package NCloud.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/storage/core/config";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TIamClientConfig
+{
+    // Metadata service url.
+    optional string MetadataServiceUrl = 1;
+
+    // Token Agent socket path.
+    optional string TokenAgentUnixSocket = 2;
+
+    // Token request timeout in durable client.
+    optional uint32 InitialRetryTimeout = 3; // in milliseconds
+
+    // Backoff timeout increment in durable client.
+    optional uint32 RetryTimeoutIncrement = 4; // in milliseconds
+
+    // Number of attempts in durable client.
+    optional uint32 RetryAttempts = 5;
+
+    // GRPC request timeout.
+    optional uint32 GrpcTimeout = 6; // in milliseconds
+
+    // Token refresh timeout.
+    optional uint32 TokenRefreshTimeout = 7; // in milliseconds
+
+    // HTTP request timeout.
+    optional uint32 HttpTimeout = 8; // in milliseconds
+}

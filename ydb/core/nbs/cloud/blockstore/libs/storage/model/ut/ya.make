@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/core/nbs/cloud/storage/core/tests/recipes/small.inc)
 SRCS(
     log_prefix_ut.cpp
     log_title_ut.cpp
+    volume_label_ut.cpp
 )
 
 PEERDIR(

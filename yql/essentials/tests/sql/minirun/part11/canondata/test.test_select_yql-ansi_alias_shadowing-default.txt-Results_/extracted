@@ -1,0 +1,91 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:7:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem
+    	SELECT 2 a
+	^
+        <tmp_path>/program.sql:<main>:7:1: Warning: Alias `a` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `a` to avoid confusion
+        	SELECT 2 a
+	^
+    <tmp_path>/program.sql:<main>:10:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem
+    	SELECT 4 a, 5 b
+	^
+        <tmp_path>/program.sql:<main>:10:1: Warning: Alias `a` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `a` to avoid confusion
+        	SELECT 4 a, 5 b
+	^
+    <tmp_path>/program.sql:<main>:13:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem
+    	SELECT 7 a, 8 b, 9 c
+	^
+        <tmp_path>/program.sql:<main>:13:1: Warning: Alias `a` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `a` to avoid confusion
+        	SELECT 7 a, 8 b, 9 c
+	^
+        <tmp_path>/program.sql:<main>:13:1: Warning: Alias `b` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `b` to avoid confusion
+        	SELECT 7 a, 8 b, 9 c
+	^
+    <tmp_path>/program.sql:<main>:18:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple
+    	SELECT (SELECT 12 a)
+	^
+        <tmp_path>/program.sql:<main>: Warning: At tuple
+        
+            <tmp_path>/program.sql:<main>:18:1: Warning: At tuple, At function: YqlResultItem, At lambda
+            	SELECT (SELECT 12 a)
+	^
+                <tmp_path>/program.sql:<main>:18:19: Warning: At function: YqlSubLink, At function: YqlSelect, At tuple, At tuple, At tuple
+                	SELECT (SELECT 12 a)
+	                  ^
+                    <tmp_path>/program.sql:<main>:18:9: Warning: At function: YqlSetItem
+                    	SELECT (SELECT 12 a)
+	        ^
+                        <tmp_path>/program.sql:<main>:18:9: Warning: Alias `a` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `a` to avoid confusion
+                        	SELECT (SELECT 12 a)
+	        ^
+    <tmp_path>/program.sql:<main>:21:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple
+    	SELECT (14 IN (SELECT 15 a))
+	^
+        <tmp_path>/program.sql:<main>: Warning: At tuple
+        
+            <tmp_path>/program.sql:<main>:21:1: Warning: At tuple, At function: YqlResultItem, At lambda
+            	SELECT (14 IN (SELECT 15 a))
+	^
+                <tmp_path>/program.sql:<main>:21:26: Warning: At function: YqlSubLink, At function: YqlSelect, At tuple, At tuple, At tuple
+                	SELECT (14 IN (SELECT 15 a))
+	                         ^
+                    <tmp_path>/program.sql:<main>:21:16: Warning: At function: YqlSetItem
+                    	SELECT (14 IN (SELECT 15 a))
+	               ^
+                        <tmp_path>/program.sql:<main>:21:16: Warning: Alias `a` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `a` to avoid confusion
+                        	SELECT (14 IN (SELECT 15 a))
+	               ^
+    <tmp_path>/program.sql:<main>:24:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple
+    	SELECT (EXISTS (SELECT 17 a))
+	^
+        <tmp_path>/program.sql:<main>: Warning: At tuple
+        
+            <tmp_path>/program.sql:<main>:24:1: Warning: At tuple, At function: YqlResultItem, At lambda
+            	SELECT (EXISTS (SELECT 17 a))
+	^
+                <tmp_path>/program.sql:<main>:24:17: Warning: At function: YqlSubLink, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem
+                	SELECT (EXISTS (SELECT 17 a))
+	                ^
+                    <tmp_path>/program.sql:<main>:24:17: Warning: Alias `a` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `a` to avoid confusion
+                    	SELECT (EXISTS (SELECT 17 a))
+	                ^
+    <tmp_path>/program.sql:<main>:27:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple
+    	SELECT *
+	^
+        <tmp_path>/program.sql:<main>: Warning: At tuple
+        
+            <tmp_path>/program.sql:<main>:27:1: Warning: At function: YqlWhere, At lambda
+            	SELECT *
+	^
+                <tmp_path>/program.sql:<main>:29:15: Warning: At function: YqlSubLink, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem
+                	WHERE EXISTS (SELECT 20 a);
+	              ^
+                    <tmp_path>/program.sql:<main>:29:15: Warning: Alias `a` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `a` to avoid confusion
+                    	WHERE EXISTS (SELECT 20 a);
+	              ^
+    <tmp_path>/program.sql:<main>:31:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem
+    	SELECT 21 a, 22 AS b
+	^
+        <tmp_path>/program.sql:<main>:31:1: Warning: Alias `a` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `a` to avoid confusion
+        	SELECT 21 a, 22 AS b
+	^

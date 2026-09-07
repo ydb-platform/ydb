@@ -9708,6 +9708,13 @@
             "uri": "https://{canondata_backend}/1597364/fdeffca975c2d2d1bc708528a504feb47b36c5c9/resource.tar.gz#test_sql2yql.test_select_yql-alias_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-ansi_alias_shadowing]": [
+        {
+            "checksum": "2e930405257044dd4cc775a0007f5ad2",
+            "size": 7351,
+            "uri": "https://{canondata_backend}/1903885/a6673486f5a20e67efb42fadbb43647055754f10/resource.tar.gz#test_sql2yql.test_select_yql-ansi_alias_shadowing_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-correlated_asterisk_subquery_scalar_with_join]": [
         {
             "checksum": "a65af77b740884fc6ff81c02ff96088f",
@@ -18540,6 +18547,11 @@
     "test_sql_format.test[select_yql-alias]": [
         {
             "uri": "file://test_sql_format.test_select_yql-alias_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-ansi_alias_shadowing]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-ansi_alias_shadowing_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-correlated_asterisk_subquery_scalar_with_join]": [

@@ -1279,6 +1279,23 @@
             "uri": "https://{canondata_backend}/1847551/c9103bf55cc11afa84471242d8aeba02b20d6dea/resource.tar.gz#test.test_select_pg-uncorrelated_asterisk_subquery_scalar-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-ansi_alias_shadowing-default.txt-Debug]": [
+        {
+            "checksum": "73cfdc7663bd341314279200468cfcc2",
+            "size": 1927,
+            "uri": "https://{canondata_backend}/1903885/8f81b060ce05601b75075548daa0509a92f60deb/resource.tar.gz#test.test_select_yql-ansi_alias_shadowing-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-ansi_alias_shadowing-default.txt-Results]": [
+        {
+            "checksum": "d0a79070fc0824ee438eeae4aa637962",
+            "size": 7443,
+            "uri": "https://{canondata_backend}/1903885/8f81b060ce05601b75075548daa0509a92f60deb/resource.tar.gz#test.test_select_yql-ansi_alias_shadowing-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_select_yql-ansi_alias_shadowing-default.txt-Results_/extracted"
+        }
+    ],
     "test.test[select_yql-evaluate_expr_column_type-default.txt-Debug]": [
         {
             "checksum": "d60fba30a91faa9335d17b70a6b9119a",

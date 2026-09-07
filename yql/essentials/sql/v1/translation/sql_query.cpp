@@ -4274,7 +4274,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM(
         "WarnOnAnsiAliasShadowing",
         WarnOnAnsiAliasShadowing,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/true),
     PAIRED_TABLE_ELEM(
         "OrderedColumns",
         OrderedColumns,

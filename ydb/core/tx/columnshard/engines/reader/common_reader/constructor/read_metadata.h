@@ -189,9 +189,14 @@ public:
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
+    const ESourcesSorting SourcesSorting;
 
     bool NeedDuplicateFiltering() const {
         return DuplicateFilteringNeeded;
+    }
+
+    ESourcesSorting GetSourcesSorting() const {
+        return SourcesSorting;
     }
 
     EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;

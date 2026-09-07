@@ -56,7 +56,8 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
         case NReader::EReaderClass::Simple: {
             std::deque<NReader::NSimple::TSourceConstructor> sources;
             for (auto&& i : portions) {
-                sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsConflicting(), readDescription.GetSorting()));
+                sources.emplace_back(
+                    NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsConflicting(), readDescription.GetRequestSorting()));
             }
             return std::make_unique<NReader::NSimple::TPortionsSources>(
                 std::move(sources), readDescription.GetSourcesSorting(), needDuplicateFiltering);
@@ -64,7 +65,8 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
         case NReader::EReaderClass::Trivial: {
             std::deque<NReader::NTrivial::TSourceConstructor> sources;
             for (auto&& i : portions) {
-                sources.emplace_back(NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsConflicting(), readDescription.GetSorting()));
+                sources.emplace_back(
+                    NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsConflicting(), readDescription.GetRequestSorting()));
             }
             return std::make_unique<NReader::NTrivial::TPortionsSources>(
                 std::move(sources), readDescription.GetSourcesSorting(), needDuplicateFiltering);

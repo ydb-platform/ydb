@@ -1,10 +1,10 @@
-#include "limit_sorted.h"
+#include "ordered_result_with_limit.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NTrivial {
 
-std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext() {
+std::shared_ptr<NCommon::IDataSource> TOrderedResultWithLimitCollection::DoTryExtractNext() {
     if (!NextSource) {
         if (!SourcesConstructor->IsFinished()) {
             NextSource = SourcesConstructor->TryExtractNext(Context, InFlightLimit);
@@ -39,7 +39,7 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext
     }
 }
 
-void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
+void TOrderedResultWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
     YDB_LOG_DEBUG("",
         {"event", "DoOnSourceFinished"},
         {"sourceIdx", source->GetSourceIdx()},
@@ -55,7 +55,7 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon:
     AFL_VERIFY(FetchingInFlightSources.erase(source->GetSourceIdx()) || Cleared || Aborted)("source_idx", source->GetSourceIdx());
 }
 
-TScanWithLimitCollection::TScanWithLimitCollection(
+TOrderedResultWithLimitCollection::TOrderedResultWithLimitCollection(
     const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : TBase(context, std::move(sourcesConstructor))
     , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())
@@ -65,4 +65,4 @@ TScanWithLimitCollection::TScanWithLimitCollection(
     }
 }
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NTrivial

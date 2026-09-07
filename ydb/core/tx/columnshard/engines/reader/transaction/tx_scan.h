@@ -23,15 +23,17 @@ private:
     TString GetReaderName() const;
     NConveyorComposite::TCPULimitsConfig GetCpuLimits() const;
     const TVersionedPresetSchemas& GetPresetSchemas() const;
+    std::optional<ESourcesSorting> GetCursorSourcesSorting() const;
 
     // Steps building the read description
+    TConclusion<std::shared_ptr<ITableMetadataAccessor>> MakeTableAccessor(
+        const NColumnShard::TSchemeShardLocalPathId& ssPathId, const TSnapshot& snapshot) const;
     TReadDescription MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting,
-        const std::shared_ptr<NLWTrace::TOrbit>& orbit, const TString& readerName) const;
-    TConclusionStatus InitTableAccessor(
-        TReadDescription& read, const NColumnShard::TSchemeShardLocalPathId& ssPathId, const TSnapshot& snapshot) const;
+        const std::shared_ptr<NLWTrace::TOrbit>& orbit, const EReaderClass readerClass,
+        const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const;
     ui64 OnScanStartedForPath(const TReadDescription& read, NLWTrace::TOrbit& orbit) const;
     TConclusion<std::unique_ptr<IScannerConstructor>> MakeScannerConstructor(
-        const TReadDescription& read, const TScannerConstructorContext& context, const TString& readerName) const;
+        const TScannerConstructorContext& context, const TString& readerName) const;
     TConclusionStatus InitScanCursor(TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
     TConclusionStatus InitProgram(TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
     TConclusionStatus InitPKRangesFilter(TReadDescription& read) const;

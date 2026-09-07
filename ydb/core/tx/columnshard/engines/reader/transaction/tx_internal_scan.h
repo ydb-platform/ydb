@@ -23,8 +23,9 @@ private:
     TReadMetadataBase::ESorting GetSorting() const;
 
     // Steps building the read description
-    TReadDescription MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting) const;
-    TConclusionStatus InitTableAccessor(TReadDescription& read, const TSnapshot& snapshot) const;
+    TConclusion<std::shared_ptr<ITableMetadataAccessor>> MakeTableAccessor(const TSnapshot& snapshot) const;
+    TReadDescription MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting,
+        const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const;
 
     // Null when diagnostics are disabled.
     std::unique_ptr<TDiagnosticsEvent> MakeDiagnosticsEvent(const TReadDescription& read) const;

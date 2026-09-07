@@ -437,7 +437,6 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
     const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
-    const ui64 LastDeprecatedPortionId;
     const std::optional<ui64> LastPortionIdOptional;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
@@ -548,10 +547,6 @@ public:
         return LastSourceRecordsCount;
     }
 
-    ui64 GetLastDeprecatedPortionId() const {
-        return LastDeprecatedPortionId;
-    }
-
     const std::optional<ui64>& GetLastPortionIdOptional() const {
         return LastPortionIdOptional;
     }
@@ -629,7 +624,6 @@ public:
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
-        , LastDeprecatedPortionId(Sources.back()->GetDeprecatedPortionId())
         , LastPortionIdOptional(Sources.back()->GetPortionIdOptional())
     {
         AFL_VERIFY(Sources.size());

@@ -29,11 +29,13 @@ TReadMetadataBase::ESorting TTxInternalScan::GetSorting() const {
     return InternalScanEvent->Get()->GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
 }
 
-TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting) const {
+TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting,
+    const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const {
     const auto& request = *InternalScanEvent->Get();
     AFL_VERIFY(Self->GetIndexOptional());
-    // An internal scan always deduplicates, and always through the trivial reader.
-    TReadDescription read(Self->TabletID(), snapshot, sorting, true, true);
+    // An internal scan always deduplicates, always through the trivial reader, and never resumes from
+    // a cursor
+    TReadDescription read(Self->TabletID(), snapshot, sorting, true, EReaderClass::Trivial, tableMetadataAccessor, std::nullopt);
     read.SetScanIdentifier(request.TaskIdentifier);
     // the parent write has already subscribed to the lock, so no need to subscribe again
     read.SetLock(request.GetLockId(), std::nullopt, NKikimrDataEvents::OPTIMISTIC,
@@ -50,15 +52,10 @@ TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot,
     return read;
 }
 
-TConclusionStatus TTxInternalScan::InitTableAccessor(TReadDescription& read, const TSnapshot& snapshot) const {
+TConclusion<std::shared_ptr<ITableMetadataAccessor>> TTxInternalScan::MakeTableAccessor(const TSnapshot& snapshot) const {
     const auto& request = *InternalScanEvent->Get();
-    auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(
+    return Self->TablesManager.BuildTableMetadataAccessor(
         "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId(), snapshot);
-    if (accConclusion.IsFail()) {
-        return TConclusionStatus::Fail(accConclusion.GetErrorMessage());
-    }
-    read.TableMetadataAccessor = accConclusion.DetachResult();
-    return TConclusionStatus::Success();
 }
 
 std::unique_ptr<TTxInternalScan::TDiagnosticsEvent> TTxInternalScan::MakeDiagnosticsEvent(const TReadDescription& read) const {
@@ -120,13 +117,14 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         {"snapshot", snapshot.DebugString()},
         {"taskId", request.TaskIdentifier});
     const TReadMetadataBase::ESorting sorting = GetSorting();
-    const TScannerConstructorContext context(snapshot, 0, sorting);
+    const TScannerConstructorContext context(snapshot, 0);
 
-    TReadDescription read = MakeReadDescription(snapshot, sorting);
-    if (auto status = InitTableAccessor(read, snapshot); status.IsFail()) {
-        return SendError("cannot build table metadata accessor for request: " + status.GetErrorMessage(),
+    auto accessorConclusion = MakeTableAccessor(snapshot);
+    if (accessorConclusion.IsFail()) {
+        return SendError("cannot build table metadata accessor for request: " + accessorConclusion.GetErrorMessage(),
             AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
     }
+    TReadDescription read = MakeReadDescription(snapshot, sorting, accessorConclusion.DetachResult());
 
     const NTrivial::TIndexScannerConstructor scannerConstructor(context);
     auto metadataConclusion = MakeReadMetadata(Self, Self->Counters.GetScanCounters(), scannerConstructor, read);

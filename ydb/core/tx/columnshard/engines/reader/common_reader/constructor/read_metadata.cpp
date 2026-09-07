@@ -15,7 +15,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
     SetPKRangesFilter(read.PKRangesFilter);
-    InitShardingInfo(read.TableMetadataAccessor);
+    InitShardingInfo(read.GetTableMetadataAccessor());
     TxId = read.TxId;
     LockId = read.LockId;
     auto lockNodeId = read.LockNodeId;
@@ -45,10 +45,10 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 
     ITableMetadataAccessor::TSelectMetadataContext context(
         owner->GetTablesManager(), owner->GetIndexVerified(), read.Orbit, owner->GetDataLocksManager());
-    SourcesConstructor = read.TableMetadataAccessor->SelectMetadata(context, read, readerClass);
+    SourcesConstructor = read.GetTableMetadataAccessor()->SelectMetadata(context, read, readerClass);
 
     if (!SourcesConstructor) {
-        return TConclusionStatus::Fail("cannot build sources constructor for " + read.TableMetadataAccessor->GetTablePath());
+        return TConclusionStatus::Fail("cannot build sources constructor for " + read.GetTableMetadataAccessor()->GetTablePath());
     }
 
     SourcesConstructor->InitCursor(read.GetScanCursorVerified());
@@ -90,10 +90,11 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 }
 
 TReadMetadata::TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read)
-    : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
+    : TBase(schemaIndex, read.GetRequestSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorVerified(), read.GetTabletId())
     , DuplicateFilteringNeeded(read.NeedDuplicateFiltering())
-    , TableMetadataAccessor(read.TableMetadataAccessor)
+    , TableMetadataAccessor(read.GetTableMetadataAccessor())
+    , SourcesSorting(read.GetSourcesSorting())
     , ReadStats(std::make_shared<TReadStats>())
 {
 }

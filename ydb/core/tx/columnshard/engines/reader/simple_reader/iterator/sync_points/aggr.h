@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
-class TScanWithLimitCollection;
+class TOrderedResultWithLimitCollection;
 
 class TSyncPointResultsAggregationControl: public ISyncPoint {
 private:
@@ -151,6 +151,7 @@ private:
             }
         }
         AFL_VERIFY(!Next);
+        const auto sourcesSorting = SourcesSortingToProto(Context->GetReadMetadata()->GetSourcesSorting());
         std::shared_ptr<IScanCursor> cursor;
         if (source->GetType() == IDataSource::EType::SimpleAggregation) {
             const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
@@ -158,19 +159,13 @@ private:
                 Collection->OnSourceFinished(i);
                 --SourcesCount;
             }
-            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
-                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
-                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), aggrSource->GetLastPortionIdOptional()))
-                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
-                               aggrSource->GetLastDeprecatedPortionId(), aggrSource->GetLastSourceRecordsCount()));
+            cursor = std::make_shared<TSourceIndexScanCursor>(sourcesSorting, nullptr, aggrSource->GetLastSourceIdx(),
+                aggrSource->GetLastSourceRecordsCount(), aggrSource->GetLastPortionIdOptional());
         } else {
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
-            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
-                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
-                               source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional()))
-                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
-                               source->GetDeprecatedPortionId(), source->GetRecordsCount()));
+            cursor = std::make_shared<TSourceIndexScanCursor>(
+                sourcesSorting, nullptr, source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional());
             --SourcesCount;
         }
         AFL_VERIFY(!source->GetStageResult().IsEmpty());

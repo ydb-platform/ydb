@@ -1,14 +1,14 @@
 #include "limit.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
-#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/limit_sorted.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/ordered_result_with_limit.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
-    const std::shared_ptr<TScanWithLimitCollection>& collection)
+    const std::shared_ptr<TOrderedResultWithLimitCollection>& collection)
     : TBase(pointIndex, "SYNC_LIMIT", context, collection)
     , Limit(limit)
     , Collection(collection)

@@ -249,7 +249,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         ui64 GetRUCost() override {
-            return NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
+            return NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0);
         }
 
         void OnRequestUnitsCharged(const NActors::TActorContext&) {

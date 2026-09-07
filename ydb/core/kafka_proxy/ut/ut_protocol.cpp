@@ -2985,9 +2985,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                                  << (lastStartOffset ? ToString(*lastStartOffset) : "n/a"));
         };
 
-        // 7_MB exceeds LowWatermark (6MB), so each write becomes its own blob and retention/compaction
-        // can move startOffset. Two blobs plus a few small records are enough to form a gap.
-        WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 2);
+        // 7_MB exceeds LowWatermark (6MB), so a large write becomes its own blob.
+        // Retention drops the first blob (offset 0). Compaction can drop the second
+        // blob only if it is a pure superseded key-1: the write session packs the
+        // unique key-new records into the current Head, so they land in the last
+        // large blob. Two large writes put key-new into the first remaining blob
+        // and startOffset stays at 1 forever. cyclesCount = 3 keeps key-new out of
+        // that remaining blob so compaction can advance startOffset to 2.
+        WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 3);
         WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 3);
         waitStartOffsetAtLeast(1, TDuration::Seconds(60), "retention");
 

@@ -2282,7 +2282,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         // => Cost = base + blocks
         const ui64 blocks = RuPayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
-        const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false, false);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false);
         UNIT_ASSERT_VALUES_EQUAL(blocks, 5);
         UNIT_ASSERT_VALUES_EQUAL(expected, 7);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
@@ -2349,7 +2349,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         // => Cost = base + blocks
         const ui64 blocks = RuPayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
-        const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false, false);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false);
         UNIT_ASSERT_VALUES_EQUAL(totalReadRu, expected);
     }
 
@@ -2415,7 +2415,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one delete RU charge");
         // adjunct 0.
         // Cost = base(2).
-        const ui64 expected = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
+        const ui64 expected = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0);
         UNIT_ASSERT_VALUES_EQUAL(expected, 2);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
@@ -2527,7 +2527,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one write RU charge");
             UNIT_ASSERT_VALUES_EQUAL(
                 charges[0].Amount,
-                NBilling::CalcRu(0, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false, false));
+                NBilling::CalcRu(0, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false));
             auto bills = metering.Take();
             UNIT_ASSERT_VALUES_EQUAL(bills.size(), 1);
             AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
@@ -2543,7 +2543,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one read RU charge");
             UNIT_ASSERT_VALUES_EQUAL(
                 charges[0].Amount,
-                NBilling::CalcRu(0, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false, false));
+                NBilling::CalcRu(0, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false));
             auto bills = metering.Take();
             UNIT_ASSERT_VALUES_EQUAL(bills.size(), 1);
             AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
@@ -2639,7 +2639,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto charges = recorder.Take();
         UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one fifo write RU charge");
-        const ui64 expected = NBilling::CalcRu(0, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, true, false);
+        const ui64 expected = NBilling::CalcRu(0, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, true);
         UNIT_ASSERT_VALUES_EQUAL(expected, 3);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         auto bills = metering.Take();

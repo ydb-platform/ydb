@@ -284,8 +284,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 this->CalcRuConsumption(PayloadSize_),
                 NBilling::READ_BASE_COST,
                 NBilling::READ_COST_PER_BLOCK,
-                Fifo_,
-                false);
+                Fifo_);
         }
 
         void OnRequestUnitsCharged(const TActorContext& ctx) {

@@ -47,6 +47,7 @@ private:
         std::unique_ptr<TKqpStreamLookupWorker> Worker;
         ui64 ReadsInflight = 0;
         ui64 LookupColumnsCount = 0;
+        std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
 
         bool ResolvePending = false;
         bool IsUniqueCheck = false;
@@ -158,7 +159,8 @@ public:
             ui64 cookie,
             size_t lookupKeyPrefix,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
-            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns) override {
+            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
+            const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) override {
         TLookupSettings settings {
             .TablePath = Settings.TablePath,
             .TableId = Settings.TableId,
@@ -252,6 +254,7 @@ public:
                     .Worker = CreateLookupWorker(std::move(settings), Settings.TypeEnv, Settings.HolderFactory),
                     .ReadsInflight = 0,
                     .LookupColumnsCount = lookupColumns.size(),
+                    .MvccSnapshot = mvccSnapshot,
                 }
             ).second);
     }
@@ -351,9 +354,10 @@ public:
         Settings.TxManager->AddShard(shardId, false, worker->GetTablePath());
         Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
 
-        if (Settings.MvccSnapshot) {
-            record.MutableSnapshot()->SetStep(Settings.MvccSnapshot->GetStep());
-            record.MutableSnapshot()->SetTxId(Settings.MvccSnapshot->GetTxId());
+        const auto& lookupState = CookieToLookupState.at(cookie);
+        if (lookupState.MvccSnapshot) {
+            record.MutableSnapshot()->SetStep(lookupState.MvccSnapshot->GetStep());
+            record.MutableSnapshot()->SetTxId(lookupState.MvccSnapshot->GetTxId());
         }
 
         AFL_ENSURE(Settings.LockTxId && Settings.LockNodeId);

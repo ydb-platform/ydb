@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     void TestFilter(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);

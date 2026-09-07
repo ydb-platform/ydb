@@ -1,6 +1,6 @@
 #pragma once
 
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_table.h"
 
 namespace NKikimr::NSchemeShard {
 

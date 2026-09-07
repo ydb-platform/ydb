@@ -1,5 +1,5 @@
 #include <ydb/core/tx/schemeshard/common/validation.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

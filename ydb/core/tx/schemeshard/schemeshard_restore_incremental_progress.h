@@ -1,6 +1,6 @@
 #pragma once
 
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_incremental_restore.h"
 
 #include <ydb/core/protos/backup.pb.h>
 #include <ydb/public/api/protos/draft/ydb_backup.pb.h>

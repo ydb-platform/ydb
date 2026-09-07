@@ -5,7 +5,7 @@
 // in Blocks A-D of the single-PR plan via runtime fixtures.
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_full_backup.h>
 #include <ydb/core/tx/schemeshard/schemeshard_schema.h>
 #include <ydb/core/tx/schemeshard/schemeshard_subop_types.h>
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>

@@ -1,4 +1,5 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table_index.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include <ydb/core/tx/schemeshard/schemeshard_generated_column_utils.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 

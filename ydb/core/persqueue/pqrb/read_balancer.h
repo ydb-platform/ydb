@@ -12,7 +12,6 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 

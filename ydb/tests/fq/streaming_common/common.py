@@ -514,6 +514,27 @@ class StreamingTestBase(TestYdsBase):
         )
         return result if result is not None else 0
 
+    def restart_node(self, kikimr: Kikimr, node_id: int) -> None:
+        """Restart a specific node in the cluster."""
+        node = kikimr.cluster.slots[node_id]
+        logger.info(f"Restarting node {node_id}")
+        node.stop()
+        node.set_log_file_prefix("logfile_restarted_")
+        node.start()
+
+    def restart_streaming_node(self, kikimr: Kikimr) -> int:
+        """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+        Returns the restarted node ID."""
+        restart_node_id = None
+        for node_id in kikimr.cluster.slots:
+            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+            if count:
+                restart_node_id = node_id
+                break
+        assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
+        self.restart_node(kikimr, restart_node_id)
+        return restart_node_id
+
     def get_streaming_query_metric(
         self, kikimr: Kikimr, query_name: str, metric_name: str, expect_counters_exist: bool = False
     ) -> int:

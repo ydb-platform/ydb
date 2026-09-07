@@ -355,10 +355,18 @@ public:
         return ShardActuals.size();
     }
 
-    const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
+    const ::NKikimr::NColumnShard::TColumnShard* GetShard() const {
         TGuard<TMutex> g(Mutex);
-        AFL_VERIFY(ShardActuals.size() == 1);
+        if (ShardActuals.size() != 1) {
+            return nullptr;
+        }
         return ShardActuals.begin()->second;
+    }
+
+    const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
+        const auto* shard = GetShard();
+        AFL_VERIFY(shard);
+        return shard;
     }
 
     ui64 GetNodePortionsCountLimitVerified(const ui64 tabletId = 0) const;

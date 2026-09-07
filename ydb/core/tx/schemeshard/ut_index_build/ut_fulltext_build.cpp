@@ -685,24 +685,38 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     // Helpers for the auto-provisioning tests below: a table with a custom (Utf8) PK and NO __ydb_row_id
     // column / unique index - the schemeshard provisions both when the fulltext index is built.
 
-    void DoCreateCustomPkTextTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+    void DoCreateCustomPkTextTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, bool split = false) {
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             Name: "texts"
             Columns { Name: "pk" Type: "Utf8" NotNull: true }
             Columns { Name: "text" Type: "String" }
             Columns { Name: "data" Type: "String" }
             KeyColumnNames: ["pk"]
-        )");
+            %s
+        )", split ? R"(SplitBoundary { KeyPrefix { Tuple { Optional { Bytes: "ptw" } } } })" : ""));
         env.TestWaitNotification(runtime, txId);
     }
 
     void DoWriteRowsCustomPk(TTestBasicRuntime& runtime) {
         auto tableDesc = DescribePath(runtime, "/MyRoot/texts", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
         const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-        UNIT_ASSERT(!tablePartitions.empty());
-        const ui64 textsTabletId = tablePartitions[0].GetDatashardId();
+        UNIT_ASSERT(tablePartitions.size() > 0);
+        TVector<TString> boundary;
+        for (auto& part: tablePartitions) {
+            if (part.GetEndOfRangeKeyPrefix().empty()) {
+                boundary.emplace_back();
+            } else {
+                TSerializedCellVec key(part.GetEndOfRangeKeyPrefix());
+                boundary.emplace_back(key.GetCells().at(0).AsBuf());
+            }
+        }
 
-        auto fnWriteRow = [&] (TString pk, TString text, TString data) {
+        auto fnWriteRow = [&](TString pk, TString text, TString data) {
+            size_t part;
+            for (part = 0; part < boundary.size()-1 && pk >= boundary[part]; part++) {
+            }
+            const ui64 textsTabletId = tablePartitions[part].GetDatashardId();
+
             TString writeQuery = Sprintf(R"(
                 (
                     (let key   '( '('pk     (Utf8 '%s) ) ) )
@@ -1184,5 +1198,98 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/fulltext_idx")), {
             NLs::PathNotExist,
         });
+    }
+
+    Y_UNIT_TEST(BuildPartitioning) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(true).DataShardStatsReportIntervalSeconds(1).DisableStatsBatching(true));
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreateCustomPkTextTable(runtime, env, txId, true);
+        DoWriteRowsCustomPk(runtime);
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> prepassBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTargetName().EndsWith(NTableIndex::NFulltext::RowIdSrcBuildSuffix);
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        {
+            Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+            NKikimrIndexBuilder::TIndexBuildSettings settings;
+            settings.set_source_path("/MyRoot/texts");
+            settings.MutableScanSettings()->SetMaxBatchRows(1);
+            settings.set_max_shards_in_flight(4);
+            *settings.mutable_index() = index;
+            auto request = new TEvIndexBuilder::TEvCreateRequest(buildIndexTx, "/MyRoot", std::move(settings));
+            auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("row-id source prepass scan request", [&]{ return prepassBlocker.size() > 0; });
+
+        // Check rowidsrc partitioning - 4 partitions (same as max_shards_in_flight)
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTablerowidsrc", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 4);
+        }
+
+        // Check indexImplTable partitioning - minParts = 2 (same as the main table) but actually 1 partition
+        ui64 implTabletId = 0;
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount(), 2);
+            implTabletId = tablePartitions[0].GetDatashardId();
+        }
+
+        // Wait for the first PeriodicTableStats so schemeshard records Ready state
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> periodicStatsBlocker(runtime, [implTabletId](const auto& ev) {
+            if (ev->Get()->Record.GetDatashardId() == implTabletId) {
+                return true;
+            }
+            return false;
+        });
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        runtime.WaitFor("indexImplTable periodic stats", [&]{ return periodicStatsBlocker.size() > 0; });
+        periodicStatsBlocker.Stop().Unblock();
+
+        TBlockEvents<TEvDataShard::TEvBuildFulltextIndexRequest> fulltextBlocker(runtime, [](const auto&) {
+            return true;
+        });
+        prepassBlocker.Stop().Unblock();
+        runtime.WaitFor("fill 0build request", [&]{ return fulltextBlocker.size() > 0; });
+
+        // Check indexImplTable0build partitioning policy - size to split = 100 MB, max parts = 4 (same as max_shards_in_flight)
+        {
+            auto buildTable = "/MyRoot/texts/fulltext_idx/indexImplTable0build";
+            auto tableDesc = DescribePath(runtime, buildTable, /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 1);
+            const auto& policy = tableDesc.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy();
+            UNIT_ASSERT_VALUES_EQUAL(policy.GetMaxPartitionsCount(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(policy.GetSizeToSplit(), 100 * 1024 * 1024);
+
+            // Re-partition it manually (100 MB isn't enough for auto-partitioning during the test)
+            TestSplitTable(runtime, ++txId, buildTable, Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional: { Bytes: "ptw" } } } }
+            )", tablePartitions[0].GetDatashardId()));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        fulltextBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        // Check final indexImplTable partitioning
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 2);
+        }
     }
 }

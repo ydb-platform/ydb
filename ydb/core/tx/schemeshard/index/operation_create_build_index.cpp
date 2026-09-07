@@ -304,6 +304,16 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto implTableDesc = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
                 indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns, false);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            // Set index table partitions to at least the same number of partitions at the main table
+            if (!indexTableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
+                auto& policy = *implTableDesc.MutablePartitionConfig()->MutablePartitioningPolicy();
+                const auto maxShardsInPath = table.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+                ui32 fulltextShards = tableInfo->GetPartitionStore().size();
+                if (fulltextShards > maxShardsInPath) {
+                    fulltextShards = maxShardsInPath;
+                }
+                policy.SetMinPartitionsCount(fulltextShards);
+            }
             result.push_back(createImplTable(std::move(implTableDesc),
                 THashSet<TString>{NTableIndex::NFulltext::GenSequence}));
 

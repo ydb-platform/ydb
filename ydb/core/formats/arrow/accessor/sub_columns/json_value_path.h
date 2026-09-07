@@ -59,6 +59,7 @@ public:
     TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType,
         const std::optional<ui64>& cookie = std::nullopt);
 
+    std::shared_ptr<IChunkedArray> GetNativeStringArray() const;
     void VisitValues(const TValuesVisitor& visitor) const;
 
     bool IsValid() const {

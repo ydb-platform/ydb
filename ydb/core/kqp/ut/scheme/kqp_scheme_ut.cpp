@@ -12921,8 +12921,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
     }
 
-    Y_UNIT_TEST(CreateBackupCollectionDisabledByDefault) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST(CreateBackupCollectionDisabled) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableBackupService(false);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+            .SetEnableBackupService(false));
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

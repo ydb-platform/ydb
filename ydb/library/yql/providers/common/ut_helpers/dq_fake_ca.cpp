@@ -139,10 +139,10 @@ void TFakeCASetup::LoadSource(const TSourceState& state) {
     });
 }
 
-void TFakeCASetup::LoadSink(const TSinkState& state) {
-    Execute([&state](TFakeActor& actor) {
+void TFakeCASetup::LoadSink(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint) {
+    Execute([&state, &checkpoint](TFakeActor& actor) {
         Y_ASSERT(actor.DqAsyncOutput);
-        actor.DqAsyncOutput->LoadState(state);
+        actor.DqAsyncOutput->LoadState(state, checkpoint);
     });
 }
 

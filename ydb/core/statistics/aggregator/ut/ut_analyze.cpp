@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
                     PRIMARY KEY (key)
                 )
                 PARTITION BY HASH(key)
-                WITH (STORE = COLUMN);
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
             )");
         } else {
             ExecuteYqlScript(env, R"(

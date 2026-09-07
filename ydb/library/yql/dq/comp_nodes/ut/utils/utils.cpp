@@ -32,6 +32,13 @@ TRuntimeNode ToBlockList(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
 
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize, const TArrayRef<TType* const> types,
                                 const NUdf::TUnboxedValuePod& values) {
+    const size_t single[] = {blockSize};
+    return ToBlocks(ctx, single, types, values);
+}
+
+NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, TArrayRef<const size_t> blockSizes,
+                                const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values) {
+    Y_ABORT_UNLESS(!blockSizes.empty(), "at least one block size is required");
     const auto& holderFactory = ctx.HolderFactory;
     const size_t width = types.size();
     const size_t total = values.GetListLength();
@@ -39,7 +46,10 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize, cons
     if (width == 0) {
         TDefaultListRepresentation listValues;
         size_t converted = 0;
+        size_t blockIndex = 0;
         while (converted < total) {
+            const size_t blockSize = blockSizes[blockIndex++ % blockSizes.size()];
+            Y_ABORT_UNLESS(blockSize > 0, "block size must be positive");
             const size_t thisBlock = std::min(blockSize, total - converted);
             NUdf::TUnboxedValue* items = nullptr;
             const auto tuple = holderFactory.CreateDirectArrayHolder(1, items);
@@ -62,8 +72,11 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize, cons
     NUdf::TUnboxedValue iterator = values.GetListIterator();
     NUdf::TUnboxedValue current;
     size_t converted = 0;
+    size_t blockIndex = 0;
     TDefaultListRepresentation listValues;
     while (converted < total) {
+        const size_t blockSize = blockSizes[blockIndex++ % blockSizes.size()];
+        Y_ABORT_UNLESS(blockSize > 0, "block size must be positive");
         for (size_t i = 0; i < blockSize && iterator.Next(current); i++, converted++) {
             for (size_t j = 0; j < builders.size(); j++) {
                 const NUdf::TUnboxedValuePod& item = current.GetElement(j);

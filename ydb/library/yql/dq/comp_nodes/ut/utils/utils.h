@@ -18,6 +18,12 @@ TRuntimeNode ToBlockList(TProgramBuilder& pgmBuilder, TRuntimeNode list);
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize, const TArrayRef<TType* const> types,
                                 const NUdf::TUnboxedValuePod& values);
 
+// Cuts the values into blocks whose lengths cycle through blockSizes, to produce an input of
+// unevenly sized blocks. Arrow chunking still caps a block at 240KB per column, so a requested size
+// may end up split.
+NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, TArrayRef<const size_t> blockSizes,
+                                const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
+
 TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool scalar);
 TType* MakeJoinType(TDqProgramBuilder& pgmBuilder, EJoinKind joinKind, TType* leftStreamType,
                     const TVector<ui32>& leftKeyDrops, TType* rightListType, const TVector<ui32>& rightKeyDrops);

@@ -121,6 +121,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
+        ApplyMaxWritesInFlight();
+
         const TMonotonic now = TActivationContext::Monotonic();
         const bool timeThrottled = now < PutThrottleUntil;
         const bool concurrencyThrottled = S3WritesInFlight >= CurrentMaxWritesInFlight;
@@ -202,6 +204,8 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
+        ApplyMaxWritesInFlight();
+
         while (!PendingPrepareWrites.empty() && S3WritesInFlight < CurrentMaxWritesInFlight) {
             auto ev = std::move(PendingPrepareWrites.front());
             PendingPrepareWrites.pop_front();
@@ -229,14 +233,16 @@ namespace NKikimr::NBlobDepot {
         --S3WritesInFlight;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
 
-        if (success && CurrentMaxWritesInFlight < MaxWritesInFlight) {
+        const ui32 maxWritesInFlight = MaxWritesInFlight();
+        if (success && CurrentMaxWritesInFlight < maxWritesInFlight) {
             if (++ConsecutiveSuccessfulWriteBatches >= SuccessesPerWriteConcurrencyStepUp) {
                 ConsecutiveSuccessfulWriteBatches = 0;
                 ++CurrentMaxWritesInFlight;
-                if (CurrentMaxWritesInFlight >= MaxWritesInFlight) {
-                    CurrentMaxWritesInFlight = MaxWritesInFlight;
+                if (CurrentMaxWritesInFlight >= maxWritesInFlight) {
+                    CurrentMaxWritesInFlight = maxWritesInFlight;
                     PutBackoff.Reset();
                 }
+
                 Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
             }
         }

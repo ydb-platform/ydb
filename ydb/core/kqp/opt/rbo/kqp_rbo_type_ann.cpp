@@ -411,6 +411,57 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpGroupingSets> groupingSets, TRBOContext& ctx) {
+    const auto aggregate = CastOperator<TOpAggregate>(groupingSets->GetInput());
+    const auto* structType = aggregate->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> keysPresentInEverySet;
+    bool first = true;
+    bool hasEmptySet = false;
+    for (const auto& groupingSet : groupingSets->GetGroupingSets()) {
+        THashSet<TInfoUnit, TInfoUnit::THashFunction> currentKeys(groupingSet.begin(), groupingSet.end());
+        hasEmptySet = hasEmptySet || groupingSet.empty();
+        if (first) {
+            keysPresentInEverySet = std::move(currentKeys);
+            first = false;
+        } else {
+            THashSet<TInfoUnit, TInfoUnit::THashFunction> intersection;
+            for (const auto& key : keysPresentInEverySet) {
+                if (currentKeys.contains(key)) {
+                    intersection.insert(key);
+                }
+            }
+            keysPresentInEverySet = std::move(intersection);
+        }
+    }
+
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> keyColumns(aggregate->KeyColumns.begin(), aggregate->KeyColumns.end());
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> scalarOptionalResults;
+    if (hasEmptySet) {
+        for (const auto& traits : aggregate->AggregationTraitsList) {
+            if (traits.AggFunction == "min" || traits.AggFunction == "max" || traits.AggFunction == "sum" || traits.AggFunction == "avg" ||
+                traits.AggFunction == "variance_1_1") {
+                scalarOptionalResults.insert(traits.ResultColName);
+            }
+        }
+    }
+
+    TVector<const TItemExprType*> resultItems;
+    resultItems.reserve(structType->GetSize());
+    for (const auto* item : structType->GetItems()) {
+        const TInfoUnit iu(TString(item->GetName()));
+        const auto* itemType = item->GetItemType();
+        const bool nonCommonKey = keyColumns.contains(iu) && !keysPresentInEverySet.contains(iu);
+        if ((nonCommonKey || scalarOptionalResults.contains(iu)) && !itemType->IsOptionalOrNull()) {
+            itemType = ctx.ExprCtx.MakeType<TOptionalExprType>(itemType);
+        }
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(item->GetName(), itemType));
+    }
+
+    groupingSets->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(resultItems));
+    return TStatus::Ok;
+}
+
 TVector<const TItemExprType*> AddOptional(const TVector<const TItemExprType*>& types, TRBOContext& rboCtx) {
     auto& ctx = rboCtx.ExprCtx;
     TVector<const TItemExprType*> optionalTypes;
@@ -676,6 +727,9 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
     else if (MatchOperator<TOpIndexLookupJoin>(op)) {
         return ComputeTypes(CastOperator<TOpIndexLookupJoin>(op), ctx);
+    }
+    else if (MatchOperator<TOpGroupingSets>(op)) {
+        return ComputeTypes(CastOperator<TOpGroupingSets>(op), ctx);
     }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);

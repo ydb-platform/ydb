@@ -62,6 +62,24 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         CheckScriptResults(scriptExecutionOperation, readyOp, db);
     }
 
+    Y_UNIT_TEST_TWIN(ExecuteScriptOnlyCommentsRejected, PerStatementExecution) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableAstCache(true);
+        app.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(PerStatementExecution);
+        auto kikimr = DefaultKikimrRunner({}, app);
+        auto db = kikimr.GetQueryClient();
+
+        for (const auto& query : {"-- empty query", "/* Multi-line\n   comment */"}) {
+            auto operation = db.ExecuteScript(query).ExtractValueSync();
+            UNIT_ASSERT_C(operation.Status().IsSuccess(), query << ": " << operation.Status().GetIssues().ToString());
+
+            auto readyOp = WaitScriptExecutionOperation(operation.Id(), kikimr.GetDriver());
+            UNIT_ASSERT_C(!readyOp.Status().IsSuccess(), query << ": " << readyOp.Status().GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(readyOp.Status().GetIssues(), NYql::TIssuesIds::YQL_NO_STATEMENTS),
+                query << ": " << readyOp.Status().GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(ExecuteMultiScript) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

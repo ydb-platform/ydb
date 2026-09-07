@@ -210,8 +210,7 @@ class TestIamAuthGeneric(StreamingTestBase):
             END DO
         """)
 
-        path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
         messages = ['1', '2', '1', '2', '3']
         self.write_stream(messages, endpoint=endpoint)
         expected = [

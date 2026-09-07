@@ -308,7 +308,7 @@ class BalancingStrategy(IBalancingStrategy):
             if pdisk_usage_w_donors[pdisk_to] + weight_to > pdisk_map[pdisk_to].ExpectedSlotCount:
                 common.print_if_not_quiet(
                     self.args,
-                    'NOTICE: Attempted to reassign vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usage %d and slot limit %d on latter' %
+                    'NOTICE: Attempted to reassign vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usage %d and slot limit %d on the latter' %
                     (*pdisk_from, *pdisk_to, pdisk_usage_w_donors[pdisk_to], pdisk_map[pdisk_to].ExpectedSlotCount), file=sys.stdout)
                 return False
 

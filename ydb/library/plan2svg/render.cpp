@@ -1072,15 +1072,17 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     PrintStageConnections(s, y0, px, pw);
 
     PrintIngressStrip(s, y0, px, pw);
-    s->Svg << "</g>" << Endl;
 
     // Last, so that nothing drawn for the stage can hide it: the badge shares the
     // task column with the throughput overlay, which spans the whole stage box.
+    // Still inside the selectable group, so clicking the badge selects the stage.
     // The stage draws into its own nested svg, so the badge is placed relative to
     // that stage box, not to its offset in the whole plan.
     if (s->WaitInputWarning) {
         PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2, s->Height, s->WaitInputWarning, "W");
     }
+
+    s->Svg << "</g>" << Endl;
 }
 
 void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {

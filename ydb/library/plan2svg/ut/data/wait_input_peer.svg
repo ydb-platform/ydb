@@ -666,10 +666,10 @@
   <line x1='964' y1='73' x2='964' y2='80' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
 <path d='M619,79c3,0,6,-4,10,-4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-1,11,-1c3,0,6,3,10,3c3,0,7,2,11,2c3,0,7,-13,11,-13c3,0,7,9,11,9c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,3,10,3c3,0,7,-6,11,-6c3,0,7,6,11,6c3,0,7,-6,11,-6c3,0,7,3,11,3c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,2,11,2c3,0,6,-8,10,-8c3,0,7,7,11,7c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,6,-1,10,-1c3,0,7,1,11,1c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
 </g>
-</g>
 <g><title>Wait input with peer stage(s) 0 wait output</title>
   <circle cx='383' cy='74' r='7' stroke='none' fill='var(--stage-texthl, #FC2824)' />
   <text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='383' y='78'>W</text>
+</g>
 </g>
 </svg>
 <svg data-stage='outer 0' data-height='122' width='1280' height='122' x='0' y='85'>

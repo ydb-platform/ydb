@@ -322,10 +322,11 @@ def test_wait_for_process_exit_timeout():
             cmds._wait_for_process_exit(123, timeout=0)
 
 
-@pytest.mark.parametrize('state,alive', [('S', True), ('Z', False)])
-def test_process_is_alive_handles_zombies(monkeypatch, state, alive):
+@pytest.mark.parametrize('state,threads,alive', [('S', 1, True), ('Z', 1, False), ('Z', 2, True)])
+def test_process_is_alive_handles_zombies(monkeypatch, state, threads, alive):
     monkeypatch.setattr(cmds.sys, 'platform', 'linux')
-    with mock.patch.object(cmds.os, 'kill'), mock.patch('builtins.open', mock.mock_open(read_data='123 (a ) name) ' + state)):
+    stat = '123 (a ) name) ' + ' '.join([state] + ['0'] * 16 + [str(threads)])
+    with mock.patch.object(cmds.os, 'kill'), mock.patch('builtins.open', mock.mock_open(read_data=stat)):
         assert cmds._process_is_alive(123) is alive
 
 

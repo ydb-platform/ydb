@@ -18,6 +18,7 @@ LOCAL_YDB_TIMEOUT = 180
 READY_TIMEOUT = 90
 QUERY_TIMEOUT = 30
 RESERVED_PORT_COUNT = 32
+TEST_CPU_COUNT = 2
 
 
 def _binary_path(environment_variable):
@@ -53,6 +54,14 @@ def _command_environment(**overrides):
     return environment
 
 
+def _limit_cpu_affinity():
+    # Keep auto-config tied to the CPUs assigned to this test, rather than all
+    # host CPUs visible on runners without a dedicated CPU cgroup.
+    if hasattr(os, 'sched_getaffinity'):
+        cpus = sorted(os.sched_getaffinity(0))[:TEST_CPU_COUNT]
+        os.sched_setaffinity(0, cpus)
+
+
 def _run(command, environment, check=True, timeout=LOCAL_YDB_TIMEOUT):
     return yatest.common.execute(
         [str(argument) for argument in command],
@@ -60,6 +69,7 @@ def _run(command, environment, check=True, timeout=LOCAL_YDB_TIMEOUT):
         check_exit_code=check,
         text=True,
         timeout=timeout,
+        preexec_fn=_limit_cpu_affinity,
     )
 
 
@@ -299,6 +309,15 @@ class LocalYdb:
                     pass
             shutil.rmtree(self.working_directory, ignore_errors=True)
             self.port_manager.release()
+
+
+@pytest.mark.parametrize('available,expected', [({3, 5, 7}, [3, 5]), ({7}, [7])])
+def test_limit_cpu_affinity(monkeypatch, available, expected):
+    calls = []
+    monkeypatch.setattr(os, 'sched_getaffinity', lambda pid: available, raising=False)
+    monkeypatch.setattr(os, 'sched_setaffinity', lambda pid, cpus: calls.append((pid, cpus)), raising=False)
+    _limit_cpu_affinity()
+    assert calls == [(0, expected)]
 
 
 @pytest.mark.parametrize('ready', [True, False])

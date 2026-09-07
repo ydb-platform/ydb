@@ -17,9 +17,10 @@ ENV(YDB_TINY_MODE=true)
 
 SIZE(MEDIUM)
 TIMEOUT(600)
+REQUIREMENTS(cpu:2)
 
 IF (SANITIZER_TYPE == "address")
-    # The ASAN lifecycle suite peaks at 12.6 GiB, above the default 8 GiB budget.
+    # Allow additional memory for the instrumented server and CLI processes.
     REQUIREMENTS(ram:16)
 ENDIF()
 

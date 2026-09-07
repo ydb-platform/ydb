@@ -645,10 +645,11 @@ def _process_is_alive(pid):
     try:
         os.kill(pid, 0)
         if sys.platform.startswith('linux'):
-            # An orphaned zombie has already closed its sockets, even if PID 1
-            # has not reaped it yet. The command name may itself contain ')'.
+            # A zombie group leader may still have live threads holding sockets.
+            # Only a single-thread zombie is safe to treat as fully stopped.
             with open('/proc/{}/stat'.format(pid)) as stream:
-                return stream.read().rsplit(')', 1)[1].split()[0] != 'Z'
+                fields = stream.read().rsplit(')', 1)[1].split()
+                return fields[0] != 'Z' or int(fields[17]) > 1
         return True
     except OSError as error:
         if error.errno in (errno.ESRCH, errno.ENOENT):

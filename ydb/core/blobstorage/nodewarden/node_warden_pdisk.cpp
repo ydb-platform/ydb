@@ -7,12 +7,16 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
 
+#include <util/generic/vector.h>
+#include <util/string/builder.h>
 #include <util/string/split.h>
+
+#include <optional>
+#include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
-
     static const std::unordered_map<NPDisk::EDeviceType, ui64> DefaultSpeedLimit{
         {NPDisk::DEVICE_TYPE_ROT, 100000000},
         {NPDisk::DEVICE_TYPE_SSD, 200000000},
@@ -46,6 +50,45 @@ namespace NKikimr::NStorage {
 
         pdiskConfig->ExpectedSlotCount = Max(1u, (ui32)lround(slotCount/slotSizeInUnits));
         pdiskConfig->SlotSizeInUnits = slotSizeInUnits;
+    }
+
+    void TNodeWarden::UpdateBlobStorageExecutorPoolMapping() {
+        if (Cfg->BlobStorageExecutorPoolIds.empty()) {
+            return;
+        }
+
+        // Runs right after the service-set merge, before any PDisk is started: a PDisk
+        // that left the configuration must free its pool slot immediately, because its
+        // replacement starts before it is destroyed (destruction may even wait for
+        // later service-set updates while its VDisks drain).
+        THashSet<ui32> pdiskIds;
+        for (const auto& pdisk : StaticServices.GetPDisks()) {
+            pdiskIds.insert(pdisk.GetPDiskID());
+        }
+        for (const auto& pdisk : DynamicServices.GetPDisks()) {
+            pdiskIds.insert(pdisk.GetPDiskID());
+        }
+        PDiskToBlobStorageExecutorPool.RetainConfiguredPDisks(pdiskIds);
+    }
+
+    std::optional<ui32> TNodeWarden::GetBlobStorageExecutorPoolId(ui32 pdiskId) {
+        if (Cfg->BlobStorageExecutorPoolIds.empty()) {
+            return std::nullopt;
+        }
+        return PDiskToBlobStorageExecutorPool.AcquirePoolId(Cfg->BlobStorageExecutorPoolIds, pdiskId);
+    }
+
+    void TNodeWarden::ApplyBlobStorageExecutorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig,
+            std::optional<ui32> blobStorageExecutorPoolId) {
+        if (!blobStorageExecutorPoolId) {
+            return;
+        }
+
+        std::optional<TCpuMask> affinity =
+            ActorContext().ActorSystem()->GetExecutorPoolAffinity(*blobStorageExecutorPoolId);
+        if (affinity) {
+            pdiskConfig->BlobStorageExecutorPoolAffinity = std::move(*affinity);
+        }
     }
 
     TIntrusivePtr<TPDiskConfig> TNodeWarden::CreatePDiskConfig(
@@ -411,9 +454,16 @@ namespace NKikimr::NStorage {
             record.ReplPDiskWriteQuoter = std::make_shared<TReplQuoter>(*writeBytesPerSecond);
         }
 
+        const ui32 pdiskID = pdisk.GetPDiskID();
+        const std::optional<ui32> assignedExecutorPoolId =
+            temporary ? std::optional<ui32>() : GetBlobStorageExecutorPoolId(pdiskID);
+        const ui32 blobStorageExecutorPoolId = assignedExecutorPoolId.value_or(AppData()->SystemPoolId);
+
         auto pdiskConfig = CreatePDiskConfig(pdisk, &record.PDiskConfigWarning);
         if (temporary) {
             pdiskConfig->MetadataOnly = true;
+        } else {
+            ApplyBlobStorageExecutorPoolAffinity(pdiskConfig, assignedExecutorPoolId);
         }
         record.ExpectedSlotCount = pdiskConfig->ExpectedSlotCount;
         record.SlotSizeInUnits = pdiskConfig->SlotSizeInUnits;
@@ -428,13 +478,14 @@ namespace NKikimr::NStorage {
             {"expectedSlotCount", record.ExpectedSlotCount},
             {"slotSizeInUnits", record.SlotSizeInUnits},
             {"expectedSlotSize", record.ExpectedSlotSize},
-            {"temporary", temporary});
+            {"temporary", temporary},
+            {"blobStorageExecutorPoolId", blobStorageExecutorPoolId});
 
-        const ui32 pdiskID = pdisk.GetPDiskID();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
         Cfg->PDiskKey.Initialize();
-        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey, AppData()->SystemPoolId, LocalNodeId);
+        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
+            blobStorageExecutorPoolId, LocalNodeId);
         if (!temporary) {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));
@@ -463,6 +514,7 @@ namespace NKikimr::NStorage {
             }
             LocalPDisks.erase(it);
             PDiskRestartInFlight.erase(pdiskId);
+            PDiskToBlobStorageExecutorPool.ReleasePoolId(pdiskId);
 
             // mark vdisks still living over this PDisk as destroyed ones
             for (auto it = LocalVDisks.lower_bound({LocalNodeId, pdiskId, 0}); it != LocalVDisks.end() &&
@@ -658,6 +710,7 @@ namespace NKikimr::NStorage {
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(
             it->second.Record, &it->second.PDiskConfigWarning);
+        ApplyBlobStorageExecutorPoolAffinity(pdiskConfig, GetBlobStorageExecutorPoolId(pdiskId));
 
         Cfg->PDiskKey.Initialize();
         Send(actorId, new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, Cfg->PDiskKey, true, pdiskConfig));
@@ -671,7 +724,7 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::MergeServiceSetPDisks(NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to,
-            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from) {
+            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from, TVector<TServiceSetPDisk>& pdisksToRestart) {
         THashMap<TPDiskKey, TServiceSetPDisk*> pdiskMap;
         for (int i = 0; i < to->size(); ++i) {
             TServiceSetPDisk *pdisk = to->Mutable(i);
@@ -706,7 +759,7 @@ namespace NKikimr::NStorage {
                     if (localPdiskIt != LocalPDisks.end()) {
                         localPdiskIt->second.Record = pdisk;
                     }
-                    DoRestartLocalPDisk(pdisk);
+                    pdisksToRestart.push_back(pdisk);
                     [[fallthrough]];
                 case NKikimrBlobStorage::INITIAL:
                 case NKikimrBlobStorage::CREATE: {

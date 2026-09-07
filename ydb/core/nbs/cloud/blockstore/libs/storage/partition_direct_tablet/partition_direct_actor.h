@@ -177,6 +177,15 @@ private:
             TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    // Replies to the volume with the outcome of its UpdateVolumeConfig request.
+    // The volume matches the reply against TxId and Origin; without them it
+    // drops the reply as belonging to an unknown transaction and never
+    // completes the request.
+    void ReplyUpdateVolumeConfig(
+        const NActors::TActorContext& ctx,
+        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        NKikimrBlockStore::EStatus status);
+
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);

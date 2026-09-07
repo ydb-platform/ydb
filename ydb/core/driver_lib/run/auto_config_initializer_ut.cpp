@@ -555,6 +555,22 @@ Y_UNIT_TEST(GetManualPoolsUseExecutorIndicesDirectly) {
     UNIT_ASSERT_VALUES_EQUAL(services, (TMap<TString, ui32>{{"Background", 4}, {"Interconnect", 3}}));
 }
 
+Y_UNIT_TEST(ClearsExecutorPoolReferenceLists) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetCpuCount(4);
+
+    // These reference Executor entries by index; the auto config rebuilds the
+    // executor list, so stale indices must not survive into the applied config.
+    config.AddBlobStorageExecutor(1);
+    config.AddBlobStorageExecutor(2);
+    config.AddInterconnectSessionExecutor(3);
+
+    ApplyAutoConfig(&config, false, false);
+
+    UNIT_ASSERT_VALUES_EQUAL(config.BlobStorageExecutorSize(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(config.InterconnectSessionExecutorSize(), 0);
+}
+
 Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAfterIdle) {
     NKikimrConfig::TActorSystemConfig config;
     config.SetCpuCount(2);

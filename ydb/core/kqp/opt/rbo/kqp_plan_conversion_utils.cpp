@@ -312,6 +312,8 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         result = ConvertTKqpOpSort(node);
     } else if (NYql::NNodes::TKqpOpAggregate::Match(node.Get())) {
         result = ConvertTKqpOpAggregate(node);
+    } else if (NYql::NNodes::TKqpOpGroupingSets::Match(node.Get())) {
+        result = ConvertTKqpOpGroupingSets(node);
     } else if (NYql::NNodes::TKqpOpReplaceAlias::Match(node.Get())) {
         result = ConvertTKqpOpReplaceAlias(node);
     } else {
@@ -637,6 +639,25 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
 
     const bool distinctAll = opAggregate.DistinctAll() == "True" ? true : false;
     return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EOpPhase::Undefined, distinctAll, node->Pos());
+}
+
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpGroupingSets(TExprNode::TPtr node) {
+    const auto opGroupingSets = TKqpOpGroupingSets(node);
+    const auto input = ExprNodeToOperator(opGroupingSets.Input().Ptr());
+    Y_ENSURE(MatchOperator<TOpAggregate>(input), "Grouping sets input must be an aggregate");
+
+    TVector<TVector<TInfoUnit>> groupingSets;
+    groupingSets.reserve(opGroupingSets.GroupingSets().Size());
+    for (const auto& groupingSet : opGroupingSets.GroupingSets()) {
+        TVector<TInfoUnit> keys;
+        keys.reserve(groupingSet.Size());
+        for (const auto& key : groupingSet) {
+            keys.emplace_back(key.StringValue());
+        }
+        groupingSets.emplace_back(std::move(keys));
+    }
+
+    return MakeIntrusive<TOpGroupingSets>(CastOperator<TOpAggregate>(input), std::move(groupingSets), node->Pos());
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPtr node) {

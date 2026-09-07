@@ -48,6 +48,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::IssueOrEnqueueS3Read(TPendingS3Read&& read) {
+        ApplyMaxS3GetsInFlight();
+
         const TMonotonic now = TActivationContext::Monotonic();
         const bool timeThrottled = now < S3GetThrottleUntil;
         const bool concurrencyThrottled = S3GetsInFlight >= CurrentMaxS3GetsInFlight;
@@ -230,14 +232,16 @@ namespace NKikimr::NBlobDepot {
         --S3GetsInFlight;
         *S3GetsInFlightCounter = S3GetsInFlight;
 
-        if (success && CurrentMaxS3GetsInFlight < MaxS3GetsInFlight) {
+        const ui32 maxS3GetsInFlight = MaxS3GetsInFlight();
+        if (success && CurrentMaxS3GetsInFlight < maxS3GetsInFlight) {
             if (++ConsecutiveSuccessfulGetBatches >= SuccessesPerGetConcurrencyStepUp) {
                 ConsecutiveSuccessfulGetBatches = 0;
                 ++CurrentMaxS3GetsInFlight;
-                if (CurrentMaxS3GetsInFlight >= MaxS3GetsInFlight) {
-                    CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
+                if (CurrentMaxS3GetsInFlight >= maxS3GetsInFlight) {
+                    CurrentMaxS3GetsInFlight = maxS3GetsInFlight;
                     S3GetBackoff.Reset();
                 }
+
                 *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
             }
         }
@@ -255,6 +259,8 @@ namespace NKikimr::NBlobDepot {
             }
             return;
         }
+
+        ApplyMaxS3GetsInFlight();
 
         while (!PendingS3Reads.empty() && S3GetsInFlight < CurrentMaxS3GetsInFlight) {
             auto read = std::move(PendingS3Reads.front());

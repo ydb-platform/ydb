@@ -61,6 +61,7 @@ namespace NKikimr {
     class TDefragScanner {
     protected:
         using TLevelSegment = NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
+        std::vector<TDiskPart> StripeSstExtents;
 
     private:
         THullDsSnap FullSnap;
@@ -74,8 +75,20 @@ namespace NKikimr {
         NMatrix::TVectorType SeenParts;
         std::array<std::tuple<ui64, TDiskPart, const TLevelSegment*>, 8> PartInfo;
 
+        template<typename TSnap>
+        static void CollectStripeSsts(const TSnap& snap, std::vector<TDiskPart>& extents) {
+            typename std::decay_t<decltype(snap.SliceSnap)>::TSstIterator it(&snap.SliceSnap);
+            for (it.SeekToFirst(); it.Valid(); it.Next()) {
+                const TDiskPart& hs = it.Get().SstPtr->HeapStripe;
+                if (!hs.Empty()) {
+                    extents.push_back(hs);
+                }
+            }
+        }
+
     public:
-        TDefragScanner(THullDsSnap&& fullSnap, std::optional<TKeyLogoBlob> seek = std::nullopt)
+        TDefragScanner(THullDsSnap&& fullSnap, std::optional<TKeyLogoBlob> seek = std::nullopt,
+                bool collectStripeSsts = false)
             : FullSnap(std::move(fullSnap))
             , GType(FullSnap.HullCtx->VCtx->Top->GType)
             , Barriers(FullSnap.BarriersSnap.CreateEssence(FullSnap.HullCtx))
@@ -87,6 +100,11 @@ namespace NKikimr {
                 Iter.Seek(*seek);
             } else {
                 Iter.SeekToFirst();
+            }
+            if (collectStripeSsts) {
+                // Blocks/Barriers SSTs on the stripe heap occupy bytes that a LogoBlobs-only scan never sees.
+                CollectStripeSsts(FullSnap.BlocksSnap, StripeSstExtents);
+                CollectStripeSsts(FullSnap.BarriersSnap, StripeSstExtents);
             }
             FullSnap.BarriersSnap.Destroy();
             FullSnap.BlocksSnap.Destroy();
@@ -442,8 +460,12 @@ namespace NKikimr {
         TDefragQuantumFindChunks(THullDsSnap&& snap, const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx,
                 THashSet<TChunkIdx> stripeChunks)
             : TDefragQuantumChunkFinder(hugeBlobCtx, std::move(stripeChunks))
-            , TDefragScanner(std::move(snap))
-        {}
+            , TDefragScanner(std::move(snap), std::nullopt, true)
+        {
+            for (const TDiskPart& p : StripeSstExtents) {
+                TDefragQuantumChunkFinder::Add(p, TLogoBlobID(), true, nullptr);
+            }
+        }
 
         using TDefragQuantumChunkFinder::Add;
     };
@@ -548,10 +570,14 @@ namespace NKikimr {
     public:
         TDefragCalcStat(THullDsSnap&& fullSnap, const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx,
                 THashSet<TChunkIdx> stripeChunks)
-            : TDefragScanner(std::move(fullSnap))
+            : TDefragScanner(std::move(fullSnap), std::nullopt, true)
             , TDefragQuantumChunkFinder(hugeBlobCtx, std::move(stripeChunks))
             , HugeBlobCtx(hugeBlobCtx)
-        {}
+        {
+            for (const TDiskPart& p : StripeSstExtents) {
+                Add(p, TLogoBlobID(), true, nullptr);
+            }
+        }
 
         void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const TLevelSegment *sst) {
             Chunks.insert(part.ChunkIdx);

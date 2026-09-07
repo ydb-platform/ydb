@@ -136,6 +136,12 @@ Y_UNIT_TEST_SUITE(TPlan2SvgGolden) {
     Y_UNIT_TEST(OperatorsExternal) {
         CheckGolden("operators_external");
     }
+
+    // Stages that wait on input while their peers wait on output, i.e. the plan
+    // that draws the "W" warning badge at the bottom of a stage.
+    Y_UNIT_TEST(WaitInputPeer) {
+        CheckGolden("wait_input_peer");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {

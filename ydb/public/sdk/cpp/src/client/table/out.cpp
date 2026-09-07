@@ -138,6 +138,9 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TAnalyzers, stream, v
     if (value.FilterLengthMax.has_value()) {
         stream << ", filter_length_max: " << *value.FilterLengthMax;
     }
+    if (value.UseFilterSuperLemmer.has_value()) {
+        stream << ", use_filter_superlemmer: " << (*value.UseFilterSuperLemmer ? "true" : "false");
+    }
     stream << " }";
 }
 

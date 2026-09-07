@@ -181,6 +181,12 @@ namespace NKikimr::NHttpProxy {
                                           "Access key id should be provided",
                                           NYds::EErrorCodes::MISSING_AUTHENTICATION_TOKEN);
                 }
+
+                if (Signature->GetService().empty()) {
+                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
+                                          "Service name should be provided",
+                                          NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
+                }
             }
 
             if (Authorize) {
@@ -190,7 +196,7 @@ namespace NKikimr::NHttpProxy {
                     signature.AccessKeyId = Signature->GetAccessKeyId();
                     signature.StringToSign = Signature->GetStringToSign();
                     signature.Signature = Signature->GetParsedSignature();
-                    signature.Service = "kinesis";
+                    signature.Service = Signature->GetService();
                     signature.Region = Signature->GetRegion();
                     signature.SignedAt = signedAt;
 
@@ -216,7 +222,7 @@ namespace NKikimr::NHttpProxy {
                 signature.set_signature(Signature->GetParsedSignature());
 
                 auto& v4params = *signature.mutable_v4_parameters();
-                v4params.set_service("kinesis");
+                v4params.set_service(Signature->GetService());
                 v4params.set_region(Signature->GetRegion());
 
                 const ui64 nanos = signedAt.NanoSeconds();

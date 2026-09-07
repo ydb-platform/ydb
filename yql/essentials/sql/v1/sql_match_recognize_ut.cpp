@@ -6,13 +6,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-NYql::TAstParseResult MatchRecognizeSqlToYql(const TString& query) {
-    TString enablingPragma = R"(
-pragma FeatureR010="prototype";
-)";
-    return SqlToYql(enablingPragma + query);
-}
-
 const NYql::TAstNode* FindMatchRecognizeParam(const NYql::TAstNode* root, TString name) {
     auto matchRecognizeBlock = FindNodeByChildAtomContent(root, 1, "match_recognize");
     UNIT_ASSERT(matchRecognizeBlock);
@@ -70,12 +63,15 @@ FROM Input MATCH_RECOGNIZE(
     )
 )";
 Y_UNIT_TEST(EnabledWithPragma) {
-    UNIT_ASSERT(not SqlToYql(minValidMatchRecognizeSql).IsOk());
-    UNIT_ASSERT(MatchRecognizeSqlToYql(minValidMatchRecognizeSql).IsOk());
+    TString enablingPragma = R"sql(
+        PRAGMA FeatureR010="prototype";
+    )sql";
+    UNIT_ASSERT(SqlToYql(minValidMatchRecognizeSql).IsOk());
+    UNIT_ASSERT(SqlToYql(enablingPragma + minValidMatchRecognizeSql).IsOk());
 }
 
 Y_UNIT_TEST(InputTableName) {
-    auto r = MatchRecognizeSqlToYql(minValidMatchRecognizeSql);
+    auto r = SqlToYql(minValidMatchRecognizeSql);
     UNIT_ASSERT(r.IsOk());
     auto input = FindMatchRecognizeParam(r.Root, "input");
     UNIT_ASSERT(IsAtom(input, "core"));
@@ -90,11 +86,11 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     ) TABLESAMPLE BERNOULLI(1.0)
 )";
-    UNIT_ASSERT(not MatchRecognizeSqlToYql(matchRecognizeAndSample).IsOk());
+    UNIT_ASSERT(not SqlToYql(matchRecognizeAndSample).IsOk());
 }
 
 Y_UNIT_TEST(NoPartitionBy) {
-    auto r = MatchRecognizeSqlToYql(minValidMatchRecognizeSql);
+    auto r = SqlToYql(minValidMatchRecognizeSql);
     UNIT_ASSERT(r.IsOk());
     auto partitionKeySelector = FindMatchRecognizeParam(r.Root, "partitionKeySelector");
     UNIT_ASSERT(IsListOfSize(GetQuoted(partitionKeySelector->GetChild(2)), 0)); // empty tuple
@@ -112,7 +108,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
-    auto r = MatchRecognizeSqlToYql(stmt);
+    auto r = SqlToYql(stmt);
     UNIT_ASSERT(r.IsOk());
     auto partitionKeySelector = FindMatchRecognizeParam(r.Root, "partitionKeySelector");
     UNIT_ASSERT(IsListOfSize(GetQuoted(partitionKeySelector->GetChild(2)), 3));
@@ -122,7 +118,7 @@ FROM Input MATCH_RECOGNIZE(
 }
 
 Y_UNIT_TEST(NoOrderBy) {
-    auto r = MatchRecognizeSqlToYql(minValidMatchRecognizeSql);
+    auto r = SqlToYql(minValidMatchRecognizeSql);
     UNIT_ASSERT(r.IsOk());
     auto sortTraits = FindMatchRecognizeParam(r.Root, "sortTraits");
     UNIT_ASSERT(IsListOfAtoms(sortTraits, {"Void"}));
@@ -138,7 +134,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
-    auto r = MatchRecognizeSqlToYql(stmt);
+    auto r = SqlToYql(stmt);
     UNIT_ASSERT(r.IsOk());
     auto sortTraits = FindMatchRecognizeParam(r.Root, "sortTraits");
     UNIT_ASSERT(IsListOfSize(sortTraits, 4));
@@ -158,7 +154,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE Y as true
 )
 )";
-    auto r = MatchRecognizeSqlToYql(stmt);
+    auto r = SqlToYql(stmt);
     UNIT_ASSERT(r.IsOk());
     const auto measures = FindMatchRecognizeParam(r.Root, "measures");
     UNIT_ASSERT(IsListOfSize(measures, 5));
@@ -180,7 +176,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto rowsPerMatch = FindMatchRecognizeParam(r.Root, "rowsPerMatch");
         UNIT_ASSERT(IsAtom(GetQuoted(rowsPerMatch), "RowsPerMatch_OneRow"));
@@ -195,7 +191,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
     }
     { // default
@@ -207,7 +203,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto rowsPerMatch = FindMatchRecognizeParam(r.Root, "rowsPerMatch");
         UNIT_ASSERT(IsAtom(GetQuoted(rowsPerMatch), "RowsPerMatch_OneRow"));
@@ -224,7 +220,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
         UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_NextRow", ""}, GetQuoted));
@@ -239,7 +235,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
         UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_PastLastRow", ""}, GetQuoted));
@@ -254,7 +250,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
         UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_ToFirst", "Y"}, GetQuoted));
@@ -269,7 +265,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(not r.IsOk());
     }
     {
@@ -282,7 +278,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
         UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_ToLast", "Y"}, GetQuoted));
@@ -297,7 +293,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(not r.IsOk());
     }
     {
@@ -310,7 +306,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
         UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_To", "Y"}, GetQuoted));
@@ -325,7 +321,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-        auto r = MatchRecognizeSqlToYql(stmt);
+        auto r = SqlToYql(stmt);
         UNIT_ASSERT(not r.IsOk());
     }
 }
@@ -339,7 +335,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
-    auto r = MatchRecognizeSqlToYql(stmt);
+    auto r = SqlToYql(stmt);
     UNIT_ASSERT(not r.IsOk());
 }
 
@@ -353,7 +349,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
-    auto r = MatchRecognizeSqlToYql(stmt);
+    auto r = SqlToYql(stmt);
     UNIT_ASSERT(not r.IsOk());
 }
 
@@ -366,7 +362,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
-    const auto& r = MatchRecognizeSqlToYql(stmt);
+    const auto& r = SqlToYql(stmt);
     UNIT_ASSERT(r.IsOk());
     const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
     UNIT_ASSERT(IsListOfSize(patternCallable, 1 + 1));
@@ -383,7 +379,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
-    const auto& r = MatchRecognizeSqlToYql(stmt);
+    const auto& r = SqlToYql(stmt);
     UNIT_ASSERT(r.IsOk());
     const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
     UNIT_ASSERT(IsListOfSize(patternCallable, 1 + 4));
@@ -402,7 +398,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
-    const auto& r = MatchRecognizeSqlToYql(stmt);
+    const auto& r = SqlToYql(stmt);
     UNIT_ASSERT(r.IsOk());
     const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
     UNIT_ASSERT(IsListOfSize(patternCallable, 1 + 2));
@@ -430,7 +426,7 @@ PATTERN (
     DEFINE A as A
 )
 )";
-    UNIT_ASSERT(MatchRecognizeSqlToYql(stmt).IsOk());
+    UNIT_ASSERT(SqlToYql(stmt).IsOk());
 }
 
 Y_UNIT_TEST(PatternLimitedNesting) {
@@ -454,7 +450,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         if (not extraNesting) {
             UNIT_ASSERT(r.IsOk());
         } else {
@@ -491,7 +487,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // no quantifiers
         const auto stmt = makeRequest("A");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(1, factor.QuantityMin);
@@ -501,7 +497,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // optional greedy(default)
         const auto stmt = makeRequest("A?");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
@@ -511,7 +507,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // optional reluctant
         const auto stmt = makeRequest("A??");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
@@ -521,7 +517,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         //+ greedy(default)
         const auto stmt = makeRequest("A+");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(1, factor.QuantityMin);
@@ -531,7 +527,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         //+ reluctant
         const auto stmt = makeRequest("A+?");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(1, factor.QuantityMin);
@@ -541,7 +537,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         //* greedy(default)
         const auto stmt = makeRequest("A*");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
@@ -551,7 +547,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         //* reluctant
         const auto stmt = makeRequest("A*?");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
@@ -561,7 +557,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // exact n
         const auto stmt = makeRequest("A{4}");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
@@ -570,7 +566,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // from n to m greedy(default
         const auto stmt = makeRequest("A{4, 7}");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
@@ -580,7 +576,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // from n to m reluctant
         const auto stmt = makeRequest("A{4,7}?");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
@@ -590,7 +586,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // at least n greedy(default)
         const auto stmt = makeRequest("A{4,}");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
@@ -600,7 +596,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // at least n reluctant
         const auto stmt = makeRequest("A{4,}?");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
@@ -610,7 +606,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // at most m greedy(default)
         const auto stmt = makeRequest("A{,7}");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
@@ -620,7 +616,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // at least n reluctant
         const auto stmt = makeRequest("A{,7}?");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
@@ -631,7 +627,7 @@ FROM Input MATCH_RECOGNIZE(
     {
         // quantifiers on subexpression
         const auto stmt = makeRequest("(A B+ C | D | ^){4,7}?");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& factor = getTheFactor(r.Root);
         UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
@@ -651,7 +647,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
 )
 )";
-    const auto& r = MatchRecognizeSqlToYql(stmt);
+    const auto& r = SqlToYql(stmt);
     UNIT_ASSERT(r.IsOk());
 
     const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
@@ -678,7 +674,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A0 as A0
 )
 )");
-        const auto& r = MatchRecognizeSqlToYql(stmt);
+        const auto& r = SqlToYql(stmt);
         if (n <= 6) {
             UNIT_ASSERT(r.IsOk());
         } else {
@@ -703,7 +699,7 @@ FROM Input MATCH_RECOGNIZE(
         L as L.V = LAST(Q.T)
 )
 )";
-    auto r = MatchRecognizeSqlToYql(stmt);
+    auto r = SqlToYql(stmt);
     UNIT_ASSERT(r.IsOk());
     const auto defines = FindMatchRecognizeParam(r.Root, "define");
     UNIT_ASSERT(IsListOfSize(defines, 7));
@@ -725,8 +721,8 @@ PATTERN ( Q )
 DEFINE
 )" << var << " AS TRUE )";
     };
-    UNIT_ASSERT(MatchRecognizeSqlToYql(getStatement("Q")).IsOk());
-    UNIT_ASSERT(!MatchRecognizeSqlToYql(getStatement("Y")).IsOk());
+    UNIT_ASSERT(SqlToYql(getStatement("Q")).IsOk());
+    UNIT_ASSERT(!SqlToYql(getStatement("Y")).IsOk());
 }
 
 Y_UNIT_TEST(CheckRequiredNavigationFunction) {
@@ -739,8 +735,8 @@ FROM Input MATCH_RECOGNIZE(
         L as L.V =
 )";
     // Be aware that right parenthesis is added at the end of the query as required
-    UNIT_ASSERT(MatchRecognizeSqlToYql(stmtPrefix + "LAST(Q.dt) )").IsOk());
-    UNIT_ASSERT(!MatchRecognizeSqlToYql(stmtPrefix + "Q.dt )").IsOk());
+    UNIT_ASSERT(SqlToYql(stmtPrefix + "LAST(Q.dt) )").IsOk());
+    UNIT_ASSERT(!SqlToYql(stmtPrefix + "Q.dt )").IsOk());
 }
 
 } // Y_UNIT_TEST_SUITE(MatchRecognize)

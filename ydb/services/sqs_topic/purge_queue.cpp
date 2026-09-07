@@ -65,13 +65,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            TMaybe purgeSettings = MakePurgerSettings(ctx);
-            if (!purgeSettings.Defined()) {
+            PurgeSettings_ = MakePurgerSettings(ctx);
+            if (!PurgeSettings_.Defined()) {
                 return;
             }
 
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreatePurger(this->SelfId(), std::move(*purgeSettings))};
-            ReaderActorId_ = ctx.RegisterWithSameMailbox(actorPtr.release());
+            this->DescribeTopic(NACLib::DescribeSchema);
             this->Become(&TPurgeQueueActor::StateWork);
         }
 
@@ -115,7 +114,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
-            this->ChargeRequestUnits(ctx);
+            Ydb::Ymq::V1::PurgeQueueResult result;
+            return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        }
+
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
         }
 
         ui64 GetRUCost() override {
@@ -123,8 +127,8 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void OnRequestUnitsCharged(const TActorContext& ctx) {
-            Ydb::Ymq::V1::PurgeQueueResult result;
-            return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+            ReaderActorId_ = ctx.RegisterWithSameMailbox(
+                NKikimr::NPQ::NMLP::CreatePurger(this->SelfId(), std::move(*PurgeSettings_)));
         }
 
         void Die(const TActorContext& ctx) override {
@@ -142,6 +146,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     private:
         TActorId ReaderActorId_;
+        TMaybe<NKikimr::NPQ::NMLP::TPurgerSettings> PurgeSettings_;
     };
 
     std::unique_ptr<NActors::IActor> CreatePurgeQueueActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

@@ -113,16 +113,34 @@ namespace NKikimr::NSqsTopic::V1 {
                     std::format("The specified queue doesn't exist (consumer \"{}\" is not a shared consumer)", QueueUrl_->Consumer.c_str())));
             }
 
-            if (pqGroup.GetPQTabletConfig().ConsumersSize() <= 1) {
+            MutationPath_ = topicInfo.RealPath;
+            DropTopic_ = pqGroup.GetPQTabletConfig().ConsumersSize() <= 1;
+            this->ChargeRequestUnits(ActorContext());
+        }
+
+        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
+            const auto* result = ev->Get();
+            if (result->Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
+            }
+            this->Reply(Ydb::StatusIds::SUCCESS);
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext&) {
+            if (DropTopic_) {
                 this->RegisterWithSameMailbox(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
                     .Database = Database,
                     .PeerName = this->Request_->GetPeerName(),
-                    .Path = topicInfo.RealPath,
+                    .Path = MutationPath_,
                     .UserToken = this->GetUserToken(),
                 }));
             } else {
                 Ydb::Topic::AlterTopicRequest request;
-                request.set_path(topicInfo.RealPath);
+                request.set_path(MutationPath_);
                 request.add_drop_consumers(QueueUrl_->Consumer);
                 this->RegisterWithSameMailbox(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
                     .Database = Database,
@@ -133,26 +151,14 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
-        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
-            }
-            this->ChargeRequestUnits(ActorContext());
-        }
-
-        ui64 GetRUCost() override {
-            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
-        }
-
-        void OnRequestUnitsCharged(const TActorContext&) {
-            this->Reply(Ydb::StatusIds::SUCCESS);
-        }
-
     protected:
         const TProtoRequest& Request() const {
             return GetRequest<TProtoRequest>(this->Request_.get());
         }
+
+    private:
+        TString MutationPath_;
+        bool DropTopic_ = false;
     };
 
     std::unique_ptr<NActors::IActor> CreateDeleteQueueActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

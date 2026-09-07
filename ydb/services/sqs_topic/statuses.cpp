@@ -48,7 +48,6 @@ namespace NKikimr::NSqsTopic::V1 {
     TTopicDescribePolicy DeleteQueueDescribePolicy() {
         TTopicDescribePolicy policy;
         policy.CdcUnsupportedMessage = TString("Deleting the changefeed is not supported");
-        policy.UnauthorizedAsNotFound = true;
         policy.UnknownErrorMessage = "Failed to describe topic";
         return policy;
     }
@@ -56,7 +55,6 @@ namespace NKikimr::NSqsTopic::V1 {
     TTopicDescribePolicy SetQueueAttributesDescribePolicy() {
         TTopicDescribePolicy policy;
         policy.NotTopicError = &NSQS::NErrors::INVALID_PARAMETER_VALUE;
-        policy.UnauthorizedAsNotFound = true;
         return policy;
     }
 
@@ -100,11 +98,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
                 return MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, policy.NotFoundMessage);
             case UNAUTHORIZED:
-                if (policy.UnauthorizedAsNotFound) {
-                    return MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, policy.NotFoundMessage);
-                }
-                return MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                    NPQ::NDescriber::Description(describePath, info.Status));
+                return MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, policy.NotFoundMessage);
             case UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                 return MakeError(NSQS::NErrors::ACCESS_DENIED, "Access denied");
             case BAD_REQUEST:

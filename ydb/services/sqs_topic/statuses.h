@@ -27,7 +27,6 @@ namespace NKikimr::NSqsTopic::V1 {
         TString NotTopicMessage = TString(QUEUE_USED_BY_ANOTHER_SCHEME_OBJECT);
         bool NotFoundIsError = true;
         TString NotFoundMessage = TString(SPECIFIED_QUEUE_DOES_NOT_EXIST);
-        bool UnauthorizedAsNotFound = false;
         TString UnknownErrorMessage;
     };
 

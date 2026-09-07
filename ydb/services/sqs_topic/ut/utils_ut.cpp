@@ -1,5 +1,4 @@
 #include <ydb/services/sqs_topic/billing.h>
-#include <ydb/services/sqs_topic/metering_attrs.h>
 #include <ydb/services/sqs_topic/statuses.h>
 #include <ydb/services/sqs_topic/utils.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
@@ -11,10 +10,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
 
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/hash.h>
 #include <util/system/hostname.h>
 
 using namespace NKikimr::NSqsTopic;
@@ -223,26 +220,6 @@ Y_UNIT_TEST_SUITE(SqsTopicMakeQueueUrl) {
 }
 
 Y_UNIT_TEST_SUITE(SqsTopicBilling) {
-    Y_UNIT_TEST(RequestUnitsBillUsesYdsSchema) {
-        using namespace NKikimr::NSqsTopic::V1::NBilling;
-
-        const TMeteringIds ids{
-            .CloudId = "cloud",
-            .FolderId = "folder",
-            .DatabaseId = "database",
-        };
-        const TString jsonLine = MakeRequestUnitsBill(ids, 7, TInstant::Seconds(1), "bill-id");
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(jsonLine, &json));
-        UNIT_ASSERT_VALUES_EQUAL(json["schema"].GetString(), "yds.serverless.requests.v1");
-        UNIT_ASSERT_VALUES_UNEQUAL(json["schema"].GetString(), "ydb.serverless.requests.v1");
-        UNIT_ASSERT_VALUES_EQUAL(json["cloud_id"].GetString(), "cloud");
-        UNIT_ASSERT_VALUES_EQUAL(json["folder_id"].GetString(), "folder");
-        UNIT_ASSERT_VALUES_EQUAL(json["resource_id"].GetString(), "database");
-        UNIT_ASSERT_VALUES_EQUAL(json["usage"]["quantity"].GetInteger(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(json["usage"]["unit"].GetString(), "request_unit");
-    }
-
     Y_UNIT_TEST(DefaultRequestCostIsTwoRu) {
         using namespace NKikimr::NSqsTopic::V1::NBilling;
 
@@ -270,33 +247,6 @@ Y_UNIT_TEST_SUITE(SqsTopicBilling) {
         UNIT_ASSERT_VALUES_EQUAL(
             CalcRu(PayloadBlocks(3 * READ_BLOCK_SIZE, WRITE_BLOCK_SIZE), WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false),
             7);
-    }
-}
-
-Y_UNIT_TEST_SUITE(SqsTopicMeteringAttrs) {
-    Y_UNIT_TEST(ParseRlContextRequiresBothAttrs) {
-        using namespace NKikimr::NSqsTopic::V1;
-
-        THashMap<TString, TString> attrs;
-        UNIT_ASSERT(!ParseRlContext(attrs, "/Root", "token"));
-        attrs[TString(RL_COORDINATION_NODE_ATTR)] = "/Root/ru";
-        UNIT_ASSERT(!ParseRlContext(attrs, "/Root", "token"));
-        attrs[TString(RL_TOPIC_RESOURCE_ATTR)] = "resource";
-        auto ctx = ParseRlContext(attrs, "/Root", "token");
-        UNIT_ASSERT(ctx.Defined());
-        UNIT_ASSERT(*ctx);
-    }
-
-    Y_UNIT_TEST(ParseMeteringIdsIsCompleteOnlyWhenAllPresent) {
-        using namespace NKikimr::NSqsTopic::V1;
-
-        THashMap<TString, TString> attrs;
-        UNIT_ASSERT(!ParseMeteringIds(attrs).IsComplete());
-        attrs[TString(CLOUD_ID_ATTR)] = "cloud";
-        attrs[TString(FOLDER_ID_ATTR)] = "folder";
-        UNIT_ASSERT(!ParseMeteringIds(attrs).IsComplete());
-        attrs[TString(DATABASE_ID_ATTR)] = "database";
-        UNIT_ASSERT(ParseMeteringIds(attrs).IsComplete());
     }
 }
 
@@ -337,5 +287,36 @@ Y_UNIT_TEST_SUITE(SqsTopicDescribeStatus) {
             UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AWS.SimpleQueueService.UnsupportedOperation");
         }
         UNIT_ASSERT(!MapTopicInfoToSqsError("/Root/q", cdc, ExistingQueuePolicy()).Defined());
+    }
+
+    Y_UNIT_TEST(UnauthorizedHidesExistenceAndDescribeAccessIsDenied) {
+        using namespace NKikimr::NSqsTopic::V1;
+        using NKikimr::NPQ::NDescriber::TTopicInfo;
+        using NKikimr::NPQ::NDescriber::EStatus;
+
+        TTopicInfo unauthorized;
+        unauthorized.Status = EStatus::UNAUTHORIZED;
+        for (const auto& policy : {
+                 ExistingQueuePolicy(),
+                 CreateQueueDescribePolicy(),
+                 DeleteQueueDescribePolicy(),
+                 SetQueueAttributesDescribePolicy(),
+                 GetQueueAttributesDescribePolicy(),
+             })
+        {
+            auto error = MapTopicInfoToSqsError("/Root/q", unauthorized, policy);
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AWS.SimpleQueueService.NonExistentQueue");
+            UNIT_ASSERT_VALUES_EQUAL(error->GetMessage(), SPECIFIED_QUEUE_DOES_NOT_EXIST);
+        }
+
+        TTopicInfo describeDenied;
+        describeDenied.Status = EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS;
+        {
+            auto error = MapTopicInfoToSqsError("/Root/q", describeDenied, ExistingQueuePolicy());
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AccessDeniedException");
+            UNIT_ASSERT_VALUES_EQUAL(error->GetMessage(), "Access denied");
+        }
     }
 }

@@ -117,8 +117,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
-            this->Become(&TChangeMessageVisibilityActorBase::StateWork);
-
             if (requestList.empty()) {
                 static_cast<TDerived*>(this)->ReplyAndDie(ctx);
                 return;
@@ -149,7 +147,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 .Deadlines = std::move(deadlines),
                 .UserToken = this->Request_->GetInternalToken(),
             };
-            this->ChargeRequestUnits(ctx);
+            this->DescribeTopic(NACLib::DescribeSchema);
+            this->Become(&TChangeMessageVisibilityActorBase::StateWork);
+        }
+
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
         }
 
         ui64 GetRUCost() override {

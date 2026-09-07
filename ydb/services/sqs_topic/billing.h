@@ -1,12 +1,8 @@
 #pragma once
 
-#include <ydb/core/metering/bill_record.h>
 #include <ydb/core/metering/stream_ru_calculator.h>
 
-#include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
-#include <util/generic/strbuf.h>
-#include <util/generic/string.h>
 #include <util/system/types.h>
 
 #include <cmath>
@@ -67,32 +63,6 @@ namespace NKikimr::NSqsTopic::V1::NBilling {
     inline ui64 CalcRu(ui64 payloadBlocks, double baseCost, double costPerBlock, bool fifo = false) {
         const double ru = baseCost + payloadBlocks * costPerBlock + CostAdjunct(fifo);
         return RoundRu(ru);
-    }
-
-    // SQS-over-topic request-unit bills. Native Topics API / Kesus accounting
-    // keep using ydb.serverless.requests.v1 from the shared rate-limiter resource.
-    inline constexpr TStringBuf REQUEST_UNITS_SCHEMA = "yds.serverless.requests.v1";
-
-    struct TMeteringIds {
-        TString CloudId;
-        TString FolderId;
-        TString DatabaseId;
-
-        bool IsComplete() const {
-            return !CloudId.empty() && !FolderId.empty() && !DatabaseId.empty();
-        }
-    };
-
-    inline TString MakeRequestUnitsBill(const TMeteringIds& ids, ui64 ru, TInstant now, const TString& id) {
-        return TBillRecord()
-            .Id(id)
-            .Schema(TString(REQUEST_UNITS_SCHEMA))
-            .CloudId(ids.CloudId)
-            .FolderId(ids.FolderId)
-            .ResourceId(ids.DatabaseId)
-            .SourceWt(now)
-            .Usage(TBillRecord::RequestUnits(ru, now))
-            .ToString();
     }
 
 } // namespace NKikimr::NSqsTopic::V1::NBilling

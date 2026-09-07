@@ -104,6 +104,9 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             PrepareWrite();
+            if (TBase::IsDead) {
+                return;
+            }
 
             this->DescribeTopic(NACLib::UpdateRow);
             this->Become(&TSendMessageActorBase::StateWork);

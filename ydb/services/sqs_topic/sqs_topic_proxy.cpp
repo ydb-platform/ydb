@@ -55,18 +55,13 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::Bootstrap(ctx);
-            this->Become(&TNotImplementedRequestActor::TBase::StateWork);
-            this->ChargeRequestUnits(ctx);
-        }
-
-        ui64 GetRUCost() override {
-            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
-        }
-
-        void OnRequestUnitsCharged(const NActors::TActorContext& ctx) {
             this->Request_->RaiseIssue(FillIssue("Method is not implemented yet", static_cast<size_t>(NYds::EErrorCodes::ERROR)));
             this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
             this->Die(ctx);
+        }
+
+        ui64 GetRUCost() override {
+            return 0;
         }
     };
 } // namespace NKikimr::NSqsTopic::V1

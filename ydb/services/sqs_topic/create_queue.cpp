@@ -116,7 +116,9 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
             if (topicInfo.Status == NPQ::NDescriber::EStatus::NOT_FOUND) {
-                return CreateTopic();
+                PendingAction_ = EPendingAction::CreateNewTopic;
+                this->ChargeRequestUnits(ActorContext());
+                return;
             }
             PQGroup = topicInfo.Info->Description;
             SelfInfo = topicInfo.Self->Info;
@@ -209,7 +211,9 @@ namespace NKikimr::NSqsTopic::V1 {
             const auto& pqConfig = PQGroup.GetPQTabletConfig();
             const NKikimrPQ::TPQTabletConfig::TConsumer* foundConsumer = FindIfPtr(pqConfig.GetConsumers(), [this](const auto& c) { return c.GetName() == ConsumerName; });
             if (!foundConsumer) {
-                return AddConsumer();
+                PendingAction_ = EPendingAction::AddConsumer;
+                this->ChargeRequestUnits(ctx);
+                return;
             }
 
             if (foundConsumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -224,7 +228,8 @@ namespace NKikimr::NSqsTopic::V1 {
                                                 TStringBuilder() << "Queue attributes mismatch: " << comparison.error()));
             }
 
-            return ReplyAndDie(ctx);
+            PendingAction_ = EPendingAction::ReplyExisting;
+            this->ChargeRequestUnits(ctx);
         }
 
 
@@ -239,7 +244,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             TString url = MakeQueueUrl(queueUrl, Request_.get());
             Result_.set_queue_url(std::move(url));
-            this->ChargeRequestUnits(ctx);
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
         }
 
         ui64 GetRUCost() override {
@@ -247,7 +252,16 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void OnRequestUnitsCharged(const TActorContext& ctx) {
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
+            switch (PendingAction_) {
+                case EPendingAction::CreateNewTopic:
+                    return CreateTopic();
+                case EPendingAction::AddConsumer:
+                    return AddConsumer();
+                case EPendingAction::ReplyExisting:
+                    return ReplyAndDie(ctx);
+                case EPendingAction::None:
+                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Failed to charge request units"));
+            }
         }
 
     protected:
@@ -256,12 +270,20 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
     private:
+        enum class EPendingAction {
+            None,
+            CreateNewTopic,
+            AddConsumer,
+            ReplyExisting,
+        };
+
         TString QueueName;
         TString ConsumerName;
         TQueueAttributes QueueAttributes;
         Ydb::Ymq::V1::CreateQueueResult Result_;
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
+        EPendingAction PendingAction_ = EPendingAction::None;
     };
 
     std::unique_ptr<NActors::IActor> CreateCreateQueueActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

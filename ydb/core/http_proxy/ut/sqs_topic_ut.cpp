@@ -2666,7 +2666,25 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         CreateQueue({}, 400);
         DeleteQueue({{"QueueUrl", "InvalidExistentQueue"}}, 400);
         PurgeQueue({{"QueueUrl", ""}}, 400);
+        TagQueue({{"QueueUrl", path.QueueUrl}}, 400);
 
+        AssertNoRequestUnitsCharge(recorder, metering);
+    }
+
+    Y_UNIT_TEST_F(TestNoChargesChangeMessageVisibilityOnMissingQueue, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        const auto receipt = NKikimr::NSqsTopic::V1::SerializeReceipt({.PartitionId = 0, .Offset = 0});
+        auto json = ChangeMessageVisibility({
+            {"QueueUrl", NON_EXISTING_QUEUE_URL},
+            {"ReceiptHandle", receipt},
+            {"VisibilityTimeout", 30},
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
         AssertNoRequestUnitsCharge(recorder, metering);
     }
 
@@ -2712,6 +2730,40 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }, 403);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ThrottlingException");
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Request was throttled by the rate limiter");
+
+        auto bills = metering.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 0, "throttled requests must not write a bill");
+    }
+
+    Y_UNIT_TEST_F(TestControlPlaneThrottleBeforeMutation, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        TTopicClient client(driver);
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath, TEvQuota::TEvClearance::EResult::Deadline);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto createJson = CreateQueue({{"QueueName", "ThrottleCreateQueue"}}, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(createJson, "__type"), "ThrottlingException");
+        UNIT_ASSERT_C(!client.DescribeTopic("ThrottleCreateQueue").GetValueSync().IsSuccess(),
+            "CreateQueue must not create the topic before quota is granted");
+
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+        auto deleteJson = DeleteQueue({{"QueueUrl", path.QueueUrl}}, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(deleteJson, "__type"), "ThrottlingException");
+        UNIT_ASSERT_C(client.DescribeTopic(path.TopicName).GetValueSync().IsSuccess(),
+            "DeleteQueue must not drop the topic before quota is granted");
+
+        auto setJson = SetQueueAttributes({
+            {"QueueUrl", path.QueueUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}},
+        }, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(setJson, "__type"), "ThrottlingException");
+
+        auto purgeJson = PurgeQueue({{"QueueUrl", path.QueueUrl}}, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(purgeJson, "__type"), "ThrottlingException");
 
         auto bills = metering.Take(1, TDuration::MilliSeconds(300));
         UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 0, "throttled requests must not write a bill");

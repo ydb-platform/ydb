@@ -143,7 +143,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", check.error())));
             }
 
-            return SendAlterTopicRequest();
+            this->ChargeRequestUnits(ActorContext());
         }
 
         std::expected<void, std::string> ValidateFifoImmutability() const {
@@ -211,24 +211,20 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
+            const auto* schemaResult = ev->Get();
+            if (schemaResult->Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, schemaResult->ErrorMessage));
             }
-            return ReplyAndDie(ActorContext());
-        }
-
-        void ReplyAndDie(const TActorContext& ctx) {
-            this->ChargeRequestUnits(ctx);
+            Ydb::Ymq::V1::SetQueueAttributesResult result;
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
         }
 
         ui64 GetRUCost() override {
             return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
         }
 
-        void OnRequestUnitsCharged(const TActorContext& ctx) {
-            Ydb::Ymq::V1::SetQueueAttributesResult result;
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        void OnRequestUnitsCharged(const TActorContext&) {
+            SendAlterTopicRequest();
         }
 
     protected:

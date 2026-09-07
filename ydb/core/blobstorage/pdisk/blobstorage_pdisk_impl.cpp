@@ -671,10 +671,6 @@ NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupTyp
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
             res = SpaceColorToStatusFlag(static_cast<TColor::E>(forcedColor));
-        } else {
-            YDB_LOG_P_LOG(PRI_ERROR, "ForcedPDiskSpaceColor has invalid value, ignoring",
-                {"marker", "BPD01"},
-                {"forcedPDiskSpaceColor", forcedColor});
         }
     }
 
@@ -1756,6 +1752,12 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             double occupancy;
             NPDisk::TStatusFlags statusFlags = Keeper.GetSpaceStatusFlags(owner, &occupancy);
             NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor = StatusFlagToSpaceColor(statusFlags);
+            if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
+                if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
+                    spaceColor = static_cast<NKikimrBlobStorage::TPDiskSpaceColor::E>(forcedColor);
+                    statusFlags = SpaceColorToStatusFlag(spaceColor);
+                }
+            }
             double vdiskSlotUsage = Keeper.GetVDiskSlotUsage(owner);
             double vdiskRawUsage = Keeper.GetVDiskRawUsage(owner);
             vdiskMetrics->SetStatusFlags(statusFlags);
@@ -1807,6 +1809,11 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetPDiskUsage(pdiskUsage);
 
         auto pdiskCapacityAlert = Keeper.GetPDiskCapacityAlert();
+        if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
+            if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
+                pdiskCapacityAlert = static_cast<NKikimrBlobStorage::TPDiskSpaceColor::E>(forcedColor);
+            }
+        }
         pDiskMetrics.SetPDiskCapacityAlert(pdiskCapacityAlert);
         pdiskState.SetPDiskCapacityAlert(pdiskCapacityAlert);
     }

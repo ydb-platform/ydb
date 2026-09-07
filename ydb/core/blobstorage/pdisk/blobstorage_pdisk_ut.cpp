@@ -1398,6 +1398,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
+        // Register the node whiteboard service on the test sender so that
+        // TEvPDiskStateUpdate messages (carrying PDiskCapacityAlert) are
+        // delivered to the test and can be inspected.
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(firstNodeId), testCtx.Sender);
+
         auto& appData = testCtx.GetRuntime()->GetAppData();
         const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
         const TString controlName = Sprintf("PDisk_%u_ForcedPDiskSpaceColor", pdiskId);
@@ -1414,16 +1421,89 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(space->StatusFlags), expected);
         };
 
+        // The PDisk sends periodic whiteboard updates carrying both the PDisk
+        // state (TEvPDiskStateUpdate with PDiskCapacityAlert) and per-VDisk
+        // states (TEvVDiskStateUpdate with VDisk CapacityAlert). Both are
+        // delivered to the test sender. This helper inspects a bounded number
+        // of incoming events and verifies that the PDiskCapacityAlert matches
+        // the expected color.
+        auto checkPDiskCapacityAlert = [&](TColor::E expected) {
+            bool found = false;
+            for (int numInspect = 20; numInspect > 0; --numInspect) {
+                const auto ev = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+                if (!ev) {
+                    break;
+                }
+                const NKikimrWhiteboard::TPDiskStateInfo& pdiskInfo = ev->Record;
+                if (!pdiskInfo.HasPDiskCapacityAlert()) {
+                    continue;
+                }
+                // Skip stale updates that reflect a previous color; keep
+                // iterating until we see the expected one.
+                if (pdiskInfo.GetPDiskCapacityAlert() != expected) {
+                    continue;
+                }
+                found = true;
+                break;
+            }
+            UNIT_ASSERT_C(found, "No TEvPDiskStateUpdate with expected PDiskCapacityAlert received");
+        };
+
+        // Similarly verifies the VDisk CapacityAlert reported via
+        // TEvVDiskStateUpdate respects the ForcedPDiskSpaceColor ICB override.
+        auto checkVDiskCapacityAlert = [&](TColor::E expected) {
+            bool found = false;
+            for (int numInspect = 20; numInspect > 0; --numInspect) {
+                const auto ev = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>();
+                if (!ev) {
+                    break;
+                }
+                const NKikimrWhiteboard::TVDiskStateInfo& vdiskInfo = ev->Record;
+                if (!vdiskInfo.HasCapacityAlert()) {
+                    continue;
+                }
+                // Skip stale updates that reflect a previous color; keep
+                // iterating until we see the expected one.
+                if (vdiskInfo.GetCapacityAlert() != expected) {
+                    continue;
+                }
+                found = true;
+                break;
+            }
+            UNIT_ASSERT_C(found, "No TEvVDiskStateUpdate with expected CapacityAlert received");
+        };
+
+        // Triggers a whiteboard report by waking the PDisk actor. The report
+        // emits both TEvPDiskStateUpdate and TEvVDiskStateUpdate to the test
+        // sender, so the capacity-alert checks below can observe them.
+        auto triggerWhiteboardReport = [&] {
+            testCtx.Send(new TEvents::TEvWakeup());
+        };
+
         checkColor(TColor::GREEN);
 
         setColor(TColor::YELLOW);
         checkColor(TColor::YELLOW);
+        // The PDiskCapacityAlert and VDisk CapacityAlert reported to the
+        // whiteboard/UI must also respect the ForcedPDiskSpaceColor ICB
+        // override. A single wakeup triggers a whiteboard report that emits
+        // both TEvPDiskStateUpdate and TEvVDiskStateUpdate; each check grabs
+        // its own event type from the edge, so they don't interfere.
+        triggerWhiteboardReport();
+        checkPDiskCapacityAlert(TColor::YELLOW);
+        checkVDiskCapacityAlert(TColor::YELLOW);
 
         setColor(TColor::RED);
         checkColor(TColor::RED);
+        triggerWhiteboardReport();
+        checkPDiskCapacityAlert(TColor::RED);
+        checkVDiskCapacityAlert(TColor::RED);
 
         setColor(TColor::GREEN);
         checkColor(TColor::GREEN);
+        triggerWhiteboardReport();
+        checkPDiskCapacityAlert(TColor::GREEN);
+        checkVDiskCapacityAlert(TColor::GREEN);
 
         setColor(0);
         checkColor(TColor::GREEN);

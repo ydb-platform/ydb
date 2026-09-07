@@ -89,6 +89,26 @@ def test_relative_database(ydb_cluster, ydb_database):
     execute_ydb_cli_command(tenant_node, relative_database, ["sql", "-s", "SELECT 1;"])
 
 
+def test_relative_database_select_from_table(ydb_cluster, ydb_database):
+    tenant_node = next(iter(ydb_cluster.slots.values()))
+    relative_database = ydb_database.rsplit("/", 1)[1]
+    table_path = f"{ydb_database}/relative_database_table"
+
+    # Set up the table with absolute paths; only the SELECT relies on relative database resolution.
+    for query in (
+        f"CREATE TABLE `{table_path}` (key Uint32, value Utf8, PRIMARY KEY (key));",
+        f'UPSERT INTO `{table_path}` (key, value) VALUES (1, "from-tenant-root");',
+    ):
+        execute_ydb_cli_command(tenant_node, ydb_database, ["sql", "-s", query])
+
+    output = execute_ydb_cli_command(
+        tenant_node,
+        relative_database,
+        ["sql", "-s", "SELECT key, value FROM relative_database_table;", "--format", "json-unicode-array"],
+    )
+    assert json.loads(output) == [{"key": 1, "value": "from-tenant-root"}]
+
+
 class TestSchemeDescribe:
     @pytest.fixture(autouse=True, scope="function")
     def init_test(self, tmp_path):

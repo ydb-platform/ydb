@@ -299,8 +299,13 @@ namespace NKikimr::NSqsTopic::V1 {
 
             if (ShouldBeCharged_ && IsQuotaRequired()) {
                 const ui64 ru = NBilling::CalcRu(
+<<<<<<< HEAD
                     CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_, false);
                 Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+=======
+                    CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_);
+                AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx))("ru", ru)("path", FullTopicPath_);
+>>>>>>> eb8fd9eea4d ([SQS] Do not charge extra RU for content-based deduplication (#52353))
                 return;
             }
 

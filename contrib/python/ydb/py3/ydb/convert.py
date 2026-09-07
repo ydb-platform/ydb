@@ -412,7 +412,7 @@ class _ResultSet(object):
     @classmethod
     def from_message(cls, message, table_client_settings=None, snapshot=None, index=None):
         rows = []
-        # prepare column parsers before actuall parsing
+        # prepare column parsers before actually parsing
         column_parsers = []
         if len(message.rows) > 0:
             for column in message.columns:

@@ -33,6 +33,7 @@
 #include <ydb/core/sys_view/common/events.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <regex>
 
 #include <ydb/library/actors/wilson/wilson_span.h>

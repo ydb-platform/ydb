@@ -24,7 +24,7 @@ size_t MatchANSIMultilineComment(TStringBuf remaining);
 
 TTokenMatcher ANSICommentMatcher(TString name, TTokenMatcher defaultComment) {
     return [defaultComment, name = std::move(name)](TStringBuf prefix) -> TMaybe<TGenericToken> {
-        const auto basic = defaultComment(prefix);
+        auto basic = defaultComment(prefix);
         if (basic.Empty()) {
             return Nothing();
         }

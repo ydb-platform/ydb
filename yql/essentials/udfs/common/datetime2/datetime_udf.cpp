@@ -3527,8 +3527,9 @@ private:
                             ++it;
                             --digits;
                         }
-                        for (; !digits && limit && std::isdigit(*it); --limit, ++it)
+                        for (; !digits && limit && std::isdigit(*it); --limit, ++it) {
                             ;
+                        }
                         while (digits--) {
                             usec *= 10U;
                         }

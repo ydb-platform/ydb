@@ -1,4 +1,3 @@
-/* syntax version 1 */
 select Re2::Options(
     true as `Utf8`,
     false as PosixSyntax,

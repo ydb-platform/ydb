@@ -322,8 +322,8 @@ IGraphTransformer::TStatus TryToUsingEntry(
     const TStringBuf lhsName = lhsRef->Tail().Content();
     const TStringBuf rhsName = rhsRef->Tail().Content();
 
-    auto lhsInput = groupInputs[lhsIdx];
-    auto rhsInput = groupInputs[rhsIdx];
+    const auto& lhsInput = groupInputs[lhsIdx];
+    const auto& rhsInput = groupInputs[rhsIdx];
 
     ui32 rhsPos;
     if (auto status = TryToFindItemI(rhsRef->Pos(), rhsInput, rhsName, rhsPos, ctx);
@@ -355,7 +355,7 @@ TMaybe<TYqlFromSettings> TYqlFromSettings::Parse(const TExprNode::TPtr& settings
     TYqlFromSettings parsed;
 
     auto validator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) -> bool {
-        if (name == "cte") {
+        if (name == "cte" || name == "into_values") {
             if (setting.ChildrenSize() != 1) {
                 ctx.AddError(TIssue(
                     ctx.GetPosition(setting.Pos()),
@@ -364,14 +364,14 @@ TMaybe<TYqlFromSettings> TYqlFromSettings::Parse(const TExprNode::TPtr& settings
                 return false;
             }
 
-            parsed.IsCTE = true;
+            parsed.IsExplicitlyColumnOrdered = true;
             return true;
         }
 
         YQL_ENSURE(false, "unknown setting " << name);
     };
 
-    if (!EnsureValidSettings(*settings, {"cte"}, validator, ctx.Expr)) {
+    if (!EnsureValidSettings(*settings, {"cte", "into_values"}, validator, ctx.Expr)) {
         return Nothing();
     }
 

@@ -180,6 +180,92 @@ TEST(TTaggedApiTest, Tags)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg2"), std::string("test")));
 }
 
+TEST(TTaggedApiTest, DynamicAnchor)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+
+    TLoggingAnchor anchor;
+    anchor.AnchorMessage = "Owner-supplied anchor name";
+
+    YT_TLOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, ELogLevel::Info, &anchor, "Message")
+        .With("Arg1", 123);
+
+    auto decoded = DecodeSingleEvent(manager);
+    EXPECT_EQ(decoded.Message, "Message");
+    ASSERT_EQ(decoded.Tags.size(), 1u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Arg1"), std::string("123")));
+
+    EXPECT_EQ(manager.GetEvents()[0].Anchor, &anchor);
+    EXPECT_EQ(anchor.AnchorMessage, "Owner-supplied anchor name");
+    EXPECT_FALSE(anchor.Registered.load());
+}
+
+TEST(TTaggedApiTest, DynamicAnchorRuntimeMessage)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+
+    TLoggingAnchor anchor;
+    for (int index = 0; index < 2; ++index) {
+        auto message = Format("Message %v", index);
+        YT_TLOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, ELogLevel::Info, &anchor, message);
+    }
+
+    ASSERT_EQ(manager.GetEvents().size(), 2u);
+    EXPECT_EQ(DecodeEvent(manager.GetEvents()[0]).Message, "Message 0");
+    EXPECT_EQ(DecodeEvent(manager.GetEvents()[1]).Message, "Message 1");
+    EXPECT_TRUE(anchor.AnchorMessage.empty());
+}
+
+TEST(TTaggedApiTest, DynamicAnchorLevelOverrideSuppresses)
+{
+    TMockLogManager manager(/*minLevel*/ ELogLevel::Warning);
+    TLogger Logger(&manager, "Test");
+
+    TLoggingAnchor anchor;
+    anchor.LevelOverride.store(ELogLevel::Debug);
+
+    int evaluated = 0;
+    auto evaluate = [&] {
+        ++evaluated;
+        return 123;
+    };
+    YT_TLOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, ELogLevel::Warning, &anchor, "Message")
+        .With("Arg1", evaluate());
+
+    EXPECT_EQ(evaluated, 0);
+    EXPECT_TRUE(manager.GetEvents().empty());
+}
+
+TEST(TTaggedApiTest, DynamicAnchorLevelOverridePromotes)
+{
+    TMockLogManager manager(/*minLevel*/ ELogLevel::Warning);
+    TLogger Logger(&manager, "Test");
+
+    TLoggingAnchor anchor;
+    anchor.LevelOverride.store(ELogLevel::Warning);
+
+    YT_TLOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, ELogLevel::Debug, &anchor, "Message");
+
+    ASSERT_EQ(manager.GetEvents().size(), 1u);
+    EXPECT_EQ(manager.GetEvents()[0].Level, ELogLevel::Warning);
+}
+
+TEST(TTaggedApiTest, DynamicAnchorIsUpdatedWhenStale)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+
+    TLoggingAnchor anchor;
+    ASSERT_FALSE(Logger.IsAnchorUpToDate(anchor));
+
+    YT_TLOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, ELogLevel::Info, &anchor, "Message");
+
+    EXPECT_TRUE(Logger.IsAnchorUpToDate(anchor));
+    EXPECT_EQ(manager.GetEvents().size(), 1u);
+}
+
 TEST(TTaggedApiTest, WithFormat)
 {
     TMockLogManager manager;
@@ -388,7 +474,32 @@ TEST(TTaggedApiTest, WellKnownErrorTag)
     EXPECT_FALSE(regular->IsWellKnown);
 
     // |.With(error)| attaches the error under the well-known "Error" key (resolved via
-    // GetWellKnownLoggingTag), with the formatted error as the value.
+    // TWellKnownLoggingTagTraits), with the formatted error as the value.
+    auto errorTag = reader.TryReadTag();
+    ASSERT_TRUE(errorTag);
+    EXPECT_EQ(errorTag->Key, "Error");
+    EXPECT_TRUE(errorTag->IsWellKnown);
+    EXPECT_NE(errorTag->Value.find("boom"), TStringBuf::npos);
+
+    EXPECT_FALSE(reader.TryReadTag());
+}
+
+TEST(TTaggedApiTest, WellKnownExceptionTag)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+
+    try {
+        THROW_ERROR_EXCEPTION("boom");
+    } catch (const std::exception& ex) {
+        YT_TLOG_INFO("Message")
+            .With(ex);
+    }
+
+    ASSERT_EQ(manager.GetEvents().size(), 1u);
+    TTaggedPayloadReader reader(std::get<TTaggedLogEventPayload>(manager.GetEvents()[0].Payload));
+    EXPECT_EQ(reader.ReadMessage(), "Message");
+
     auto errorTag = reader.TryReadTag();
     ASSERT_TRUE(errorTag);
     EXPECT_EQ(errorTag->Key, "Error");

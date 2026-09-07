@@ -1,9 +1,9 @@
 --- contrib/python/aiohttp/aiohttp/web_fileresponse.py	(4519f9a6f455df2a2d92670c1d43e4da2fdf57a0)
 +++ contrib/python/aiohttp/aiohttp/web_fileresponse.py	(af2f4ddbeb99de10bbbd64a8995abf061fe8cc5c)
 @@ -3,6 +3,7 @@ import os
- import pathlib
  import sys
  from contextlib import suppress
+ from enum import Enum, auto
 +from importlib.resources.abc import Traversable
  from mimetypes import MimeTypes
  from stat import S_ISREG
@@ -17,15 +17,9 @@
          self._chunk_size = chunk_size
  
      async def _sendfile_fallback(
-@@ -319,7 +320,7 @@ class FileResponse(StreamResponse):
-         #  can be ignored since the map was cleared above.
-         if hdrs.CONTENT_TYPE not in self.headers:
-             self.content_type = (
--                CONTENT_TYPES.guess_type(self._path)[0] or FALLBACK_CONTENT_TYPE
-+                CONTENT_TYPES.guess_type(self._path.name)[0] or FALLBACK_CONTENT_TYPE
-             )
- 
-         if file_encoding:
+@@ -319,1 +320,1 @@ class FileResponse(StreamResponse):
+-            self.content_type = guesser(self._path)[0] or FALLBACK_CONTENT_TYPE
++            self.content_type = guesser(self._path.name)[0] or FALLBACK_CONTENT_TYPE
 --- contrib/python/aiohttp/aiohttp/web_urldispatcher.py	(4519f9a6f455df2a2d92670c1d43e4da2fdf57a0)
 +++ contrib/python/aiohttp/aiohttp/web_urldispatcher.py	(af2f4ddbeb99de10bbbd64a8995abf061fe8cc5c)
 @@ -11,6 +11,7 @@ import re

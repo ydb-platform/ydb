@@ -13,6 +13,7 @@ SRCS(
     cms_tx_get_log_tail.cpp
     cms_tx_init_scheme.cpp
     cms_tx_load_state.cpp
+    cms_tx_persist_ddisk_info.cpp
     cms_tx_log_and_send.cpp
     cms_tx_log_cleanup.cpp
     cms_tx_process_notification.cpp
@@ -39,6 +40,7 @@ SRCS(
     info_collector.cpp
     info_collector.h
     json_proxy.h
+    json_proxy_ddisk.h
     json_proxy_config_items.h
     json_proxy_config_updates.h
     json_proxy_config_validators.h
@@ -72,6 +74,8 @@ RESOURCE(
     ui/cms.js cms/ui/cms.js
     ui/config_dispatcher.css cms/ui/config_dispatcher.css
     ui/cms_log.js cms/ui/cms_log.js
+    ui/nbs2_tablets.css cms/ui/nbs2_tablets.css
+    ui/nbs2_tablets.js cms/ui/nbs2_tablets.js
     ui/console_log.js cms/ui/console_log.js
     ui/common.css cms/ui/common.css
     ui/common.js cms/ui/common.js

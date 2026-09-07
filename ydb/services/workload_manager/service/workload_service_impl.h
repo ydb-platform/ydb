@@ -115,7 +115,8 @@ private:
             RemovePendingSession(ev->Get()->SessionId, [actorSystem = TActivationContext::ActorSystem()](TEvCleanupRequest::TPtr event) {
                 actorSystem->Send(event->Sender, new TEvCleanupResponse(Ydb::StatusIds::NOT_FOUND, NYql::TIssues{NYql::TIssue(TStringBuilder() << "Pool " << event->Get()->PoolId << " not found")}));
             });
-            TActivationContext::Send(ev->Sender, std::make_unique<TEvContinueRequest>(status, TString{}, NResourcePool::TPoolSettings{}, issues));
+            TActivationContext::Send(ev->Sender,
+                std::make_unique<TEvContinueRequest>(ev->Get()->QueryId, status, TString{}, NResourcePool::TPoolSettings{}, issues));
         }
         PendingRequests.clear();
     }

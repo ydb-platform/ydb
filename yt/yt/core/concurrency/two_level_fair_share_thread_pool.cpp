@@ -760,6 +760,14 @@ public:
 
             YT_VERIFY(fetchNext);
 
+            // Pairs with the seq_cst fence in Invoke: either the producer observes our
+            // ActiveThreads_ decrement and notifies, or we observe its enqueued action.
+            std::atomic_thread_fence(std::memory_order::seq_cst);
+            if (!InvokeQueue_.IsEmpty()) {
+                CancelWait();
+                continue;
+            }
+
             // NB: Hazard pointer reclamation is driven by Wait (the parking primitive).
             Wait(cookie, isStopping);
         }

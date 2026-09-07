@@ -477,6 +477,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
     };
 
+    struct DirectBlockGroupTabletState : Table<133> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
+        struct Revision : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastChangedAt : Column<3, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+
+        using TKey = TableKey<TabletId>;
+        using TColumns = TableColumns<TabletId, Revision, LastChangedAt>;
+    };
+
     struct DirectBlockGroupClaims : Table<134> {
         struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
         struct DirectBlockGroupId : Column<2, NScheme::NTypeIds::Uint64> {}; // PK
@@ -512,6 +521,7 @@ struct Schema : NIceDb::Schema {
         DriveSerial,
         BlobDepotDeleteQueue,
         BridgeSyncState,
+        DirectBlockGroupTabletState,
         DirectBlockGroupClaims
     >;
 

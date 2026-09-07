@@ -168,11 +168,13 @@ protected:
 
     void OnAdded(const TSimpleCachedValuePtr& value) override
     {
-        YT_LOG_DEBUG("Item add (Item: %v)", value->GetKey());
+        YT_TLOG_DEBUG("Item add")
+            .With("Item", value->GetKey());
         auto guard = Guard(Lock_);
 
         if (!Keys_.find(value->GetKey()).IsEnd()) {
-            YT_LOG_ALERT("Item already exist (Item: %v)", value->GetKey());
+            YT_TLOG_ALERT("Item already exist")
+                .With("Item", value->GetKey());
         }
 
         EmplaceOrCrash(Keys_, value->GetKey());
@@ -181,11 +183,13 @@ protected:
 
     void OnRemoved(const TSimpleCachedValuePtr& value) override
     {
-        YT_LOG_DEBUG("Item remove (Item: %v)", value->GetKey());
+        YT_TLOG_DEBUG("Item remove")
+            .With("Item", value->GetKey());
         auto guard = Guard(Lock_);
 
         if (Keys_.find(value->GetKey()).IsEnd()) {
-            YT_LOG_ALERT("Item not found (Item: %v)", value->GetKey());
+            YT_TLOG_ALERT("Item not found")
+                .With("Item", value->GetKey());
         }
 
         EraseOrCrash(Keys_, value->GetKey());

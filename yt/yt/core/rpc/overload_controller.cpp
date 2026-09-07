@@ -185,7 +185,7 @@ private:
         } catch (const std::exception& ex) {
             if (!CgroupErrorLogged_) {
                 YT_TLOG_INFO("Failed to collect cgroup CPU statistics")
-                    .With(TError(ex));
+                    .With(ex);
                 CgroupErrorLogged_ = true;
             }
         }

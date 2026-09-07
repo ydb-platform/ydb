@@ -28,6 +28,7 @@ class TGetImpl {
     const bool IsVerboseNoDataEnabled;
     const bool CollectDebugInfo;
     const bool MustRestoreFirst;
+    const NKikimrBlobStorage::TDataKind::E DataKind;
     const bool ReportDetailedPartMap;
     const bool EnableChecksumCalcAndValidationOnDsProxy;
     std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
@@ -79,6 +80,7 @@ public:
         , IsVerboseNoDataEnabled(ev->IsVerboseNoDataEnabled)
         , CollectDebugInfo(ev->CollectDebugInfo)
         , MustRestoreFirst(ev->MustRestoreFirst)
+        , DataKind(ev->DataKind)
         , ReportDetailedPartMap(ev->ReportDetailedPartMap)
         , EnableChecksumCalcAndValidationOnDsProxy(enableChecksumCalcAndValidationOnDsProxy)
         , ForceBlockTabletData(ev->ForceBlockTabletData)

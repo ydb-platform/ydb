@@ -154,9 +154,7 @@ using TCallableComputationNodeBuilderMap = std::unordered_map<std::string_view, 
 namespace {
 
 struct TCallableComputationNodeBuilderFuncMapFiller {
-    TCallableComputationNodeBuilderFuncMapFiller()
-    {
-    }
+    TCallableComputationNodeBuilderFuncMapFiller() = default;
 
     const TCallableComputationNodeBuilderMap Map = {
         {"Append", &WrapAppend},

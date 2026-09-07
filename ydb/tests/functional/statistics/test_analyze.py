@@ -18,6 +18,13 @@ CLUSTER_CONFIG = dict(
     additional_log_configs={
         'STATISTICS': LogLevels.DEBUG,
     },
+    # Default report period is 60s; shorten so ANALYZE fits in medium timeout.
+    column_shard_config={
+        'statistics': {
+            'report_base_statistics_period_ms': 1000,
+            'report_executor_statistics_period_ms': 1000,
+        },
+    },
 )
 
 
@@ -35,7 +42,7 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
                 int_val Int64,
                 string_val String,
                 PRIMARY KEY (key))
-            WITH (STORE=COLUMN)
+            WITH (STORE=COLUMN, PARTITION_COUNT=4)
         ''')
 
     table_path = f"{ydb_database}/{table_name}"

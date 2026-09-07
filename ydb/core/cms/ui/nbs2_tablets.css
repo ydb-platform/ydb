@@ -1,0 +1,6 @@
+.nbs2-tablet-row { cursor: pointer; }
+.nbs2-tablet-row > td:first-child { font-weight: 600; }
+.nbs2-disk { display: inline-block; margin: 0 0.25rem 0.25rem 0; padding: 0.15rem 0.35rem; border-radius: 0.2rem; background: #e9ecef; font-family: monospace; }
+.nbs2-disk-unavailable { background: #dc3545; color: #fff; font-weight: 700; }
+.nbs2-count-unavailable { color: #dc3545; font-weight: 700; }
+#nbs2-tablet-details-0 { background: #f8f9fa; }

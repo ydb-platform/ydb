@@ -244,7 +244,6 @@ private:
         }
     }
 
-private:
     ui32 MembersCount_ = Max<ui32>();
     TSmallVec<TStringRef> MembersNames_;
     TSmallVec<const TType*> MembersTypes_;
@@ -269,7 +268,6 @@ private:
         ItemType_ = itemType;
     }
 
-private:
     const TType* ItemType_ = nullptr;
 };
 
@@ -292,7 +290,6 @@ private:
         ItemType_ = itemType;
     }
 
-private:
     const TType* ItemType_ = nullptr;
 };
 
@@ -326,7 +323,6 @@ private:
         }
     }
 
-private:
     ui32 ElementsCount_ = Max<ui32>();
     TSmallVec<const TType*> ElementsTypes_;
 };
@@ -354,7 +350,6 @@ private:
         ValueType_ = valueType;
     }
 
-private:
     const TType* KeyType_ = nullptr;
     const TType* ValueType_ = nullptr;
 };
@@ -418,7 +413,6 @@ private:
         }
     }
 
-private:
     const TType* ReturnType_ = nullptr;
     ui32 ArgsCount_ = ~0;
     TSmallVec<const TType*> ArgsTypes_;
@@ -448,7 +442,6 @@ private:
         ItemType_ = itemType;
     }
 
-private:
     const TType* ItemType_ = nullptr;
 };
 
@@ -471,7 +464,6 @@ private:
         UnderlyingType_ = underlyingType;
     }
 
-private:
     const TType* UnderlyingType_ = nullptr;
 };
 
@@ -576,7 +568,6 @@ private:
         IsScalar_ = isScalar;
     }
 
-private:
     const TType* ItemType_ = nullptr;
     bool IsScalar_ = false;
 };
@@ -606,7 +597,6 @@ private:
         IsDynamic_ = isDynamic;
     }
 
-private:
     const TType* ItemType_ = nullptr;
     bool IsDynamic_ = false;
 };

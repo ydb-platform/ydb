@@ -11,6 +11,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include "health_check.h"
 
 #include <util/stream/null.h>

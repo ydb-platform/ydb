@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/compute/events/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
@@ -141,6 +142,8 @@ struct IDqComputeActorAsyncInput {
 // 6. Checkpoints actor builds state for all task node as sum of the state of CA and all its sinks and saves it.
 // 7. ...
 // 8. When checkpoint is written into database, checkpoints actor calls IDqComputeActorAsyncOutput::CommitState() to apply all side effects.
+// 9. When all side effects were applied Sink/transform run callback ICallbacks::OnAsyncOutputStateCommitted()
+// 10. After receiving all commits checkpoint will be marked as completed
 struct IDqComputeActorAsyncOutput {
     struct ICallbacks { // Compute actor
         virtual void ResumeExecution(EResumeSource source = EResumeSource::Default) = 0;
@@ -148,6 +151,7 @@ struct IDqComputeActorAsyncOutput {
 
         // Checkpointing
         virtual void OnAsyncOutputStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+        virtual void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
 
         // Finishing
         virtual void OnAsyncOutputFinished(ui64 outputIndex) = 0; // Signal that async output has successfully written its finish flag and so compute actor is ready to finish.
@@ -170,8 +174,14 @@ struct IDqComputeActorAsyncOutput {
         const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) = 0;
 
     // Checkpointing.
-    virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
-    virtual void LoadState(const TSinkState& state) = 0;
+
+    // Apply side effects related to this checkpoint. Should call ICallbacks::OnAsyncOutputStateCommitted() when state was committed.
+    // Function CommitState() must be idempotent, and may be called multiple times, in case of checkpoint restoration, for same sink.
+    virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
+
+    // Load state from specific checkpoint.
+    // If checkpoint used for restoration was in pending commit state, next will be called CommitState() on the same checkpoint.
+    virtual void LoadState(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint) = 0;
 
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
 
@@ -273,6 +283,7 @@ public:
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
         NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
+        IDqSchedulerContextPtr SchedulerContext;
     };
 
     struct TLookupSourceArguments {
@@ -305,6 +316,7 @@ public:
         IRandomProvider *const RandomProvider;
         NWilson::TTraceId TraceId;
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
+        bool HasCheckpoints = false;
     };
 
     struct TInputTransformArguments {

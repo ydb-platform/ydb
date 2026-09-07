@@ -2170,33 +2170,33 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         staticVDisk.InitFull();
         dynamicVDisk.InitFull();
 
-        // Let the neighbour from the dynamic group take everything it can
+        auto checkSpace = [&](TVDiskMock &vdisk) {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+        };
+
+        // The neighbour from the dynamic group takes chunks until it is told to stop taking user writes
         ui32 dynamicChunks = 0;
-        for (;;) {
-            const auto reserveResult = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
-                new NPDisk::TEvChunkReserve(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound, 1));
-            if (reserveResult->Status != NKikimrProto::OK) {
-                UNIT_ASSERT_VALUES_EQUAL(reserveResult->Status, NKikimrProto::OUT_OF_SPACE);
-                break;
-            }
+        while (StatusFlagToSpaceColor(checkSpace(dynamicVDisk)->StatusFlags) < TColor::YELLOW) {
+            testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound, 1),
+                NKikimrProto::OK);
             ++dynamicChunks;
         }
         UNIT_ASSERT_GT(dynamicChunks, 0);
 
-        auto dynamicSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
-            new NPDisk::TEvCheckSpace(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound),
-            NKikimrProto::OK);
-        UNIT_ASSERT_GE(StatusFlagToSpaceColor(dynamicSpace->StatusFlags), TColor::ORANGE);
+        // The reserve of the static group VDisk is not reported to the neighbour, so it gives up while the reserve
+        // is still there and the static group VDisk is still allowed to write
+        auto dynamicSpace = checkSpace(dynamicVDisk);
+        auto staticSpace = checkSpace(staticVDisk);
+        UNIT_ASSERT_GT(staticSpace->FreeChunks, dynamicSpace->FreeChunks);
+        UNIT_ASSERT_LT(StatusFlagToSpaceColor(staticSpace->StatusFlags), TColor::YELLOW);
 
-        // The VDisk of the static group keeps allocating and committing chunks and still reports free space
+        // And it can indeed allocate and commit chunks
         staticVDisk.ReserveChunk();
         staticVDisk.CommitReservedChunks();
-
-        auto staticSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
-            new NPDisk::TEvCheckSpace(staticVDisk.PDiskParams->Owner, staticVDisk.PDiskParams->OwnerRound),
-            NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(staticSpace->StatusFlags), TColor::GREEN);
-        UNIT_ASSERT_GT(staticSpace->FreeChunks, 0);
+        UNIT_ASSERT_GT(checkSpace(staticVDisk)->FreeChunks, 0);
     }
 
     Y_UNIT_TEST(SlotSizeBytesUsesFormulaUnlessExpectedSlotSizeIsSet) {

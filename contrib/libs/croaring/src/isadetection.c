@@ -109,7 +109,7 @@ unsigned int CROARING_AVX512_REQUIRED =
      CROARING_AVX512VBMI2 | CROARING_AVX512BITALG | CROARING_AVX512VPOPCNTDQ);
 #endif
 
-#if defined(__x86_64__) || defined(_M_AMD64)  // x64
+#if CROARING_IS_X64  // x64
 
 static inline void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx,
                          uint32_t *edx) {
@@ -257,7 +257,7 @@ static inline uint32_t dynamic_croaring_detect_supported_architectures(void) {
 
 #endif  // end SIMD extension detection code
 
-#if defined(__x86_64__) || defined(_M_AMD64)  // x64
+#if CROARING_IS_X64  // x64
 
 #if CROARING_ATOMIC_IMPL == CROARING_ATOMIC_IMPL_CPP
 static inline uint32_t croaring_detect_supported_architectures(void) {
@@ -339,7 +339,7 @@ int croaring_hardware_support(void) {
 }
 #endif
 
-#endif  // defined(__x86_64__) || defined(_M_AMD64) // x64
+#endif  // CROARING_IS_X64 // x64
 #ifdef __cplusplus
 }
 }

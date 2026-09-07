@@ -62,6 +62,8 @@ public:
     NCommon::TConfSetting<TString, Static> OverridePlanner;
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
+    NCommon::TConfSetting<bool, Static> UseBlockHashJoinForCross;
+    NCommon::TConfSetting<bool, Static> EnableNewRBOPhysicalStagePeephole;
     NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
@@ -255,6 +257,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetDqHashOperatorsUseBlocks() const;
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
+    bool GetUseBlockHashJoinForCross() const;
+    bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;
     bool IsAutoIndexSelectionDisabled() const;
     bool IsAutoIndexSelectionForIndexLookupJoinEnabled() const;

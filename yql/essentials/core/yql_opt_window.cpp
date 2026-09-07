@@ -1926,7 +1926,7 @@ public:
 
 private:
     TExprNode::TPtr BuildFinalOutput(TExprContext& ctx) const {
-        const auto defaultValue = GetDefaultValue();
+        auto defaultValue = GetDefaultValue();
         YQL_ENSURE(!FrameNeverEmpty_);
 
         if (defaultValue->IsCallable("Null")) {
@@ -2954,7 +2954,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
     } else {
         YQL_ENSURE(!sessionKey);
         preprocessLambda = MakeIdentityLambda(pos, ctx);
-        auto groupKeySelector = keySelector;
+        const auto& groupKeySelector = keySelector;
 
         condenseSwitch = ctx.Builder(pos)
             .Lambda()

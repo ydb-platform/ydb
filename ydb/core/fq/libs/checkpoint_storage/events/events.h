@@ -11,6 +11,8 @@
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 namespace NFq {
 
 struct TEvCheckpointStorage {
@@ -32,6 +34,10 @@ struct TEvCheckpointStorage {
         // Internal Storage events.
         EvNewCheckpointSucceeded,
         EvGcFinished,
+
+        // Graph deletion events.
+        EvDeleteGraphRequest,
+        EvDeleteGraphResponse,
 
         EvEnd,
     };
@@ -246,6 +252,31 @@ struct TEvCheckpointStorage {
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
         ui64 Cookie;
+    };
+
+    // Sent to TStorageProxy to delete all checkpoint data for a graph.
+    struct TEvDeleteGraphRequest : NActors::TEventLocal<TEvDeleteGraphRequest, EvDeleteGraphRequest> {
+        explicit TEvDeleteGraphRequest(TString graphId)
+            : GraphId(std::move(graphId)) {
+        }
+
+        TString GraphId;
+    };
+
+    // Response from TStorageProxy after deleting all checkpoint data for a graph.
+    struct TEvDeleteGraphResponse : NActors::TEventLocal<TEvDeleteGraphResponse, EvDeleteGraphResponse> {
+        explicit TEvDeleteGraphResponse(NYql::TIssues issues = {})
+            : Status(issues.Empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::INTERNAL_ERROR)
+            , Issues(std::move(issues)) {
+        }
+
+        TEvDeleteGraphResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Issues(std::move(issues)) {
+        }
+
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
     };
 };
 

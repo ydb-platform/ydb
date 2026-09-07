@@ -181,8 +181,8 @@ class AbstractRoute(abc.ABC):
         if expect_handler is None:
             expect_handler = _default_expect_handler
 
-        assert asyncio.iscoroutinefunction(
-            expect_handler
+        assert inspect.iscoroutinefunction(expect_handler) or (
+            sys.version_info < (3, 14) and asyncio.iscoroutinefunction(expect_handler)
         ), f"Coroutine is expected, got {expect_handler!r}"
 
         method = method.upper()
@@ -190,18 +190,20 @@ class AbstractRoute(abc.ABC):
             raise ValueError(f"{method} is not allowed HTTP method")
 
         assert callable(handler), handler
-        if asyncio.iscoroutinefunction(handler):
+        if inspect.iscoroutinefunction(handler) or (
+            sys.version_info < (3, 14) and asyncio.iscoroutinefunction(handler)
+        ):
             pass
         elif inspect.isgeneratorfunction(handler):
             warnings.warn(
-                "Bare generators are deprecated, " "use @coroutine wrapper",
+                "Bare generators are deprecated, use @coroutine wrapper",
                 DeprecationWarning,
             )
         elif isinstance(handler, type) and issubclass(handler, AbstractView):
             pass
         else:
             warnings.warn(
-                "Bare functions are deprecated, " "use async ones", DeprecationWarning
+                "Bare functions are deprecated, use async ones", DeprecationWarning
             )
 
             @wraps(handler)
@@ -250,7 +252,10 @@ class AbstractRoute(abc.ABC):
 
 
 class UrlMappingMatchInfo(BaseDict, AbstractMatchInfo):
-    def __init__(self, match_dict: Dict[str, str], route: AbstractRoute):
+
+    __slots__ = ("_route", "_apps", "_current_app", "_frozen")
+
+    def __init__(self, match_dict: Dict[str, str], route: AbstractRoute) -> None:
         super().__init__(match_dict)
         self._route = route
         self._apps: List[Application] = []
@@ -312,6 +317,9 @@ class UrlMappingMatchInfo(BaseDict, AbstractMatchInfo):
 
 
 class MatchInfoError(UrlMappingMatchInfo):
+
+    __slots__ = ("_exception",)
+
     def __init__(self, http_exception: HTTPException) -> None:
         self._exception = http_exception
         super().__init__({}, SystemRoute(self._exception))
@@ -345,7 +353,9 @@ async def _default_expect_handler(request: Request) -> None:
 class Resource(AbstractResource):
     def __init__(self, *, name: Optional[str] = None) -> None:
         super().__init__(name=name)
-        self._routes: List[ResourceRoute] = []
+        self._routes: Dict[str, ResourceRoute] = {}
+        self._any_route: Optional[ResourceRoute] = None
+        self._allowed_methods: Set[str] = set()
 
     def add_route(
         self,
@@ -354,14 +364,12 @@ class Resource(AbstractResource):
         *,
         expect_handler: Optional[_ExpectHandler] = None,
     ) -> "ResourceRoute":
-
-        for route_obj in self._routes:
-            if route_obj.method == method or route_obj.method == hdrs.METH_ANY:
-                raise RuntimeError(
-                    "Added route will never be executed, "
-                    "method {route.method} is already "
-                    "registered".format(route=route_obj)
-                )
+        if route := self._routes.get(method, self._any_route):
+            raise RuntimeError(
+                "Added route will never be executed, "
+                f"method {route.method} is already "
+                "registered"
+            )
 
         route_obj = ResourceRoute(method, handler, self, expect_handler=expect_handler)
         self.register_route(route_obj)
@@ -371,23 +379,17 @@ class Resource(AbstractResource):
         assert isinstance(
             route, ResourceRoute
         ), f"Instance of Route class is required, got {route!r}"
-        self._routes.append(route)
+        if route.method == hdrs.METH_ANY:
+            self._any_route = route
+        self._allowed_methods.add(route.method)
+        self._routes[route.method] = route
 
     async def resolve(self, request: Request) -> _Resolve:
-        allowed_methods: Set[str] = set()
-
-        match_dict = self._match(request.rel_url.path_safe)
-        if match_dict is None:
-            return None, allowed_methods
-
-        for route_obj in self._routes:
-            route_method = route_obj.method
-            allowed_methods.add(route_method)
-
-            if route_method == request.method or route_method == hdrs.METH_ANY:
-                return (UrlMappingMatchInfo(match_dict, route_obj), allowed_methods)
-        else:
-            return None, allowed_methods
+        if (match_dict := self._match(request.rel_url.path_safe)) is None:
+            return None, set()
+        if route := self._routes.get(request.method, self._any_route):
+            return UrlMappingMatchInfo(match_dict, route), self._allowed_methods
+        return None, self._allowed_methods
 
     @abc.abstractmethod
     def _match(self, path: str) -> Optional[Dict[str, str]]:
@@ -397,7 +399,7 @@ class Resource(AbstractResource):
         return len(self._routes)
 
     def __iter__(self) -> Iterator["ResourceRoute"]:
-        return iter(self._routes)
+        return iter(self._routes.values())
 
     # TODO: implement all abstract methods
 
@@ -581,6 +583,7 @@ class StaticResource(PrefixResource):
                 "HEAD", self._handle, self, expect_handler=expect_handler
             ),
         }
+        self._allowed_methods = set(self._routes)
 
     def url_for(  # type: ignore[override]
         self,
@@ -643,14 +646,15 @@ class StaticResource(PrefixResource):
         self._routes["OPTIONS"] = ResourceRoute(
             "OPTIONS", handler, self, expect_handler=self._expect_handler
         )
+        self._allowed_methods.add("OPTIONS")
 
     async def resolve(self, request: Request) -> _Resolve:
         path = request.rel_url.path_safe
         method = request.method
-        allowed_methods = set(self._routes)
         if not path.startswith(self._prefix2) and path != self._prefix:
             return None, set()
 
+        allowed_methods = self._allowed_methods
         if method not in allowed_methods:
             return None, allowed_methods
 
@@ -777,7 +781,7 @@ class PrefixedSubAppResource(PrefixResource):
             router.index_resource(resource)
 
     def url_for(self, *args: str, **kwargs: str) -> URL:
-        raise RuntimeError(".url_for() is not supported " "by sub-application root")
+        raise RuntimeError(".url_for() is not supported by sub-application root")
 
     def get_info(self) -> _InfoDict:
         return {"app": self._app, "prefix": self._prefix}
@@ -900,7 +904,7 @@ class MatchedSubAppResource(PrefixedSubAppResource):
         return match_info, methods
 
     def __repr__(self) -> str:
-        return "<MatchedSubAppResource -> {app!r}>" "".format(app=self._app)
+        return f"<MatchedSubAppResource -> {self._app!r}>"
 
 
 class ResourceRoute(AbstractRoute):

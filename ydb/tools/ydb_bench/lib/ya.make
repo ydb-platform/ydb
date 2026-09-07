@@ -7,6 +7,9 @@ PY_SRCS(
     common.py
     config.py
     import_results.py
+    load_control.py
+    local_ydb.py
+    linux_telemetry.py
     runner.py
     results.py
     system_info.py
@@ -15,7 +18,11 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/grpcio
     contrib/python/PyYAML
+    ydb/core/protos
+    ydb/public/api/grpc
+    ydb/public/api/protos
     ydb/tools/ydb_bench/benchmarks
 )
 

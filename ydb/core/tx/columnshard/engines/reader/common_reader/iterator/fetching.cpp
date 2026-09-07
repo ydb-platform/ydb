@@ -295,7 +295,6 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;
         }
-
         // A nested continuation may have finished the shared program (extracted resources / stopped visitor)
         // while Execute() was in progress. Do not keep mutating that shared state from this frame.
         // Pin visitor once — HasExecutionVisitor + GetExecutionVisitorVerified is a TOCTOU with Stop().

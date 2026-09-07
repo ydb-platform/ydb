@@ -288,6 +288,61 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
             ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
     }
 
+    Y_UNIT_TEST(TestSetTableInfoReflectsIndexImplTableMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Indexes({{"by_value", {"value"}}}));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        reported.clear();
+        // DataShard reports its identity from DoPeriodicTasks(), which reschedules every 5s.
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        auto byPathSuffix = [&](const TString &suffix) {
+            TVector<TReportedTableInfo> matched;
+            for (const auto &info : reported) {
+                if (info.TablePath.EndsWith(suffix)) {
+                    matched.push_back(info);
+                }
+            }
+            return matched;
+        };
+
+        auto indexReports = byPathSuffix("/by_value/indexImplTable");
+        UNIT_ASSERT_C(!indexReports.empty(), "expected at least one report from the index impl table shard");
+        for (const auto &info : indexReports) {
+            UNIT_ASSERT_VALUES_EQUAL_C(info.MetricsLevel,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition),
+                "index impl table " << info.TablePath << " did not inherit the base table's metrics level");
+        }
+
+        auto baseReports = byPathSuffix("/table-1");
+        UNIT_ASSERT_C(!baseReports.empty(), "expected at least one report from the base table shard");
+        for (const auto &info : baseReports) {
+            UNIT_ASSERT_VALUES_EQUAL_C(info.MetricsLevel,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition),
+                "base table " << info.TablePath << " did not report its own metrics level");
+        }
+    }
+
     // The database-wide TABLES_METRICS_LEVEL reaches DataShard on the subdomain
     // publish, which bumps no table SchemaVersion. Patch the published subdomain
     // description on the wire so the DataShard-side handling can be exercised

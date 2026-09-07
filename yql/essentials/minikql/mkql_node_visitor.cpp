@@ -587,7 +587,7 @@ void TExploringNodeVisitor::Walk(TNode* root, std::vector<TNode*>& nodeStack, co
 
 void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes,
                                  bool buildConsumersMap, size_t nodesCountHint) {
-    return Walk(root, env.GetNodeStack(), terminalNodes, buildConsumersMap, nodesCountHint);
+    Walk(root, env.GetNodeStack(), terminalNodes, buildConsumersMap, nodesCountHint);
 }
 
 const std::vector<TNode*>& TExploringNodeVisitor::GetNodes() {

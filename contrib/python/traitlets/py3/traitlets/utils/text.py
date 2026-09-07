@@ -1,6 +1,7 @@
 """
 Utilities imported from ipython_genutils
 """
+
 from __future__ import annotations
 
 import re

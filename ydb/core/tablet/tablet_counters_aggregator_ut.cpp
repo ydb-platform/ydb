@@ -1082,6 +1082,11 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
     const TPathId TENANT_PATH_ID(1113, 1001);
     const TPathId TABLE_ID(1113, 42);
 
+    // A newer PathId at the very same TABLE_PATH: models a table dropped and recreated
+    // at the same path, reporting under a fresh identity while the old table's tablet
+    // may still be alive and reporting too
+    const TPathId RECREATED_TABLE_ID(1113, 44);
+
     constexpr TTabletTypes::EType TABLET_TYPE = TTabletTypes::DataShard;
 
     constexpr ui32 LEVEL_TABLE = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
@@ -1213,10 +1218,18 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
      * and the counters (TEvTabletAddCounters) are two separate events.
      */
     struct TFakeTablet {
-        TFakeTablet(ui64 tabletId, ui32 followerId, ui32 metricsLevel)
+        TFakeTablet(
+            ui64 tabletId,
+            ui32 followerId,
+            ui32 metricsLevel,
+            TPathId tableId = TABLE_ID,
+            ui64 schemaVersion = 1
+        )
             : TabletId(tabletId)
             , FollowerId(followerId)
             , MetricsLevel(metricsLevel)
+            , TableId(tableId)
+            , SchemaVersion(schemaVersion)
             , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
             , ExecutorCounters(new TTabletCountersBase(
                 Y_ARRAY_SIZE(EXECUTOR_SIMPLE_COUNTER_NAMES),
@@ -1247,8 +1260,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
             env.Runtime.Send(new IEventHandle(aggregatorId, env.Edge,
                 new TEvTabletCounters::TEvTabletSetTableInfo(
-                    TabletId, TENANT_PATH_ID, FollowerId, TABLE_ID, TABLE_PATH,
-                    1 /* schemaVersion */, MetricsLevel)));
+                    TabletId, TENANT_PATH_ID, FollowerId, TableId, TABLE_PATH,
+                    SchemaVersion, MetricsLevel)));
         }
 
         void SendCounters(TEnv& env) {
@@ -1292,6 +1305,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         const ui64 TabletId;
         const ui32 FollowerId;
         ui32 MetricsLevel;
+        const TPathId TableId;
+        const ui64 SchemaVersion;
 
         TIntrusivePtr<TEvTabletCounters::TInFlightCookie> CounterEventsInFlight;
 
@@ -1778,6 +1793,239 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
         UNIT_ASSERT_VALUES_EQUAL(
             GetCounterValue(FindLeafCounters(env, 1000, 1), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
+    }
+
+    /**
+     * Verify that a tablet whose OWN (TableId, SchemaVersion) is older than the newest
+     * one seen at its table's path is a straggler: its report is withdrawn rather than
+     * applied, and the live table's counters are untouched.
+     *
+     * @note The scenario the node aggregator can no longer defend against on its own: a
+     *       table is dropped and recreated at the same path with a newer PathId. The new
+     *       table's own tablet reports and builds the correct state. The OLD table's
+     *       tablet is still alive and keeps sending its own 5s round, still carrying its
+     *       own (by now stale) identity — LatestByPath is what tells the two apart.
+     */
+    Y_UNIT_TEST(StaleTabletReportIsWithdrawnNotApplied) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+
+        // The table is dropped and recreated at the same path with a newer PathId: its
+        // own (different) tablet reports and builds the correct state
+        TFakeTablet newTablet(2000, 0, LEVEL_PARTITION, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 2000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+
+        // The OLD table's tablet is still alive and reports again, without ever having
+        // learned of the recreation — its own idea of the identity is still the old one
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
+        ReportCounters(env, {&oldTablet});
+
+        // The straggler's report is withdrawn rather than applied: its own leaf is gone ...
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+
+        // ... and the live table's counters are exactly as they were
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 2000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+    }
+
+    /**
+     * Verify that LatestByPath is reclaimed once the last tablet reporting a path is
+     * forgotten, rather than leaking and wedging that path forever.
+     *
+     * @note Proven by an identity that would have been rejected as stale had the old
+     *       entry survived (an OLDER SchemaVersion than the forgotten tablet's) —
+     *       publishing normally means nothing was left behind to compare it against.
+     */
+    Y_UNIT_TEST(LatestByPathIsReclaimedOnceTheLastTabletIsForgotten) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_PARTITION, TABLE_ID, 2 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+
+        oldTablet.SendForget(env);
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        TFakeTablet newTablet(2000, 0, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion, OLDER than the forgotten tablet's */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 2000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+    }
+
+    /**
+     * Verify the Hole-A scenario from the PR review: a table recreated at a level that
+     * collects NOTHING at all (Disabled). Two different guards cooperate to reach the
+     * same end state: the recreated table's own tablet is stopped by the
+     * `IsCollectedMetricsLevel` gate on ITS OWN Disabled level (the level is a
+     * per-tablet input — see `ApplyDetailedMetrics`), and only ever withdraws its OWN
+     * (never-published) contribution; the OLD table's straggler is rejected earlier
+     * still, by the identity comparison (`IsOlderThan`), before the level gate is ever
+     * consulted — and it is THAT rejection which finally withdraws the old leaf, since
+     * the recreated table's own report never touches it.
+     */
+    Y_UNIT_TEST(StaleReportAfterRecreationAsDisabledPublishesNothing) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 0), "SUM", ALLOWED_EXECUTOR_COUNTER), 5u);
+
+        // The table is dropped and recreated at the same path with a newer PathId, and
+        // this time it collects nothing at all: its own (different) tablet reports Disabled
+        TFakeTablet newTablet(2000, 0, LEVEL_DISABLED, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        // Nothing of the recreated table is published — the IsCollectedMetricsLevel
+        // gate stops it on its own (Disabled) level
+        UNIT_ASSERT(!FindLeafCounters(env, 2000, 0));
+
+        // The OLD table's tablet is still alive and reports again, without ever having
+        // learned of the recreation — its own idea of the identity is still the old one
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
+        ReportCounters(env, {&oldTablet});
+
+        // Nothing came back: no leaf for either tablet, no table= group at all
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(!FindLeafCounters(env, 2000, 0));
+        UNIT_ASSERT(!FindTableGroup(env));
+    }
+
+    /**
+     * Verify the Hole-B scenario from the PR review: a table recreated at Table level,
+     * observed on the FOLLOWER instance. The follower never builds anything for Table
+     * level (`IsFollowerRole && IsTableLevel(...)` returns before `GetOrCreateTable()`),
+     * so the recreated table's own report only ever tears the old PARTITION leaf down —
+     * nothing replaces it. The straggler's later report, rejected by `IsOlderThan`
+     * before the level gate is ever consulted, then has nothing left to resurrect either.
+     */
+    Y_UNIT_TEST(StaleFollowerReportAfterRecreationAsTableLevelPublishesNothing) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldFollower(1000, 1, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion */);
+        oldFollower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldFollower.SendUpdate(env);
+        ReportCounters(env, {&oldFollower});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 1), "SUM", ALLOWED_EXECUTOR_COUNTER), 5u);
+
+        // The table is recreated at Table level: its own (different) follower tablet
+        // reports it. The follower instance skips building anything for Table level, but
+        // the old leaf is still torn down as part of the level reconcile.
+        TFakeTablet newFollower(2000, 1, LEVEL_TABLE, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newFollower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newFollower.SendUpdate(env);
+        ReportCounters(env, {&newFollower});
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT(!FindTableBucketCounters(env));
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        // The OLD follower tablet is still alive and reports again, still carrying its
+        // own (by now stale) PARTITION identity — the straggler
+        oldFollower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
+        ReportCounters(env, {&oldFollower});
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT(!FindTableBucketCounters(env));
+        UNIT_ASSERT(!FindTableGroup(env));
+    }
+
+    /**
+     * Verify the eager eviction of the older generation (PR review Part 2): a table
+     * recreated at the SAME path and the SAME level must not have to wait for the old
+     * tablet to report again (and get rejected by `IsOlderThan`) before the bucket
+     * reflects the new generation alone. Without this, the bucket would sum BOTH
+     * generations' tablets — 5 + 7, not 7 — for as long as the old one stays quiet.
+     */
+    Y_UNIT_TEST(RecreatedTableAtTheSameLevelDropsOldContributions) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_TABLE, TABLE_ID, 1 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 5u);
+
+        // The table is dropped and recreated at the SAME path and the SAME level: its
+        // own (different) tablet reports and sends its own round of counters, without
+        // the old one ever reporting again
+        TFakeTablet newTablet(2000, 0, LEVEL_TABLE, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        // The bucket holds the NEW generation alone
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+    }
+
+    /**
+     * Verify the rename cleanup (PR review Part 3): once a tablet's identity event
+     * moves it to a new path, the OLD path's group is dropped right away, driven by
+     * the identity event alone — not left to leak until the database is torn down,
+     * and not waiting on a counters tick that will never come again at the old path.
+     */
+    Y_UNIT_TEST(RenameDropsTheStaleGroupOfTheOldPath) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        const TString RENAMED_TABLE_PATH = "/Root/db/dir/renamed_table";
+        const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
+
+        TFakeTablet tablet(1000, 0, LEVEL_PARTITION);
+        tablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        tablet.SendUpdate(env);
+        ReportCounters(env, {&tablet});
+
+        UNIT_ASSERT(FindTableGroup(env));
+
+        // The tablet reports a new identity at another path — an ESchemeOpMoveTable
+        // rename, seen from here as the very same tablet now reporting a different
+        // TablePath — and sends no counters at all afterwards
+        env.Runtime.Send(new IEventHandle(env.GetAggregatorId(tablet.FollowerId), env.Edge,
+            new TEvTabletCounters::TEvTabletSetTableInfo(
+                tablet.TabletId, TENANT_PATH_ID, tablet.FollowerId, tablet.TableId,
+                RENAMED_TABLE_PATH, tablet.SchemaVersion, tablet.MetricsLevel)));
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // The old table= group is gone immediately: the identity event alone drives
+        // the cleanup, no further counters tick is needed
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        // Nothing of the new path exists yet either: an identity event alone builds
+        // no counter group, only a report does. Guarded at every step, the same shape
+        // as FindTableGroup: this tablet was the database's only one, so ForgetLeaf's
+        // pruning may well have taken database= (and even the raw group) with it too
+        auto rawGroup = FindRawGroup(env);
+        auto databaseGroup = rawGroup ? rawGroup->FindSubgroup("database", DATABASE_PATH) : nullptr;
+        UNIT_ASSERT(!databaseGroup || !databaseGroup->FindSubgroup("table", RENAMED_RELATIVE_TABLE_PATH));
     }
 }
 

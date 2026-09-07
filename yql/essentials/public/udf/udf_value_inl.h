@@ -255,7 +255,7 @@ inline bool TBoxedValueAccessor::NextPair(IBoxedValue& value, TUnboxedValue& key
 
 inline void TBoxedValueAccessor::Apply(IBoxedValue& value, IApplyContext& context) {
     Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
-    return value.Apply(context);
+    value.Apply(context);
 }
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
@@ -283,7 +283,7 @@ inline void TBoxedValueAccessor::Load(IBoxedValue& value, const TStringRef& stat
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
 inline void TBoxedValueAccessor::Push(IBoxedValue& value, const TUnboxedValuePod& data) {
     Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 11)));
-    return value.Push(data);
+    value.Push(data);
 }
 #endif
 
@@ -428,7 +428,7 @@ inline bool TUnboxedValuePod::HasFastListLength() const {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
 inline void TUnboxedValuePod::Push(const TUnboxedValuePod& value) const {
     UDF_VERIFY(IsBoxed(), "Value is not a list");
-    return TBoxedValueAccessor::Push(*Raw.Boxed.Value, value);
+    TBoxedValueAccessor::Push(*Raw.Boxed.Value, value);
 }
 #endif
 
@@ -613,7 +613,7 @@ inline bool TUnboxedValuePod::NextPair(TUnboxedValue& key, TUnboxedValue& payloa
 
 inline void TUnboxedValuePod::Apply(IApplyContext& context) const {
     UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::Apply(*Raw.Boxed.Value, context);
+    TBoxedValueAccessor::Apply(*Raw.Boxed.Value, context);
 }
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
@@ -634,7 +634,7 @@ inline TUnboxedValue TUnboxedValuePod::Save() const {
 
 inline void TUnboxedValuePod::Load(const TStringRef& state) {
     UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::Load(*Raw.Boxed.Value, state);
+    TBoxedValueAccessor::Load(*Raw.Boxed.Value, state);
 }
 #endif
 
@@ -662,9 +662,11 @@ inline bool TUnboxedValuePod::Load2(const TUnboxedValue& value) {
 Y_FORCE_INLINE void TUnboxedValuePod::Ref() const noexcept {
     switch (Raw.GetMarkers()) {
         case EMarkers::String:
-            return Raw.String.Value->Ref();
+            Raw.String.Value->Ref();
+            return;
         case EMarkers::Boxed:
-            return Raw.Boxed.Value->Ref();
+            Raw.Boxed.Value->Ref();
+            return;
         default:
             return;
     }
@@ -673,9 +675,11 @@ Y_FORCE_INLINE void TUnboxedValuePod::Ref() const noexcept {
 Y_FORCE_INLINE void TUnboxedValuePod::UnRef() const noexcept {
     switch (Raw.GetMarkers()) {
         case EMarkers::String:
-            return Raw.String.Value->UnRef();
+            Raw.String.Value->UnRef();
+            return;
         case EMarkers::Boxed:
-            return Raw.Boxed.Value->UnRef();
+            Raw.Boxed.Value->UnRef();
+            return;
         default:
             return;
     }
@@ -684,9 +688,11 @@ Y_FORCE_INLINE void TUnboxedValuePod::UnRef() const noexcept {
 Y_FORCE_INLINE void TUnboxedValuePod::ReleaseRef() const noexcept {
     switch (Raw.GetMarkers()) {
         case EMarkers::String:
-            return Raw.String.Value->ReleaseRef();
+            Raw.String.Value->ReleaseRef();
+            return;
         case EMarkers::Boxed:
-            return Raw.Boxed.Value->ReleaseRef();
+            Raw.Boxed.Value->ReleaseRef();
+            return;
         default:
             return;
     }
@@ -695,9 +701,11 @@ Y_FORCE_INLINE void TUnboxedValuePod::ReleaseRef() const noexcept {
 Y_FORCE_INLINE void TUnboxedValuePod::DeleteUnreferenced() const noexcept {
     switch (Raw.GetMarkers()) {
         case EMarkers::String:
-            return Raw.String.Value->DeleteUnreferenced();
+            Raw.String.Value->DeleteUnreferenced();
+            return;
         case EMarkers::Boxed:
-            return Raw.Boxed.Value->DeleteUnreferenced();
+            Raw.Boxed.Value->DeleteUnreferenced();
+            return;
         default:
             return;
     }
@@ -717,9 +725,11 @@ Y_FORCE_INLINE i32 TUnboxedValuePod::LockRef() const noexcept {
 Y_FORCE_INLINE void TUnboxedValuePod::UnlockRef(i32 prev) const noexcept {
     switch (Raw.GetMarkers()) {
         case EMarkers::String:
-            return Raw.String.Value->UnlockRef(prev);
+            Raw.String.Value->UnlockRef(prev);
+            return;
         case EMarkers::Boxed:
-            return Raw.Boxed.Value->UnlockRef(prev);
+            Raw.Boxed.Value->UnlockRef(prev);
+            return;
         default:
             return;
     }

@@ -384,7 +384,7 @@ void LogStructuredEvent(
         THROW_ERROR_EXCEPTION(                                                                                       \
             ::NYT::EErrorCode::Fatal,                                                                                \
             "Malformed request or incorrect state detected")                                                         \
-            << ::NYT::TErrorAttribute("message", std::move(messageStr__));                                           \
+            .With("message", std::move(messageStr__));                                                               \
         /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */                                 \
     } while (false)
 
@@ -489,26 +489,54 @@ void LogStructuredEvent(
 // If the message is not logged then the |.With| chain is not evaluated, so tag value
 // expressions cost nothing.
 
-//! Yields a #TStaticAnchorRef for the expansion site: a per-call-site leaky anchor and
-//! its one-shot registration flag, produced via an immediately-invoked lambda.
-#define YT_TLOG_STATIC_ANCHOR_REF()                                                                    \
-    [] {                                                                                               \
-        /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */                 \
-        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                  \
-        static std::atomic<bool> anchorRegistered__;                                                   \
-        return ::NYT::NLogging::NDetail::TStaticAnchorRef{anchorStorage__.Get(), &anchorRegistered__}; \
-        /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */                   \
+//! Yields a #TStaticAnchorRef for the expansion site: a per-call-site leaky anchor, its
+//! one-shot registration flag and the site's source location.
+#define YT_TLOG_STATIC_ANCHOR_REF()                                                    \
+    [] {                                                                               \
+        /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */ \
+        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__;  \
+        static std::atomic<bool> anchorRegistered__;                                   \
+        return ::NYT::NLogging::NDetail::TStaticAnchorRef{                             \
+            anchorStorage__.Get(),                                                     \
+            &anchorRegistered__,                                                       \
+            __LOCATION__};                                                             \
+        /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */   \
     }()
 
-#define YT_TLOG_EVENT(logger, level, message)                  \
-    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__( \
-            (logger)(),                                               \
-            (level),                                                  \
-            __LOCATION__,                                             \
-            YT_TLOG_STATIC_ANCHOR_REF(),                              \
-            (message));                                               \
-        !loggingGuard__.IsEnabled())                                  \
-    { } else                                                          \
+#define YT_TLOG_EVENT(logger, level, message)                          \
+    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__(  \
+            (logger)(),                                                \
+            (level),                                                   \
+            YT_TLOG_STATIC_ANCHOR_REF(),                               \
+            (message));                                                \
+        !loggingGuard__.IsEnabled())                                   \
+    { } else                                                           \
+        loggingGuard__.Self()
+
+//! Logs against an #anchorRef captured at another call site via
+//! |YT_TLOG_STATIC_ANCHOR_REF()| and handed to a helper that logs on its caller's behalf,
+//! so each caller keeps its own anchor and source location rather than sharing the
+//! helper's.
+#define YT_TLOG_EVENT_WITH_STATIC_ANCHOR(logger, level, anchorRef, message) \
+    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__(       \
+            (logger)(),                                                     \
+            (level),                                                        \
+            (anchorRef),                                                    \
+            (message));                                                     \
+        !loggingGuard__.IsEnabled())                                        \
+    { } else                                                                \
+        loggingGuard__.Self()
+
+//! Logs against a caller-owned #anchor; #message may be computed at run time.
+#define YT_TLOG_EVENT_WITH_DYNAMIC_ANCHOR(logger, level, anchor, message)          \
+    if (::NYT::NLogging::NDetail::TTaggedLoggingGuard loggingGuard__(              \
+            (logger)(),                                                            \
+            (level),                                                               \
+            __LOCATION__,                                                          \
+            ::NYT::NLogging::NDetail::TDynamicAnchorRef{(anchor)},                 \
+            (message));                                                            \
+        !loggingGuard__.IsEnabled())                                               \
+    { } else                                                                       \
         loggingGuard__.Self()
 
 #ifdef YT_ENABLE_TRACE_LOGGING
@@ -549,12 +577,10 @@ void LogStructuredEvent(
 // fires once the chain (the loop body) has completed.
 
 // The |for| deliberately has no condition: with no normal exit and a |[[noreturn]]| step,
-// the whole expansion is noreturn to the compiler. The body still runs exactly once, since
-// #Commit never returns.
+// the whole expansion is noreturn to the compiler.
 #define YT_TLOG_FATAL(message)                                              \
     for (::NYT::NLogging::NDetail::TTaggedFatalLoggingGuard loggingGuard__( \
             Logger(),                                                       \
-            __LOCATION__,                                                   \
             YT_TLOG_STATIC_ANCHOR_REF(),                                    \
             (message));                                                     \
         /*no condition*/;                                                   \
@@ -570,14 +596,13 @@ void LogStructuredEvent(
 #define YT_TLOG_ALERT_AND_THROW(message)                                       \
     for (::NYT::NLogging::NDetail::TTaggedThrowingLoggingGuard loggingGuard__( \
             Logger(),                                                          \
-            __LOCATION__,                                                      \
             YT_TLOG_STATIC_ANCHOR_REF(),                                       \
             (message));                                                        \
         loggingGuard__.TryEnter();                                             \
         THROW_ERROR_EXCEPTION(                                                 \
             ::NYT::EErrorCode::Fatal,                                          \
             "Malformed request or incorrect state detected")                   \
-            << ::NYT::TErrorAttribute("message", loggingGuard__.Commit()))     \
+            .With("message", loggingGuard__.Commit()))                         \
         loggingGuard__.Self()
 #define YT_TLOG_ALERT_AND_THROW_IF(condition, message)     if (condition) [[unlikely]]    YT_TLOG_ALERT_AND_THROW(message)
 #define YT_TLOG_ALERT_AND_THROW_UNLESS(condition, message) if (!(condition)) [[unlikely]] YT_TLOG_ALERT_AND_THROW(message)

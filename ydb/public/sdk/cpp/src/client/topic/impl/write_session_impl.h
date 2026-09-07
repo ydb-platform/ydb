@@ -276,6 +276,7 @@ private:
         std::vector<std::pair<std::string, std::string>> MessageMeta;
         TWriteContext WriteContext;
         NThreading::TPromise<bool> FlushPromise;
+        std::shared_ptr<TGRpcConnectionsImpl> FlushPromiseConnections;
 
         TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
                          TWriteContext&& writeContext = std::monostate{})
@@ -302,10 +303,22 @@ private:
             CompleteFlush(true);
         }
 
+        void InitFlushPromise(const std::shared_ptr<TGRpcConnectionsImpl>& connections) {
+            FlushPromise = NThreading::NewPromise<bool>();
+            FlushPromiseConnections = connections;
+        }
+
         void CompleteFlush(bool value) noexcept {
-            if (FlushPromise.Initialized()) {
-                FlushPromise.TrySetValue(value);
+            if (!FlushPromise.Initialized()) {
+                return;
             }
+
+            NThreading::TPromise<bool> promise;
+            FlushPromise.Swap(promise);
+            auto connections = std::move(FlushPromiseConnections);
+            connections->PostToResponseQueue([promise = std::move(promise), value]() mutable {
+                promise.TrySetValue(value);
+            });
         }
     };
 

@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include "heartbeat.h"
+#include "schema_change.h"
 #include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ {
@@ -24,6 +25,7 @@ struct TSourceIdInfo {
     bool TxModified = false;
     TMaybe<TPartitionKeyRange> KeyRange;
     TMaybe<THeartbeat> LastHeartbeat;
+    TMaybe<TSchemaChangeInfo> LastSchemaChange;
     EState State = EState::Registered;
 
 
@@ -34,6 +36,8 @@ struct TSourceIdInfo {
 
     TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TMaybe<i16> producerEpoch = Nothing()) const;
     TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat, TMaybe<i16> producerEpoch = Nothing()) const;
+    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TSchemaChangeInfo&& schemaChange, TMaybe<i16> producerEpoch = Nothing()) const;
+    TSourceIdInfo Updated(TSchemaChangeInfo&& schemaChange) const;
 
     static EState ConvertState(NKikimrPQ::TMessageGroupInfo::EState value);
     static NKikimrPQ::TMessageGroupInfo::EState ConvertState(EState value);

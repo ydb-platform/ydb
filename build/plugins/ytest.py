@@ -171,8 +171,7 @@ def validate_test(unit, kw):
     is_fuzzing = valid_kw.get("FUZZING", False)
     is_kvm = 'kvm' in requirements_orig
     requirements = {}
-    secret_requirements = ('sb_vault', 'yav')
-    list_requirements = secret_requirements
+    secret_requirements = reqs.SECRET_REQUIREMENT_NAMES
     for req in requirements_orig:
         if req in ('kvm',):
             requirements[req] = str(True)
@@ -180,8 +179,11 @@ def validate_test(unit, kw):
 
         if ":" in req:
             req_name, req_value = req.split(":", 1)
-            if req_name in list_requirements:
-                requirements[req_name] = ",".join(filter(None, [requirements.get(req_name), req_value]))
+            if req_name in secret_requirements:
+                if req_name in requirements:
+                    requirements[req_name] += reqs.SECRET_REQUIREMENT_SEPARATOR + req_value
+                else:
+                    requirements[req_name] = req_value
             else:
                 if req_name in requirements:
                     if req_value in ["0"]:
@@ -221,6 +223,13 @@ def validate_test(unit, kw):
                 error_msg = str(e)
             if error_msg:
                 errors += [error_msg]
+
+    if not errors:
+        error_msg = reqs.validate_secret_requirement_conflicts(requirements)
+        if error_msg:
+            errors.append(error_msg)
+        else:
+            reqs.deduplicate_secret_requirements(requirements)
 
     invalid_requirements_for_distbuild = [
         requirement for requirement in requirements.keys() if requirement not in ('ram', 'ram_disk', 'cpu', 'network')

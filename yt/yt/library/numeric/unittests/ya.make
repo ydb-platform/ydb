@@ -3,6 +3,7 @@ GTEST(unittester-library-numeric)
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    algorithm_helpers_ut.cpp
     binary_search_ut.cpp
     double_array_ut.cpp
     piecewise_linear_function_ut.cpp

@@ -127,8 +127,9 @@ namespace {
             }
 
             const auto rename = [&](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
-                if (path.empty())
+                if (path.empty()) {
                     return {};
+                }
                 auto newPath = path;
                 newPath.front() = ctx.AppendString((*input)->FullName(newPath.front()));
                 return {std::move(newPath)};
@@ -324,8 +325,9 @@ namespace {
         std::vector<std::string_view> lCheck;
         lCheck.reserve(leftKeys.size());
         for (const auto& x : leftKeys) {
-            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
+            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second)) {
                 lCheck.emplace_back(ctx.AppendString(name));
+            }
             if (!myLeftScope.contains(x.first)) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
@@ -344,8 +346,9 @@ namespace {
         std::vector<std::string_view> rCheck;
         rCheck.reserve(rightKeys.size());
         for (const auto& x : rightKeys) {
-            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
+            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second)) {
                 rCheck.emplace_back(ctx.AppendString(name));
+            }
             if (!myRightScope.contains(x.first)) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
@@ -441,41 +444,45 @@ namespace {
 
         if (unique) {
             if (singleSide) {
-                if (leftSide)
+                if (leftSide) {
                     *unique = lUnique;
-                else if (rightSide)
+                } else if (rightSide) {
                     *unique = rUnique;
+                }
             } else if (!joinType.IsAtom("Cross")) {
                 const bool exclusion = joinType.IsAtom("Exclusion") ;
                 const bool useLeft = lUnique && (rOneRow || exclusion);
                 const bool useRight = rUnique && (lOneRow || exclusion);
 
-                if (useLeft && !useRight)
+                if (useLeft && !useRight) {
                     *unique = lUnique;
-                else if (useRight && !useLeft)
+                } else if (useRight && !useLeft) {
                     *unique = rUnique;
-                else if (useLeft && useRight)
+                } else if (useLeft && useRight) {
                     *unique = TUniqueConstraintNode::Merge(lUnique, rUnique, ctx);
+                }
             }
         }
 
         if (distinct) {
             if (singleSide) {
-                if (leftSide)
+                if (leftSide) {
                     *distinct = lDistinct;
-                else if (rightSide)
+                } else if (rightSide) {
                     *distinct = rDistinct;
+                }
             } else if (!joinType.IsAtom("Cross")) {
                 const bool inner = joinType.IsAtom("Inner");
                 const bool useLeft = lDistinct && rOneRow && (inner || leftSide);
                 const bool useRight = rDistinct && lOneRow && (inner || rightSide);
 
-                if (useLeft && !useRight)
+                if (useLeft && !useRight) {
                     *distinct = lDistinct;
-                else if (useRight && !useLeft)
+                } else if (useRight && !useLeft) {
                     *distinct = rDistinct;
-                else if (useLeft && useRight)
+                } else if (useLeft && useRight) {
                     *distinct = TDistinctConstraintNode::Merge(lDistinct, rDistinct, ctx);
+                }
             }
         }
 
@@ -1055,8 +1062,9 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
                 const bool unwrap = ETypeAnnotationKind::Optional == commonType->GetKind() &&
                     std::any_of(x.second.AllTypes.cbegin(), x.second.AllTypes.cend(), [](const TTypeAnnotationNode* type) { return ETypeAnnotationKind::Optional != type->GetKind(); });
                 resultFields.emplace_back(ctx.MakeType<TItemExprType>(x.first, unwrap ? commonType->Cast<TOptionalExprType>()->GetItemType() : commonType));
-            } else
+            } else {
                 return IGraphTransformer::TStatus::Error;
+            }
         }
     }
 
@@ -1686,15 +1694,16 @@ TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExp
 TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType&& payloads, bool payload, bool optional, bool filter, TExprContext& ctx) {
     const auto pos = list->Pos();
     const auto filterPayloads = [&payloads](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-        if (payloads.empty())
+        if (payloads.empty()) {
             parent.Arg(1, "row");
-        else
+        } else {
             parent.Callable(1, "FilterMembers")
                 .Arg(0, "row")
                 .List(1)
                     .Add(std::move(payloads))
                 .Seal()
             .Seal();
+        }
         return parent;
     };
 
@@ -1929,8 +1938,9 @@ TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi
                     .Atom(0, multi ? "Many" : "One", TNodeFlags::Default)
                     .Atom(1, "Hashed", TNodeFlags::Default)
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        if constexpr (Squeeze)
+                        if constexpr (Squeeze) {
                             parent.Atom(2, "Compact", TNodeFlags::Default);
+                        }
                         return parent;
 
                     })
@@ -1952,8 +1962,9 @@ TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi
                     .Atom(0, multi ? "Many" : "One", TNodeFlags::Default)
                     .Atom(1, "Hashed", TNodeFlags::Default)
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        if constexpr (Squeeze)
+                        if constexpr (Squeeze) {
                             parent.Atom(2, "Compact", TNodeFlags::Default);
+                        }
                         return parent;
 
                     })

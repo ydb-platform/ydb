@@ -269,6 +269,7 @@ const std::string& TClientRequest::GetUser() const
 
 void TClientRequest::SetUser(const std::string& user)
 {
+    YT_VERIFY(!user.empty());
     User_ = user;
 }
 

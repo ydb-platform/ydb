@@ -1,6 +1,12 @@
 #pragma once
 
+#include "partition_direct_service.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/core/base/events.h>
 
@@ -27,12 +33,14 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
+        EvUpdateDirtyMapState,
         EvFastPathServiceReady,
 
         EvFastPathServiceShutdown,
         EvFastPathServiceStopped,
         EvPoisonByBlockedGeneration,
         EvAddHostToDBG,
+        EvPartitionCleanupCompleted,
 
         EvEnd,
     };
@@ -42,10 +50,26 @@ struct TEvPartitionDirectPrivate
               TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
     {
         TVChunkConfig VChunkConfig;
-        NThreading::TPromise<void> UpdateCompleted = NThreading::NewPromise();
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
 
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
+        {}
+    };
+
+    struct TEvUpdateDirtyMapState
+        : public NActors::
+              TEventLocal<TEvUpdateDirtyMapState, EvUpdateDirtyMapState>
+    {
+        ui32 VChunkIndex;
+        TDirtyMapStateProto State;
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
+
+        TEvUpdateDirtyMapState(ui32 vChunkIndex, TDirtyMapStateProto state)
+            : VChunkIndex(vChunkIndex)
+            , State(std::move(state))
         {}
     };
 
@@ -85,12 +109,27 @@ struct TEvPartitionDirectPrivate
     struct TEvAddHostToDBG
         : public NActors::TEventLocal<TEvAddHostToDBG, EvAddHostToDBG>
     {
-        size_t DirectBlockGroupId;
-        size_t NewHostIndex;
+        const size_t DirectBlockGroupId;
+        const ui32 DBGConnectionsConfigGeneration;
 
-        TEvAddHostToDBG(size_t dbgId, size_t newHostIndex)
+        TEvAddHostToDBG(size_t dbgId, ui32 dbgConnectionsConfigGeneration)
             : DirectBlockGroupId(dbgId)
-            , NewHostIndex(newHostIndex)
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
+        {}
+    };
+
+    // Cleanup actor reports wipe + BSC deallocate outcome to the tablet.
+    struct TEvPartitionCleanupCompleted
+        : public NActors::TEventLocal<
+              TEvPartitionCleanupCompleted,
+              EvPartitionCleanupCompleted>
+    {
+        NProto::TError Error;
+
+        TEvPartitionCleanupCompleted() = default;
+
+        explicit TEvPartitionCleanupCompleted(NProto::TError error)
+            : Error(std::move(error))
         {}
     };
 };

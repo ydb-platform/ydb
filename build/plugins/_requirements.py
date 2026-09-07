@@ -2,8 +2,15 @@ import lib.test_const as consts
 import re
 import lib._metric_resolvers as mr
 
-CANON_SB_VAULT_REGEX = re.compile(r"\w+=(value|file):[-\w]+:\w+")
-CANON_YAV_REGEX = re.compile(r"\w+=(value|file):sec-[a-z0-9]+:\w+")
+# Repeated requirements are serialized with this separator. It is intentionally
+# excluded from the supported secret key alphabet, so the transport is unambiguous.
+SECRET_REQUIREMENT_SEPARATOR = ","
+SECRET_REQUIREMENT_NAMES = (consts.TestRequirements.SbVault, consts.TestRequirements.YavSecret)
+ENV_NAME_PATTERN = r"[A-Za-z_]\w*"
+# Dots and dashes are widely used in existing keys; embedded equals are preserved by the existing parser.
+SECRET_KEY_PATTERN = r"[-.=\w]+"
+CANON_SB_VAULT_REGEX = re.compile(ENV_NAME_PATTERN + r"=(?:value|file):[-\w]+:" + SECRET_KEY_PATTERN)
+CANON_YAV_REGEX = re.compile(ENV_NAME_PATTERN + r"=(?:value|file):sec-[a-z0-9]+:" + SECRET_KEY_PATTERN)
 PORTO_LAYERS_REGEX = re.compile(r"^\d+(,\d+)*$")
 VALID_DNS_REQUIREMENTS = ("default", "local", "dns64")
 VALID_NETWORK_REQUIREMENTS = ("full", "restricted")
@@ -78,14 +85,46 @@ def check_ram_disk(suite_ram_disk, test_size, is_kvm=False):
     return None
 
 
+def _validate_secret_requirements(value, pattern):
+    return all(pattern.fullmatch(item) for item in value.split(SECRET_REQUIREMENT_SEPARATOR))
+
+
+def validate_secret_requirement_conflicts(requirements):
+    assignments = {}
+    for requirement_name in SECRET_REQUIREMENT_NAMES:
+        if requirement_name not in requirements:
+            continue
+        for item in requirements[requirement_name].split(SECRET_REQUIREMENT_SEPARATOR):
+            env_name = item.partition('=')[0]
+            assignment = (requirement_name, item)
+            previous = assignments.get(env_name)
+            if previous is not None and previous != assignment:
+                return "Environment variable '{}' has conflicting secret requirements".format(env_name)
+            assignments[env_name] = assignment
+
+
+def deduplicate_secret_requirements(requirements):
+    for requirement_name in SECRET_REQUIREMENT_NAMES:
+        if requirement_name not in requirements:
+            continue
+        items = requirements[requirement_name].split(SECRET_REQUIREMENT_SEPARATOR)
+        requirements[requirement_name] = SECRET_REQUIREMENT_SEPARATOR.join(dict.fromkeys(items))
+
+
 def validate_sb_vault(name, value):
-    if not CANON_SB_VAULT_REGEX.match(value):
-        return "sb_vault value '{}' should follow pattern <ENV_NAME>=<value|file>:<owner>:<vault key>".format(value)
+    if not _validate_secret_requirements(value, CANON_SB_VAULT_REGEX):
+        return (
+            "sb_vault value '{}' should follow pattern "
+            "<ENV_NAME>=<value|file>:<owner>:<vault key>; ',' is reserved for repeated requirements"
+        ).format(value)
 
 
 def validate_yav_vault(name, value):
-    if not CANON_YAV_REGEX.match(value):
-        return "yav value '{}' should follow pattern <ENV_NAME>=<value|file>:<sec-id>:<key>".format(value)
+    if not _validate_secret_requirements(value, CANON_YAV_REGEX):
+        return (
+            "yav value '{}' should follow pattern "
+            "<ENV_NAME>=<value|file>:<sec-id>:<key>; ',' is reserved for repeated requirements"
+        ).format(value)
 
 
 def validate_porto_layers(name, value):

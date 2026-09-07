@@ -1,4 +1,5 @@
 #include "sql_into_tables.h"
+#include "sql_select_yql.h"
 #include "sql_values.h"
 
 #include <yql/essentials/core/langver/feature.gen.h>
@@ -200,10 +201,21 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 
     Ctx_.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
 
-    auto values = TSqlIntoValues(*this).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
+    const auto& rule = node.GetRule_into_values_source4();
+    TNodePtr valuesNode = YqlSelectOrLegacy(
+        [&]() -> TNodeResult {
+            return ToNode(BuildYqlSelect(*this, rule));
+        },
+        [&]() -> TNodePtr {
+            TSqlIntoValues x(*this);
+            return Unwrap(ToNode(x.Build(rule, SqlIntoUserModeStr_)));
+        },
+        pos);
+    TSourcePtr values = MoveOutIfSource(valuesNode);
     if (!values) {
         return nullptr;
     }
+
     if (!ValidateServiceName(node, table, SqlIntoMode, GetPos(modeTokens[0]))) {
         return nullptr;
     }

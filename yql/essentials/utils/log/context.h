@@ -69,8 +69,7 @@ public:
         }
     }
 
-    virtual ~TLogContextListItem() {
-    }
+    virtual ~TLogContextListItem() = default;
 
     [[nodiscard]] const TString* begin() const {
         auto* ptr = reinterpret_cast<const ui8*>(this);

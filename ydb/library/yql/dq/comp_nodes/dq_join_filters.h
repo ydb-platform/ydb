@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
 #include <optional>
+#include <utility>
 
 namespace NKikimr::NMiniKQL {
 
@@ -20,6 +21,11 @@ struct TJoinFilters {
 
     explicit operator bool() const {
         return OneSide.Probe || OneSide.Build || BothSides;
+    }
+
+    void SwapSides() {
+        std::swap(Args.Build, Args.Probe);
+        std::swap(OneSide.Build, OneSide.Probe);
     }
 
     void RegisterDependencies(const std::function<void(IComputationNode*)>& dependsOn,

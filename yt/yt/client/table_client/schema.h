@@ -552,6 +552,7 @@ struct TSchemaValidationOptions
     bool AllowUnversionedUpdateColumns = false;
     bool AllowTimestampColumns = false;
     bool AllowOperationColumns = false;
+    bool AllowShuffleColumns = false;
 };
 
 void ValidateColumnSchema(
@@ -573,6 +574,8 @@ void ValidateNoDescendingSortOrder(
     const TKeyColumns& keyColumns);
 
 void ValidateNoRenamedColumns(const TTableSchema& schema);
+
+void ValidateNoAggregateStateType(const TTableSchema& schema);
 
 void ValidateColumnUniqueness(const TTableSchema& schema);
 

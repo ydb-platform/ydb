@@ -24,3 +24,8 @@
 ## C++
 
 - Use C++20 or earlier
+
+## Actors
+
+Most YDB code is `TActor` subclasses. Develop and change actors according to
+@ydb/library/actors/AGENTS.md

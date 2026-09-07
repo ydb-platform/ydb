@@ -16,6 +16,7 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/library/operation_id
 )
 

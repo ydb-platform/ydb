@@ -754,10 +754,6 @@ void TKqpTasksGraph::FillStages() {
                             meta.IndexMetas.back().TablePath = indexSettings.GetDocsTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                             meta.IndexMetas.emplace_back();
-                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDictTable());
-                            meta.IndexMetas.back().TablePath = indexSettings.GetDictTable().GetPath();
-                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
-                            meta.IndexMetas.emplace_back();
                             meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetStatsTable());
                             meta.IndexMetas.back().TablePath = indexSettings.GetStatsTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
@@ -1949,6 +1945,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         (*result->MutableTaskParams())[taskParam] = actorIdProto.SerializeAsString();
     }
 
+    if (const auto executionGeneration = GetMeta().UserRequestContext->CurrentExecutionGeneration) {
+        auto& params = *result->MutableTaskParams();
+        params["current_execution_generation"] = ToString(executionGeneration);
+        params["checkpoints_enabled"] = ToString(GetMeta().AllowCheckpoints);
+    }
+
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);
@@ -2301,6 +2303,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
         }
+
+        GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
     }
 }
 
@@ -2531,9 +2535,28 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             }
         }
     } else if (shuffleEliminated /* save partitioning for shuffle elimination */) {
-        std::size_t stageInternalTaskId = 0;
         columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
         columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
+
+        // in runtime we calc hash, which will be in [0; shardcount]
+        // so we merge two mappings: hash -> shardID and shardID -> channelID for runtime
+        THashMap<ui64, ui64> hashByShardId;
+        Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't been delivered yet.");
+        const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
+        const auto& sharding = tableDesc.GetSharding();
+        for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
+            hashByShardId.insert({sharding.GetColumnShards(si), si});
+        }
+
+        // The shuffling stage creates one output channel per task of this stage, walking stageInfo.Tasks in order
+        // (BuildHashShuffleChannels), and at runtime TaskIndexByHash is used as an index into that channel vector
+        // (TColumnShardHashV1::Finish). So a task must be addressed by its position in the placed stageInfo.Tasks,
+        // not by its position in the nodeShards traversal below: tasksByNode preserves the order inside a node, but
+        // nodeShards is a hash map, so the per-node blocks come in an order unrelated to the placed one.
+        THashMap<ui64 /* taskId */, ui64 /* position in stageInfo.Tasks */> taskPositionInStage;
+        for (std::size_t i = 0; i < stageInfo.Tasks.size(); ++i) {
+            taskPositionInStage[stageInfo.Tasks[i]] = i;
+        }
 
         for (auto&& [nodeId, shardsInfo] : nodeShards) {
             auto& nodeTasks = tasksByNode.at(nodeId);
@@ -2557,17 +2580,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 }
             }
 
-            // in runtime we calc hash, which will be in [0; shardcount]
-            // so we merge two mappings: hash -> shardID and shardID -> channelID for runtime
-            THashMap<ui64, ui64> hashByShardId;
-            Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't been delivered yet.");
-            const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
-            const auto& sharding = tableDesc.GetSharding();
-            for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
-                hashByShardId.insert({sharding.GetColumnShards(si), si});
-            }
-
-            for (ui32 t = 0; t < tasksPerNode; ++t, ++stageInternalTaskId) {
+            for (ui32 t = 0; t < tasksPerNode; ++t) {
                 auto& task = GetTask(nodeTasks[t]);
                 task.Reason = TTaskType::SHUFFLE_ELIMINATE_SCAN;
                 task.Meta = metas[t];
@@ -2576,6 +2589,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 task.Meta.ScanTask = true;
                 task.SetMetaId(t);
 
+                const ui64 stageInternalTaskId = taskPositionInStage.at(nodeTasks[t]);
                 for (const auto& readInfo: *task.Meta.Reads) {
                     Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
                     (*columnShardHashV1Params.TaskIndexByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
@@ -2739,6 +2753,27 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     settings->MutableIndexDescription()->CopyFrom(fullTextSource.GetIndexDescription());
 
     auto guard = TxAlloc->TypeEnv.BindAllocator();
+    auto extractFloatingPointSetting = [&](const NKqpProto::TKqpPhyValue& protoValue) -> std::optional<double> {
+        NMiniKQL::TType* valueType = nullptr;
+        auto value = ExtractPhyValue(
+            stageInfo, protoValue,
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod(), &valueType);
+        if (!value.HasValue()) {
+            return std::nullopt;
+        }
+
+        YQL_ENSURE(valueType && valueType->GetKind() == NMiniKQL::TType::EKind::Data,
+            "Unexpected fulltext floating-point setting type");
+        const auto schemeType = static_cast<NMiniKQL::TDataType*>(valueType)->GetSchemeType();
+        if (schemeType == NUdf::TDataType<float>::Id) {
+            return static_cast<double>(value.Get<float>());
+        }
+
+        YQL_ENSURE(schemeType == NUdf::TDataType<double>::Id,
+            "Unexpected fulltext floating-point setting scheme type: " << schemeType);
+        return value.Get<double>();
+    };
+
     {
         TStringBuilder queryBuilder;
         for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
@@ -2780,12 +2815,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     if (fullTextSource.HasBFactor()) {
-        auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetBFactor(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-
-        if (value.HasValue()) {
-            settings->SetBFactor(value.Get<double>());
+        if (const auto value = extractFloatingPointSetting(fullTextSource.GetBFactor())) {
+            settings->SetBFactor(*value);
         }
     }
 
@@ -2808,11 +2839,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     if (fullTextSource.HasK1Factor()) {
-        auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetK1Factor(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-        if (value.HasValue()) {
-            settings->SetK1Factor(value.Get<double>());
+        if (const auto value = extractFloatingPointSetting(fullTextSource.GetK1Factor())) {
+            settings->SetK1Factor(*value);
         }
     }
 
@@ -3236,6 +3264,20 @@ void TKqpTasksGraph::FillSecureParamsFromStage(THashMap<TString, TString>& secur
     }
 }
 
+void TKqpTasksGraph::FillExternalSourceSecureParams(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const {
+    for (const auto& source : stage.GetSources()) {
+        if (!source.HasExternalSource()) {
+            continue;
+        }
+        const auto& externalSource = source.GetExternalSource();
+        const auto& sourceName = externalSource.GetSourceName();
+        if (!sourceName) {
+            continue;
+        }
+        secureParams.emplace(sourceName, ReplaceStructuredTokenReferences(externalSource.GetAuthInfo()));
+    }
+}
+
 bool TKqpTasksGraph::StageNeedsLocalPlacement(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo) const {
     for (const auto& transform : stage.GetOutputTransforms()) {
         if (transform.HasInternalSink()) {
@@ -3309,6 +3351,9 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
     if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
         settings.SetLockMode(*GetMeta().LockMode);
     }
+    settings.SetCollectAffectedRows(
+        GetMeta().CollectAffectedRows && !settings.GetIsIndexImplTable());
+
         // Use per-transaction QuerySpanId if available (for deferred effects),
         // otherwise fall back to global QuerySpanId; apply per-table suppression.
         {

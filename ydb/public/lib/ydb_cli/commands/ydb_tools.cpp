@@ -219,7 +219,8 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data."
             " ImportData will throw an error if you try to upload data into an existing table that has"
             " secondary indexes or is in the process of building them. If you need to restore a table"
-            " with secondary indexes, make sure it's not already present in the scheme.")
+            " with secondary indexes, make sure it's not already present in the scheme."
+            " Column-oriented (OLAP) tables are restored via BulkUpsert because ImportData does not support them.")
         .StoreTrue(&UseImportData);
 
     config.Opts->AddLongOption("replace", "Remove existing objects from the database that match those in the backup before restoration."

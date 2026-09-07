@@ -99,6 +99,9 @@ namespace WAVM { namespace IR {
 		std::vector<ValueType> nonParameterLocalTypes;
 		std::vector<U8> code;
 		std::vector<std::vector<Uptr>> branchTables;
+		// Parallel to IR operators in `code`: Code-section-relative offsets of the original
+		// wasm opcode bytes (populated only by binary deserialization; empty for WAST/IR).
+		std::vector<U32> operatorCodeSectionOffsets;
 	};
 
 	// A table definition

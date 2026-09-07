@@ -25,7 +25,7 @@ def discover_cases():
 
 
 TSpec = collections.namedtuple(
-    'TSpec', ['program', 'canonize_ast', 'cfg', 'xfail', 'langver', 'files', 'diff_tool', 'scan_udfs', 'extra_env', 'secure_params', 'patch_cfg_file']
+    'TSpec', ['program', 'canonize_ast', 'cfg', 'xfail', 'langver', 'files', 'diff_tool', 'scan_udfs', 'udf_bridge', 'extra_env', 'secure_params', 'patch_cfg_file']
 )
 
 
@@ -59,6 +59,7 @@ def make_test(case):
     files = {}
     diff_tool = None
     scan_udfs = os.getenv('YQL_UDF_NO_SCAN') != 'yes'
+    udf_bridge = False
     # check for purecalc-only UDFs (TODO: replace with YQL_UDF_NO_SCAN macro)
     if project_path.startswith('robot/rthub/yql/udfs') or project_path.startswith('robot/zora'):
         scan_udfs = False
@@ -71,6 +72,8 @@ def make_test(case):
             scan_udfs = True
         elif item[0] == 'disable_scan_udfs':
             scan_udfs = False
+        elif item[0] == 'udf_bridge':
+            udf_bridge = True
     patch_file_name = yql_utils.get_gateway_cfg_patch(cfg)
     patch_file_path = os.path.join(DATA_PATH, patch_file_name) if patch_file_name else None
 
@@ -96,6 +99,7 @@ def make_test(case):
         files=files,
         diff_tool=diff_tool,
         scan_udfs=scan_udfs,
+        udf_bridge=udf_bridge,
         extra_env=extra_env,
         secure_params=secure_params,
         patch_cfg_file=patch_file_path,

@@ -27,6 +27,8 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(134217728, config.GetVChunkSize());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostQueuesCount());
+        UNIT_ASSERT(config.GetEnableChecksums());
+        UNIT_ASSERT_VALUES_EQUAL(200, config.GetCopyRangeBandwidthMbs());
     }
 
     Y_UNIT_TEST(ShouldUseExplicitProtoValuesWhenSet)
@@ -39,8 +41,10 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         proto.SetVChunkSize(33554432);
         proto.SetVhostThreadsCount(12);
         proto.SetVhostQueuesCount(16);
+        proto.SetEnableChecksums(false);
+        proto.SetCopyRangeBandwidthMbs(100);
 
-        TStorageConfig config{std::move(proto)};
+        TStorageConfig config{proto};
 
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MilliSeconds(42),
@@ -53,6 +57,8 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(33554432, config.GetVChunkSize());
         UNIT_ASSERT_VALUES_EQUAL(12u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(16u, config.GetVhostQueuesCount());
+        UNIT_ASSERT(!config.GetEnableChecksums());
+        UNIT_ASSERT_VALUES_EQUAL(100u, config.GetCopyRangeBandwidthMbs());
     }
 
     Y_UNIT_TEST(ShouldApplyDefaultsForPartialProto)
@@ -60,7 +66,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         NProto::TStorageServiceConfig proto;
         proto.SetStripeSize(2048);
 
-        TStorageConfig config{std::move(proto)};
+        TStorageConfig config{proto};
 
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MicroSeconds(1000),
@@ -73,6 +79,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(134217728, config.GetVChunkSize());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostQueuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(200, config.GetCopyRangeBandwidthMbs());
     }
 
     Y_UNIT_TEST(ShouldAcceptOnlyVhostThreadsCountAndKeepOtherDefaults)
@@ -80,7 +87,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         NProto::TStorageServiceConfig proto;
         proto.SetVhostThreadsCount(8);
 
-        TStorageConfig config{std::move(proto)};
+        TStorageConfig config{proto};
 
         UNIT_ASSERT_VALUES_EQUAL(8u, config.GetVhostThreadsCount());
         // VhostQueuesCount must fall back to its default when not set.
@@ -92,7 +99,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         NProto::TStorageServiceConfig proto;
         proto.SetVhostQueuesCount(2);
 
-        TStorageConfig config{std::move(proto)};
+        TStorageConfig config{proto};
 
         UNIT_ASSERT_VALUES_EQUAL(2u, config.GetVhostQueuesCount());
         // VhostThreadsCount must fall back to its default when not set.

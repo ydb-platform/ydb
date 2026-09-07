@@ -64,7 +64,8 @@ private:
         return GetPortionAccessor().GetRecordsVerified().size() + GetPortionAccessor().GetIndexesVerified().size();
     }
 
-    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusionStatus DoAssembleAccessor(
+        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
 
     virtual TConclusion<bool> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;

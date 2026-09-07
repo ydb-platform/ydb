@@ -501,6 +501,16 @@ public:
         }
     }
 
+    template <NPrivate::ConfigFeatureList TContainer, typename TActivationPolicy>
+    void DispatchWithActivationPolicy(const TString& cluster, const TContainer& clusterValues, const TActivationPolicy& activationPolicy) {
+        using TAttribute = typename TContainer::value_type;
+
+        TString activationLabel = TStringBuilder() << ProviderName_ << "_" << cluster;
+        const auto flags = activationPolicy.template SelectAndSave<TAttribute>(
+            activationLabel, QContext_, clusterValues, !ProviderName_.empty());
+        Dispatch(cluster, flags);
+    }
+
     template <NPrivate::ConfigFeatureList TContainer, NPrivate::AttributeFilter<TContainer> TFilter>
     void Dispatch(const TContainer& globalValues, const TFilter& filter) {
         Dispatch(ALL_CLUSTERS, globalValues, filter);
@@ -509,6 +519,11 @@ public:
     template <NPrivate::ConfigFeatureList TContainer>
     void Dispatch(const TContainer& globalValues) {
         Dispatch(ALL_CLUSTERS, globalValues);
+    }
+
+    template <NPrivate::ConfigFeatureList TContainer, typename TActivationPolicy>
+    void DispatchWithActivationPolicy(const TContainer& globalValues, const TActivationPolicy& activationPolicy) {
+        DispatchWithActivationPolicy(ALL_CLUSTERS, globalValues, activationPolicy);
     }
 
     void FreezeDefaults();

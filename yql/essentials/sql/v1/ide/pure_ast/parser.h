@@ -16,4 +16,6 @@ public:
 
 IParser::TPtr MakeParser(bool isAnsiLexer);
 
+void ClearParserCache();
+
 } // namespace NSQLPureAST

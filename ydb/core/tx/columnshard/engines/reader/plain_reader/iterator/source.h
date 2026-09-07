@@ -67,9 +67,10 @@ private:
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
-    virtual void DoAssembleAccessor(
+    virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
+        return TConclusionStatus::Fail("incorrect method usage DoAssembleAccessor");
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(

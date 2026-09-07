@@ -121,6 +121,22 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldTest)
         UNIT_ASSERT_VALUES_EQUAL(R(3, 7), v[0]);
     }
 
+    Y_UNIT_TEST(AddField)
+    {
+        TBlockRangeField f;
+        UNIT_ASSERT(f.Add(R(0, 4)));
+        UNIT_ASSERT(f.Add(R(20, 24)));
+
+        TBlockRangeField other;
+        UNIT_ASSERT(other.Add(R(5, 10)));
+        UNIT_ASSERT(other.Add(R(30, 34)));
+
+        UNIT_ASSERT(f.Add(other));
+        UNIT_ASSERT_VALUES_EQUAL("[0..10][20..24][30..34]", f.Print());
+        UNIT_ASSERT(!f.Add(other));
+        UNIT_ASSERT(!f.Add(f));
+    }
+
     // -------------------------------------------------------------------------
     // Remove – basic
 
@@ -193,6 +209,22 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldTest)
         UNIT_ASSERT_VALUES_EQUAL(R(23, 25), v[1]);
     }
 
+    Y_UNIT_TEST(RemoveField)
+    {
+        TBlockRangeField f;
+        UNIT_ASSERT(f.Add(R(0, 40)));
+
+        TBlockRangeField other;
+        UNIT_ASSERT(other.Add(R(5, 9)));
+        UNIT_ASSERT(other.Add(R(20, 29)));
+
+        UNIT_ASSERT(f.Remove(other));
+        UNIT_ASSERT_VALUES_EQUAL("[0..4][10..19][30..40]", f.Print());
+        UNIT_ASSERT(!f.Remove(other));
+        UNIT_ASSERT(f.Remove(f));
+        UNIT_ASSERT(f.Empty());
+    }
+
     // -------------------------------------------------------------------------
     // Overlaps
 
@@ -252,6 +284,25 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldTest)
         UNIT_ASSERT(!f.Overlaps(R(5, 9)));
         // [21,21] touches end but doesn't overlap.
         UNIT_ASSERT(!f.Overlaps(R(21, 25)));
+    }
+
+    Y_UNIT_TEST(OverlapsField)
+    {
+        TBlockRangeField left;
+        TBlockRangeField right;
+
+        UNIT_ASSERT(!left.Overlaps(right));
+
+        left.Add(R(0, 5));
+        left.Add(R(20, 25));
+        right.Add(R(6, 10));
+        right.Add(R(30, 35));
+        UNIT_ASSERT(!left.Overlaps(right));
+        UNIT_ASSERT(!right.Overlaps(left));
+
+        right.Add(R(24, 29));
+        UNIT_ASSERT(left.Overlaps(right));
+        UNIT_ASSERT(right.Overlaps(left));
     }
 
     // -------------------------------------------------------------------------

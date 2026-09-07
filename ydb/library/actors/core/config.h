@@ -33,6 +33,7 @@ namespace NActors {
         EASProfile ActorSystemProfile = EASProfile::Default;
         bool HasSharedThread = false;
         bool AllThreadsAreShared = false;
+        bool EnableWaker = false;
         // tiny-ydb configs
         std::vector<i16> AdjacentPools;
         i16 ForcedForeignSlotCount = 0;

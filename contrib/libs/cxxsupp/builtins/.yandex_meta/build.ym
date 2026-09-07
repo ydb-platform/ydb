@@ -173,6 +173,7 @@ python3 join.py common special arm
 echo ')'
 
 echo 'ELSEIF (ARCH_AARCH64)'
+echo 'CFLAGS(-DCOMPILER_RT_HAS_FLOAT16)'
 echo 'SRCS('
 ls aarch64/*.c cpu_model/aarch64.*c aarch64/*.S > special
 python3 join.py common special aarch

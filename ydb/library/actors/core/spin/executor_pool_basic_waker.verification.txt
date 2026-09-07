@@ -1,0 +1,197 @@
+Model: executor_pool_basic_waker.pml
+Source model SHA-256:
+  c77e4ccd89aa5dd1a9cdda6cf08d33325ea2c0e1b1d02acca2e85f13a9aa4333
+
+All runs used a one-hour timeout, a maximum search depth of 1,000,000,000,
+a 220,000 MB verifier memory limit, partial-order reduction, and no fairness.
+Every run completed the full state-space search before the timeout with
+errors: 0 and exit status 0. No run produced a trail.
+
+Each run used a derived model.pml. The safety model removes all four LTL
+blocks. Each liveness model retains only the selected LTL block and removes
+the other three. This filtering does not change the Promela transition
+system. The source and derived SHA-256 values are recorded below.
+
+-------------------------------------------------------------------------------
+
+Safety verification (no LTL claim)
+
+Started: 2026-08-21T23:43:38+03:00
+Finished: 2026-08-21T23:49:58+03:00
+Host: mr-nvme-testing-004.ydb.yandex.net
+Spin: Spin Version 6.5.2 -- 6 December 2019
+Source SHA-256:
+  c77e4ccd89aa5dd1a9cdda6cf08d33325ea2c0e1b1d02acca2e85f13a9aa4333
+Derived model SHA-256:
+  4f7b8a58101e5da4ce554005471dd968fe1c806ce27cf79cd86507a6a85d0950
+
+The derived model removes all four LTL blocks.
+
+Commands:
+  spin -a model.pml
+  cc -O3 -DSAFETY -DNOCLAIM -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -m1000000000 -w30
+
+Result: HOLDS (full state-space search completed with errors: 0)
+
+State-vector 76 byte, depth reached 37827442, errors: 0
+3.325185e+08 states, stored
+7.0017207e+08 states, matched
+1.0326906e+09 transitions (= stored+matched)
+4.0752544e+08 atomic steps
+84683.211 MB total actual memory usage
+pan: elapsed time 350 seconds
+wall clock time 6:15.88
+maximum resident set size 86721244 kbytes
+
+Run directory:
+  mr-nvme-testing-004.ydb.yandex.net:/tmp/waker_safety_c77e4ccd_WOR7Bo
+
+-------------------------------------------------------------------------------
+
+Claim: live_resize_reconciles
+
+Started: 2026-08-21T23:43:38+03:00
+Finished: 2026-08-21T23:55:59+03:00
+Host: mr-nvme-testing-003.ydb.yandex.net
+Spin: Spin Version 6.4.9 -- 17 December 2018
+Source SHA-256:
+  c77e4ccd89aa5dd1a9cdda6cf08d33325ea2c0e1b1d02acca2e85f13a9aa4333
+Derived model SHA-256:
+  e58de16114058639916ba0321f239a39649f6531e06df4a4b22d718e8c246941
+
+The derived model removes live_queue_changes,
+live_waker_pending_clears, and live_zero_activations_sleep.
+
+Commands:
+  spin -a model.pml
+  cc -O3 -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -a -m1000000000 -w31
+
+Result: HOLDS (full state-space search completed with errors: 0)
+
+State-vector 92 byte, depth reached 64697006, errors: 0
+4.6634965e+08 states, stored (5.98753e+08 visited)
+1.592931e+09 states, matched
+2.191684e+09 transitions (= visited+matched)
+8.1110927e+08 atomic steps
+105625.797 MB total actual memory usage
+pan: elapsed time 703 seconds
+wall clock time 12:16.09
+maximum resident set size 108168392 kbytes
+
+Run directory:
+  mr-nvme-testing-003.ydb.yandex.net:/tmp/waker_resize_c77e4ccd_nOwA4P
+
+-------------------------------------------------------------------------------
+
+Claim: live_queue_changes
+
+Started: 2026-08-21T20:43:38+00:00
+Finished: 2026-08-21T21:00:37+00:00
+Host: mr-nvme-testing-002.ydb.yandex.net
+Spin: Spin Version 6.5.2 -- 6 December 2019
+Source SHA-256:
+  c77e4ccd89aa5dd1a9cdda6cf08d33325ea2c0e1b1d02acca2e85f13a9aa4333
+Derived model SHA-256:
+  d10b41adc0208e6610ff2a4d32ef0428141aca358a0549679827c270e4df3505
+
+The derived model removes live_resize_reconciles,
+live_waker_pending_clears, and live_zero_activations_sleep.
+
+Commands:
+  spin -a model.pml
+  cc -O3 -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -a -m1000000000 -w31
+
+Result: HOLDS (full state-space search completed with errors: 0)
+
+State-vector 92 byte, depth reached 64697006, errors: 0
+6.2989756e+08 states, stored (9.2585e+08 visited)
+2.5841678e+09 states, matched
+3.5100178e+09 transitions (= visited+matched)
+1.2995753e+09 atomic steps
+118104.801 MB total actual memory usage
+pan: elapsed time 983 seconds
+wall clock time 16:54.17
+maximum resident set size 120948736 kbytes
+
+Run directory:
+  mr-nvme-testing-002.ydb.yandex.net:/tmp/waker_queue_c77e4ccd_2SSPF3
+
+-------------------------------------------------------------------------------
+
+Claim: live_waker_pending_clears
+
+Started: 2026-08-21T23:50:49+03:00
+Finished: 2026-08-22T00:07:23+03:00
+Host: mr-nvme-testing-004.ydb.yandex.net
+Spin: Spin Version 6.5.2 -- 6 December 2019
+Source SHA-256:
+  c77e4ccd89aa5dd1a9cdda6cf08d33325ea2c0e1b1d02acca2e85f13a9aa4333
+Derived model SHA-256:
+  7ba43f070d27668f7b5c2ede7b8d5794fcc6a0f8ad33db2d0dbf9d59b41fc149
+
+The derived model removes live_resize_reconciles,
+live_queue_changes, and live_zero_activations_sleep.
+
+Commands:
+  spin -a model.pml
+  cc -O3 -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -a -m1000000000 -w31
+
+Result: HOLDS (full state-space search completed with errors: 0)
+
+State-vector 92 byte, depth reached 64697006, errors: 0
+5.7819066e+08 states, stored (8.22524e+08 visited)
+2.4596306e+09 states, matched
+3.2821549e+09 transitions (= visited+matched)
+1.2051436e+09 atomic steps
+114159.586 MB total actual memory usage
+pan: elapsed time 959 seconds
+wall clock time 16:29.46
+maximum resident set size 116908496 kbytes
+
+Run directory:
+  mr-nvme-testing-004.ydb.yandex.net:/tmp/waker_pending_c77e4ccd_RFKvfo
+
+-------------------------------------------------------------------------------
+
+Claim: live_zero_activations_sleep
+
+Started: 2026-08-21T23:57:12+03:00
+Finished: 2026-08-22T00:10:01+03:00
+Host: mr-nvme-testing-003.ydb.yandex.net
+Spin: Spin Version 6.4.9 -- 17 December 2018
+Source SHA-256:
+  c77e4ccd89aa5dd1a9cdda6cf08d33325ea2c0e1b1d02acca2e85f13a9aa4333
+Derived model SHA-256:
+  c22fd9e5cae3f799bf69ddb750c8b2b1afa01688e0bfa1566cb75f6713afd261
+
+The derived model removes live_resize_reconciles,
+live_queue_changes, and live_waker_pending_clears.
+
+Commands:
+  spin -a model.pml
+  cc -O3 -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -a -m1000000000 -w31
+
+Result: HOLDS (full state-space search completed with errors: 0)
+
+State-vector 92 byte, depth reached 64697006, errors: 0
+4.6021482e+08 states, stored (5.8657e+08 visited)
+1.5405887e+09 states, matched
+2.1271591e+09 transitions (= visited+matched)
+7.9938958e+08 atomic steps
+105156.949 MB total actual memory usage
+pan: elapsed time 734 seconds
+wall clock time 12:44.51
+maximum resident set size 107688176 kbytes
+
+Run directory:
+  mr-nvme-testing-003.ydb.yandex.net:/tmp/waker_zero_sleep_c77e4ccd_qeEXwZ

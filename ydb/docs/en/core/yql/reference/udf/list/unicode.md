@@ -56,7 +56,13 @@ Functions for Unicode strings.
 
   Calculates the Levenshtein distance for the passed strings.
 
-* `Unicode::Fold(Utf8{Flags:AutoMap}, [ Language:String?, DoLowerCase:Bool?, DoRenyxa:Bool?, DoSimpleCyr:Bool?, FillOffset:Bool? ]) -> Utf8`
+* Signature:
+
+  ```text
+  Unicode::Fold(Utf8{Flags:AutoMap},
+  [ Language:String?, DoLowerCase:Bool?, DoRenyxa:Bool?, DoSimpleCyr:Bool?,
+  FillOffset:Bool? ]) -> Utf8
+  ```
 
   Performs [case folding](https://www.w3.org/TR/charmod-norm/#definitionCaseFolding) on the passed string.
 
@@ -120,7 +126,12 @@ Functions for Unicode strings.
 
   Converts a string to UPPER, lower, or Title case.
 
-* `Unicode::SplitToList( string:Utf8?, separator:Utf8, [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<Utf8>`
+* Signature:
+
+  ```text
+  Unicode::SplitToList( string:Utf8?, separator:Utf8,
+  [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<Utf8>
+  ```
 
   Splits a string into substrings by separator.
 `string` -- Source string. `separator` -- Separator. Parameters:

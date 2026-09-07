@@ -28,7 +28,7 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         colNamesToIndices.emplace(inputColumns[i].GetFullName(), i);
     }
 
-    for (const auto& mapElement : Map->MapElements) {
+    for (const auto& mapElement : Map->GetMapElements()) {
         if (mapElement.IsRename()) {
             renameSources.insert(mapElement.GetRename());
         }
@@ -48,7 +48,7 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         outputColumns.push_back(fullName);
     }
 
-    for (const auto& mapElement : Map->MapElements) {
+    for (const auto& mapElement : Map->GetMapElements()) {
         const auto outColName = mapElement.GetElementName().GetFullName();
         if (!liveOutputs.contains(outColName)) {
             continue;

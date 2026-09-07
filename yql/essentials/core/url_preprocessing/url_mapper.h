@@ -28,7 +28,6 @@ private:
         TRegExSubst TargetUrlSubst;
     };
 
-private:
     TVector<TCustomScheme> CustomSchemes_;
 };
 

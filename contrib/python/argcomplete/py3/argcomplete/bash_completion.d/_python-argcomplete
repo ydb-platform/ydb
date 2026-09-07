@@ -145,9 +145,13 @@ _python_argcomplete_global() {
         req_argv=( "" "${COMP_WORDS[@]:1}" )
         __python_argcomplete_expand_tilde_by_ref executable
     else
-        executable="${words[1]}"
+        # Reconstruct the unshifted words array from BUFFER to handle cases where
+        # a helper completion function (like _python) has shifted the words array.
+        local -a local_words
+        local_words=( ${(z)BUFFER} )
+        executable="${local_words[1]}"
         __python_argcomplete_expand_tilde_by_ref executable
-        req_argv=( "${words[@]:1}" )
+        req_argv=( "${local_words[@]:1}" )
     fi
 
     local ARGCOMPLETE=0

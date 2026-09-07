@@ -106,7 +106,6 @@ public:
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
         TComputationContext& CompCtx_;
         const TSelf* const Self_;
         NUdf::TUnboxedValue Stream_;
@@ -142,7 +141,6 @@ public:
             return status;
         }
 
-    private:
         TComputationContext& CompCtx_;
         NUdf::TUnboxedValue SplitStream_;
         TSplitStreamValue* SplitStreamValue_;
@@ -185,7 +183,6 @@ private:
         this->Own(HandlerItemNode_);
     }
 
-private:
     IComputationNode* const Stream_;
 
     IComputationExternalNode* const KeyExtractorItemNode_;

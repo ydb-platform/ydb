@@ -15,6 +15,7 @@ PEERDIR(
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/lexer/regex
     yql/essentials/sql/v1/reflect
+    yql/essentials/sql/v1/ide/core
     yql/essentials/sql/v1/ide/completion/antlr4
     yql/essentials/sql/v1/ide/completion/core
     yql/essentials/sql/v1/ide/completion/text

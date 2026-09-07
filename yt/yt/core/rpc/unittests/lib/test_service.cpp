@@ -136,6 +136,9 @@ public:
         WriteAuthenticationIdentityToProto(response, context->GetAuthenticationIdentity());
         ToProto(response->mutable_mutation_id(), context->GetMutationId());
         response->set_retry(context->IsRetry());
+        if (const auto& header = context->GetRequestHeader(); header.has_start_time()) {
+            response->set_start_time(header.start_time());
+        }
         context->Reply();
     }
 

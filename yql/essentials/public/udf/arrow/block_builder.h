@@ -253,7 +253,6 @@ protected:
     // returns the newly allocated size in bytes
     virtual size_t DoReserve() = 0;
 
-protected:
     size_t GetCurrLen() const {
         return CurrLen_;
     }
@@ -1090,7 +1089,6 @@ private:
         return 0;
     }
 
-private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder_;
 };
 
@@ -1346,7 +1344,6 @@ private:
         return NullBuilder_->Capacity();
     }
 
-private:
     std::unique_ptr<TArrayBuilderBase> Inner_;
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder_;
 };
@@ -1534,7 +1531,6 @@ private:
         return TypeCodes_->Capacity() + ValueOffsets_->Capacity();
     }
 
-private:
     TVector<TArrayBuilderBase::Ptr> Children_;
     std::unique_ptr<TTypedBufferBuilder<i8>> TypeCodes_;
     std::unique_ptr<TTypedBufferBuilder<i32>> ValueOffsets_;

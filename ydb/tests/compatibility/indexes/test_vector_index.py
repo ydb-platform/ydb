@@ -11,14 +11,13 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
     def setup(self):
         if min(self.versions) < (25, 1):
             pytest.skip("Only available since 25-1")
-        self.rows_count = 9
+        # A two-level tree with two clusters needs enough rows in each prefix
+        # to keep both clusters populated at every level. Sparse branches are
+        # handled differently by older versions during DML.
+        self.rows_count = 12
         self.rows_per_user = 3
         self.index_name = "vector_idx"
         self.vector_dimension = 3
-        # Keep every branch of the two-level tree populated. Older versions
-        # reject DML when resolving a childless branch, while newer versions
-        # skip it, which makes the result depend on the node handling a query
-        # during a rolling upgrade.
         self.clusters = 2
         # vector type: [ data type, conversion function ]
         self.vector_types = {

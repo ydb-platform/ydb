@@ -4,6 +4,7 @@ SRCS(
     dbs_controller.cpp
     dbs_controller_actor.cpp
     dbs_controller_database.cpp
+    dbs_controller_permission.cpp
     dbs_controller_query.cpp
     dbs_controller_update_ddisk_map.cpp
     dbs_initschema.cpp

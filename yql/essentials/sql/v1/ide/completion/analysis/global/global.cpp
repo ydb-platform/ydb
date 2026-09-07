@@ -3,12 +3,13 @@
 #include "column.h"
 #include "function.h"
 #include "input.h"
-#include "named_node_resolution.h"
 #include "named_node_visibility.h"
 #include "parser.h"
 #include "use.h"
 
 #include <yql/essentials/sql/v1/ide/completion/syntax/ansi.h>
+
+#include <yql/essentials/sql/v1/ide/analysis/named_node_resolution.h>
 
 #include <library/cpp/iterator/functools.h>
 
@@ -126,7 +127,7 @@ public:
     TGlobalContext Analyze(TCompletionInput input, TEnvironment env) const override {
         TParsedInput parsed = Parser_->Parse(input);
 
-        INamedNodes::TPtr nodes = ResolveNamedNodes(parsed, env);
+        INamedNodes::TPtr nodes = ResolveNamedNodes(parsed.ParseTree, env);
 
         TGlobalContext ctx;
         ctx.Use = FindUseStatement(parsed, *nodes);

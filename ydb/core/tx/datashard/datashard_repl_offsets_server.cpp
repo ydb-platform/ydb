@@ -133,6 +133,7 @@ void TReplicationSourceOffsetsServer::ProcessRead(const TReadId& readId, TReadSt
                 ++itSplitKey;
             }
             ++itSource;
+            state.NextSplitKeyId = 0;
         }
     }
 

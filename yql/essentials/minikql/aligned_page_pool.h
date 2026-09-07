@@ -266,7 +266,6 @@ protected:
 
     void* GetPageImpl();
 
-protected:
     std::stack<void*, std::vector<void*>> FreePages_;
     std::unordered_set<void*> AllPages_;
     std::unordered_map<void*, size_t> ActiveBlocks_;

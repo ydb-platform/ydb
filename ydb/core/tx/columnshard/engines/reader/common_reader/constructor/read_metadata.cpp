@@ -61,7 +61,6 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     }
 
     StatsMode = read.StatsMode;
-    DeduplicationPolicy = read.DeduplicationPolicy;
     GroupedMemoryLimiterOperator = read.GroupedMemoryLimiterOperator;
 
     if (read.readConflictingPortions) {
@@ -93,6 +92,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 TReadMetadata::TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read)
     : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorVerified(), read.GetTabletId())
+    , DuplicateFilteringNeeded(read.NeedDuplicateFiltering())
     , TableMetadataAccessor(read.TableMetadataAccessor)
     , ReadStats(std::make_shared<TReadStats>())
 {

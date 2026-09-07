@@ -48,6 +48,10 @@ void TWorkloadCommandBuildIndex::DoConfig(TConfig& config) {
 }
 
 int TWorkloadCommandBuildIndex::DoRun() {
+    if (Params.IndexType == "None") {
+        return EXIT_SUCCESS;
+    }
+
     TStringBuilder ddlQuery;
     ddlQuery << "ALTER TABLE `" << Params.DbPath << "/" << Params.TableOpts.Name << "`\n";
     ddlQuery << "ADD INDEX `" << Params.IndexName << "`\n";

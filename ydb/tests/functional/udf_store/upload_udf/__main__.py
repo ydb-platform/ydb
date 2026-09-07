@@ -8,7 +8,8 @@ Upload:
   WASM udf / library: modules row + module_chunks
 
 Delete:
-  WASM udf: modules + module_chunks + best-effort AOT artifacts (kind=module)
+  Prefer --uid (modules PK). Also supports --md5 / --udf-file for UDF and --library-name for library.
+  WASM: modules + module_chunks + best-effort AOT artifacts (kind=module)
   library: modules + module_chunks + best-effort AOT artifacts (kind=library)
   NATIVE_UNSAFE: modules (KV orphan left; service removes on-disk copy on snapshot)
 """
@@ -283,27 +284,84 @@ def _delete_artifacts(driver, pool, database: str, artifact_id: str, kind: str) 
                 )
 
 
-def _delete_udf(driver, pool, database: str, md5: str, udf_type: str) -> None:
-    uid = _find_uid(pool, database, md5=md5)
+def _select_module_row(pool, database: str, *, uid: str = "", md5: str = "") -> dict:
+    """Return {uid, md5, name, type} for a modules row, or {} if missing."""
+    full_table = "{}/{}".format(database, UDF_TABLE_MODULES_PATH)
     if uid:
-        _delete_chunks(pool, database, uid)
-        _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "uid", uid)
+        query = (
+            "DECLARE $uid AS Utf8; "
+            "SELECT uid, md5, name, type FROM `{}` WHERE uid = $uid LIMIT 1;"
+        ).format(full_table)
+        result = pool.execute_with_retries(query, {"$uid": uid})
+    elif md5:
+        query = (
+            "DECLARE $md5 AS Utf8; "
+            "SELECT uid, md5, name, type FROM `{}` WHERE md5 = $md5 LIMIT 1;"
+        ).format(full_table)
+        result = pool.execute_with_retries(query, {"$md5": md5})
     else:
-        _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "md5", md5)
-    if udf_type == "WASM":
+        return {}
+    if not result or not result[0].rows:
+        return {}
+    values = list(result[0].rows[0].values())
+    return {
+        "uid": values[0],
+        "md5": values[1],
+        "name": values[2],
+        "type": values[3],
+    }
+
+
+def _delete_module_by_uid(driver, pool, database: str, uid: str, udf_type: str = "") -> str:
+    row = _select_module_row(pool, database, uid=uid)
+    if not row:
+        raise RuntimeError(
+            "no modules row with uid={} (already deleted or wrong --database)".format(uid)
+        )
+    module_type = row["type"] or udf_type
+    md5 = row["md5"] or ""
+    name = row["name"] or ""
+    print(
+        "[upload_udf] deleting module: uid={} md5={} name={} type={}".format(
+            uid, md5, name, module_type
+        ),
+        file=sys.stderr,
+    )
+    _delete_chunks(pool, database, uid)
+    _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "uid", uid)
+    if _select_module_row(pool, database, uid=uid):
+        raise RuntimeError("delete failed: modules row still present for uid={}".format(uid))
+    if module_type == "WASM" and md5:
         _delete_artifacts(driver, pool, database, md5, "module")
-    print("[upload_udf] deleted udf: md5={} type={}".format(md5, udf_type), file=sys.stderr)
+    elif module_type == "LIBRARY" and name:
+        _delete_artifacts(driver, pool, database, name, "library")
+    print(
+        "[upload_udf] deleted from tables: uid={}. "
+        "In-memory unload waits for UDF store metadata refresh (~10s)".format(uid),
+        file=sys.stderr,
+    )
+    return uid
+
+
+def _delete_udf(driver, pool, database: str, md5: str, udf_type: str) -> None:
+    row = _select_module_row(pool, database, md5=md5)
+    if not row:
+        raise RuntimeError(
+            "no modules row with md5={} (already deleted, wrong --database, or wrong md5). "
+            "Prefer --uid. List rows: SELECT uid, md5, name, type FROM `{}/{}`".format(
+                md5, database, UDF_TABLE_MODULES_PATH
+            )
+        )
+    _delete_module_by_uid(driver, pool, database, row["uid"], udf_type or row["type"])
 
 
 def _delete_library(driver, pool, database: str, name: str) -> None:
     uid = _find_uid(pool, database, name=name, module_type="LIBRARY")
-    if uid:
-        _delete_chunks(pool, database, uid)
-        _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "uid", uid)
-    else:
-        _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "name", name)
-    _delete_artifacts(driver, pool, database, name, "library")
-    print("[upload_udf] deleted library: name={}".format(name), file=sys.stderr)
+    if not uid:
+        raise RuntimeError(
+            "no LIBRARY modules row with name={} (already deleted or wrong --database)".format(name)
+        )
+    _delete_module_by_uid(driver, pool, database, uid, "LIBRARY")
 
 
 def _do_upload(args) -> str:
@@ -377,26 +435,25 @@ def _do_upload(args) -> str:
 
 
 def _do_delete(args) -> str:
-    if args.kind == "library":
-        if not args.library_name:
-            raise RuntimeError("--library-name is required for library delete")
-        with ydb.Driver(ydb.DriverConfig(endpoint=args.endpoint, database=args.database)) as driver:
-            driver.wait(timeout=30, fail_fast=True)
-            with ydb.QuerySessionPool(driver, size=1) as pool:
-                _delete_library(driver, pool, args.database, args.library_name)
-        return args.library_name
-
-    md5 = args.md5
-    if not md5:
-        if not args.udf_file:
-            raise RuntimeError("delete udf requires --md5 or --udf-file")
-        md5, _ = _compute_md5(args.udf_file)
-
     with ydb.Driver(ydb.DriverConfig(endpoint=args.endpoint, database=args.database)) as driver:
         driver.wait(timeout=30, fail_fast=True)
         with ydb.QuerySessionPool(driver, size=1) as pool:
+            if args.uid:
+                return _delete_module_by_uid(driver, pool, args.database, args.uid, args.type)
+
+            if args.kind == "library":
+                if not args.library_name:
+                    raise RuntimeError("--library-name is required for library delete (or pass --uid)")
+                _delete_library(driver, pool, args.database, args.library_name)
+                return args.library_name
+
+            md5 = args.md5
+            if not md5:
+                if not args.udf_file:
+                    raise RuntimeError("delete udf requires --uid, --md5, or --udf-file")
+                md5, _ = _compute_md5(args.udf_file)
             _delete_udf(driver, pool, args.database, md5, args.type)
-    return md5
+            return md5
 
 
 def main() -> int:
@@ -405,7 +462,12 @@ def main() -> int:
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--database", required=True)
     parser.add_argument("--udf-file", default="")
-    parser.add_argument("--md5", default="", help="UDF md5 for --action delete (optional if --udf-file given)")
+    parser.add_argument(
+        "--uid",
+        default="",
+        help="modules.uid (PK) for --action delete; preferred over --md5/--udf-file",
+    )
+    parser.add_argument("--md5", default="", help="UDF md5 for --action delete (optional if --uid/--udf-file given)")
     parser.add_argument("--type", default="NATIVE_UNSAFE", choices=["NATIVE_UNSAFE", "WASM"])
     parser.add_argument("--manifest", default="")
     parser.add_argument("--kind", default="udf", choices=["udf", "library"])

@@ -12,6 +12,7 @@ from typing import (
     Protocol,
     Type,
     Union,
+    overload,
 )
 
 import pytest
@@ -26,7 +27,7 @@ from .test_utils import (
     teardown_test_loop,
     unused_port as _unused_port,
 )
-from .web import Application
+from .web import Application, BaseRequest, Request
 from .web_protocol import _RequestHandler
 
 try:
@@ -36,13 +37,22 @@ except ImportError:  # pragma: no cover
 
 
 class AiohttpClient(Protocol):
-    def __call__(
+    @overload
+    async def __call__(
         self,
-        __param: Union[Application, BaseTestServer],
+        __param: Application,
         *,
         server_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs: Any
-    ) -> Awaitable[TestClient]: ...
+        **kwargs: Any,
+    ) -> TestClient[Request, Application]: ...
+    @overload
+    async def __call__(
+        self,
+        __param: BaseTestServer,
+        *,
+        server_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> TestClient[BaseRequest, None]: ...
 
 
 class AiohttpServer(Protocol):
@@ -88,7 +98,7 @@ def pytest_fixture_setup(fixturedef):  # type: ignore[no-untyped-def]
     if inspect.isasyncgenfunction(func):
         # async generator fixture
         is_async_gen = True
-    elif asyncio.iscoroutinefunction(func):
+    elif inspect.iscoroutinefunction(func):
         # regular async fixture
         is_async_gen = False
     else:
@@ -190,14 +200,14 @@ def _passthrough_loop_context(loop, fast=False):  # type: ignore[no-untyped-def]
 
 def pytest_pycollect_makeitem(collector, name, obj):  # type: ignore[no-untyped-def]
     """Fix pytest collecting for coroutines."""
-    if collector.funcnamefilter(name) and asyncio.iscoroutinefunction(obj):
+    if collector.funcnamefilter(name) and inspect.iscoroutinefunction(obj):
         return list(collector._genfunctions(name, obj))
 
 
 def pytest_pyfunc_call(pyfuncitem):  # type: ignore[no-untyped-def]
     """Run coroutines in an event loop instead of a normal function call."""
     fast = pyfuncitem.config.getoption("--aiohttp-fast")
-    if asyncio.iscoroutinefunction(pyfuncitem.function):
+    if inspect.iscoroutinefunction(pyfuncitem.function):
         existing_loop = pyfuncitem.funcargs.get(
             "proactor_loop"
         ) or pyfuncitem.funcargs.get("loop", None)
@@ -355,9 +365,7 @@ def raw_test_server(  # type: ignore[no-untyped-def]  # pragma: no cover
 
 
 @pytest.fixture
-def aiohttp_client(
-    loop: asyncio.AbstractEventLoop,
-) -> Iterator[AiohttpClient]:
+def aiohttp_client(loop: asyncio.AbstractEventLoop) -> Iterator[AiohttpClient]:
     """Factory to create a TestClient instance.
 
     aiohttp_client(app, **kwargs)
@@ -366,13 +374,28 @@ def aiohttp_client(
     """
     clients = []
 
+    @overload
+    async def go(
+        __param: Application,
+        *,
+        server_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> TestClient[Request, Application]: ...
+
+    @overload
+    async def go(
+        __param: BaseTestServer,
+        *,
+        server_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> TestClient[BaseRequest, None]: ...
+
     async def go(
         __param: Union[Application, BaseTestServer],
         *args: Any,
         server_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs: Any
-    ) -> TestClient:
-
+        **kwargs: Any,
+    ) -> TestClient[Any, Any]:
         if isinstance(__param, Callable) and not isinstance(  # type: ignore[arg-type]
             __param, (Application, BaseTestServer)
         ):

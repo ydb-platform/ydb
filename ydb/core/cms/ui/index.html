@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="cms/ext/theme.blue.css">
 
     <link rel="stylesheet" href="cms/common.css"></link>
+    <link rel="stylesheet" href="cms/nbs2_tablets.css"></link>
     <link rel="stylesheet" href="cms/cms.css"></link>
     <link rel="stylesheet" href="cms/sentinel.css"></link>
     <link rel="stylesheet" href="cms/state_storage.css"></link>
@@ -24,6 +25,7 @@
     <script language="javascript" type="text/javascript" src="cms/yaml_config.js"></script>
     <script language="javascript" type="text/javascript" src="cms/config_forms.js"></script>
     <script language="javascript" type="text/javascript" src="cms/validators.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/nbs2_tablets.js"></script>
     <script language="javascript" type="text/javascript" src="cms/cms.js"></script>
     <script data-main="cms/main" src="cms/ext/require.min.js"></script>
     <script language="javascript" type="text/javascript"  src="cms/ext/monaco-editor/vs/loader.js?v=0.27.0.2"></script>
@@ -75,6 +77,9 @@
               <circle id="state-storage-anim" cy="50%" cx="50%" r="5"></circle>
             </svg>
           </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#nbs2-tablets" data-toggle="tab">NBS 2.0 tablets</a>
         </li>
       </ul>
       <div class="tab-content" style="padding-top: 10px">
@@ -373,6 +378,49 @@
           <div id="configs-error" class="error"></div>
           <div id="configs-success" class="success"></div>
           <div id="config-items"></div>
+        </div>
+        <div id="nbs2-tablets" class="tab-pane fade">
+          <div id="nbs2-tablets-error" class="error"></div>
+          <div class="form-inline mb-2">
+            <label for="nbs2-tablets-view" class="mr-2">View</label>
+            <select id="nbs2-tablets-view" class="form-control mr-3">
+              <option value="tablets">Tablets</option>
+              <option value="ddisks">DDisk</option>
+            </select>
+            <label for="nbs2-tablets-filter" class="mr-2">Filter</label>
+            <input id="nbs2-tablets-filter" type="text" class="form-control mr-3" placeholder="Tablet or disk id">
+            <label for="nbs2-tablets-sort" class="mr-2">Sort by</label>
+            <select id="nbs2-tablets-sort" class="form-control mr-3">
+              <option value="tablet">Tablet Id</option>
+              <option value="last_changed_at">Last changed</option>
+              <option value="groups_count">Groups count</option>
+            </select>
+            <label for="nbs2-tablets-sort-desc" class="mr-2">Desc</label>
+            <input id="nbs2-tablets-sort-desc" type="checkbox" class="mr-3">
+            <label for="nbs2-tablets-problems" class="mr-2">Only problems</label>
+            <input id="nbs2-tablets-problems" type="checkbox" class="mr-2">
+            <button id="nbs2-tablets-refresh" class="btn btn-secondary ml-2">Refresh</button>
+          </div>
+          <div class="form-inline mb-2">
+            <label for="nbs2-tablets-page-size" class="mr-2">Rows per page</label>
+            <select id="nbs2-tablets-page-size" class="form-control mr-3">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button id="nbs2-tablets-prev-page" class="btn btn-outline-secondary mr-2">Prev page</button>
+            <span id="nbs2-tablets-page-info" class="mr-2">Page 1</span>
+            <button id="nbs2-tablets-next-page" class="btn btn-outline-secondary">Next page</button>
+          </div>
+          <table id="nbs2-tablets-table" class="table table-sm table-hover">
+            <thead><tr><th>Tablet</th><th>Groups</th><th>Unavailable DDisk</th><th>Unavailable Persistent Buffer</th><th>Changed</th></tr></thead>
+            <tbody id="nbs2-tablets-body"></tbody>
+          </table>
+          <table id="nbs2-ddisks-table" class="table table-sm table-hover" style="display: none">
+            <thead><tr><th>DDisk</th><th>Node</th><th>PDisk</th><th>State</th><th>Tablets</th></tr></thead>
+            <tbody id="nbs2-ddisks-body"></tbody>
+          </table>
         </div>
         <div id="validators" class="tab-pane fade">
           <div id="validators-error" class="error"></div>

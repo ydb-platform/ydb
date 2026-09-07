@@ -99,7 +99,7 @@ def describe(
                 object.__repr__,
                 type.__repr__,
             ):  # type:ignore[comparison-overlap]
-                name = "at '%s'" % hex(id(value))
+                name = f"at '{hex(id(value))}'"
                 verbose = False
             else:
                 name = repr(value)
@@ -115,7 +115,7 @@ def describe(
         return add_article(typename, False, capital)
     else:
         raise ValueError(
-            "The 'article' argument should be 'the', 'a', 'an', or None not %r" % article
+            f"The 'article' argument should be 'the', 'a', 'an', or None not {article!r}"
         )
 
 

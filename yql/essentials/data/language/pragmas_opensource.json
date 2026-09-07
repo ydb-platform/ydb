@@ -3,6 +3,9 @@
     "name": "yt.Annotations"
   },
   {
+    "name": "yt.ApplyMaxJobCountToAll"
+  },
+  {
     "name": "yt.ApplyStoredConstraints"
   },
   {
@@ -711,6 +714,9 @@
     "name": "dq.ChunkSizeLimit"
   },
   {
+    "name": "dq.Clique"
+  },
+  {
     "name": "dq.CollectCoreDumps"
   },
   {
@@ -1240,6 +1246,9 @@
   },
   {
     "name": "Udf"
+  },
+  {
+    "name": "UdfBridge"
   },
   {
     "name": "UnicodeLiterals"

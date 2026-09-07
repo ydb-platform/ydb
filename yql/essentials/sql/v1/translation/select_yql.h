@@ -13,6 +13,7 @@ struct TYqlSourceAlias {
     enum class EKind {
         Subquery,
         CTE,
+        IntoValues,
     };
 
     TPosition Position;
@@ -130,6 +131,8 @@ EYqlSetOp AllQualified(EYqlSetOp op);
 
 TNodePtr GetYqlSource(const TNodePtr& node);
 
+TSourcePtr ToTableExpression(TYqlSource source);
+
 TNodePtr ToTableExpression(TNodePtr source);
 
 TYqlSelectArgs DestructYqlSelect(TNodePtr node);
@@ -138,9 +141,9 @@ TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 
 TNodePtr BuildYqlSelf(TPosition position);
 
-TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
+TSourcePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 
-TNodePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);
+TSourcePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);
 
 TNodePtr WrapYqlSelectSubExpr(TNodePtr node);
 

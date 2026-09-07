@@ -27,6 +27,14 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
         TestWriteAndRead({.ForcePDiskFallback = true}, 1_MB);
     }
 
+    Y_UNIT_TEST(WriteAndReadWithoutChecksums_Uring) {
+        TestWriteAndReadWithoutChecksums({});
+    }
+
+    Y_UNIT_TEST(WriteAndReadWithoutChecksums_PDiskFallback) {
+        TestWriteAndReadWithoutChecksums({.ForcePDiskFallback = true});
+    }
+
     Y_UNIT_TEST(CheckVChunksArePerTablet_Uring) {
         TestCheckVChunksArePerTablet({});
     }

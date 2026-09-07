@@ -27,12 +27,15 @@ from traitlets.utils.text import indent, wrap_paragraphs
 
 from .loader import Config, DeferredConfig, LazyConfigValue, _is_section_key
 
+if t.TYPE_CHECKING:
+    from typing_extensions import Self
+
 # -----------------------------------------------------------------------------
 # Helper classes for Configurables
 # -----------------------------------------------------------------------------
 
 if t.TYPE_CHECKING:
-    LoggerType = t.Union[logging.Logger, logging.LoggerAdapter[t.Any]]
+    LoggerType = logging.Logger | logging.LoggerAdapter[t.Any]
 else:
     LoggerType = t.Any
 
@@ -82,7 +85,7 @@ class Configurable(HasTraits):
         parent = kwargs.pop("parent", None)
         if parent is not None:
             # config is implied from parent
-            if kwargs.get("config", None) is None:
+            if kwargs.get("config") is None:
                 kwargs["config"] = parent.config
             self.parent = parent
 
@@ -287,7 +290,7 @@ class Configurable(HasTraits):
             if isinstance(trait, Dict):
                 sample_value = "<key-1>=<value-1>"
             else:
-                sample_value = "<%s-item-1>" % trait.__class__.__name__.lower()
+                sample_value = f"<{trait.__class__.__name__.lower()}-item-1>"
             if multiplicity == "append":
                 header = f"{header}={sample_value}..."
             else:
@@ -305,7 +308,7 @@ class Configurable(HasTraits):
 
         if "Enum" in trait.__class__.__name__:
             # include Enum choices
-            lines.append(indent("Choices: %s" % trait.info()))
+            lines.append(indent(f"Choices: {trait.info()}"))
 
         if inst is not None:
             lines.append(indent(f"Current: {getattr(inst, trait.name or '')!r}"))
@@ -317,7 +320,7 @@ class Configurable(HasTraits):
             if dvr is not None:
                 if len(dvr) > 64:
                     dvr = dvr[:61] + "..."
-                lines.append(indent("Default: %s" % dvr))
+                lines.append(indent(f"Default: {dvr}"))
 
         return "\n".join(lines)
 
@@ -404,8 +407,8 @@ class Configurable(HasTraits):
                     lines.append(c(trait.help))
                 if "Enum" in type(trait).__name__:
                     # include Enum choices
-                    lines.append("#  Choices: %s" % trait.info())
-                lines.append("#  Default: %s" % default_repr)
+                    lines.append(f"#  Choices: {trait.info()}")
+                lines.append(f"#  Default: {default_repr}")
             else:
                 # Trait appears multiple times and isn't defined here.
                 # Truncate help to first line + "See also Original.trait"
@@ -450,7 +453,7 @@ class Configurable(HasTraits):
                     dvr = dvr[:61] + "..."
                 # Double up backslashes, so they get to the rendered docs
                 dvr = dvr.replace("\\n", "\\\\n")
-                lines.append(indent("Default: ``%s``" % dvr))
+                lines.append(indent(f"Default: ``{dvr}``"))
                 lines.append("")
 
             help = trait.help or "No description"
@@ -511,9 +514,6 @@ class LoggingConfigurable(Configurable):
         return logger.handlers[0]
 
 
-CT = t.TypeVar("CT", bound="SingletonConfigurable")
-
-
 class SingletonConfigurable(LoggingConfigurable):
     """A configurable that only allows one instance.
 
@@ -551,7 +551,7 @@ class SingletonConfigurable(LoggingConfigurable):
                 subclass._instance = None  # type:ignore[unreachable]
 
     @classmethod
-    def instance(cls: type[CT], *args: t.Any, **kwargs: t.Any) -> CT:
+    def instance(cls, *args: t.Any, **kwargs: t.Any) -> Self:
         """Returns a global instance of this class.
 
         This method create a new instance if none have previously been created

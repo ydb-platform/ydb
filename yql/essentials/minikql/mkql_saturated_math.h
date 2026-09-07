@@ -92,9 +92,9 @@ Y_FORCE_INLINE constexpr bool IsBelongToInterval(EInfBoundary infBoundary,
     Y_DEBUG_ABORT_UNLESS(NYql::NDecimal::IsComparable(b));
 
     if (infBoundary == EInfBoundary::Right) {
-        return NYql::NDecimal::IsGreaterOrEqual(x, b);
+        return NYql::NDecimal::IsGreaterOrEqual(x, b, 0);
     } else {
-        return NYql::NDecimal::IsLessOrEqual(x, b);
+        return NYql::NDecimal::IsLessOrEqual(x, b, 0);
     }
 }
 

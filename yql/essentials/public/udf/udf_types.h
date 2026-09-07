@@ -329,7 +329,6 @@ class ITypeInfoHelper1 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper1>;
 
-public:
     virtual ~ITypeInfoHelper1() = default;
 
     virtual ETypeKind GetTypeKind(const TType* type) const = 0;
@@ -371,7 +370,6 @@ class ITypeInfoHelper2: public ITypeInfoHelper1 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper2>;
 
-public:
     virtual const TPgTypeDescription* FindPgTypeDescription(ui32 typeId) const = 0;
 };
 #endif
@@ -395,7 +393,6 @@ class ITypeInfoHelper3: public ITypeInfoHelper2 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper3>;
 
-public:
     // returns nullptr if type isn't supported
     virtual IArrowType::TPtr MakeArrowType(const TType* type) const = 0;
     // The given ArrowSchema struct is released, even if this function fails.
@@ -408,7 +405,6 @@ class ITypeInfoHelper4: public ITypeInfoHelper3 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper4>;
 
-public:
     virtual ui64 GetMaxBlockLength(const TType* type) const = 0;
     virtual ui64 GetMaxBlockBytes() const = 0;
 };
@@ -419,7 +415,6 @@ class ITypeInfoHelper5: public ITypeInfoHelper4 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper5>;
 
-public:
     virtual void NotifyNotConsumedLinear(const TSourcePosition& pos) const = 0;
 };
 #endif

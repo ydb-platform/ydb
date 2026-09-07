@@ -87,9 +87,9 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
     }
 }
 
-void TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) {
+TConclusionStatus TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) {
     if (Fetching.empty()) {
-        return;
+        return TConclusionStatus::Success();
     }
     const bool hasIndex = context.GetIndexes().HasIndex(IndexMeta->GetIndexId());
     std::vector<std::vector<TString>> data;
@@ -113,6 +113,7 @@ void TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetchingResultCont
             context.GetIndexes().AddData(originalDataAddress, IndexAddressesVector[idx], data[idx]);
         }
     }
+    return TConclusionStatus::Success();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

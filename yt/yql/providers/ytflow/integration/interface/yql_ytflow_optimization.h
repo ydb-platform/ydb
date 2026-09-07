@@ -40,6 +40,23 @@ public:
         TExprContext& ctx) = 0;
 
     /**
+        Apply sort key of YtflowWriteWrap's content for its underlying provider specific
+        write callable, so that the output can be created with the very same sort key
+        Args:
+            * write - provider specific write callable
+            * sort - sort expr node
+            * ctx - expr context
+        Returns one of:
+            * empty TPtr on error
+            * original `write`, if no changes
+            * new write with applied sort key
+    */
+    virtual TExprNode::TPtr ApplySort(
+        const TExprNode::TPtr& write,
+        const TExprNode::TPtr& sort,
+        TExprContext& ctx) = 0;
+
+    /**
         Rewrite YtflowWriteWrap's underlying provider specific write callable
         Args:
             * write - provider specific write callable
@@ -66,6 +83,11 @@ public:
 
     TExprNode::TPtr ApplyUnordered(
         const TExprNode::TPtr& read,
+        TExprContext& ctx) override;
+
+    TExprNode::TPtr ApplySort(
+        const TExprNode::TPtr& write,
+        const TExprNode::TPtr& sort,
         TExprContext& ctx) override;
 
     TExprNode::TPtr TrimWriteContent(

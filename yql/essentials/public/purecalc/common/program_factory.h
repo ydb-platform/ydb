@@ -31,7 +31,6 @@ public:
     explicit TProgramFactory(const TProgramFactoryOptions&);
     ~TProgramFactory() override;
 
-public:
     void AddUdfModule(
         const TStringBuf& moduleName,
         NKikimr::NUdf::TUniquePtr<NKikimr::NUdf::IUdfModule>&& module) override;

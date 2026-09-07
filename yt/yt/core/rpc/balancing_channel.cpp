@@ -13,6 +13,8 @@
 
 #include <yt/yt/core/net/address.h>
 
+#include <yt/yt/core/misc/lazy_ptr.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -236,27 +238,25 @@ DEFINE_REFCOUNTED_TYPE(TBalancingChannelSubprovider)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelProvider
+class TBalancingChannelProviderBase
     : public IRoamingChannelProvider
 {
 public:
-    TBalancingChannelProvider(
+    TBalancingChannelProviderBase(
         TBalancingChannelConfigPtr config,
-        IChannelFactoryPtr channelFactory,
         const std::string& endpointDescription,
-        IAttributeDictionaryPtr endpointAttributes,
-        IPeerDiscoveryPtr peerDiscovery)
+        IAttributeDictionaryPtr endpointAttributes)
         : Config_(std::move(config))
-        , ChannelFactory_(std::move(channelFactory))
-        , EndpointDescription_(Format("%v%v",
-            endpointDescription,
-            Config_->Addresses))
-        , EndpointAttributes_(ConvertToAttributes(BuildYsonStringFluently()
-            .BeginMap()
-                .Item("addresses").Value(Config_->Addresses)
-                .Items(*endpointAttributes)
-            .EndMap()))
-        , PeerDiscovery_(std::move(peerDiscovery))
+        , EndpointDescription_(
+            Format("%v%v",
+                endpointDescription,
+                Config_->Addresses))
+        , EndpointAttributes_(
+            ConvertToAttributes(BuildYsonStringFluently()
+                .BeginMap()
+                    .Item("addresses").Value(Config_->Addresses)
+                    .Items(*endpointAttributes)
+                .EndMap()))
     { }
 
     const std::string& GetEndpointDescription() const override
@@ -269,16 +269,35 @@ public:
         return *EndpointAttributes_;
     }
 
+protected:
+    const TBalancingChannelConfigPtr Config_;
+    const std::string EndpointDescription_;
+    const IAttributeDictionaryPtr EndpointAttributes_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TBalancingChannelProvider
+    : public TBalancingChannelProviderBase
+{
+public:
+    TBalancingChannelProvider(
+        TBalancingChannelConfigPtr config,
+        IChannelFactoryPtr channelFactory,
+        const std::string& endpointDescription,
+        IAttributeDictionaryPtr endpointAttributes,
+        IPeerDiscoveryPtr peerDiscovery)
+        : TBalancingChannelProviderBase(
+            std::move(config),
+            endpointDescription,
+            std::move(endpointAttributes))
+        , ChannelFactory_(std::move(channelFactory))
+        , PeerDiscovery_(std::move(peerDiscovery))
+    { }
+
     TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& request) override
     {
-        if (Config_->DisableBalancingOnSingleAddress &&
-            Config_->Addresses &&
-            Config_->Addresses->size() == 1)
-        {
-            return MakeFuture(ChannelFactory_->CreateChannel((*Config_->Addresses)[0]));
-        } else {
-            return GetSubprovider(request->GetService())->GetChannel(request);
-        }
+        return GetSubprovider(request->GetService())->GetChannel(request);
     }
 
     TFuture<IChannelPtr> GetChannel(std::string serviceName) override
@@ -307,11 +326,7 @@ public:
     }
 
 private:
-    const TBalancingChannelConfigPtr Config_;
     const IChannelFactoryPtr ChannelFactory_;
-
-    const std::string EndpointDescription_;
-    const IAttributeDictionaryPtr EndpointAttributes_;
     const IPeerDiscoveryPtr PeerDiscovery_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
@@ -353,6 +368,55 @@ DEFINE_REFCOUNTED_TYPE(TBalancingChannelProvider)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TSinglePeerBalancingChannelProvider
+    : public TBalancingChannelProviderBase
+{
+public:
+    TSinglePeerBalancingChannelProvider(
+        TBalancingChannelConfigPtr config,
+        IChannelFactoryPtr channelFactory,
+        const std::string& endpointDescription,
+        IAttributeDictionaryPtr endpointAttributes)
+        : TBalancingChannelProviderBase(
+            std::move(config),
+            endpointDescription,
+            std::move(endpointAttributes))
+        , Channel_(BIND([this, channelFactory = std::move(channelFactory)] () {
+            return channelFactory->CreateChannel(Config_->Addresses->front());
+        }))
+    { }
+
+    TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& /*request*/) override
+    {
+        return GetChannel();
+    }
+
+    TFuture<IChannelPtr> GetChannel(std::string /*serviceName*/) override
+    {
+        return GetChannel();
+    }
+
+    TFuture<IChannelPtr> GetChannel() override
+    {
+        // Always create a new future since its channel can be moved via .AsUnique() call.
+        return MakeFuture(Channel_.Value());
+    }
+
+    void Terminate(const TError& error) override
+    {
+        if (Channel_.HasValue()) {
+            Channel_->Terminate(error);
+        }
+    }
+
+private:
+    const TLazyIntrusivePtr<IChannel> Channel_;
+};
+
+DEFINE_REFCOUNTED_TYPE(TSinglePeerBalancingChannelProvider)
+
+////////////////////////////////////////////////////////////////////////////////
+
 IChannelPtr CreateBalancingChannel(
     TBalancingChannelConfigPtr config,
     IChannelFactoryPtr channelFactory,
@@ -380,6 +444,17 @@ IRoamingChannelProviderPtr CreateBalancingChannelProvider(
     YT_VERIFY(config);
     YT_VERIFY(channelFactory);
     YT_VERIFY(peerDiscovery);
+
+    if (config->DisableBalancingOnSingleAddress &&
+        config->Addresses &&
+        config->Addresses->size() == 1)
+    {
+        return New<TSinglePeerBalancingChannelProvider>(
+            std::move(config),
+            std::move(channelFactory),
+            endpointDescription,
+            std::move(endpointAttributes));
+    }
 
     return New<TBalancingChannelProvider>(
         std::move(config),

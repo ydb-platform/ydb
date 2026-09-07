@@ -333,7 +333,7 @@ private:
         Ctx_.AddError(TIssue(Ctx_.GetPosition(pos), message));
     }
 
-private:
+
     TExprContext& Ctx_;
     bool HasErrors_ = false;
     TNodeMap<TUsage> Visited_;

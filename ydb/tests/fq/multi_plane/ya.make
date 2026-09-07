@@ -9,10 +9,6 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(
-    ydb/tests/tools/pq_read
-)
-
 TEST_SRCS(
     test_cp_ic.py
     test_dispatch.py

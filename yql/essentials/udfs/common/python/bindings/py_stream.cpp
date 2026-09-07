@@ -254,7 +254,6 @@ private:
         }
     }
 
-private:
     TPyCastContext::TPtr CastCtx_;
     const NUdf::TType* ItemType_;
     TPyObjectPtr PyIter_;

@@ -21,8 +21,13 @@ template <class T, class TTraits>
 auto TObjectPool<T, TTraits>::Allocate() -> TObjectPtr
 {
     T* obj = nullptr;
-    if (PooledObjects_.Dequeue(&obj)) {
+    while (PooledObjects_.Dequeue(&obj)) {
         --PoolSize_;
+        if (IsReusable(obj)) {
+            break;
+        }
+        FreeInstance(obj);
+        obj = nullptr;
     }
 
     if (!obj) {
@@ -73,6 +78,16 @@ void TObjectPool<T, TTraits>::Release(int count)
         --PoolSize_;
         FreeInstance(obj);
         --count;
+    }
+}
+
+template <class T, class TTraits>
+bool TObjectPool<T, TTraits>::IsReusable(const T* obj)
+{
+    if constexpr (requires { TTraits::IsReusable(obj); }) {
+        return TTraits::IsReusable(obj);
+    } else {
+        return true;
     }
 }
 

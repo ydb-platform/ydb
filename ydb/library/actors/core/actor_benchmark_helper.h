@@ -447,8 +447,10 @@ struct TActorBenchmark {
         ui64 MaxPairSentEvents;
     };
 
-    static auto BenchContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType, TDuration testDuration = TDuration::Zero(), ui32 inFlight = 1) {
+    static auto BenchContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType,
+            TDuration testDuration = TDuration::Zero(), ui32 inFlight = 1, bool enableWaker = false) {
         THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, false);
+        setup->CpuManager.Basic.back().EnableWaker = enableWaker;
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 

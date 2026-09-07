@@ -152,4 +152,16 @@ message TStorageServiceConfig
     // actor mailbox. Connect still uses the actor path. Falls back to the actor
     // path when no direct session is available for the destination node.
     optional bool UseDirectSessionTransport = 31;
+
+    // Defaults to true. When false, NBS does not calculate or attach per-block
+    // checksums and DDisk/PersistentBuffer ignore checksum machinery.
+    optional bool EnableChecksums = 32;
+
+    // Maximum aggregate bandwidth in megabytes per second for copying ranges
+    // within a DirectBlockGroup. 0 disables throttling.
+    optional uint32 CopyRangeBandwidthMbs = 33;
+
+    // Interval (in milliseconds) for publishing disk-level vchunk counters
+    // to Solomon. 0 disables publishing.
+    optional uint32 VChunkCountersUpdateInterval = 34;
 }

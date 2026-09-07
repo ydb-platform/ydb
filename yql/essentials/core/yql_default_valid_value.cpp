@@ -179,7 +179,7 @@ private:
         Result_ = false; // YQL_ENSURE(false, "ScalarExprType is not supported.");
     }
 
-private:
+
     const TTypeAnnotationNode* Type_;
     bool Result_ = false;
 };
@@ -493,7 +493,7 @@ private:
         YQL_ENSURE(false, "DynamicLinearExprType is not supported.");
     }
 
-private:
+
     const TTypeAnnotationNode* Type_;
     TExprContext& Ctx_;
     TExprNode::TPtr Result_ = nullptr;

@@ -1111,7 +1111,7 @@ public:
         }
     }
 
-public: // unavailable getters may be eliminated at compile time, but it'd make code much less readable
+    // unavailable getters may be eliminated at compile time, but it'd make code much less readable
     TValueEqual GetValueEqual() const {
         Y_ABORT_UNLESS(SupportEqual);
         return TValueEqual(KeyTypes_, IsTuple_, Equate_.Get());

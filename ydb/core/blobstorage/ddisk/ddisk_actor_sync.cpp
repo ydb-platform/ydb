@@ -128,10 +128,10 @@ namespace NKikimr::NDDisk {
         sync.Requests.reserve(segmentCount);
 
         auto validateSelector = [&](const TBlockSelector& selector, TStringBuf selectorName) {
-            if (selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
+            if (selector.OffsetInBytes % IntegrityUnitSize || selector.Size % IntegrityUnitSize || !selector.Size) {
                 reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     TStringBuilder() << selectorName
-                        << " offset and size must be multiple of sector size and size must be nonzero");
+                        << " offset and size must be multiple of the 4 KiB integrity unit and size must be nonzero");
                 return false;
             }
 
@@ -307,6 +307,36 @@ namespace NKikimr::NDDisk {
             return;
         }
 
+        TRope data = ev->Get()->GetPayload(0);
+        if (Config.EnableChecksums) {
+            if (!HasRequiredBlockChecksums(record.ChecksumsSize(),
+                    request.Selector.OffsetInBytes, request.Selector.Size)) {
+                SyncReadCookiesInFlight.erase(ev->Cookie);
+                request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST;
+                request.ErrorReason << "source read must return one checksum per aligned 4 KiB block";
+                sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId
+                    << "] source read has no complete checksum list; ";
+                if (--sync.RequestsInFlight == 0) {
+                    MaybeReplySync(it);
+                }
+                return;
+            }
+            if (const auto validation = ValidatePayloadChecksums(record, data)) {
+                SyncReadCookiesInFlight.erase(ev->Cookie);
+                request.Status = validation->Status;
+                request.ErrorReason << validation->ErrorReason;
+                sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId
+                    << "] source payload checksum mismatch; ";
+                if (validation->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED) {
+                    Counters.Checksums.ChecksumMismatch->Inc();
+                }
+                if (--sync.RequestsInFlight == 0) {
+                    MaybeReplySync(it);
+                }
+                return;
+            }
+        }
+
         TChunkRef& chunkRef = ChunkRefs[sync.Creds.TabletId][sync.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             // Park first: IssueChunkAllocation may place the extent synchronously from the
@@ -319,12 +349,18 @@ namespace NKikimr::NDDisk {
             return;
         }
 
+        if (Config.EnableChecksums) {
+            if (chunkRef.IntegrityExtentWriteInFlight) {
+                chunkRef.PendingSerializedWrites.emplace(ev, "WaitIntegrityExtentWrite");
+                return;
+            }
+            chunkRef.IntegrityExtentWriteInFlight = true;
+        }
+
         std::vector<TSegmentManager::TSegment> segments;
         SegmentManager.PopRequest(ev->Cookie, &segments);
         SyncReadCookiesInFlight.erase(ev->Cookie);
         Y_VERIFY(segments.size());
-
-        TRope data = ev->Get()->GetPayload(0);
 
         std::sort(segments.begin(), segments.end());
         ui64 cuttedFromData = request.Selector.OffsetInBytes;
@@ -347,22 +383,30 @@ namespace NKikimr::NDDisk {
             data.ExtractFront(end - begin, &segmentData);
             cuttedFromData = end;
 
-            // Track the written blocks at submission time. The source read result may carry
-            // per-4KiB-block checksums of the whole requested range; slice out this segment's part.
-            {
+            ui64 integrityOperationId = 0;
+            if (Config.EnableChecksums) {
                 std::vector<ui64> segmentChecksums;
                 const ui64 selectorOffset = request.Selector.OffsetInBytes;
-                if (record.ChecksumsSize() > 0 &&
-                        static_cast<ui64>(record.ChecksumsSize()) * IntegrityUnitSize == request.Selector.Size &&
-                        selectorOffset % IntegrityUnitSize == 0 &&
-                        begin % IntegrityUnitSize == 0 && end % IntegrityUnitSize == 0) {
-                    const auto& checksums = record.GetChecksums();
-                    const size_t first = (begin - selectorOffset) / IntegrityUnitSize;
-                    const size_t count = (end - begin) / IntegrityUnitSize;
-                    segmentChecksums.assign(checksums.begin() + first, checksums.begin() + first + count);
-                }
-                IntegrityManager->OnBlocksWritten({sync.Creds.TabletId, sync.VChunkIndex},
-                    static_cast<ui32>(begin), static_cast<ui32>(end - begin), segmentChecksums);
+                Y_ABORT_UNLESS(selectorOffset % IntegrityUnitSize == 0
+                    && begin % IntegrityUnitSize == 0 && end % IntegrityUnitSize == 0);
+                const auto& checksums = record.GetChecksums();
+                const size_t first = (begin - selectorOffset) / IntegrityUnitSize;
+                const size_t count = (end - begin) / IntegrityUnitSize;
+                segmentChecksums.assign(checksums.begin() + first, checksums.begin() + first + count);
+                integrityOperationId = IntegrityManager->BeginBlocksWrite(
+                    {sync.Creds.TabletId, sync.VChunkIndex}, static_cast<ui32>(begin),
+                    static_cast<ui32>(end - begin), segmentChecksums);
+                const bool inserted = PendingSyncSegments.emplace(integrityOperationId, TPendingSyncSegment{
+                    .SyncId = syncId,
+                    .RequestId = ev->Cookie,
+                    .Begin = begin,
+                    .End = end,
+                }).second;
+                Y_ABORT_UNLESS(inserted);
+                // Keep metadata ahead of data on both uring and PDisk-fallback paths. The client still
+                // waits for both completions, but fallback consumers cannot strand a later pair write
+                // while waiting for the sync result.
+                DrainIntegrityManager();
             }
 
             auto diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, begin);
@@ -371,6 +415,7 @@ namespace NKikimr::NDDisk {
             syncWriteOp->SetSyncId(syncId);
             syncWriteOp->SetRequestId(ev->Cookie);
             syncWriteOp->SetSegment(begin, end);
+            syncWriteOp->SetIntegrityOperationId(integrityOperationId);
             syncWriteOp->PrepareWrite(std::move(segmentData), diskOffset, chunkRef.ChunkIdx, begin);
 
             DirectUringOp(op);
@@ -386,36 +431,79 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvPrivate::TEvInternalSyncWriteResult::TPtr ev) {
-        auto it = SyncsInFlight.find(ev->Get()->SyncId);
+        if (!Config.EnableChecksums) {
+            FinishSyncSegment(TPendingSyncSegment{
+                .SyncId = ev->Get()->SyncId,
+                .RequestId = ev->Get()->RequestId,
+                .Begin = ev->Get()->SegmentBegin,
+                .End = ev->Get()->SegmentEnd,
+                .DataCompleted = true,
+                .IntegrityCompleted = true,
+                .DataStatus = ev->Get()->Status,
+                .DataError = std::move(ev->Get()->ErrorMessage),
+            });
+            return;
+        }
+
+        const auto segmentIt = PendingSyncSegments.find(ev->Get()->IntegrityOperationId);
+        if (segmentIt == PendingSyncSegments.end()) {
+            return;
+        }
+        segmentIt->second.DataCompleted = true;
+        segmentIt->second.DataStatus = ev->Get()->Status;
+        segmentIt->second.DataError = std::move(ev->Get()->ErrorMessage);
+        MaybeFinishSyncSegment(ev->Get()->IntegrityOperationId);
+    }
+
+    void TDDiskActor::MaybeFinishSyncSegment(ui64 integrityOperationId) {
+        const auto segmentIt = PendingSyncSegments.find(integrityOperationId);
+        if (segmentIt == PendingSyncSegments.end() || !segmentIt->second.DataCompleted
+                || !segmentIt->second.IntegrityCompleted) {
+            return;
+        }
+        TPendingSyncSegment segment = std::move(segmentIt->second);
+        PendingSyncSegments.erase(segmentIt);
+        FinishSyncSegment(std::move(segment));
+    }
+
+    void TDDiskActor::FinishSyncSegment(TPendingSyncSegment segment) {
+        auto it = SyncsInFlight.find(segment.SyncId);
         if (it == SyncsInFlight.end()) {
             return;
         }
         auto& sync = it->second;
 
-        const ui64 requestId = ev->Get()->RequestId;
+        const ui64 requestId = segment.RequestId;
         if (requestId < sync.FirstRequestId || requestId >= sync.FirstRequestId + sync.Requests.size()) {
             return;
         }
         auto& request = sync.Requests[requestId - sync.FirstRequestId];
 
-        if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
-            return;
+        NKikimrBlobStorage::NDDisk::TReplyStatus::E status = segment.DataStatus;
+        TString errorReason = std::move(segment.DataError);
+        if (status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                && segment.IntegrityStatus == TIntegrityManager::EOperationStatus::Corrupted) {
+            status = NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
+            errorReason = std::move(segment.IntegrityError);
         }
 
-        const ui64 begin = ev->Get()->SegmentBegin;
-        const ui64 end = ev->Get()->SegmentEnd;
-        if (ev->Get()->Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-            request.ErrorReason << "[" << begin << ";" << end << ") failed to write; reason: " << ev->Get()->ErrorMessage << "; ";
+        if (status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                && request.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+            request.Status = status;
+            request.ErrorReason << "[" << segment.Begin << ";" << segment.End
+                << ") failed to write; reason: " << errorReason << "; ";
             sync.ErrorReason << "[request_idx=" << requestId - sync.FirstRequestId << "] failed to write; ";
-            if (--sync.RequestsInFlight == 0) {
-                MaybeReplySync(it);
-            }
-            return;
         }
 
+        Y_ABORT_UNLESS(request.SegmentsInFlight > 0);
         if (--request.SegmentsInFlight == 0) {
-            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+            if (request.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+                request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+            }
+            if (Config.EnableChecksums) {
+                ReleaseIntegrityExtentWrite(
+                    sync.Creds.TabletId, sync.VChunkIndex);
+            }
             if (--sync.RequestsInFlight == 0) {
                 MaybeReplySync(it);
             }

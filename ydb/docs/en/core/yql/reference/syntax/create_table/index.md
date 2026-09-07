@@ -342,7 +342,6 @@ When creating row tables, you can specify:
 When creating column tables, you can specify:
 
 * [Bloom index](bloom_skip_index.md).
-* [Column groups](family.md).
 * [Additional parameters](with.md).
 * [Creating and populating a table based on query results](as_select.md).
 

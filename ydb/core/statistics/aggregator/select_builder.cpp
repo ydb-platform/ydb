@@ -79,7 +79,10 @@ TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> table
         if (agg.UdafFactory) {
             res << "AGGREGATE_BY(";
             if (agg.TupleColumnNames) {
-                res << "StablePickle(AsTuple(";
+                res << (agg.TupleEncoding == ETupleEncoding::PresortKey
+                            ? "Udf(StatisticsInternal::PresortKey)"
+                            : "StablePickle")
+                    << "(AsTuple(";
                 bool firstCol = true;
                 for (const auto& columnName : *agg.TupleColumnNames) {
                     if (firstCol) {

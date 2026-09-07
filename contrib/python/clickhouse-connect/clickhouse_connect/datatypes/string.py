@@ -128,6 +128,9 @@ class FixedString(ClickHouseType):
                     ext(b)
         else:
             for b in column:
-                if len(b) != sz:
+                if len(b) == sz:
+                    ext(b)
+                elif not b:
+                    ext(empty)
+                else:
                     raise ctx.data_error(f"Fixed String binary value {b.hex(' ')} does not match column size {sz}")
-                ext(b)

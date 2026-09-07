@@ -100,13 +100,17 @@ void TLoader::StageParseMeta()
             }
         }
 
-        if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() && FlatGroupIndexes) {
-            BTreeGroupIndexes.clear();
-            BTreeHistoricIndexes.clear();
-        }
-        if (!AppData()->FeatureFlags.GetEnableLocalDBFlatIndex() && BTreeGroupIndexes) {
-            FlatGroupIndexes.clear();
-            FlatHistoricIndexes.clear();
+        // Offline readers of a page collection have no feature flags to consult, and then whatever
+        // index the part holds is kept.
+        if (HasAppData()) {
+            if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() && FlatGroupIndexes) {
+                BTreeGroupIndexes.clear();
+                BTreeHistoricIndexes.clear();
+            }
+            if (!AppData()->FeatureFlags.GetEnableLocalDBFlatIndex() && BTreeGroupIndexes) {
+                FlatGroupIndexes.clear();
+                FlatHistoricIndexes.clear();
+            }
         }
 
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */

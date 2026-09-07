@@ -50,6 +50,19 @@ bool TBlockRangeField::Add(TBlockRange64 range)
     return erasedCount != 1 || merged != firstErased;
 }
 
+bool TBlockRangeField::Add(const TBlockRangeField& field)
+{
+    if (this == &field) {
+        return false;
+    }
+
+    bool changed = false;
+    for (const auto& range: field.Intervals) {
+        changed |= Add(range);
+    }
+    return changed;
+}
+
 bool TBlockRangeField::Remove(TBlockRange64 range)
 {
     if (Intervals.empty()) {
@@ -90,6 +103,19 @@ bool TBlockRangeField::Remove(TBlockRange64 range)
     return changed;
 }
 
+bool TBlockRangeField::Remove(const TBlockRangeField& field)
+{
+    if (this == &field) {
+        return Clear();
+    }
+
+    bool changed = false;
+    for (const auto& range: field.Intervals) {
+        changed |= Remove(range);
+    }
+    return changed;
+}
+
 bool TBlockRangeField::Clear()
 {
     const bool changed = !Intervals.empty();
@@ -112,6 +138,26 @@ bool TBlockRangeField::Overlaps(TBlockRange64 other) const
     }
 
     return it->Overlaps(other);
+}
+
+bool TBlockRangeField::Overlaps(const TBlockRangeField& other) const
+{
+    // Disjoint intervals are ordered by both Start and End, so advance the
+    // interval that lies entirely before the other one.
+    auto left = Intervals.begin();
+    auto right = other.Intervals.begin();
+
+    while (left != Intervals.end() && right != other.Intervals.end()) {
+        if (left->End < right->Start) {
+            ++left;
+        } else if (right->End < left->Start) {
+            ++right;
+        } else {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void TBlockRangeField::Enumerate(TEnumerateFunc func) const

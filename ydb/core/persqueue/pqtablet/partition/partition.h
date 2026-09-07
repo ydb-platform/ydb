@@ -1175,6 +1175,8 @@ private:
     void ProcessPendingEvents(const TActorContext& ctx);
 
     TRowVersion LastEmittedHeartbeat;
+    TRowVersion LastEmittedSchemaChange;
+    TMessageQueue PendingSchemaChangeResponses;
 
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 

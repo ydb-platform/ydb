@@ -2,6 +2,8 @@
 
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -134,7 +136,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                     continue;
                 }
 
-                const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(EConvertDynamicTablesToStatic::Disable);
+                const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(
+                    IsAvailableLangVersion(NFeature::ConvertDynamicTablesToStaticBeforeJoin.MinLangVer, State_->Types->LangVer) ? EConvertDynamicTablesToStatic::Join : EConvertDynamicTablesToStatic::Disable
+                );
+
                 const auto keepMergeWithDynamicInput = State_->Configuration->KeepMergeWithDynamicInput.Get().GetOrElse(false);
                 if (keepMergeWithDynamicInput || convertDynamicTablesToStatic != EConvertDynamicTablesToStatic::Disable) {
                     if (AnyOf(innerMergeSection.Paths(), [](TYtPath path) {
@@ -634,7 +639,9 @@ template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamic
 
 template <class TNodeType>
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic(TExprBase node, TExprContext& ctx) const {
-    const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(EConvertDynamicTablesToStatic::Disable);
+    const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(
+        IsAvailableLangVersion(NFeature::ConvertDynamicTablesToStaticBeforeJoin.MinLangVer, State_->Types->LangVer) ? EConvertDynamicTablesToStatic::Join : EConvertDynamicTablesToStatic::Disable
+    );
     if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Disable) {
         return node;
     } else if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Join

@@ -341,6 +341,10 @@ public:
         return Record.GetRequest().GetCollectDiagnostics();
     }
 
+    bool GetCollectAffectedRows() const {
+        return Record.GetRequest().GetCollectAffectedRows();
+    }
+
     ui32 CalculateSerializedSize() const override {
         PrepareRemote();
         return Record.ByteSize();
@@ -469,14 +473,6 @@ public:
         QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
     }
 
-    void SetGeneration(i64 generation) {
-        Generation = generation;
-    }
-
-    i64 GetGeneration() const {
-        return Generation;
-    }
-
     void SetDisableDefaultTimeout(bool disableDefaultTimeout) {
         DisableDefaultTimeout = disableDefaultTimeout;
     }
@@ -519,7 +515,6 @@ private:
     std::optional<NFormats::TArrowFormatSettings> ArrowFormatSettings;
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
-    i64 Generation = 0;
     bool DisableDefaultTimeout = false;
     std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
     std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;

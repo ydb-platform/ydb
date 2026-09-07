@@ -111,6 +111,7 @@ public:
     TMap<ui32, TVector<TVector<TStringPair>>> RunsByInFlight; // Runs grouped by InFlight
     TMap<ui32, TVector<TSpeedAndIops>> SpeedAndIopsByInFlight; // Speed/IOPS grouped by InFlight
     bool HeaderPrinted = false;
+    TVector<ui32> HumanColumnWidths; // sticky widths for one human-format table
     bool SkipStatistics_ = false;
     NJson::TJsonWriter JsonWriter;
 
@@ -186,7 +187,8 @@ public:
 
     void PrintResultsHumanFormatSingleRow(const TVector<TStringPair>& row, const TVector<ui32>& columnWidths) {
         TEST_COUT("|");
-        for (size_t i = 0; i < row.size(); ++i) {
+        const size_t n = std::min(row.size(), columnWidths.size());
+        for (size_t i = 0; i < n; ++i) {
             const auto& value = row[i].Value;
             ui32 width = columnWidths[i];
             TEST_COUT(std::format(" {:>{}.{}} |", value.c_str(), width, width));
@@ -194,35 +196,59 @@ public:
         TEST_COUT_LN("");
     }
 
-    TVector<ui32> CalculateColumnWidths(const TVector<TStringPair>& row) const {
+    // Human format prints a header on the first row and keeps streaming later rows
+    // (e.g. --inflight-from/--inflight-to). Widths are therefore fixed at header time.
+    // Speed/IOPS/percentiles grow across an inflight sweep, so give them a floor that
+    // fits typical NVMe numbers instead of sizing the header from the first (smallest) row.
+    static ui32 HumanColumnWidthFloor(const TString& name) {
+        if (name == "Speed") {
+            return 12; // "12345.6 MB/s"
+        }
+        if (name == "IOPS") {
+            return 8;
+        }
+        if (name.size() >= 2 && name[0] == 'p' && name[1] >= '0' && name[1] <= '9') {
+            return 8; // "12345 us"
+        }
+        return 0;
+    }
+
+    static ui32 MaxHumanColumnWidth(size_t numCols) {
         const ui32 screenWidth = 250;
-        const ui32 maxColumnWidthLimit = row.size() > 0 ? screenWidth / row.size() - 3 : 10;
+        return numCols > 0 ? screenWidth / numCols - 3 : 10;
+    }
+
+    TVector<ui32> CalculateColumnWidths(const TVector<TStringPair>& row) const {
+        const ui32 maxColumnWidthLimit = MaxHumanColumnWidth(row.size());
 
         TVector<ui32> columnWidths;
         columnWidths.reserve(row.size());
         for (const auto& counter : row) {
-            ui32 maxWidth = std::max(counter.Name.size(), counter.Value.size());
-            columnWidths.push_back(std::min<ui32>(maxWidth, maxColumnWidthLimit));
+            ui32 maxWidth = std::max({
+                static_cast<ui32>(counter.Name.size()),
+                static_cast<ui32>(counter.Value.size()),
+                HumanColumnWidthFloor(counter.Name),
+            });
+            columnWidths.push_back(std::min(maxWidth, maxColumnWidthLimit));
         }
         return columnWidths;
     }
 
     void PrintResultsHumanFormat() {
-        TVector<ui32> columnWidths = CalculateColumnWidths(Results);
-
         if (!HeaderPrinted) {
             HeaderPrinted = true;
+            HumanColumnWidths = CalculateColumnWidths(Results);
             PrintGlobalParams();
             TEST_COUT("|");
             for (size_t i = 0; i < Results.size(); ++i) {
                 const auto& name = Results[i].Name;
-                ui32 width = columnWidths[i];
+                ui32 width = HumanColumnWidths[i];
                 TEST_COUT(std::format(" {:>{}.{}} |", name.c_str(), width, width));
             }
             TEST_COUT_LN("");
         }
 
-        PrintResultsHumanFormatSingleRow(Results, columnWidths);
+        PrintResultsHumanFormatSingleRow(Results, HumanColumnWidths);
     }
 
     void PrintResultsJsonFormat() {
@@ -352,15 +378,18 @@ public:
             return {};
         }
 
-        const ui32 screenWidth = 250;
         size_t numCols = allRows[0].size();
-        const ui32 maxColumnWidthLimit = numCols > 0 ? screenWidth / numCols - 3 : 10;
+        const ui32 maxColumnWidthLimit = MaxHumanColumnWidth(numCols);
 
         TVector<ui32> columnWidths(numCols, 0);
 
-        // First pass: consider header names
+        // First pass: consider header names and per-column floors
         for (size_t i = 0; i < numCols; ++i) {
-            columnWidths[i] = std::max(columnWidths[i], static_cast<ui32>(allRows[0][i].Name.size()));
+            columnWidths[i] = std::max({
+                columnWidths[i],
+                static_cast<ui32>(allRows[0][i].Name.size()),
+                HumanColumnWidthFloor(allRows[0][i].Name),
+            });
         }
 
         // Consider all row values
@@ -563,6 +592,7 @@ public:
                 JsonWriter.Flush();
             }
             HeaderPrinted = false;
+            HumanColumnWidths.clear();
             PrintResults();
         } else {
             // Print all runs with statistics
@@ -572,6 +602,7 @@ public:
             }
             // Note: JSON for multiple runs uses NJson::WriteJson in PrintAllRunsStructuredJson()
             HeaderPrinted = false;
+            HumanColumnWidths.clear();
         }
     }
 
@@ -601,6 +632,10 @@ struct TPerfTestConfig {
     ui32 InFlightTo = 0;
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // SectorMaps[0] alias
     bool DisablePDiskDataEncryption;
+    bool DisableDDiskChecksums;
+    bool ForcePDiskFallback;
+    // Used as both the maximum and initial PB chunk count by DDisk-based tests.
+    ui32 PersistentBufferChunks = 512;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
@@ -641,16 +676,20 @@ struct TPerfTestConfig {
             const TString monPort, bool doLockFile, const TString runCountStr = "1",
             const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
             bool disablePDiskDataEncryption = false,
+            bool disableDDiskChecksums = false,
+            bool forcePDiskFallback = false,
             NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN)
         : TPerfTestConfig(TVector<TString>{path}, name, type, outputFormatName,
                 monPort, doLockFile, runCountStr, inFlightFromStr, inFlightToStr,
-                disablePDiskDataEncryption, logLevel)
+                disablePDiskDataEncryption, disableDDiskChecksums, forcePDiskFallback, logLevel)
     {}
 
     TPerfTestConfig(const TVector<TString>& paths, const TString name, const TString type, const TString outputFormatName,
             const TString monPort, bool doLockFile, const TString runCountStr = "1",
             const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
             bool disablePDiskDataEncryption = false,
+            bool disableDDiskChecksums = false,
+            bool forcePDiskFallback = false,
             NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN)
         : Paths(paths)
         , Path(paths.at(0))
@@ -661,6 +700,8 @@ struct TPerfTestConfig {
         , InFlightFrom(std::strtol(inFlightFromStr.c_str(), nullptr, 10))
         , InFlightTo(std::strtol(inFlightToStr.c_str(), nullptr, 10))
         , DisablePDiskDataEncryption(disablePDiskDataEncryption)
+        , DisableDDiskChecksums(disableDDiskChecksums)
+        , ForcePDiskFallback(forcePDiskFallback)
         , LogLevel(logLevel)
     {
         auto it_type = DeviceStrToType.find(type);

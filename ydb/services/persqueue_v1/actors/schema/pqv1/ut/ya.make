@@ -8,6 +8,7 @@ SRCS(
     alter_topic_sdk_ut.cpp
     create_topic_ut.cpp
     create_topic_sdk_ut.cpp
+    describe_topic_sdk_ut.cpp
     pqv1_sdk_test_utils.cpp
     schema_ops_ut.cpp
 )

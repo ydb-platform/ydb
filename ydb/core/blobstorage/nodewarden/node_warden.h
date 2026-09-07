@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <util/folder/path.h>
+#include <util/generic/vector.h>
 
 namespace NKikimrConfig {
 
@@ -67,6 +68,7 @@ namespace NKikimr {
 
         std::optional<NYdb::NBS::NProto::TDDiskConfig> DDiskConfig;
         std::optional<NYdb::NBS::NProto::TPBufferConfig> PBufferConfig;
+        TVector<ui32> BlobStorageExecutorPoolIds;
 
         std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 

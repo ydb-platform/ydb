@@ -107,7 +107,8 @@ public:
 private:
     void Do(TComputationContext& ctx, NUdf::TUnboxedValuePod* begin, NUdf::TUnboxedValuePod* end) const {
         if (ctx.ExecuteLLVM && Comparator_) {
-            return Algorithm_(begin, end, std::bind(Comparator_, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+            Algorithm_(begin, end, std::bind(Comparator_, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+            return;
         }
 
         TArgsPlace args;
@@ -280,7 +281,8 @@ public:
 private:
     void Do(TComputationContext& ctx, NUdf::TUnboxedValuePod* begin, NUdf::TUnboxedValuePod* nth, NUdf::TUnboxedValuePod* end) const {
         if (ctx.ExecuteLLVM && Comparator_) {
-            return Algorithm_(begin, nth, end, std::bind(Comparator_, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+            Algorithm_(begin, nth, end, std::bind(Comparator_, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+            return;
         }
 
         TArgsPlace args;

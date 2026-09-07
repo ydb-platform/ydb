@@ -39,7 +39,9 @@ struct TOut<T> {
         };
 
         bool isFirst = true;
-        R.ForEachFieldValue(value, [&]<auto k>(const auto& value) {
+        R.ForEachFieldValue(value, [&]<size_t Index, auto k>(const auto& value) {
+            Y_UNUSED(Index);
+
             using TValue = std::remove_cvref_t<decltype(value)>;
 
             if (!isFirst) {

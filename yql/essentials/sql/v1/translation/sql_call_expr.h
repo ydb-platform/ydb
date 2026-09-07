@@ -69,7 +69,6 @@ private:
     TSQLStatus FillArg(const TString& module, const TString& func, size_t& idx, const TRule_named_expr& node);
     TSQLStatus FillArgs(const TRule_named_expr_list& node);
 
-private:
     TPosition Pos_;
     TString Func_;
     TString Module_;

@@ -1275,10 +1275,12 @@ void THttpRawClient::InitPingClient() {
     if (Context_.UseTLS) {
         auto httpsClientConfig = NYT::New<NHttps::TClientConfig>();
         httpsClientConfig->MaxIdleConnections = 16;
+        httpsClientConfig->DnsResolveOptions = GetDnsResolveOptions(Context_.Config);
         PingHttpClient_ = NHttps::CreateClient(std::move(httpsClientConfig), std::move(httpPoller));
     } else {
         auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
         httpClientConfig->MaxIdleConnections = 16;
+        httpClientConfig->DnsResolveOptions = GetDnsResolveOptions(Context_.Config);
         PingHttpClient_ = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
     }
 }

@@ -80,6 +80,14 @@ namespace NKikimr::NPQ::NMLP {
         return update;
     }
 
+    bool TChildPartitionsOrderManager::SetSendFullStateByPartitionId(ui32 partitionId, ESendReasons reason) {
+        auto it = ChildrenPartitionWithKeepOrder.find(partitionId);
+        if (it == ChildrenPartitionWithKeepOrder.end()) {
+            return false;
+        }
+        return it->second.AddSendFullStateReason(reason);
+    }
+
     TString TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::SendFullStateReasonsAsString() const {
         return SendReasonsToString(SendReasons.Reasons);
     }

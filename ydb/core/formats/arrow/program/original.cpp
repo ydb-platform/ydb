@@ -93,7 +93,10 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnAccessorProcess
             if (!source) {
                 return TConclusionStatus::Fail("source was destroyed before (original assemble start)");
             }
-            source->AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
+            auto conclusion = source->AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
         }
     }
     return EExecutionResult::Success;

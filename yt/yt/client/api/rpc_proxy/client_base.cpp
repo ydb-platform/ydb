@@ -8,10 +8,12 @@
 #include "journal_reader.h"
 #include "journal_writer.h"
 #include "private.h"
+#include "request_info.h"
 #include "table_reader.h"
 #include "table_writer.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/distributed_file_session.h>
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
@@ -20,8 +22,6 @@
 #include <yt/yt/client/api/rowset.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
-
-#include <yt/yt/client/rpc/request_info.h>
 
 #include <yt/yt/client/signature/signature.h>
 
@@ -704,6 +704,8 @@ TFuture<IFileReaderPtr> TClientBase::CreateFileReader(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
+    SetReadFileRequestInfo(req, *req);
+
     return NRpcProxy::CreateFileReader(std::move(req));
 }
 
@@ -724,6 +726,8 @@ IFileWriterPtr TClientBase::CreateFileWriter(
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
+
+    SetWriteFileRequestInfo(req, path, *req);
 
     return NRpcProxy::CreateFileWriter(std::move(req));
 }
@@ -790,10 +794,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
 
     FillRequest(req.Get(), path, /*format*/ std::nullopt, options);
 
-    SetReadTableRequestInfo(
-        req,
-        path,
-        *req);
+    SetReadTableRequestInfo(req, path, *req);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -816,6 +817,8 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
     }
 
     ToProto(req->mutable_transactional_options(), options);
+
+    SetWriteTableRequestInfo(req, path);
 
     auto schema = New<TTableSchema>();
     return NRpc::CreateRpcClientOutputStream(
@@ -846,6 +849,8 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
     auto req = proxy.StartDistributedWriteSession();
     FillRequest(req.Get(), path, options);
 
+    SetStartDistributedWriteSessionRequestInfo(req, path);
+
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke()
@@ -872,6 +877,8 @@ TFuture<void> TClientBase::PingDistributedWriteSession(
 
     FillRequest(req.Get(), session, options);
 
+    SetPingDistributedWriteSessionRequestInfo(req, session);
+
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().AsVoid();
@@ -886,6 +893,8 @@ TFuture<void> TClientBase::FinishDistributedWriteSession(
     auto req = proxy.FinishDistributedWriteSession();
 
     FillRequest(req.Get(), sessionWithResults, options);
+
+    SetFinishDistributedWriteSessionRequestInfo(req, sessionWithResults.Session);
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
@@ -904,6 +913,8 @@ TFuture<TDistributedWriteFileSessionWithCookies> TClientBase::StartDistributedWr
 
     auto req = proxy.StartDistributedWriteFileSession();
     FillRequest(req.Get(), path, options);
+
+    SetStartDistributedWriteFileSessionRequestInfo(req, path);
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
@@ -931,6 +942,8 @@ TFuture<void> TClientBase::PingDistributedWriteFileSession(
 
     FillRequest(req.Get(), session, options);
 
+    SetPingDistributedWriteFileSessionRequestInfo(req, session);
+
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().AsVoid();
@@ -945,6 +958,8 @@ TFuture<void> TClientBase::FinishDistributedWriteFileSession(
     auto req = proxy.FinishDistributedWriteFileSession();
 
     FillRequest(req.Get(), session, options);
+
+    SetFinishDistributedWriteFileSessionRequestInfo(req, session.Session);
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 

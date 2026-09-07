@@ -209,12 +209,11 @@ static constexpr char ReferencePrefix = '$';
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TSkiffSchemaRepresentation)
+DECLARE_REFCOUNTED_STRUCT(TSkiffSchemaRepresentation)
 
-class TSkiffSchemaRepresentation
+struct TSkiffSchemaRepresentation
     : public TYsonStruct
 {
-public:
     TString Name;
     EWireType WireType;
     std::optional<std::vector<INodePtr>> Children;

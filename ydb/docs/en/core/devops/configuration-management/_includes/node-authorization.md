@@ -1,5 +1,3 @@
-# Database Node Authentication and Authorization
-
 Database node authentication in a {{ ydb-short-name }} cluster ensures verification of database node authenticity when making service calls to other nodes via the gRPC protocol. Node authorization ensures verification and provision of necessary permissions when processing service calls, including operations for registering starting nodes in the cluster and accessing [configuration](../configuration-v2/config-overview.md). Using database node authentication and authorization is recommended for all {{ ydb-short-name }} clusters, as it helps avoid situations of unauthorized data access through the inclusion of attacker-controlled nodes in the cluster.
 
 Database node authentication and authorization is performed in the following order:

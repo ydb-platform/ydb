@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxCreateReplication: public TTxBase {
@@ -19,7 +21,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", Ev->Get()->ToString()});
 
         auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvController::TEvCreateReplicationResult>();
@@ -28,8 +32,8 @@ public:
 
         const auto pathId = TPathId::FromProto(record.GetPathId());
         if (Self->Find(pathId)) {
-            CLOG_W(ctx, "Replication already exists"
-                << ": pathId# " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Replication already exists",
+                {"pathId", pathId});
 
             Result->Record.SetStatus(NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS);
             return true;
@@ -38,9 +42,9 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         const auto rid = Self->SysParams.AllocateReplicationId(db);
-        CLOG_N(ctx, "Add replication"
-            << ": rid# " << rid
-            << ", pathId# " << pathId);
+        YDB_LOG_NOTICE_CTX(ctx, "Add replication",
+            {"rid", rid},
+            {"pathId", pathId});
 
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::PathOwnerId>(pathId.OwnerId),
@@ -58,7 +62,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
@@ -68,7 +73,8 @@ public:
             const auto& tenant = Replication->GetDatabase();
             Y_ABORT_UNLESS(tenant);
             if (!Self->NodesManager.HasTenant(tenant)) {
-                CLOG_I(ctx, "Discover tenant nodes: tenant# " << tenant);
+                YDB_LOG_INFO_CTX(ctx, "Discover tenant nodes",
+                    {"tenant", tenant});
                 Self->NodesManager.DiscoverNodes(tenant, Self->DiscoveryCache, ctx);
             }
 

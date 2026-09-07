@@ -48,6 +48,7 @@ namespace NKikimr::NPQ::NMLP {
         bool Empty() const;
         bool SetSendFullStateToAll(ESendReasons reason, ui64 inflightMessagesCount);
         bool SetSendFullStateByCookie(ui32 cookie, ESendReasons reason);
+        bool SetSendFullStateByPartitionId(ui32 partitionId, ESendReasons reason);
 
         static TString SendReasonsToString(ESendReasons reason);
 

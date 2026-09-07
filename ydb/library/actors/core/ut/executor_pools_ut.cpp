@@ -220,6 +220,17 @@ void TieBasicPoolsAndSharedPool(const std::vector<std::unique_ptr<TBasicExecutor
 
 Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
+    Y_UNIT_TEST(SharedPoolReportsUnitedMode) {
+        for (const bool united : {false, true}) {
+            TSharedExecutorPoolConfig config;
+            config.United = united;
+
+            const TSharedExecutorPool sharedPool(config, {});
+
+            UNIT_ASSERT_VALUES_EQUAL(sharedPool.IsUnited(), united);
+        }
+    }
+
     Y_UNIT_TEST(ReceiveActivationForEachRevolvingCounter) {
         std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
             .Threads = 1

@@ -274,7 +274,8 @@ NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const T
     }
 }
 
-void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
+void TBlobStorageController::OnActivateExecutor(const TActorContext& ctx) {
+    Y_UNUSED(ctx);
     StartConsoleInteraction();
 
     // create stat processor
@@ -969,6 +970,22 @@ void TBlobStorageController::ValidateInternalState() {
 #endif
 }
 
+void TBlobStorageController::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+    ConsoleInteraction->Handle(ev);
+}
+
+void TBlobStorageController::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+    if (ev->Get()->ClientId == CmsPipe) {
+        // The CMS pipe actor has died (e.g. exhausted its retry policy after
+        // a CMS tablet restart). Drop the stale actor id so that the next
+        // revision-change notification recreates the pipe instead of
+        // silently sending data to a dead actor forever.
+        CmsPipe = TActorId();
+        return;
+    }
+    ConsoleInteraction->Handle(ev);
+}
+
 STFUNC(TBlobStorageController::StateWork) {
     const ui32 type = ev->GetTypeRewrite();
     THPTimer timer;
@@ -1013,8 +1030,8 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerReplaceConfigRequest, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerFetchConfigRequest, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, ConsoleInteraction->Handle);
-        hFunc(TEvTabletPipe::TEvClientConnected, ConsoleInteraction->Handle);
-        hFunc(TEvTabletPipe::TEvClientDestroyed, ConsoleInteraction->Handle);
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerDistconfRequest, Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
@@ -1023,6 +1040,8 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
+        hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);
+        hFunc(TEvBlobStorage::TEvControllerDDiskInfoGetTablet, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_ERROR("StateWork unexpected event",
@@ -1063,6 +1082,9 @@ void TBlobStorageController::PassAway() {
         if (const auto& actorId = info.VirtualGroupSetupMachineId) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
+    }
+    if (CmsPipe) {
+        NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe);
     }
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, GetNameserviceActorId(), SelfId(),
         nullptr, 0));

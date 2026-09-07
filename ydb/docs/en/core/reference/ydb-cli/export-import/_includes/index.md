@@ -12,7 +12,7 @@
 - [Connection and authentication when working with an S3-compatible object storage](../auth-s3.md)
 - [Exporting to an S3-compatible object storage `export s3`](../export-s3.md)
 - [Importing from an S3-compatible object storage `import s3`](../import-s3.md)
-- [Configuring NFS for backup](../../../../recipes/nfs-backup/nfs-backup.md)
+- [Configuring NFS for backup](../../../../recipes/backup/nfs-backup/nfs-backup.md)
 - [Exporting to NFS `export nfs`](../export-nfs.md)
 - [Importing from NFS `import nfs`](../import-nfs.md)
 

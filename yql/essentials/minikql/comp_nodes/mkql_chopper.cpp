@@ -534,9 +534,12 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && InputPtr_) {
             Input_->SetValue(ctx, ctx.HolderFactory.Create<TCodegenInput>(InputPtr_, stream, &ctx, sharedState));
-        } else
+        } else {
 #endif
             Input_->SetValue(ctx, ctx.HolderFactory.Create<TSubStream>(sharedState, stream, ItemArg_, Chop_, ctx));
+#ifndef MKQL_DISABLE_CODEGEN
+        }
+#endif
 
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && OutputPtr_) {

@@ -117,9 +117,47 @@ $test_status = SELECT
     CASE WHEN LastKind = 'Stability' THEN JSON_VALUE(LastStats, '$.table_type') ELSE NULL END AS TableType,
     CASE WHEN LastKind = 'Stability' THEN CAST(JSON_VALUE(LastStats, '$.test_timestamp') AS Uint64) ELSE NULL END AS TestTimestamp,
 
-    -- Фазы прогона (main / recoverability) из Stats.phases
+    -- Фазы прогона (main / recoverability) из Stats.phases.
+    -- Main-фаза уже лежит в SuccessRate / TotalRuns / NemesisEnabled.
+    -- Recoverability* — плоские колонки для DataLens (JSON.phases сам дашборд не парсит).
     CASE WHEN LastKind = 'Stability' THEN JSON_QUERY(LastStats, '$.phases') ELSE NULL END AS Phases,
     CASE WHEN LastKind = 'Stability' THEN CAST(JSON_VALUE(LastStats, '$.phases_count') AS Int32) ELSE NULL END AS PhasesCount,
+    CASE
+        WHEN LastKind = 'Stability' AND JSON_VALUE(LastStats, '$.phases[1].name') = 'recoverability' THEN 1U
+        WHEN LastKind = 'Stability' THEN 0U
+        ELSE NULL
+    END AS HasRecoverability,
+    CASE
+        WHEN LastKind = 'Stability' AND JSON_VALUE(LastStats, '$.phases[1].name') = 'recoverability'
+        THEN CAST(JSON_VALUE(LastStats, '$.phases[1].total_runs') AS Int32)
+        ELSE NULL
+    END AS RecoverabilityTotalRuns,
+    CASE
+        WHEN LastKind = 'Stability' AND JSON_VALUE(LastStats, '$.phases[1].name') = 'recoverability'
+        THEN CAST(JSON_VALUE(LastStats, '$.phases[1].successful_runs') AS Int32)
+        ELSE NULL
+    END AS RecoverabilitySuccessfulRuns,
+    CASE
+        WHEN LastKind = 'Stability' AND JSON_VALUE(LastStats, '$.phases[1].name') = 'recoverability'
+        THEN CAST(JSON_VALUE(LastStats, '$.phases[1].failed_runs') AS Int32)
+        ELSE NULL
+    END AS RecoverabilityFailedRuns,
+    CASE
+        WHEN LastKind = 'Stability' AND JSON_VALUE(LastStats, '$.phases[1].name') = 'recoverability'
+        THEN CAST(JSON_VALUE(LastStats, '$.phases[1].success_rate') AS Float)
+        ELSE NULL
+    END AS RecoverabilitySuccessRate,
+    CASE
+        WHEN LastKind = 'Stability' AND JSON_VALUE(LastStats, '$.phases[1].name') = 'recoverability'
+        THEN (
+            CASE
+                WHEN JSON_VALUE(LastStats, '$.phases[1].is_successful') = 'true'
+                  OR CAST(JSON_VALUE(LastStats, '$.phases[1].is_successful') AS Uint64) = 1UL THEN 1U
+                ELSE 0U
+            END
+        )
+        ELSE NULL
+    END AS RecoverabilityIsSuccessful,
     
     -- Информация о кластере
     JSON_VALUE(LastInfo, '$.cluster.version') AS ClusterVersion,
@@ -194,6 +232,12 @@ $final_metrics = SELECT
     TestTimestamp,
     Phases,
     PhasesCount,
+    HasRecoverability,
+    RecoverabilityTotalRuns,
+    RecoverabilitySuccessfulRuns,
+    RecoverabilityFailedRuns,
+    RecoverabilitySuccessRate,
+    RecoverabilityIsSuccessful,
     ClusterVersion,
     ClusterVersionLink,
     ClusterEndpoint,
@@ -241,6 +285,11 @@ $final_metrics = SELECT
         WHEN TotalIterations > 0 THEN CAST(FailedIterations AS Float) / CAST(TotalIterations AS Float)
         ELSE 0.0
     END AS IterationFailureRate,
+
+    CASE
+        WHEN RecoverabilityTotalRuns > 0 THEN CAST(RecoverabilityFailedRuns AS Float) / CAST(RecoverabilityTotalRuns AS Float)
+        ELSE NULL
+    END AS RecoverabilityFailureRate,
     
     CASE 
         WHEN PlannedDuration > 0 THEN ActualDuration / PlannedDuration
@@ -298,6 +347,13 @@ SELECT
     TestTimestamp,
     Phases,
     PhasesCount,
+    HasRecoverability,
+    RecoverabilityTotalRuns,
+    RecoverabilitySuccessfulRuns,
+    RecoverabilityFailedRuns,
+    RecoverabilitySuccessRate,
+    RecoverabilityIsSuccessful,
+    RecoverabilityFailureRate,
     
     -- Информация об ошибках ClusterCheck
     CASE WHEN LastKind = 'ClusterCheck' THEN JSON_VALUE(LastStats, '$.issue_type') ELSE NULL END AS ClusterIssueType,

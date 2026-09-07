@@ -58,7 +58,7 @@ void AdjustSecretPaths(
 class TExternalDataSourceAuthFields final {
 public:
     TExternalDataSourceAuthFields() = default;
-    TExternalDataSourceAuthFields(const THashSet<TString>& mandatoryFields, const TVector<TSecretSettingsNames>& secretsFields);
+    TExternalDataSourceAuthFields(const THashSet<TString>& mandatoryFields, const TVector<TSecretSettingsNames>& secretsFields, const THashSet<TString>& optionalFields = {});
 
     [[nodiscard]] bool CheckMandatoryFields(TStringBuf authField, const std::map<TString, TDeferredAtom>& result) const;
 

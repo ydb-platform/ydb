@@ -8,6 +8,10 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 
+// TBuildIndexConfig holds a TVector<NYdb::NTable::TGlobalIndexSettings>, which helpers.h
+// only forward-declares; constructing one needs the complete type.
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -40,6 +44,40 @@ void VerifyTableDescriptionAndRestartSchemeShard(
     RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
     describeResult = DescribePath(runtime, tableName);
+
+    Cerr << "TEST TEvDescribeSchemeResult after restarting Scheme Shard:" << Endl
+        << describeResult.DebugString()
+        << Endl;
+
+    TestDescribeResult(describeResult, validTableChecks);
+}
+
+/**
+ * Validate the description for the given PRIVATE table (e.g. an index impl table),
+ * restart Scheme Shard and make sure the table description is still valid.
+ *
+ * @param[in] runtime The test runtime
+ * @param[in] tableName The path of the private table to verify
+ * @param[in] validTableChecks The validation checks to apply to the table description
+ */
+void VerifyPrivateTableDescriptionAndRestartSchemeShard(
+    TTestBasicRuntime& runtime,
+    const TString& tableName,
+    const TVector<NLs::TCheckFunc>& validTableChecks
+) {
+    // First, validate the current table description
+    auto describeResult = DescribePrivatePath(runtime, tableName);
+
+    Cerr << "TEST TEvDescribeSchemeResult:" << Endl
+        << describeResult.DebugString()
+        << Endl;
+
+    TestDescribeResult(describeResult, validTableChecks);
+
+    // Restart Scheme Shard and make sure the metrics settings are still valid
+    RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+    describeResult = DescribePrivatePath(runtime, tableName);
 
     Cerr << "TEST TEvDescribeSchemeResult after restarting Scheme Shard:" << Endl
         << describeResult.DebugString()
@@ -902,6 +940,727 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
         VerifyAlterTableValidDetailedMetricsLevel(
             true /* sourceHasMetricsLevel */,
             NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+        );
+    }
+
+    /**
+     * Verify that ALTER TABLE, which specifies the detailed metrics settings for a table
+     * with a global secondary index, propagates the settings to the index impl table.
+     *
+     * @param[in] metricsLevel The detailed metrics level to verify
+     */
+    void VerifyAlterTablePropagatesToIndexImplTable(
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The index impl table has no detailed metrics settings yet
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable"), {
+            NLs::PathExist,
+            [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                UNIT_ASSERT(!record.GetPathDescription().GetTable().HasDetailedMetricsSettings());
+            },
+        });
+
+        TestAlterTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
+                    Name: "Table"
+                    DetailedMetricsSettings {
+                        Configured {
+                            MetricsLevel: %s
+                        }
+                    }
+                )",
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(metricsLevel).c_str()
+            )
+        );
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto checkLevel = [metricsLevel](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& tableDescription = record.GetPathDescription().GetTable();
+
+            UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
+
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
+            );
+
+            UNIT_ASSERT(tableDescription.GetDetailedMetricsSettings().HasConfigured());
+            UNIT_ASSERT(!tableDescription.GetDetailedMetricsSettings().HasNotConfigured());
+
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                metricsLevel
+            );
+        };
+
+        // The base table is configured correctly
+        VerifyTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table",
+            { NLs::PathExist, checkLevel }
+        );
+
+        // The index impl table inherited the same detailed metrics settings
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table/UserDefinedIndex/indexImplTable",
+            { NLs::PathExist, checkLevel }
+        );
+    }
+
+    Y_UNIT_TEST(AlterTablePropagatesToIndexImplTableLevelTable) {
+        VerifyAlterTablePropagatesToIndexImplTable(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+        );
+    }
+
+    Y_UNIT_TEST(AlterTablePropagatesToIndexImplTableLevelPartition) {
+        VerifyAlterTablePropagatesToIndexImplTable(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+        );
+    }
+
+    /**
+     * Verify that a single ALTER TABLE, which both specifies the detailed metrics settings
+     * and disables KEY_BLOOM_FILTER (routing through the local-bloom-drop branch of
+     * CreateConsistentAlterTable, which returns before the common-sense-path branch), still
+     * propagates the detailed metrics settings to a global secondary index's impl table.
+     */
+    Y_UNIT_TEST(AlterTableBloomDropBranchPropagatesToIndexImplTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+              PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+              }
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+            IndexDescription {
+              Name: "idx_bloom_1"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["key"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelPartition
+                }
+            }
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table/UserDefinedIndex/indexImplTable",
+            {
+                NLs::PathExist,
+                [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& tableDescription = record.GetPathDescription().GetTable();
+
+                    UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
+                    UNIT_ASSERT(tableDescription.GetDetailedMetricsSettings().HasConfigured());
+
+                    UNIT_ASSERT_EQUAL(
+                        tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+                    );
+                },
+            }
+        );
+    }
+
+    /**
+     * Verify that a single ALTER TABLE, which both specifies the detailed metrics settings
+     * and adds a local bloom filter index (routing through the local-bloom-add branch of
+     * CreateConsistentAlterTable, which returns before the common-sense-path branch), still
+     * propagates the detailed metrics settings to a global secondary index's impl table.
+     */
+    Y_UNIT_TEST(AlterTableBloomAddBranchPropagatesToIndexImplTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelPartition
+                }
+            }
+            TableIndexes {
+                Name: "idx_bloom_1"
+                Type: EIndexTypeLocalBloomFilter
+                KeyColumnNames: ["key"]
+                BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table/UserDefinedIndex/indexImplTable",
+            {
+                NLs::PathExist,
+                [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& tableDescription = record.GetPathDescription().GetTable();
+
+                    UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
+                    UNIT_ASSERT(tableDescription.GetDetailedMetricsSettings().HasConfigured());
+
+                    UNIT_ASSERT_EQUAL(
+                        tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+                    );
+                },
+            }
+        );
+    }
+
+    /**
+     * Verify that ALTER TABLE, which explicitly removes the detailed metrics settings
+     * from a table with a global secondary index, also clears the settings on the
+     * index impl table.
+     */
+    Y_UNIT_TEST(AlterTableClearingDetailedMetricsSettingsClearsIndexImplTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelPartition
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                NotConfigured {
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto checkNoSettings = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT(!record.GetPathDescription().GetTable().HasDetailedMetricsSettings());
+        };
+
+        VerifyTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table",
+            { NLs::PathExist, checkNoSettings }
+        );
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table/UserDefinedIndex/indexImplTable",
+            { NLs::PathExist, checkNoSettings }
+        );
+    }
+
+    /**
+     * Verify that CREATE TABLE with an indexed table and the detailed metrics level
+     * specified on the base table seeds the same level on the global index impl table.
+     *
+     * @param[in] metricsLevel The detailed metrics level to verify
+     */
+    void VerifyCreateIndexedTableSeedsIndexImplTable(
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(
+            R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint64" }
+                  Columns { Name: "indexed" Type: "Uint64" }
+                  KeyColumnNames: ["key"]
+                  DetailedMetricsSettings {
+                      Configured {
+                          MetricsLevel: %s
+                      }
+                  }
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                }
+            )",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(metricsLevel).c_str()
+        ));
+
+        env.TestWaitNotification(runtime, txId);
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table/UserDefinedIndex/indexImplTable",
+            {
+                NLs::PathExist,
+                [metricsLevel](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& tableDescription = record.GetPathDescription().GetTable();
+
+                    UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
+
+                    UNIT_ASSERT_EQUAL(
+                        tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
+                    );
+
+                    UNIT_ASSERT_EQUAL(
+                        tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                        metricsLevel
+                    );
+                },
+            }
+        );
+    }
+
+    Y_UNIT_TEST(CreateIndexedTableSeedsIndexImplTableLevelTable) {
+        VerifyCreateIndexedTableSeedsIndexImplTable(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+        );
+    }
+
+    Y_UNIT_TEST(CreateIndexedTableSeedsIndexImplTableLevelPartition) {
+        VerifyCreateIndexedTableSeedsIndexImplTable(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+        );
+    }
+
+    /**
+     * Verify that CREATE TABLE with a vector index and the detailed metrics level
+     * specified on the base table seeds the same level on BOTH vector index impl tables
+     * (the level table and the posting table).
+     */
+    Y_UNIT_TEST(CreateVectorIndexedTableSeedsIndexImplTables) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "vectors"
+              Columns { Name: "id" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "covered" Type: "String" }
+              KeyColumnNames: ["id"]
+              DetailedMetricsSettings {
+                  Configured {
+                      MetricsLevel: MetricsLevelPartition
+                  }
+              }
+            }
+            IndexDescription {
+              Name: "idx_vector"
+              KeyColumnNames: ["embedding"]
+              DataColumnNames: ["covered"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto checkLevel = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& tableDescription = record.GetPathDescription().GetTable();
+
+            UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
+
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
+            );
+
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+            );
+        };
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/vectors/idx_vector/indexImplLevelTable",
+            { NLs::PathExist, checkLevel }
+        );
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/vectors/idx_vector/indexImplPostingTable",
+            { NLs::PathExist, checkLevel }
+        );
+    }
+
+    /**
+     * Verify that CREATE TABLE with a PREFIXED vector index and the detailed metrics level
+     * specified on the base table seeds the same level on ALL THREE vector index impl tables
+     * (the prefix table, the level table and the posting table).
+     */
+    Y_UNIT_TEST(CreatePrefixedVectorIndexedTableSeedsIndexImplTables) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "vectors"
+              Columns { Name: "id" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "prefix" Type: "String" }
+              KeyColumnNames: ["id"]
+              DetailedMetricsSettings {
+                  Configured {
+                      MetricsLevel: MetricsLevelPartition
+                  }
+              }
+            }
+            IndexDescription {
+              Name: "idx_vector"
+              KeyColumnNames: ["prefix", "embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto checkLevel = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& tableDescription = record.GetPathDescription().GetTable();
+
+            UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
+
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
+            );
+
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+            );
+        };
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/vectors/idx_vector/indexImplPrefixTable",
+            { NLs::PathExist, checkLevel }
+        );
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/vectors/idx_vector/indexImplLevelTable",
+            { NLs::PathExist, checkLevel }
+        );
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/vectors/idx_vector/indexImplPostingTable",
+            { NLs::PathExist, checkLevel }
+        );
+    }
+
+    /**
+     * Verify that building a global secondary index on a table, which already has the
+     * detailed metrics level configured, seeds the same level on the new index impl table.
+     */
+    Y_UNIT_TEST(BuildIndexSeedsIndexImplTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "indexed" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelPartition
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "UserDefinedIndex", NKikimrSchemeOp::EIndexTypeGlobal, {"indexed"}, {}, {}
+        });
+        env.TestWaitNotification(runtime, txId);
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table/UserDefinedIndex/indexImplTable",
+            {
+                NLs::PathExist,
+                [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& tableDescription = record.GetPathDescription().GetTable();
+
+                    UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
+
+                    UNIT_ASSERT_EQUAL(
+                        tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
+                    );
+
+                    UNIT_ASSERT_EQUAL(
+                        tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+                    );
+                },
+            }
+        );
+    }
+
+    /**
+     * Verify that building a VECTOR index on a table, which already has the detailed metrics
+     * level configured, seeds the same level on BOTH new vector index impl tables (the level
+     * table and the posting table). This covers the CreateBuildPropose path in
+     * build_index__progress.cpp, distinct from the CreateIndexedTable path already covered by
+     * CreateVectorIndexedTableSeedsIndexImplTables.
+     */
+    Y_UNIT_TEST(BuildVectorIndexSeedsIndexImplTables) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["id"]
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelPartition
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
+            "idx_vector", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+        });
+        env.TestWaitNotification(runtime, txId);
+
+        auto checkLevel = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& tableDescription = record.GetPathDescription().GetTable();
+
+            UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
+
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
+            );
+
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+            );
+        };
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/vectors/idx_vector/indexImplLevelTable",
+            { NLs::PathExist, checkLevel }
+        );
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/vectors/idx_vector/indexImplPostingTable",
+            { NLs::PathExist, checkLevel }
+        );
+    }
+
+    /**
+     * Verify that an ALTER TABLE, which does not touch the detailed metrics settings,
+     * does not affect the (unconfigured) detailed metrics settings of the index impl table.
+     */
+    Y_UNIT_TEST(AlterTableUnrelatedChangeDoesNotTouchIndexImplTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "add" Type: "Uint64" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table/UserDefinedIndex/indexImplTable",
+            {
+                NLs::PathExist,
+                [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    UNIT_ASSERT(!record.GetPathDescription().GetTable().HasDetailedMetricsSettings());
+                },
+            }
+        );
+    }
+
+    /**
+     * Verify that ALTER TABLE on an indexed table fails correctly, when the detailed
+     * metrics settings are specified in the request and the EnableDataShardDetailedMetrics
+     * feature flag is disabled, and that the index impl table is left untouched.
+     */
+    Y_UNIT_TEST(AlterIndexedTableDetailedMetricsNotAllowedFeatureFlagDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
+                Name: "Table"
+                DetailedMetricsSettings {
+                    Configured {
+                        MetricsLevel: MetricsLevelPartition
+                    }
+                }
+            )",
+            {{
+                NKikimrScheme::StatusInvalidParameter,
+                "The detailed metrics settings are specified in the request, "
+                "but the detailed metrics feature is disabled by the corresponding "
+                "feature flag (EnableDataShardDetailedMetrics)",
+            }}
+        );
+
+        VerifyPrivateTableDescriptionAndRestartSchemeShard(
+            runtime,
+            "/MyRoot/Table/UserDefinedIndex/indexImplTable",
+            {
+                NLs::PathExist,
+                [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    UNIT_ASSERT(!record.GetPathDescription().GetTable().HasDetailedMetricsSettings());
+                },
+            }
         );
     }
 }

@@ -1,0 +1,9 @@
+/* custom check: len(yt_res_yson[0][b'Write'][0][b'Data']) < 10 */
+USE plato;
+
+$input = "Input";
+
+SELECT *
+FROM $input
+WITH SCHEMA Struct<key:String, subkey:String, value:String>
+TABLESAMPLE BERNOULLI(30) REPEATABLE(1);

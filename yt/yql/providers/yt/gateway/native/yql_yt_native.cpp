@@ -37,6 +37,7 @@
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <yql/essentials/ast/yql_expr.h>
@@ -257,7 +258,7 @@ public:
         SetYtLoggerGlobalBackend(
             Services_.Config->HasYtLogLevel() ? Services_.Config->GetYtLogLevel() : -1,
             Services_.Config->GetYtDebugLogSize(),
-            Services_.Config->GetYtDebugLogFile(),
+            Services_.StaticConfig->GetYtDebugLogFile(),
             Services_.Config->GetYtDebugLogAlwaysWrite()
         );
     }
@@ -313,6 +314,10 @@ public:
             return session->Async([session, logCtx] {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 try {
+                    with_lock(session->SecureTmpFolderPreparationsMutex_) {
+                        session->SecureTmpFolderPreparationsByCluster_.clear();
+                    }
+
                     session->TxCache_.AbortAll();
                 } catch (...) {
                     YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
@@ -806,7 +811,7 @@ public:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     Services_.FunctionRegistry->SupportsSizedAllocators());
                 alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings());
+                TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings(), options.BridgeMode(), options.BridgeBinaryPath());
                 TVector<TRuntimeNode> tupleNodes;
                 for (auto& node: nodes) {
                     tupleNodes.push_back(builder.BuildLambda(*MkqlCompiler_, node, ctx));
@@ -1139,6 +1144,10 @@ public:
 
     TString GetClusterServer(const TString& cluster) const final {
         return Clusters_->TryGetServer(cluster);
+    }
+
+    TString GetClusterYtName(const TString& cluster) const final {
+        return Clusters_->TryGetYtName(cluster);
     }
 
     NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
@@ -2168,7 +2177,7 @@ private:
                     TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                         execCtx->FunctionRegistry_->SupportsSizedAllocators());
                     alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                    TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+                    TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
 
                     TRuntimeNode root = DeserializeRuntimeNode(filterLambda, builder.GetTypeEnvironment());
@@ -3521,7 +3530,7 @@ private:
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 Services_.FunctionRegistry->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings());
+            TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings(), options.BridgeMode(), options.BridgeBinaryPath());
             auto rootNode = builder.BuildLambda(*MkqlCompiler_, result.Input().Ptr(), ctx);
             hasListResult = rootNode.GetStaticType()->IsList();
             lambda = SerializeRuntimeNode(rootNode, builder.GetTypeEnvironment());
@@ -3965,7 +3974,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4169,7 +4178,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4265,6 +4274,7 @@ private:
         TString reduceLambda,
         const TString& reduceInputType,
         const TExpressionResorceUsage& reduceExtraUsage,
+        bool forceApplyMaxJobCount,
         NYT::TNode intermediateMeta,
         const NYT::TNode& intermediateSchema,
         const NYT::TNode& intermediateStreams,
@@ -4274,7 +4284,7 @@ private:
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
                           mapExtraUsage, mapBlockInput, reduceLambda, reduceInputType, reduceExtraUsage,
-                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun]
+                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun, forceApplyMaxJobCount]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4410,7 +4420,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4424,6 +4434,7 @@ private:
                 mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 mapJob->SetLangVer(execCtx->Options_.LangVer());
                 mapJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+                mapJob->SetBridgeMode(execCtx->Options_.BridgeMode());
                 transform.ApplyJobProps(*mapJob);
                 transform.ApplyUserJobSpec(mapUserJobSpec, testRun);
 
@@ -4442,7 +4453,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4456,6 +4467,7 @@ private:
                 reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 reduceJob->SetLangVer(execCtx->Options_.LangVer());
                 reduceJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+                reduceJob->SetBridgeMode(execCtx->Options_.BridgeMode());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4493,8 +4505,11 @@ private:
             }
 
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
-            FillSpec(spec, *execCtx, entry, mapExtraUsage.Cpu, reduceExtraUsage.Cpu,
-                EYtOpProp::IntermediateData | EYtOpProp::WithMapper | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling);
+            EYtOpProps opProps = EYtOpProp::IntermediateData | EYtOpProp::WithMapper | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling;
+            if (forceApplyMaxJobCount) {
+                opProps |= EYtOpProp::ForceApplyMaxJobCount;
+            }
+            FillSpec(spec, *execCtx, entry, mapExtraUsage.Cpu, reduceExtraUsage.Cpu, opProps);
             if (!intermediateStreams.IsUndefined()) {
                 spec["mapper"]["output_streams"] = intermediateStreams;
             }
@@ -4522,6 +4537,7 @@ private:
         TString reduceLambda,
         const TString& reduceInputType,
         const TExpressionResorceUsage& reduceExtraUsage,
+        bool forceApplyMaxJobCount,
         const NYT::TNode& intermediateSchema,
         bool useIntermediateStreams,
         const TExecContext<TRunOptions>::TPtr& execCtx
@@ -4529,7 +4545,7 @@ private:
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType,
-                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun]
+                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun, forceApplyMaxJobCount]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4600,7 +4616,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4614,6 +4630,7 @@ private:
                 reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 reduceJob->SetLangVer(execCtx->Options_.LangVer());
                 reduceJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+                reduceJob->SetBridgeMode(execCtx->Options_.BridgeMode());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4645,8 +4662,11 @@ private:
             }
 
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
-            FillSpec(spec, *execCtx, entry, 0., reduceExtraUsage.Cpu,
-                EYtOpProp::IntermediateData | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling);
+            EYtOpProps opProps = EYtOpProp::IntermediateData | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling;
+            if (forceApplyMaxJobCount) {
+                opProps |= EYtOpProp::ForceApplyMaxJobCount;
+            }
+            FillSpec(spec, *execCtx, entry, 0., reduceExtraUsage.Cpu, opProps);
             if (useIntermediateStreams) {
                 spec["reducer"]["enable_input_table_index"] = true;
             }
@@ -4673,6 +4693,7 @@ private:
         const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(execCtx->Cluster_, *execCtx->Options_.Config());
         const auto useIntermediateStreams = execCtx->Options_.Config()->UseIntermediateStreams.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_STREAMS);
         const bool mapBlockInput = NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
+        const bool forceApplyMaxJobCount = NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::ForceApplyMaxJobCount);
 
         NYT::TNode intermediateMeta;
         NYT::TNode intermediateSchema;
@@ -4738,7 +4759,7 @@ private:
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             mapLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx);
             mapInputType = NCommon::WriteTypeToYson(GetSequenceItemType(mapReduce.Input().Size() == 1U ?
                 TExprBase(mapReduce.Input().Item(0)) : TExprBase(mapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0)), true));
@@ -4757,7 +4778,7 @@ private:
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             reduceLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Reducer(), ctx);
         }
         TExpressionResorceUsage reduceExtraUsage = execCtx->ScanExtraResourceUsage(mapReduce.Reducer().Body().Ref(), false);
@@ -4775,16 +4796,17 @@ private:
         }
 
         return execCtx->Session_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
-            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx]()
+            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx,
+            forceApplyMaxJobCount]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
-                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
+                    reduceLambda, reduceInputType, reduceExtraUsage, forceApplyMaxJobCount, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
             } else {
-                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,
-                    useIntermediateStreams, execCtx);
+                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, forceApplyMaxJobCount,
+                    intermediateSchema, useIntermediateStreams, execCtx);
             }
         });
     }
@@ -4912,7 +4934,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 transform.SetTwoPhaseTransform();
@@ -4963,6 +4985,7 @@ private:
             job->SetLangVer(execCtx->Options_.LangVer());
             job->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
             job->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+            job->SetBridgeMode(execCtx->Options_.BridgeMode());
             job->SetUseSkiff(useSkiff, 0);
 
             mapOpSpec.AddInput(tmpTable);
@@ -5025,7 +5048,7 @@ private:
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 Services_.FunctionRegistry->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             lambda = builder.BuildLambdaWithIO(*MkqlCompiler_, fill.Content(), ctx);
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(fill.Content().Ref(), false);
@@ -5502,7 +5525,12 @@ private:
             if (src.IsRelative()) {
                 src = (TFsPath::Cwd() / src).Fix();
             }
-            const TFsPath dst(tmp.Path().Child(src.GetName()));
+            TString name = src.GetName();
+            const auto& fileOpts = std::get<1U>(f);
+            if (fileOpts.PathInJob_) {
+                name = *fileOpts.PathInJob_;
+            }
+            const TFsPath dst(tmp.Path().Child(name));
             YQL_ENSURE(NFs::SymLink(src, dst), "Can't make symlink " << dst << " on " << src);
         }
 
@@ -5622,7 +5650,7 @@ private:
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(execCtx->Options_.SecureParams());
-            TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, secureParamsProvider.get(), execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
+            TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, secureParamsProvider.get(), execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             THolder<TCodecContext> codecCtx;
             TString pathPrefix;
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -5711,6 +5739,7 @@ private:
         job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
         job->SetLangVer(execCtx->Options_.LangVer());
         job->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+        job->SetBridgeMode(execCtx->Options_.BridgeMode());
 
         mapOpSpec.AddInput(tmpTable);
         mapOpSpec.AddOutput(tmpTable);
@@ -6039,7 +6068,11 @@ private:
                 }
 
                 if (!auth && Services_.YtTokenResolver) {
-                    if (auto token = Services_.YtTokenResolver->ResolveClusterToken(options.Cluster())) {
+                    auto ytName = Clusters_->TryGetYtName(options.Cluster());
+                    if (!ytName) {
+                        ythrow yexception() << "Unknown cluster name: " << options.Cluster();
+                    }
+                    if (auto token = Services_.YtTokenResolver->ResolveClusterToken(ytName)) {
                         auth = *token;
                     }
                 }
@@ -6373,6 +6406,8 @@ private:
 } // NNative
 
 IYtGateway::TPtr CreateYtNativeGateway(const TYtNativeServices& services) {
+    YQL_ENSURE(services.Config);
+    YQL_ENSURE(services.StaticConfig);
     return MakeIntrusive<NNative::TYtNativeGateway>(services);
 }
 

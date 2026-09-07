@@ -1,4 +1,5 @@
 #include "local_topic_client_factory.h"
+#include "local_deferred_publish_client.h"
 #include "local_federated_topic_client.h"
 #include "local_topic_client.h"
 
@@ -6,6 +7,7 @@ namespace NKikimr::NKqp {
 
 namespace {
 
+using namespace NYdb;
 using namespace NYdb::NFederatedTopic;
 using namespace NYdb::NTopic;
 
@@ -21,6 +23,10 @@ public:
 
     NYql::IFederatedTopicClient::TPtr CreateFederatedTopicClient(const TFederatedTopicClientSettings& clientSettings) final {
         return CreateLocalFederatedTopicClient(Settings, clientSettings);
+    }
+
+    NYql::IDeferredPublishClient::TPtr CreateDeferredPublishClient(const TCommonClientSettings& settings) final {
+        return CreateLocalDeferredPublishClient(Settings, settings);
     }
 
 private:

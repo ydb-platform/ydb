@@ -87,6 +87,53 @@ namespace NActors {
         return Sleep(stopFlag);
     }
 
+    bool TExecutorThreadCtx::WaitForWaker(
+            const std::atomic<bool>& stopFlag,
+            const std::atomic<i64>& activationCredits,
+            const std::atomic<ui64>& reductions,
+            ui64 wakerRequestBit) {
+        EThreadState state = GetState<EThreadState>();
+        if (state == EThreadState::Spin) {
+            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SPIN> activityGuard;
+            while (state == EThreadState::Spin && !stopFlag.load(std::memory_order_relaxed)) {
+                if (activationCredits.load(std::memory_order_acquire) > 0 ||
+                        (reductions.load(std::memory_order_acquire) & wakerRequestBit)) {
+                    if (ReplaceState(state, EThreadState::None)) {
+                        return false;
+                    }
+                    continue;
+                }
+                SpinLockPause();
+                state = GetState<EThreadState>();
+            }
+        }
+
+        if ((state == EThreadState::Sleep || state == EThreadState::Blocking) &&
+                !stopFlag.load(std::memory_order_relaxed)) {
+            Y_DEBUG_ABORT_UNLESS(TlsThreadContext);
+
+            NHPTimer::STime hpnow = GetCycleCountFast();
+            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+            ui32 prevActivity = TlsThreadContext->ActivityContext.ElapsingActorActivity.exchange(
+                SleepActivity, std::memory_order_acq_rel);
+            TlsThreadContext->ExecutionStats->AddElapsedCycles(prevActivity, hpnow - hpprev);
+            do {
+                if (WaitingPad.Park()) {
+                    return true;
+                }
+                hpnow = GetCycleCountFast();
+                hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+                TlsThreadContext->ExecutionStats->AddParkedCycles(hpnow - hpprev);
+                state = GetState<EThreadState>();
+            } while ((state == EThreadState::Sleep || state == EThreadState::Blocking) &&
+                !stopFlag.load(std::memory_order_relaxed));
+            TlsThreadContext->ActivityContext.ActivationStartTS.store(hpnow, std::memory_order_release);
+            TlsThreadContext->ActivityContext.ElapsingActorActivity.store(
+                TlsThreadContext->ActivityContext.ActorSystemIndex, std::memory_order_release);
+        }
+        return stopFlag.load(std::memory_order_relaxed);
+    }
+
     bool TExecutorThreadCtx::WakeUp() {
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_WAKE_UP, false> activityGuard;
         for (ui32 i = 0; i < 2; ++i) {
@@ -109,6 +156,13 @@ namespace NActors {
                         return true;
                     }
                     break;
+                case EThreadState::Blocking:
+                case EThreadState::NeedToBeWaker:
+                case EThreadState::NeedToBeWakerFromSpin:
+                case EThreadState::NeedToBeWakerFromSleep:
+                case EThreadState::NeedToBeWakerFromBlocking:
+                case EThreadState::Waker:
+                    return false;
                 default:
                     Y_ABORT();
             }

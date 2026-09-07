@@ -30,16 +30,20 @@ public:
     TCoroutineBase(const TCoroutineBase& other) = delete;
     TCoroutineBase& operator=(const TCoroutineBase& other) = delete;
 
-    ~TCoroutineBase();
-
     bool IsCompleted() const noexcept;
 
 protected:
     template <NMpl::CInvocable<void()> TBody>
     explicit TCoroutineBase(TBody body, EExecutionStackKind stackKind);
 
+    ~TCoroutineBase();
+
     void Resume();
     void Suspend();
+
+    //! If the coroutine is still running (suspended mid-body), resumes it to
+    //! unwind via TCoroutineAbandonedException.
+    void Abandon();
 
 private:
     enum class EState
@@ -117,6 +121,8 @@ public:
         TCallee&& callee,
         EExecutionStackKind stackKind = DefaultExecutionStackKind);
 
+    ~TCoroutine();
+
     template <class... TParams>
     const std::optional<R>& Run(TParams&&... params);
 
@@ -150,6 +156,8 @@ public:
     TCoroutine(
         TCallee&& callee,
         EExecutionStackKind stackKind = DefaultExecutionStackKind);
+
+    ~TCoroutine();
 
     template <class... TParams>
     bool Run(TParams&&... params);

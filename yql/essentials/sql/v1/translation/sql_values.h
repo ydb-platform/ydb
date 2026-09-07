@@ -19,8 +19,10 @@ public:
 protected:
     bool BuildRows(const TRule_values_source_row_list& node, TVector<TVector<TNodePtr>>& rows);
 
-    TSourcePtr ValuesSource(const TRule_values_source& node, const TVector<TString>& columnsHint,
-                            const TString& operationName);
+    TSourceResult ValuesSource(
+        const TRule_values_source& node,
+        const TVector<TString>& columnsHint,
+        const TString& operationName);
 
 private:
     bool BuildRow(const TRule_values_source_row& inRow, TVector<TNodePtr>& outRow);
@@ -33,7 +35,7 @@ public:
     {
     }
 
-    TSourcePtr Build(const TRule_into_values_source& node, const TString& operationName);
+    TSourceResult Build(const TRule_into_values_source& node, const TString& operationName);
 };
 
 class TSqlAsValues: public TSqlValues {
@@ -43,7 +45,7 @@ public:
     {
     }
 
-    TSourcePtr Build(const TRule_values_source& node, const TString& operationName);
+    TSourceResult Build(const TRule_values_source& node, const TString& operationName);
 };
 
 } // namespace NSQLTranslationV1

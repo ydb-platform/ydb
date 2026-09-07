@@ -21,10 +21,14 @@ namespace NYql {
 
 class TYtDownloader: public NYql::NFS::IDownloader {
 public:
-    TYtDownloader(const TFileStorageConfig& /*config*/, const TString& defaultServer)
-        : DefaultServer_(defaultServer)
-    {
-    }
+    TYtDownloader(const TFileStorageConfig&, TConfigClusters::TPtr clusters)
+        : Clusters_(std::move(clusters))
+    {}
+
+    TYtDownloader(const TFileStorageConfig&, const TString& defaultCluster)
+        : DefaultCluster_(defaultCluster)
+    {}
+
     ~TYtDownloader() = default;
 
     bool Accept(const THttpURL& url) final {
@@ -40,22 +44,28 @@ public:
         if (oauthToken) {
             createOpts.Token(oauthToken);
         }
-        auto host = url.PrintS(NUri::TField::FlagHostPort);
-        if (host == "current") {
-            if (!DefaultServer_) {
-                throw yexception() << "Cannot download url: " << url.PrintS() << ", default cluster is not defined";
+        auto clusterYtName = url.PrintS(NUri::TField::FlagHostPort);
+
+        TString clusterServer = Clusters_ ? Clusters_->TryResolveServerByYtName(clusterYtName) : TString{};
+        if (!clusterServer) {
+            if (clusterYtName == "current") {
+                if (!DefaultCluster_) {
+                    throw yexception() << "Cannot download url: " << url.PrintS() << ", default cluster is not defined";
+                }
+                clusterServer = DefaultCluster_;
+            } else {
+                clusterServer = clusterYtName;
             }
-            host = DefaultServer_;
         }
         auto path = params.Has("path") ? params.Get("path") : TString{TStringBuf(url.GetField(NUri::TField::FieldPath)).Skip(1)};
 
-        auto client = NYT::CreateClient(host, createOpts);
+        auto client = NYT::CreateClient(clusterServer, createOpts);
         NYT::IClientBasePtr tx = client;
         TString txId = params.Get("transaction_id");
         if (!txId) {
             txId = params.Get("t");
         }
-        YQL_LOG(INFO) << "YtDownload: host=" << host << ", path='" << path << "', tx=" << txId;
+        YQL_LOG(INFO) << "YtDownload: clusterYtName=" << clusterYtName << ", clusterServer=" << clusterServer << ", path='" << path << "', tx=" << txId;
 
         if (txId) {
             TGUID g;
@@ -74,7 +84,7 @@ public:
         ));
         auto rev = ToString(GetContentRevision(attrs));
         if (oldEtag == rev) {
-            YQL_LOG(INFO) << "YtDownload: host=" << host << ", path='" << path << "', tx=" << txId << " - same revision";
+            YQL_LOG(INFO) << "YtDownload: clusterYtName=" << clusterYtName << ", clusterServer=" << clusterServer << ", path='" << path << "', tx=" << txId << " - same revision";
             return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
         }
 
@@ -102,11 +112,20 @@ public:
     }
 
 private:
-    const TString DefaultServer_;
+    const TConfigClusters::TPtr Clusters_;
+    const TString DefaultCluster_;
 };
 
-NYql::NFS::IDownloaderPtr MakeYtDownloader(const TFileStorageConfig& config, const TString& defaultServer) {
-    return MakeIntrusive<TYtDownloader>(config, defaultServer);
+NYql::NFS::IDownloaderPtr MakeYtDownloader(const TFileStorageConfig& config) {
+    return MakeIntrusive<TYtDownloader>(config, TString{});
+}
+
+NYql::NFS::IDownloaderPtr MakeYtDownloader(const TFileStorageConfig& config, const TString& defaultCluster) {
+    return MakeIntrusive<TYtDownloader>(config, defaultCluster);
+}
+
+NYql::NFS::IDownloaderPtr MakeYtDownloader(const TFileStorageConfig& config, TConfigClusters::TPtr clusters) {
+    return MakeIntrusive<TYtDownloader>(config, std::move(clusters));
 }
 
 } // NYql

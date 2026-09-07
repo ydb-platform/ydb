@@ -1,0 +1,51 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": "SELECT 1\n"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "textDocument/diagnostic",
+    "params": {
+      "identifier": "YQL",
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      }
+    }
+  },
+  {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "items": [
+        {
+          "code": "WARNING",
+          "message": "Format mismatch, expected:\n↵\n••••1↵\n;↵\n\nbut got:\n•1↵\n\n",
+          "range": {
+            "end": {
+              "character": 6,
+              "line": 0
+            },
+            "start": {
+              "character": 5,
+              "line": 0
+            }
+          },
+          "severity": 2,
+          "source": "format"
+        }
+      ],
+      "kind": "full",
+      "resultId": "1"
+    }
+  }
+]

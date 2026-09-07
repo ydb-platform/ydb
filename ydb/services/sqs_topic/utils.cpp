@@ -1,10 +1,11 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <library/cpp/digest/md5/md5.h>
 
@@ -31,17 +32,24 @@ namespace NKikimr::NSqsTopic {
         return result;
     }
 
-    TString GetEndpoint(const NKikimrConfig::TSqsConfig& config) {
-        const TString& endpoint = config.GetEndpoint();
-        if (endpoint) {
-            return endpoint;
-        } else {
-            return TStringBuilder() << "http://" << FQDNHostName() << ":" << config.GetHttpServerConfig().GetPort();
-        }
-    }
-
     const NKikimrConfig::TSqsConfig& Cfg() {
         return AppData()->SqsConfig;
+    }
+
+    TString MakeQueueUrl(const TRichQueueUrl& queueUrl, const NGRpcService::IRequestCtxBaseMtSafe* request) {
+        TString requestEndpoint;
+        if (request) {
+            if (const auto value = request->GetPeerMetaValues(TString{REQUEST_ENDPOINT_METADATA_KEY})) {
+                requestEndpoint = *value;
+            }
+        }
+        const auto& httpProxyConfig = AppData()->HttpProxyConfig;
+        return MakeQueueUrl(
+            queueUrl,
+            requestEndpoint,
+            FQDNHostName(),
+            static_cast<ui16>(httpProxyConfig.GetPort()),
+            httpProxyConfig.GetSecure());
     }
 
     TString GenerateMessageId(const TString& database, const TString& topicPath, const NPQ::NMLP::TMessageId& pos) {

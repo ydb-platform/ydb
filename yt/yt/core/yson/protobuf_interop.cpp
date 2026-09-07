@@ -266,7 +266,7 @@ NYTree::ENodeType GetNodeTypeByProtobufScalarElement(const TProtobufScalarElemen
     }
 
     THROW_ERROR_EXCEPTION("Encountered non-scalar field type for scalar protobuf element")
-        .With("fieldType", scalarElement.Type.Underlying());
+        .With("field_type", scalarElement.Type.Underlying());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

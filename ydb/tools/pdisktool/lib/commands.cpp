@@ -1,11 +1,15 @@
 #include "commands.h"
 
 #include "blobs.h"
+#include "blobsource.h"
 #include "chunk.h"
 #include "keys.h"
 #include "output.h"
 #include "sector.h"
 #include "session.h"
+#include "tabletdb.h"
+#include "tabletdump.h"
+#include "tabletlog.h"
 
 #include <ydb/core/erasure/erasure.h>
 
@@ -36,6 +40,8 @@ void PrintUsage(const TString& argv0) {
         << "  barriers          List barriers for a VDisk\n"
         << "  blocks            List blocks for a VDisk\n"
         << "  export-blob       Export this VDisk's blob parts to files, comparing duplicate copies\n"
+        << "  restore-tablet    Rebuild a flat tablet's tables from export-blob directories\n"
+        << "                    (--tablet ID --blobs DIR [--blobs DIR ...] --erasure NAME --output DIR)\n"
         << "  verify            Scan format/syslog/log/data and list issues\n"
         << "  dump-sector       Hex-dump a physical sector\n"
         << "  metadata          Dump the metadata vault blob if present\n\n"
@@ -401,6 +407,170 @@ int CmdExportBlob(
     return FinishText(proto, session.Issues, g.Json(), print, stats.PartsWithDifferingCopies > 0);
 }
 
+struct TRestoreTabletArgs {
+    ui64 TabletId = 0;
+    TVector<TString> Dirs;
+    TString Erasure;
+    ui32 MaxGeneration = Max<ui32>();
+    TDumpOptions Dump;
+};
+
+int CmdRestoreTablet(const TGlobals& g, const TRestoreTabletArgs& args) {
+    TIssueLog issues;
+    issues.Strict = g.Strict;
+
+    NKikimr::NPdiskTool::TRestoreTabletResult proto;
+    proto.SetTabletId(args.TabletId);
+    proto.SetOutput(args.Dump.Output);
+
+    auto species = ParseErasure(args.Erasure, issues);
+    if (issues.HasErrors()) {
+        PrintIssues(issues, Cerr);
+        return 1;
+    }
+    if (!species) {
+        issues.Warning("restore-tablet", "No --erasure was given, so only blobs whose parts already"
+            " span the whole body can be used; give the group erasure to recover the rest");
+    }
+
+    TMaybe<TErasureType> erasure;
+    if (species) {
+        erasure = TErasureType(*species);
+    }
+
+    TBlobStore store(erasure, issues);
+    for (const TString& dir : args.Dirs) {
+        store.AddDirectory(dir);
+    }
+    store.FlushIssues();
+
+    const auto& blobStats = store.Stats();
+    proto.SetBlobsFound(blobStats.Blobs);
+    proto.SetBlobsRestored(blobStats.Restored);
+    proto.SetBlobsUnrecoverable(blobStats.Unrecoverable);
+    proto.SetPartsWithDifferingCopies(blobStats.DisagreeingParts);
+
+    if (!blobStats.Blobs) {
+        issues.Error("restore-tablet", TStringBuilder() << "No exported blob parts were found in "
+            << args.Dirs.size() << (args.Dirs.size() == 1 ? " input directory" : " input directories")
+            << "; files are expected to be named the way export-blob names them");
+        PrintIssues(issues, Cerr);
+        return 1;
+    }
+
+    auto history = RebuildTabletHistory(store, args.TabletId, args.MaxGeneration, issues);
+    proto.SetKeyEntryCandidatesTried(history.Stats.CandidatesTried);
+    if (history.Ok) {
+        proto.SetKeyEntry(history.KeyEntry.ToString());
+        proto.SetSnapshotGeneration(history.Snapshot.first);
+        proto.SetSnapshotStep(history.Snapshot.second);
+        proto.SetConfirmedGeneration(history.Confirmed.first);
+        proto.SetConfirmedStep(history.Confirmed.second);
+        proto.SetLatestGeneration(history.Latest.first);
+        proto.SetLatestStep(history.Latest.second);
+        proto.SetGapsTolerated(history.Stats.GapsTolerated);
+    }
+
+    bool booted = false;
+    TDumpStats dumpStats;
+    if (history.Ok) {
+        TTabletBoot boot(store, args.TabletId, issues);
+        booted = boot.Run(history);
+
+        const auto& bootStats = boot.Stats();
+        proto.SetHasSnapshot(bootStats.HasSnapshot);
+        proto.SetLogEntriesApplied(bootStats.RedoEntries);
+        proto.SetLogEntriesSkipped(bootStats.RedoSkipped);
+        proto.SetSchemeEntriesApplied(bootStats.AlterEntries);
+        proto.SetSchemeEntriesSkipped(bootStats.AlterSkipped);
+        proto.SetPartsLoaded(bootStats.BundlesLoaded);
+        proto.SetPartsDropped(bootStats.BundlesDropped);
+        proto.SetTxStatusLoaded(bootStats.TxStatusLoaded);
+        proto.SetTxStatusDropped(bootStats.TxStatusDropped);
+        proto.SetPagesRead(bootStats.PagesRead);
+        proto.SetPagesMissing(bootStats.PagesMissing);
+        proto.SetPagesCorrupt(bootStats.PagesCorrupt);
+
+        if (booted) {
+            // The page env has to outlive the iteration, so the dump happens while boot is alive.
+            booted = DumpTablet(boot.Database(), boot.Pages(), args.Dump, issues, dumpStats);
+        }
+    }
+
+    for (const auto& table : dumpStats.Tables) {
+        auto* out = proto.AddTables();
+        out->SetTableId(table.Table);
+        out->SetName(table.Name);
+        out->SetFile(table.File);
+        out->SetRows(table.Rows);
+        out->SetErasedRows(table.Erased);
+        out->SetBytes(table.Bytes);
+        out->SetComplete(table.Complete);
+    }
+    proto.SetTotalRows(dumpStats.Rows);
+    proto.SetIncompleteTables(dumpStats.Incomplete);
+    proto.SetDescription(dumpStats.Description);
+
+    // The blobs that could not be reassembled explain most of what is missing above, so keep a sample
+    // of them in the result instead of the whole list.
+    constexpr size_t maxListed = 64;
+    for (const auto& id : store.Unrecoverable()) {
+        if (proto.UnrecoverableBlobsSize() >= maxListed) {
+            break;
+        }
+        proto.AddUnrecoverableBlobs(id.ToString());
+    }
+
+    auto print = [](const NKikimr::NPdiskTool::TRestoreTabletResult& p, IOutputStream& out) {
+        out << "Tablet " << p.GetTabletId() << Endl;
+        out << "blobs: " << p.GetBlobsFound() << " found, " << p.GetBlobsRestored() << " restored, "
+            << p.GetBlobsUnrecoverable() << " unrecoverable";
+        if (p.GetPartsWithDifferingCopies()) {
+            out << ", " << p.GetPartsWithDifferingCopies() << " part(s) had differing copies";
+        }
+        out << Endl;
+        if (p.HasKeyEntry()) {
+            out << "key entry: " << p.GetKeyEntry() << " (candidates tried "
+                << p.GetKeyEntryCandidatesTried() << ")" << Endl;
+            out << "snapshot: " << p.GetSnapshotGeneration() << ":" << p.GetSnapshotStep()
+                << ", confirmed " << p.GetConfirmedGeneration() << ":" << p.GetConfirmedStep()
+                << ", latest " << p.GetLatestGeneration() << ":" << p.GetLatestStep() << Endl;
+            if (p.GetGapsTolerated()) {
+                out << "the log had gaps, so some of the newest changes are missing" << Endl;
+            }
+            out << "log: " << p.GetLogEntriesApplied() << " applied, " << p.GetLogEntriesSkipped()
+                << " skipped; scheme: " << p.GetSchemeEntriesApplied() << " applied, "
+                << p.GetSchemeEntriesSkipped() << " skipped" << Endl;
+            out << "parts: " << p.GetPartsLoaded() << " loaded, " << p.GetPartsDropped()
+                << " dropped; pages: " << p.GetPagesRead() << " read, " << p.GetPagesMissing()
+                << " missing, " << p.GetPagesCorrupt() << " corrupt" << Endl;
+        }
+        if (p.TablesSize()) {
+            out << Endl << "TableId\tRows\tErased\tComplete\tFile" << Endl;
+            for (const auto& t : p.GetTables()) {
+                out << t.GetTableId() << "\t" << t.GetRows() << "\t" << t.GetErasedRows() << "\t"
+                    << (t.GetComplete() ? "yes" : "no") << "\t" << t.GetFile() << Endl;
+            }
+            out << "total " << p.GetTotalRows() << " row(s)";
+            if (p.GetIncompleteTables()) {
+                out << ", " << p.GetIncompleteTables() << " table(s) truncated";
+            }
+            out << Endl;
+        }
+        if (p.GetDescription()) {
+            out << "tables described in " << p.GetDescription() << Endl;
+        }
+        if (p.UnrecoverableBlobsSize()) {
+            out << Endl << "Unrecoverable blobs (up to 64 shown):" << Endl;
+            for (const auto& id : p.GetUnrecoverableBlobs()) {
+                out << "  " << id << Endl;
+            }
+        }
+    };
+
+    return FinishText(proto, issues, g.Json(), print, !booted);
+}
+
 int CmdVerify(const TGlobals& g) {
     TPDiskSession session;
     if (!OpenSession(g, session)) {
@@ -717,6 +887,37 @@ int RunCommand(const TString& command, int argc, char** argv) {
                 return 1;
             }
             return CmdExportBlob(g, vdisk, owner, erasure, id, from, to, filter, output);
+        } else if (command == "restore-tablet") {
+            TRestoreTabletArgs args;
+            TOpts opts = TOpts::Default();
+            // This command reads directories, not a device, so the device and key options do not apply.
+            opts.AddLongOption("format", "text or json").RequiredArgument("FMT").StoreResult(&g.Format);
+            opts.AddLongOption("strict", "fail on the first error").NoArgument().SetFlag(&g.Strict);
+            opts.AddHelpOption();
+            opts.AddLongOption("tablet", "tablet id").RequiredArgument("ID")
+                .StoreResult(&args.TabletId).Required();
+            opts.AddLongOption("blobs", "export-blob output directory (repeatable)")
+                .RequiredArgument("DIR").Handler1T<TString>([&args](const TString& value) {
+                    args.Dirs.push_back(value);
+                });
+            opts.AddLongOption("erasure", "group erasure (none, block-4-2, ...)")
+                .RequiredArgument("NAME").StoreResult(&args.Erasure);
+            opts.AddLongOption("output", "output directory").RequiredArgument("DIR")
+                .StoreResult(&args.Dump.Output).Required();
+            opts.AddLongOption("max-generation", "ignore log entries above this generation")
+                .RequiredArgument("N").StoreResult(&args.MaxGeneration);
+            opts.AddLongOption("csv", "comma separated instead of tab separated")
+                .NoArgument().SetFlag(&args.Dump.Csv);
+            opts.AddLongOption("tables-only", "describe the tables and stop")
+                .NoArgument().SetFlag(&args.Dump.TablesOnly);
+            opts.AddLongOption("include-erased", "keep erased rows, with a leading op column")
+                .NoArgument().SetFlag(&args.Dump.IncludeErased);
+            TOptsParseResult(&opts, argc, argv);
+            if (args.Dirs.empty()) {
+                Cerr << "--blobs is required at least once" << Endl;
+                return 1;
+            }
+            return CmdRestoreTablet(g, args);
         } else if (command == "verify") {
             TOpts opts = TOpts::Default();
             AddGlobals(opts, g);

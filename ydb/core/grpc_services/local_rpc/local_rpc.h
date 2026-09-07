@@ -487,7 +487,7 @@ public:
         }
 
         Y_ABORT_UNLESS(!Finished, "Try to read from finished stream");
-        Y_ABORT_UNLESS(!OnResponseCallback, "Can not multiply read from stream");
+        Y_ABORT_UNLESS(!OnResponseCallback, "Cannot read from stream multiple times");
         OnResponseCallback = callback;
     }
 

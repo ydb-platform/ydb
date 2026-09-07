@@ -59,6 +59,8 @@ public:
 
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) final;
 
+    IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) final;
+
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const final;
 
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const final;

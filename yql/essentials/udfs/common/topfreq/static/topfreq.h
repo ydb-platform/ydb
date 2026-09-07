@@ -27,7 +27,6 @@ protected:
     void Compress(ui32 newSize, bool sort = false);
     TUnboxedValue Convert(const IValueBuilder* valueBuilder) const;
 
-protected:
     TTopFreqBase(THash hash, TEquals equals);
 
     void Init(const TUnboxedValuePod& value, ui32 minSize, ui32 maxSize);

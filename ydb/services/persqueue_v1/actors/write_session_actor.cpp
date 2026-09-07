@@ -11,6 +11,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
@@ -856,13 +857,8 @@ bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContex
         }
     }
 
-    auto actor =
-        std::make_unique<TPartitionWriterCacheActor>(ctx.SelfID,
-                                                     Partition,
-                                                     PartitionTabletId,
-                                                     opts);
-
-    PartitionWriterCache = ctx.RegisterWithSameMailbox(actor.release());
+    PartitionWriterCache = ctx.RegisterWithSameMailbox(
+        NPQ::CreatePartitionWriterCacheActor(ctx.SelfID, Partition, PartitionTabletId, opts));
     return true;
 }
 

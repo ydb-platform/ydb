@@ -64,21 +64,34 @@ public:
 
     template <typename TAction>
     constexpr void ForEachField(TAction f) const {
-        ForEachFieldUnsafe(std::move(f));
+        ForEachFieldUnsafe([&]<size_t Index>(const auto& field) {
+            Y_UNUSED(Index);
+            f(field);
+        });
     }
 
     template <typename TReceiver, typename TAction>
     constexpr void ForEachFieldValue(TReceiver&& receiver, TAction f) const {
-        ForEachFieldUnsafe([&](const auto& field) {
+        ForEachFieldUnsafe([&]<size_t Index>(const auto& field) {
             using TField = std::decay_t<decltype(field)>;
-            f.template operator()<TField::Name>(field.Get(std::forward<TReceiver>(receiver)));
+            f.template operator()<Index, TField::Name>(field.Get(std::forward<TReceiver>(receiver)));
         });
     }
 
 private:
     template <typename TAction>
-    constexpr void ForEachFieldUnsafe(TAction f) const {
-        std::apply([&f](const auto&... fields) { (f(fields), ...); }, Fields_);
+    Y_FORCE_INLINE constexpr void ForEachFieldUnsafe(TAction f) const {
+        ForEachFieldUnsafe(std::move(f), std::make_index_sequence<FieldsCount()>{});
+    }
+
+    template <typename TAction, size_t... Indexes>
+    Y_FORCE_INLINE constexpr void ForEachFieldUnsafe(TAction f, std::index_sequence<Indexes...>) const {
+        (
+            [&] {
+                const auto& field = std::get<Indexes>(Fields_);
+                f.template operator()<Indexes>(field);
+            }(),
+            ...);
     }
 
     consteval bool AreFieldNamesUnique() const {
@@ -95,7 +108,6 @@ private:
         return sizeof...(TFields);
     }
 
-private:
     TSmallString<N> Name_;
     std::tuple<TFields...> Fields_;
 };

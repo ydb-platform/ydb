@@ -8,6 +8,7 @@ SRCS(
     direct_block_group_test_fixture.cpp
     direct_session_registry_ut.cpp
     erase_request_ut.cpp
+    fast_path_service_ut.cpp
     flush_request_ut.cpp
     ic_direct_storage_transport_ut.cpp
     read_request_ut.cpp
@@ -19,6 +20,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/ut_blobstorage/lib
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/testlib
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib
     ydb/core/nbs/cloud/blockstore/libs/storage/testlib
     ydb/core/protos

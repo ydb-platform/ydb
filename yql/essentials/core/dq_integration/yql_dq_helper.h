@@ -15,8 +15,7 @@ class IDqHelper {
 public:
     using TPtr = std::shared_ptr<IDqHelper>;
 
-    virtual ~IDqHelper() {
-    }
+    virtual ~IDqHelper() = default;
 
     virtual bool IsSingleConsumerConnection(const TExprNode::TPtr& node, const TParentsMap& parentsMap) = 0;
     virtual TExprNode::TPtr PushLambdaAndCreateCnResult(const TExprNode::TPtr& dcUnionAll, const TExprNode::TPtr& lambda, TPositionHandle pos,

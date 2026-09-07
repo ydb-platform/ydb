@@ -15,6 +15,11 @@ message TAttr {
     optional TActivationPercentage Activation = 3;
 }
 
+message TActivationGroup {
+    optional string Name = 1;
+    optional TActivationPercentage Activation = 2;
+}
+
 message TRemoteFilePattern {
     required string Pattern = 1; // regexp to match
     required string Cluster = 2;  // replacement string for YT server
@@ -996,4 +1001,6 @@ message TGatewaysConfig {
     optional TLayersConfig Layers = 26;
     optional NProto.TRuntimeSettings RuntimeSettings = 27;
     optional TSpytGatewayConfig Spyt = 28;
+
+    repeated TActivationGroup ActivationGroup = 29; // Named activation groups shared by all configuration sections.
 }

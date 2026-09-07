@@ -87,12 +87,12 @@ private:
     void GetSelf(TReqGet* request, TRspGet* response, const TCtxGetPtr& context) override
     {
         auto options = ParseGetSensorOptions(request);
-        YT_LOG_DEBUG("Received sensor value request (RequestId: %v, Name: %v, Tags: %v, ReadAllProjections: %v, ExportSummaryAsMax: %v)",
-            context->GetRequestId(),
-            options.Name,
-            options.TagMap,
-            options.ReadAllProjections,
-            options.ExportSummaryAsMax);
+        YT_TLOG_DEBUG("Received sensor value request")
+            .With("RequestId", context->GetRequestId())
+            .With("Name", options.Name)
+            .With("Tags", options.TagMap)
+            .With("ReadAllProjections", options.ReadAllProjections)
+            .With("ExportSummaryAsMax", options.ExportSummaryAsMax);
 
         if (!options.Name) {
             response->set_value(ToProto(BuildYsonStringFluently().Entity()));
@@ -174,7 +174,7 @@ private:
 
     void UpdateSensorTree()
     {
-        YT_LOG_DEBUG("Updating sensor service tree");
+        YT_TLOG_DEBUG("Updating sensor service tree");
 
         TWallTimer timer;
 
@@ -198,7 +198,9 @@ private:
                 ForceYPath(Root_, path);
                 SetNodeByYPath(Root_, path, node);
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to add new sensor to the sensor service tree (Name: %v)", name);
+                YT_TLOG_DEBUG("Failed to add new sensor to the sensor service tree")
+                    .With("Name", name)
+                    .With(ex);
 
                 // Ignore sensors with weird names.
                 ++malformedSensorCount;
@@ -211,13 +213,11 @@ private:
         auto elapsed = timer.GetElapsedTime();
         SensorTreeUpdateDuration_.Record(elapsed);
 
-        YT_LOG_DEBUG(
-            "Finished updating sensor service tree "
-            "(TotalSensorCount: %v, AddedSensorCount: %v, MalformedSensorCount: %v, Elapsed: %v)",
-            sensors.size(),
-            addedSensorCount,
-            malformedSensorCount,
-            elapsed);
+        YT_TLOG_DEBUG("Finished updating sensor service tree")
+            .With("TotalSensorCount", sensors.size())
+            .With("AddedSensorCount", addedSensorCount)
+            .With("MalformedSensorCount", malformedSensorCount)
+            .With("Elapsed", elapsed);
     }
 
     IYPathService::TResolveResult ResolveSelf(

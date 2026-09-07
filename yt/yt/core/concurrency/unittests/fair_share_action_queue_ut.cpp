@@ -115,7 +115,7 @@ public:
         }
         EXPECT_EQ(enqueuedPerThread, totalFromBuckets);
 
-        for (auto bucket : TEnumTraits<EBuckets>::GetDomainValues()) {
+        for (auto bucket : TEnumTraits<EBuckets>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
             int totalFromBucketQueues = 0;
 
             for (auto queue : bucketToQueues[bucket]) {

@@ -333,6 +333,9 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         umodti3.c
     )
 ELSEIF (ARCH_AARCH64)
+    CFLAGS(
+        -DCOMPILER_RT_HAS_FLOAT16
+    )
     SRCS(
         aarch64/chkstk.S
         aarch64/fp_mode.c

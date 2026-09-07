@@ -648,6 +648,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
     REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
     REGISTER_SETTING(*this, _ForbidReservedColumns);
+    REGISTER_SETTING(*this, _ReplaceEmptyOpWithTouch);
+    REGISTER_SETTING(*this, ApplyMaxJobCountToAll);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

@@ -195,7 +195,8 @@ int TSensorSet::Collect()
             counter->LastValue = value;
             return {delta, true};
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Counter read failed");
+            YT_TLOG_ERROR("Counter read failed")
+                .With(ex);
             return {0, false};
         }
     });
@@ -224,7 +225,8 @@ int TSensorSet::Collect()
 
             return {value, true};
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Gauge read failed");
+            YT_TLOG_ERROR("Gauge read failed")
+                .With(ex);
             return {0, false};
         }
     });

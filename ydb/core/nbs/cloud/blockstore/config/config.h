@@ -41,6 +41,9 @@ public:
     [[nodiscard]] ui32 GetVhostQueuesCount() const;
     [[nodiscard]] ui64 GetPBufferCleanupLsnStep() const;
     [[nodiscard]] bool GetUseDirectSessionTransport() const;
+    [[nodiscard]] bool GetEnableChecksums() const;
+    [[nodiscard]] ui32 GetCopyRangeBandwidthMbs() const;
+    [[nodiscard]] TDuration GetVChunkCountersUpdateInterval() const;
 
     [[nodiscard]] TString Dump() const;
 

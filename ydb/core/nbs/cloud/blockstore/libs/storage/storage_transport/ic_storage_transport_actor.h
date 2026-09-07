@@ -21,6 +21,7 @@ private:
     // Optional: when set, DirectSession handles from TEvNodeConnected are
     // published here for TICDirectStorageTransport datapath sends.
     const std::shared_ptr<TDirectSessionRegistry> DirectSessionRegistry;
+    const bool EnableChecksums;
 
     ui64 RequestIdGenerator = 0;
 
@@ -73,6 +74,7 @@ public:
     TICStorageTransportActor(
         const TDiskDescription& diskDescription,
         ui32 dbgIndex,
+        bool enableChecksums,
         std::shared_ptr<TDirectSessionRegistry> directSessionRegistry =
             nullptr);
 
@@ -207,6 +209,7 @@ private:
 NActors::TActorId CreateTransportActor(
     const TDiskDescription& diskDescription,
     ui32 dbgIndex,
+    bool enableChecksums,
     std::shared_ptr<TDirectSessionRegistry> directSessionRegistry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////

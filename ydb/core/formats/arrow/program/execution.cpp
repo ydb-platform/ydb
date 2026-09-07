@@ -9,7 +9,8 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-void TSimpleDataSource::DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+TConclusionStatus TSimpleDataSource::DoAssembleAccessor(
+    const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     auto itBlob = Blobs.find(TBlobAddress(columnId, subColumnName));
     AFL_VERIFY(itBlob != Blobs.end());
     auto it = Info.find(columnId);
@@ -23,6 +24,7 @@ void TSimpleDataSource::DoAssembleAccessor(const TProcessorContext& context, con
         context.MutableResources().AddVerified(
             columnId, NAccessor::NPlain::TConstructor().DeserializeFromString(itBlob->second, cData).DetachResult(), true);
     }
+    return TConclusionStatus::Success();
 }
 
 void TSimpleDataSource::AddBlob(const ui32 columnId, const TString& subColumnName, const std::shared_ptr<arrow::Array>& data) {

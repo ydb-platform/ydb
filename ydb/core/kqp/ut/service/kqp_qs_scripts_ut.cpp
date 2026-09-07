@@ -98,6 +98,33 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
     }
 
+    Y_UNIT_TEST(SyntaxV0ReturnsBadRequestWithPerStatementExecution) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            --!syntax_v0
+            SELECT 42;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            scriptExecutionOperation.Status().GetStatus(),
+            EStatus::SUCCESS,
+            scriptExecutionOperation.Status().GetIssues().ToString());
+
+        auto readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readyOp.Status().GetStatus(),
+            EStatus::BAD_REQUEST,
+            readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            readyOp.Status().GetIssues().ToString(),
+            "V0 syntax is disabled",
+            readyOp.Status().GetIssues().ToString());
+    }
+
     void ValidatePlan(const std::optional<std::string>& plan) {
         UNIT_ASSERT(plan);
         UNIT_ASSERT(plan != "{}");
@@ -289,6 +316,15 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
         UNIT_ASSERT_VALUES_EQUAL(listed, ScriptExecutionsCount);
         UNIT_ASSERT_EQUAL(ops, listedOps);
+    }
+
+    Y_UNIT_TEST(ListScriptExecutionsInvalidPageToken) {
+        auto kikimr = DefaultKikimrRunner();
+
+        NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
+        auto list = client.List<NYdb::NQuery::TScriptExecutionOperation>(42, "invalid-page-token").ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(list.GetStatus(), EStatus::BAD_REQUEST, list.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ForgetScriptExecution) {

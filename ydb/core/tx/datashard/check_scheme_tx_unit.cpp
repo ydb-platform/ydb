@@ -239,7 +239,7 @@ bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx,
         {"schemeVersion", proposedSchemaVersion},
         {"currentVersion", currentSchemaVersion},
         {"expectedVersion", expectedSchemaVersion},
-        {"tablet", DataShard.TabletID()},
+        {"tabletId", DataShard.TabletID()},
         {"txId", activeTx->GetTxId()});
 
     // Allow scheme tx if proposed or current schema version is zero. This simplify migration a lot.
@@ -862,3 +862,7 @@ THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -6,7 +6,6 @@ PEERDIR(
 
 SRCS(
     global_ut.cpp
-    named_node_resolution_ut.cpp
 )
 
 END()

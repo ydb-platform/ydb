@@ -1,0 +1,8 @@
+PRAGMA YqlSelect = 'force';
+
+$ts = [
+    <|TablePath: 'Input', idx: 1|>,
+    <|TablePath: 'Input1', idx: 2|>,
+];
+
+SELECT * FROM plato.PARTITION_LIST($ts);

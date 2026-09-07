@@ -1,0 +1,1 @@
+{"_yql_column_0"="\xFF\xFF\xFF\xFF\xFF\xFF\xFD\x10";"cnt"=751u;"planner_type"="some1";};

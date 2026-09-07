@@ -4,5 +4,6 @@ RECURSE(
     kikimr
     service
     storage
+    throttling
     vhost
 )

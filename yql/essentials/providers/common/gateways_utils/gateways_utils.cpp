@@ -1,6 +1,8 @@
 #include "gateways_utils.h"
 
+#include <yql/essentials/providers/common/activation/yql_activation.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <util/generic/maybe.h>
@@ -35,6 +37,7 @@ TGatewaySQLFlags TGatewaySQLFlags::From(const TGatewaysConfig& config, const TAc
     }
 
     TGatewaySQLFlags flags;
+    const NConfig::TActivationGroupRegistry activationGroups(config);
 
     {
         const auto& simple = config.GetSqlCore().GetTranslationFlags();
@@ -48,7 +51,7 @@ TGatewaySQLFlags TGatewaySQLFlags::From(const TGatewaysConfig& config, const TAc
 
         if (!flag.HasActivation()) {
             // Unconditionally enable
-        } else if (isActive(flag.GetActivation())) {
+        } else if (isActive(activationGroups.Resolve(flag.GetActivation()))) {
             flags.Activated_.emplace(name);
         } else {
             continue;
@@ -98,6 +101,58 @@ void GetClusterMappingFromGateways(const NYql::TGatewaysConfig& gateways, THashM
         AddClusters(gateways.GetKikimr().GetClusterMapping(),
                     TString{KikimrProviderName},
                     &clusterMapping);
+    }
+}
+
+void SyncWithStaticGateways(TStaticGatewaysConfig& staticGateways, TGatewaysConfig& gateways) {
+    if (gateways.HasYt()) {
+        if (!staticGateways.GetYt().HasMrJobBin() && gateways.GetYt().HasMrJobBin()) {
+            staticGateways.MutableYt()->SetMrJobBin(gateways.GetYt().GetMrJobBin());
+        }
+        if (!staticGateways.GetYt().HasMrJobUdfsDir() && gateways.GetYt().HasMrJobUdfsDir()) {
+            staticGateways.MutableYt()->SetMrJobUdfsDir(gateways.GetYt().GetMrJobUdfsDir());
+        }
+        if (!staticGateways.GetYt().HasYtDebugLogFile() && gateways.GetYt().HasYtDebugLogFile()) {
+            staticGateways.MutableYt()->SetYtDebugLogFile(gateways.GetYt().GetYtDebugLogFile());
+        }
+        if (!staticGateways.GetYt().HasMrJobBinMd5() && gateways.GetYt().HasMrJobBinMd5()) {
+            staticGateways.MutableYt()->SetMrJobBinMd5(gateways.GetYt().GetMrJobBinMd5());
+        }
+        if (staticGateways.GetYt().MrJobSystemLibsWithMd5Size() == 0 && gateways.GetYt().MrJobSystemLibsWithMd5Size() != 0) {
+            auto* staticSysLibs = staticGateways.MutableYt()->MutableMrJobSystemLibsWithMd5();
+            for (const auto& entry : gateways.GetYt().GetMrJobSystemLibsWithMd5()) {
+                TStaticFileWithMd5 staticEntry;
+                staticEntry.SetFile(entry.GetFile());
+                staticEntry.SetMd5(entry.GetMd5());
+                staticSysLibs->Add(std::move(staticEntry));
+            }
+        }
+    }
+
+    if (gateways.HasRtmr()) {
+        if (!staticGateways.GetRtmr().HasYqlRtmrDynLib() && gateways.GetRtmr().HasYqlRtmrDynLib()) {
+            staticGateways.MutableRtmr()->SetYqlRtmrDynLib(gateways.GetRtmr().GetYqlRtmrDynLib());
+        }
+
+        if (staticGateways.GetRtmr().ArtifactsSize() == 0 && gateways.GetRtmr().ArtifactsSize() != 0) {
+            auto* staticArtifacts = staticGateways.MutableRtmr()->MutableArtifacts();
+            for (const auto& entry : gateways.GetRtmr().GetArtifacts()) {
+                staticArtifacts->Add(TString(entry));
+            }
+        }
+    }
+
+    // remove all static settings from dynamic config
+    if (gateways.HasYt()) {
+        gateways.MutableYt()->ClearMrJobBin();
+        gateways.MutableYt()->ClearYtDebugLogFile();
+        gateways.MutableYt()->ClearMrJobBinMd5();
+        gateways.MutableYt()->ClearMrJobSystemLibsWithMd5();
+    }
+
+    if (gateways.HasRtmr()) {
+        gateways.MutableRtmr()->ClearYqlRtmrDynLib();
+        gateways.MutableRtmr()->ClearArtifacts();
     }
 }
 

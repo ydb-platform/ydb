@@ -983,6 +983,7 @@ NNodes::TMaybeNode<NNodes::TExprBase> FuseMapToMapReduce(NNodes::TExprBase node,
         auto resultSettings = MergeSettings(
             *NYql::RemoveSettings(outerMapReduce.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx),
             *NYql::RemoveSettings(innerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted | EYtSettingType::BlockInputReady | EYtSettingType::BlockOutputReady, ctx), ctx);
+        resultSettings = NYql::AddSetting(*resultSettings, EYtSettingType::ForceApplyMaxJobCount, {}, ctx);
         return Build<TYtMapReduce>(ctx, node.Pos())
             .InitFrom(outerMapReduce)
             .World<TCoSync>()

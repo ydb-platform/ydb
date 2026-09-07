@@ -59,7 +59,7 @@ def mypy_decorator_typing() -> None:
             return True
 
     t = T()
-    reveal_type(t.foo)  # R: builtins.str
+    reveal_type(t.foo)  # R: str
     reveal_type(t._foo_observer)  # R: Any
     reveal_type(t._foo_validate)  # R: Any
 
@@ -100,14 +100,14 @@ def mypy_list_typing() -> None:
         ).tag(config=True)
 
     t = T()
-    reveal_type(List(["foo"]))  # R: traitlets.traitlets.List[builtins.str]
-    reveal_type(List([""]).tag(sync=True))  # R: traitlets.traitlets.List[builtins.str]
+    reveal_type(List(["foo"]))  # R: traitlets.traitlets.List[str]
+    reveal_type(List([""]).tag(sync=True))  # R: traitlets.traitlets.List[str]
     reveal_type(List(None, allow_none=True))  # R: traitlets.traitlets.List[Never]
     reveal_type(
         List(None, allow_none=True).tag(sync=True)  # R: traitlets.traitlets.List[Never]
     )
-    reveal_type(T.latex_command)  # R: traitlets.traitlets.List[builtins.str]
-    reveal_type(t.latex_command)  # R: builtins.list[builtins.str]
+    reveal_type(T.latex_command)  # R: traitlets.traitlets.List[str]
+    reveal_type(t.latex_command)  # R: list[str]
 
 
 @pytest.mark.mypy_testing
@@ -116,12 +116,12 @@ def mypy_dict_typing() -> None:
         foo = Dict({}, help="Shell command used to compile latex.").tag(config=True)
 
     t = T()
-    reveal_type(Dict(None, allow_none=True))  # R: traitlets.traitlets.Dict[builtins.str, Any]
+    reveal_type(Dict(None, allow_none=True))  # R: traitlets.traitlets.Dict[str, Any]
     reveal_type(
-        Dict(None, allow_none=True).tag(sync=True)  # R: traitlets.traitlets.Dict[builtins.str, Any]
+        Dict(None, allow_none=True).tag(sync=True)  # R: traitlets.traitlets.Dict[str, Any]
     )
-    reveal_type(T.foo)  # R: traitlets.traitlets.Dict[builtins.str, Any]
-    reveal_type(t.foo)  # R: builtins.dict[builtins.str, Any]
+    reveal_type(T.foo)  # R: traitlets.traitlets.Dict[str, Any]
+    reveal_type(t.foo)  # R: dict[str, Any]
 
 
 @pytest.mark.mypy_testing
@@ -162,8 +162,8 @@ def mypy_type_typing() -> None:
     t = KernelSpecManager()
     reveal_type(t.kernel_spec_class)  # R: def () -> tests.test_typing.KernelSpec@129
     reveal_type(t.kernel_spec_class())  # R: tests.test_typing.KernelSpec@129
-    reveal_type(t.kernel_spec_class().item)  # R: builtins.str
-    reveal_type(t.other_class)  # R: builtins.type
+    reveal_type(t.kernel_spec_class().item)  # R: str
+    reveal_type(t.other_class)  # R: type
     reveal_type(t.other_class())  # R: Any
     reveal_type(t.other_kernel_spec_class)  # R: def () -> tests.test_typing.KernelSpec@129
     reveal_type(t.other_kernel_spec_class())  # R: tests.test_typing.KernelSpec@129
@@ -185,29 +185,29 @@ def mypy_unicode_typing() -> None:
 
     t = T()
     reveal_type(
-        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str, builtins.str | builtins.bytes]
+        Unicode(  # R: traitlets.traitlets.Unicode[str, str | bytes]
             "foo"
         )
     )
     reveal_type(
-        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str, builtins.str | builtins.bytes]
+        Unicode(  # R: traitlets.traitlets.Unicode[str, str | bytes]
             ""
         ).tag(sync=True)
     )
     reveal_type(
-        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str | None, builtins.str | builtins.bytes | None]
+        Unicode(  # R: traitlets.traitlets.Unicode[str | None, str | bytes | None]
             None, allow_none=True
         )
     )
     reveal_type(
-        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str | None, builtins.str | builtins.bytes | None]
+        Unicode(  # R: traitlets.traitlets.Unicode[str | None, str | bytes | None]
             None, allow_none=True
         ).tag(sync=True)
     )
     reveal_type(
-        T.export_format  # R: traitlets.traitlets.Unicode[builtins.str, builtins.str | builtins.bytes]
+        T.export_format  # R: traitlets.traitlets.Unicode[str, str | bytes]
     )
-    reveal_type(t.export_format)  # R: builtins.str
+    reveal_type(t.export_format)  # R: str
 
 
 @pytest.mark.mypy_testing
@@ -221,12 +221,12 @@ def mypy_enum_typing() -> None:
 
     t = T()
     reveal_type(
-        Enum(  # R: traitlets.traitlets.Enum[builtins.str]
+        Enum(  # R: traitlets.traitlets.Enum[str]
             ("foo",)
         )
     )
     reveal_type(
-        Enum(  # R: traitlets.traitlets.Enum[builtins.str]
+        Enum(  # R: traitlets.traitlets.Enum[str]
             [""]
         ).tag(sync=True)
     )
@@ -241,9 +241,9 @@ def mypy_enum_typing() -> None:
         ).tag(sync=True)
     )
     reveal_type(
-        T.log_level  # R: traitlets.traitlets.Enum[builtins.int]
+        T.log_level  # R: traitlets.traitlets.Enum[int]
     )
-    reveal_type(t.log_level)  # R: builtins.int
+    reveal_type(t.log_level)  # R: int
 
 
 @pytest.mark.mypy_testing
@@ -277,9 +277,9 @@ def mypy_set_typing() -> None:
     reveal_type(Set(None, allow_none=True))  # R: traitlets.traitlets.Set
     reveal_type(Set(None, allow_none=True).tag(sync=True))  # R: traitlets.traitlets.Set
     reveal_type(T.remove_cell_tags)  # R: traitlets.traitlets.Set
-    reveal_type(t.remove_cell_tags)  # R: builtins.set[Any]
+    reveal_type(t.remove_cell_tags)  # R: set[Any]
     reveal_type(T.safe_output_keys)  # R: traitlets.traitlets.Set
-    reveal_type(t.safe_output_keys)  # R: builtins.set[Any]
+    reveal_type(t.safe_output_keys)  # R: set[Any]
 
 
 @pytest.mark.mypy_testing
@@ -312,35 +312,35 @@ def mypy_bool_typing() -> None:
 
     t = T()
     reveal_type(
-        Bool(True)  # R: traitlets.traitlets.Bool[builtins.bool, builtins.bool | builtins.int]
+        Bool(True)  # R: traitlets.traitlets.Bool[bool, bool | int]
     )
     reveal_type(
-        Bool(  # R: traitlets.traitlets.Bool[builtins.bool, builtins.bool | builtins.int]
+        Bool(  # R: traitlets.traitlets.Bool[bool, bool | int]
             True
         ).tag(sync=True)
     )
     reveal_type(
-        Bool(  # R: traitlets.traitlets.Bool[builtins.bool | None, builtins.bool | builtins.int | None]
+        Bool(  # R: traitlets.traitlets.Bool[bool | None, bool | int | None]
             None, allow_none=True
         )
     )
     reveal_type(
-        Bool(  # R: traitlets.traitlets.Bool[builtins.bool | None, builtins.bool | builtins.int | None]
+        Bool(  # R: traitlets.traitlets.Bool[bool | None, bool | int | None]
             None, allow_none=True
         ).tag(sync=True)
     )
     reveal_type(
-        T.b  # R: traitlets.traitlets.Bool[builtins.bool, builtins.bool | builtins.int]
+        T.b  # R: traitlets.traitlets.Bool[bool, bool | int]
     )
-    reveal_type(t.b)  # R: builtins.bool
-    reveal_type(t.ob)  # R: builtins.bool | None
+    reveal_type(t.b)  # R: bool
+    reveal_type(t.ob)  # R: bool | None
     reveal_type(
-        T.b  # R: traitlets.traitlets.Bool[builtins.bool, builtins.bool | builtins.int]
+        T.b  # R: traitlets.traitlets.Bool[bool, bool | int]
     )
     reveal_type(
-        T.ob  # R: traitlets.traitlets.Bool[builtins.bool | None, builtins.bool | builtins.int | None]
+        T.ob  # R: traitlets.traitlets.Bool[bool | None, bool | int | None]
     )
-    # we would expect this to be Optional[bool | int], but...
+    # we would expect this to be bool | int | None, but...
     t.b = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "bool | int")  [assignment]
     t.b = None  # E: Incompatible types in assignment (expression has type "None", variable has type "bool | int")  [assignment]
 
@@ -352,24 +352,24 @@ def mypy_int_typing() -> None:
         oi: Int[int | None, int | None] = Int(42, allow_none=True).tag(sync=True)
 
     t = T()
-    reveal_type(Int(True))  # R: traitlets.traitlets.Int[builtins.int, builtins.int]
-    reveal_type(Int(True).tag(sync=True))  # R: traitlets.traitlets.Int[builtins.int, builtins.int]
+    reveal_type(Int(True))  # R: traitlets.traitlets.Int[int, int]
+    reveal_type(Int(True).tag(sync=True))  # R: traitlets.traitlets.Int[int, int]
     reveal_type(
-        Int(  # R: traitlets.traitlets.Int[builtins.int | None, builtins.int | None]
+        Int(  # R: traitlets.traitlets.Int[int | None, int | None]
             None, allow_none=True
         )
     )
     reveal_type(
-        Int(  # R: traitlets.traitlets.Int[builtins.int | None, builtins.int | None]
+        Int(  # R: traitlets.traitlets.Int[int | None, int | None]
             None, allow_none=True
         ).tag(sync=True)
     )
-    reveal_type(T.i)  # R: traitlets.traitlets.Int[builtins.int, builtins.int]
-    reveal_type(t.i)  # R: builtins.int
-    reveal_type(t.oi)  # R: builtins.int | None
-    reveal_type(T.i)  # R: traitlets.traitlets.Int[builtins.int, builtins.int]
+    reveal_type(T.i)  # R: traitlets.traitlets.Int[int, int]
+    reveal_type(t.i)  # R: int
+    reveal_type(t.oi)  # R: int | None
+    reveal_type(T.i)  # R: traitlets.traitlets.Int[int, int]
     reveal_type(
-        T.oi  # R: traitlets.traitlets.Int[builtins.int | None, builtins.int | None]
+        T.oi  # R: traitlets.traitlets.Int[int | None, int | None]
     )
     t.i = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "int")  [assignment]
     t.i = None  # E: Incompatible types in assignment (expression has type "None", variable has type "int")  [assignment]
@@ -383,21 +383,21 @@ def mypy_cint_typing() -> None:
         oi = CInt(42, allow_none=True).tag(sync=True)
 
     t = T()
-    reveal_type(CInt(42))  # R: traitlets.traitlets.CInt[builtins.int, Any]
-    reveal_type(CInt(42).tag(sync=True))  # R: traitlets.traitlets.CInt[builtins.int, Any]
+    reveal_type(CInt(42))  # R: traitlets.traitlets.CInt[int, Any]
+    reveal_type(CInt(42).tag(sync=True))  # R: traitlets.traitlets.CInt[int, Any]
     reveal_type(
-        CInt(None, allow_none=True)  # R: traitlets.traitlets.CInt[builtins.int | None, Any]
+        CInt(None, allow_none=True)  # R: traitlets.traitlets.CInt[int | None, Any]
     )
     reveal_type(
-        CInt(  # R: traitlets.traitlets.CInt[builtins.int | None, Any]
+        CInt(  # R: traitlets.traitlets.CInt[int | None, Any]
             None, allow_none=True
         ).tag(sync=True)
     )
-    reveal_type(T.i)  # R: traitlets.traitlets.CInt[builtins.int, Any]
-    reveal_type(t.i)  # R: builtins.int
-    reveal_type(t.oi)  # R: builtins.int | None
-    reveal_type(T.i)  # R: traitlets.traitlets.CInt[builtins.int, Any]
-    reveal_type(T.oi)  # R: traitlets.traitlets.CInt[builtins.int | None, Any]
+    reveal_type(T.i)  # R: traitlets.traitlets.CInt[int, Any]
+    reveal_type(t.i)  # R: int
+    reveal_type(t.oi)  # R: int | None
+    reveal_type(T.i)  # R: traitlets.traitlets.CInt[int, Any]
+    reveal_type(T.oi)  # R: traitlets.traitlets.CInt[int | None, Any]
 
 
 @pytest.mark.mypy_testing
@@ -407,21 +407,21 @@ def mypy_tcp_typing() -> None:
         otcp = TCPAddress(None, allow_none=True)
 
     t = T()
-    reveal_type(t.tcp)  # R: tuple[builtins.str, builtins.int]
+    reveal_type(t.tcp)  # R: tuple[str, int]
     reveal_type(
-        T.tcp  # R: traitlets.traitlets.TCPAddress[tuple[builtins.str, builtins.int], tuple[builtins.str, builtins.int]]
+        T.tcp  # R: traitlets.traitlets.TCPAddress[tuple[str, int], tuple[str, int]]
     )
     reveal_type(
-        T.tcp.tag(  # R:traitlets.traitlets.TCPAddress[tuple[builtins.str, builtins.int], tuple[builtins.str, builtins.int]]
+        T.tcp.tag(  # R:traitlets.traitlets.TCPAddress[tuple[str, int], tuple[str, int]]
             sync=True
         )
     )
-    reveal_type(t.otcp)  # R: tuple[builtins.str, builtins.int] | None
+    reveal_type(t.otcp)  # R: tuple[str, int] | None
     reveal_type(
-        T.otcp  # R: traitlets.traitlets.TCPAddress[tuple[builtins.str, builtins.int] | None, tuple[builtins.str, builtins.int] | None]
+        T.otcp  # R: traitlets.traitlets.TCPAddress[tuple[str, int] | None, tuple[str, int] | None]
     )
     reveal_type(
-        T.otcp.tag(  # R: traitlets.traitlets.TCPAddress[tuple[builtins.str, builtins.int] | None, tuple[builtins.str, builtins.int] | None]
+        T.otcp.tag(  # R: traitlets.traitlets.TCPAddress[tuple[str, int] | None, tuple[str, int] | None]
             sync=True
         )
     )

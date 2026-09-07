@@ -1,6 +1,6 @@
-To diagnose network issues, use the healthcheck in the [Embedded UI](../../../../reference/embedded-ui/index.md):
+To diagnose network issues, use the healthcheck in the [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md):
 
-1. Open the [Embedded UI](../../../../reference/embedded-ui/index.md):
+1. Open the [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md):
 
     1. Navigate to the **Databases** tab and click on the desired database.
 

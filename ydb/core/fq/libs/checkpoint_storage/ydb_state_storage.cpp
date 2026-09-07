@@ -57,38 +57,45 @@ public:
             TStringBuf buf(blob);
 
             while (!buf.empty()) {
-                auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+                auto& nodeState = NodeStates[nodeNum++];
+                const ui64 nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+                if (nodeStateSize == std::numeric_limits<ui64>::max()) {
+                    // Stateful operator was not initialized
+                    continue;
+                }
+
+                if (!nodeState) {
+                    nodeState.emplace();
+                }
+
                 Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
                 TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
                 buf.Skip(nodeStateSize);
 
                 NKikimr::NMiniKQL::TInputSerializer reader(nodeStateBuf);
                 auto type = reader.GetType();
-                auto& nodeState = NodeStates[nodeNum];
-                nodeState.Type = type;
+                nodeState->Type = type;
 
                 switch (type) {
-                    case NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB:
-                    {
-                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.data(), nodeStateBuf.size());
+                    case NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB: {
+                        nodeState->SimpleBlobNodeState = TString(nodeStateBuf.data(), nodeStateBuf.size());
+                        break;
                     }
-                    break;
                     case NKikimr::NMiniKQL::EMkqlStateType::SNAPSHOT:
-                    case NKikimr::NMiniKQL::EMkqlStateType::INCREMENT:
-                    {
+                    case NKikimr::NMiniKQL::EMkqlStateType::INCREMENT: {
                         reader.ReadItems(
                             [&](std::string_view key, std::string_view value) {
-                                nodeState.Items[TString(key)] = TString(value);
+                                nodeState->Items[TString(key)] = TString(value);
                             },
                             [&](std::string_view key) {
                                 // Not used for SNAPSHOT.
-                                nodeState.Items.erase(TString(key));
+                                nodeState->Items.erase(TString(key));
                             });
+                        break;
                     }
-                    break;
                 }
-                ++nodeNum;
             }
+
             Y_ENSURE(buf.empty(), "State/buf is corrupted");
         }
     }
@@ -98,19 +105,21 @@ public:
         NYql::NDq::TComputeActorState state;
         state.Sources = Sources;
         state.Sinks = Sinks;
+
         TString result;
         for (const auto& [nodeNum, nodeState] : NodeStates) {
-
-            if (nodeState.Type == NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB) {
-                NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, nodeState.SimpleBlobNodeState);
+            if (!nodeState) {
+                NKikimr::NMiniKQL::WriteUi64(result, std::numeric_limits<ui64>::max());
+            } else if (nodeState->Type == NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB) {
+                NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, nodeState->SimpleBlobNodeState);
             } else {
-                NYql::NUdf::TUnboxedValue saved =
-                     NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(nodeState.Items, 0);
+                const auto saved = NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(nodeState->Items, 0);
                 const TStringBuf savedBuf = saved.AsStringRef();
                 NKikimr::NMiniKQL::WriteUi64(result, savedBuf.size());
                 result.AppendNoAlias(savedBuf.data(), savedBuf.size());
             }
         }
+
         auto& stateData = state.MiniKqlProgram.ConstructInPlace().Data;
         stateData.Blob = result;
         Y_ENSURE(LastVersion, "LastVersion is empty");
@@ -118,7 +127,7 @@ public:
         return state;
     }
 
-    static EStateType GetStateType(const ui64 taskId, const NYql::NDq::TComputeActorState& state) {
+    static EStateType GetStateType(const NYql::NDq::TComputeActorState& state) {
         if (!state.MiniKqlProgram) {
             return EStateType::Snapshot;
         }
@@ -128,7 +137,8 @@ public:
         while (!buf.empty()) {
             const ui64 nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
             if (nodeStateSize == std::numeric_limits<ui64>::max()) {
-                throw yexception() << "Task " << taskId << " has incomplete program state: some stateful operators are still not initialized.";
+                // Stateful operator was not initialized
+                continue;
             }
 
             Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
@@ -145,12 +155,13 @@ public:
     }
 
 private:
-    struct NodeState {
+    struct TNodeState {
         NKikimr::NMiniKQL::EMkqlStateType Type;
         std::map<TString, TString> Items;
         TString SimpleBlobNodeState;
     };
-    std::map<ui64, NodeState> NodeStates;
+
+    std::map<ui64, std::optional<TNodeState>> NodeStates;
     std::list<NYql::NDq::TSourceState> Sources;
     std::list<NYql::NDq::TSinkState> Sinks;
     TMaybe<ui64> LastVersion;
@@ -424,7 +435,7 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
     taskInfo.States.push_front({});
     NYql::NDq::TComputeActorState& state = taskInfo.States.front();
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState, task id, blob size",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},
@@ -432,7 +443,7 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
 
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
-    return TIncrementLogic::GetStateType(taskInfo.TaskId, state);
+    return TIncrementLogic::GetStateType(state);
 }
 
 size_t TStateStorage::SerializeState(
@@ -469,7 +480,7 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
     size_t size = 0;
 
     try {
-        type = TIncrementLogic::GetStateType(taskId, state);
+        type = TIncrementLogic::GetStateType(state);
         size = SerializeState(state, serializedState);
         if (!size || serializedState.empty()) {
             return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}}));
@@ -734,7 +745,7 @@ TFuture<TStatus> TStateStorage::ListStatesForGeneration(const TContextPtr& conte
                             }
                             taskIt->ListOfStatesForReading.push_back(stateInfo);
 
-                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration: task row count and type",
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration result row",
                                 {"graphId", context->GraphId},
                                 {"checkpointId", context->CheckpointId},
                                 {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
@@ -822,11 +833,11 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt, {}});
-                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "TaskId checkpoint, rows",
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListOfStates result row",
                                 {"graphId", context->GraphId},
                                 {"checkpointId", context->CheckpointId},
                                 {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
-                                {"id", checkpointId},
+                                {"listedCheckpointId", checkpointId},
                                 {"count", cnt});
                         }
                     }
@@ -953,7 +964,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState: task_id, seq_no, blob_seq_num",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},
@@ -1131,12 +1142,11 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
         {"taskCount", context->Tasks.size()});
 
     std::vector<NYql::NDq::TComputeActorState> states;
+
     try {
-        for (auto& task : context->Tasks)
-        {
+        for (auto& task : context->Tasks) {
             TIncrementLogic logic;
-            for (auto& state : task.States)
-            {
+            for (auto& state : task.States) {
                 logic.Apply(state);
             }
             states.push_back(std::move(logic.Build()));
@@ -1144,6 +1154,7 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     } catch (...) {
         issues.AddIssue(CurrentExceptionMessage());
     }
+
     return states;
 }
 

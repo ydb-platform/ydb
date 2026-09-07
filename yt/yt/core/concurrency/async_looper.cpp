@@ -111,7 +111,7 @@ void TAsyncLooper::StartLoop(const TGuard& guard)
             throw;
         }
         YT_TLOG_FATAL("Unexpected error encountered during the async step")
-            .With(TError(ex));
+            .With(ex);
     } catch (...) {
         YT_TLOG_FATAL("Unexpected error encountered during the async step");
     }
@@ -217,7 +217,7 @@ void TAsyncLooper::DoStep()
             throw;
         }
         YT_TLOG_FATAL("Unexpected error encountered during the sync step")
-            .With(TError(ex));
+            .With(ex);
     } catch (...) {
         YT_TLOG_FATAL("Unexpected error encountered during the sync step");
     }

@@ -22,8 +22,7 @@ class TListLiteral;
 template <typename T>
 class TTaggedPointer {
 public:
-    TTaggedPointer() {
-    }
+    TTaggedPointer() = default;
     TTaggedPointer(T* ptr, bool mark) {
         Y_DEBUG_ABORT_UNLESS((uintptr_t(ptr) & 1) == 0);
         Raw_ = (void*)(uintptr_t(ptr) | (mark ? 1 : 0));
@@ -58,8 +57,7 @@ struct TRuntimeNode {
         return Data.GetPtr();
     }
 
-    ~TRuntimeNode() {
-    }
+    ~TRuntimeNode() = default;
 
     TType* GetRuntimeType() const;
 
@@ -329,19 +327,11 @@ class TPgType;
 // Created only by TTypeEnvironment::InternName
 class TInternName {
 public:
-    TInternName()
-    {
-    }
+    TInternName() = default;
 
-    TInternName(const TInternName& other)
-        : StrBuf_(other.StrBuf_)
-    {
-    }
+    TInternName(const TInternName& other) = default;
 
-    TInternName& operator=(const TInternName& other) {
-        StrBuf_ = other.StrBuf_;
-        return *this;
-    }
+    TInternName& operator=(const TInternName& other) = default;
 
     size_t Hash() const {
         return (size_t)StrBuf_.data();
@@ -383,7 +373,6 @@ private:
     {
     }
 
-private:
     TStringBuf StrBuf_;
 };
 
@@ -695,7 +684,6 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
     static bool CalculatePresortSupport(ui32 membersCount, std::pair<TInternName, TType*>* members);
 
-private:
     ui32 MembersCount_;
     std::pair<TInternName, TType*>* Members_;
 };
@@ -728,7 +716,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode* Values_;
 };
 
@@ -759,7 +746,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
     TDataType* IndexDictKey_;
 };
@@ -790,7 +776,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode* Items_;
     ui32 Count_;
 };
@@ -818,7 +803,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
 };
 
@@ -845,7 +829,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
 };
 
@@ -872,7 +855,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
 };
 
@@ -905,7 +887,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode Item_;
 };
 
@@ -936,7 +917,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
     bool IsDynamic_;
 };
@@ -970,7 +950,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* KeyType_;
     TType* PayloadType_;
 };
@@ -1001,7 +980,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     ui32 ItemsCount_;
     std::pair<TRuntimeNode, TRuntimeNode>* Items_;
 };
@@ -1066,7 +1044,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     bool IsMergeDisabled0_;
     ui32 ArgumentsCount_;
     TInternName Name_;
@@ -1144,7 +1121,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     ui32 InputsCount_;
     ui32 UniqueId_;
     TRuntimeNode* Inputs_;
@@ -1228,7 +1204,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode Item_;
 };
 
@@ -1359,7 +1334,6 @@ private:
         return true;
     }
 
-private:
     ui32 ElementsCount_;
     TType** Elements_;
 };
@@ -1416,7 +1390,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode* Values_;
 };
 
@@ -1452,7 +1425,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TInternName const Tag_;
 };
 
@@ -1487,7 +1459,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* BaseType_;
     TInternName const Tag_;
 };
@@ -1532,7 +1503,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* Data_;
 };
 
@@ -1562,7 +1532,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TRuntimeNode Item_;
     ui32 Index_;
 };
@@ -1576,7 +1545,6 @@ public:
         Many = 1
     };
 
-public:
     static TBlockType* Create(TType* itemType, EShape shape, const TTypeEnvironment& env);
 
     using TType::IsSameType;
@@ -1600,7 +1568,6 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
-private:
     TType* ItemType_;
     EShape Shape_;
 };

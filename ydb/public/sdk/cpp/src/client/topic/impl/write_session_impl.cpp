@@ -672,7 +672,7 @@ NThreading::TFuture<bool> TWriteSessionImpl::Flush() {
     }
 
     if (!message->FlushPromise.Initialized()) {
-        message->FlushPromise = NThreading::NewPromise<bool>();
+        message->InitFlushPromise(Connections);
     }
 
     return message->FlushPromise.GetFuture();

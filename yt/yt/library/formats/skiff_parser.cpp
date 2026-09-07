@@ -579,7 +579,8 @@ private:
                         columnId,
                         /*sparseColumn*/ sparseColumn);
                 case ELogicalMetatype::Tagged:
-                    // denullified type should not contain tagged type
+                case ELogicalMetatype::AggregateState:
+                    // Denullified type should not contain tagged types.
                     break;
             }
             YT_ABORT();

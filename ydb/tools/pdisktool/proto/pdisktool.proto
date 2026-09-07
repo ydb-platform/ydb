@@ -261,6 +261,62 @@ message TDumpSectorResult {
     repeated TIssue Issues = 7;
 }
 
+message TRestoredTable {
+    optional uint32 TableId = 1;
+    optional string Name = 2;
+    optional string File = 3;
+    optional uint64 Rows = 4;
+    optional uint64 ErasedRows = 5;
+    optional uint64 Bytes = 6;
+    // False when a page of some part is not in the input, so the file stops short of the whole table.
+    optional bool Complete = 7;
+}
+
+message TRestoreTabletResult {
+    optional uint64 TabletId = 1;
+    optional string Output = 2;
+    optional string Description = 3;
+
+    // What the log replay settled on.
+    optional string KeyEntry = 10;
+    optional uint32 SnapshotGeneration = 11;
+    optional uint32 SnapshotStep = 12;
+    optional uint32 ConfirmedGeneration = 13;
+    optional uint32 ConfirmedStep = 14;
+    optional uint32 LatestGeneration = 15;
+    optional uint32 LatestStep = 16;
+    optional uint32 KeyEntryCandidatesTried = 17;
+    optional bool GapsTolerated = 18;
+
+    // Input.
+    optional uint64 BlobsFound = 20;
+    optional uint64 BlobsRestored = 21;
+    optional uint64 BlobsUnrecoverable = 22;
+    optional uint64 PartsWithDifferingCopies = 23;
+    repeated string UnrecoverableBlobs = 24; // truncated
+
+    // Boot.
+    optional bool HasSnapshot = 30;
+    optional uint64 LogEntriesApplied = 31;
+    optional uint64 LogEntriesSkipped = 32;
+    optional uint64 SchemeEntriesApplied = 33;
+    optional uint64 SchemeEntriesSkipped = 34;
+    optional uint64 PartsLoaded = 35;
+    optional uint64 PartsDropped = 36;
+    optional uint64 TxStatusLoaded = 37;
+    optional uint64 TxStatusDropped = 38;
+    optional uint64 PagesRead = 39;
+    optional uint64 PagesMissing = 40;
+    optional uint64 PagesCorrupt = 41;
+
+    // Output.
+    repeated TRestoredTable Tables = 50;
+    optional uint64 TotalRows = 51;
+    optional uint64 IncompleteTables = 52;
+
+    repeated TIssue Issues = 100;
+}
+
 message TMetadataResult {
     optional bool Present = 1;
     optional uint64 SequenceNumber = 2;

@@ -94,6 +94,9 @@ namespace NKikimr {
             size_t RestoreIndex = Max<size_t>();
             bool IsRestoring = false;
             bool MustRestoreFirst = false;
+            // Restoring a blob into a pile which lacks it is a write made on behalf of the original
+            // request, so it is admitted the same way that request would be.
+            NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
 
             TDynBitMap Processed; // a set of piles we already got main reply from
@@ -109,6 +112,8 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(Info);
                 Y_ABORT_UNLESS(Info->Group);
                 Y_ABORT_UNLESS(Info->Group->HasBridgeGroupState());
+
+                DataKind = request->DataKind;
 
                 if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvGet>) {
                     Y_ABORT_UNLESS(!request->PhantomCheck);
@@ -177,8 +182,12 @@ namespace NKikimr {
                 return CreateWithErrorReason(ev, ev->Status, ev->Id, StatusFlags, self.GroupId, ApproximateFreeSpaceShare);
             }
 
-            std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvBlockResult *ev, auto* /*current*/) {
-                return CreateWithErrorReason(ev, ev->Status);
+            std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvBlockResult *ev, auto *current) {
+                auto result = std::make_unique<TEvBlobStorage::TEvBlockResult>(ev->Status);
+                result->ErrorReason = std::move(ev->ErrorReason);
+                result->IsTabletStorageInfoVersionObsolete = ev->IsTabletStorageInfoVersionObsolete
+                    || (current && current->IsTabletStorageInfoVersionObsolete);
+                return result;
             }
 
             std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvCollectGarbageResult *ev, auto *current) {
@@ -403,8 +412,10 @@ namespace NKikimr {
                     if (item.Buffer && item.Buffer.size() == item.Id.BlobSize()) {
                         IssueRestorePut(self, RestoreIndex);
                     } else {
-                        self.SendQuery(shared_from_this(), item.ReadFrom, std::make_unique<TEvBlobStorage::TEvGet>(
-                            item.Id, 0, 0, TInstant::Max(), GetHandleClass), {.Index = RestoreIndex});
+                        auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, TInstant::Max(),
+                            GetHandleClass);
+                        get->DataKind = DataKind;
+                        self.SendQuery(shared_from_this(), item.ReadFrom, std::move(get), {.Index = RestoreIndex});
                         IsRestoring = true;
                     }
 
@@ -455,6 +466,7 @@ namespace NKikimr {
                             .HandleClass = handleClass,
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::BridgeProxyRestorePut,
+                            .DataKind = DataKind,
                             .IssueKeepFlag = item.IssueKeepFlag,
                             .IgnoreBlock = true,
                         }), {.Index = index});
@@ -793,9 +805,7 @@ namespace NKikimr {
             }
 
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
-                if (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE && !ev.AlreadyEncrypted) {
-                    // we have to encrypt this message
-                } else if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
+                if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
                     // send this message as is
                 } else if (AppData()->FeatureFlags.GetEnableInterpileTrafficOptimization()) {
                     // enable reducing interpile traffic; clone the original message rather than

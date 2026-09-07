@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    yql_pq_deferred_publish_client.cpp
     yql_pq_federated_topic_client.cpp
     yql_pq_topic_client.cpp
 )

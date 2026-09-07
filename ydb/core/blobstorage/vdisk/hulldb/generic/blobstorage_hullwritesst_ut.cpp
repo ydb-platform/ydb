@@ -67,16 +67,18 @@ namespace NKikimr {
                 }
             };
 
-            TTest(ui32 chunksToUse, ui8 owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize)
+            TTest(ui32 chunksToUse, ui8 owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize,
+                    ui32 baseOffset = 0)
                 : ChunksToUse(chunksToUse)
                 , Owner(owner)
                 , OwnerRound(ownerRound)
                 , ChunkSize(chunkSize)
                 , AppendBlockSize(appendBlockSize)
                 , WriteBlockSize(writeBlockSize)
+                , BaseOffset(baseOffset)
                 , WriterPtr(new TWriter(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse, Owner, OwnerRound,
                         ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
-                        EBlobHeaderMode::OLD_HEADER))
+                        EBlobHeaderMode::OLD_HEADER, BaseOffset))
                 , Arena(&TRopeArenaBackend::Allocate)
                 , ReservedChunks()
                 , Stat()
@@ -108,6 +110,7 @@ namespace NKikimr {
             const ui32 ChunkSize;
             const ui32 AppendBlockSize;
             const ui32 WriteBlockSize;
+            const ui32 BaseOffset;
 
             std::unique_ptr<TWriter> WriterPtr;
             TRopeArena Arena;
@@ -145,7 +148,7 @@ namespace NKikimr {
 
             void ValidateWriteSpan() {
                 for (const auto& kv : WriteSpan) {
-                    ui32 expectedBegin = 0;
+                    ui32 expectedBegin = BaseOffset;
                     for (auto it = kv.second.begin(); it != kv.second.end(); ++it) {
                         UNIT_ASSERT_VALUES_EQUAL(expectedBegin, it->first);
                         expectedBegin = it->second;
@@ -188,7 +191,7 @@ namespace NKikimr {
                     Finish(step);
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
-                        EBlobHeaderMode::OLD_HEADER);
+                        EBlobHeaderMode::OLD_HEADER, BaseOffset);
                     Y_ABORT_UNLESS(push());
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
@@ -237,7 +240,7 @@ namespace NKikimr {
 
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
-                        EBlobHeaderMode::OLD_HEADER);
+                        EBlobHeaderMode::OLD_HEADER, BaseOffset);
                     Y_ABORT_UNLESS(push());
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
@@ -264,7 +267,7 @@ namespace NKikimr {
 
                     WriterPtr = std::make_unique<TWriterBlock>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
-                        EBlobHeaderMode::OLD_HEADER);
+                        EBlobHeaderMode::OLD_HEADER, BaseOffset);
                     Y_ABORT_UNLESS(WriterPtr->PushIndexOnly(key, merger.GetMemRec(), nullptr, nullptr));
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
@@ -532,6 +535,24 @@ namespace NKikimr {
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+        }
+
+        Y_UNIT_TEST(BlockStripeBaseOffset) {
+            ui32 chunksToUse = 1;
+            ui8 owner = 1;
+            ui64 ownerRound = 1;
+            ui32 appendBlockSize = 4u << 10u;
+            ui32 chunkSize = 64 * appendBlockSize;
+            ui32 writeBlockSize = 16u << 10u;
+            ui32 baseOffset = 8 * appendBlockSize;
+            TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize,
+                appendBlockSize, writeBlockSize, baseOffset);
+            test.Test(200);
+
+            const auto& conclusion = test.GetStat().Stat.at(0).WriterConclusion;
+            UNIT_ASSERT_VALUES_EQUAL(conclusion.Addr.ChunkIdx, 1u);
+            UNIT_ASSERT(conclusion.Addr.Offset >= baseOffset);
+            UNIT_ASSERT_VALUES_EQUAL(conclusion.UsedChunks.size(), 1u);
         }
     }
 

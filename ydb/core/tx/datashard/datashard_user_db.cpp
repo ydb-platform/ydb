@@ -7,6 +7,8 @@
 
 #include <ydb/library/aclib/user_context.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 using NTableIndex::NFulltext::TGen;
@@ -321,8 +323,14 @@ void TDataShardUserDb::EraseRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
+    // CollectAffectedRows only adds an extra read to determine whether the
+    // row existed; it must not affect writes, locks, or conflict checks.
+    const bool rowExists =
+        (LockMode == ELockMode::OptimisticSnapshotIsolation || CollectAffectedRows)
+        && RowExists(tableId, key);
+
     if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
-        if (!RowExists(tableId, key)) {
+        if (!rowExists) {
             // Don't perform write for keys which don't exist, SnapshotRW
             // transaction may break otherwise even when not actually
             // performing operations from the user's viewpoint
@@ -336,6 +344,10 @@ void TDataShardUserDb::EraseRow(
 
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
+
+    if (CollectAffectedRows && rowExists) {
+        Counters.NAffectedRows++;
+    }
 }
 
 bool TDataShardUserDb::PrechargeRow(
@@ -357,6 +369,10 @@ void TDataShardUserDb::IncreaseUpdateCounters(
 
     Counters.NUpdateRow++;
     Counters.UpdateRowBytes += keyBytes + valueBytes;
+
+    if (CollectAffectedRows) {
+        Counters.NAffectedRows++;
+    }
 }
 
 void TDataShardUserDb::IncreaseSelectCounters(
@@ -537,8 +553,10 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
 
     if (!Db.HasOpenTx(localTid, lockId)) {
         if (Db.HasRemovedTx(localTid, lockId)) {
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Committing removed changes lockId# " << lockId << " tid# " << localTid << " shard# " << Self.TabletID());
+            YDB_LOG_CRIT("Committing removed changes",
+                {"lockId", lockId},
+                {"tid", localTid},
+                {"shard", Self.TabletID()});
             Self.IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
         }
         return;
@@ -556,12 +574,15 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
     }
 
     if (VolatileTxId) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Scheduling commit of lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self.TabletID());
+        YDB_LOG_TRACE("Scheduling commit",
+            {"lockId", lockId},
+            {"localTid", localTid},
+            {"shard", Self.TabletID()});
         if (VolatileCommitTxIds.insert(lockId).second) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
             if (it != TxMaps.end()) {
-                it->second->Add(lockId, MvccVersion);
+                it->second->Add(lockId, TRowVersion::Min());
             }
         }
         // Note for AI agents: we don't add lockId to CommittedTxIds because
@@ -569,7 +590,10 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
         return;
     }
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Committing changes lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self.TabletID());
+    YDB_LOG_TRACE("Committing changes",
+        {"lockId", lockId},
+        {"localTid", localTid},
+        {"shard", Self.TabletID()});
     Db.CommitTx(localTid, lockId, MvccVersion);
     Self.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(lockId, Db);
     CommittedTxIds.insert(lockId);
@@ -584,7 +608,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
 
 void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId) {
     auto* dynamicTxMap = static_cast<NTable::TDynamicTransactionMap*>(GetReadTxMap(tableId).Get());
-    dynamicTxMap->Add(txId, MvccVersion);
+    dynamicTxMap->Add(txId, TRowVersion::Min());
 }
 
 class TLockedReadTxObserver: public NTable::ITransactionObserver {
@@ -996,7 +1020,7 @@ ui64 TDataShardUserDb::GetWriteTxId(const TTableId& tableId) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
             if (it != TxMaps.end()) {
-                it->second->Add(VolatileTxId, MvccVersion);
+                it->second->Add(VolatileTxId, TRowVersion::Min());
             }
         }
         // Note for AI agents: we don't add VolatileTxId to CommittedTxIds
@@ -1019,7 +1043,13 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
         // We need tx map to see committed volatile tx changes
         VolatileTxId && !VolatileCommitTxIds.empty() ||
         // We need tx map when current lock has uncommitted changes
-        LockTxId && Self.SysLocksTable().HasCurrentWriteLock(tableId)
+        LockTxId && Self.SysLocksTable().HasCurrentWriteLock(tableId) ||
+        // In SnapshotIsolation mode we need tx map to see changes committed by our
+        // own locks earlier in this EvWrite (immediate commit path). Those deltas
+        // remain in the localdb under their original LockTxId; without a TxMap entry
+        // they are only visible at MvccVersion, which may be newer than SnapshotVersion.
+        // Mapping them to TRowVersion::Min() makes them visible at any snapshot.
+        LockMode == ELockMode::OptimisticSnapshotIsolation && !CommittedTxIds.empty()
     );
 
     if (!needTxMap) {
@@ -1034,9 +1064,18 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
             // Uncommitted changes are visible in all possible snapshots
             txMap->Add(LockTxId, TRowVersion::Min());
         } else if (VolatileTxId) {
-            // We want committed volatile changes to be visible at the write version
+            // Own volatile commit-time writes must be visible at any snapshot,
+            // same as LockTxId.
             for (ui64 commitTxId : VolatileCommitTxIds) {
-                txMap->Add(commitTxId, MvccVersion);
+                txMap->Add(commitTxId, TRowVersion::Min());
+            }
+        }
+        if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+            // Make immediately committed lock changes visible at any snapshot.
+            // This allows commit-time writes (e.g. DELETE in the same EvWrite as the
+            // lock commit) to see rows committed by the lock via RowExists checks.
+            for (ui64 txId : CommittedTxIds) {
+                txMap->Add(txId, TRowVersion::Min());
             }
         }
     }
@@ -1142,3 +1181,7 @@ const NMiniKQL::TEngineHostCounters& TDataShardUserDb::GetCounters() const {
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

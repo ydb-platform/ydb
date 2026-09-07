@@ -1,3 +1,6 @@
+import pytest
+
+from ydb.apps.dstool.lib import common
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bsbase3
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
@@ -9,6 +12,17 @@ from ydb.tests.library.common.msgbus_types import MessageBusStatus
 #
 # for ydb_{cluster, database, ...} fixture family
 pytest_plugins = 'ydb.tests.library.fixtures'
+
+
+@pytest.fixture(autouse=True)
+def isolate_dstool_client_state(monkeypatch):
+    monkeypatch.setattr(common, 'connection_params', common.ConnectionParams())
+    monkeypatch.setattr(common, 'bad_hosts', set())
+    monkeypatch.setattr(common, 'cache', {})
+    monkeypatch.setattr(common, 'name_cache', {})
+    monkeypatch.delenv('YDB_TOKEN', raising=False)
+    monkeypatch.delenv('IAM_TOKEN', raising=False)
+    yield
 
 
 class BaseConfigBuilder:
@@ -201,6 +215,29 @@ class FakeReassignGroupDiskHandler:
             config_response.Success = True
         else:
             config_response.Success = False
+
+        response = kikimr_msgbus.TResponse()
+        response.Status = MessageBusStatus.MSTATUS_OK
+        response.BlobStorageConfigResponse.CopyFrom(config_response)
+        return response
+
+
+class FakePopulatePDiskHandler:
+    def handle(self, func, *params):
+        assert func == 'BlobStorageConfig'
+        bs_request = params[0]
+
+        config_response = kikimr_bsconfig.TConfigResponse()
+        for command in bs_request.Request.Command:
+            assert command.HasField('PopulatePDisk')
+            config_response.Status.add().Success = True
+
+        if bs_request.Request.Rollback:
+            config_response.Success = False
+            config_response.ErrorDescription = 'fake transaction rollback'
+            config_response.RollbackSuccess = True
+        else:
+            config_response.Success = True
 
         response = kikimr_msgbus.TResponse()
         response.Status = MessageBusStatus.MSTATUS_OK

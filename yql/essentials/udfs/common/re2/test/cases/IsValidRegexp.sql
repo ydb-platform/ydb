@@ -1,4 +1,3 @@
-/* syntax version 1 */
 SELECT
     Re2::IsValidRegexp("*") AS invalid_star_at_start,
     Re2::IsValidRegexp("[") AS invalid_unclosed_bracket,

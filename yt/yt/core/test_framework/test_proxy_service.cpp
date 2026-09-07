@@ -103,8 +103,9 @@ void TTestChannel::HandleRequestResult(
     } else if (error.IsOK()) {
         NProto::TResponseHeader header;
         YT_VERIFY(TryParseResponseHeader(bus->GetMessage(), &header));
+        auto headerError = FromProto<TError>(header.error());
         auto wrappedError = TError("Test proxy service error")
-            << FromProto<TError>(header.error());
+            .WithIf(!headerError.IsOK(), headerError);
         response->HandleError(std::move(wrappedError));
     } else {
         auto wrappedError = TError("Test proxy service error")

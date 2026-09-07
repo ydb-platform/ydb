@@ -418,14 +418,15 @@ class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture)
 
         self.copy_with_kafka_streams(source_topic, target_topic, len(plain_messages) + len(batch_messages))
 
+        expected = plain_messages + [
+            message.decode("utf-8")
+            for message in batch_messages
+        ]
         read = read_messages(
             self.driver,
             target_topic,
             KAFKA_CHECKER_CONSUMER,
-            len(plain_messages) + len(batch_messages),
+            len(expected),
         )
-        assert len(read) == len(plain_messages) + len(batch_messages)
-        assert {message.decode("utf-8") for message in read} == set(plain_messages) | {
-            message.decode("utf-8")
-            for message in batch_messages
-        }
+        assert len(read) == len(expected)
+        assert_kafka_streams_forwarded_payloads(read, expected)

@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import socket
 import time
 import uuid
+from contextlib import contextmanager
 
 import boto3
 from hamcrest import assert_that, equal_to, has_item, has_length, not_none, raises
@@ -17,6 +19,31 @@ logger = logging.getLogger(__name__)
 DEFAULT_REGION = 'ru-central1'
 DEFAULT_SECURITY_TOKEN = 'root@builtin'
 DEFAULT_SQS_CONSUMER = 'ydb-sqs-consumer'
+
+
+@contextmanager
+def resolve_hostname_as_localhost(hostname):
+    # No /etc/hosts: remap a fake DNS name to the same address the cluster already uses.
+    original_getaddrinfo = socket.getaddrinfo
+    original_gethostbyname = socket.gethostbyname
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        if host == hostname:
+            host = 'localhost'
+        return original_getaddrinfo(host, port, *args, **kwargs)
+
+    def fake_gethostbyname(host):
+        if host == hostname:
+            host = 'localhost'
+        return original_gethostbyname(host)
+
+    socket.getaddrinfo = fake_getaddrinfo
+    socket.gethostbyname = fake_gethostbyname
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
+        socket.gethostbyname = original_gethostbyname
 
 
 class KikimrSqsTopicTestBase(object):
@@ -119,16 +146,61 @@ class KikimrSqsTopicTestBase(object):
         )['QueueUrl']
         return queue_name
 
-    def _make_boto_client(self):
+    def _make_boto_client(self, endpoint_url=None):
         session = boto3.session.Session()
         return session.client(
             service_name='sqs',
             aws_access_key_id='unused',
             aws_secret_access_key='unused',
             aws_session_token=DEFAULT_SECURITY_TOKEN,
-            endpoint_url=self.sqs_endpoint,
+            endpoint_url=endpoint_url or self.sqs_endpoint,
             region_name=DEFAULT_REGION,
         )
+
+    @contextmanager
+    def _boto_client_with_request_host(self, request_host):
+        origin = 'http://{}:{}'.format(request_host, self.cluster.nodes[1].http_proxy_port)
+        with resolve_hostname_as_localhost(request_host):
+            yield origin, self._make_boto_client(endpoint_url='{}{}'.format(origin, self.database))
+
+    @contextmanager
+    def _boto_client_with_forwarded_host(self, public_host, proto='HTTPS, http'):
+        # Talk to the real backend Host (localhost:http_proxy_port) and inject balancer headers.
+        first_proto = proto.split(',', 1)[0].strip().lower()
+        public_origin = '{}://{}'.format(first_proto, public_host)
+        client = self._make_boto_client()
+
+        def add_forwarded_headers(request, **kwargs):
+            request.headers['X-Forwarded-Host'] = public_host
+            request.headers['X-Forwarded-Proto'] = proto
+
+        event_name = 'before-send.sqs.*'
+        client.meta.events.register(event_name, add_forwarded_headers)
+        try:
+            yield public_origin, client
+        finally:
+            client.meta.events.unregister(event_name, add_forwarded_headers)
+
+    @contextmanager
+    def _boto_client_with_rfc_forwarded(self, public_host, proto='https'):
+        first_proto = proto.split(',', 1)[0].strip().lower()
+        if ':' in public_host or public_host.startswith('['):
+            host_param = '"{}"'.format(public_host)
+        else:
+            host_param = public_host
+        forwarded = 'for=192.0.2.43;host={};proto={}'.format(host_param, first_proto)
+        public_origin = '{}://{}'.format(first_proto, public_host)
+        client = self._make_boto_client()
+
+        def add_forwarded_header(request, **kwargs):
+            request.headers['Forwarded'] = forwarded
+
+        event_name = 'before-send.sqs.*'
+        client.meta.events.register(event_name, add_forwarded_header)
+        try:
+            yield public_origin, client
+        finally:
+            client.meta.events.unregister(event_name, add_forwarded_header)
 
     def _make_ydb_driver(self):
         node = self.cluster.nodes[1]

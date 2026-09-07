@@ -53,7 +53,7 @@ kafka_proxy_config:
 
 ### HTTP
 
-{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
+{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
 
 Пример включения TLS на HTTP-порту, что делает его использования HTTPS:
 
@@ -61,6 +61,8 @@ kafka_proxy_config:
 monitoring_config:
     monitoring_certificate_file: "/opt/ydb/certs/node.crt"
 ```
+
+Подробное описание параметров TLS для мониторинга см. в разделе [monitoring_config](./monitoring_config.md#tls).
 
 ## {{ ydb-short-name }} в роли клиента
 

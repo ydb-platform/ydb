@@ -20,6 +20,48 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
         }
     }
 
+    Y_UNIT_TEST(AnalyzerHelpersRoundTrip) {
+        TFulltextIndexSettings settings;
+        TFulltextIndexSettings::TColumnAnalyzers column;
+        column.Column = "Text";
+        column.Analyzers = TFulltextIndexSettings::TAnalyzers::Snowball("russian");
+        settings.Columns.push_back(column);
+
+        Ydb::Table::FulltextIndexSettings proto;
+        settings.SerializeTo(proto);
+        auto restored = TFulltextIndexSettings::FromProto(proto);
+
+        UNIT_ASSERT_VALUES_EQUAL(restored.Columns.size(), 1);
+        UNIT_ASSERT(restored.Columns[0].Analyzers.has_value());
+        const auto& analyzers = *restored.Columns[0].Analyzers;
+        UNIT_ASSERT_VALUES_EQUAL(analyzers.Language.value_or(""), "russian");
+        UNIT_ASSERT(analyzers.UseFilterLowercase.value_or(false));
+        UNIT_ASSERT(analyzers.UseFilterStopwords.value_or(false));
+        UNIT_ASSERT(analyzers.UseFilterSnowball.value_or(false));
+    }
+
+    Y_UNIT_TEST(SuperLemmerAnalyzerRoundTrip) {
+        TFulltextIndexSettings settings;
+        TFulltextIndexSettings::TColumnAnalyzers column;
+        column.Column = "Text";
+        column.Analyzers = TFulltextIndexSettings::TAnalyzers::SuperLemmer("russian");
+        settings.Columns.push_back(column);
+
+        Ydb::Table::FulltextIndexSettings proto;
+        settings.SerializeTo(proto);
+        UNIT_ASSERT(proto.columns(0).analyzers().use_filter_superlemmer());
+
+        auto restored = TFulltextIndexSettings::FromProto(proto);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Columns.size(), 1);
+        UNIT_ASSERT(restored.Columns[0].Analyzers.has_value());
+        const auto& analyzers = *restored.Columns[0].Analyzers;
+        UNIT_ASSERT_VALUES_EQUAL(analyzers.Language.value_or(""), "russian");
+        UNIT_ASSERT(analyzers.UseFilterLowercase.value_or(false));
+        UNIT_ASSERT(analyzers.UseFilterStopwords.value_or(false));
+        UNIT_ASSERT(analyzers.UseFilterSuperLemmer.value_or(false));
+        UNIT_ASSERT_STRING_CONTAINS(ToString(restored), "use_filter_superlemmer: true");
+    }
+
     Y_UNIT_TEST_TWIN(CreateTableWithIndex, UseQueryClient) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableFulltextIndex(true);
@@ -271,6 +313,48 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateTableWithAnalyzer, UseQueryClient) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableFulltextIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        TString query = R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/TestTable` (
+                Key Uint64,
+                Text String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx
+                    GLOBAL USING fulltext_plain
+                    ON (Text)
+                    WITH (analyzer="standard")
+            );
+        )";
+        auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTableWithSnowballAnalyzer, UseQueryClient) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableFulltextIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        TString query = R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/TestTable` (
+                Key Uint64,
+                Text String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx
+                    GLOBAL USING fulltext_relevance
+                    ON (Text)
+                    WITH (analyzer="snowball", language="russian")
+            );
+        )";
+        auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST_TWIN(CreateTableWithIndexInvalidSettings, UseQueryClient) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableFulltextIndex(true);
@@ -325,6 +409,23 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "column analyzers should be set");
+        }
+        { // snowball analyzer without language
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Text String,
+                    PRIMARY KEY (Key),
+                    INDEX fulltext_idx
+                        GLOBAL USING fulltext_plain
+                        ON (Text)
+                        WITH (analyzer="snowball")
+                );
+            )";
+            auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "language required when use_filter_snowball is set");
         }
     }
 

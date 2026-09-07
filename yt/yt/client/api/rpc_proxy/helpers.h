@@ -518,6 +518,9 @@ std::vector<TSharedRef> SerializeRowset(
     TRange<TRow> rows,
     NProto::TRowsetDescriptor* descriptor);
 
+NTableClient::TTableSchemaPtr DeserializeRowsetSchema(
+    const NProto::TRowsetDescriptor& descriptor);
+
 template <class TRow>
 TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,

@@ -334,7 +334,6 @@ private:
         U_.E.Ptr = ptr;
     }
 
-private:
     union {
         TExternal E;
         TInplace I;
@@ -617,17 +616,14 @@ private:
             }
         }
 
-    private:
         NUdf::TUnboxedValue State_;
         NUdf::TUnboxedValue Stream_;
     };
 
-private:
     void RegisterDependencies() const final {
         DependsOn(Stream_);
     }
 
-private:
     IComputationNode* const Stream_;
     const std::optional<ui32> FilterColumn_;
     const size_t Width_;
@@ -710,6 +706,8 @@ std::equal_to<T> MakeEqual(ui32 keyLength) {
 
 template <>
 std::equal_to<TExternalFixedSizeKey> MakeEqual(ui32 keyLength) {
+    // The typed specialization carries the fixed key length, unlike std::equal_to<>.
+    // NOLINTNEXTLINE(modernize-use-transparent-functors)
     return std::equal_to<TExternalFixedSizeKey>(keyLength);
 }
 
@@ -1341,7 +1339,6 @@ private:
         const NYql::EDatumValidationMode ValidationMode_;
     };
 
-private:
     void RegisterDependencies() const final {
         this->DependsOn(Stream_);
     }

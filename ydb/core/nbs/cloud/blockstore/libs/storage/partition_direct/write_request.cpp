@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/string/cast.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -35,12 +37,10 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , WriteMode(directBlockGroup->GetOracle()->GetWriteMode())
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
-          {{"t",
-            WriteMode == EWriteMode::IndirectWrite ? "IndirectWrite"
-                                                   : "DirectWrite"},
-           {"lsn", bundle->GetLsn()},
-           {"r", bundle->GetRange()},
-           {"rv", bundle->GetVChunkRange()}}))
+          {{"t", ToString(WriteMode)},
+           {"pBufferKey", bundle->GetPBufferKey().Print()},
+           {"r", bundle->GetRange().Print()},
+           {"rv", bundle->GetVChunkRange().Print()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Bundle(std::move(bundle))
@@ -122,7 +122,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
         VChunkConfig.GetVChunkIndex(),
         coordinator,
         hosts,
-        Bundle->GetLsn(),
+        Bundle->GetPBufferKey(),
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,
         Bundle->GetSgList(),
@@ -290,7 +290,7 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
     auto future = DirectBlockGroup->WriteBlocksToPBuffer(
         VChunkConfig.GetVChunkIndex(),
         host,
-        Bundle->GetLsn(),
+        Bundle->GetPBufferKey(),
         Bundle->GetVChunkRange(),
         Bundle->GetSgList(),
         span ? span->GetTraceId() : NWilson::TTraceId());

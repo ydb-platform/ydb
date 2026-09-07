@@ -395,7 +395,7 @@ void TAsyncExpiringCache<TKey, TValue>::Ping(const TKey& key)
 {
     auto config = GetConfig();
     auto now = NProfiling::GetCpuInstant();
-    auto [guard, map] = LockAndGetReadableShardForKey(key);
+    auto [guard, map] = LockAndGetWritableShardForKey(key);
 
     if (auto it = map.find(key); it != map.end() && it->second->Promise.IsSet()) {
         const auto& entry = it->second;

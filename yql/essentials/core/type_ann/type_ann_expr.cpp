@@ -357,8 +357,9 @@ private:
                     return argStatus;
                 }
 
-                if (argStatus.Level == TStatus::Repeat)
+                if (argStatus.Level == TStatus::Repeat) {
                     return TStatus::Ok;
+                }
 
                 TStatus combinedStatus = TStatus::Ok;
                 TExprNode::TListType newChildren;

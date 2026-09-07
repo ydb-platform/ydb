@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package NKikimr;
+
+message TEqHeightHistogramIntermediateState {
+    message TEntry {
+        bytes UpperBound = 1;
+        uint64 Count = 2;
+        uint64 RankUncertainty = 3;
+        bool SingleKey = 4;
+    }
+
+    message TParams {
+        uint32 NumBuckets = 1;
+        uint32 EmissionRate = 2;
+        uint64 MaxStateBytes = 3;
+    }
+
+    bool BudgetForced = 1;
+    TParams Params = 2;
+    uint64 TotalCount = 3;
+    bytes MinKey = 4;
+    repeated TEntry Entries = 5;
+}
+
+// Finalized histogram from Finalize().
+message TEqHeightHistogramResult {
+    message TBucket {
+        bytes UpperBound = 1;
+        uint64 CumulativeCount = 2;
+    }
+
+    uint32 NumBuckets = 1;
+    uint64 TotalCount = 2;
+    uint64 MaxRankError = 3;
+    repeated TBucket Buckets = 4;
+}

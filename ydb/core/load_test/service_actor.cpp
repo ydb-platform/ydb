@@ -574,7 +574,7 @@ public:
                 }
                 LOG_D("Create new load actor with tag# " << tag);
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateDDiskLoadTest(
-                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag, true)));
                 break;
             }
 
@@ -585,7 +585,7 @@ public:
                 }
                 LOG_D("Create new load actor with tag# " << tag);
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreatePersistentBufferWriterLoadTest(
-                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag, true)));
                 break;
             }
 

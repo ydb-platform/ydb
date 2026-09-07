@@ -6,7 +6,10 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/shutdown/controller.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/session_actor/kqp_query_state.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/util/ulid.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <library/cpp/iterator/functools.h>
@@ -50,7 +53,7 @@ namespace {
         runtime.SetObserverFunc(grab);
 
         auto shutdownState = new TKqpShutdownState();
-        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, 
+        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {},
                      new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), nodeIndexToShutdown);
 
         auto future = kikimr.RunInThreadPool([&queryClient, &query](){
@@ -67,15 +70,82 @@ namespace {
 
         auto result = runtime.WaitFuture(future);
 
-        UNIT_ASSERT_C(nodeShuttingDownCount >= expectedMinShutdownEvents, 
-            stageDescription << ": Expected at least " << expectedMinShutdownEvents 
+        UNIT_ASSERT_C(nodeShuttingDownCount >= expectedMinShutdownEvents,
+            stageDescription << ": Expected at least " << expectedMinShutdownEvents
             << " NODE_SHUTTING_DOWN responses, got: " << nodeShuttingDownCount);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus,
             stageDescription << ": Unexpected result status. Got issues: " << result.GetIssues().ToString());
     }
 } // anonymous namespace
+
 Y_UNIT_TEST_SUITE(KqpService) {
+    Y_UNIT_TEST(QueryTxIdResetUnsetsValue) {
+        TULIDGenerator ulidGen;
+        TKqpQueryState::TQueryTxId txId;
+
+        UNIT_ASSERT(!txId.HasValue());
+
+        const auto firstId = ulidGen.Next();
+        txId.SetValue(firstId);
+        UNIT_ASSERT(txId.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(txId.GetValue().GetHumanStr(), firstId.ToString());
+
+        // Reset() must return the id to the unset state. Storing a default constructed
+        // TTxId instead leaves the underlying TMaybe engaged, and then every later
+        // SetValue() fails with "SetValue(): requirement !Id failed".
+        txId.Reset();
+        UNIT_ASSERT(!txId.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(txId.GetValue().GetHumanStr(), "");
+
+        const auto secondId = ulidGen.Next();
+        txId.SetValue(secondId);
+        UNIT_ASSERT(txId.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(txId.GetValue().GetHumanStr(), secondId.ToString());
+    }
+
+    Y_UNIT_TEST(DuplicatedWorkloadManagerContinueRequest) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(app)
+            .SetWithSampleTables(false)
+            .SetUseRealThreads(false));
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(R"(
+                    CREATE RESOURCE POOL test_pool WITH (concurrent_query_limit = 1);
+                )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        ui32 continueRequests = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NWorkloadManager::TEvContinueRequest::EventType && ++continueRequests == 1) {
+                const auto* msg = ev->Get<NWorkloadManager::TEvContinueRequest>();
+                auto copy = std::make_unique<NWorkloadManager::TEvContinueRequest>(
+                    msg->QueryId, msg->Status, msg->PoolId, msg->PoolConfig, msg->Issues);
+                runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, copy.release(), ev->Flags, ev->Cookie));
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery("SELECT 42;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ResourcePool("test_pool")).GetValueSync();
+        });
+
+        UNIT_ASSERT_C(continueRequests > 0, "Query did not go through workload manager admission");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(Shutdown) {
         const ui32 Inflight = 50;
         const TDuration WaitDuration = TDuration::Seconds(1);
@@ -889,7 +959,7 @@ struct TDictCase {
     Y_UNIT_TEST(ThreeNodesGradualShutdown) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);
-        
+
         TKikimrRunner kikimr(TKikimrSettings()
                                         .SetFeatureFlags(featureFlags)
                                         .SetNodeCount(3)
@@ -987,6 +1057,65 @@ struct TDictCase {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
             "Expected SUCCESS because retry to another node was in progress, but got: " << result.GetIssues().ToString());
+    }
+
+    /* Scenario (rolling upgrade / node drain):
+        - Every TEvStartKqpTasksRequest bounces back as undelivered with ReasonActorUnknown,
+          so the executer keeps rescheduling internal retries until the budget is exhausted.
+        - A node going away is a transient condition, so the query must terminate with the
+          retriable UNAVAILABLE, just like the Disconnected and NODE_SHUTTING_DOWN paths do,
+          and not with the non-retriable INTERNAL_ERROR.
+     */
+    Y_UNIT_TEST(RetriesExhaustedByActorUnknownIsUnavailable) {
+        TKikimrSettings settings = TKikimrSettings()
+                                    .SetNodeCount(2)
+                                    .SetUseRealThreads(false);
+        auto* retriesConfig = settings.AppConfig.MutableTableServiceConfig()->MutableExecuterRetriesConfig();
+        retriesConfig->SetMaxRetryNumber(2);
+        retriesConfig->SetMinDelayToRetryMs(1);
+        retriesConfig->SetMaxDelayToRetryMs(5);
+
+        TKikimrRunner kikimr(settings);
+        kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto queryClient = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+
+        ui32 bouncedRequests = 0;
+
+        // Imitate a draining node: the KQP node-service actor is already gone, so every
+        // attempt to start tasks there comes back with ReasonActorUnknown. Bounce the
+        // requests to all the nodes, otherwise the planner may hand the tasks over to a
+        // node that is not tracked yet and the outcome becomes timing dependent.
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksRequest::EventType) {
+                ++bouncedRequests;
+                auto undeliveredEv = new TEvents::TEvUndelivered(
+                    TEvKqpNode::TEvStartKqpTasksRequest::EventType,
+                    TEvents::TEvUndelivered::ReasonActorUnknown);
+                auto senderNodeIndex = ev->Recipient.NodeId() - runtime.GetNodeId(0);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, undeliveredEv, 0, ev->Cookie),
+                    senderNodeIndex, true);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto result = kikimr.RunCall([&queryClient]() {
+            return queryClient.ExecuteQuery(R"(
+                SELECT COUNT(*) AS cnt, SUM(Data) AS sum_data
+                FROM `/Root/LargeTable`
+                LIMIT 100
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+
+        UNIT_ASSERT_C(bouncedRequests > 0, "The query did not send a single TEvStartKqpTasksRequest, "
+            "so the ActorUnknown retry path was never reached");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAVAILABLE,
+            "Expected the retriable UNAVAILABLE after the ActorUnknown retries are exhausted, but got: "
+                << result.GetStatus() << ", " << result.GetIssues().ToString());
     }
 
 }

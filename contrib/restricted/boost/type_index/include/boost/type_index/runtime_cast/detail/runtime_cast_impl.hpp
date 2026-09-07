@@ -20,7 +20,9 @@
 #include <boost/type_index.hpp>
 
 #if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+#ifndef BOOST_TYPE_INDEX_USE_STD_MODULE
 #include <type_traits>
+#endif
 #endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE

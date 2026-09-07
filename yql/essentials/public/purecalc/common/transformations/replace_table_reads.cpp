@@ -36,7 +36,6 @@ public:
 
     TTableReadsReplacer(TVector<const TStructExprType*>&&, TString, TString) = delete;
 
-public:
     TStatus DoTransform(const TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
         if (Complete_) {

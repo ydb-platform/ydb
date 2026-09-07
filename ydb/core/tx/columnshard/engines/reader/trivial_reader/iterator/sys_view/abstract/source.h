@@ -141,7 +141,8 @@ private:
     }
 
 protected:
-    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
+    virtual TConclusionStatus DoAssembleAccessor(
+        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
         const ui32 recordsCount = GetRecordsCount();
         AFL_VERIFY(!subColumnName);
         if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
@@ -153,6 +154,7 @@ protected:
             context.MutableResources().AddVerified(
                 columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(columnId, recordsCount)), true);
         }
+        return TConclusionStatus::Success();
     }
 
 public:

@@ -39,7 +39,7 @@ private:
     std::vector<TDictionaryChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
 
-    void DoOnDataCollected(TFetchingResultContext& context) override;
+    TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override;
     void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override;
     void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override;
 

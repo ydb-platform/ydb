@@ -310,14 +310,14 @@ class Roaring {
     void clear() { api::roaring_bitmap_clear(&roaring); }
 
     /**
-     * Return the largest value (if not empty)
+     * Returns the greatest value in the set, or 0 if the set is empty.
      */
     uint32_t maximum() const noexcept {
         return api::roaring_bitmap_maximum(&roaring);
     }
 
     /**
-     * Return the smallest value (if not empty)
+     * Returns the smallest value in the set, or UINT32_MAX if the set is empty.
      */
     uint32_t minimum() const noexcept {
         return api::roaring_bitmap_minimum(&roaring);
@@ -794,7 +794,7 @@ class Roaring {
     Roaring operator&(const Roaring &o) const {
         roaring_bitmap_t *r = api::roaring_bitmap_and(&roaring, &o.roaring);
         if (r == NULL) {
-            ROARING_TERMINATE("failed materalization in and");
+            ROARING_TERMINATE("failed materialization in and");
         }
         return Roaring(r);
     }
@@ -807,7 +807,7 @@ class Roaring {
     Roaring operator-(const Roaring &o) const {
         roaring_bitmap_t *r = api::roaring_bitmap_andnot(&roaring, &o.roaring);
         if (r == NULL) {
-            ROARING_TERMINATE("failed materalization in andnot");
+            ROARING_TERMINATE("failed materialization in andnot");
         }
         return Roaring(r);
     }
@@ -820,7 +820,7 @@ class Roaring {
     Roaring operator|(const Roaring &o) const {
         roaring_bitmap_t *r = api::roaring_bitmap_or(&roaring, &o.roaring);
         if (r == NULL) {
-            ROARING_TERMINATE("failed materalization in or");
+            ROARING_TERMINATE("failed materialization in or");
         }
         return Roaring(r);
     }
@@ -833,7 +833,7 @@ class Roaring {
     Roaring operator^(const Roaring &o) const {
         roaring_bitmap_t *r = api::roaring_bitmap_xor(&roaring, &o.roaring);
         if (r == NULL) {
-            ROARING_TERMINATE("failed materalization in xor");
+            ROARING_TERMINATE("failed materialization in xor");
         }
         return Roaring(r);
     }

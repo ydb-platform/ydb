@@ -32,6 +32,7 @@ The generated rST syntax looks like this::
 
     Cross reference like this: :configtrait:`Application.log_datefmt`.
 """
+
 from __future__ import annotations
 
 import typing as t
@@ -88,7 +89,7 @@ def class_config_rst_doc(cls: type[HasTraits], trait_aliases: dict[str, t.Any]) 
         # Choices or type
         if "Enum" in ttype:
             # include Enum choices
-            lines.append(indent(":options: " + ", ".join("``%r``" % x for x in trait.values)))  # type:ignore[attr-defined]
+            lines.append(indent(":options: " + ", ".join(f"``{x!r}``" for x in trait.values)))  # type:ignore[attr-defined]
         else:
             lines.append(indent(":trait type: " + ttype))
 
@@ -104,7 +105,7 @@ def class_config_rst_doc(cls: type[HasTraits], trait_aliases: dict[str, t.Any]) 
                     dvr = dvr[:61] + "..."
                 # Double up backslashes, so they get to the rendered docs
                 dvr = dvr.replace("\\n", "\\\\n")
-                lines.append(indent(":default: ``%s``" % dvr))
+                lines.append(indent(f":default: ``{dvr}``"))
 
         # Command line aliases
         if trait_aliases[fullname]:

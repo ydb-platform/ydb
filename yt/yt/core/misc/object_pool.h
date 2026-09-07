@@ -18,6 +18,8 @@ namespace NYT {
 /*!
  * |Clean| method is called before an object is put into the pool.
  *
+ * |IsReusable| method is called before an object is returned from the pool.
+ *
  * |GetMaxPoolSize| method is called to determine the maximum number of
  * objects allowed to be pooled.
  */
@@ -36,6 +38,11 @@ struct TPooledObjectTraitsBase
 
     static void Clean(TObject*)
     { }
+
+    static bool IsReusable(const TObject*)
+    {
+        return true;
+    }
 
     static int GetMaxPoolSize()
     {
@@ -75,6 +82,8 @@ private:
 
     //! Calls #TPooledObjectTraits::Clean and returns the instance back into the pool.
     void Reclaim(TObject* obj);
+
+    static bool IsReusable(const TObject* obj);
 
     void FreeInstance(TObject* obj);
 

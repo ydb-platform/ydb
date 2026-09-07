@@ -16,7 +16,8 @@ using namespace NKikimr;
 ////////////////////////////////////////////////////////////////////////////////
 
 TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
-    TTestActorRuntime* runtime)
+    TTestActorRuntime* runtime,
+    bool enableChecksums)
     : TICStorageTransportTestAdapter(
           runtime,
           [&]
@@ -30,20 +31,24 @@ TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
                           .TabletId = 100,
                           .Generation = 1},
                       0,
+                      enableChecksums,
                       bootstrap.Registry)
                       .release(),
                   0);
               return bootstrap;
-          }())
+          }(),
+          enableChecksums)
 {}
 
 TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
     TTestActorRuntime* runtime,
-    TBootstrap bootstrap)
+    TBootstrap bootstrap,
+    bool enableChecksums)
     : TICDirectStorageTransport(
           runtime->GetActorSystem(0),
           bootstrap.ActorId,
-          bootstrap.Registry)
+          bootstrap.Registry,
+          enableChecksums)
     , Runtime(runtime)
     , NodeId(runtime->GetNodeId(0))
     , EdgeActor(runtime->AllocateEdgeActor(0))

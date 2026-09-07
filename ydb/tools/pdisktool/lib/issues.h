@@ -13,6 +13,7 @@
 #include <util/generic/maybe.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <ydb/tools/pdisktool/proto/pdisktool.pb.h>
 
@@ -102,7 +103,7 @@ public:
 class TRepeatedIssues {
     struct TEntry {
         ui64 Count = 0;
-        ui64 Last = 0;
+        TString Last;
     };
     TMap<TString, TEntry> Entries;
     TString Location;
@@ -115,9 +116,14 @@ public:
     {}
 
     void Add(const TString& what, ui64 position) {
+        Add(what, ToString(position));
+    }
+
+    // For positions that are not a number, a blob id being the common case.
+    void Add(const TString& what, TString position) {
         auto& e = Entries[what];
         ++e.Count;
-        e.Last = position;
+        e.Last = std::move(position);
     }
 
     bool Empty() const {

@@ -118,7 +118,7 @@ struct TColorLimits {
         }
     }
 
-    i64 GetQuotaForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) {
+    i64 GetQuotaForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) const {
         switch (color) {
             case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:           return Cyan.CalculateQuota(total);
             case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW:   return LightYellow.CalculateQuota(total);

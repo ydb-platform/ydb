@@ -135,8 +135,9 @@ def parse_columns(expr: str):
             if char == quote:
                 quote = None
             elif char == "\\" and expr[pos] == "'" and expr[pos : pos + 4] != "' = " and expr[pos : pos + 2] != "')":
-                label += expr[pos]
+                label += char + expr[pos]
                 pos += 1
+                continue
         else:
             if level == 0:
                 if char in (" ", "="):

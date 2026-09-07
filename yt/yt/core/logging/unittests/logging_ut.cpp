@@ -279,7 +279,7 @@ TEST_F(TLoggingTest, ReloadOnSighup)
 
     WaitForPredicate([&] {
         std::string message("Message1");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -295,7 +295,7 @@ TEST_F(TLoggingTest, ReloadOnSighup)
 
     WaitForPredicate([&] {
         std::string message("Message2");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -329,7 +329,7 @@ TEST_F(TLoggingTest, ReloadOnRename)
 
     WaitForPredicate([&] {
         std::string message("Message1");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -341,7 +341,7 @@ TEST_F(TLoggingTest, ReloadOnRename)
 
     WaitForPredicate([&] {
         std::string message("Message2");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -503,9 +503,9 @@ TEST_F(TLoggingTest, LogManager)
         };
     })", errorFile.Name(), infoFile.Name()));
 
-    YT_LOG_DEBUG("Debug message");
-    YT_LOG_INFO("Info message");
-    YT_LOG_ERROR("Error message");
+    YT_TLOG_DEBUG("Debug message");
+    YT_TLOG_INFO("Info message");
+    YT_TLOG_ERROR("Error message");
 
     TLogManager::Get()->Synchronize();
 
@@ -539,11 +539,11 @@ TEST_F(TLoggingTest, ThreadMinLogLevel)
         };
     })", debugFile.Name()));
 
-    YT_LOG_DEBUG("Debug message 1");
+    YT_TLOG_DEBUG("Debug message 1");
 
     SetThreadMinLogLevel(ELogLevel::Info);
-    YT_LOG_DEBUG("Debug message 2");
-    YT_LOG_INFO("Info message 1");
+    YT_TLOG_DEBUG("Debug message 2");
+    YT_TLOG_INFO("Info message 1");
 
     TLogManager::Get()->Synchronize();
 
@@ -1078,27 +1078,27 @@ TEST_F(TLoggingTest, WithMinLevel)
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Trace);
 
-        YT_LOG_TRACE("Message 1");
-        YT_LOG_DEBUG("Message 2");
-        YT_LOG_INFO("Message 3");
+        YT_TLOG_TRACE("Message 1");
+        YT_TLOG_DEBUG("Message 2");
+        YT_TLOG_INFO("Message 3");
         ASSERT_EQ(getNewLogLinesCount(), 3);
     }
 
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Debug);
 
-        YT_LOG_TRACE("Message 4");
-        YT_LOG_DEBUG("Message 5");
-        YT_LOG_INFO("Message 6");
+        YT_TLOG_TRACE("Message 4");
+        YT_TLOG_DEBUG("Message 5");
+        YT_TLOG_INFO("Message 6");
         ASSERT_EQ(getNewLogLinesCount(), 2);
     }
 
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Info);
 
-        YT_LOG_TRACE("Message 7");
-        YT_LOG_DEBUG("Message 8");
-        YT_LOG_INFO("Message 9");
+        YT_TLOG_TRACE("Message 7");
+        YT_TLOG_DEBUG("Message 8");
+        YT_TLOG_INFO("Message 9");
         ASSERT_EQ(getNewLogLinesCount(), 1);
     }
 }
@@ -1172,7 +1172,7 @@ TEST_P(TBuiltinRotationTest, All)
         Cerr << "[RotationTest] Waiting for message in file (Iter: " << index << ")" << Endl;
         // Wait until the message hits the file.
         WaitForPredicate([&] {
-            YT_LOG_INFO(message);
+            YT_TLOG_INFO(message);
             auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
             if (files.empty()) {
                 return false;
@@ -1441,15 +1441,16 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
         };
     })", logFile.Name()));
 
-    YT_LOG_INFO("Info message");
+    YT_TLOG_INFO("Info message");
 
     struct TCoreDumper
         : public ICoreDumper
     {
         bool SafeCoreDumped = false;
 
-        // TODO(babenko): migrate to std::string
-        TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/) override
+        TCoreDump WriteCoreDump(
+            const std::vector<std::string>& /*notes*/,
+            TStringBuf /*reason*/) override
         {
             SafeCoreDumped = true;
             return TCoreDump{
@@ -1526,12 +1527,12 @@ TEST_F(TLoggingTest, SupressedRequests)
         traceContext->SetRequestId(requestId);
         NTracing::TTraceContextGuard guard(traceContext);
 
-        YT_LOG_INFO("Traced message");
+        YT_TLOG_INFO("Traced message");
 
         TLogManager::Get()->SuppressRequest(requestId);
     }
 
-    YT_LOG_INFO("Info message");
+    YT_TLOG_INFO("Info message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1561,9 +1562,9 @@ TEST_F(TLoggingTest, SuppressedMessages)
         suppressed_messages = ["Suppressed message"];
     })", logFile.Name()));
 
-    YT_LOG_INFO("Suppressed message 1");
-    YT_LOG_INFO("Suppressed message 2");
-    YT_LOG_INFO("Good message");
+    YT_TLOG_INFO("Suppressed message 1");
+    YT_TLOG_INFO("Suppressed message 2");
+    YT_TLOG_INFO("Good message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1594,9 +1595,9 @@ TEST_F(TLoggingTest, MessageLevelOverride)
         };
     })", logFile.Name()));
 
-    YT_LOG_INFO("Overridden message 1");
-    YT_LOG_TRACE("Overridden message 2");
-    YT_LOG_INFO("Good message");
+    YT_TLOG_INFO("Overridden message 1");
+    YT_TLOG_TRACE("Overridden message 2");
+    YT_TLOG_INFO("Good message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1714,7 +1715,8 @@ protected:
     void LogLongMessages()
     {
         for (int i = 0; i < N; ++i) {
-            YT_LOG_INFO("%v", TRange(Chunks_.data(), Chunks_.data() + i));
+            YT_TLOG_INFO("Long message")
+                .With("Chunks", TRange(Chunks_.data(), Chunks_.data() + i));
         }
     }
 
@@ -1930,9 +1932,9 @@ TEST_F(TCustomWriterTest, Write)
         };
     })", CustomWriterType));
 
-    YT_LOG_INFO("first");
-    YT_LOG_INFO("second");
-    YT_LOG_INFO("third");
+    YT_TLOG_INFO("first");
+    YT_TLOG_INFO("second");
+    YT_TLOG_INFO("third");
 
     TLogManager::Get()->Synchronize();
 

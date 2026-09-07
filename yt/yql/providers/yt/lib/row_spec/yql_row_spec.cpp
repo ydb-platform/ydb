@@ -1627,6 +1627,28 @@ bool TYqlRowSpecInfo::KeepPureSortOnly(TExprContext& ctx) {
     return sortIsChanged;
 }
 
+bool TYqlRowSpecInfo::HasNonNativeDescendingSort() const {
+    YQL_ENSURE(SortMembers.size() <= SortedBy.size());
+    YQL_ENSURE(SortMembers.size() <= SortDirections.size());
+    for (size_t i = 0; i < SortMembers.size(); ++i) {
+        if (!SortDirections[i] && SortedBy[i] != SortMembers[i] && Type->FindItem(SortMembers[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TYqlRowSpecInfo::HasNativeDescendingSort() const {
+    YQL_ENSURE(SortMembers.size() <= SortedBy.size());
+    YQL_ENSURE(SortMembers.size() <= SortDirections.size());
+    for (size_t i = 0; i < SortMembers.size(); ++i) {
+        if (!SortDirections[i] && SortedBy[i] == SortMembers[i] && Type->FindItem(SortMembers[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TYqlRowSpecInfo::ClearNativeDescendingSort(TExprContext& ctx) {
     for (size_t i = 0; i < SortDirections.size(); ++i) {
         if (!SortDirections[i] && Type->FindItem(SortedBy[i])) {
@@ -1636,7 +1658,7 @@ bool TYqlRowSpecInfo::ClearNativeDescendingSort(TExprContext& ctx) {
     return false;
 }
 
-bool TYqlRowSpecInfo::MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from) {
+bool TYqlRowSpecInfo::MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from, bool useNativeDescSort) {
     bool sortIsChanged = false;
     UniqueKeys = false; // Merge of two and more tables cannot have unique keys
     const size_t resultSize = Min<size_t>(SortMembers.size(), from.SortMembers.size()); // Truncate all calculated columns
@@ -1644,7 +1666,28 @@ bool TYqlRowSpecInfo::MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInf
         sortIsChanged = ClearSortness(ctx, resultSize);
     }
     for (size_t i = 0; i < resultSize; ++i) {
-        if (SortMembers[i] != from.SortMembers[i] || SortedBy[i] != from.SortedBy[i] || SortedByTypes[i] != from.SortedByTypes[i] || SortDirections[i] != from.SortDirections[i]) {
+        bool mismatch = SortMembers[i] != from.SortMembers[i] ||
+                        SortDirections[i] != from.SortDirections[i];
+        if (!mismatch) {
+            if (!useNativeDescSort || SortDirections[i]) {
+                // ascending sort or no native desc sort support
+                mismatch = SortedBy[i] != from.SortedBy[i] || SortedByTypes[i] != from.SortedByTypes[i];
+            } else {
+                auto myType = GetType();
+                auto fromType = from.GetType();
+                YQL_ENSURE(myType && fromType);
+                auto myMemberType = myType->FindItemType(SortMembers[i]);
+                auto fromMemberType = fromType->FindItemType(from.SortMembers[i]);
+                if (fromMemberType == myMemberType) {
+                    // fix SortedBy
+                    SortedBy[i] = SortMembers[i];
+                    SortedByTypes[i] = myMemberType;
+                }
+                mismatch = myMemberType != fromMemberType;
+            }
+        }
+
+        if (mismatch) {
             sortIsChanged = ClearSortness(ctx, i) || sortIsChanged;
             break;
         }

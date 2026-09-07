@@ -8,13 +8,17 @@ from multidict import MultiMapping
 
 from .typedefs import StrOrURL
 
-try:
+if TYPE_CHECKING:
     import ssl
 
     SSLContext = ssl.SSLContext
-except ImportError:  # pragma: no cover
-    ssl = SSLContext = None  # type: ignore[assignment]
+else:
+    try:
+        import ssl
 
+        SSLContext = ssl.SSLContext
+    except ImportError:  # pragma: no cover
+        ssl = SSLContext = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from .client_reqrep import ClientResponse, ConnectionKey, Fingerprint, RequestInfo
@@ -50,6 +54,7 @@ __all__ = (
     "NonHttpUrlClientError",
     "InvalidUrlRedirectClientError",
     "NonHttpUrlRedirectClientError",
+    "WSMessageTypeError",
 )
 
 
@@ -410,3 +415,7 @@ class ClientConnectorCertificateError(*cert_errors_bases):  # type: ignore[misc]
             "[{0.certificate_error.__class__.__name__}: "
             "{0.certificate_error.args}]".format(self)
         )
+
+
+class WSMessageTypeError(TypeError):
+    """WebSocket message type is not valid."""

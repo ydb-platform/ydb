@@ -1110,7 +1110,7 @@ void ValidateDictOfPersonStructFunc(const NUdf::TUnboxedValuePod& value, ui32 lo
     NUdf::TUnboxedValue payload;
     for (ui32 index = 0; index < broken_index && dictIter.NextPair(key, payload); ++index) {
         UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), index);
-        auto person = payload;
+        const auto& person = payload;
         auto firstName = person.GetElement(NUdf::TPersonStructWithOptList::MetaIndexes[0]);
         UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), LIST_OF_STRUCT_PERSON[index].FirstName);
         auto lastName = person.GetElement(NUdf::TPersonStructWithOptList::MetaIndexes[1]);
@@ -1180,7 +1180,7 @@ Y_UNIT_TEST(TestUdfResultCheckDictOfPerson) {
         NUdf::TUnboxedValue payload;
         for (ui32 index = 0; dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MakeDictDigiT2Person()[index].first);
-            auto person = payload;
+            const auto& person = payload;
             auto firstName = person.GetElement(NUdf::TPersonStruct::MetaIndexes[0]);
             UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->FirstName);
             auto lastName = person.GetElement(NUdf::TPersonStruct::MetaIndexes[1]);
@@ -1198,7 +1198,7 @@ Y_UNIT_TEST(TestUdfResultCheckDictOfPersonBroken) {
         NUdf::TUnboxedValue payload;
         for (ui32 index = 0; index < DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX && dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MakeDictDigiT2PersonBroken()[index].first);
-            auto person = payload;
+            const auto& person = payload;
             auto firstName = person.GetElement(NUdf::TPersonStruct::MetaIndexes[0]);
             UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->FirstName);
             auto lastName = person.GetElement(NUdf::TPersonStruct::MetaIndexes[1]);

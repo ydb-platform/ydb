@@ -71,16 +71,16 @@ private:
         }
 
         void OnParsingError(TStatus status) override {
-            YDB_LOG_ERROR("Got parsing",
+            YDB_LOG_ERROR("Got parsing error",
                 {"logPrefix", LogPrefix},
                 {"error", status.GetErrorMessage()});
             Self.FatalError(status);
         }
 
         void OnParsedData(ui64 numberRows) override {
-            YDB_LOG_TRACE("Got parsed data, number",
+            YDB_LOG_TRACE("Got parsed data",
                 {"logPrefix", LogPrefix},
-                {"rows", numberRows});
+                {"numberRows", numberRows});
 
             Self.ParsedData.assign(ParerSchema.size(), std::span<NYql::NUdf::TUnboxedValue>());
             for (size_t i = 0; i < ParerSchema.size(); ++i) {
@@ -180,9 +180,9 @@ private:
             FinishPacking();
             TQueue<TDataBatch> result;
             result.swap(ClientData);
-            YDB_LOG_TRACE("ExtractClientData, number",
+            YDB_LOG_TRACE("ExtractClientData",
                 {"logPrefix", LogPrefix},
-                {"batches", result.size()});
+                {"numberBatches", result.size()});
             return result;
         }
 
@@ -269,10 +269,10 @@ private:
 
             Offset = Self.Offsets->at(rowId);
             if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && Offset < *nextOffset) {
-                YDB_LOG_TRACE("OnData, skip next",
+                YDB_LOG_TRACE("OnData, skip due to next message offset",
                     {"logPrefix", LogPrefix},
                     {"historicalOffset", Offset},
-                    {"messageOffset", *nextOffset});
+                    {"nextOffset", *nextOffset});
                 return;
             }
 
@@ -293,7 +293,9 @@ private:
                     // All data was locked in parser, so copy is safe
                     FilteredRow[i++] = parsedData[rowId];
                 }
-                DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+                with_lock(Self.Alloc) {
+                    DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+                }
 
                 ++newNumberRows;
                 newDataPackerSize = DataPacker->PackedSizeEstimate();
@@ -308,11 +310,11 @@ private:
                 return;
             }
 
-            YDB_LOG_TRACE("OnBatchFinish, number row",
+            YDB_LOG_TRACE("OnBatchFinish",
                 {"logPrefix", LogPrefix},
                 {"offset", Offset},
-                {"rows", numberRows},
-                {"size", rowSize},
+                {"numberRows", numberRows},
+                {"rowSize", rowSize},
                 {"watermark", Watermark});
 
             Client->AddDataToClient(Offset, numberRows, rowSize, Watermark);
@@ -345,7 +347,7 @@ private:
 
         void FinishPacking() {
             if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
-                YDB_LOG_TRACE("FinishPacking, batch number",
+                YDB_LOG_TRACE("FinishPacking",
                     {"logPrefix", LogPrefix},
                     {"size", DataPackerSize},
                     {"rows", FilteredOffsets.size()});
@@ -438,7 +440,7 @@ public:
     }
 
     void HandleException(const std::exception& error) {
-        YDB_LOG_ERROR("Got unexpected",
+        YDB_LOG_ERROR("Got unexpected exception",
             {"logPrefix", LogPrefix},
             {"exception", error.what()});
         FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Format handler error, got unexpected exception: " << error.what()));
@@ -471,16 +473,16 @@ public:
     }
 
     TStatus AddClient(IClientDataConsumer::TPtr client) override {
-        YDB_LOG_DEBUG("Add client with id",
+        YDB_LOG_DEBUG("Add client",
             {"logPrefix", LogPrefix},
             {"clientId", client->GetClientId()});
 
         if (const auto clientOffset = client->GetNextMessageOffset()) {
             if (Parser && CurrentOffset && *CurrentOffset > *clientOffset) {
-                YDB_LOG_DEBUG("Parser was flushed due to new historical offset (previous parser",
+                YDB_LOG_DEBUG("Parser was flushed due to new historical offset",
                     {"logPrefix", LogPrefix},
                     {"clientOffset", *clientOffset},
-                    {"offset", *CurrentOffset});
+                    {"currentOffset", *CurrentOffset});
                 Parser->Refresh(true);
             }
         }
@@ -513,7 +515,7 @@ public:
     }
 
     void RemoveClient(NActors::TActorId clientId) override {
-        YDB_LOG_DEBUG("Remove client with id",
+        YDB_LOG_DEBUG("Remove client",
             {"logPrefix", LogPrefix},
             {"clientId", clientId});
 
@@ -597,7 +599,7 @@ private:
             Parser->Refresh(true);
         }
 
-        YDB_LOG_DEBUG("UpdateParser to new schema with size",
+        YDB_LOG_DEBUG("UpdateParser to new schema",
             {"logPrefix", LogPrefix},
             {"schemaSize", parerSchema.size()});
         ParserHandler = MakeIntrusive<TParserHandler>(*this, std::move(parerSchema));
@@ -610,7 +612,7 @@ private:
                 }
 
                 Parser = newParser.DetachResult();
-                YDB_LOG_DEBUG("Parser was created on schema with columns",
+                YDB_LOG_DEBUG("Parser was created on new schema",
                     {"logPrefix", LogPrefix},
                     {"schemaSize", schemaSize});
             } else {
@@ -618,7 +620,7 @@ private:
                     return status;
                 }
 
-                YDB_LOG_DEBUG("Parser was updated on new schema with columns",
+                YDB_LOG_DEBUG("Parser was updated on new schema",
                     {"logPrefix", LogPrefix},
                     {"schemaSize", schemaSize});
             }
@@ -681,7 +683,7 @@ private:
     }
 
     void FatalError(TStatus status) const {
-        YDB_LOG_ERROR("Got fatal",
+        YDB_LOG_ERROR("Got fatal error",
             {"logPrefix", LogPrefix},
             {"error", status.GetErrorMessage()});
         for (const auto& [_, client] : Clients) {

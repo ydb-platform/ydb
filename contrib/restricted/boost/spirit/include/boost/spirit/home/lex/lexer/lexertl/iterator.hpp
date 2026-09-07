@@ -1,4 +1,5 @@
 //  Copyright (c) 2001-2011 Hartmut Kaiser
+//  Copyright (c)      2025 Joaquin M Lopez Munoz
 // 
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying 
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -114,6 +115,19 @@ namespace boost { namespace spirit { namespace lex { namespace lexertl
             return (0 != statename) 
               ? unique_functor_type::map_state(*this, statename)
               : 0;
+        }
+
+        iterator& operator++()
+        {
+          this->base_type::operator++();
+          return *this;
+        }
+
+        iterator operator++(int)
+        {
+          iterator tmp(*this);
+          this->base_type::operator++();
+          return tmp;
         }
     };
 }}

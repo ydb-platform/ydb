@@ -101,7 +101,6 @@ private:
     TCheckCallback CheckCallback_;
     TFetchCallback FetchCallback_;
 
-private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
         CheckCallback_();
         return FetchCallback_(result);

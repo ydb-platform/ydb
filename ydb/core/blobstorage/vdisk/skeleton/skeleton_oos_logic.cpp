@@ -181,7 +181,7 @@ namespace NKikimr {
             record.GetDataKind());
     }
 
-    bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVBlock::TPtr &ev) const {
+    bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVBlock::TPtr &ev, bool hasExistingEntry) const {
         const ESpaceColor color = GetSpaceColor();
         auto &stat = Stat->Lookup(TStat::Block, color).HandleMsg(ev->Get()->GetCachedByteSize());
         switch (color) {
@@ -195,7 +195,7 @@ namespace NKikimr {
                 return stat.Allow();
             case TSpaceColor::RED: {
                 // FIXME: handle complete removal only
-                return stat.NotAllow();
+                return stat.Pass(hasExistingEntry);
             }
             case TSpaceColor::BLACK:
                 return stat.NotAllow();

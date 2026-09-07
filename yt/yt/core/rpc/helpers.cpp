@@ -87,7 +87,7 @@ bool IsChannelFailureErrorHandled(const TError& error)
 
 void LabelHandledChannelFailureError(TError* error)
 {
-    *error <<= TErrorAttribute("channel_failure_error_handled", true);
+    error->Add("channel_failure_error_handled", true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -669,7 +669,7 @@ void EnrichClientRequestError(
     {
         auto featureId = error->Attributes().Get<int>(FeatureIdAttributeKey);
         if (auto featureName = (*featureIdFormatter)(featureId)) {
-            *error <<= TErrorAttribute(FeatureNameAttributeKey, featureName);
+            error->Add(FeatureNameAttributeKey, featureName);
         }
     }
 

@@ -9,6 +9,8 @@
 #include <library/cpp/yt/yson_string/convert.h>
 #include <library/cpp/yt/yson_string/string.h>
 
+#include <library/cpp/yt/logging/tag.h>
+
 #include <library/cpp/yt/misc/property.h>
 
 #include <util/system/compiler.h>
@@ -16,6 +18,8 @@
 
 #include <util/generic/size_literals.h>
 
+#include <concepts>
+#include <exception>
 #include <ranges>
 #include <type_traits>
 
@@ -59,12 +63,6 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec);
 
 // Forward declaration.
 class TErrorException;
-
-template <class TValue>
-concept CErrorNestable = requires (TError& error, TValue&& operand)
-{
-    { error <<= std::forward<TValue>(operand) } -> std::same_as<TError&>;
-};
 
 template <class TRange>
 concept CErrorAttributeRange =
@@ -229,6 +227,12 @@ public:
     template <CErrorAttributeRange TRange>
     [[nodiscard]] TError&& With(TRange&& attributes) &&;
 
+    [[nodiscard]] TError With(TAnyMergeableDictionaryRef attributes) const &;
+    [[nodiscard]] TError&& With(TAnyMergeableDictionaryRef attributes) &&;
+
+    //! NB: OK errors are dropped as they carry no diagnostics and cannot become inner ones.
+    //! This makes the overloads usable with an operand that is only sometimes a failure,
+    //! e.g. a cancelation error, which #TFuture::Cancel may well be passed as OK.
     [[nodiscard]] TError With(const TError& innerError) const &;
     [[nodiscard]] TError&& With(const TError& innerError) &&;
     [[nodiscard]] TError With(TError&& innerError) const &;
@@ -239,25 +243,29 @@ public:
     template <CErrorRange TRange>
     [[nodiscard]] TError&& With(TRange&& innerErrors) &&;
 
-    TError& operator <<= (const TErrorAttribute& attribute) &;
-    TError& operator <<= (const std::vector<TErrorAttribute>& attributes) &;
-    TError& operator <<= (const TError& innerError) &;
-    TError& operator <<= (TError&& innerError) &;
-    TError& operator <<= (const std::vector<TError>& innerErrors) &;
-    TError& operator <<= (std::vector<TError>&& innerErrors) &;
-    TError& operator <<= (TAnyMergeableDictionaryRef attributes) &;
+    //! Forwards to #With only when #condition holds.
+    //! NB: The operands are evaluated either way.
+    template <class... TArgs>
+    [[nodiscard]] TError WithIf(bool condition, TArgs&&... args) const &;
+    template <class... TArgs>
+    [[nodiscard]] TError&& WithIf(bool condition, TArgs&&... args) &&;
 
-    template <CErrorNestable TValue>
-    TError&& operator << (TValue&& operand) &&;
+    //! In-place counterparts of #With.
+    template <CConvertibleToAttributeValue TValue>
+    TError& Add(const TErrorAttribute::TKey& key, const TValue& value) &;
 
-    template <CErrorNestable TValue>
-    TError operator << (TValue&& operand) const &;
+    TError& Add(const TErrorAttribute& attribute) &;
 
-    template <CErrorNestable TValue>
-    TError&& operator << (const std::optional<TValue>& rhs) &&;
+    template <CErrorAttributeRange TRange>
+    TError& Add(TRange&& attributes) &;
 
-    template <CErrorNestable TValue>
-    TError operator << (const std::optional<TValue>& rhs) const &;
+    TError& Add(TAnyMergeableDictionaryRef attributes) &;
+
+    TError& Add(const TError& innerError) &;
+    TError& Add(TError&& innerError) &;
+
+    template <CErrorRange TRange>
+    TError& Add(TRange&& innerErrors) &;
 
     // The |enricher| is called during TError initial construction and before TErrorOr<> construction. Meant
     // to enrich the error, e.g. by setting generic attributes. Copying TError from another TError or TErrorException
@@ -294,6 +302,8 @@ private:
 
     template <CErrorAttributeRange TRange>
     void AddAttributes(TRange&& attributes);
+
+    void AddAttributes(TAnyMergeableDictionaryRef attributes);
 
     void AddInnerError(const TError& innerError);
     void AddInnerError(TError&& innerError);
@@ -526,11 +536,19 @@ auto RunNoExcept(F&& functor, As&&... args) noexcept -> decltype(functor(std::fo
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Registers errors as a well-known logging tag (ADL customization point for
-//! library/cpp/yt/logging), so that |YT_TLOG_*(...).With(error)| attaches them under
-//! the "Error" key, rendered after the message in plain text.
-TStringBuf GetWellKnownLoggingTag(const std::exception&);
-TStringBuf GetWellKnownLoggingTag(const TError&);
+template <class T>
+    requires std::derived_from<T, TError>
+struct NLogging::TWellKnownLoggingTagTraits<T>
+{
+    static constexpr TStringBuf Key = "Error";
+};
+
+template <class T>
+    requires std::derived_from<T, std::exception>
+struct NLogging::TWellKnownLoggingTagTraits<T>
+{
+    static constexpr TStringBuf Key = "Error";
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

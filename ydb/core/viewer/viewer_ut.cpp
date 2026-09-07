@@ -2307,6 +2307,85 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(response.StartsWith("<svg"), response);
     }
 
+    Y_UNIT_TEST(ComputationGraphPost) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TString plan = R"json({
+    "meta": {"version": "0.2", "type": "query"},
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [{
+            "PlanNodeId": 5,
+            "Node Type": "Sink",
+            "Operators": [{"Name": "Write pq", "SinkType": "pq", "ExternalDataSource": "pq", "Inputs": []}],
+            "Stats": {
+                "Tasks": 1, "FinishedTasks": 1,
+                "EgressRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
+                "EgressBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2}
+            },
+            "Plans": [{
+                "PlanNodeId": 4,
+                "Node Type": "Stage",
+                "Stats": {"Tasks": 0, "FinishedTasks": 0},
+                "Plans": [{
+                    "PlanNodeId": 3,
+                    "Node Type": "HashShuffle",
+                    "PlanNodeType": "Connection",
+                    "Plans": [{
+                        "PlanNodeId": 2,
+                        "Node Type": "Stage",
+                        "Stats": {
+                            "Tasks": 2, "FinishedTasks": 0,
+                            "OutputRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
+                            "OutputBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2},
+                            "CpuTimeUs":   {"Min": 1000, "Max": 3000, "Sum": 4000, "Count": 2}
+                        },
+                        "Plans": [{
+                            "PlanNodeId": 1,
+                            "Node Type": "Source",
+                            "Operators": [{"Name": "Read pq", "SourceType": "pq", "ExternalDataSource": "pq", "Inputs": []}],
+                            "Stats": {
+                                "Tasks": 2, "FinishedTasks": 0,
+                                "IngressRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
+                                "IngressBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2}
+                            }
+                        }]
+                    }]
+                }]
+            }]
+        }]
+    }
+})json";
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = VALID_TOKEN;
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/computation_graph", plan, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        UNIT_ASSERT_C(response.StartsWith("<svg"), response);
+        UNIT_ASSERT_C(response.Contains("Read pq"), response);
+        UNIT_ASSERT_C(response.Contains("<circle"), response);
+    }
+
     Y_UNIT_TEST(CommitOffsetTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -2327,6 +2406,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         securityConfig.SetEnforceUserTokenCheckRequirement(true);
         securityConfig.AddAdministrationAllowedSIDs(ROOT_TOKEN);
         securityConfig.AddViewerAllowedSIDs("username");
+        securityConfig.AddRegisterDynamicNodeAllowedSIDs(ROOT_TOKEN);
 
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};

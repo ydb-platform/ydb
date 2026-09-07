@@ -58,7 +58,6 @@ protected:
         };
     }
 
-protected:
     struct THandlerInfo {
         TPrerequisite Prerequisite;
         THandler Handler;

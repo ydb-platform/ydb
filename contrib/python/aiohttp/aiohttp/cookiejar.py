@@ -9,6 +9,7 @@ import pathlib
 import pickle
 import re
 import time
+import warnings
 from collections import defaultdict
 from http.cookies import BaseCookie, Morsel, SimpleCookie
 from typing import (
@@ -59,7 +60,7 @@ class CookieJar(AbstractCookieJar):
     DATE_DAY_OF_MONTH_RE = re.compile(r"(\d{1,2})")
 
     DATE_MONTH_RE = re.compile(
-        "(jan)|(feb)|(mar)|(apr)|(may)|(jun)|(jul)|" "(aug)|(sep)|(oct)|(nov)|(dec)",
+        "(jan)|(feb)|(mar)|(apr)|(may)|(jun)|(jul)|(aug)|(sep)|(oct)|(nov)|(dec)",
         re.I,
     )
 
@@ -75,7 +76,7 @@ class CookieJar(AbstractCookieJar):
     except (OSError, ValueError):
         # Hit the maximum representable time on Windows
         # https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/localtime-localtime32-localtime64
-        # Throws ValueError on PyPy 3.8 and 3.9, OSError elsewhere
+        # Throws ValueError on PyPy 3.9, OSError elsewhere
         MAX_TIME = calendar.timegm((3000, 12, 31, 23, 59, 59, -1, -1, -1))
     except OverflowError:
         # #4515: datetime.max may not be representable on 32-bit platforms
@@ -115,6 +116,10 @@ class CookieJar(AbstractCookieJar):
         self._treat_as_secure_origin = treat_as_secure_origin
         self._expire_heap: List[Tuple[float, Tuple[str, str, str]]] = []
         self._expirations: Dict[Tuple[str, str, str], float] = {}
+
+    @property
+    def quote_cookie(self) -> bool:
+        return self._quote_cookie
 
     def save(self, file_path: PathLike) -> None:
         file_path = pathlib.Path(file_path)
@@ -309,7 +314,14 @@ class CookieJar(AbstractCookieJar):
         if not self._cookies:
             # Skip rest of function if no non-expired cookies.
             return filtered
-        request_url = URL(request_url)
+        if type(request_url) is not URL:
+            warnings.warn(
+                "filter_cookies expects yarl.URL instances only,"
+                f"and will stop working in 4.x, got {type(request_url)}",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            request_url = URL(request_url)
         hostname = request_url.raw_host or ""
 
         is_not_secure = request_url.scheme not in ("https", "wss")
@@ -465,6 +477,10 @@ class DummyCookieJar(AbstractCookieJar):
 
     def __len__(self) -> int:
         return 0
+
+    @property
+    def quote_cookie(self) -> bool:
+        return True
 
     def clear(self, predicate: Optional[ClearCookiePredicate] = None) -> None:
         pass

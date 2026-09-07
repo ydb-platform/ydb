@@ -137,12 +137,7 @@ public:
         {
         }
 
-        TIterator& operator=(const TIterator& other)
-        {
-            Owner = other.Owner;
-            Position = other.Position;
-            return *this;
-        }
+        TIterator& operator=(const TIterator& other) = default;
 
         bool AtEnd() const {
             return Position == Owner->End_;
@@ -184,12 +179,7 @@ public:
         {
         }
 
-        TReverseIterator& operator=(const TReverseIterator& other)
-        {
-            Owner_ = other.Owner_;
-            Position_ = other.Position_;
-            return *this;
-        }
+        TReverseIterator& operator=(const TReverseIterator& other) = default;
 
         bool AtEnd() const {
             return Position_ == Owner_->Begin_;

@@ -60,7 +60,6 @@ private:
     NKikimr::NMiniKQL::TRuntimeNode MakeArg(const TTypeAnnotationNode* type);
     NKikimr::NMiniKQL::TBlockType* MakeType(const TTypeAnnotationNode* type);
 
-private:
     const TLangVersion Langver_;
     NKikimr::NMiniKQL::TScopedAlloc Alloc_;
     const NKikimr::NMiniKQL::TTypeEnvironment Env_;

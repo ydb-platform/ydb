@@ -7,8 +7,6 @@ ITypeVisitor::ITypeVisitor(ui16 compatibilityVersion)
 {
 }
 
-ITypeInfoHelper::ITypeInfoHelper()
-{
-}
+ITypeInfoHelper::ITypeInfoHelper() = default;
 
 } // namespace NYql::NUdf

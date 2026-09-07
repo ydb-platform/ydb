@@ -52,7 +52,6 @@ private:
         return *reinterpret_cast<TAtomic*>(Ptr_);
     }
 
-private:
     i64* Ptr_;
 };
 

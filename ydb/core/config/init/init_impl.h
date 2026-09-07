@@ -11,6 +11,7 @@
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>

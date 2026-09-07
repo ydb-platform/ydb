@@ -5270,7 +5270,6 @@ public:
         return VL(nodes_vec.data(), nodes_vec.size());
     }
 
-public:
     TWarningRules GetWarningRules() const {
         return WarningPolicy_.GetRules();
     }
@@ -5391,7 +5390,6 @@ private:
         return L(A("PgProjectionRef"), QA(ToString(num - 1)));
     }
 
-private:
     TVector<TAstParseResult>& AstParseResults_;
     NSQLTranslation::TTranslationSettings Settings_;
     NYql::TWarningPolicy WarningPolicy_;

@@ -12,6 +12,8 @@
 
 #include <yt/yt/core/compression/public.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
 #include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/range.h>
@@ -111,6 +113,12 @@ public:
     void HandleFeedback(const TStreamingFeedback& feedback);
     std::optional<TStreamingPayload> TryPull();
 
+    //! Returns the cumulative time the window was drained (ReadPosition_ == WritePosition_).
+    TDuration GetWindowDrainedTime();
+
+    //! Returns the cumulative time writes were blocked because the window was full.
+    TDuration GetWriteStallTime();
+
     DEFINE_SIGNAL(void(), Aborted);
 
 private:
@@ -143,6 +151,8 @@ private:
     TRingQueue<TConfirmationEntry> ConfirmationQueue_;
     TPromise<void> ClosePromise_;
     NConcurrency::TDelayedExecutorCookie CloseTimeoutCookie_;
+    NProfiling::TWallTimer WindowDrainedTimer_;
+    NProfiling::TWallTimer WriteStallTimer_{/*start*/ false};
     bool Closed_ = false;
     ssize_t WritePosition_ = 0;
     ssize_t SentPosition_ = 0;

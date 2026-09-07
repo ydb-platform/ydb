@@ -12,6 +12,7 @@ namespace NKqp {
 using namespace NYql;
 
 class IOperator;
+class TOpAggregate;
 
 const TInfoUnitSet& EmptyInfoUnitSet();
 bool ContainsInfoUnit(const TVector<TInfoUnit>& units, const TInfoUnit& unit);
@@ -23,6 +24,7 @@ TInfoUnitSet MakeInfoUnitSet(const TVector<TInfoUnit>& ius);
 bool IsGeneratedIgnoreIU(const TInfoUnit& iu);
 TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props);
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op);
+bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOContext& ctx);
 
 bool JoinOutputsLeft(const TString& joinKind);
 bool JoinOutputsRight(const TString& joinKind);

@@ -31,9 +31,6 @@
 
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -52,6 +49,22 @@
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>
+
+#include <memory>
+
+namespace NKikimrConfig {
+class TColumnShardConfig;
+}
+
+namespace NKikimr::NConsole {
+namespace TEvConfigsDispatcher {
+struct TEvSetConfigSubscriptionResponse;
+}
+
+namespace TEvConsole {
+struct TEvConfigNotificationRequest;
+}
+}   // namespace NKikimr::NConsole
 
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
@@ -302,8 +315,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void Handle(TAutoPtr<NActors::TEventHandle<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>>& ev);
+    void Handle(TAutoPtr<NActors::TEventHandle<NConsole::TEvConsole::TEvConfigNotificationRequest>>& ev);
     void Handle(TEvPrivate::TEvRetryConfigSubscription::TPtr& ev);
     void ApplyColumnShardConfig();
     void SubscribeToColumnShardConfig();
@@ -441,83 +454,7 @@ protected:
         }
     }
 
-    STFUNC(StateWork) {
-        const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-            "self_id", SelfId())("ev", ev->GetTypeName());
-        TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxProcessing::TEvReadSet, Handle);
-            HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
-
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvTabletPipe::TEvServerConnected, Handle);
-            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvColumnShard::TEvProposeTransaction, Handle);
-            HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
-            HFunc(TEvDataShard::TEvCancelTransactionProposal, Handle);
-            HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
-            HFunc(TEvDataShard::TEvKqpScan, Handle);
-            HFunc(TEvColumnShard::TEvInternalScan, Handle);
-            HFunc(TEvTxProcessing::TEvPlanStep, Handle);
-            HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
-            HFunc(TEvPrivate::TEvStartCompaction, Handle);
-            HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
-            HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
-
-            HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
-            HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
-            HFunc(TEvPrivate::TEvWriteIndex, Handle);
-            HFunc(TEvPrivate::TEvScanStats, Handle);
-            HFunc(TEvPrivate::TEvReadFinished, Handle);
-            HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
-            HFunc(NActors::TEvents::TEvWakeup, Handle);
-            HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
-            hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
-            hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
-            HFunc(NEvents::TDataEvents::TEvWrite, Handle);
-            HFunc(TEvPrivate::TEvWriteDraft, Handle);
-            HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
-            HFunc(TEvPrivate::TEvTieringModified, Handle);
-
-            HFunc(NActors::TEvents::TEvUndelivered, Handle);
-
-            HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
-            HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
-            HFunc(NOlap::NBackground::TEvRemoveSession, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
-
-            HFunc(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvStartToSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvSendDataFromSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvAckDataToSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
-            HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
-            HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
-            HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
-            HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
-            HFunc(TEvDataShard::TEvCancelBackup, Handle);
-            HFunc(TEvDataShard::TEvCancelRestore, Handle);
-            HFunc(TEvDataShard::TEvCompactTable, Handle);
-
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
-            hFunc(TEvPrivate::TEvRetryConfigSubscription, Handle);
-
-            default:
-                if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_S_WARN("TColumnShard.StateWork at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
-                                                            << " event: " << ev->ToString());
-                }
-                break;
-        }
-    }
+    STFUNC(StateWork);
 
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
@@ -572,8 +509,9 @@ private:
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
-    // Local CMS snapshot of ColumnShardConfig
-    NKikimrConfig::TColumnShardConfig ColumnShardConfig;
+    // Local CMS snapshot of ColumnShardConfig. Heap-allocated so this header
+    // does not need a complete NKikimrConfig::TColumnShardConfig / config.pb.h.
+    std::unique_ptr<NKikimrConfig::TColumnShardConfig> ColumnShardConfig;
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
@@ -784,6 +722,7 @@ public:
     }
 
     TColumnShard(TTabletStorageInfo* info, const TActorId& tablet);
+    ~TColumnShard();
 };
 
 }   // namespace NKikimr::NColumnShard

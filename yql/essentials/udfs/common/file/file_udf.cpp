@@ -465,7 +465,6 @@ private:
             return true;
         }
 
-    private:
         const ui32 IndexP_;
         const ui32 IndexT_;
         const ui32 IndexA_;
@@ -527,7 +526,6 @@ private:
             return *HasItems_;
         }
 
-    protected:
         const ui32 IndexP_;
         const ui32 IndexT_;
         const ui32 IndexA_;

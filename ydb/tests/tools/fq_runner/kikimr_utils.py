@@ -404,6 +404,17 @@ class TokenAccessorExtension(ExtensionPoint):
         kikimr.compute_plane.fq_config['token_accessor']['use_ssl'] = self.use_ssl
 
 
+class SynchronizationServiceExtension(ExtensionPoint):
+    def is_applicable(self, request):
+        return True
+
+    def apply_to_kikimr(self, request, kikimr):
+        if 'compute' in kikimr.control_plane.fq_config:
+            kikimr.control_plane.fq_config['compute'].setdefault('ydb', {})['synchronization_service'] = {
+                'enable': True
+            }
+
+
 @contextmanager
 def start_kikimr(request, kikimr_extensions):
     start_kikimr.__annotations__ = {

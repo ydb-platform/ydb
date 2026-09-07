@@ -1,0 +1,5 @@
+/* custom error: ListFromRange cannot represent the default Step 1 as Decimal(35,35); provide an explicit non-zero Decimal Step */
+SELECT ListFromRange(
+    Decimal("0.00000000000000000000000000000000001", 35, 35),
+    Decimal("0.00000000000000000000000000000000004", 35, 35)
+);

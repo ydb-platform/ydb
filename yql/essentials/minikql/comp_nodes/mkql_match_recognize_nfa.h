@@ -597,7 +597,7 @@ public:
 
 private:
     // TODO (zverevgeny): Consider to change to std::vector for the sake of perf
-    using TStateSet = std::set<TState, std::less<TState>, TMKQLAllocator<TState>>;
+    using TStateSet = std::set<TState, std::less<>, TMKQLAllocator<TState>>;
 
     bool MakeEpsilonTransitionsImpl() {
         TStateSet newStates;
@@ -649,8 +649,8 @@ private:
     }
 
     void MakeEpsilonTransitions() {
-        while (MakeEpsilonTransitionsImpl())
-            ;
+        while (MakeEpsilonTransitionsImpl()) {
+        }
     }
 
     static void Add(THashMap<size_t, i64>& counters, size_t index, i64 value) {

@@ -1,6 +1,7 @@
 """
 A simple utility to import something by its string name.
 """
+
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
 from __future__ import annotations
@@ -21,11 +22,13 @@ def import_item(name: str) -> Any:
 
     Returns
     -------
-    mod : module object
-        The module that was imported.
+    mod : object
+        The imported object: for a dotted name ``foo.bar``, the ``bar``
+        attribute of module ``foo`` (which may be any object); for an
+        un-dotted name, the module itself.
     """
     if not isinstance(name, str):
-        raise TypeError("import_item accepts strings, not '%s'." % type(name))
+        raise TypeError(f"import_item accepts strings, not '{type(name)}'.")
     parts = name.rsplit(".", 1)
     if len(parts) == 2:
         # called with 'foo.bar....'
@@ -34,7 +37,7 @@ def import_item(name: str) -> Any:
         try:
             pak = getattr(module, obj)
         except AttributeError as e:
-            raise ImportError("No module named %s" % obj) from e
+            raise ImportError(f"No module named {obj}") from e
         return pak
     else:
         # called with un-dotted string

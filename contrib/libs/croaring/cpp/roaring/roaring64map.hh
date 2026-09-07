@@ -445,7 +445,7 @@ class Roaring64Map {
     void clear() { roarings.clear(); }
 
     /**
-     * Return the largest value (if not empty)
+     * Returns the largest value in the set, or 0 if the set is empty.
      */
     uint64_t maximum() const {
         for (auto roaring_iter = roarings.crbegin();
@@ -461,7 +461,7 @@ class Roaring64Map {
     }
 
     /**
-     * Return the smallest value (if not empty)
+     * Returns the smallest value in the set, or UINT64_MAX if the set is empty.
      */
     uint64_t minimum() const {
         for (auto roaring_iter = roarings.cbegin();

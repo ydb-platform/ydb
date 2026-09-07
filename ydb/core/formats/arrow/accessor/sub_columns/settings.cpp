@@ -2,6 +2,15 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
+ui32 GetMaxDenseEncodingVersion() {
+    return 1;
+}
+
+TEncodingParams TEncodingParams::FromVersion(const ui32 version) {
+    AFL_VERIFY(version && version <= GetMaxDenseEncodingVersion())("version", version);
+    return TEncodingParams{ .UseDenseEncoder = true };
+}
+
 TSettings::TColumnsDistributor::EColumnType TSettings::TColumnsDistributor::TakeAndDetect(const ui64 columnSize, const ui32 columnValuesCount) {
     if (!!PredSize) {
         AFL_VERIFY(columnSize <= *PredSize)("col", columnSize)("pred", PredSize);

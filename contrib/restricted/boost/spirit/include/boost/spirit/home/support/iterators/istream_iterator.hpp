@@ -1,4 +1,5 @@
 //  Copyright (c) 2001-2011 Hartmut Kaiser
+//  Copyright (c) 2025 Joaquin M Lopez Munoz
 // 
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -53,6 +54,9 @@ namespace boost { namespace spirit
         basic_istream_iterator()
           : base_type() {}
 
+        basic_istream_iterator(basic_istream_iterator const& rhs)
+          : base_type(rhs) {}
+
         explicit basic_istream_iterator(std::basic_istream<Elem, Traits>& x)
           : base_type(x) {}
 
@@ -61,10 +65,23 @@ namespace boost { namespace spirit
           : base_type() {}            // shipped with gcc 3.1
 #endif // BOOST_WORKAROUND(__GLIBCPP__, == 20020514)
 
-        basic_istream_iterator operator= (base_type const& rhs)
+        basic_istream_iterator& operator=(basic_istream_iterator const& rhs)
         {
             this->base_type::operator=(rhs);
             return *this;
+        }
+
+        basic_istream_iterator& operator++()
+        {
+            this->base_type::operator++();
+            return *this;
+        }
+
+        basic_istream_iterator operator++(int)
+        {
+            basic_istream_iterator tmp(*this);
+            this->base_type::operator++();
+            return tmp;
         }
 
     // default generated operators, destructor and assignment operator are ok.

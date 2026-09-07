@@ -429,6 +429,7 @@ def write_raw_messages_in_transaction(driver, topic_name, values, producer_id=No
                 topic_name,
                 producer_id=producer_id or f"tx-producer-{uuid.uuid4().hex}",
                 partition_id=partition_id,
+                codec=ydb.TopicCodec.RAW,
             )
             for value in values:
                 writer.write(ydb.TopicWriterMessage(value), timeout=30)
@@ -649,7 +650,11 @@ def read_messages_in_batches(driver, topic_name, consumer, expected_count, max_m
 
 
 def write_raw_messages(driver, topic_name, values, producer_id=None):
-    with driver.topic_client.writer(topic_name, producer_id=producer_id or f"producer-{uuid.uuid4().hex}") as writer:
+    with driver.topic_client.writer(
+        topic_name,
+        producer_id=producer_id or f"producer-{uuid.uuid4().hex}",
+        codec=ydb.TopicCodec.RAW,
+    ) as writer:
         for value in values:
             writer.write(ydb.TopicWriterMessage(value))
 

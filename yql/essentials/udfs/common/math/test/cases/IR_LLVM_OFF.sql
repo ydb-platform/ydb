@@ -1,4 +1,3 @@
-/* syntax version 1 */
 pragma config.flags("ValidateUdf", "None");
 pragma config.flags("LLVM_OFF");
 
@@ -23,5 +22,4 @@ select
     Math::Mod(-1, 7),
     Math::Mod(-1, 0),
     Math::Rem(-1, 7),
-    Math::Rem(-1, 0)
-from Input;
+    Math::Rem(-1, 0);

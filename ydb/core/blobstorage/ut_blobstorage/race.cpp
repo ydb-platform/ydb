@@ -1,7 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/activity.h>
 
-std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env) {
+std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env, ui32 partitionedNode) {
     auto config = env.FetchBaseConfig();
     std::vector<ui32> res;
 
@@ -12,6 +12,9 @@ std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env) {
     }
 
     for (const ui32 nodeId : env.Runtime->GetNodes()) {
+        if (nodeId == partitionedNode) {
+            continue;
+        }
         bool badGroups = false;
         for (const auto& group : config.GetGroup()) {
             ui32 numFullyWorking = 0;
@@ -32,7 +35,7 @@ std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env) {
     return res;
 }
 
-bool IssueReassignQuery(TEnvironmentSetup& env) {
+bool IssueReassignQuery(TEnvironmentSetup& env, ui32 partitionedNode) {
     auto config = env.FetchBaseConfig();
 
     std::map<std::tuple<ui32, ui32, ui32>, const NKikimrBlobStorage::TBaseConfig::TVSlot*> slots;
@@ -48,11 +51,14 @@ bool IssueReassignQuery(TEnvironmentSetup& env) {
         std::vector<const NKikimrBlobStorage::TBaseConfig::TVSlot*> all, notready;
         for (const auto& id : group.GetVSlotId()) {
             auto *slot = slots.at(std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()));
-            all.push_back(slot);
             if (slot->GetReady()) {
                 ++numFullyWorking;
-            } else {
-                notready.push_back(slot);
+            }
+            if (id.GetNodeId() != partitionedNode) {
+                all.push_back(slot);
+                if (!slot->GetReady()) {
+                    notready.push_back(slot);
+                }
             }
         }
         if (numFullyWorking > 6) {
@@ -209,7 +215,7 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
     while (counter) {
         // restart node at random basis
         if (counter % 30 == 15) {
-            auto nodes = GetRestartableNodes(env);
+            auto nodes = GetRestartableNodes(env, partitionedNode);
             if (!nodes.empty()) {
                 auto it = nodes.begin();
                 std::advance(it, RandomNumber(nodes.size()));
@@ -219,9 +225,8 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
                 --counter;
                 continue;
             }
-        } else if (IssueReassignQuery(env)) {
-            const TDuration delay = TDuration::MilliSeconds(1 + RandomNumber<ui64>(200));
-            env.Sim(delay);
+        } else if (IssueReassignQuery(env, partitionedNode)) {
+            env.Sim(TDuration::Minutes(10));
             --counter;
             continue;
         }

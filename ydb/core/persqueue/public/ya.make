@@ -25,6 +25,7 @@ END()
 RECURSE(
     cluster_tracker
     codecs
+    dataplane
     counters
     describer
     fetcher

@@ -26,6 +26,7 @@ RECURSE_FOR_TESTS(
     sysview
     tli
     topics
+    tracing
     tx
     view
     yql

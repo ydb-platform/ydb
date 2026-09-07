@@ -153,7 +153,9 @@ namespace NWilson {
         res.Data = std::make_unique<TData>(TInstant::Zero(), 0, NWilson::TTraceId(spanId), EFlags::NONE,
                 nullptr);
         res.Data->Span.set_trace_id(parentId.GetTraceIdPtr(), parentId.GetTraceIdSize());
-        res.Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+        if (!parentId.IsRoot()) {
+            res.Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+        }
         res.Data->Span.set_span_id(spanId.GetSpanIdPtr(), spanId.GetSpanIdSize());
         res.Data->Span.set_start_time_unix_nano(startTs.NanoSeconds());
         res.Data->Span.set_end_time_unix_nano(endTs.NanoSeconds());

@@ -17,6 +17,9 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#include <atomic>
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 namespace NKikimr::NKqp {
@@ -98,12 +101,42 @@ ui64 GetExpectedVersion(const TString&) {
     return 0;
 }
 
-template<typename TRequest, typename TResponse, typename TResult>
+template<typename TRequest, typename TResponse, typename TResult, typename TExtractStatus>
 TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
-    typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback)
+    typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
+    std::shared_ptr<ICompileDependencyDiagnostics> diagnostics,
+    ECompileDependency dependency,
+    TStringBuf target,
+    TExtractStatus extractStatus,
+    ECompileDependencyPurpose purpose)
 {
     auto promise = NewPromise<TResult>();
-    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(actorId, request, promise, callback);
+    if (!diagnostics) {
+        IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(
+            actorId, request, promise, std::move(callback));
+        actorSystem->Register(requestHandler, TMailboxType::HTSwap,
+            actorSystem->AppData<TAppData>()->UserPoolId);
+        return promise.GetFuture();
+    }
+
+    auto diagnostic = diagnostics->Begin(dependency, TString(target), purpose);
+    auto diagnosticFinished = std::make_shared<std::atomic<bool>>(false);
+    auto finishDiagnostic = [diagnostics, diagnostic, diagnosticFinished](ECompileDependencyStatus status) mutable {
+        if (diagnostics && !diagnosticFinished->exchange(true, std::memory_order_relaxed)) {
+            diagnostics->Finish(std::move(diagnostic), status);
+        }
+    };
+    auto tracedCallback = [callback = std::move(callback), finishDiagnostic,
+            extractStatus = std::move(extractStatus)]
+            (TPromise<TResult> promise, TResponse&& response) mutable {
+        finishDiagnostic(extractStatus(response));
+        callback(std::move(promise), std::move(response));
+    };
+    auto failedCallback = [finishDiagnostic = std::move(finishDiagnostic)]() mutable {
+        finishDiagnostic(ECompileDependencyStatus::Error);
+    };
+    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(
+        actorId, request, promise, std::move(tracedCallback), std::move(failedCallback));
     actorSystem->Register(requestHandler, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
     return promise.GetFuture();
 }
@@ -937,6 +970,16 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
 {
+    return LoadTableMetadataImpl(cluster, table, settings, database, userToken,
+        ECompileDependencyPurpose::QueryTable);
+}
+
+NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadataImpl(
+    const TString& cluster, const TString& table,
+    const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    ECompileDependencyPurpose purpose)
+{
     using TResult = TTableMetadataResult;
 
     auto ptr = weak_from_base();
@@ -947,7 +990,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         if (settings.SysViewRewritten_ && NSysView::GetSystemViewRewrittenResolver().IsSystemViewPath(SplitPath(table), sysViewPath)) {
             tableMetaFuture = LoadSysViewRewrittenMetadata(cluster, table, sysViewPath.ViewName);
         } else {
-            tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
+            tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken,
+                purpose);
         }
         return tableMetaFuture.Apply([ptr, database, userToken](const TFuture<TTableMetadataResult>& future) mutable {
             try {
@@ -1007,8 +1051,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
                 YDB_LOG_DEBUG_CTX(*ActorSystem, "Load index metadata without schema version check",
                     {"index", index.Name});
                 children.push_back(
-                    LoadTableMetadata(cluster, implTablePath,
-                        TLoadTableMetadataSettings().WithPrivateTables(true), database, userToken)
+                    LoadTableMetadataImpl(cluster, implTablePath,
+                        TLoadTableMetadataSettings().WithPrivateTables(true), database, userToken,
+                        ECompileDependencyPurpose::IndexImplementation)
                 );
             } else {
                 YDB_LOG_DEBUG_CTX(*ActorSystem, "Load index metadata with schema version check",
@@ -1070,7 +1115,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
     try {
         auto ptr = weak_from_base();
         const auto settings = TLoadTableMetadataSettings().WithPrivateTables(true);
-        auto tableMetaFuture = LoadTableMetadataCache(cluster, std::make_pair(indexId, tableName), settings, database, userToken);
+        auto tableMetaFuture = LoadTableMetadataCache(cluster, std::make_pair(indexId, tableName),
+            settings, database, userToken, ECompileDependencyPurpose::IndexImplementation);
         return tableMetaFuture.Apply([ptr, database, userToken](const TFuture<TTableMetadataResult>& future) mutable {
             try {
                 auto result = future.GetValue();
@@ -1162,7 +1208,8 @@ template<typename TPath>
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadataCache(
     const TString& cluster, const TPath& id,
     TLoadTableMetadataSettings settings, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    ECompileDependencyPurpose purpose)
 {
     using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
     using TResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
@@ -1222,7 +1269,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         ActorSystem,
         schemeCacheId,
         ev.Release(),
-        [userToken, database, cluster, mainCluster = Cluster, table, settings,
+        [userToken, database, cluster, mainCluster = Cluster, table, settings, purpose,
             expectedSchemaVersion, ptr, queryName, externalPath, enableOnlineAddUniqueIndex]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
@@ -1402,7 +1449,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             return;
                         }
                         settings.WithExternalDatasources_ = true;
-                        locked->LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken)
+                        locked->LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken,
+                            ECompileDependencyPurpose::ExternalDataSource)
                             .Apply([promise, externalTableMetadata](const TFuture<TTableMetadataResult>& result) mutable
                         {
                             auto externalDataSourceMetadata = result.GetValue();
@@ -1419,7 +1467,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             }
                             TIndexId pathId = TIndexId(child.PathId, child.SchemaVersion);
 
-                            locked->LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
+                            locked->LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings,
+                                database, userToken, purpose)
                                 .Apply([promise](const TFuture<TTableMetadataResult>& result) mutable
                             {
                                 promise.SetValue(result.GetValue());
@@ -1435,7 +1484,20 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
             } catch (const yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
-        }
+        },
+        CompileDiagnostics, ECompileDependency::SchemeCache, table,
+        [](const TResponse& response) {
+            if (!response.Request || response.Request->ResultSet.empty()) {
+                return ECompileDependencyStatus::Error;
+            }
+            for (const auto& entry : response.Request->ResultSet) {
+                if (entry.Status != EStatus::Ok) {
+                    return ECompileDependencyStatus::Error;
+                }
+            }
+            return ECompileDependencyStatus::Ok;
+        },
+        purpose
     );
 
     // Create an apply for the future that will fetch table statistics and save it in the metadata
@@ -1447,7 +1509,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     TActorSystem* actorSystem = ActorSystem;
 
-    return future.Apply([actorSystem, database](const TFuture<TTableMetadataResult>& f) {
+    return future.Apply([actorSystem, database, table, diagnostics = CompileDiagnostics, purpose](const TFuture<TTableMetadataResult>& f) {
         auto result = f.GetValue();
         if (!result.Success()) {
             return MakeFuture(result);
@@ -1484,9 +1546,15 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 auto s = resp.Simple;
                 result.Metadata->RecordsCount = s.RowCount;
                 result.Metadata->DataSize = s.BytesSize;
-                result.Metadata->StatsLoaded = response.Success;
+                result.Metadata->StatsLoaded = resp.Success;
                 promise.SetValue(result);
-        });
+        }, diagnostics, ECompileDependency::StatisticsService, table,
+        [](const NStat::TEvStatistics::TEvGetStatisticsResult& response) {
+            return response.Success && !response.StatResponses.empty()
+                && std::all_of(response.StatResponses.begin(), response.StatResponses.end(),
+                    [](const auto& item) { return item.Success; })
+                ? ECompileDependencyStatus::Ok : ECompileDependencyStatus::Error;
+        }, purpose);
     });
 }
 

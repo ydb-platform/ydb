@@ -149,52 +149,51 @@ public:
 
         Self->SplitStarted = true;
 
-        // We need to remove all non-qualifying locks first, making sure their uncommitted
-        // changes are not borrowed by new shards. Qualifying locks (persistent, write-only)
-        // are spared and transferred to dst shards as ancestor locks.
+        // We need to remove all locks that we won't be transferring to dst shards first,
+        // making sure their uncommitted changes are not borrowed by new shards.
         if (!Self->SysLocksTable().GetLocks().empty()) {
-            // Check whether there are any non-qualifying locks remaining
-            bool hasNonQualifying = false;
-            for (const auto& pr : Self->SysLocksTable().GetLocks()) {
-                if (!pr.second->IsPersistent() || !pr.second->GetReadTables().empty()) {
-                    hasNonQualifying = true;
+            const bool lockTransferEnabled = AppData(ctx)
+                ->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+            auto lockTransferPredicate = [lockTransferEnabled](const TLockInfo& lock) {
+                return lockTransferEnabled
+                    && !lock.IsBroken()
+                    && lock.IsPersistent() && lock.GetReadTables().empty();
+            };
+
+            auto countBefore = Self->SysLocksTable().GetLocks().size();
+            TDataShardLocksDb locksDb(*Self, txc);
+            TSetupSysLocks guardLocks(*Self, &locksDb);
+            for (auto& pr : Self->SysLocksTable().GetLocks()) {
+                if (lockTransferPredicate(*pr.second)) {
+                    continue;
+                }
+                Self->SysLocksTable().EraseLock(pr.first);
+                if (pr.second->IsPersistent()) {
+                    // Don't erase more than one persistent lock at a time
                     break;
                 }
             }
+            auto [_, locksBrokenBySplit] = Self->SysLocksTable().ApplyLocks();
+            if (!locksBrokenBySplit.empty()) {
+                auto victimQuerySpanIds = Self->SysLocksTable().ExtractVictimQuerySpanIds(locksBrokenBySplit);
+                NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Tablet split operation invalidated locks", locksBrokenBySplit,
+                                               Nothing(), victimQuerySpanIds);
+            }
+            auto countAfter = Self->SysLocksTable().GetLocks().size();
 
-            if (hasNonQualifying) {
-                auto countBefore = Self->SysLocksTable().GetLocks().size();
-                TDataShardLocksDb locksDb(*Self, txc);
-                TSetupSysLocks guardLocks(*Self, &locksDb);
-                for (auto& pr : Self->SysLocksTable().GetLocks()) {
-                    if (pr.second->IsPersistent() && pr.second->GetReadTables().empty()) {
-                        continue;  // spare qualifying persistent write-only locks for transfer
-                    }
-                    Self->SysLocksTable().EraseLock(pr.first);
-                    if (pr.second->IsPersistent()) {
-                        // Don't erase more than one persistent lock at a time
-                        break;
-                    }
-                }
-                auto [_, locksBrokenBySplit] = Self->SysLocksTable().ApplyLocks();
-                if (!locksBrokenBySplit.empty()) {
-                    auto victimQuerySpanIds = Self->SysLocksTable().ExtractVictimQuerySpanIds(locksBrokenBySplit);
-                    NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Tablet split operation invalidated locks", locksBrokenBySplit,
-                                                   Nothing(), victimQuerySpanIds);
-                }
-                auto countAfter = Self->SysLocksTable().GetLocks().size();
-                Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
+            if (countAfter < countBefore) {
+                // Still removing locks, re-execute.
                 Self->Execute(Self->CreateTxStartSplit(), ctx);
                 return true;
             }
 
-            // All remaining locks are qualifying persistent write-only locks.
-            // Collect them for transfer to dst shards as ancestor locks.
+            Y_ENSURE(countAfter == countBefore);
+            // All remaining locks are those that we want to transfer.
+            // Collect them for the snapshot.
             Self->SrcLocksToTransfer.clear();
             for (const auto& pr : Self->SysLocksTable().GetLocks()) {
                 const TLockInfo& lock = *pr.second;
-                Y_ENSURE(lock.IsPersistent() && lock.GetReadTables().empty(),
-                    "Expected only qualifying persistent write-only locks");
+                Y_ENSURE(lockTransferPredicate(lock));
 
                 auto& srcLockInfo = Self->SrcLocksToTransfer.emplace_back();
                 srcLockInfo.SetLockId(lock.GetLockId());
@@ -214,8 +213,8 @@ public:
                     proto.SetFlags(ui64(ancestorLock.Flags));
                 }
             }
-            // Fall through: qualifying locks remain and the snapshot will include their
-            // uncommitted writes. Dst shards will track them via AncestorShardsLocks.
+        } else {
+            Self->SrcLocksToTransfer.clear();
         }
 
         ui64 opId = Self->SrcSplitOpId;

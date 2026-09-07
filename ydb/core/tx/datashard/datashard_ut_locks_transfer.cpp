@@ -32,6 +32,7 @@ struct TTestEnv {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(app);
+        serverSettings.FeatureFlags.SetEnableDataShardLocksTransferOnSplit(true);
 
         Server = new TServer(serverSettings);
         auto& runtime = GetRuntime();

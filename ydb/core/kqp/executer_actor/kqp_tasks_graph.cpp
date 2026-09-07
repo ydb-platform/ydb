@@ -1426,7 +1426,7 @@ static TVector<ui64> GetCsShardingOrderedShardIds(const NKikimrSchemeOp::TColumn
 static std::optional<std::vector<TString>> BuildColumnShardHashV1ForWriteAffinity(
     TKqpTasksGraph& graph,
     const TStageInfo& stageInfo,
-    const TStageInfo& inputStageInfo,
+    TStageInfo& inputStageInfo,
     ui32 outputIdx)
 {
     // Use effective sharding columns: prefer table-resolver populated
@@ -1679,7 +1679,7 @@ static std::optional<std::vector<TString>> BuildColumnShardHashV1ForWriteAffinit
     // created a stale cache entry in HashParamsByOutput[outputIdx] by calling
     // the same accessor. If we only update ColumnShardHashV1Params (the primary),
     // FillOutputDesc will read the stale cache entry instead of the updated value.
-    auto& transformParams = const_cast<TStageInfo&>(inputStageInfo).Meta.GetColumnShardHashV1Params(outputIdx);
+    auto& transformParams = inputStageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
     transformParams.SourceShardCount = N;
     transformParams.TaskIndexByHash = std::move(taskIndexByHash);
     transformParams.SourceTableKeyColumnTypes = std::move(keyTypes);
@@ -1714,14 +1714,6 @@ static std::optional<std::vector<TString>> BuildColumnShardHashV1ForWriteAffinit
     // Both forms are handled below.
 
     if (useNumericIndices) {
-        // Build column name to index map from sink settings Columns.
-        // The Columns field lists columns in the same order as the
-        // Transform stage's output struct (which maps to Multi elements).
-        THashMap<TString, ui32> columnNameToIndex;
-        for (ui32 i = 0; i < static_cast<ui32>(sinkSettings.GetColumns().size()); ++i) {
-            columnNameToIndex[sinkSettings.GetColumns(i).GetName()] = i;
-        }
-
         for (const auto& colName : effectiveShardingColumns) {
             auto it = columnNameToIndex.find(colName);
             if (it != columnNameToIndex.end()) {
@@ -4240,75 +4232,6 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
 
             BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
 
-#ifdef QP_FORCE_CS_WRITE_AFFINITY
-            // Invariant: with the force flag, a multi-task OLAP sink stage must have
-            // input channels that are either ColumnShardHashV1 (per-shard routing) or
-            // Broadcast (pure OLAP VALUES: all rows to every task, filtered by TargetShardIds).
-            // This check runs AFTER BuildKqpStageChannels, when channels are populated.
-            if (stageInfo.Tasks.size() > 1) {
-                bool isOlapSink = false;
-                for (const auto& sink : stage.GetSinks()) {
-                    if (sink.HasInternalSink()
-                            && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                        NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-                        if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
-                                && sinkSettings.GetIsOlap()) {
-                            isOlapSink = true;
-                            break;
-                        }
-                    }
-                }
-                if (isOlapSink) {
-                    for (const auto& taskId : stageInfo.Tasks) {
-                        const auto& task = GetTask(taskId);
-                        bool hasNonHashShuffleInput = false;
-                        bool hasAnyChannel = false;
-                        TString nonHashShuffleInfo;
-                        TString outputTypeInfo;
-                        for (const auto& input : task.Inputs) {
-                            for (const auto& channelId : input.Channels) {
-                                hasAnyChannel = true;
-                                const auto& channel = GetChannel(channelId);
-                                const auto& srcTask = GetTask(channel.SrcTask);
-                                const auto& srcOutput = srcTask.Outputs[channel.SrcOutputIndex];
-                                outputTypeInfo = TStringBuilder()
-                                    << "outputType=" << srcOutput.Type
-                                    << " hashKind=" << (srcOutput.HashKind.has_value()
-                                        ? ToString((int)*srcOutput.HashKind) : "none")
-                                    << " partitionsCount=" << srcOutput.PartitionsCount;
-                                if (srcOutput.Type == TTaskOutputType::Broadcast) {
-                                    // Broadcast is valid for pure OLAP + affinity.
-                                    continue;
-                                }
-                                if (srcOutput.Type != TTaskOutputType::HashPartition
-                                        || srcOutput.HashKind != EHashShuffleFuncType::ColumnShardHashV1) {
-                                    hasNonHashShuffleInput = true;
-                                    nonHashShuffleInfo = TStringBuilder()
-                                        << "srcTask=" << channel.SrcTask
-                                        << " channelId=" << channelId
-                                        << " outputType=" << srcOutput.Type
-                                        << " hashKind=" << (srcOutput.HashKind.has_value()
-                                            ? ToString((int)*srcOutput.HashKind) : "none");
-                                    break;
-                                }
-                            }
-                            if (hasNonHashShuffleInput) {
-                                break;
-                            }
-                        }
-                        AFL_VERIFY(hasAnyChannel && !hasNonHashShuffleInput)
-                            ("stageId", stageInfo.Id)
-                            ("taskId", taskId)
-                            ("hasAnyChannel", hasAnyChannel)
-                            ("outputTypeInfo", outputTypeInfo)
-                            ("nonHashShuffleInfo", nonHashShuffleInfo)
-                            ("inputsCount", task.Inputs.size())
-                            ("msg", "QP_FORCE_CS_WRITE_AFFINITY: multi-task OLAP sink input channels"
-                                    " are not ColumnShardHashV1 or Broadcast — per-shard routing violated");
-                    }
-                }
-            }
-#endif
         }
 
         GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
@@ -4895,13 +4818,6 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 MaxTasksGraph->AddTask(task, nodeId);
             }
 
-#ifdef QP_FORCE_CS_WRITE_AFFINITY
-            AFL_VERIFY(stageInfo.Tasks.size() == shardNodes.size())
-                ("stageId", stageInfo.Id)
-                ("tasksCount", stageInfo.Tasks.size())
-                ("shardNodesCount", shardNodes.size())
-                ("msg", "QP_FORCE_CS_WRITE_AFFINITY requires one task per shard");
-#endif
 
             return;
         }

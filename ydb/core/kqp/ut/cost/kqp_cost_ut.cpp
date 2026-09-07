@@ -2226,8 +2226,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         {
             auto query = std::format(R"(
-                {}
-                CREATE TABLE `/Root/TestTable2` (PRIMARY KEY (Group, Name)) WITH (STORE={}) AS SELECT * FROM `/Root/TestTable`;
+                {}CREATE TABLE `/Root/TestTable2` (PRIMARY KEY (Group, Name)) WITH (STORE={}) AS SELECT * FROM `/Root/TestTable`;
             )", isOlap ? "PRAGMA ydb.EnableCsWriteAffinity = \"true\";\n" : "", isOlap ? "COLUMN" : "ROW");
 
             auto txControl = NYdb::NQuery::TTxControl::NoTx();

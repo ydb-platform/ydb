@@ -91,7 +91,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_archive WITH (
 
 Установка идентификатора приложения в клиенте:
 
-- **{{ ydb-short-name }} Embedded UI** — фиксированное значение `ydb-ui`, задаётся viewer-ом и не настраивается пользователем.
+- **{{ ydb-short-name }} Embedded UI** — фиксированное значение `ydb-ui`, задаётся Embedded UI и не настраивается пользователем.
 - **YDB CLI** — не поддерживается: идентификатор клиентского приложения в запросе не отправляется.
 - **YDB C++ SDK** — на каждом запросе через параметр `Header` настроек [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, где константа [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) равна `x-ydb-application-name`.
 - **YDB Go SDK** — на драйвере через опцию [`WithApplicationName`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/options.go#L163) в вызове `ydb.Open`.
@@ -162,7 +162,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_stream WITH (
 
 Если в DDL для создания классификатора пула ресурсов не указан `RANK`, то по умолчанию ему будет присвоено значение $RANK = MAX(existing\_ranks) + 1000$. Все значения `RANK` должны быть уникальными, чтобы обеспечить строго детерминированный порядок выбора пула ресурсов в случае конфликтующих условий. Такое поведение выбрано для возможности добавлять новые классификаторы пулов ресурсов между уже существующими.
 
-Также возможно наличие классификатора, который ссылается на несуществующий пул ресурсов или к которому у пользователя нет доступа. В таком случае такие классификаторы будут пропускаться.
+Также возможно наличие классификатора, который ссылается на несуществующий пул ресурсов или к которому у пользователя нет доступа. В таком случае он пропускается.
 
 С ограничениями на число классификаторов можно ознакомиться на странице [ограничений](../../../concepts/limits-ydb.md#resource_pool).
 

@@ -504,13 +504,14 @@ public:
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
         std::shared_ptr<TPatternCacheEntry> entry;
-        bool canBeCached;
+        bool canBeCached = false;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
             Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set in Prepare stage of TDqTaskRunner");
             TProgramKey cacheKey{program.GetLangVer(), StableHashRuntimeSettings(*RuntimeSettings), program.GetRaw()};
             auto future = cache->FindOrSubscribe(cacheKey);
-            if (!future.HasValue()) {
+            if (!future) {
+                // Nobody is building an entry for this key yet, so it is up to this task to do it.
                 try {
                     entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
                     if (canBeCached && entry->Pattern->GetSuitableForCache()) {
@@ -525,7 +526,9 @@ public:
                     throw;
                 }
             } else {
-                entry = future.GetValueSync();
+                // Either a cache hit, or somebody is already building the very same pattern - waiting for them beats
+                // building it once again in every task of the stage.
+                entry = future->GetValueSync();
             }
         }
 

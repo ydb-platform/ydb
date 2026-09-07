@@ -44,7 +44,7 @@ public:
         return it->second.Entry;
     }
 
-    void Insert(const TProgramKey& key, TPatternCacheEntryPtr entry) {
+    TPatternCacheEntryPtr Insert(const TProgramKey& key, TPatternCacheEntryPtr entry) {
         auto [it, inserted] = ProgramKeyToPatternCacheHolder_.emplace(std::piecewise_construct,
                                                                       std::forward_as_tuple(key),
                                                                       std::forward_as_tuple(key, entry));
@@ -66,7 +66,13 @@ public:
         }
 
         it->second.Entry->IsInCache.store(true);
+
+        // Taken before the eviction below, which is free to drop the very holder that has just been inserted.
+        TPatternCacheEntryPtr cachedEntry = it->second.Entry;
+
         ClearIfNeeded();
+
+        return cachedEntry;
     }
 
     void NotifyPatternCompiled(const TProgramKey& key) {
@@ -285,7 +291,7 @@ TPatternCacheEntryPtr TComputationPatternLRUCache::Find(const TProgramKey& key) 
     return {};
 }
 
-TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TProgramKey& key) {
+std::optional<TPatternCacheEntryFuture> TComputationPatternLRUCache::FindOrSubscribe(const TProgramKey& key) {
     std::lock_guard lock(Mutex_);
     if (auto it = Cache_->Find(key)) {
         ++*Hits_;
@@ -299,8 +305,8 @@ TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TPro
         std::forward_as_tuple());
     if (isNew) {
         ++*Misses_;
-        // First future is empty - so the subscriber can initiate the entry creation.
-        return {};
+        // Nothing to wait for - the caller is the one to create the entry.
+        return std::nullopt;
     }
 
     ++*Waits_;
@@ -308,17 +314,18 @@ TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TPro
     auto& subscribers = notifyIt->second;
     subscribers.push_back(promise);
 
-    // Second and next futures are not empty - so subscribers can wait while first one creates the entry.
-    return promise;
+    // Somebody else is already creating the entry, so the caller just waits for them.
+    return promise.GetFuture();
 }
 
 void TComputationPatternLRUCache::EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv) {
     Y_DEBUG_ABORT_UNLESS(patternWithEnv && patternWithEnv->Pattern);
     TVector<NThreading::TPromise<TPatternCacheEntryPtr>> subscribers;
+    TPatternCacheEntryPtr cachedEntry;
 
     {
         std::lock_guard lock(Mutex_);
-        Cache_->Insert(key, patternWithEnv);
+        cachedEntry = Cache_->Insert(key, patternWithEnv);
 
         auto notifyIt = Notify_.find(key);
         if (notifyIt != Notify_.end()) {
@@ -329,8 +336,10 @@ void TComputationPatternLRUCache::EmplacePattern(const TProgramKey& key, TPatter
         UpdatePatternCurrentUsageInfo();
     }
 
+    // Subscribers get the entry the cache actually holds - the one whose access counters and compilation state it
+    // tracks - and never a duplicate that has just been dropped.
     for (auto& subscriber : subscribers) {
-        subscriber.SetValue(patternWithEnv);
+        subscriber.SetValue(cachedEntry);
     }
 }
 

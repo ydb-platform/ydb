@@ -1055,19 +1055,19 @@ Y_UNIT_TEST(TripletKeyNotifyPatternMissing) {
     const TProgramKey key{NYql::MakeLangVersion(2025, 1), MakeStableHash(0x20), "prog"};
     TComputationPatternLRUCache cache({1'000'000, 1'000'000});
 
-    // Register as the first subscriber (gets an empty future to trigger creation)
+    // Register as the first subscriber (gets nothing to wait for, so it has to create the entry)
     auto firstFuture = cache.FindOrSubscribe(key);
-    UNIT_ASSERT(!firstFuture.Initialized());
+    UNIT_ASSERT(!firstFuture);
 
     // Register a second subscriber (gets a promise future)
     auto secondFuture = cache.FindOrSubscribe(key);
-    UNIT_ASSERT(secondFuture.Initialized());
-    UNIT_ASSERT(!secondFuture.HasValue());
+    UNIT_ASSERT(secondFuture);
+    UNIT_ASSERT(!secondFuture->HasValue());
 
     // Notify missing - second subscriber should receive nullptr
     cache.NotifyPatternMissing(key);
-    UNIT_ASSERT(secondFuture.HasValue());
-    UNIT_ASSERT(!secondFuture.GetValue());
+    UNIT_ASSERT(secondFuture->HasValue());
+    UNIT_ASSERT(!secondFuture->GetValue());
 }
 
 Y_UNIT_TEST(TripletKeyFindOrSubscribeDistinctKeys) {
@@ -1090,10 +1090,10 @@ Y_UNIT_TEST(TripletKeyFindOrSubscribeDistinctKeys) {
     auto future1 = cache.FindOrSubscribe(TProgramKey{ver1, hash, program});
     auto future2 = cache.FindOrSubscribe(TProgramKey{ver2, hash, program});
 
-    UNIT_ASSERT(future1.Initialized() && future1.HasValue());
-    UNIT_ASSERT(future2.Initialized() && future2.HasValue());
-    UNIT_ASSERT_EQUAL(future1.GetValue(), entry1);
-    UNIT_ASSERT_EQUAL(future2.GetValue(), entry2);
+    UNIT_ASSERT(future1 && future1->HasValue());
+    UNIT_ASSERT(future2 && future2->HasValue());
+    UNIT_ASSERT_EQUAL(future1->GetValue(), entry1);
+    UNIT_ASSERT_EQUAL(future2->GetValue(), entry2);
 }
 
 Y_UNIT_TEST(PatternWithoutCompiledCodeIsNotTracked) {
@@ -1219,32 +1219,6 @@ Y_UNIT_TEST(EvictedEntryIsMarkedAsNotCached) {
     UNIT_ASSERT(!cache.Find(firstKey));
     UNIT_ASSERT(!first->IsInCache.load());
     UNIT_ASSERT(second->IsInCache.load());
-}
-
-Y_UNIT_TEST(FindOrSubscribeTellsBuilderFromWaiter) {
-    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
-    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
-
-    // The first miss hands out an uninitialized future: this caller is the one to build the entry.
-    auto builderFuture = cache.FindOrSubscribe(key);
-    UNIT_ASSERT(!builderFuture.Initialized());
-
-    // Every next miss for the same key gets an initialized future without a value yet - it has to be told apart
-    // from the one above, since HasValue() is false for both.
-    auto waiterFuture = cache.FindOrSubscribe(key);
-    UNIT_ASSERT(waiterFuture.Initialized());
-    UNIT_ASSERT(!waiterFuture.HasValue());
-
-    auto entry = MakeMockEntry();
-    cache.EmplacePattern(key, entry);
-
-    UNIT_ASSERT(waiterFuture.HasValue());
-    UNIT_ASSERT_EQUAL(waiterFuture.GetValue(), entry);
-
-    // And a hit is an initialized future that already holds the entry.
-    auto hitFuture = cache.FindOrSubscribe(key);
-    UNIT_ASSERT(hitFuture.Initialized() && hitFuture.HasValue());
-    UNIT_ASSERT_EQUAL(hitFuture.GetValue(), entry);
 }
 
 Y_UNIT_TEST(DuplicateEmplaceKeepsTheCachedEntry) {

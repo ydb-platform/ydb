@@ -100,7 +100,7 @@ public:
     }
 
     TPatternCacheEntryPtr Find(const TProgramKey& key);
-    TPatternCacheEntryFuture FindOrSubscribe(const TProgramKey& key);
+    std::optional<TPatternCacheEntryFuture> FindOrSubscribe(const TProgramKey& key);
 
     void EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv);
 

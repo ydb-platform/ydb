@@ -35,6 +35,8 @@
 
 #include <ydb/core/protos/config.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_BACKUP
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -786,8 +788,11 @@ public:
         return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "S3Uploader"},
+            {"selfId", this->SelfId()},
+            {"storageName", NBackup::NFieldsWrappers::GetStorageName<TSettings>()});
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(

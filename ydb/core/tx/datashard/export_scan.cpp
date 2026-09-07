@@ -10,6 +10,8 @@
 #include <util/generic/bitmap.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_BACKUP
+
 namespace NKikimr {
 namespace NDataShard {
 

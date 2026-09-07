@@ -61,6 +61,7 @@ private:
     IRetryPolicy::TPtr RetryPolicy;
     THashMap<NTiers::TExternalStorageId, IRetryPolicy::IRetryState::TPtr> RetryStateByObject;
     THashMap<NTiers::TExternalStorageId, TSchemaSecretsResolveState> SchemaSecretsResolveByTier;
+    ui64 NextSchemaSecretsSeqNo = 0;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr SecretsFetcher;
     TActorId TiersFetcher;
 
@@ -138,8 +139,6 @@ private:
         SchemaSecretsResolveByTier.erase(tierId);
     }
 
-    // At most one DescribeSecret in flight per tier. A newer description bumps LatestSeqNo and is
-    // resolved after the current request completes; stale replies with a smaller seqno are ignored.
     void StartSchemaSecretsResolve(const NTiers::TExternalStorageId& tierId) {
         auto* state = SchemaSecretsResolveByTier.FindPtr(tierId);
         AFL_VERIFY(state);
@@ -168,7 +167,7 @@ private:
     void RequestSchemaSecretsResolve(
         const NTiers::TExternalStorageId& tierId, NTiers::TTierConfig tier, TVector<TString> secretNames) {
         auto& state = SchemaSecretsResolveByTier[tierId];
-        ++state.LatestSeqNo;
+        state.LatestSeqNo = ++NextSchemaSecretsSeqNo;
         state.PendingConfig = std::move(tier);
         state.SecretNames = std::move(secretNames);
         if (state.InFlight) {

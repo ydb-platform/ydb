@@ -256,8 +256,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
 
         void ReplyAndDie(const TActorContext& ctx) {
-            Ydb::Ymq::V1::CreateQueueResult result;
-
+            Result_.Clear();
             const TRichQueueUrl queueUrl{
                 .Database = this->Database,
                 .TopicPath = this->TopicPath,
@@ -266,9 +265,16 @@ namespace NKikimr::NSqsTopic::V1 {
             };
 
             TString url = MakeQueueUrl(queueUrl, Request_.get());
-            result.set_queue_url(std::move(url));
+            Result_.set_queue_url(std::move(url));
+            this->ChargeRequestUnits(ctx);
+        }
 
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
         }
 
     protected:
@@ -280,6 +286,7 @@ namespace NKikimr::NSqsTopic::V1 {
         TString QueueName;
         TString ConsumerName;
         TQueueAttributes QueueAttributes;
+        Ydb::Ymq::V1::CreateQueueResult Result_;
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
     };

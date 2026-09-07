@@ -91,11 +91,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
-                default:
-                    TBase::StateWork(ev);
-            }
+            TBase::StateWork(ev);
         }
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -128,7 +124,15 @@ namespace NKikimr::NSqsTopic::V1 {
             if (ConsumerConfig.Defined() && ConsumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer \"{}\" is not a shared consumer)", ConsumerName.c_str())));
             }
-            ReplyAndDie(ActorContext());
+            this->ChargeRequestUnits(ActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
+            ReplyAndDie(ctx);
         }
 
         void ReplyAndDie(const TActorContext& ctx) {

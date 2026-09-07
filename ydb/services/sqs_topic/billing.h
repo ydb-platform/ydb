@@ -1,6 +1,11 @@
 #pragma once
 
+#include <ydb/core/metering/bill_record.h>
+
+#include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/strbuf.h>
+#include <util/generic/string.h>
 #include <util/system/types.h>
 
 #include <cmath>
@@ -23,6 +28,8 @@ namespace NKikimr::NSqsTopic::V1::NBilling {
     constexpr double WRITE_BASE_COST = 2.0;
     constexpr double READ_BASE_COST = 2.0;
     constexpr double DELETE_BASE_COST = 2.0;
+    // Flat RU cost for SQS-over-topic methods that are not payload-metered.
+    constexpr double DEFAULT_REQUEST_COST = 2.0;
 
     // RU cost charged per payload block (see WRITE_BLOCK_SIZE / READ_BLOCK_SIZE).
     constexpr double WRITE_COST_PER_BLOCK = 1.0;
@@ -59,6 +66,32 @@ namespace NKikimr::NSqsTopic::V1::NBilling {
         const double ru = baseCost
                 + payloadBlocks * costPerBlock + CostAdjunct(fifo, dedup);
         return RoundRu(ru);
+    }
+
+    // SQS-over-topic request-unit bills. Native Topics API / Kesus accounting
+    // keep using ydb.serverless.requests.v1 from the shared rate-limiter resource.
+    inline constexpr TStringBuf REQUEST_UNITS_SCHEMA = "yds.serverless.requests.v1";
+
+    struct TMeteringIds {
+        TString CloudId;
+        TString FolderId;
+        TString DatabaseId;
+
+        bool IsComplete() const {
+            return !CloudId.empty() && !FolderId.empty() && !DatabaseId.empty();
+        }
+    };
+
+    inline TString MakeRequestUnitsBill(const TMeteringIds& ids, ui64 ru, TInstant now, const TString& id) {
+        return TBillRecord()
+            .Id(id)
+            .Schema(TString(REQUEST_UNITS_SCHEMA))
+            .CloudId(ids.CloudId)
+            .FolderId(ids.FolderId)
+            .ResourceId(ids.DatabaseId)
+            .SourceWt(now)
+            .Usage(TBillRecord::RequestUnits(ru, now))
+            .ToString();
     }
 
 } // namespace NKikimr::NSqsTopic::V1::NBilling

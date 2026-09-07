@@ -1,3 +1,4 @@
+#include <ydb/services/sqs_topic/billing.h>
 #include <ydb/services/sqs_topic/utils.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
@@ -7,6 +8,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/hostname.h>
@@ -213,5 +215,47 @@ Y_UNIT_TEST_SUITE(SqsTopicMakeQueueUrl) {
             url,
             TStringBuilder() << "https://" << FQDNHostName() << "/v1/5//Root/5/topic/8/consumer");
         UNIT_ASSERT(!url.Contains(":0"));
+    }
+}
+
+Y_UNIT_TEST_SUITE(SqsTopicBilling) {
+    Y_UNIT_TEST(RequestUnitsBillUsesYdsSchema) {
+        using namespace NKikimr::NSqsTopic::V1::NBilling;
+
+        const TMeteringIds ids{
+            .CloudId = "cloud",
+            .FolderId = "folder",
+            .DatabaseId = "database",
+        };
+        const TString jsonLine = MakeRequestUnitsBill(ids, 7, TInstant::Seconds(1), "bill-id");
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(jsonLine, &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["schema"].GetString(), "yds.serverless.requests.v1");
+        UNIT_ASSERT_VALUES_UNEQUAL(json["schema"].GetString(), "ydb.serverless.requests.v1");
+        UNIT_ASSERT_VALUES_EQUAL(json["cloud_id"].GetString(), "cloud");
+        UNIT_ASSERT_VALUES_EQUAL(json["folder_id"].GetString(), "folder");
+        UNIT_ASSERT_VALUES_EQUAL(json["resource_id"].GetString(), "database");
+        UNIT_ASSERT_VALUES_EQUAL(json["usage"]["quantity"].GetInteger(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(json["usage"]["unit"].GetString(), "request_unit");
+    }
+
+    Y_UNIT_TEST(DefaultRequestCostIsTwoRu) {
+        using namespace NKikimr::NSqsTopic::V1::NBilling;
+
+        UNIT_ASSERT_VALUES_EQUAL(RoundRu(DEFAULT_REQUEST_COST), 2);
+        UNIT_ASSERT_VALUES_EQUAL(RoundRu(WRITE_BASE_COST), RoundRu(DEFAULT_REQUEST_COST));
+        UNIT_ASSERT_VALUES_EQUAL(RoundRu(READ_BASE_COST), RoundRu(DEFAULT_REQUEST_COST));
+        UNIT_ASSERT_VALUES_EQUAL(RoundRu(DELETE_BASE_COST), RoundRu(DEFAULT_REQUEST_COST));
+    }
+
+    Y_UNIT_TEST(CalcRuAddsFifoAndDedupAdjuncts) {
+        using namespace NKikimr::NSqsTopic::V1::NBilling;
+
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(0, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false, false), 2);
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(0, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, true, false), 3);
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(0, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false, true), 3);
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(0, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, true, true), 4);
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(5, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false, false), 7);
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(5, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, true, true), 9);
     }
 }

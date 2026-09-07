@@ -61,6 +61,8 @@ namespace NKikimr::NSqsTopic::V1 {
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
         void Handle(TEvPQ::TEvListAllTopicsResponse::TPtr& ev);
         void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
+        ui64 GetRUCost() override;
+        void OnRequestUnitsCharged(const TActorContext& ctx);
 
     private:
         const TProtoRequest& Request() const {
@@ -70,6 +72,7 @@ namespace NKikimr::NSqsTopic::V1 {
     private:
         TString DatabaseName_;
         TActorId DescriberActorId;
+        Ydb::Ymq::V1::ListQueuesResult Result_;
     };
 
     TListQueuesActor::TListQueuesActor(NKikimr::NGRpcService::IRequestOpCtx* request)
@@ -193,12 +196,20 @@ namespace NKikimr::NSqsTopic::V1 {
             };
             result.add_queue_urls(MakeQueueUrl(queueUrl, Request_.get()));
         }
-        return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        Result_ = std::move(result);
+        this->ChargeRequestUnits(ctx);
+    }
+
+    ui64 TListQueuesActor::GetRUCost() {
+        return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+    }
+
+    void TListQueuesActor::OnRequestUnitsCharged(const TActorContext& ctx) {
+        return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
     }
 
     void TListQueuesActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
             hFunc(TEvPQ::TEvListAllTopicsResponse, Handle);
             HFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
             default:

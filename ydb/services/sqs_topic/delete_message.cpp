@@ -64,18 +64,15 @@ namespace NKikimr::NSqsTopic::V1 {
     class TDeleteMessageActorBase:
         public TQueueUrlHolder,
         public TGrpcActorBase<TDeleteMessageActorBase<TDerived, TServiceRequest>, TServiceRequest>,
-        private NPQ::TRlHelpers,
         public TCdcStreamCompatible {
     protected:
         using TBase = TGrpcActorBase<TDeleteMessageActorBase, TServiceRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
-        using EWakeupTag = NPQ::TRlHelpers::EWakeupTag;
 
     public:
         TDeleteMessageActorBase(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TQueueUrlHolder(ParseQueueUrlFromRequest<TProtoRequest>(request))
             , TBase(request, GetTopicPath().value_or(""))
-            , NPQ::TRlHelpers({}, request, NBilling::WRITE_BLOCK_SIZE, false)
         {
         }
 
@@ -83,7 +80,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::Bootstrap(ctx);
-            NPQ::TRlHelpers::Bootstrap(this->SelfId(), ctx);
 
             if (this->Request().queue_url().empty()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueUrl parameter."));
@@ -140,33 +136,15 @@ namespace NKikimr::NSqsTopic::V1 {
                 .UserToken = this->Request_->GetInternalToken(),
             };
 
-            NACLib::TUserToken token(this->Request_->GetSerializedToken());
-            ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
-
             this->SendDescribeProposeRequest(ctx);
             this->Become(&TDeleteMessageActorBase::StateWork);
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 HFunc(NPQ::NMLP::TEvChangeResponse, Handle);
-                hFunc(TEvents::TEvWakeup, HandleWakeupTag);
                 default:
                     TBase::StateWork(ev);
-            }
-        }
-
-        void HandleWakeupTag(TEvents::TEvWakeup::TPtr& ev) {
-            switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
-                case EWakeupTag::RlAllowed:
-                    CreateCommitter();
-                    return;
-                case EWakeupTag::RlNoResource:
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION, "Request was throttled by the rate limiter"));
-                default:
-                    OnWakeup(static_cast<EWakeupTag>(ev->Get()->Tag));
-                    return;
             }
         }
 
@@ -242,27 +220,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (CommiterActorId_) {
                 ctx.Send(CommiterActorId_, new TEvents::TEvPoison);
             }
-            NPQ::TRlHelpers::PassAway(this->SelfId());
             this->TBase::Die(ctx);
         }
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            // Second navigate: resolve the rate-limiter path from the database
-            // serverless attributes, then start the committer.
-            if (TBase::IsRlPathNavigateResponse(ev)) {
-                if (auto rlContext = this->ExtractRlContext(ev)) {
-                    SetRlContext(*rlContext);
-                    if (IsQuotaRequired()) {
-                        const ui64 ru = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
-                        AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()))
-                            ("ru", ru)("path", FullTopicPath_);
-                        return;
-                    }
-                }
-                CreateCommitter();
-                return;
-            }
-
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
             const auto& response = result->ResultSet.front();
@@ -284,17 +245,15 @@ namespace NKikimr::NSqsTopic::V1 {
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
 
-            if (ShouldBeCharged_) {
-                // Always put in request units metering mode
-                SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
+        }
 
-                // RU-metered topics need the rate-limiter path, which is not carried
-                // by DoLocalRpc requests. Resolve it from the database attributes
-                // before committing so the charge in Handle(TEvChangeResponse) can fire.
-                this->SendRlPathNavigate();
-            } else {
-                CreateCommitter();
-            }
+        ui64 GetRUCost() override {
+            return NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
+        }
+
+        void OnRequestUnitsCharged(const NActors::TActorContext&) {
+            CreateCommitter();
         }
 
         void CreateCommitter() {
@@ -307,7 +266,6 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
     protected:
-        bool ShouldBeCharged_{};
         TActorId CommiterActorId_;
         THashMap<TString, NSQS::TError> Failed_;
         THashSet<TString> Success_;

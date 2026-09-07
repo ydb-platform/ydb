@@ -171,7 +171,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 hFunc(NPQ::NMLP::TEvDescribeResponse, Handle);
                 default:
                     TBase::StateWork(ev);
@@ -336,8 +335,16 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void ReplyAndDie(const TActorContext& ctx) {
-            Ydb::Ymq::V1::GetQueueAttributesResult result = FillAttributes();
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+            Result_ = FillAttributes();
+            this->ChargeRequestUnits(ctx);
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
         }
 
     protected:
@@ -351,6 +358,7 @@ namespace NKikimr::NSqsTopic::V1 {
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
         TMaybe<NKikimrPQ::TPQTabletConfig::TConsumer> ConsumerConfig;
         NPQ::NMLP::TEvDescribeResponse::TPtr DescribeResponse;
+        Ydb::Ymq::V1::GetQueueAttributesResult Result_;
     };
 
     std::unique_ptr<NActors::IActor> CreateGetQueueAttributesActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

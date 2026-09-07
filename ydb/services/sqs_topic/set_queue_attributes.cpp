@@ -95,7 +95,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
                 hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
@@ -247,6 +246,14 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void ReplyAndDie(const TActorContext& ctx) {
+            this->ChargeRequestUnits(ctx);
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
             Ydb::Ymq::V1::SetQueueAttributesResult result;
             return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
         }

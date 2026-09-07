@@ -143,7 +143,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 deadlines.push_back(deadline);
             }
 
-            NPQ::NMLP::TMessageDeadlineChangerSettings changerSettings{
+            ChangerSettings_ = NPQ::NMLP::TMessageDeadlineChangerSettings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
@@ -151,14 +151,20 @@ namespace NKikimr::NSqsTopic::V1 {
                 .Deadlines = std::move(deadlines),
                 .UserToken = this->Request_->GetInternalToken(),
             };
+            this->ChargeRequestUnits(ctx);
+        }
 
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateMessageDeadlineChanger(this->SelfId(), std::move(changerSettings))};
-            DeadlineChangerActorId_ = ctx.RegisterWithSameMailbox(actorPtr.release());
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const NActors::TActorContext& ctx) {
+            DeadlineChangerActorId_ = ctx.RegisterWithSameMailbox(
+                NKikimr::NPQ::NMLP::CreateMessageDeadlineChanger(this->SelfId(), std::move(*ChangerSettings_)));
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
                 HFunc(NPQ::NMLP::TEvChangeResponse, Handle);
                 default:
                     TBase::StateWork(ev);
@@ -253,6 +259,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     protected:
         TActorId DeadlineChangerActorId_;
+        TMaybe<NPQ::NMLP::TMessageDeadlineChangerSettings> ChangerSettings_;
         THashMap<TString, NSQS::TError> Failed_;
         THashSet<TString> Success_;
         TMap<NPQ::NMLP::TMessageId, TString, TMessageIdLess> PositionToIdMap_;

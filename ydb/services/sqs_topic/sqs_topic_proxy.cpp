@@ -42,41 +42,39 @@ namespace NKikimr::NSqsTopic::V1 {
 
     template <class TEvRequest>
     class TNotImplementedRequestActor
-        : public TRpcSchemeRequestActor<TNotImplementedRequestActor<TEvRequest>, TEvRequest>
-        , public NActors::IActorExceptionHandler
+        : public TGrpcActorBase<TNotImplementedRequestActor<TEvRequest>, TEvRequest>
     {
-        using TBase = TRpcSchemeRequestActor<TNotImplementedRequestActor, TEvRequest>;
+        using TBase = TGrpcActorBase<TNotImplementedRequestActor, TEvRequest>;
 
     public:
         TNotImplementedRequestActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-            : TBase(request)
+            : TBase(request, TString())
         {
         }
         ~TNotImplementedRequestActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::Bootstrap(ctx);
+            this->Become(&TNotImplementedRequestActor::StateWork);
+            this->ChargeRequestUnits(ctx);
+        }
+
+        void StateWork(TAutoPtr<IEventHandle>& ev) {
+            TBase::StateWork(ev);
+        }
+
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            Y_UNUSED(ev);
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const NActors::TActorContext& ctx) {
             this->Request_->RaiseIssue(FillIssue("Method is not implemented yet", static_cast<size_t>(NYds::EErrorCodes::ERROR)));
             this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
             this->Die(ctx);
-        }
-
-        bool OnUnhandledException(const std::exception& exc) override {
-            const auto& ctx = this->ActorContext();
-            YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::SQS, "Unhandled exception in SQS topic actor",
-                {"typeName", TypeName(exc)},
-                {"exception", exc.what()},
-                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
-
-            const auto error = MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Internal error");
-            NYql::TIssue issue(error.GetMessage());
-            issue.SetCode(
-                NSQS::TErrorClass::GetId(error.GetErrorCode()),
-                NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
-            this->Request_->RaiseIssue(issue);
-            this->Request_->ReplyWithYdbStatus(Ydb::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED);
-            this->Die(ctx);
-            return true;
         }
     };
 } // namespace NKikimr::NSqsTopic::V1

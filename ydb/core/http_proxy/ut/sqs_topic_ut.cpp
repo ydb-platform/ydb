@@ -11,6 +11,7 @@
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
+#include <ydb/core/metering/metering.h>
 #include <ydb/core/metering/stream_ru_calculator.h>
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/services/sqs_topic/billing.h>
@@ -404,6 +405,95 @@ namespace {
         std::shared_ptr<TMutex> Lock_;
         std::shared_ptr<TVector<TRuCharge>> Charges_;
     };
+
+    class TMeteringServiceMock : public TActor<TMeteringServiceMock> {
+    public:
+        TMeteringServiceMock(std::shared_ptr<TMutex> lock, std::shared_ptr<TVector<TString>> records)
+            : TActor(&TMeteringServiceMock::StateWork)
+            , Lock_(std::move(lock))
+            , Records_(std::move(records))
+        {}
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NMetering::TEvMetering::TEvWriteMeteringJson, Handle);
+            }
+        }
+
+        void Handle(NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& ev) {
+            TGuard<TMutex> guard(*Lock_);
+            Records_->push_back(ev->Get()->MeteringJson);
+        }
+
+    private:
+        std::shared_ptr<TMutex> Lock_;
+        std::shared_ptr<TVector<TString>> Records_;
+    };
+
+    class TMeteringRecorder {
+    public:
+        TMeteringRecorder(TTestActorRuntime* runtime)
+            : Lock_(std::make_shared<TMutex>())
+            , Records_(std::make_shared<TVector<TString>>())
+        {
+            const ui32 nodeIndex = 0;
+            const ui32 systemPoolId = runtime->GetAppData().SystemPoolId;
+            auto* actor = new TMeteringServiceMock(Lock_, Records_);
+            const TActorId actorId = runtime->Register(actor, nodeIndex, systemPoolId);
+            runtime->RegisterService(NMetering::MakeMeteringServiceID(), actorId);
+        }
+
+        TVector<TString> Take(size_t expected = 1, TDuration timeout = TDuration::Seconds(10)) {
+            const TInstant deadline = TInstant::Now() + timeout;
+            for (;;) {
+                {
+                    TGuard<TMutex> guard(*Lock_);
+                    if (Records_->size() >= expected || TInstant::Now() >= deadline) {
+                        TVector<TString> result = std::move(*Records_);
+                        Records_->clear();
+                        return result;
+                    }
+                }
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        }
+
+    private:
+        std::shared_ptr<TMutex> Lock_;
+        std::shared_ptr<TVector<TString>> Records_;
+    };
+
+    void AssertYdsRequestUnitsBill(const TString& jsonLine, ui64 expectedRu) {
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(jsonLine, &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["schema"].GetString(), "yds.serverless.requests.v1");
+        UNIT_ASSERT_VALUES_UNEQUAL(json["schema"].GetString(), "ydb.serverless.requests.v1");
+        UNIT_ASSERT_VALUES_EQUAL(json["cloud_id"].GetString(), "cloud4");
+        UNIT_ASSERT_VALUES_EQUAL(json["folder_id"].GetString(), "folder4");
+        UNIT_ASSERT_VALUES_EQUAL(json["resource_id"].GetString(), "database4");
+        UNIT_ASSERT_VALUES_EQUAL(json["usage"]["unit"].GetString(), "request_unit");
+        UNIT_ASSERT_VALUES_EQUAL(json["usage"]["quantity"].GetInteger(), static_cast<i64>(expectedRu));
+    }
+
+    void AssertDefaultRequestUnitsCharge(TRuRecorder& recorder, TMeteringRecorder& metering, const TRuTopicSetup& ru) {
+        auto charges = recorder.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one RU charge");
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, NKikimr::NSqsTopic::V1::NBilling::RoundRu(
+            NKikimr::NSqsTopic::V1::NBilling::DEFAULT_REQUEST_COST));
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "expected exactly one metering record");
+        AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
+    }
+
+    void AssertNoRequestUnitsCharge(TRuRecorder& recorder, TMeteringRecorder& metering) {
+        auto charges = recorder.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 0, "expected no RU charge");
+        auto bills = metering.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 0, "expected no metering record");
+    }
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
@@ -2174,6 +2264,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
 
         TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
 
         // Send several messages (total payload > 8 KiB) in a single SendMessage
         // (batch) call. The whole batch produces exactly one write RU charge.
@@ -2197,6 +2288,10 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "expected exactly one write metering record");
+        AssertYdsRequestUnitsBill(bills[0], expected);
     }
 
     Y_UNIT_TEST_F(TestReceiveMessageChargesRequestUnits, TFixture) {
@@ -2210,6 +2305,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
 
         TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
 
         const auto bodies = MakeRuMeteringBodies();
         SendMessageBatch({
@@ -2218,6 +2314,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         // Drop the single write charge; we only assert on the read charges below.
         recorder.Take();
+        metering.Take();
 
         // Receive all messages. Each ReceiveMessage call returns at least one
         // message (they are all available) and produces exactly one read RU
@@ -2238,6 +2335,10 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one read RU charge");
             UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
             UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+            auto bills = metering.Take(1);
+            UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "expected exactly one read metering record");
+            AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
 
             totalReadRu += charges[0].Amount;
             collected += k;
@@ -2263,6 +2364,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
 
         TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
 
         const auto bodies = MakeRuMeteringBodies();
         SendMessageBatch({
@@ -2271,6 +2373,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         // Drop the single write charge.
         recorder.Take();
+        metering.Take();
 
         // Receive all messages, collecting their receipt handles and dropping the
         // per-response read charges.
@@ -2288,6 +2391,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             }
             // Each non-empty receive produces exactly one read charge; drop it.
             recorder.Take(1);
+            metering.Take(1);
         }
         UNIT_ASSERT_VALUES_EQUAL(receipts.size(), RuMetering_MessageCount);
 
@@ -2316,6 +2420,260 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "expected exactly one delete metering record");
+        AssertYdsRequestUnitsBill(bills[0], expected);
+    }
+
+    Y_UNIT_TEST_F(TestControlPlaneChargesRequestUnits, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto urlJson = GetQueueUrl({{"QueueName", path.TopicName + "@" + path.ConsumerName}});
+        UNIT_ASSERT(!urlJson["QueueUrl"].GetString().empty());
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        auto listJson = ListQueues({});
+        UNIT_ASSERT(listJson["QueueUrls"].GetArray().size() >= 1);
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        auto attrsJson = GetQueueAttributes({
+            {"QueueUrl", path.QueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"FifoQueue"}},
+        });
+        UNIT_ASSERT(attrsJson["Attributes"].IsMap());
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        PurgeQueue({{"QueueUrl", path.QueueUrl}});
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        SetQueueAttributes({
+            {"QueueUrl", path.QueueUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}},
+        });
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        auto createJson = CreateQueue({{"QueueName", "RuMeteringCreatedQueue"}});
+        UNIT_ASSERT(!createJson["QueueUrl"].GetString().empty());
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        DeleteQueue({{"QueueUrl", createJson["QueueUrl"].GetString()}});
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+    }
+
+    Y_UNIT_TEST_F(TestChangeMessageVisibilityChargesRequestUnits, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", "cmv-billing"}});
+        recorder.Take();
+        metering.Take();
+
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        recorder.Take();
+        metering.Take();
+
+        ChangeMessageVisibility({
+            {"QueueUrl", path.QueueUrl},
+            {"ReceiptHandle", json["Messages"][0]["ReceiptHandle"].GetString()},
+            {"VisibilityTimeout", 120},
+        });
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+    }
+
+    Y_UNIT_TEST_F(TestSingleMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto emptyJson = ReceiveMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"WaitTimeSeconds", 0},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(emptyJson["Messages"].GetArray().size(), 0);
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        auto sendJson = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "single-ru"},
+        });
+        UNIT_ASSERT(!sendJson["MessageId"].GetString().empty());
+        {
+            auto charges = recorder.Take();
+            UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one write RU charge");
+            UNIT_ASSERT_VALUES_EQUAL(
+                charges[0].Amount,
+                NBilling::CalcRu(0, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false, false));
+            auto bills = metering.Take();
+            UNIT_ASSERT_VALUES_EQUAL(bills.size(), 1);
+            AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
+        }
+
+        auto receiveJson = ReceiveMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArray().size(), 1);
+        {
+            auto charges = recorder.Take();
+            UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one read RU charge");
+            UNIT_ASSERT_VALUES_EQUAL(
+                charges[0].Amount,
+                NBilling::CalcRu(0, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false, false));
+            auto bills = metering.Take();
+            UNIT_ASSERT_VALUES_EQUAL(bills.size(), 1);
+            AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
+        }
+
+        DeleteMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"ReceiptHandle", receiveJson["Messages"][0]["ReceiptHandle"].GetString()},
+        });
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+    }
+
+    Y_UNIT_TEST_F(TestChangeMessageVisibilityBatchChargesRequestUnits, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        SendMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "cmv-batch-1"}},
+                NJson::TJsonMap{{"Id", "Id-2"}, {"MessageBody", "cmv-batch-2"}},
+            }},
+        });
+        recorder.Take();
+        metering.Take();
+
+        TVector<TString> receipts;
+        while (receipts.size() < 2) {
+            auto json = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+                {"MaxNumberOfMessages", 10},
+            });
+            for (const auto& message : json["Messages"].GetArray()) {
+                receipts.push_back(message["ReceiptHandle"].GetString());
+            }
+            recorder.Take(1);
+            metering.Take(1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(receipts.size(), 2);
+
+        auto changeJson = ChangeMessageVisibilityBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "change-1"},
+                    {"ReceiptHandle", receipts[0]},
+                    {"VisibilityTimeout", 120},
+                },
+                NJson::TJsonMap{
+                    {"Id", "change-2"},
+                    {"ReceiptHandle", receipts[1]},
+                    {"VisibilityTimeout", 60},
+                },
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(changeJson["Successful"].GetArray().size(), 2);
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+    }
+
+    Y_UNIT_TEST_F(TestFifoSendMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto createJson = CreateQueue({
+            {"QueueName", "RuMeteringFifo.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}},
+        });
+        const TString queueUrl = GetPathFromQueueUrlMap(createJson);
+        UNIT_ASSERT(!queueUrl.empty());
+        recorder.Take();
+        metering.Take();
+
+        auto sendJson = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "fifo-ru"},
+            {"MessageGroupId", "group-1"},
+            {"MessageDeduplicationId", "dedup-1"},
+        });
+        UNIT_ASSERT(!sendJson["MessageId"].GetString().empty());
+
+        auto charges = recorder.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one fifo write RU charge");
+        const ui64 expected = NBilling::CalcRu(0, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(expected, 3);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL(bills.size(), 1);
+        AssertYdsRequestUnitsBill(bills[0], expected);
+    }
+
+    Y_UNIT_TEST_F(TestNoChargesRequestUnitsOnValidationErrors, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        GetQueueUrl({}, 400);
+        SendMessage({{"QueueUrl", ""}, {"MessageBody", "x"}}, 400);
+        ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"MaxNumberOfMessages", 0}}, 400);
+        DeleteMessage({{"QueueUrl", path.QueueUrl}}, 400);
+        ChangeMessageVisibility({{"QueueUrl", path.QueueUrl}}, 400);
+        ListQueues({{"MaxResults", 0}}, 400);
+        GetQueueAttributes({{"QueueUrl", "invalid-url"}}, 400);
+        SetQueueAttributes({
+            {"QueueUrl", path.QueueUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "-1"}}},
+        }, 400);
+        CreateQueue({}, 400);
+        DeleteQueue({{"QueueUrl", "InvalidExistentQueue"}}, 400);
+        PurgeQueue({{"QueueUrl", ""}}, 400);
+
+        AssertNoRequestUnitsCharge(recorder, metering);
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibilityInvalid, TFixture) {

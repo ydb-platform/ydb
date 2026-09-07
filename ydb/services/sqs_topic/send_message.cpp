@@ -79,17 +79,15 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     template <class TDerived, class TServiceRequest>
-    class TSendMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest>, private NPQ::TRlHelpers {
+    class TSendMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
     protected:
         using TBase = TGrpcActorBase<TSendMessageActorBase, TServiceRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
-        using EWakeupTag = NPQ::TRlHelpers::EWakeupTag;
 
     public:
         TSendMessageActorBase(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TQueueUrlHolder(ParseQueueUrlFromRequest<TProtoRequest>(request))
             , TBase(request, GetTopicPath().value_or(""))
-            , NPQ::TRlHelpers({}, request, NBilling::WRITE_BLOCK_SIZE, false)
         {
         }
 
@@ -98,7 +96,6 @@ namespace NKikimr::NSqsTopic::V1 {
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
-            NPQ::TRlHelpers::Bootstrap(this->SelfId(), ctx);
 
             if (this->Request().queue_url().empty()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueUrl parameter."));
@@ -106,9 +103,6 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!QueueUrl_.has_value()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
-
-            NACLib::TUserToken token(this->Request_->GetSerializedToken());
-            ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
 
             PrepareWrite();
 
@@ -228,24 +222,9 @@ namespace NKikimr::NSqsTopic::V1 {
             static_cast<TDerived*>(this)->ReplyAndDie(TlsActivationContext->AsActorContext());
         }
 
-        void Handle(TEvents::TEvWakeup::TPtr& ev) {
-            switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
-                case EWakeupTag::RlAllowed:
-                    CreateWriterOrReply();
-                    return;
-                case EWakeupTag::RlNoResource:
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION, "Request was throttled by the rate limiter"));
-                default:
-                    OnWakeup(static_cast<EWakeupTag>(ev->Get()->Tag));
-                    return;
-            }
-        }
-
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
-                hFunc(TEvents::TEvWakeup, Handle);
                 default:
                     TBase::StateWork(ev);
             }
@@ -315,27 +294,6 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            // Second navigate: resolve the rate-limiter path from the database
-            // serverless attributes, then proceed with the write.
-            if (TBase::IsRlPathNavigateResponse(ev)) {
-                if (auto rlContext = this->ExtractRlContext(ev)) {
-                    SetRlContext(*rlContext);
-                    if (IsQuotaRequired()) {
-                        const ui64 ru = NBilling::CalcRu(
-                            CalcRuConsumption(PayloadSize_),
-                            NBilling::WRITE_BASE_COST,
-                            NBilling::WRITE_COST_PER_BLOCK,
-                            Fifo_,
-                            ContentBasedDeduplication_);
-                        AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()))
-                            ("ru", ru)("path", FullTopicPath_);
-                        return;
-                    }
-                }
-                CreateWriterOrReply();
-                return;
-            }
-
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
             const auto& response = result->ResultSet.front();
@@ -359,17 +317,20 @@ namespace NKikimr::NSqsTopic::V1 {
             ApplyContentBasedDeduplication(
                 Fifo_ && response.PQGroupInfo->Description.GetPQTabletConfig().GetContentBasedDeduplication());
 
-            if (ShouldBeCharged_) {
-                // Always put in request units metering mode
-                SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
+        }
 
-                // RU-metered topics need the rate-limiter path, which is not carried
-                // by DoLocalRpc requests. Resolve it from the database attributes
-                // before writing so the charge in Handle(TEvWriteResponse) can fire.
-                this->SendRlPathNavigate();
-            } else {
-                CreateWriterOrReply();
-            }
+        ui64 GetRUCost() override {
+            return NBilling::CalcRu(
+                this->CalcRuConsumption(PayloadSize_),
+                NBilling::WRITE_BASE_COST,
+                NBilling::WRITE_COST_PER_BLOCK,
+                Fifo_,
+                ContentBasedDeduplication_);
+        }
+
+        void OnRequestUnitsCharged(const NActors::TActorContext&) {
+            CreateWriterOrReply();
         }
 
         void Die(const TActorContext& ctx) override {
@@ -379,7 +340,6 @@ namespace NKikimr::NSqsTopic::V1 {
             if (WriterActor_) {
                 ctx.Send(WriterActor_, new TEvents::TEvPoison);
             }
-            NPQ::TRlHelpers::PassAway(this->SelfId());
             this->TBase::Die(ctx);
         }
 
@@ -415,7 +375,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
     private:
         TActorId DescriptorActorId_;
-        bool ShouldBeCharged_{};
         TActorId WriterActor_;
         ui64 PayloadSize_{};
         bool Fifo_{};

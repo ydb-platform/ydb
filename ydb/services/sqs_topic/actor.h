@@ -1,9 +1,11 @@
 #pragma once
 
+#include "billing.h"
 #include "error.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/metering/metering.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/sqs.pb.h>
@@ -14,6 +16,11 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
+#include <ydb/library/actors/core/events.h>
+
+#include <util/generic/algorithm.h>
+#include <util/generic/guid.h>
+#include <util/generic/maybe.h>
 #include <util/system/type_name.h>
 #include <util/system/backtrace.h>
 
@@ -24,13 +31,26 @@ namespace NKikimr::NSqsTopic::V1 {
     // request check actor (ruRlTopicConfig).
     inline constexpr TStringBuf RL_COORDINATION_NODE_ATTR = "serverless_rt_coordination_node_path";
     inline constexpr TStringBuf RL_TOPIC_RESOURCE_ATTR = "serverless_rt_topic_resource_ru";
+    inline constexpr TStringBuf CLOUD_ID_ATTR = "cloud_id";
+    inline constexpr TStringBuf FOLDER_ID_ATTR = "folder_id";
+    inline constexpr TStringBuf DATABASE_ID_ATTR = "database_id";
 
     template<class TDerived, class TRequest>
-    class TGrpcActorBase: public NGRpcProxy::V1::TPQGrpcSchemaBase<TDerived, TRequest> {
+    class TGrpcActorBase
+        : public NGRpcProxy::V1::TPQGrpcSchemaBase<TDerived, TRequest>
+        , protected NPQ::TRlHelpers
+    {
         public:
         using TBase = NGRpcProxy::V1::TPQGrpcSchemaBase<TDerived, TRequest>;
-        using TBase::TBase;
+        using EWakeupTag = NPQ::TRlHelpers::EWakeupTag;
+        using TBase::TopicPath;
 
+        TGrpcActorBase(NKikimr::NGRpcService::IRequestOpCtx* request, const TString& topicPath,
+                       ui64 ruBlockSize = NBilling::WRITE_BLOCK_SIZE)
+            : TBase(request, topicPath)
+            , NPQ::TRlHelpers({}, request, ruBlockSize, false)
+        {
+        }
 
         void ReplyWithError(Ydb::StatusIds::StatusCode status, size_t additionalStatus, const TString& messageText) = delete;
 
@@ -81,6 +101,30 @@ namespace NKikimr::NSqsTopic::V1 {
             return nullptr;
         }
 
+        void Bootstrap(const NActors::TActorContext& ctx) {
+            TBase::Bootstrap(ctx);
+            NPQ::TRlHelpers::Bootstrap(this->SelfId(), ctx);
+            NACLib::TUserToken token(this->Request_->GetSerializedToken());
+            ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
+            if (ShouldBeCharged_) {
+                SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+            }
+        }
+
+        void Die(const NActors::TActorContext& ctx) override {
+            NPQ::TRlHelpers::PassAway(this->SelfId());
+            TBase::Die(ctx);
+        }
+
+        void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
+                hFunc(NActors::TEvents::TEvWakeup, HandleBillingWakeup);
+                default:
+                    TBase::StateWork(ev);
+            }
+        }
+
         // Requests dispatched via DoLocalRpc carry no RlPath, so the rate-limiter
         // coordination node / resource path have to be resolved from the database
         // user-attributes (Kafka-proxy does the same for its RU billing). The
@@ -107,23 +151,19 @@ namespace NKikimr::NSqsTopic::V1 {
 
         // Builds a rate-limiter context from the serverless_rt_* database
         // attributes. Returns Nothing() when the attributes are absent, in which
-        // case the topic is simply not RU-metered and no quota is charged.
+        // case quota is not acquired (the yds bill may still be written).
         TMaybe<NPQ::TRlContext> ExtractRlContext(const TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) const {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            if (result->ResultSet.empty()) {
-                return Nothing();
-            }
-            const auto& entry = result->ResultSet.front();
-            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            const auto* entry = GetNavigateEntry(ev);
+            if (!entry) {
                 return Nothing();
             }
 
             TString coordinationNode;
             TString resourcePath;
-            if (const auto* value = entry.Attributes.FindPtr(TString(RL_COORDINATION_NODE_ATTR))) {
+            if (const auto* value = entry->Attributes.FindPtr(TString(RL_COORDINATION_NODE_ATTR))) {
                 coordinationNode = *value;
             }
-            if (const auto* value = entry.Attributes.FindPtr(TString(RL_TOPIC_RESOURCE_ATTR))) {
+            if (const auto* value = entry->Attributes.FindPtr(TString(RL_TOPIC_RESOURCE_ATTR))) {
                 resourcePath = *value;
             }
             if (coordinationNode.empty() || resourcePath.empty()) {
@@ -132,5 +172,136 @@ namespace NKikimr::NSqsTopic::V1 {
 
             return NPQ::TRlContext(coordinationNode, resourcePath, this->Database, this->Request_->GetSerializedToken());
         }
+
+        NBilling::TMeteringIds ExtractMeteringIds(const TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) const {
+            NBilling::TMeteringIds ids;
+            const auto* entry = GetNavigateEntry(ev);
+            if (!entry) {
+                return ids;
+            }
+            if (const auto* value = entry->Attributes.FindPtr(TString(CLOUD_ID_ATTR))) {
+                ids.CloudId = *value;
+            }
+            if (const auto* value = entry->Attributes.FindPtr(TString(FOLDER_ID_ATTR))) {
+                ids.FolderId = *value;
+            }
+            if (const auto* value = entry->Attributes.FindPtr(TString(DATABASE_ID_ATTR))) {
+                ids.DatabaseId = *value;
+            }
+            return ids;
+        }
+
+        void WriteChargedRequestUnits(const NActors::TActorContext& ctx) {
+            if (!MeteringIds_.IsComplete() || ChargedRu_ == 0) {
+                return;
+            }
+            NMetering::SendMeteringJson(
+                ctx,
+                NBilling::MakeRequestUnitsBill(MeteringIds_, ChargedRu_, ctx.Now(), CreateGuidAsString()));
+        }
+
+        // Invoked after the serverless RL path is resolved so that
+        // CalcRuConsumption() can see the kesus resource. The returned amount
+        // is acquired as quota and written into the yds bill.
+        virtual ui64 GetRUCost() = 0;
+
+        void ChargeRequestUnits(const NActors::TActorContext& ctx) {
+            if (!ShouldBeCharged_) {
+                return static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
+            }
+            SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+            if (!RlPathResolved_) {
+                PendingCharge_ = true;
+                SendRlPathNavigate();
+                return;
+            }
+            AcquireQuotaForComputedCost(ctx);
+        }
+
+        // Called after quota is granted (or skipped) and the bill is written.
+        void OnRequestUnitsCharged(const NActors::TActorContext&) {
+        }
+
+    protected:
+        NBilling::TMeteringIds MeteringIds_;
+        ui64 ChargedRu_ = 0;
+        bool ShouldBeCharged_ = false;
+
+    private:
+        static const NSchemeCache::TSchemeCacheNavigate::TEntry* GetNavigateEntry(
+            const TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev)
+        {
+            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
+            if (result->ResultSet.empty()) {
+                return nullptr;
+            }
+            const auto& entry = result->ResultSet.front();
+            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                return nullptr;
+            }
+            return &entry;
+        }
+
+        void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            if (IsRlPathNavigateResponse(ev)) {
+                HandleRlPathNavigate(ev);
+                return;
+            }
+            static_cast<TDerived*>(this)->HandleCacheNavigateResponse(ev);
+        }
+
+        void HandleRlPathNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            MeteringIds_ = ExtractMeteringIds(ev);
+            if (auto rlContext = ExtractRlContext(ev)) {
+                SetRlContext(*rlContext);
+            }
+            RlPathResolved_ = true;
+
+            const auto& ctx = TlsActivationContext->AsActorContext();
+            if (PendingCharge_) {
+                PendingCharge_ = false;
+                AcquireQuotaForComputedCost(ctx);
+                return;
+            }
+        }
+
+        void AcquireQuotaForComputedCost(const NActors::TActorContext& ctx) {
+            ChargedRu_ = this->GetRUCost();
+            if (ChargedRu_ == 0) {
+                // Zero cost: treat quota as already granted. Do not talk to the
+                // rate limiter and do not write a bill.
+                static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
+                return;
+            }
+            if (IsQuotaRequired()) {
+                AFL_ENSURE(MaybeRequestQuota(ChargedRu_, EWakeupTag::RlAllowed, ctx))
+                    ("ru", ChargedRu_);
+                return;
+            }
+            WriteChargedRequestUnits(ctx);
+            static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
+        }
+
+        void HandleBillingWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
+            const auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
+            const auto& ctx = TlsActivationContext->AsActorContext();
+            switch (tag) {
+                case EWakeupTag::RlAllowed:
+                    NPQ::TRlHelpers::OnWakeup(tag);
+                    WriteChargedRequestUnits(ctx);
+                    static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
+                    return;
+                case EWakeupTag::RlNoResource:
+                    NPQ::TRlHelpers::OnWakeup(tag);
+                    ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION, "Request was throttled by the rate limiter"));
+                    return;
+                default:
+                    NPQ::TRlHelpers::OnWakeup(tag);
+                    return;
+            }
+        }
+
+        bool RlPathResolved_ = false;
+        bool PendingCharge_ = false;
     };
 }

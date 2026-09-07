@@ -92,7 +92,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
                 HFunc(NKikimr::NPQ::NMLP::TEvPurgeResponse, Handle);
                 default:
                     TBase::StateWork(ev);
@@ -116,6 +115,14 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
+            this->ChargeRequestUnits(ctx);
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
             Ydb::Ymq::V1::PurgeQueueResult result;
             return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
         }

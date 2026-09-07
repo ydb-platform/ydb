@@ -165,6 +165,14 @@ namespace NKikimr::NSqsTopic::V1 {
             if (result->Status != Ydb::StatusIds::SUCCESS) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
             }
+            this->ChargeRequestUnits(ActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext&) {
             this->Reply(Ydb::StatusIds::SUCCESS);
         }
 

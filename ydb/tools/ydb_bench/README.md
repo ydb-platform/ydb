@@ -14,7 +14,7 @@ The tool provides four benchmarks:
 - `ping-bench`: pairwise actor ping throughput;
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
-- `local-ydb`: a local static/dynamic YDB cluster driven by `ydb workload kv`.
+- `local-ydb`: a local static/dynamic YDB cluster driven by the `kv` or `stock` YDB CLI workload.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -102,6 +102,7 @@ local-ydb:
       warmup: 10
       duration: 30
       repetitions: 3
+      verification-repetitions: 3
     affinity:
       ydb-cli:
         mode: pack-numa-pack-chiplet-spread-core
@@ -117,19 +118,41 @@ Config V2 cluster backed by in-memory SectorMap PDisks, and stops it after the
 profile. `single` always uses one dynamic node. `storage` may grow the
 dynamic-node count up to `max-dynamic-nodes` when dynamic CPU is saturated but
 static/storage CPU is not; `custom` keeps the explicitly requested geometry.
+Across scaled stages, latency search selects the highest feasible load, while
+manual points and throughput search select the highest observed throughput;
+ties prefer fewer dynamic nodes.
 Each static node gets its own `NONE`-profile SectorMap with the virtual size
 specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
 
+An explicitly configured profile `timeout` caps every YDB CLI setup, warmup,
+measurement, and cleanup command. Workload-specific safety limits still apply
+when they are shorter. Without an explicit cap, setup and cleanup retain their
+workload-specific budgets. The computed default is used as a conservative
+per-command budget for cluster control; it is not a deadline or an estimate of
+the total profile runtime.
+
 `load.parameter` selects the one monotonic YDB CLI setting controlled by the
-benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. A
-`values` list measures exact points. For adaptive runs, `search` defines the
-range and resolution. `maximize-throughput` uses a discrete ternary search and
-prefers the lowest load with the best observed throughput; a plateau is
-confirmed only when the selected role's CPU is saturated. `latency-slo` uses
-the configured `multiplier` to find the first failing point, then a binary
-search to find the highest load whose millisecond percentile, error count, and
-achieved-rate ratio satisfy the SLO. For example:
+benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`.
+Both `kv` and `stock` accept either parameter. Stock throughput counts successful
+query operations per second.
+A `values` list measures exact points. For adaptive runs,
+`search` defines the range and resolution. `maximize-throughput` uses a
+discrete ternary search and, after confirming a plateau, selects the lowest
+CPU-saturated load within the configured throughput tolerance of the best
+saturated measurement. A plateau is confirmed only when the selected role's
+CPU is saturated. `latency-slo` uses the configured `multiplier` to find the
+first failing point, then a binary search to find the highest load whose
+millisecond percentile, error count, and achieved-rate ratio satisfy the SLO.
+Automatic search is limited to 64 measurements per cluster-geometry stage.
+The `storage` preset can run a separate search after each dynamic-node scaling
+step, so a complete profile can contain more than 64 measurements.
+Latency-SLO configuration validation rejects ranges, multipliers, or
+resolutions whose deterministic worst-case search path can exceed that limit.
+Throughput search stops at the limit and reports the best point measured so far
+with a `search-limit-reached` outcome, because its path depends on measured
+throughput, feasibility, and cached probes.
+For example:
 
 ```yaml
     load:
@@ -147,16 +170,48 @@ achieved-rate ratio satisfy the SLO. For example:
         min-achieved-rate-ratio: 0.98
 ```
 
-Set `load.allow-errors: true` when request-level errors reported by
-`ydb workload` are an expected part of the experiment. Such points remain
+For workloads which report an `errors` metric, set `load.allow-errors: true`
+when request-level errors reported by `ydb workload` are an expected part of
+the experiment. Such points remain
 eligible for selection and the error counts stay in CSV, manifests, tables,
-and charts. The flag does not hide or tolerate a failed CLI process, timeout,
-malformed output, cluster failure, or workload setup/cleanup failure. For a
-latency SLO, it disables the `max-errors` rejection while keeping the latency
-and achieved-rate checks active.
+and charts, provided every repetition completed at least one successful
+operation. A repetition with zero successful operations makes the whole point
+ineligible, even when errors are allowed. It remains in the raw repetition and
+attempt diagnostics, but is omitted from summary comparison rows and its
+latency is not plotted as a zero. The flag does not hide or tolerate a failed
+CLI process, timeout, malformed output, cluster failure, or workload
+setup/cleanup failure. For a latency SLO, it disables the `max-errors`
+rejection while keeping the successful-operation, latency, and achieved-rate
+checks active.
 
 The previous flat `mode`, `start`, and `slo` fields remain accepted for config
 compatibility, but newly generated YAML uses `search` and `objective`.
+
+`measurement.repetitions` controls how many samples contribute to every search
+point. Set `measurement.verification-repetitions` to run additional independent
+samples at the load selected by the search; it defaults to `0` so existing
+configurations keep their previous runtime and is limited to 20. These
+post-search samples are included when deriving the conservative default
+cluster-control command budget. An explicitly configured `timeout` also caps
+each workload command; it remains a per-command safety bound rather than an
+absolute profile deadline.
+Verification never
+changes the selected load or dynamic-node scaling decision. Its holdout samples
+are written separately to `verification-repetitions.csv` and
+`verification-summary.csv`; a completed holdout becomes the reported metric
+source while the search measurements remain intact for diagnostics. Latency
+holdout metrics are evaluated with the same aggregate SLO contract as a search
+point. A throughput holdout is diagnostic: its request-error acceptance,
+throughput drift, and CPU saturation do not claim statistical reproducibility.
+
+When the winning stage is the last one, its cluster remains open until
+verification finishes. If an earlier stage wins, verification recreates its
+geometry on a fresh cluster; that cluster's configuration is stored in
+`verification-cluster/cluster.yaml`.
+
+The profile page separates the final **Result** from the **Discovery** process.
+Result presents the selected load, throughput, latency, errors, and CPU metrics;
+Discovery keeps the attempt history, synchronized search charts, and commands.
 
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.
@@ -164,7 +219,9 @@ The web profile page shows the same live phase with elapsed time and a countdown
 for warmup and measurement. Completed attempts appear immediately on synchronized
 search-order charts for candidate load, current best load, throughput, latency,
 CPU by role, errors, and retries. Geometry stages and the chronological attempt
-table remain available after completion. Profile `run.json` stores attempt and
+table remain available after completion. A bounded recent-activity log replays
+profile phase transitions and commands after a page reload without exposing the
+full event payload. Profile `run.json` stores attempt and
 stage timestamps, durations, structured decisions, scaling actions, and the
 final outcome so consumers do not have to parse diagnostic text.
 
@@ -332,11 +389,19 @@ manifests, and non-v4 result manifests are rejected before extraction.
 Accepted results are installed under `OUTPUT/imports/import-<id>` without
 changing `run.json`; files are made read-only and a collision never overwrites
 an existing import. The Runs list labels them `imported` while local results
-remain `local`. The Comparisons page persists a chosen run set locally and
-shows only availability keys: shared benchmark/profile/affinity keys, shared
-benchmark/profile keys where that shared affinity is unique, and each run's
-own benchmark/profile keys. It intentionally performs no charting or metric
-calculation.
+remain `local`. The Comparisons page persists a chosen run set locally. For
+local YDB results it provides a compact baseline table with selected load,
+throughput, latency, errors, CPU usage, dynamic-node count, and directional
+deltas. Deltas are suppressed for semantically incompatible workload,
+load-parameter, or latency-percentile combinations. Configuration,
+environment, affinity, and binary differences remain visible next to every
+candidate so that a confounded comparison is not mistaken for a regression.
+Compatible local YDB profiles also get synchronized search curves for
+throughput, latency, CPU by process role, and errors. Curves use the actual
+searched load on the X axis, split geometry stages by dynamic-node count, and
+connect only each profile's own measured loads; another profile's intermediate
+load does not create a false gap or a synthesized value.
+Generic configurable summary charts remain available below the baseline table.
 # Result manifest compatibility
 
 Run manifests use schema version 4. Earlier manifests are intentionally not

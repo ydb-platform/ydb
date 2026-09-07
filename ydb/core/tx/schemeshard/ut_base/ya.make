@@ -20,6 +20,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_base.cpp
+    ut_operation_registry.cpp
     ut_counters.cpp
     ut_info_types.cpp
     ut_move_tablet_to_storage_pool.cpp

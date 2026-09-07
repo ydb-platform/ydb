@@ -1,4 +1,5 @@
 #include "schemeshard_path_footprint.h"
+#include "schemeshard_operation_registry.h"
 
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
@@ -10,6 +11,7 @@
 
 #include <array>
 #include <string_view>
+#include <type_traits>
 
 namespace NKikimr::NSchemeShard {
 
@@ -303,96 +305,57 @@ TStringBuf PathRefRoleName(EPathRefRole role) {
     return "Unknown";
 }
 
-TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
+namespace {
+
+template <NKikimrSchemeOp::EOperationType Type>
+using TOperationTag = std::integral_constant<NKikimrSchemeOp::EOperationType, Type>;
+
+class TOperationPathExtractor {
     using F = EPathField;
     using TAt = TRefSink::TAt;
 
-    TPathRefs result;
-    TRefSink out(result);
+public:
+    TOperationPathExtractor(const NKikimrSchemeOp::TModifyScheme& tx, TRefSink& out)
+        : Tx(tx)
+        , Out(out)
+    {}
 
-    const auto genericDrop = [&]() {
-        const auto& drop = tx.GetDrop();
-        if (drop.HasId()) {
-            // An ID takes precedence over Name.
-            out.ById(F::Drop_Id, 0, drop.GetId());
-        } else {
-            out.Add(F::Drop_Name, drop.GetName());
-        }
-    };
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpMkDir>) {
+        Out.Add(F::MkDir_Name, Tx.GetMkDir().GetName());
+    }
 
-    // TTL Storage fields name external data sources by absolute path.
-    const auto emitTierStorages = [&](F field, const NKikimrSchemeOp::TColumnDataLifeCycle& ttl) {
-        if (!ttl.HasEnabled()) {
-            return;
-        }
-        const auto& tiers = ttl.GetEnabled().GetTiers();
-        for (int i = 0; i < tiers.size(); ++i) {
-            if (tiers[i].HasEvictToExternalStorage()) {
-                out.Add(field, tiers[i].GetEvictToExternalStorage().GetStorage(),
-                    TAt{.Index = ui32(i)});
-            }
-        }
-    };
-
-    // SrcPath belongs to the remote cluster; extract only local paths.
-    const auto replicationPaths = [&](F transferDstPath, F transferDirectoryPath,
-            F specificTargetDstPath, F alterTransferDirectoryPath,
-            const NKikimrSchemeOp::TReplicationDescription& desc) {
-        const auto& config = desc.GetConfig();
-        if (config.HasTransferSpecific()) {
-            const auto& target = config.GetTransferSpecific().GetTarget();
-            if (target.HasDstPath()) {
-                out.Add(transferDstPath, target.GetDstPath());
-            }
-            if (target.HasDirectoryPath()) {
-                out.Add(transferDirectoryPath, target.GetDirectoryPath());
-            }
-        }
-        // The replication controller creates these absolute destinations later.
-        const auto& specific = config.GetSpecific();
-        for (size_t i = 0; i < specific.TargetsSize(); ++i) {
-            const auto& target = specific.GetTargets(i);
-            if (target.HasDstPath()) {
-                out.Add(specificTargetDstPath, target.GetDstPath(), TAt{.Index = ui32(i)});
-            }
-        }
-        if (desc.HasAlterTransfer() && desc.GetAlterTransfer().HasDirectoryPath()) {
-            out.Add(alterTransferDirectoryPath, desc.GetAlterTransfer().GetDirectoryPath());
-        }
-    };
-
-    switch (tx.GetOperationType()) {
-    case NKikimrSchemeOp::ESchemeOpMkDir:
-        out.Add(F::MkDir_Name, tx.GetMkDir().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateTable:
-        out.Add(F::CreateTable_Name, tx.GetCreateTable().GetName());
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateTable>) {
+        Out.Add(F::CreateTable_Name, Tx.GetCreateTable().GetName());
         // Copy sources are resolved absolutely.
-        if (tx.GetCreateTable().HasCopyFromTable()) {
-            out.Add(F::CreateTable_CopyFromTable, tx.GetCreateTable().GetCopyFromTable());
+        if (Tx.GetCreateTable().HasCopyFromTable()) {
+            Out.Add(F::CreateTable_CopyFromTable, Tx.GetCreateTable().GetCopyFromTable());
         }
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup:
-        out.Add(F::CreatePersQueueGroup_Name, tx.GetCreatePersQueueGroup().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropTable:
-        genericDrop();
-        out.Implicit(F::Implicit_DropTable_Children, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterTable: {
-        const auto& alter = tx.GetAlterTable();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup>) {
+        Out.Add(F::CreatePersQueueGroup_Name, Tx.GetCreatePersQueueGroup().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropTable>) {
+        GenericDrop();
+        Out.Implicit(F::Implicit_DropTable_Children, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropPersQueueGroup>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterTable>) {
+        const auto& alter = Tx.GetAlterTable();
         if (alter.HasPathId()) {
             const auto pathId = TPathId::FromProto(alter.GetPathId());
-            out.ById(F::AlterTable_PathId, pathId.OwnerId, pathId.LocalPathId);
+            Out.ById(F::AlterTable_PathId, pathId.OwnerId, pathId.LocalPathId);
         } else if (alter.HasId_Deprecated()) {
-            out.ById(F::AlterTable_Id_Deprecated, 0, alter.GetId_Deprecated());
+            Out.ById(F::AlterTable_Id_Deprecated, 0, alter.GetId_Deprecated());
         } else {
-            out.Add(F::AlterTable_Name, alter.GetName());
+            Out.Add(F::AlterTable_Name, alter.GetName());
         }
-        const int alterTableIndex = out.Last();
+        const int alterTableIndex = Out.Last();
         // Relative sequence names use the table ref as their base, even for ID-addressed tables.
         for (size_t i = 0; i < alter.ColumnsSize(); ++i) {
             const auto& column = alter.GetColumns(i);
@@ -402,645 +365,864 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
             const TAt at{.Index = ui32(i)};
             const TString& value = column.GetDefaultFromSequence();
             if (value.StartsWith('/')) {
-                out.AddAs(F::AlterTable_Column_DefaultFromSequence, value,
+                Out.AddAs(F::AlterTable_Column_DefaultFromSequence, value,
                     EKind::Absolute, ERole::Dependency, at);
             } else {
-                out.SiblingOf(F::AlterTable_Column_DefaultFromSequence, value,
+                Out.SiblingOf(F::AlterTable_Column_DefaultFromSequence, value,
                     alterTableIndex, at);
             }
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup: {
-        const auto& alter = tx.GetAlterPersQueueGroup();
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup>) {
+        const auto& alter = Tx.GetAlterPersQueueGroup();
         if (alter.HasPathId()) {
-            out.ById(F::AlterPersQueueGroup_PathId, 0, alter.GetPathId());
+            Out.ById(F::AlterPersQueueGroup_PathId, 0, alter.GetPathId());
         } else {
-            out.Add(F::AlterPersQueueGroup_Name, alter.GetName());
+            Out.Add(F::AlterPersQueueGroup_Name, alter.GetName());
         }
         // Incremental-backup destinations are absolute.
         const auto& offload = alter.GetPQTabletConfig().GetOffloadConfig();
         if (offload.HasIncrementalBackup()) {
-            out.Add(F::AlterPersQueueGroup_IncrementalBackup_DstPath,
+            Out.Add(F::AlterPersQueueGroup_IncrementalBackup_DstPath,
                 offload.GetIncrementalBackup().GetDstPath());
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpModifyACL:
-        out.Add(F::ModifyACL_Name, tx.GetModifyACL().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpRmDir:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions: {
-        const auto& info = tx.GetSplitMergeTablePartitions();
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpModifyACL>) {
+        Out.Add(F::ModifyACL_Name, Tx.GetModifyACL().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpRmDir>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions>) {
+        const auto& info = Tx.GetSplitMergeTablePartitions();
         if (info.HasTableLocalId()) {
-            out.ById(F::SplitMergeTablePartitions_TableLocalId,
+            Out.ById(F::SplitMergeTablePartitions_TableLocalId,
                 info.GetTableOwnerId(), info.GetTableLocalId());
         } else {
             // TablePath is resolved without WorkingDir.
-            out.Add(F::SplitMergeTablePartitions_TablePath, info.GetTablePath());
+            Out.Add(F::SplitMergeTablePartitions_TablePath, info.GetTablePath());
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpBackup:
-        out.Add(F::Backup_TableName, tx.GetBackup().GetTableName());
-        out.Implicit(F::Implicit_Backup_TableChildren, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateSubDomain:
-        out.Add(F::SubDomain_Name, tx.GetSubDomain().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropSubDomain:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateRtmrVolume:
-        out.Add(F::CreateRtmrVolume_Name, tx.GetCreateRtmrVolume().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume:
-        out.Add(F::CreateBlockStoreVolume_Name, tx.GetCreateBlockStoreVolume().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume: {
-        const auto& alter = tx.GetAlterBlockStoreVolume();
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpBackup>) {
+        Out.Add(F::Backup_TableName, Tx.GetBackup().GetTableName());
+        Out.Implicit(F::Implicit_Backup_TableChildren, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateSubDomain>) {
+        Out.Add(F::SubDomain_Name, Tx.GetSubDomain().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropSubDomain>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateRtmrVolume>) {
+        Out.Add(F::CreateRtmrVolume_Name, Tx.GetCreateRtmrVolume().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume>) {
+        Out.Add(F::CreateBlockStoreVolume_Name, Tx.GetCreateBlockStoreVolume().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume>) {
+        const auto& alter = Tx.GetAlterBlockStoreVolume();
         if (alter.HasPathId()) {
-            out.ById(F::AlterBlockStoreVolume_PathId, 0, alter.GetPathId());
+            Out.ById(F::AlterBlockStoreVolume_PathId, 0, alter.GetPathId());
         } else {
-            out.Add(F::AlterBlockStoreVolume_Name, alter.GetName());
+            Out.Add(F::AlterBlockStoreVolume_Name, alter.GetName());
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume:
-        out.Add(F::AssignBlockStoreVolume_Name, tx.GetAssignBlockStoreVolume().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateKesus:
-        out.Add(F::Kesus_Name, tx.GetKesus().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropKesus:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpForceDropSubDomain:
-        genericDrop();
-        out.Implicit(F::Implicit_ForceDropSubDomain_Subtree, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
-        out.Add(F::CreateSolomonVolume_Name, tx.GetCreateSolomonVolume().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropSolomonVolume:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterKesus:
-        out.Add(F::Kesus_Name, tx.GetKesus().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterSubDomain:
-        out.Add(F::SubDomain_Name, tx.GetSubDomain().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterUserAttributes:
-        out.Add(F::AlterUserAttributes_PathName, tx.GetAlterUserAttributes().GetPathName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpForceDropUnsafe:
-        genericDrop();
-        out.Implicit(F::Implicit_ForceDropUnsafe_Subtree, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateIndexedTable: {
-        const auto& cfg = tx.GetCreateIndexedTable();
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume>) {
+        Out.Add(F::AssignBlockStoreVolume_Name, Tx.GetAssignBlockStoreVolume().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateKesus>) {
+        Out.Add(F::Kesus_Name, Tx.GetKesus().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropKesus>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpForceDropSubDomain>) {
+        GenericDrop();
+        Out.Implicit(F::Implicit_ForceDropSubDomain_Subtree, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateSolomonVolume>) {
+        Out.Add(F::CreateSolomonVolume_Name, Tx.GetCreateSolomonVolume().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropSolomonVolume>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterKesus>) {
+        Out.Add(F::Kesus_Name, Tx.GetKesus().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterSubDomain>) {
+        Out.Add(F::SubDomain_Name, Tx.GetSubDomain().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterUserAttributes>) {
+        Out.Add(F::AlterUserAttributes_PathName, Tx.GetAlterUserAttributes().GetPathName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpForceDropUnsafe>) {
+        GenericDrop();
+        Out.Implicit(F::Implicit_ForceDropUnsafe_Subtree, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateIndexedTable>) {
+        const auto& cfg = Tx.GetCreateIndexedTable();
         const TString& base = cfg.GetTableDescription().GetName();
-        out.Add(F::CreateIndexedTable_TableDescription_Name, base);
-        const int baseIndex = out.Last();
+        Out.Add(F::CreateIndexedTable_TableDescription_Name, base);
+        const int baseIndex = Out.Last();
         for (size_t i = 0; i < cfg.IndexDescriptionSize(); ++i) {
-            out.Sibling(F::CreateIndexedTable_IndexDescription_Name,
+            Out.Sibling(F::CreateIndexedTable_IndexDescription_Name,
                 cfg.GetIndexDescription(i).GetName(), base, TAt{.Index = ui32(i)});
         }
         for (size_t i = 0; i < cfg.SequenceDescriptionSize(); ++i) {
-            out.Sibling(F::CreateIndexedTable_SequenceDescription_Name,
+            Out.Sibling(F::CreateIndexedTable_SequenceDescription_Name,
                 cfg.GetSequenceDescription(i).GetName(), base, TAt{.Index = ui32(i)});
         }
-        out.Implicit(F::Implicit_CreateIndexedTable_IndexImplTables, baseIndex);
-        break;
+        Out.Implicit(F::Implicit_CreateIndexedTable_IndexImplTables, baseIndex);
     }
-    case NKikimrSchemeOp::ESchemeOpCreateTableIndex:
-        out.Add(F::CreateTableIndex_Name, tx.GetCreateTableIndex().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables: {
-        const auto& cfg = tx.GetCreateConsistentCopyTables();
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateTableIndex>) {
+        Out.Add(F::CreateTableIndex_Name, Tx.GetCreateTableIndex().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables>) {
+        const auto& cfg = Tx.GetCreateConsistentCopyTables();
         for (size_t i = 0; i < cfg.CopyTableDescriptionsSize(); ++i) {
             const auto& item = cfg.GetCopyTableDescriptions(i);
             const TAt at{.Index = ui32(i)};
-            out.Add(F::CopyTables_Item_SrcPath, item.GetSrcPath(), at);
-            const int srcIndex = out.Last();
-            out.Add(F::CopyTables_Item_DstPath, item.GetDstPath(), at);
+            Out.Add(F::CopyTables_Item_SrcPath, item.GetSrcPath(), at);
+            const int srcIndex = Out.Last();
+            Out.Add(F::CopyTables_Item_DstPath, item.GetDstPath(), at);
             if (item.HasCreateSrcCdcStream()) {
-                out.Sibling(F::CopyTables_Item_CreateSrcCdc_StreamName,
+                Out.Sibling(F::CopyTables_Item_CreateSrcCdc_StreamName,
                     item.GetCreateSrcCdcStream().GetStreamDescription().GetName(),
                     item.GetSrcPath(), at);
             }
             if (item.HasDropSrcCdcStream()) {
                 const auto& drop = item.GetDropSrcCdcStream();
                 for (size_t j = 0; j < drop.StreamNameSize(); ++j) {
-                    out.Sibling(F::CopyTables_Item_DropSrcCdc_StreamName,
+                    Out.Sibling(F::CopyTables_Item_DropSrcCdc_StreamName,
                         drop.GetStreamName(j), item.GetSrcPath(),
                         TAt{.Index = ui32(i), .SubIndex = ui32(j)});
                 }
             }
             for (const auto* kv : SortedByKey(item.GetIndexImplTableCdcStreams())) {
-                out.Sibling(F::CopyTables_Item_IndexImplCdc_StreamName,
+                Out.Sibling(F::CopyTables_Item_IndexImplCdc_StreamName,
                     kv->second.GetStreamDescription().GetName(),
-                    out.Own(JoinPath({item.GetSrcPath(), kv->first})),
+                    Out.Own(JoinPath({item.GetSrcPath(), kv->first})),
                     TAt{.Index = ui32(i), .Key = kv->first});
             }
             for (const auto* kv : SortedByKey(item.GetIndexImplTableDropCdcStreams())) {
-                const TStringBuf base = out.Own(JoinPath({item.GetSrcPath(), kv->first}));
+                const TStringBuf base = Out.Own(JoinPath({item.GetSrcPath(), kv->first}));
                 for (size_t j = 0; j < kv->second.StreamNameSize(); ++j) {
-                    out.Sibling(F::CopyTables_Item_IndexImplDropCdc_StreamName,
+                    Out.Sibling(F::CopyTables_Item_IndexImplDropCdc_StreamName,
                         kv->second.GetStreamName(j), base,
                         TAt{.Index = ui32(i), .SubIndex = ui32(j), .Key = kv->first});
                 }
             }
-            out.Implicit(F::Implicit_CopyTables_Item_Children, srcIndex, at);
+            Out.Implicit(F::Implicit_CopyTables_Item_Children, srcIndex, at);
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpDropTableIndex:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateExtSubDomain:
-    case NKikimrSchemeOp::ESchemeOpAlterExtSubDomain:
-    case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
-        out.Add(F::SubDomain_Name, tx.GetSubDomain().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain:
-        genericDrop();
-        out.Implicit(F::Implicit_ForceDropExtSubDomain_Subtree, out.Last());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
-        break;
-    case NKikimrSchemeOp::ESchemeOpUpgradeSubDomain:
-    case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
-        out.Add(F::UpgradeSubDomain_Name, tx.GetUpgradeSubDomain().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateIndexBuild: {
-        const auto& cfg = tx.GetInitiateIndexBuild();
-        out.Add(F::InitiateIndexBuild_Table, cfg.GetTable());
-        out.Sibling(F::InitiateIndexBuild_Index_Name, cfg.GetIndex().GetName(), cfg.GetTable());
-        out.Implicit(F::Implicit_InitiateIndexBuild_IndexImplTables, out.Last());
-        break;
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropTableIndex>) {
+        GenericDrop();
     }
-    case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
-        out.Add(F::InitiateBuildIndexMainTable_TableName,
-            tx.GetInitiateBuildIndexMainTable().GetTableName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation:
-        out.Add(F::PrepareIndexValidation_TableName,
-            tx.GetPrepareIndexValidation().GetTableName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateLock:
-    case NKikimrSchemeOp::ESchemeOpDropLock:
-        out.Add(F::LockConfig_Name, tx.GetLockConfig().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpApplyIndexBuild: {
-        const auto& cfg = tx.GetApplyIndexBuild();
-        out.Add(F::ApplyIndexBuild_TablePath, cfg.GetTablePath());
-        out.Sibling(F::ApplyIndexBuild_IndexName, cfg.GetIndexName(), cfg.GetTablePath());
-        break;
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateExtSubDomain>) {
+        Out.Add(F::SubDomain_Name, Tx.GetSubDomain().GetName());
     }
-    case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable:
-        out.Add(F::FinalizeBuildIndexMainTable_TableName,
-            tx.GetFinalizeBuildIndexMainTable().GetTableName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterTableIndex:
-        out.Add(F::AlterTableIndex_Name, tx.GetAlterTableIndex().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterSolomonVolume:
-        out.Add(F::AlterSolomonVolume_Name, tx.GetAlterSolomonVolume().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable:
-        out.Add(F::AlterTable_Name, tx.GetAlterTable().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable:
-        out.Add(F::CreateTable_Name, tx.GetCreateTable().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropIndex: {
-        const auto& cfg = tx.GetDropIndex();
-        out.Add(F::DropIndex_TableName, cfg.GetTableName());
-        out.Sibling(F::DropIndex_IndexName, cfg.GetIndexName(), cfg.GetTableName());
-        out.Implicit(F::Implicit_DropIndex_IndexImplTables, out.Last());
-        break;
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterExtSubDomain>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateExtSubDomain>{});
     }
-    case NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable: {
-        const auto& cfg = tx.GetDropIndex();
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateExtSubDomain>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain>) {
+        GenericDrop();
+        Out.Implicit(F::Implicit_ForceDropExtSubDomain_Subtree, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpUpgradeSubDomain>) {
+        Out.Add(F::UpgradeSubDomain_Name, Tx.GetUpgradeSubDomain().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpUpgradeSubDomain>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateIndexBuild>) {
+        const auto& cfg = Tx.GetInitiateIndexBuild();
+        Out.Add(F::InitiateIndexBuild_Table, cfg.GetTable());
+        Out.Sibling(F::InitiateIndexBuild_Index_Name, cfg.GetIndex().GetName(), cfg.GetTable());
+        Out.Implicit(F::Implicit_InitiateIndexBuild_IndexImplTables, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable>) {
+        Out.Add(F::InitiateBuildIndexMainTable_TableName,
+            Tx.GetInitiateBuildIndexMainTable().GetTableName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpPrepareIndexValidation>) {
+        Out.Add(F::PrepareIndexValidation_TableName,
+            Tx.GetPrepareIndexValidation().GetTableName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateLock>) {
+        Out.Add(F::LockConfig_Name, Tx.GetLockConfig().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropLock>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateLock>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpApplyIndexBuild>) {
+        const auto& cfg = Tx.GetApplyIndexBuild();
+        Out.Add(F::ApplyIndexBuild_TablePath, cfg.GetTablePath());
+        Out.Sibling(F::ApplyIndexBuild_IndexName, cfg.GetIndexName(), cfg.GetTablePath());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable>) {
+        Out.Add(F::FinalizeBuildIndexMainTable_TableName,
+            Tx.GetFinalizeBuildIndexMainTable().GetTableName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterTableIndex>) {
+        Out.Add(F::AlterTableIndex_Name, Tx.GetAlterTableIndex().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterSolomonVolume>) {
+        Out.Add(F::AlterSolomonVolume_Name, Tx.GetAlterSolomonVolume().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable>) {
+        Out.Add(F::AlterTable_Name, Tx.GetAlterTable().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable>) {
+        Out.Add(F::CreateTable_Name, Tx.GetCreateTable().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropIndex>) {
+        const auto& cfg = Tx.GetDropIndex();
+        Out.Add(F::DropIndex_TableName, cfg.GetTableName());
+        Out.Sibling(F::DropIndex_IndexName, cfg.GetIndexName(), cfg.GetTableName());
+        Out.Implicit(F::Implicit_DropIndex_IndexImplTables, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable>) {
+        const auto& cfg = Tx.GetDropIndex();
         // The table is a target resolved as one child of WorkingDir.
-        out.AddAs(F::DropIndex_TableName, cfg.GetTableName(),
+        Out.AddAs(F::DropIndex_TableName, cfg.GetTableName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
-        out.Sibling(F::DropIndex_IndexName, cfg.GetIndexName(), cfg.GetTableName());
-        break;
+        Out.Sibling(F::DropIndex_IndexName, cfg.GetIndexName(), cfg.GetTableName());
     }
-    case NKikimrSchemeOp::ESchemeOpCancelIndexBuild: {
-        const auto& cfg = tx.GetCancelIndexBuild();
-        out.Add(F::CancelIndexBuild_TablePath, cfg.GetTablePath());
-        out.Sibling(F::CancelIndexBuild_IndexName, cfg.GetIndexName(), cfg.GetTablePath());
-        break;
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCancelIndexBuild>) {
+        const auto& cfg = Tx.GetCancelIndexBuild();
+        Out.Add(F::CancelIndexBuild_TablePath, cfg.GetTablePath());
+        Out.Sibling(F::CancelIndexBuild_IndexName, cfg.GetIndexName(), cfg.GetTablePath());
     }
-    case NKikimrSchemeOp::ESchemeOpCreateFileStore:
-        out.Add(F::CreateFileStore_Name, tx.GetCreateFileStore().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterFileStore:
-        out.Add(F::AlterFileStore_Name, tx.GetAlterFileStore().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropFileStore:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpRestore:
-        out.Add(F::Restore_TableName, tx.GetRestore().GetTableName());
-        out.Implicit(F::Implicit_Restore_TableChildren, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateColumnStore:
-        out.Add(F::CreateColumnStore_Name, tx.GetCreateColumnStore().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterColumnStore:
-        out.Add(F::AlterColumnStore_Name, tx.GetAlterColumnStore().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropColumnStore:
-        genericDrop();
-        out.Implicit(F::Implicit_DropColumnStore_ColumnTables, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
-        out.Add(F::CreateColumnTable_Name, tx.GetCreateColumnTable().GetName());
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateFileStore>) {
+        Out.Add(F::CreateFileStore_Name, Tx.GetCreateFileStore().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterFileStore>) {
+        Out.Add(F::AlterFileStore_Name, Tx.GetAlterFileStore().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropFileStore>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpRestore>) {
+        Out.Add(F::Restore_TableName, Tx.GetRestore().GetTableName());
+        Out.Implicit(F::Implicit_Restore_TableChildren, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateColumnStore>) {
+        Out.Add(F::CreateColumnStore_Name, Tx.GetCreateColumnStore().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterColumnStore>) {
+        Out.Add(F::AlterColumnStore_Name, Tx.GetAlterColumnStore().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropColumnStore>) {
+        GenericDrop();
+        Out.Implicit(F::Implicit_DropColumnStore_ColumnTables, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateColumnTable>) {
+        Out.Add(F::CreateColumnTable_Name, Tx.GetCreateColumnTable().GetName());
         // Column-table copy sources are resolved absolutely.
-        if (tx.GetCreateColumnTable().HasCopyFromTable()) {
-            out.Add(F::CreateColumnTable_CopyFromTable,
-                tx.GetCreateColumnTable().GetCopyFromTable());
+        if (Tx.GetCreateColumnTable().HasCopyFromTable()) {
+            Out.Add(F::CreateColumnTable_CopyFromTable,
+                Tx.GetCreateColumnTable().GetCopyFromTable());
         }
-        emitTierStorages(F::CreateColumnTable_TierStorage,
-            tx.GetCreateColumnTable().GetTtlSettings());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
+        EmitTierStorages(F::CreateColumnTable_TierStorage,
+            Tx.GetCreateColumnTable().GetTtlSettings());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterColumnTable>) {
         // Fall back to AlterTable.Name when AlterColumnTable is absent.
-        if (tx.HasAlterColumnTable()) {
-            out.Add(F::AlterColumnTable_Name, tx.GetAlterColumnTable().GetName());
-            const int alterColumnTableIndex = out.Last();
-            emitTierStorages(F::AlterColumnTable_TierStorage,
-                tx.GetAlterColumnTable().GetAlterTtlSettings());
-            out.Implicit(F::Implicit_AlterColumnTable_DroppedTiers, alterColumnTableIndex);
+        if (Tx.HasAlterColumnTable()) {
+            Out.Add(F::AlterColumnTable_Name, Tx.GetAlterColumnTable().GetName());
+            const int alterColumnTableIndex = Out.Last();
+            EmitTierStorages(F::AlterColumnTable_TierStorage,
+                Tx.GetAlterColumnTable().GetAlterTtlSettings());
+            Out.Implicit(F::Implicit_AlterColumnTable_DroppedTiers, alterColumnTableIndex);
         } else {
-            out.Add(F::AlterTable_Name, tx.GetAlterTable().GetName());
+            Out.Add(F::AlterTable_Name, Tx.GetAlterTable().GetName());
         }
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropColumnTable:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterLogin:
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropColumnTable>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterLogin>) {
         // Removing a user or group scans the audience subtree for ownership and ACL references.
-        if (tx.GetAlterLogin().HasRemoveUser() || tx.GetAlterLogin().HasRemoveGroup()) {
-            out.Add(F::WorkingDirItself, {});
-            out.Implicit(F::Implicit_AlterLogin_AclScan, out.Last());
+        if (Tx.GetAlterLogin().HasRemoveUser() || Tx.GetAlterLogin().HasRemoveGroup()) {
+            Out.Add(F::WorkingDirItself, {});
+            Out.Implicit(F::Implicit_AlterLogin_AclScan, Out.Last());
         }
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateCdcStream: {
-        const auto& op = tx.GetCreateCdcStream();
-        out.Add(F::CreateCdcStream_TableName, op.GetTableName());
-        out.Sibling(F::CreateCdcStream_StreamDescription_Name,
-            op.GetStreamDescription().GetName(), op.GetTableName());
-        out.Implicit(F::Implicit_CreateCdcStream_PqGroupUnderStream, out.Last());
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpCreateCdcStreamImpl:
-        out.AddAs(F::CreateCdcStream_StreamDescription_Name,
-            tx.GetCreateCdcStream().GetStreamDescription().GetName(),
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateCdcStream>) {
+        const auto& op = Tx.GetCreateCdcStream();
+        Out.Add(F::CreateCdcStream_TableName, op.GetTableName());
+        Out.Sibling(F::CreateCdcStream_StreamDescription_Name,
+            op.GetStreamDescription().GetName(), op.GetTableName());
+        Out.Implicit(F::Implicit_CreateCdcStream_PqGroupUnderStream, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateCdcStreamImpl>) {
+        Out.AddAs(F::CreateCdcStream_StreamDescription_Name,
+            Tx.GetCreateCdcStream().GetStreamDescription().GetName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateCdcStreamAtTable: {
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateCdcStreamAtTable>) {
         // The table is the target; resolving the stream supplies its path ID.
-        const auto& op = tx.GetCreateCdcStream();
+        const auto& op = Tx.GetCreateCdcStream();
         // Create resolves TableName as one child, without TSplitChildTag.
-        out.AddAs(F::CreateCdcStream_TableName, op.GetTableName(),
+        Out.AddAs(F::CreateCdcStream_TableName, op.GetTableName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
-        out.Sibling(F::CreateCdcStream_StreamDescription_Name,
+        Out.Sibling(F::CreateCdcStream_StreamDescription_Name,
             op.GetStreamDescription().GetName(), op.GetTableName());
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpAlterCdcStream: {
-        const auto& op = tx.GetAlterCdcStream();
-        out.Add(F::AlterCdcStream_TableName, op.GetTableName());
-        out.Sibling(F::AlterCdcStream_StreamName, op.GetStreamName(), op.GetTableName());
-        break;
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterCdcStream>) {
+        const auto& op = Tx.GetAlterCdcStream();
+        Out.Add(F::AlterCdcStream_TableName, op.GetTableName());
+        Out.Sibling(F::AlterCdcStream_StreamName, op.GetStreamName(), op.GetTableName());
     }
-    case NKikimrSchemeOp::ESchemeOpAlterCdcStreamImpl:
-        out.AddAs(F::AlterCdcStream_StreamName, tx.GetAlterCdcStream().GetStreamName(),
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterCdcStreamImpl>) {
+        Out.AddAs(F::AlterCdcStream_StreamName, Tx.GetAlterCdcStream().GetStreamName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterCdcStreamAtTable: {
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterCdcStreamAtTable>) {
         // TableName is split into segments under WorkingDir; StreamName is one child.
-        const auto& op = tx.GetAlterCdcStream();
-        out.AddAs(F::AlterCdcStream_TableName, op.GetTableName(),
+        const auto& op = Tx.GetAlterCdcStream();
+        Out.AddAs(F::AlterCdcStream_TableName, op.GetTableName(),
             EKind::PathUnderWorkingDirSplit, ERole::Target);
-        out.Sibling(F::AlterCdcStream_StreamName, op.GetStreamName(), op.GetTableName());
-        break;
+        Out.Sibling(F::AlterCdcStream_StreamName, op.GetStreamName(), op.GetTableName());
     }
-    case NKikimrSchemeOp::ESchemeOpDropCdcStream: {
-        const auto& op = tx.GetDropCdcStream();
-        out.Add(F::DropCdcStream_TableName, op.GetTableName());
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropCdcStream>) {
+        const auto& op = Tx.GetDropCdcStream();
+        Out.Add(F::DropCdcStream_TableName, op.GetTableName());
         for (size_t i = 0; i < op.StreamNameSize(); ++i) {
-            out.Sibling(F::DropCdcStream_StreamName, op.GetStreamName(i), op.GetTableName(),
+            Out.Sibling(F::DropCdcStream_StreamName, op.GetStreamName(i), op.GetTableName(),
                 TAt{.Index = ui32(i)});
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable: {
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable>) {
         // TableName and each StreamName are resolved as single children.
-        const auto& op = tx.GetDropCdcStream();
-        out.AddAs(F::DropCdcStream_TableName, op.GetTableName(),
+        const auto& op = Tx.GetDropCdcStream();
+        Out.AddAs(F::DropCdcStream_TableName, op.GetTableName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
         for (size_t i = 0; i < op.StreamNameSize(); ++i) {
-            out.Sibling(F::DropCdcStream_StreamName, op.GetStreamName(i), op.GetTableName(),
+            Out.Sibling(F::DropCdcStream_StreamName, op.GetStreamName(i), op.GetTableName(),
                 TAt{.Index = ui32(i)});
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpRotateCdcStream: {
-        const auto& op = tx.GetRotateCdcStream();
-        out.Add(F::RotateCdcStream_TableName, op.GetTableName());
-        out.Sibling(F::RotateCdcStream_OldStreamName, op.GetOldStreamName(), op.GetTableName());
-        out.Sibling(F::RotateCdcStream_NewStream_Name,
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpRotateCdcStream>) {
+        const auto& op = Tx.GetRotateCdcStream();
+        Out.Add(F::RotateCdcStream_TableName, op.GetTableName());
+        Out.Sibling(F::RotateCdcStream_OldStreamName, op.GetOldStreamName(), op.GetTableName());
+        Out.Sibling(F::RotateCdcStream_NewStream_Name,
             op.GetNewStream().GetStreamDescription().GetName(), op.GetTableName());
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl: {
-        const auto& op = tx.GetRotateCdcStream();
-        out.AddAs(F::RotateCdcStream_OldStreamName, op.GetOldStreamName(),
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl>) {
+        const auto& op = Tx.GetRotateCdcStream();
+        Out.AddAs(F::RotateCdcStream_OldStreamName, op.GetOldStreamName(),
             EKind::LeafUnderWorkingDir, ERole::Source);
-        out.AddAs(F::RotateCdcStream_NewStream_Name,
+        Out.AddAs(F::RotateCdcStream_NewStream_Name,
             op.GetNewStream().GetStreamDescription().GetName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable: {
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable>) {
         // TableName is split under WorkingDir; both stream names are single children.
-        const auto& op = tx.GetRotateCdcStream();
-        out.AddAs(F::RotateCdcStream_TableName, op.GetTableName(),
+        const auto& op = Tx.GetRotateCdcStream();
+        Out.AddAs(F::RotateCdcStream_TableName, op.GetTableName(),
             EKind::PathUnderWorkingDirSplit, ERole::Target);
-        out.Sibling(F::RotateCdcStream_OldStreamName, op.GetOldStreamName(), op.GetTableName());
-        out.Sibling(F::RotateCdcStream_NewStream_Name,
+        Out.Sibling(F::RotateCdcStream_OldStreamName, op.GetOldStreamName(), op.GetTableName());
+        Out.Sibling(F::RotateCdcStream_NewStream_Name,
             op.GetNewStream().GetStreamDescription().GetName(), op.GetTableName());
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpMoveTable: {
-        out.Add(F::MoveTable_SrcPath, tx.GetMoveTable().GetSrcPath());
-        const int moveSrcIndex = out.Last();
-        out.Add(F::MoveTable_DstPath, tx.GetMoveTable().GetDstPath());
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpMoveTable>) {
+        Out.Add(F::MoveTable_SrcPath, Tx.GetMoveTable().GetSrcPath());
+        const int moveSrcIndex = Out.Last();
+        Out.Add(F::MoveTable_DstPath, Tx.GetMoveTable().GetDstPath());
         // Cascade children belong to the source.
-        out.Implicit(F::Implicit_MoveTable_Children, moveSrcIndex);
-        break;
+        Out.Implicit(F::Implicit_MoveTable_Children, moveSrcIndex);
     }
-    case NKikimrSchemeOp::ESchemeOpMoveTableIndex: {
-        out.Add(F::MoveTableIndex_SrcPath, tx.GetMoveTableIndex().GetSrcPath());
-        const int moveTableIndexSrcIndex = out.Last();
-        out.Add(F::MoveTableIndex_DstPath, tx.GetMoveTableIndex().GetDstPath());
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpMoveTableIndex>) {
+        Out.Add(F::MoveTableIndex_SrcPath, Tx.GetMoveTableIndex().GetSrcPath());
+        const int moveTableIndexSrcIndex = Out.Last();
+        Out.Add(F::MoveTableIndex_DstPath, Tx.GetMoveTableIndex().GetDstPath());
         // Implementation tables and sequences belong to the source.
-        out.Implicit(F::Implicit_MoveTableIndex_Children, moveTableIndexSrcIndex);
-        break;
+        Out.Implicit(F::Implicit_MoveTableIndex_Children, moveTableIndexSrcIndex);
     }
-    case NKikimrSchemeOp::ESchemeOpMoveSequence:
-        out.Add(F::MoveSequence_SrcPath, tx.GetMoveSequence().GetSrcPath());
-        out.Add(F::MoveSequence_DstPath, tx.GetMoveSequence().GetDstPath());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateSequence:
-    case NKikimrSchemeOp::ESchemeOpAlterSequence:
-        out.Add(F::Sequence_Name, tx.GetSequence().GetName());
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpMoveSequence>) {
+        Out.Add(F::MoveSequence_SrcPath, Tx.GetMoveSequence().GetSrcPath());
+        Out.Add(F::MoveSequence_DstPath, Tx.GetMoveSequence().GetDstPath());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateSequence>) {
+        Out.Add(F::Sequence_Name, Tx.GetSequence().GetName());
         // Sequence copy sources are resolved absolutely.
-        if (tx.HasCopySequence()) {
-            out.Add(F::CopySequence_CopyFrom, tx.GetCopySequence().GetCopyFrom());
+        if (Tx.HasCopySequence()) {
+            Out.Add(F::CopySequence_CopyFrom, Tx.GetCopySequence().GetCopyFrom());
         }
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropSequence:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateReplication:
-    case NKikimrSchemeOp::ESchemeOpCreateTransfer:
-        out.Add(F::Replication_Name, tx.GetReplication().GetName());
-        replicationPaths(F::Replication_TransferTarget_DstPath,
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterSequence>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateSequence>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropSequence>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateReplication>) {
+        Out.Add(F::Replication_Name, Tx.GetReplication().GetName());
+        ReplicationPaths(F::Replication_TransferTarget_DstPath,
             F::Replication_TransferTarget_DirectoryPath,
             F::Replication_SpecificTarget_DstPath,
             F::Replication_AlterTransfer_DirectoryPath,
-            tx.GetReplication());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterReplication:
-    case NKikimrSchemeOp::ESchemeOpAlterTransfer: {
-        const auto& op = tx.GetAlterReplication();
+            Tx.GetReplication());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateTransfer>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateReplication>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterReplication>) {
+        const auto& op = Tx.GetAlterReplication();
         if (op.HasPathId()) {
             const auto pathId = TPathId::FromProto(op.GetPathId());
-            out.ById(F::AlterReplication_PathId, pathId.OwnerId, pathId.LocalPathId);
+            Out.ById(F::AlterReplication_PathId, pathId.OwnerId, pathId.LocalPathId);
         } else {
-            out.Add(F::AlterReplication_Name, op.GetName());
+            Out.Add(F::AlterReplication_Name, op.GetName());
         }
-        replicationPaths(F::AlterReplication_TransferTarget_DstPath,
+        ReplicationPaths(F::AlterReplication_TransferTarget_DstPath,
             F::AlterReplication_TransferTarget_DirectoryPath,
             F::AlterReplication_SpecificTarget_DstPath,
             F::AlterReplication_AlterTransfer_DirectoryPath,
             op);
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpDropReplication:
-    case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
-    case NKikimrSchemeOp::ESchemeOpDropTransfer:
-    case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
-        out.Add(F::BlobDepot_Name, tx.GetBlobDepot().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
-    case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
-        // These operations are stubs and touch no paths.
-        break;
-    case NKikimrSchemeOp::ESchemeOpMoveIndex: {
-        const auto& op = tx.GetMoveIndex();
-        out.Add(F::MoveIndex_TablePath, op.GetTablePath());
-        out.Sibling(F::MoveIndex_SrcPath, op.GetSrcPath(), op.GetTablePath());
-        const int moveIndexSrcIndex = out.Last();
-        out.Sibling(F::MoveIndex_DstPath, op.GetDstPath(), op.GetTablePath());
-        out.Implicit(F::Implicit_MoveIndex_IndexImplTables, moveIndexSrcIndex);
-        break;
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterTransfer>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterReplication>{});
     }
-    case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
-        out.Add(F::CreateExternalTable_Name, tx.GetCreateExternalTable().GetName());
-        if (tx.GetCreateExternalTable().HasDataSourcePath()) {
-            out.Add(F::CreateExternalTable_DataSourcePath,
-                tx.GetCreateExternalTable().GetDataSourcePath());
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropReplication>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropReplicationCascade>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpDropReplication>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropTransfer>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpDropReplication>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropTransferCascade>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpDropReplication>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateBlobDepot>) {
+        Out.Add(F::BlobDepot_Name, Tx.GetBlobDepot().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpMoveIndex>) {
+        const auto& op = Tx.GetMoveIndex();
+        Out.Add(F::MoveIndex_TablePath, op.GetTablePath());
+        Out.Sibling(F::MoveIndex_SrcPath, op.GetSrcPath(), op.GetTablePath());
+        const int moveIndexSrcIndex = Out.Last();
+        Out.Sibling(F::MoveIndex_DstPath, op.GetDstPath(), op.GetTablePath());
+        Out.Implicit(F::Implicit_MoveIndex_IndexImplTables, moveIndexSrcIndex);
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateExternalTable>) {
+        Out.Add(F::CreateExternalTable_Name, Tx.GetCreateExternalTable().GetName());
+        if (Tx.GetCreateExternalTable().HasDataSourcePath()) {
+            Out.Add(F::CreateExternalTable_DataSourcePath,
+                Tx.GetCreateExternalTable().GetDataSourcePath());
         }
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropExternalTable:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
-        out.Add(F::CreateExternalTable_Name, tx.GetCreateExternalTable().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
-        out.Add(F::CreateExternalDataSource_Name, tx.GetCreateExternalDataSource().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
-        out.Add(F::CreateExternalDataSource_Name, tx.GetCreateExternalDataSource().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
-        out.Add(F::InitiateColumnBuild_Table, tx.GetInitiateColumnBuild().GetTable());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
-        out.Add(F::DropColumnBuild_Settings_Table,
-            tx.GetDropColumnBuild().GetSettings().GetTable());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateView:
-        out.Add(F::CreateView_Name, tx.GetCreateView().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropView:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterView:
-        // Unimplemented; no paths are resolved.
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup: {
-        const auto& op = tx.GetCreateContinuousBackup();
-        out.Add(F::CreateContinuousBackup_TableName, op.GetTableName());
-        const int cbTableIndex = out.Last();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropExternalTable>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterExternalTable>) {
+        Out.Add(F::CreateExternalTable_Name, Tx.GetCreateExternalTable().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateExternalDataSource>) {
+        Out.Add(F::CreateExternalDataSource_Name, Tx.GetCreateExternalDataSource().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropExternalDataSource>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterExternalDataSource>) {
+        Out.Add(F::CreateExternalDataSource_Name, Tx.GetCreateExternalDataSource().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateColumnBuild>) {
+        Out.Add(F::InitiateColumnBuild_Table, Tx.GetInitiateColumnBuild().GetTable());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropColumnBuild>) {
+        Out.Add(F::DropColumnBuild_Settings_Table,
+            Tx.GetDropColumnBuild().GetSettings().GetTable());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateView>) {
+        Out.Add(F::CreateView_Name, Tx.GetCreateView().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropView>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateContinuousBackup>) {
+        const auto& op = Tx.GetCreateContinuousBackup();
+        Out.Add(F::CreateContinuousBackup_TableName, op.GetTableName());
+        const int cbTableIndex = Out.Last();
         // Absent stream names are generated during execution.
         if (op.GetContinuousBackupDescription().HasStreamName()) {
-            out.SiblingOf(F::CreateContinuousBackup_StreamName,
+            Out.SiblingOf(F::CreateContinuousBackup_StreamName,
                 op.GetContinuousBackupDescription().GetStreamName(), cbTableIndex);
         }
-        out.Implicit(F::Implicit_CreateContinuousBackup_CdcStream, cbTableIndex);
-        break;
+        Out.Implicit(F::Implicit_CreateContinuousBackup_CdcStream, cbTableIndex);
     }
-    case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: {
-        const auto& op = tx.GetAlterContinuousBackup();
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterContinuousBackup>) {
+        const auto& op = Tx.GetAlterContinuousBackup();
         // TSplitChildTag keeps even leading-slash paths under WorkingDir.
-        out.Add(F::AlterContinuousBackup_TableName, op.GetTableName());
-        const int cbTableIndex = out.Last();
+        Out.Add(F::AlterContinuousBackup_TableName, op.GetTableName());
+        const int cbTableIndex = Out.Last();
         if (op.HasTakeIncrementalBackup()) {
             const auto& take = op.GetTakeIncrementalBackup();
-            out.Add(F::AlterContinuousBackup_TakeIncrementalBackup_DstPath, take.GetDstPath());
+            Out.Add(F::AlterContinuousBackup_TakeIncrementalBackup_DstPath, take.GetDstPath());
             if (take.HasDstStreamPath()) {
                 // Absent stream names are generated during execution.
-                out.SiblingOf(F::AlterContinuousBackup_TakeIncrementalBackup_DstStreamPath,
+                Out.SiblingOf(F::AlterContinuousBackup_TakeIncrementalBackup_DstStreamPath,
                     take.GetDstStreamPath(), cbTableIndex);
             }
         }
-        out.Implicit(F::Implicit_AlterContinuousBackup_IncrementalBackupTable, cbTableIndex);
-        break;
+        Out.Implicit(F::Implicit_AlterContinuousBackup_IncrementalBackupTable, cbTableIndex);
     }
-    case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
-        out.Add(F::DropContinuousBackup_TableName, tx.GetDropContinuousBackup().GetTableName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
-    case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
-        out.Add(F::CreateResourcePool_Name, tx.GetCreateResourcePool().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropResourcePool:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
-    case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable: {
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropContinuousBackup>) {
+        Out.Add(F::DropContinuousBackup_TableName, Tx.GetDropContinuousBackup().GetTableName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateResourcePool>) {
+        Out.Add(F::CreateResourcePool_Name, Tx.GetCreateResourcePool().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterResourcePool>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateResourcePool>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropResourcePool>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups>) {
         // Retired; the factory rejects these operations.
-        const auto& op = tx.GetRestoreMultipleIncrementalBackups();
+        const auto& op = Tx.GetRestoreMultipleIncrementalBackups();
         for (size_t i = 0; i < op.SrcTablePathsSize(); ++i) {
-            out.Add(F::RestoreMultipleIncrementalBackups_SrcTablePaths,
+            Out.Add(F::RestoreMultipleIncrementalBackups_SrcTablePaths,
                 op.GetSrcTablePaths(i), TAt{.Index = ui32(i)});
         }
-        out.Add(F::RestoreMultipleIncrementalBackups_DstTablePath, op.GetDstTablePath());
-        break;
+        Out.Add(F::RestoreMultipleIncrementalBackups_DstTablePath, op.GetDstTablePath());
     }
-    case NKikimrSchemeOp::ESchemeOpCreateBackupCollection: {
-        const auto& op = tx.GetCreateBackupCollection();
-        out.Add(F::CreateBackupCollection_Name, op.GetName());
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateBackupCollection>) {
+        const auto& op = Tx.GetCreateBackupCollection();
+        Out.Add(F::CreateBackupCollection_Name, op.GetName());
         // Backup collection entries are resolved absolutely.
         const auto& entryList = op.GetExplicitEntryList();
         for (size_t i = 0; i < entryList.EntriesSize(); ++i) {
-            out.Add(F::CreateBackupCollection_Entry_Path, entryList.GetEntries(i).GetPath(),
+            Out.Add(F::CreateBackupCollection_Entry_Path, entryList.GetEntries(i).GetPath(),
                 TAt{.Index = ui32(i)});
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
-        out.Add(F::AlterBackupCollection_Name, tx.GetAlterBackupCollection().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
-        out.Add(F::DropBackupCollection_Name, tx.GetDropBackupCollection().GetName());
-        out.Implicit(F::Implicit_DropBackupCollection_Entries, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
-        out.Add(F::BackupBackupCollection_Name, tx.GetBackupBackupCollection().GetName());
-        out.Implicit(F::Implicit_BackupBackupCollection_Entries, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
-    case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp:
-        out.Add(F::BackupIncrementalBackupCollection_Name,
-            tx.GetBackupIncrementalBackupCollection().GetName());
-        out.Implicit(F::Implicit_BackupIncrementalBackupCollection_Entries, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateFullBackupOp:
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterBackupCollection>) {
+        Out.Add(F::AlterBackupCollection_Name, Tx.GetAlterBackupCollection().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropBackupCollection>) {
+        Out.Add(F::DropBackupCollection_Name, Tx.GetDropBackupCollection().GetName());
+        Out.Implicit(F::Implicit_DropBackupCollection_Entries, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpBackupBackupCollection>) {
+        Out.Add(F::BackupBackupCollection_Name, Tx.GetBackupBackupCollection().GetName());
+        Out.Implicit(F::Implicit_BackupBackupCollection_Entries, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection>) {
+        Out.Add(F::BackupIncrementalBackupCollection_Name,
+            Tx.GetBackupIncrementalBackupCollection().GetName());
+        Out.Implicit(F::Implicit_BackupIncrementalBackupCollection_Entries, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateFullBackupOp>) {
         // WorkingDir already points at the backup collection; no name field.
-        out.Add(F::WorkingDirItself, {});
-        out.Implicit(F::Implicit_CreateFullBackupOp_Entries, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
-    case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp:
-        out.Add(F::RestoreBackupCollection_Name, tx.GetRestoreBackupCollection().GetName());
-        out.Implicit(F::Implicit_RestoreBackupCollection_Entries, out.Last());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateSysView:
-        out.Add(F::CreateSysView_Name, tx.GetCreateSysView().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropSysView:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpChangePathState:
-        out.Add(F::ChangePathState_Path, tx.GetChangePathState().GetPath());
-        break;
-    case NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets:
-    case NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets: {
-        const auto& op = tx.GetIncrementalRestoreLockTargets();
+        Out.Add(F::WorkingDirItself, {});
+        Out.Implicit(F::Implicit_CreateFullBackupOp_Entries, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpRestoreBackupCollection>) {
+        Out.Add(F::RestoreBackupCollection_Name, Tx.GetRestoreBackupCollection().GetName());
+        Out.Implicit(F::Implicit_RestoreBackupCollection_Entries, Out.Last());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpRestoreBackupCollection>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateSysView>) {
+        Out.Add(F::CreateSysView_Name, Tx.GetCreateSysView().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropSysView>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpChangePathState>) {
+        Out.Add(F::ChangePathState_Path, Tx.GetChangePathState().GetPath());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets>) {
+        const auto& op = Tx.GetIncrementalRestoreLockTargets();
         for (size_t i = 0; i < op.DstPathsSize(); ++i) {
-            out.Add(F::IncrementalRestoreLockTargets_DstPaths, op.GetDstPaths(i),
+            Out.Add(F::IncrementalRestoreLockTargets_DstPaths, op.GetDstPaths(i),
                 TAt{.Index = ui32(i)});
         }
         for (size_t i = 0; i < op.SrcPathsSize(); ++i) {
-            out.Add(F::IncrementalRestoreLockTargets_SrcPaths, op.GetSrcPaths(i),
+            Out.Add(F::IncrementalRestoreLockTargets_SrcPaths, op.GetSrcPaths(i),
                 TAt{.Index = ui32(i)});
         }
-        break;
     }
-    case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
-        out.Implicit(F::Implicit_IncrementalRestoreFinalize_PersistedState, -1);
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateSecret:
-        out.Add(F::CreateSecret_Name, tx.GetCreateSecret().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpAlterSecret:
-        out.Add(F::AlterSecret_Name, tx.GetAlterSecret().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropSecret:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
-    case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery:
-        out.Add(F::CreateStreamingQuery_Name, tx.GetCreateStreamingQuery().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropStreamingQuery:
-        genericDrop();
-        break;
-    case NKikimrSchemeOp::ESchemeOpTruncateTable:
-        out.Add(F::TruncateTable_TableName, tx.GetTruncateTable().GetTableName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
-        out.Add(F::CreateTestShardSet_Name, tx.GetCreateTestShardSet().GetName());
-        break;
-    case NKikimrSchemeOp::ESchemeOpDropTestShardSet:
-        genericDrop();
-        break;
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize>) {
+        Out.Implicit(F::Implicit_IncrementalRestoreFinalize_PersistedState, -1);
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateSecret>) {
+        Out.Add(F::CreateSecret_Name, Tx.GetCreateSecret().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterSecret>) {
+        Out.Add(F::AlterSecret_Name, Tx.GetAlterSecret().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropSecret>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateStreamingQuery>) {
+        Out.Add(F::CreateStreamingQuery_Name, Tx.GetCreateStreamingQuery().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpAlterStreamingQuery>) {
+        (*this)(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateStreamingQuery>{});
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropStreamingQuery>) {
+        GenericDrop();
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpTruncateTable>) {
+        Out.Add(F::TruncateTable_TableName, Tx.GetTruncateTable().GetTableName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpCreateTestShardSet>) {
+        Out.Add(F::CreateTestShardSet_Name, Tx.GetCreateTestShardSet().GetName());
+    }
+
+    void operator()(TOperationTag<NKikimrSchemeOp::ESchemeOpDropTestShardSet>) {
+        GenericDrop();
+    }
+
+private:
+    void GenericDrop() {
+        const auto& drop = Tx.GetDrop();
+        if (drop.HasId()) {
+            // An ID takes precedence over Name.
+            Out.ById(F::Drop_Id, 0, drop.GetId());
+        } else {
+            Out.Add(F::Drop_Name, drop.GetName());
+        }
+    }
+
+    // TTL Storage fields name external data sources by absolute path.
+    void EmitTierStorages(F field, const NKikimrSchemeOp::TColumnDataLifeCycle& ttl) {
+        if (!ttl.HasEnabled()) {
+            return;
+        }
+        const auto& tiers = ttl.GetEnabled().GetTiers();
+        for (int i = 0; i < tiers.size(); ++i) {
+            if (tiers[i].HasEvictToExternalStorage()) {
+                Out.Add(field, tiers[i].GetEvictToExternalStorage().GetStorage(),
+                    TAt{.Index = ui32(i)});
+            }
+        }
+    }
+
+    // SrcPath belongs to the remote cluster; extract only local paths.
+    void ReplicationPaths(F transferDstPath, F transferDirectoryPath,
+            F specificTargetDstPath, F alterTransferDirectoryPath,
+            const NKikimrSchemeOp::TReplicationDescription& desc) {
+        const auto& config = desc.GetConfig();
+        if (config.HasTransferSpecific()) {
+            const auto& target = config.GetTransferSpecific().GetTarget();
+            if (target.HasDstPath()) {
+                Out.Add(transferDstPath, target.GetDstPath());
+            }
+            if (target.HasDirectoryPath()) {
+                Out.Add(transferDirectoryPath, target.GetDirectoryPath());
+            }
+        }
+        // The replication controller creates these absolute destinations later.
+        const auto& specific = config.GetSpecific();
+        for (size_t i = 0; i < specific.TargetsSize(); ++i) {
+            const auto& target = specific.GetTargets(i);
+            if (target.HasDstPath()) {
+                Out.Add(specificTargetDstPath, target.GetDstPath(), TAt{.Index = ui32(i)});
+            }
+        }
+        if (desc.HasAlterTransfer() && desc.GetAlterTransfer().HasDirectoryPath()) {
+            Out.Add(alterTransferDirectoryPath, desc.GetAlterTransfer().GetDirectoryPath());
+        }
+    }
+
+    const NKikimrSchemeOp::TModifyScheme& Tx;
+    TRefSink& Out;
+};
+
+template <NKikimrSchemeOp::EOperationType Type>
+void ExtractRegisteredOperation(const NKikimrSchemeOp::TModifyScheme& tx, TRefSink& out) {
+    TOperationPathExtractor extractor(tx, out);
+    if constexpr (requires { extractor(TOperationTag<Type>{}); }) {
+        extractor(TOperationTag<Type>{});
+    } else {
+        constexpr auto support = GetSchemeOperationSupport(Type);
+        static_assert(support == ESchemeOperationSupport::Unsupported
+                || support == ESchemeOperationSupport::Stub
+                || support == ESchemeOperationSupport::Deprecated,
+            "Implemented operations must declare a path extractor");
+    }
+}
+
+} // namespace
+
+TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
+    using F = EPathField;
+    using TAt = TRefSink::TAt;
+
+    TPathRefs result;
+    TRefSink out(result);
+
+    switch (tx.GetOperationType()) {
+#define SCHEME_OP_IMPLEMENTED(name, ...) \
+    case NKikimrSchemeOp::name: ExtractRegisteredOperation<NKikimrSchemeOp::name>(tx, out); break;
+#define SCHEME_OP_INTERNAL(name, ...) SCHEME_OP_IMPLEMENTED(name)
+#define SCHEME_OP_UNSUPPORTED(name) SCHEME_OP_IMPLEMENTED(name)
+#define SCHEME_OP_DEPRECATED(name) SCHEME_OP_IMPLEMENTED(name)
+#define SCHEME_OP_STUB(name, ...) SCHEME_OP_IMPLEMENTED(name)
+#define SCHEME_OP_RETIRED(name, ...) SCHEME_OP_IMPLEMENTED(name)
+#define SCHEME_OP_UNSUPPORTED_TX(...)
+#define SCHEME_OP_TRANSIENT_TX(...)
+#include "schemeshard_operation_registry.inc"
+#undef SCHEME_OP_IMPLEMENTED
+#undef SCHEME_OP_INTERNAL
+#undef SCHEME_OP_UNSUPPORTED
+#undef SCHEME_OP_DEPRECATED
+#undef SCHEME_OP_STUB
+#undef SCHEME_OP_RETIRED
+#undef SCHEME_OP_UNSUPPORTED_TX
+#undef SCHEME_OP_TRANSIENT_TX
     }
 
     // Every operation resolves ApplyIf IDs on this SchemeShard before proposing.

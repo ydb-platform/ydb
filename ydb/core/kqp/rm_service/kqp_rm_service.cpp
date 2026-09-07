@@ -122,9 +122,15 @@ public:
         SetActualLimits();
     }
 
+    void SetOverPercent(double overPercent) {
+        OverPercent = overPercent;
+        SetActualLimits();
+    }
+
     void SetActualLimits() {
         Limit = Percentage(BaseLimit, MemoryPoolPercent);
         OverLimit = OverPercentage(Limit, OverPercent);
+        UpdateCookie();
     }
 
     ui64 GetLimit() const {
@@ -278,7 +284,7 @@ public:
                 tx.TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
             }
 
-            if (hasScanQueryMemory && !tx.PoolId.empty() && tx.MemoryPoolPercent > 0) {
+            if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
                 auto [it, success] = MemoryNamedPools.emplace(tx.MakePoolId(), nullptr);
 
                 if (success) {
@@ -318,7 +324,7 @@ public:
                 tx.AckFailedMemoryAlloc(resources.Memory);
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
-                    if (!tx.PoolId.empty()) {
+                    if (tx.HasMemoryPoolLimit()) {
                         auto it = MemoryNamedPools.find(tx.MakePoolId());
                         if (it != MemoryNamedPools.end()) {
                             it->second->Release(resources.Memory);
@@ -387,7 +393,7 @@ public:
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
-                if (!tx.PoolId.empty()) {
+                if (tx.HasMemoryPoolLimit()) {
                     auto it = MemoryNamedPools.find(tx.MakePoolId());
                     if (it != MemoryNamedPools.end()) {
                         it->second->Release(resources.Memory);
@@ -508,6 +514,7 @@ public:
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
         SpillingPercent.store(config.GetSpillingPercent());
+        TotalMemoryResource->SetOverPercent(config.GetSpillingPercent());
         MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
         PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());

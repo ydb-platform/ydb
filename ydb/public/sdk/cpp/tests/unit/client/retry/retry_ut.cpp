@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/rows.h>
 #include <ydb/public/sdk/cpp/src/client/row_ranges/rows_stream_drain.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/tests/common/fake_trace_provider.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
@@ -23,6 +24,7 @@
 #include <grpcpp/server_context.h>
 
 #include <deque>
+#include <functional>
 #include <stdexcept>
 
 using namespace NYdb;
@@ -89,11 +91,16 @@ void SimulateScanDrainFailure() {
 
 class TMockTableService : public Ydb::Table::V1::TableService::Service {
 public:
+    std::function<void()> OnCreateSession;
+
     grpc::Status CreateSession(
         grpc::ServerContext*,
         const Ydb::Table::CreateSessionRequest*,
         Ydb::Table::CreateSessionResponse* response) override
     {
+        if (OnCreateSession) {
+            OnCreateSession();
+        }
         Ydb::Table::CreateSessionResult result;
         result.set_session_id("fake-table-session-id");
 
@@ -144,7 +151,7 @@ struct TTableClientFixture {
     std::unique_ptr<TDriver> Driver;
     std::unique_ptr<NTable::TTableClient> Client;
 
-    TTableClientFixture() {
+    TTableClientFixture(std::shared_ptr<NTrace::ITraceProvider> traceProvider = {}) {
         NTesting::InitPortManagerFromEnv();
         const auto portHolder = NTesting::GetFreePort();
         const ui16 port = portHolder;
@@ -153,6 +160,7 @@ struct TTableClientFixture {
         GrpcServer = StartGrpcServer(endpoint, TableService);
         Driver = std::make_unique<TDriver>(
             TDriverConfig()
+                .SetTraceProvider(std::move(traceProvider))
                 .SetEndpoint(endpoint)
                 .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetDatabase("/Root/My/DB"));
@@ -297,17 +305,29 @@ Y_UNIT_TEST_SUITE(TTableRangeErrorRetryTest) {
 
 Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
     Y_UNIT_TEST(AsyncCancellationCompletesBeforeLateResult) {
-        TTableClientFixture fixture;
-        std::stop_source stopSource;
-        auto attemptResult = NThreading::NewPromise<TStatus>();
-        auto result = fixture.Client->RetryOperation(
-            [&](NTable::TTableClient&) -> TAsyncStatus {
-                return attemptResult.GetFuture();
-            },
-            FastRetrySettings().CancellationToken(stopSource.get_token()));
-        stopSource.request_stop();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetValue(TDuration::Seconds(1)).GetStatus(), EStatus::CLIENT_CANCELLED);
-        attemptResult.SetValue(OkStatus());
+        for (bool lateException : {false, true}) {
+            auto traces = std::make_shared<NTests::TFakeTraceProvider>();
+            TTableClientFixture fixture(traces);
+            std::stop_source stopSource;
+            auto attemptResult = NThreading::NewPromise<TStatus>();
+            auto result = fixture.Client->RetryOperation(
+                [&](NTable::TTableClient&) -> TAsyncStatus {
+                    return attemptResult.GetFuture();
+                },
+                FastRetrySettings().CancellationToken(stopSource.get_token()));
+            stopSource.request_stop();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue(TDuration::Seconds(1)).GetStatus(), EStatus::CLIENT_CANCELLED);
+            auto tracer = traces->GetFakeTracer("ydb-cpp-sdk-table");
+            UNIT_ASSERT(!tracer->GetLastSpan()->IsEnded());
+            if (lateException) {
+                attemptResult.SetException(std::make_exception_ptr(std::runtime_error("late failure")));
+            } else {
+                attemptResult.SetValue(OkStatus());
+            }
+            for (const auto& span : tracer->GetSpans()) {
+                UNIT_ASSERT(span.Span->IsEnded());
+            }
+        }
     }
 
     Y_UNIT_TEST(SyncCancellationStopsAfterAttempt) {
@@ -320,6 +340,68 @@ Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
                 return OkStatus();
             }, FastRetrySettings().CancellationToken(stopSource.get_token()));
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_CANCELLED);
+    }
+
+    Y_UNIT_TEST(PreStoppedTokenSkipsAttempts) {
+        TTableClientFixture fixture;
+        std::stop_source stopSource;
+        stopSource.request_stop();
+        auto settings = FastRetrySettings().CancellationToken(stopSource.get_token());
+        auto operation = [](NTable::TSession) -> TStatus {
+            UNIT_FAIL("A pre-stopped operation must not run");
+            return OkStatus();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Client->RetryOperationSync(operation, settings).GetStatus(), EStatus::CLIENT_CANCELLED);
+        auto result = fixture.Client->RetryOperation(
+            [operation](NTable::TSession session) { return NThreading::MakeFuture(operation(session)); }, settings);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue(TDuration::Seconds(1)).GetStatus(), EStatus::CLIENT_CANCELLED);
+    }
+
+    Y_UNIT_TEST(CancellationDuringSessionCreationSkipsOperation) {
+        for (bool async : {false, true}) {
+            std::stop_source stopSource;
+            TTableClientFixture fixture;
+            fixture.TableService.OnCreateSession = [stopSource]() mutable { stopSource.request_stop(); };
+            auto settings = FastRetrySettings().CancellationToken(stopSource.get_token());
+            auto operation = [](NTable::TSession) -> TStatus {
+                UNIT_FAIL("Cancellation during session creation must skip the operation");
+                return OkStatus();
+            };
+            auto result = async
+                ? fixture.Client->RetryOperation(
+                    [operation](NTable::TSession session) { return NThreading::MakeFuture(operation(session)); }, settings)
+                    .GetValue(TDuration::Seconds(5))
+                : fixture.Client->RetryOperationSync(operation, settings);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_CANCELLED);
+            fixture.Driver->Stop(true);
+        }
+    }
+
+    Y_UNIT_TEST(UnaryCancellationWorksWithoutRetriesAndWhenNested) {
+        TTableClientFixture fixture;
+        std::stop_source stopSource;
+        stopSource.request_stop();
+        for (ui32 maxRetries : {0u, 3u}) {
+            auto settings = FastRetrySettings().MaxRetries(maxRetries).RetryUndefined(true)
+                .CancellationToken(stopSource.get_token());
+            auto checkCancelled = [](const auto& future) {
+                UNIT_ASSERT_VALUES_EQUAL(future.GetValue(TDuration::Seconds(1)).GetStatus(), EStatus::CLIENT_CANCELLED);
+            };
+            auto operation = [&](NTable::TTableClient& client) {
+                checkCancelled(client.BulkUpsert("/unused", TValueBuilder().Int32(1).Build(),
+                    NTable::TBulkUpsertSettings().RetrySettings(settings)));
+                checkCancelled(client.BulkUpsert("/unused", NTable::EDataFormat::CSV, "1", "",
+                    NTable::TBulkUpsertSettings().RetrySettings(settings)));
+                checkCancelled(client.ReadRows("/unused", TValueBuilder().Int32(1).Build(), {},
+                    NTable::TReadRowsSettings().RetrySettings(settings)));
+                return NThreading::MakeFuture(OkStatus());
+            };
+            UNIT_ASSERT(operation(*fixture.Client).GetValueSync().IsSuccess());
+            UNIT_ASSERT(fixture.Client->RetryOperation(operation).GetValueSync().IsSuccess());
+            NQuery::TQueryClient queryClient(*fixture.Driver);
+            checkCancelled(queryClient.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().RetrySettings(settings)));
+        }
     }
 }
 

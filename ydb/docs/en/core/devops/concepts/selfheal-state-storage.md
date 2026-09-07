@@ -53,7 +53,7 @@ You can enable and disable SelfHeal State Storage by changing the configuration:
 
 ## Managing automatic configuration changes {#automatic-management}
 
-In addition to the general enable/disable of SelfHeal State Storage (parameter `state_storage_self_heal_config.enable`, see [above](#on-off)), in the `self_management_config` section of the `config.yaml` configuration file, you can individually manage automatic configuration changes for each of the metadata distribution subsystems, as well as limit the set of nodes to which SelfHeal can move replicas.
+In addition to the general [enable/disable](#on-off) of SelfHeal State Storage (parameter `state_storage_self_heal_config.enable`), in the `self_management_config` section of the `config.yaml` configuration file, you can individually manage automatic configuration changes for each of the metadata distribution subsystems, as well as limit the set of nodes to which SelfHeal can move replicas.
 
 
 ```yaml
